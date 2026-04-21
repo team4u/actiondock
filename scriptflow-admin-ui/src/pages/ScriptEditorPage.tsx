@@ -741,9 +741,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   return (
     <>
       {contextHolder}
-      <Space className="script-editor-page" direction="vertical" size="large" style={{ width: "100%" }}>
+      <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
         <Card>
-          <Row className="page-card-header" justify="space-between" align="middle" gutter={[16, 16]}>
+          <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
             <Col>
               <Space direction="vertical" size={2}>
                 <Button
@@ -816,22 +816,24 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               column={{
                 xs: 1,
                 sm: 2,
-                lg: 4
+                lg: 3
               }}
             >
-              <Descriptions.Item label="状态">
-                <Tag color={currentScript.status === "PUBLISHED" ? "green" : "gold"}>
-                  {currentScript.status}
-                </Tag>
+              <Descriptions.Item label="状态 / 更新时间">
+                <Space size={8} wrap>
+                  <Tag color={currentScript.status === "PUBLISHED" ? "green" : "gold"}>
+                    {currentScript.status}
+                  </Tag>
+                  <Text type="secondary">{formatDateTime(currentScript.updatedAt)}</Text>
+                </Space>
               </Descriptions.Item>
               <Descriptions.Item label="版本">{currentScript.version}</Descriptions.Item>
               <Descriptions.Item label="创建时间">{formatDateTime(currentScript.createdAt)}</Descriptions.Item>
-              <Descriptions.Item label="更新时间">{formatDateTime(currentScript.updatedAt)}</Descriptions.Item>
             </Descriptions>
           </Card>
         )}
 
-        <Card bodyStyle={{ paddingTop: 12 }}>
+        <Card bodyStyle={{ paddingTop: 8 }}>
           <Tabs
             activeKey={activeTab}
             onChange={handleTabChange}
@@ -840,7 +842,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 key: "definition",
                 label: "脚本定义",
                 children: (
-                  <Row gutter={[20, 20]}>
+                  <Row gutter={[16, 16]}>
                     <Col xs={24} xl={8}>
                       <Card title="基础信息">
                         <Form
@@ -949,7 +951,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       key: "commands",
                       label: "调用命令",
                       children: (
-                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                        <Space direction="vertical" size={16} style={{ width: "100%" }}>
                           <InfoHint
                             label="可直接执行的 REST API 与 CLI 命令"
                             content={
@@ -965,7 +967,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 key: "command-detail",
                                 label: "查看详情",
                                 children: (
-                                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
                                     <Text type="secondary">使用当前脚本 ID 生成</Text>
                                     <Tabs
                                       items={[
@@ -1000,7 +1002,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 key: "command-execute",
                                 label: "执行脚本",
                                 children: (
-                                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
                                     <Text type="secondary">跟随当前调试配置生成</Text>
                                     {commandInput.note && (
                                       <Alert
@@ -1052,7 +1054,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       key: "command-contract",
                                       label: "Schema",
                                       children: (
-                                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                                        <Space direction="vertical" size={16} style={{ width: "100%" }}>
                                           <Text type="secondary">供模型与调用方查看输入输出定义</Text>
                                           <Tabs
                                             items={[
@@ -1087,7 +1089,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                             emptyDescription="当前没有可展示的 Schema 示例"
                                           />
 
-                                          <Row gutter={[20, 20]}>
+                                          <Row gutter={[16, 16]}>
                                             {hasInputSchema ? (
                                               <Col xs={24} xl={12}>
                                                 <SchemaFieldSummary
@@ -1122,16 +1124,16 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       key: "execution",
                       label: "执行调试",
                       children: (
-                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                          <Row gutter={[20, 20]}>
+                        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                          <Row gutter={[16, 16]}>
                             <Col xs={24} xl={10}>
-                              <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                              <Space direction="vertical" size={16} style={{ width: "100%" }}>
                                 <Card
                                   type="inner"
                                   title="执行入参"
                                   extra={<Text type="secondary">根据 inputSchema 自动生成</Text>}
                                 >
-                                  <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
                                     {executionValidationError && (
                                       <Alert
                                         type="error"
@@ -1250,7 +1252,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   title="执行输出"
                                   extra={<Text type="secondary">根据 outputSchema 渲染</Text>}
                                 >
-                                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
                                     {hasOutputSchema && (
                                       <SchemaFieldSummary
                                         title="输出字段清单"
@@ -1347,7 +1349,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 }
                               >
                                 {currentExecution ? (
-                                  <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
                                     <Descriptions
                                       size="small"
                                       column={{

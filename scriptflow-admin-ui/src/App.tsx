@@ -200,12 +200,22 @@ export function App() {
       theme={{
         algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
-          borderRadius: 14,
+          borderRadius: 12,
           colorPrimary: "#2357d5",
           colorBgLayout: isDark ? "#0b1220" : "#f3f5f8",
           colorBgContainer: isDark ? "#101a2b" : "#ffffff",
           colorBorderSecondary: isDark ? "rgba(148, 163, 184, 0.18)" : "rgba(5, 5, 5, 0.06)",
-          fontFamily: "'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif"
+          fontFamily: "'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif",
+          fontSize: 13,
+          controlHeight: 34,
+          controlHeightSM: 28,
+          controlHeightLG: 38,
+          padding: 12,
+          paddingSM: 8,
+          paddingLG: 16,
+          margin: 12,
+          marginSM: 8,
+          marginLG: 16
         },
         components: {
           Layout: {

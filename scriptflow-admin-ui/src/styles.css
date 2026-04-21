@@ -102,7 +102,7 @@ a {
 }
 
 .brand-block {
-  padding: 24px 20px 18px;
+  padding: 18px 16px 14px;
 }
 
 .brand-kicker {
@@ -117,12 +117,12 @@ a {
 
 .app-header {
   height: auto;
-  padding: 20px 28px;
+  padding: 14px 20px;
   background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -130,7 +130,7 @@ a {
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 10px;
 }
 
 .app-header__title {
@@ -163,45 +163,45 @@ a {
 }
 
 .app-content {
-  padding: 0 28px 28px;
+  padding: 0 20px 20px;
   min-width: 0;
 }
 
 .editor-footer {
-  margin-top: 16px;
+  margin-top: 10px;
   align-items: flex-start;
 }
 
 .schema-builder {
-  min-height: 420px;
+  min-height: 360px;
 }
 
 .schema-builder .ant-tabs-content-holder {
-  min-height: 420px;
+  min-height: 360px;
 }
 
 .schema-builder-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .schema-builder-empty {
-  min-height: 360px;
+  min-height: 280px;
   display: grid;
   place-items: center;
-  gap: 12px;
+  gap: 10px;
   border: 1px dashed var(--app-primary-soft-strong);
-  border-radius: 16px;
+  border-radius: 14px;
   background: linear-gradient(180deg, var(--app-card-start), var(--app-panel-end));
 }
 
 .schema-field-card {
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--app-code-border);
-  border-radius: 16px;
+  border-radius: 14px;
   background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -210,8 +210,8 @@ a {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .schema-field-card__index {
@@ -229,13 +229,13 @@ a {
 .schema-field-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.6fr);
-  gap: 14px 16px;
+  gap: 10px 12px;
 }
 
 .schema-field-grid__item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .schema-field-grid__item--compact {
@@ -255,7 +255,7 @@ a {
 .schema-builder-preview {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .info-hint-group {
@@ -301,8 +301,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
@@ -315,14 +315,14 @@ a {
 .script-import-result {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .script-import-result__code {
   margin: 0;
-  padding: 14px 16px;
+  padding: 10px 12px;
   overflow: auto;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--app-code-border);
   background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
   color: var(--app-code-text);
@@ -335,57 +335,57 @@ a {
 .execution-json-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .schema-contract {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .schema-contract__list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .schema-contract__item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 10px 12px;
   border: 1px solid var(--app-code-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
 }
 
 .command-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .command-panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .app-code-editor {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--app-code-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .app-code-editor__placeholder {
   position: absolute;
-  top: 12px;
-  left: 52px;
+  top: 10px;
+  left: 48px;
   color: var(--app-placeholder);
   font-size: 14px;
   pointer-events: none;
@@ -393,9 +393,9 @@ a {
 
 .json-preview {
   margin: 0;
-  padding: 16px;
+  padding: 12px;
   overflow: auto;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--app-code-preview-bg);
   color: var(--app-code-preview-text);
   font-size: 13px;
@@ -404,9 +404,9 @@ a {
 
 .command-preview {
   margin: 0;
-  padding: 18px;
+  padding: 14px;
   overflow: auto;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--app-code-border);
   background:
     linear-gradient(180deg, var(--app-command-start), var(--app-command-end)),
@@ -423,14 +423,14 @@ a {
 }
 
 .script-editor-page .ant-card-head {
-  padding-top: 6px;
-  padding-bottom: 14px;
+  padding-top: 2px;
+  padding-bottom: 8px;
 }
 
 .script-editor-page .ant-card-head-title,
 .script-editor-page .ant-card-extra {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 6px;
+  padding-bottom: 4px;
 }
 
 .ant-table-tbody > tr.execution-history-row-active > td {
@@ -445,7 +445,7 @@ a {
 
 .run-page {
   min-height: 100vh;
-  padding: 28px;
+  padding: 20px;
   position: relative;
   overflow: hidden;
 }
@@ -483,16 +483,16 @@ a {
 }
 
 .run-page__topbar {
-  margin: 0 auto 20px;
+  margin: 0 auto 12px;
   max-width: 1320px;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
 }
 
 .run-page__headline {
-  margin: 0 auto 24px;
+  margin: 0 auto 16px;
   max-width: 1320px;
 }
 
@@ -526,8 +526,8 @@ a {
 
 .run-status-card__description {
   max-width: 720px;
-  font-size: 15px;
-  line-height: 1.8;
+  font-size: 14px;
+  line-height: 1.65;
 }
 
 .run-page__layout {
@@ -535,12 +535,12 @@ a {
   max-width: 1320px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 24px;
+  gap: 16px;
 }
 
 .run-panel,
 .run-status-card {
-  border-radius: 26px !important;
+  border-radius: 18px !important;
   border: 1px solid rgba(148, 163, 184, 0.18) !important;
   overflow: hidden;
 }
@@ -557,7 +557,7 @@ a {
 }
 
 .run-status-card {
-  margin: 0 auto 24px;
+  margin: 0 auto 16px;
   max-width: 1320px;
   background:
     linear-gradient(135deg, rgba(255, 252, 245, 0.92), rgba(255, 255, 255, 0.78)),
@@ -571,7 +571,7 @@ a {
 }
 
 .run-panel__empty {
-  min-height: 220px;
+  min-height: 160px;
   display: grid;
   place-items: center;
   gap: 8px;
@@ -581,13 +581,13 @@ a {
 .run-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .run-field {
-  padding: 16px;
+  padding: 12px;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
+  border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(248, 250, 252, 0.78)),
     linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
@@ -600,11 +600,11 @@ a {
 }
 
 .run-field__header {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .run-field__label,
@@ -624,30 +624,22 @@ a {
 }
 
 .run-result__summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.run-result__status {
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  min-height: 28px;
 }
 
 .run-output-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .run-output-item {
-  padding: 16px 18px;
-  border-radius: 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background:
     linear-gradient(135deg, rgba(255, 250, 239, 0.84), rgba(255, 255, 255, 0.72)),
@@ -662,19 +654,52 @@ a {
 
 .run-output-item__value {
   display: block;
-  margin-top: 10px;
+  margin-top: 6px;
   font-size: 15px;
-  line-height: 1.8;
+  line-height: 1.6;
   word-break: break-word;
 }
 
 .run-json-preview {
-  min-height: 280px;
+  min-height: 220px;
 }
 
 .ant-card {
-  border-radius: 18px;
+  border-radius: 14px;
   box-shadow: var(--app-card-shadow);
+}
+
+.ant-card .ant-card-head {
+  min-height: 46px;
+  padding: 0 16px;
+}
+
+.ant-card .ant-card-head-title,
+.ant-card .ant-card-extra {
+  padding: 10px 0;
+}
+
+.ant-card .ant-card-body {
+  padding: 16px;
+}
+
+.ant-form-item {
+  margin-bottom: 14px;
+}
+
+.ant-tabs-top > .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.ant-descriptions .ant-descriptions-item-label,
+.ant-descriptions .ant-descriptions-item-content {
+  padding-bottom: 8px;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th,
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 .json-preview {
@@ -702,11 +727,11 @@ a {
 
 @media (max-width: 768px) {
   .app-header {
-    padding: 16px 16px 8px;
+    padding: 12px 14px 6px;
   }
 
   .app-content {
-    padding: 0 16px 16px;
+    padding: 0 14px 14px;
   }
 
   .app-header__main,
@@ -754,7 +779,7 @@ a {
   }
 
   .run-page {
-    padding: 16px;
+    padding: 14px;
   }
 
   .run-page__topbar,
@@ -764,24 +789,24 @@ a {
   }
 
   .run-result__summary {
-    grid-template-columns: 1fr;
+    display: block;
   }
 }
 
 @media (max-width: 576px) {
   .brand-block {
-    padding: 20px 16px 16px;
+    padding: 16px 14px 14px;
   }
 
   .schema-field-card,
   .ant-card .ant-card-body {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .schema-builder-empty {
     min-height: 280px;
-    padding: 20px 12px;
+    padding: 16px 12px;
   }
 
   .schema-field-card__header .ant-space,
@@ -796,6 +821,6 @@ a {
   }
 
   .run-status-card .ant-card-body {
-    padding: 18px;
+    padding: 14px;
   }
 }

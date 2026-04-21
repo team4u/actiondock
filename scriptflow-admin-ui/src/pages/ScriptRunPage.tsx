@@ -62,7 +62,7 @@ function StatusCallout({
 }) {
   return (
     <Card className="run-status-card" bordered={false}>
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
         <div className="run-status-card__kicker">Script Runtime</div>
         <Title level={3} className="run-status-card__title">
           {title}
@@ -318,7 +318,7 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
                 showIcon
                 message="当前脚本含复杂输入结构"
                 description={`正式页暂不支持这些字段类型：${unsupportedInputFields.join("、")}`}
-                style={{ marginBottom: 20 }}
+                style={{ marginBottom: 14 }}
               />
             ) : null}
 
@@ -328,7 +328,7 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
                 showIcon
                 message="输入参数校验失败"
                 description={validationError.fieldErrors.map((item) => item.message).join("；")}
-                style={{ marginBottom: 20 }}
+                style={{ marginBottom: 14 }}
               />
             ) : null}
 
@@ -381,18 +381,14 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
                 />
               </div>
             ) : (
-              <Space direction="vertical" size="large" style={{ width: "100%" }}>
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <div className="run-result__summary">
-                  <div className="run-result__status">
-                    <Text type="secondary">状态</Text>
-                    <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
-                      {executionResult.status}
-                    </Tag>
-                  </div>
-                  <div className="run-result__status">
-                    <Text type="secondary">完成时间</Text>
-                    <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
-                  </div>
+                  <Text type="secondary">状态：</Text>
+                  <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
+                    {executionResult.status}
+                  </Tag>
+                  <Text type="secondary">完成时间：</Text>
+                  <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
                 </div>
 
                 {executionResult.errorMessage ? (

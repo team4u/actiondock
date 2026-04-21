@@ -12,12 +12,17 @@ import org.team4u.scriptflow.RuntimeApplication;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
+import java.util.Map;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,6 +59,49 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.status").value(0))
                 .andExpect(jsonPath("$.data.id").value("script-1"))
                 .andExpect(jsonPath("$.data.name").value("Hello"));
+    }
+
+    @Test
+    void detailStripsUiFieldsFromSchemaByDefault() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "name", Map.of(
+                                        "type", "string",
+                                        "title", "Name",
+                                        "x-ui", Map.of("widget", "textarea", "rows", 4),
+                                        "ui", Map.of("component", "input")
+                                )
+                        )
+                )));
+
+        mockMvc.perform(get("/api/scripts/script-1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("\"x-ui\""))))
+                .andExpect(content().string(not(containsString("\"ui\""))))
+                .andExpect(jsonPath("$.data.inputSchema.properties.name.type").value("string"));
+    }
+
+    @Test
+    void detailKeepsUiFieldsWhenExplicitlyRequested() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "name", Map.of(
+                                        "type", "string",
+                                        "x-ui", Map.of("widget", "textarea", "rows", 4)
+                                )
+                        )
+                )));
+
+        mockMvc.perform(get("/api/scripts/script-1").param("includeUiSchema", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.inputSchema.properties.name.x-ui.widget").value("textarea"))
+                .andExpect(jsonPath("$.data.inputSchema.properties.name.x-ui.rows").value(4));
     }
 
     @Test

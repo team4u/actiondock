@@ -16,24 +16,36 @@ public class ScriptController {
     }
 
     @GetMapping
-    public ApiResponse<List<ScriptDefinition>> list() {
-        return ApiResponse.success(scriptApplicationService.list());
+    public ApiResponse<List<ScriptDefinition>> list(@RequestParam(defaultValue = "false") boolean includeUiSchema) {
+        return ApiResponse.success(scriptApplicationService.list().stream()
+                .map(definition -> toResponse(definition, includeUiSchema))
+                .toList());
     }
 
     @PostMapping
-    public ApiResponse<ScriptDefinition> save(@RequestBody ScriptDefinition definition) {
-        return ApiResponse.success(scriptApplicationService.save(definition));
+    public ApiResponse<ScriptDefinition> save(
+            @RequestParam(defaultValue = "false") boolean includeUiSchema,
+            @RequestBody ScriptDefinition definition
+    ) {
+        return ApiResponse.success(toResponse(scriptApplicationService.save(definition), includeUiSchema));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<ScriptDefinition> detail(@PathVariable String id) {
-        return ApiResponse.success(scriptApplicationService.get(id));
+    public ApiResponse<ScriptDefinition> detail(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "false") boolean includeUiSchema
+    ) {
+        return ApiResponse.success(toResponse(scriptApplicationService.get(id), includeUiSchema));
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<ScriptDefinition> update(@PathVariable String id, @RequestBody ScriptDefinition definition) {
+    public ApiResponse<ScriptDefinition> update(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "false") boolean includeUiSchema,
+            @RequestBody ScriptDefinition definition
+    ) {
         definition.setId(id);
-        return ApiResponse.success(scriptApplicationService.save(definition));
+        return ApiResponse.success(toResponse(scriptApplicationService.save(definition), includeUiSchema));
     }
 
     @DeleteMapping("/{id}")
@@ -49,7 +61,14 @@ public class ScriptController {
     }
 
     @PostMapping("/{id}/publish")
-    public ApiResponse<ScriptDefinition> publish(@PathVariable String id) {
-        return ApiResponse.success(scriptApplicationService.publish(id), "发布成功");
+    public ApiResponse<ScriptDefinition> publish(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "false") boolean includeUiSchema
+    ) {
+        return ApiResponse.success(toResponse(scriptApplicationService.publish(id), includeUiSchema), "发布成功");
+    }
+
+    private ScriptDefinition toResponse(ScriptDefinition definition, boolean includeUiSchema) {
+        return includeUiSchema ? definition : SchemaViewSanitizer.sanitize(definition);
     }
 }

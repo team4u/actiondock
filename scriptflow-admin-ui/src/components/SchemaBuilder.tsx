@@ -188,7 +188,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                       </Button>
                     </div>
                   ) : (
-                    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
                       {value.fields.map((field, index) => {
                         const fieldErrors = builderErrors[field.id] ?? {};
 
@@ -333,12 +333,12 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
             key: "json",
             label: "JSON",
             children: (
-              <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <InfoHint
                   label={`${label}支持直接输入 JSON Schema`}
                   content="保存时会校验为合法 JSON 对象；如果结构仍在 builder 支持范围内，可再切回可视化编辑。"
                 />
-                <CodeEditor value={jsonText} onChange={handleJsonChange} theme={theme} height="420px" />
+                <CodeEditor value={jsonText} onChange={handleJsonChange} theme={theme} height="360px" />
                 {value.mode === "json" && jsonModeReason ? (
                   <Alert type="warning" showIcon message="当前 JSON 无法映射为 Builder" description={jsonModeReason} />
                 ) : null}

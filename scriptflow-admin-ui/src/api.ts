@@ -59,15 +59,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function listScripts(): Promise<ScriptDefinition[]> {
-  return request<ScriptDefinition[]>("/api/scripts");
+  return request<ScriptDefinition[]>("/api/scripts?includeUiSchema=true");
 }
 
 export function getScript(id: string): Promise<ScriptDefinition> {
-  return request<ScriptDefinition>(`/api/scripts/${id}`);
+  return request<ScriptDefinition>(`/api/scripts/${id}?includeUiSchema=true`);
 }
 
 export function createScript(payload: ScriptDefinition): Promise<ScriptDefinition> {
-  return request<ScriptDefinition>("/api/scripts", {
+  return request<ScriptDefinition>("/api/scripts?includeUiSchema=true", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -75,7 +75,7 @@ export function createScript(payload: ScriptDefinition): Promise<ScriptDefinitio
 }
 
 export function updateScript(id: string, payload: ScriptDefinition): Promise<ScriptDefinition> {
-  return request<ScriptDefinition>(`/api/scripts/${id}`, {
+  return request<ScriptDefinition>(`/api/scripts/${id}?includeUiSchema=true`, {
     method: "PUT",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -95,7 +95,7 @@ export function validateScript(id: string): Promise<void> {
 }
 
 export function publishScript(id: string): Promise<ScriptDefinition> {
-  return request<ScriptDefinition>(`/api/scripts/${id}/publish`, {
+  return request<ScriptDefinition>(`/api/scripts/${id}/publish?includeUiSchema=true`, {
     method: "POST"
   });
 }
