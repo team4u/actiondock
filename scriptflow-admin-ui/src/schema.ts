@@ -1,3 +1,5 @@
+import { parseJsonText, prettyJson } from "./utils";
+
 export type SchemaFieldKind = "string" | "number" | "integer" | "boolean" | "enum";
 
 export interface SchemaFieldDraft {
@@ -28,8 +30,8 @@ export type SchemaEditorState =
       fields: SchemaFieldDraft[];
     }
   | {
-      mode: "readonly";
-      rawSchema: Record<string, unknown>;
+      mode: "json";
+      jsonText: string;
       reason: string;
     };
 
@@ -143,39 +145,42 @@ export function hasSchemaFieldErrors(fields: SchemaFieldDraft[]): boolean {
   return Object.keys(validateSchemaFields(fields)).length > 0;
 }
 
-function failReadonly(reason: string, schema: Record<string, unknown>): SchemaEditorState {
+function failJson(reason: string, schema: Record<string, unknown>, jsonText?: string): SchemaEditorState {
   return {
-    mode: "readonly",
-    rawSchema: schema,
+    mode: "json",
+    jsonText: jsonText ?? prettyJson(schema),
     reason
   };
 }
 
-export function deserializeSchema(schema?: Record<string, unknown>): SchemaEditorState {
+export function deserializeSchema(
+  schema?: Record<string, unknown>,
+  jsonText?: string
+): SchemaEditorState {
   if (!schema || Object.keys(schema).length === 0) {
     return createEmptySchemaEditorState();
   }
 
   if (!isRecord(schema)) {
-    return failReadonly("顶层 schema 不是对象", {});
+    return failJson("顶层 schema 不是对象", {}, jsonText);
   }
 
   if (hasUnsupportedKeys(schema, ROOT_KEYS)) {
-    return failReadonly("根节点包含 builder 不支持的扩展配置", schema);
+    return failJson("根节点包含 builder 不支持的扩展配置", schema, jsonText);
   }
 
   if ("type" in schema && schema.type !== "object") {
-    return failReadonly("根节点 type 必须是 object", schema);
+    return failJson("根节点 type 必须是 object", schema, jsonText);
   }
 
   if ("required" in schema) {
     if (!Array.isArray(schema.required) || schema.required.some((item) => typeof item !== "string")) {
-      return failReadonly("required 必须是字符串数组", schema);
+      return failJson("required 必须是字符串数组", schema, jsonText);
     }
   }
 
   if ("properties" in schema && !isRecord(schema.properties)) {
-    return failReadonly("properties 必须是对象", schema);
+    return failJson("properties 必须是对象", schema, jsonText);
   }
 
   const properties = isRecord(schema.properties) ? schema.properties : {};
@@ -188,23 +193,23 @@ export function deserializeSchema(schema?: Record<string, unknown>): SchemaEdito
 
   for (const [name, metaValue] of Object.entries(properties)) {
     if (!isRecord(metaValue)) {
-      return failReadonly(`字段 ${name} 的定义不是对象`, schema);
+      return failJson(`字段 ${name} 的定义不是对象`, schema, jsonText);
     }
     if (hasUnsupportedKeys(metaValue, FIELD_KEYS)) {
-      return failReadonly(`字段 ${name} 含有 builder 不支持的扩展配置`, schema);
+      return failJson(`字段 ${name} 含有 builder 不支持的扩展配置`, schema, jsonText);
     }
     if ("properties" in metaValue || "items" in metaValue) {
-      return failReadonly(`字段 ${name} 使用了嵌套结构`, schema);
+      return failJson(`字段 ${name} 使用了嵌套结构`, schema, jsonText);
     }
 
     const title = typeof metaValue.title === "string" ? metaValue.title : "";
 
     if ("enum" in metaValue) {
       if (!Array.isArray(metaValue.enum) || metaValue.enum.some((item) => typeof item !== "string")) {
-        return failReadonly(`字段 ${name} 的 enum 必须是字符串数组`, schema);
+        return failJson(`字段 ${name} 的 enum 必须是字符串数组`, schema, jsonText);
       }
       if ("type" in metaValue && metaValue.type !== "string") {
-        return failReadonly(`字段 ${name} 的 enum 仅支持 string 类型`, schema);
+        return failJson(`字段 ${name} 的 enum 仅支持 string 类型`, schema, jsonText);
       }
       fields.push({
         id: createDraftId(),
@@ -224,7 +229,7 @@ export function deserializeSchema(schema?: Record<string, unknown>): SchemaEdito
       type !== "integer" &&
       type !== "boolean"
     ) {
-      return failReadonly(`字段 ${name} 的类型不在 builder 支持范围内`, schema);
+      return failJson(`字段 ${name} 的类型不在 builder 支持范围内`, schema, jsonText);
     }
 
     fields.push({
@@ -243,24 +248,36 @@ export function deserializeSchema(schema?: Record<string, unknown>): SchemaEdito
   };
 }
 
-export function serializeSchemaEditorState(
-  state: SchemaEditorState,
+export function deserializeSchemaJsonText(
+  jsonText: string,
   fieldName: string
-): Record<string, unknown> {
-  if (state.mode === "readonly") {
-    return state.rawSchema;
-  }
+): SchemaEditorState {
+  const schema = parseJsonText(jsonText, fieldName);
+  return deserializeSchema(schema, jsonText);
+}
 
-  const errors = validateSchemaFields(state.fields);
-  if (Object.keys(errors).length > 0) {
-    throw new Error(`${fieldName}存在未完成或不合法的字段，请先修正`);
+function buildSchemaFromFields(
+  fields: SchemaFieldDraft[],
+  options: {
+    fieldName?: string;
+    validate: boolean;
+  }
+): Record<string, unknown> {
+  if (options.validate) {
+    const errors = validateSchemaFields(fields);
+    if (Object.keys(errors).length > 0) {
+      throw new Error(`${options.fieldName ?? "Schema"}存在未完成或不合法的字段，请先修正`);
+    }
   }
 
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
 
-  state.fields.forEach((field) => {
+  fields.forEach((field) => {
     const name = field.name.trim();
+    if (!name) {
+      return;
+    }
     const title = field.title.trim();
     const property: Record<string, unknown> = {
       type: field.type === "enum" ? "string" : field.type
@@ -270,7 +287,10 @@ export function serializeSchemaEditorState(
       property.title = title;
     }
     if (field.type === "enum") {
-      property.enum = parseEnumValues(field.enumText);
+      const enumValues = parseEnumValues(field.enumText);
+      if (enumValues.length > 0) {
+        property.enum = enumValues;
+      }
     }
 
     properties[name] = property;
@@ -289,6 +309,23 @@ export function serializeSchemaEditorState(
   }
 
   return schema;
+}
+
+export function formatSchemaEditorState(state: SchemaEditorState): string {
+  if (state.mode === "json") {
+    return state.jsonText;
+  }
+  return prettyJson(buildSchemaFromFields(state.fields, { validate: false }));
+}
+
+export function serializeSchemaEditorState(
+  state: SchemaEditorState,
+  fieldName: string
+): Record<string, unknown> {
+  if (state.mode === "json") {
+    return parseJsonText(state.jsonText, fieldName);
+  }
+  return buildSchemaFromFields(state.fields, { fieldName, validate: true });
 }
 
 export function resolveSchemaFields(schema?: Record<string, unknown>): {

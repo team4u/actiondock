@@ -30,6 +30,12 @@ public class ApiResponse<T> {
         return response;
     }
 
+    public static <T> ApiResponse<T> error(String msg, int status, T data) {
+        ApiResponse<T> response = error(msg, status);
+        response.data = data;
+        return response;
+    }
+
     public int getStatus() {
         return status;
     }

@@ -28,11 +28,39 @@ const ScriptEditorPage = lazy(() =>
   import("./pages/ScriptEditorPage").then((module) => ({ default: module.ScriptEditorPage }))
 );
 
-function AdminShell() {
+type ColorMode = "light" | "dark";
+
+function getSystemColorMode(): ColorMode {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function useSystemColorMode(): ColorMode {
+  const [colorMode, setColorMode] = useState<ColorMode>(getSystemColorMode);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setColorMode(event.matches ? "dark" : "light");
+    };
+
+    setColorMode(mediaQuery.matches ? "dark" : "light");
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  return colorMode;
+}
+
+function AdminShell({ colorMode }: { colorMode: ColorMode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
+  const isDark = colorMode === "dark";
   const [apiKey, setApiKeyState] = useState(getApiKey());
   const [modalOpen, setModalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -54,6 +82,7 @@ function AdminShell() {
       </div>
       <Menu
         mode="inline"
+        theme={isDark ? "dark" : "light"}
         selectedKeys={[location.pathname.startsWith("/scripts") ? "scripts" : ""]}
         items={[
           {
@@ -69,7 +98,7 @@ function AdminShell() {
   return (
     <Layout className="app-shell">
       {!isMobile ? (
-        <Sider width={220} theme="light" className="app-sider">
+        <Sider width={220} theme={isDark ? "dark" : "light"} className="app-sider">
           {navigationMenu}
         </Sider>
       ) : null}
@@ -110,8 +139,8 @@ function AdminShell() {
             <Routes>
               <Route path="/" element={<Navigate to="/scripts" replace />} />
               <Route path="/scripts" element={<ScriptListPage />} />
-              <Route path="/scripts/new" element={<ScriptEditorPage mode="create" />} />
-              <Route path="/scripts/:id" element={<ScriptEditorPage mode="edit" />} />
+              <Route path="/scripts/new" element={<ScriptEditorPage colorMode={colorMode} mode="create" />} />
+              <Route path="/scripts/:id" element={<ScriptEditorPage colorMode={colorMode} mode="edit" />} />
             </Routes>
           </Suspense>
         </Content>
@@ -146,20 +175,41 @@ function AdminShell() {
 }
 
 export function App() {
+  const colorMode = useSystemColorMode();
+  const isDark = colorMode === "dark";
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = colorMode;
+  }, [colorMode]);
+
   return (
     <ConfigProvider
       theme={{
-        algorithm: theme.defaultAlgorithm,
+        algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
           borderRadius: 14,
           colorPrimary: "#2357d5",
-          colorBgLayout: "#f3f5f8",
+          colorBgLayout: isDark ? "#0b1220" : "#f3f5f8",
+          colorBgContainer: isDark ? "#101a2b" : "#ffffff",
+          colorBorderSecondary: isDark ? "rgba(148, 163, 184, 0.18)" : "rgba(5, 5, 5, 0.06)",
           fontFamily: "'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif"
+        },
+        components: {
+          Layout: {
+            bodyBg: "transparent",
+            headerBg: "transparent",
+            siderBg: isDark ? "#0f1727" : "#ffffff"
+          },
+          Menu: {
+            itemBg: "transparent",
+            itemSelectedBg: isDark ? "rgba(35, 87, 213, 0.24)" : "rgba(35, 87, 213, 0.12)",
+            itemSelectedColor: isDark ? "#dbe7ff" : "#2357d5"
+          }
         }
       }}
     >
       <AntdApp>
-        <AdminShell />
+        <AdminShell colorMode={colorMode} />
       </AntdApp>
     </ConfigProvider>
   );

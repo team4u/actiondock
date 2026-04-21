@@ -20,6 +20,7 @@ public class ExecutionApplicationService {
     private final ExecutionRepository executionRepository;
     private final ScriptEngine scriptEngine;
     private final Executor executor;
+    private final ScriptSchemaSupport scriptSchemaSupport;
 
     public ExecutionApplicationService(ScriptRepository scriptRepository,
                                        ExecutionRepository executionRepository,
@@ -29,17 +30,20 @@ public class ExecutionApplicationService {
         this.executionRepository = executionRepository;
         this.scriptEngine = scriptEngine;
         this.executor = executor;
+        this.scriptSchemaSupport = new ScriptSchemaSupport();
     }
 
     public ExecutionRecord execute(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
         ScriptDefinition scriptDefinition = scriptRepository.findById(scriptId)
                 .orElseThrow(() -> new IllegalArgumentException("Script not found: " + scriptId));
+        Map<String, Object> payload = input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
+        scriptSchemaSupport.validateInput(scriptId, payload, scriptDefinition.getInputSchema());
 
         ExecutionRecord record = new ExecutionRecord()
                 .setId(UUID.randomUUID().toString())
                 .setScriptId(scriptId)
                 .setSubmitMode(submitMode == null ? SubmitMode.SYNC : submitMode)
-                .setInput(input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input))
+                .setInput(payload)
                 .setCreatedAt(LocalDateTime.now());
 
         if (record.getSubmitMode() == SubmitMode.ASYNC) {

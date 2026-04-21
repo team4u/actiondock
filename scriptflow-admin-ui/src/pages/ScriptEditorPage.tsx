@@ -9,7 +9,6 @@ import {
   RocketOutlined,
   SaveOutlined
 } from "@ant-design/icons";
-import Editor from "@monaco-editor/react";
 import {
   Alert,
   Button,
@@ -52,12 +51,15 @@ import {
   validateScript
 } from "../api";
 import { getApiKey } from "../auth";
+import { CodeEditor } from "../components/CodeEditor";
 import {
   buildExecuteCliCommand,
   buildExecuteCurlCommand,
   buildExecutionInputFromValues,
+  buildScriptContractCliCommand,
   buildScriptDetailCliCommand,
   buildScriptDetailCurlCommand,
+  buildToolDetailCurlCommand,
   resolveExecutionCommandInput
 } from "../commands";
 import { SchemaBuilder } from "../components/SchemaBuilder";
@@ -71,15 +73,17 @@ import type {
   ExecutionRecord,
   ExecutionStatus,
   ScriptDefinition,
-  SubmitMode
+  SubmitMode,
+  ValidationErrorData
 } from "../types";
-import type { SchemaEditorState } from "../schema";
+import type { SchemaEditorState, SchemaFieldDefinition } from "../schema";
 import { copyText, formatDateTime, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
 interface ScriptEditorPageProps {
+  colorMode: "light" | "dark";
   mode: "create" | "edit";
 }
 
@@ -144,38 +148,53 @@ function JsonPreview({
   );
 }
 
-function JsonEditor({
-  value,
-  onChange,
-  placeholder
+function isValidationErrorData(value: unknown): value is ValidationErrorData {
+  return Boolean(value) && typeof value === "object" && Array.isArray((value as ValidationErrorData).fieldErrors);
+}
+
+function SchemaFieldSummary({
+  title,
+  fields,
+  unsupportedFields
 }: {
-  value: string;
-  onChange: (nextValue: string) => void;
-  placeholder: string;
+  title: string;
+  fields: SchemaFieldDefinition[];
+  unsupportedFields: string[];
 }) {
+  if (fields.length === 0 && unsupportedFields.length === 0) {
+    return null;
+  }
+
   return (
-    <div className="execution-json-editor">
-      <Editor
-        height="260px"
-        defaultLanguage="json"
-        language="json"
-        value={value}
-        onChange={(nextValue) => onChange(nextValue ?? "")}
-        theme="vs-light"
-        options={{
-          minimap: { enabled: false },
-          fontSize: 14,
-          scrollBeyondLastLine: false,
-          wordWrap: "on",
-          automaticLayout: true,
-          tabSize: 2,
-          lineNumbersMinChars: 3,
-          padding: { top: 12, bottom: 12 }
-        }}
-      />
-      {!value.trim() && (
-        <div className="execution-json-editor__placeholder">{placeholder}</div>
+    <div className="schema-contract">
+      <Text strong>{title}</Text>
+      {fields.length > 0 ? (
+        <div className="schema-contract__list">
+          {fields.map((field) => (
+            <div key={field.name} className="schema-contract__item">
+              <Space size={[8, 8]} wrap>
+                <Text strong>{field.label}</Text>
+                <Text code>{field.name}</Text>
+                <Tag>{field.kind}</Tag>
+                {field.required ? <Tag color="red">required</Tag> : <Tag>optional</Tag>}
+              </Space>
+              {field.enumValues && field.enumValues.length > 0 ? (
+                <Text type="secondary">枚举值: {field.enumValues.join(", ")}</Text>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前 schema 没有可提取的字段清单" />
       )}
+      {unsupportedFields.length > 0 ? (
+        <Alert
+          type="info"
+          showIcon
+          message="存在未结构化展示的字段"
+          description={`以下字段仅能通过 JSON 方式查看或传入：${unsupportedFields.join("、")}`}
+        />
+      ) : null}
     </div>
   );
 }
@@ -217,11 +236,12 @@ function CommandPanel({
   );
 }
 
-export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
+export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
+  const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<ScriptFormValues>();
   const [executionForm] = Form.useForm<Record<string, unknown>>();
@@ -246,6 +266,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   const [executionJsonInput, setExecutionJsonInput] = useState("{}");
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
   const [currentExecution, setCurrentExecution] = useState<ExecutionRecord | null>(null);
+  const [executionValidationError, setExecutionValidationError] = useState<ValidationErrorData | null>(null);
   const [deletingExecutionId, setDeletingExecutionId] = useState<string | null>(null);
   const [clearingExecutionHistory, setClearingExecutionHistory] = useState(false);
   const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
@@ -264,6 +285,8 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   const { supportedFields, unsupportedFields } = resolveSchemaFields(currentScript?.inputSchema);
   const { supportedFields: supportedOutputFields, unsupportedFields: unsupportedOutputFields } =
     resolveSchemaFields(currentScript?.outputSchema);
+  const hasInputSchema = Boolean(currentScript?.inputSchema && Object.keys(currentScript.inputSchema).length > 0);
+  const hasOutputSchema = Boolean(currentScript?.outputSchema && Object.keys(currentScript.outputSchema).length > 0);
   const outputValues = isRecord(currentExecution?.output) ? currentExecution.output : {};
   const supportsSchemaForm = supportedFields.length > 0;
   const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
@@ -283,6 +306,14 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
       })
     : "";
   const detailCliCommand = currentScript ? buildScriptDetailCliCommand(currentScript.id) : "";
+  const toolDetailCliCommand = currentScript ? buildScriptContractCliCommand(currentScript.id) : "";
+  const toolDetailCurlCommand = currentScript
+    ? buildToolDetailCurlCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
   const executeCurlCommand = currentScript
     ? buildExecuteCurlCommand({
         apiKey,
@@ -299,6 +330,16 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const toolContractResponseExample = currentScript
+    ? {
+        status: 0,
+        msg: "处理成功",
+        data: {
+          ...(hasInputSchema ? { input: supportedFields } : {}),
+          ...(hasOutputSchema ? { output: supportedOutputFields } : {})
+        }
+      }
+    : undefined;
 
   const clearPolling = () => {
     if (pollingTimerRef.current !== null) {
@@ -373,6 +414,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
     try {
       const script = await getScript(scriptId);
       setCurrentScript(script);
+      setExecutionValidationError(null);
       form.setFieldsValue({
         id: script.id,
         name: script.name,
@@ -397,6 +439,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
         type: "GROOVY"
       });
       setCurrentScript(null);
+      setExecutionValidationError(null);
       setSourceText(DEFAULT_SOURCE);
       setInputSchemaState(createEmptySchemaEditorState());
       setOutputSchemaState(createEmptySchemaEditorState());
@@ -537,27 +580,28 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
               (await executionForm.validateFields()) as Record<string, unknown>
             )
           : parseJsonText(executionJsonInput, "执行入参");
-      const record = await executeScript({
+      const response = await executeScript({
         scriptId: currentScript.id,
         input,
         mode: executionMode
       });
+      setExecutionValidationError(null);
 
-      setCurrentExecution(record);
-      setExecutionHistory((previous) =>
-        sortExecutions([record, ...previous.filter((item) => item.id !== record.id)])
-      );
-
-      if (record.submitMode === "ASYNC" && isExecutionActive(record.status)) {
+      if (response.submitMode === "ASYNC" && isExecutionActive(response.status)) {
         messageApi.success("异步执行已提交");
-        await loadExecutionHistory(currentScript.id, record.id);
-        startPolling(record.id, currentScript.id);
+        await loadExecutionHistory(currentScript.id, response.id);
+        startPolling(response.id, currentScript.id);
       } else {
         clearPolling();
         messageApi.success("执行完成");
-        await loadExecutionHistory(currentScript.id, record.id);
+        await loadExecutionHistory(currentScript.id, response.id);
       }
     } catch (error) {
+      if (error instanceof ApiError && isValidationErrorData(error.data)) {
+        setExecutionValidationError(error.data);
+      } else {
+        setExecutionValidationError(null);
+      }
       const detail = error instanceof ApiError || error instanceof Error ? error.message : "执行失败";
       messageApi.error(detail);
     } finally {
@@ -844,7 +888,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                     <Col xs={24} xl={16}>
                       <Card
                         title="脚本内容"
-                        extra={<Text type="secondary">Groovy 使用代码编辑器，输入输出结构使用可视化构建器</Text>}
+                        extra={<Text type="secondary">Groovy 使用代码编辑器，输入输出结构支持 Builder 和 JSON 两种编辑方式</Text>}
                       >
                         <Tabs
                           items={[
@@ -852,37 +896,45 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                               key: "source",
                               label: "source.groovy",
                               children: (
-                                <Editor
+                                <CodeEditor
                                   height="clamp(320px, 60vh, 420px)"
-                                  defaultLanguage="groovy"
                                   language="groovy"
                                   value={sourceText}
-                                  onChange={(value) => setSourceText(value ?? "")}
-                                  theme="vs-light"
-                                  options={{
-                                    minimap: { enabled: false },
-                                    fontSize: 14,
-                                    scrollBeyondLastLine: false
-                                  }}
+                                  onChange={setSourceText}
+                                  theme={editorTheme}
                                 />
                               )
                             },
                             {
                               key: "input",
                               label: "inputSchema.json",
-                              children: <SchemaBuilder label="输入结构" value={inputSchemaState} onChange={setInputSchemaState} />
+                              children: (
+                                <SchemaBuilder
+                                  label="输入结构"
+                                  value={inputSchemaState}
+                                  onChange={setInputSchemaState}
+                                  theme={editorTheme}
+                                />
+                              )
                             },
                             {
                               key: "output",
                               label: "outputSchema.json",
-                              children: <SchemaBuilder label="输出结构" value={outputSchemaState} onChange={setOutputSchemaState} />
+                              children: (
+                                <SchemaBuilder
+                                  label="输出结构"
+                                  value={outputSchemaState}
+                                  onChange={setOutputSchemaState}
+                                  theme={editorTheme}
+                                />
+                              )
                             }
                           ]}
                         />
                         <Space className="editor-footer">
                           <CodeOutlined />
                           <Text type="secondary">
-                            保存时会校验 Schema 字段配置，Groovy 语法通过后端校验接口确认。
+                            保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Groovy 语法通过后端校验接口确认。
                           </Text>
                         </Space>
                       </Card>
@@ -908,94 +960,162 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                             }
                           />
 
-                          <Row gutter={[20, 20]}>
-                            <Col xs={24} xl={12}>
-                              <Card
-                                type="inner"
-                                title="查看详情"
-                                extra={<Text type="secondary">使用当前脚本 ID 生成</Text>}
-                              >
-                                <Tabs
-                                  items={[
+                          <Tabs
+                            items={[
+                              {
+                                key: "command-detail",
+                                label: "查看详情",
+                                children: (
+                                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                                    <Text type="secondary">使用当前脚本 ID 生成</Text>
+                                    <Tabs
+                                      items={[
+                                        {
+                                          key: "detail-rest",
+                                          label: "REST API",
+                                          children: (
+                                            <CommandPanel
+                                              title="详情查询 cURL"
+                                              command={detailCurlCommand}
+                                              onCopy={(command) => void handleCopyCommand(command)}
+                                            />
+                                          )
+                                        },
+                                        {
+                                          key: "detail-cli",
+                                          label: "CLI",
+                                          children: (
+                                            <CommandPanel
+                                              title="详情查询 CLI"
+                                              command={detailCliCommand}
+                                              onCopy={(command) => void handleCopyCommand(command)}
+                                            />
+                                          )
+                                        }
+                                      ]}
+                                    />
+                                  </Space>
+                                )
+                              },
+                              {
+                                key: "command-execute",
+                                label: "执行脚本",
+                                children: (
+                                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                                    <Text type="secondary">跟随当前调试配置生成</Text>
+                                    {commandInput.note && (
+                                      <Alert
+                                        type={commandInput.source === "sample" || commandInput.source === "empty" ? "warning" : "info"}
+                                        showIcon
+                                        message={commandInput.note}
+                                      />
+                                    )}
+                                    <Descriptions size="small" column={isMobile ? 1 : 2}>
+                                      <Descriptions.Item label="执行模式">
+                                        {executionMode}
+                                      </Descriptions.Item>
+                                      <Descriptions.Item label="入参来源">
+                                        {getCommandInputSourceLabel(commandInput.source)}
+                                      </Descriptions.Item>
+                                    </Descriptions>
+                                    <Tabs
+                                      items={[
+                                        {
+                                          key: "execute-rest",
+                                          label: "REST API",
+                                          children: (
+                                            <CommandPanel
+                                              title="执行脚本 cURL"
+                                              command={executeCurlCommand}
+                                              onCopy={(command) => void handleCopyCommand(command)}
+                                            />
+                                          )
+                                        },
+                                        {
+                                          key: "execute-cli",
+                                          label: "CLI",
+                                          children: (
+                                            <CommandPanel
+                                              title="执行脚本 CLI"
+                                              command={executeCliCommand}
+                                              onCopy={(command) => void handleCopyCommand(command)}
+                                            />
+                                          )
+                                        }
+                                      ]}
+                                    />
+                                  </Space>
+                                )
+                              },
+                              ...(hasInputSchema || hasOutputSchema
+                                ? [
                                     {
-                                      key: "detail-rest",
-                                      label: "REST API",
+                                      key: "command-contract",
+                                      label: "Schema",
                                       children: (
-                                        <CommandPanel
-                                          title="详情查询 cURL"
-                                          command={detailCurlCommand}
-                                          onCopy={(command) => void handleCopyCommand(command)}
-                                        />
-                                      )
-                                    },
-                                    {
-                                      key: "detail-cli",
-                                      label: "CLI",
-                                      children: (
-                                        <CommandPanel
-                                          title="详情查询 CLI"
-                                          command={detailCliCommand}
-                                          onCopy={(command) => void handleCopyCommand(command)}
-                                        />
+                                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                                          <Text type="secondary">供模型与调用方查看输入输出定义</Text>
+                                          <Tabs
+                                            items={[
+                                              {
+                                                key: "contract-rest",
+                                                label: "REST API",
+                                                children: (
+                                                  <CommandPanel
+                                                    title="获取 Schema cURL"
+                                                    command={toolDetailCurlCommand}
+                                                    onCopy={(command) => void handleCopyCommand(command)}
+                                                  />
+                                                )
+                                              },
+                                              {
+                                                key: "contract-cli",
+                                                label: "CLI",
+                                                children: (
+                                                  <CommandPanel
+                                                    title="获取 Schema CLI"
+                                                    command={toolDetailCliCommand}
+                                                    onCopy={(command) => void handleCopyCommand(command)}
+                                                  />
+                                                )
+                                              }
+                                            ]}
+                                          />
+
+                                          <JsonPreview
+                                            title="Schema 响应示例"
+                                            value={toolContractResponseExample}
+                                            emptyDescription="当前没有可展示的 Schema 示例"
+                                          />
+
+                                          <Row gutter={[20, 20]}>
+                                            {hasInputSchema ? (
+                                              <Col xs={24} xl={12}>
+                                                <SchemaFieldSummary
+                                                  title="入参"
+                                                  fields={supportedFields}
+                                                  unsupportedFields={unsupportedFields}
+                                                />
+                                              </Col>
+                                            ) : null}
+
+                                            {hasOutputSchema ? (
+                                              <Col xs={24} xl={12}>
+                                                <SchemaFieldSummary
+                                                  title="出参"
+                                                  fields={supportedOutputFields}
+                                                  unsupportedFields={unsupportedOutputFields}
+                                                />
+                                              </Col>
+                                            ) : null}
+                                          </Row>
+                                        </Space>
                                       )
                                     }
-                                  ]}
-                                />
-                              </Card>
-                            </Col>
-
-                            <Col xs={24} xl={12}>
-                              <Card
-                                type="inner"
-                                title="执行脚本"
-                                extra={<Text type="secondary">跟随当前调试配置生成</Text>}
-                              >
-                                <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-                                  {commandInput.note && (
-                                    <Alert
-                                      type={commandInput.source === "sample" || commandInput.source === "empty" ? "warning" : "info"}
-                                      showIcon
-                                      message={commandInput.note}
-                                    />
-                                  )}
-                                  <Descriptions size="small" column={isMobile ? 1 : 2}>
-                                    <Descriptions.Item label="执行模式">
-                                      {executionMode}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label="入参来源">
-                                      {getCommandInputSourceLabel(commandInput.source)}
-                                    </Descriptions.Item>
-                                  </Descriptions>
-                                  <Tabs
-                                    items={[
-                                      {
-                                        key: "execute-rest",
-                                        label: "REST API",
-                                        children: (
-                                          <CommandPanel
-                                            title="执行脚本 cURL"
-                                            command={executeCurlCommand}
-                                            onCopy={(command) => void handleCopyCommand(command)}
-                                          />
-                                        )
-                                      },
-                                      {
-                                        key: "execute-cli",
-                                        label: "CLI",
-                                        children: (
-                                          <CommandPanel
-                                            title="执行脚本 CLI"
-                                            command={executeCliCommand}
-                                            onCopy={(command) => void handleCopyCommand(command)}
-                                          />
-                                        )
-                                      }
-                                    ]}
-                                  />
-                                </Space>
-                              </Card>
-                            </Col>
-                          </Row>
+                                  ]
+                                : [])
+                            ]}
+                          />
                         </Space>
                       )
                     },
@@ -1004,15 +1124,6 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                       label: "执行调试",
                       children: (
                         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                          {unsupportedFields.length > 0 && (
-                            <Alert
-                              type="info"
-                              showIcon
-                              message="部分输入字段暂不支持自动生成表单"
-                              description={`以下字段不会出现在执行表单中：${unsupportedFields.join("、")}。如需传入，请切换到 JSON 输入。`}
-                            />
-                          )}
-
                           <Row gutter={[20, 20]}>
                             <Col xs={24} xl={10}>
                               <Space direction="vertical" size="large" style={{ width: "100%" }}>
@@ -1022,6 +1133,33 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                                   extra={<Text type="secondary">根据 inputSchema 自动生成</Text>}
                                 >
                                   <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                                    {executionValidationError && (
+                                      <Alert
+                                        type="error"
+                                        showIcon
+                                        message="参数校验失败"
+                                        description={
+                                          <div>
+                                            {executionValidationError.fieldErrors.map((fieldError) => (
+                                              <div key={`${fieldError.field}-${fieldError.reason}`}>
+                                                <Text code>{fieldError.field}</Text>
+                                                {" - "}
+                                                {fieldError.message}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        }
+                                      />
+                                    )}
+
+                                    {hasInputSchema && (
+                                      <SchemaFieldSummary
+                                        title="参数清单"
+                                        fields={supportedFields}
+                                        unsupportedFields={unsupportedFields}
+                                      />
+                                    )}
+
                                     <Radio.Group
                                       value={executionMode}
                                       optionType="button"
@@ -1121,10 +1259,11 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                                                   label="执行入参 JSON"
                                                   extra="直接输入 JSON 对象执行，不依赖 inputSchema。"
                                                 >
-                                                  <JsonEditor
+                                                  <CodeEditor
                                                     value={executionJsonInput}
                                                     onChange={setExecutionJsonInput}
                                                     placeholder='{"name":"Alice"}'
+                                                    theme={editorTheme}
                                                   />
                                                 </Form.Item>
                                               </Form>
@@ -1138,10 +1277,11 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                                           label="执行入参 JSON"
                                           extra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
                                         >
-                                          <JsonEditor
+                                          <CodeEditor
                                             value={executionJsonInput}
                                             onChange={setExecutionJsonInput}
                                             placeholder='{"name":"Alice"}'
+                                            theme={editorTheme}
                                           />
                                         </Form.Item>
                                       </Form>
@@ -1165,12 +1305,11 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                                   extra={<Text type="secondary">根据 outputSchema 渲染</Text>}
                                 >
                                   <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-                                    {unsupportedOutputFields.length > 0 && (
-                                      <Alert
-                                        type="info"
-                                        showIcon
-                                        message="部分输出字段暂不支持结构化渲染"
-                                        description={`以下字段将仅在 JSON 预览中展示：${unsupportedOutputFields.join("、")}`}
+                                    {hasOutputSchema && (
+                                      <SchemaFieldSummary
+                                        title="输出字段清单"
+                                        fields={supportedOutputFields}
+                                        unsupportedFields={unsupportedOutputFields}
                                       />
                                     )}
 

@@ -165,6 +165,23 @@ export function buildScriptDetailCurlCommand({
   return lines.join(" \\\n");
 }
 
+export function buildToolDetailCurlCommand({
+  apiKey,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  origin: string;
+  scriptId: string;
+}): string {
+  const lines = ["curl -X GET"];
+  if (apiKey) {
+    lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
+  }
+  lines.push(`  ${shellQuote(`${origin}/api/schema/${scriptId}`)}`);
+  return lines.join(" \\\n");
+}
+
 export function buildExecuteCurlCommand({
   apiKey,
   input,
@@ -200,6 +217,12 @@ export function buildExecuteCurlCommand({
 
 export function buildScriptDetailCliCommand(scriptId: string): string {
   return `java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script show --id ${shellQuote(
+    scriptId
+  )}`;
+}
+
+export function buildScriptContractCliCommand(scriptId: string): string {
+  return `java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script schema --id ${shellQuote(
     scriptId
   )}`;
 }

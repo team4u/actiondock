@@ -11,8 +11,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.scriptflow.RuntimeApplication;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
+import org.team4u.scriptflow.application.InvalidExecutionInputException;
+import org.team4u.scriptflow.application.SchemaFieldError;
+import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
+import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 
 import java.util.List;
@@ -54,11 +58,24 @@ class ExecutionControllerTest {
     @MockBean
     private ExecutionApplicationService executionApplicationService;
 
+    @MockBean
+    private ScriptApplicationService scriptApplicationService;
+
     @Test
     void executeUsesSyncModeByDefault() throws Exception {
         when(executionApplicationService.execute(eq("script-1"), any(), eq(SubmitMode.SYNC))).thenReturn(new ExecutionRecord()
                 .setId("exec-1")
-                .setStatus(ExecutionStatus.SUCCESS));
+                .setScriptId("script-1")
+                .setStatus(ExecutionStatus.SUCCESS)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setInput(Map.of("name", "Alice"))
+                .setOutput(Map.of("message", "Hello", "secret", "token")));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setOutputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of("message", Map.of("type", "string"))
+                )));
 
         mockMvc.perform(post("/api/executions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -67,12 +84,44 @@ class ExecutionControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.msg").value("已受理"))
-                .andExpect(jsonPath("$.data.id").value("exec-1"));
+                .andExpect(jsonPath("$.data.id").value("exec-1"))
+                .andExpect(jsonPath("$.data.output.message").value("Hello"))
+                .andExpect(jsonPath("$.data.output.secret").doesNotExist())
+                .andExpect(jsonPath("$.data.input").doesNotExist())
+                .andExpect(jsonPath("$.data.debug").doesNotExist());
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> inputCaptor = ArgumentCaptor.forClass(Map.class);
         verify(executionApplicationService).execute(eq("script-1"), inputCaptor.capture(), eq(SubmitMode.SYNC));
         assertThat(inputCaptor.getValue()).containsEntry("name", "Alice");
+    }
+
+    @Test
+    void executeIncludesRawInputAndOutputInDebugView() throws Exception {
+        when(executionApplicationService.execute(eq("script-1"), any(), eq(SubmitMode.SYNC))).thenReturn(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("script-1")
+                .setStatus(ExecutionStatus.SUCCESS)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setInput(Map.of("name", "Alice"))
+                .setOutput(Map.of("message", "Hello", "secret", "token")));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setOutputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of("message", Map.of("type", "string"))
+                )));
+
+        mockMvc.perform(post("/api/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scriptId":"script-1","input":{"name":"Alice"},"responseView":"DEBUG"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.output.message").value("Hello"))
+                .andExpect(jsonPath("$.data.debug.input.name").value("Alice"))
+                .andExpect(jsonPath("$.data.debug.rawOutput.message").value("Hello"))
+                .andExpect(jsonPath("$.data.debug.rawOutput.secret").value("token"));
     }
 
     @Test
@@ -92,6 +141,26 @@ class ExecutionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.msg").value("Execution not found: missing"));
+    }
+
+    @Test
+    void executeReturnsStructuredValidationError() throws Exception {
+        when(executionApplicationService.execute(eq("script-1"), any(), eq(SubmitMode.SYNC)))
+                .thenThrow(new InvalidExecutionInputException("script-1", List.of(
+                        new SchemaFieldError("name", "required", "Name 为必填", "present", "missing")
+                )));
+
+        mockMvc.perform(post("/api/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scriptId":"script-1","input":{}}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.msg").value("输入参数校验失败"))
+                .andExpect(jsonPath("$.data.code").value("INVALID_ARGUMENTS"))
+                .andExpect(jsonPath("$.data.scriptId").value("script-1"))
+                .andExpect(jsonPath("$.data.fieldErrors[0].field").value("name"));
     }
 
     @Test

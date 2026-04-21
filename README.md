@@ -97,6 +97,12 @@ java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar run --id hello-groovy
 - `GET /api/executions/{id}`
 - `GET /api/executions?scriptId=...`
 
+执行接口说明：
+
+- `POST /api/executions` 默认返回轻量执行结果，不回显完整 `input`，`output` 会按脚本的 `outputSchema` 做顶层字段投影
+- `POST /api/executions` 支持可选 `responseView: "RESULT" | "DEBUG"`，其中 `DEBUG` 会额外返回原始 `input` 和 `rawOutput`
+- `GET /api/executions/{id}` 与 `GET /api/executions?scriptId=...` 继续返回完整执行记录，包含原始 `input` 和 `output`
+
 ## 说明
 
 - 数据库：H2 文件库

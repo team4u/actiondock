@@ -71,6 +71,47 @@ class ExecutionApplicationServiceTest {
     }
 
     @Test
+    void executeRejectsInvalidInputAgainstSchema() {
+        scriptRepository.save(new ScriptDefinition()
+                .setId("script-1")
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "required", List.of("name"),
+                        "properties", Map.of(
+                                "name", Map.of("type", "string", "title", "Name")
+                        )
+                )));
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        assertThatThrownBy(() -> service.execute("script-1", Map.of(), SubmitMode.SYNC))
+                .isInstanceOf(InvalidExecutionInputException.class)
+                .hasMessage("输入参数校验失败");
+        assertThat(executionRepository.savedSnapshots).isEmpty();
+    }
+
+    @Test
+    void executeSkipsValidationWhenSchemaMissing() {
+        scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
+        when(scriptEngine.execute(any(), any())).thenReturn(Map.of("ok", true));
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        ExecutionRecord record = service.execute("script-1", Map.of("free", "form"), SubmitMode.SYNC);
+
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
+        assertThat(record.getInput()).containsEntry("free", "form");
+    }
+
+    @Test
     void executeCapturesFailures() {
         scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("throw new RuntimeException()"));
         when(scriptEngine.execute(any(), any())).thenThrow(new IllegalStateException("boom"));

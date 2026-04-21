@@ -1,0 +1,270 @@
+package org.team4u.scriptflow.application;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+public class ScriptSchemaSupport {
+    public SchemaSummary summarize(Map<String, Object> schema) {
+        ParsedSchema parsedSchema = parse(schema);
+        List<SchemaField> fields = parsedSchema.fields().stream()
+                .map(field -> new SchemaField(
+                        field.name(),
+                        field.label(),
+                        field.kind(),
+                        field.required(),
+                        field.description(),
+                        field.enumValues(),
+                        field.defaultValue(),
+                        field.examples()
+                ))
+                .toList();
+        return new SchemaSummary(fields);
+    }
+
+    public void validateInput(String scriptId, Map<String, Object> input, Map<String, Object> schema) {
+        ParsedSchema parsedSchema = parse(schema);
+        if (parsedSchema.fields().isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> payload = input == null ? Map.of() : input;
+        List<SchemaFieldError> fieldErrors = new ArrayList<>();
+        for (ParsedField field : parsedSchema.fields()) {
+            if (!payload.containsKey(field.name())) {
+                if (field.required()) {
+                    fieldErrors.add(new SchemaFieldError(
+                            field.name(),
+                            "required",
+                            field.label() + " 为必填",
+                            "present",
+                            "missing"
+                    ));
+                }
+                continue;
+            }
+
+            Object value = payload.get(field.name());
+            if (value == null) {
+                fieldErrors.add(new SchemaFieldError(
+                        field.name(),
+                        "type_mismatch",
+                        field.label() + " 不能为 null",
+                        field.kind(),
+                        "null"
+                ));
+                continue;
+            }
+
+            if (!field.supported()) {
+                continue;
+            }
+
+            if (!matchesType(value, field.kind())) {
+                fieldErrors.add(new SchemaFieldError(
+                        field.name(),
+                        "type_mismatch",
+                        field.label() + " 必须是 " + field.kind(),
+                        field.kind(),
+                        detectType(value)
+                ));
+                continue;
+            }
+
+            if (!field.enumValues().isEmpty()) {
+                String enumValue = String.valueOf(value);
+                if (!field.enumValues().contains(enumValue)) {
+                    fieldErrors.add(new SchemaFieldError(
+                            field.name(),
+                            "enum_mismatch",
+                            field.label() + " 必须是枚举值之一: " + String.join(", ", field.enumValues()),
+                            "enum(" + String.join(", ", field.enumValues()) + ")",
+                            enumValue
+                    ));
+                }
+            }
+        }
+
+        if (!fieldErrors.isEmpty()) {
+            throw new InvalidExecutionInputException(scriptId, fieldErrors);
+        }
+    }
+
+    private ParsedSchema parse(Map<String, Object> schema) {
+        if (schema == null || schema.isEmpty()) {
+            return new ParsedSchema(List.of());
+        }
+
+        Map<String, Object> properties = toObjectMap(schema.get("properties"));
+        if (properties.isEmpty()) {
+            return new ParsedSchema(List.of());
+        }
+
+        Set<String> requiredFields = toStringSet(schema.get("required"));
+        List<ParsedField> fields = new ArrayList<>();
+        properties.forEach((name, rawMeta) -> fields.add(parseField(name, rawMeta, requiredFields.contains(name))));
+        return new ParsedSchema(fields);
+    }
+
+    private ParsedField parseField(String name, Object rawMeta, boolean required) {
+        Map<String, Object> meta = toObjectMap(rawMeta);
+        String label = stringValue(meta.get("title"));
+        if (label == null || label.isBlank()) {
+            label = name;
+        }
+
+        String description = stringValue(meta.get("description"));
+        List<String> enumValues = toStringList(meta.get("enum"));
+        Object defaultValue = meta.get("default");
+        List<Object> examples = toObjectList(meta.get("examples"));
+
+        if (!enumValues.isEmpty()) {
+            String type = stringValue(meta.get("type"));
+            boolean supported = type == null || "string".equals(type);
+            return new ParsedField(name, label, "enum", required, description, enumValues, defaultValue, examples, supported);
+        }
+
+        String type = stringValue(meta.get("type"));
+        boolean supported = isSupportedType(type);
+        String kind = supported ? type : type == null ? "unknown" : type;
+        return new ParsedField(name, label, kind, required, description, List.of(), defaultValue, examples, supported);
+    }
+
+    private boolean matchesType(Object value, String kind) {
+        return switch (kind) {
+            case "string", "enum" -> value instanceof String;
+            case "boolean" -> value instanceof Boolean;
+            case "number" -> value instanceof Number;
+            case "integer" -> isInteger(value);
+            default -> true;
+        };
+    }
+
+    private boolean isInteger(Object value) {
+        if (!(value instanceof Number number)) {
+            return false;
+        }
+        if (number instanceof Byte || number instanceof Short || number instanceof Integer || number instanceof Long || number instanceof BigInteger) {
+            return true;
+        }
+        if (number instanceof BigDecimal decimal) {
+            return decimal.stripTrailingZeros().scale() <= 0;
+        }
+        if (number instanceof Float || number instanceof Double) {
+            double doubleValue = number.doubleValue();
+            return Double.isFinite(doubleValue) && doubleValue == Math.rint(doubleValue);
+        }
+        return false;
+    }
+
+    private String detectType(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String) {
+            return "string";
+        }
+        if (value instanceof Boolean) {
+            return "boolean";
+        }
+        if (value instanceof Number) {
+            return isInteger(value) ? "integer" : "number";
+        }
+        if (value instanceof List<?>) {
+            return "array";
+        }
+        if (value instanceof Map<?, ?>) {
+            return "object";
+        }
+        return value.getClass().getSimpleName();
+    }
+
+    private boolean isSupportedType(String type) {
+        return "string".equals(type) || "number".equals(type) || "integer".equals(type) || "boolean".equals(type);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toObjectMap(Object value) {
+        if (!(value instanceof Map<?, ?> source)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        source.forEach((key, item) -> result.put(String.valueOf(key), item));
+        return result;
+    }
+
+    private Set<String> toStringSet(Object value) {
+        if (!(value instanceof List<?> items)) {
+            return Set.of();
+        }
+        Set<String> values = new LinkedHashSet<>();
+        items.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .forEach(values::add);
+        return values;
+    }
+
+    private List<String> toStringList(Object value) {
+        if (!(value instanceof List<?> items)) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (Object item : items) {
+            if (!(item instanceof String text)) {
+                return List.of();
+            }
+            values.add(text);
+        }
+        return List.copyOf(values);
+    }
+
+    private List<Object> toObjectList(Object value) {
+        if (!(value instanceof List<?> items)) {
+            return List.of();
+        }
+        return List.copyOf(items);
+    }
+
+    private String stringValue(Object value) {
+        return value instanceof String text ? text : null;
+    }
+
+    private record ParsedSchema(List<ParsedField> fields) {
+    }
+
+    private record ParsedField(
+            String name,
+            String label,
+            String kind,
+            boolean required,
+            String description,
+            List<String> enumValues,
+            Object defaultValue,
+            List<Object> examples,
+            boolean supported
+    ) {
+    }
+
+    public record SchemaSummary(
+            List<SchemaField> fields
+    ) {
+    }
+
+    public record SchemaField(
+            String name,
+            String label,
+            String kind,
+            boolean required,
+            String description,
+            List<String> enumValues,
+            Object defaultValue,
+            List<Object> examples
+    ) {
+    }
+}

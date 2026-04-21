@@ -3,6 +3,7 @@ import type {
   ApiErrorPayload,
   ApiResponse,
   ExecuteRequest,
+  ExecutionResponse,
   ExecutionRecord,
   ScriptDefinition
 } from "./types";
@@ -13,10 +14,12 @@ const JSON_HEADERS = {
 
 export class ApiError extends Error {
   status: number;
+  data?: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, data?: unknown) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -45,7 +48,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const message = payload && "msg" in payload && payload.msg ? payload.msg : "请求失败";
-    throw new ApiError(message, response.status);
+    const data = payload && "data" in payload ? payload.data : undefined;
+    throw new ApiError(message, response.status, data);
   }
 
   if (!payload || !("data" in payload)) {
@@ -96,8 +100,8 @@ export function publishScript(id: string): Promise<ScriptDefinition> {
   });
 }
 
-export function executeScript(payload: ExecuteRequest): Promise<ExecutionRecord> {
-  return request<ExecutionRecord>("/api/executions", {
+export function executeScript(payload: ExecuteRequest): Promise<ExecutionResponse> {
+  return request<ExecutionResponse>("/api/executions", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)

@@ -1,10 +1,65 @@
 :root {
+  color-scheme: light;
   color: rgba(0, 0, 0, 0.88);
   background: #f3f5f8;
+  --app-text: rgba(0, 0, 0, 0.88);
+  --app-background: #f3f5f8;
+  --app-background-top-glow: rgba(35, 87, 213, 0.08);
+  --app-background-start: #f8f9fb;
+  --app-background-end: #f2f4f7;
+  --app-border-subtle: rgba(5, 5, 5, 0.06);
+  --app-primary: #2357d5;
+  --app-primary-soft: rgba(35, 87, 213, 0.12);
+  --app-primary-soft-strong: rgba(35, 87, 213, 0.2);
+  --app-card-start: rgba(255, 255, 255, 0.98);
+  --app-card-end: rgba(247, 249, 252, 0.98);
+  --app-card-shadow: 0 10px 30px rgba(31, 41, 55, 0.06);
+  --app-panel-start: rgba(248, 250, 252, 0.96);
+  --app-panel-end: rgba(241, 245, 249, 0.96);
+  --app-code-border: rgba(15, 23, 42, 0.08);
+  --app-code-text: #0f172a;
+  --app-code-preview-bg: #0f172a;
+  --app-code-preview-text: #dbeafe;
+  --app-command-start: rgba(15, 23, 42, 0.98);
+  --app-command-end: rgba(30, 41, 59, 0.98);
+  --app-command-accent: rgba(35, 87, 213, 0.18);
+  --app-command-text: #e2e8f0;
+  --app-placeholder: rgba(15, 23, 42, 0.35);
+  --app-selection: rgba(35, 87, 213, 0.08);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  color: rgba(244, 247, 255, 0.92);
+  background: #0b1220;
+  --app-text: rgba(244, 247, 255, 0.92);
+  --app-background: #0b1220;
+  --app-background-top-glow: rgba(74, 122, 255, 0.18);
+  --app-background-start: #0d1424;
+  --app-background-end: #09101c;
+  --app-border-subtle: rgba(148, 163, 184, 0.18);
+  --app-primary: #7aa2ff;
+  --app-primary-soft: rgba(74, 122, 255, 0.18);
+  --app-primary-soft-strong: rgba(74, 122, 255, 0.28);
+  --app-card-start: rgba(16, 26, 43, 0.98);
+  --app-card-end: rgba(11, 18, 32, 0.98);
+  --app-card-shadow: 0 20px 48px rgba(2, 6, 23, 0.32);
+  --app-panel-start: rgba(15, 23, 42, 0.96);
+  --app-panel-end: rgba(12, 19, 33, 0.96);
+  --app-code-border: rgba(148, 163, 184, 0.18);
+  --app-code-text: #dbe7ff;
+  --app-code-preview-bg: #08111f;
+  --app-code-preview-text: #dbe7ff;
+  --app-command-start: rgba(8, 17, 31, 0.98);
+  --app-command-end: rgba(15, 23, 42, 0.98);
+  --app-command-accent: rgba(74, 122, 255, 0.24);
+  --app-command-text: #e2e8f0;
+  --app-placeholder: rgba(219, 231, 255, 0.36);
+  --app-selection: rgba(74, 122, 255, 0.16);
 }
 
 * {
@@ -13,9 +68,10 @@
 
 body {
   margin: 0;
+  color: var(--app-text);
   background:
-    radial-gradient(circle at top left, rgba(35, 87, 213, 0.08), transparent 24%),
-    linear-gradient(180deg, #f8f9fb 0%, #f2f4f7 100%);
+    radial-gradient(circle at top left, var(--app-background-top-glow), transparent 24%),
+    linear-gradient(180deg, var(--app-background-start) 0%, var(--app-background-end) 100%);
   overflow-x: hidden;
 }
 
@@ -38,7 +94,7 @@ a {
 }
 
 .app-sider {
-  border-inline-end: 1px solid rgba(5, 5, 5, 0.06);
+  border-inline-end: 1px solid var(--app-border-subtle);
 }
 
 .app-navigation {
@@ -52,7 +108,7 @@ a {
 .brand-kicker {
   display: block;
   margin-bottom: 8px;
-  color: #2357d5;
+  color: var(--app-primary);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -120,6 +176,10 @@ a {
   min-height: 420px;
 }
 
+.schema-builder .ant-tabs-content-holder {
+  min-height: 420px;
+}
+
 .schema-builder-toolbar {
   display: flex;
   align-items: center;
@@ -133,17 +193,17 @@ a {
   display: grid;
   place-items: center;
   gap: 12px;
-  border: 1px dashed rgba(35, 87, 213, 0.2);
+  border: 1px dashed var(--app-primary-soft-strong);
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(243, 246, 252, 0.96));
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-panel-end));
 }
 
 .schema-field-card {
   padding: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--app-code-border);
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .schema-field-card__header {
@@ -160,8 +220,8 @@ a {
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
-  background: rgba(35, 87, 213, 0.12);
-  color: #2357d5;
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -224,9 +284,9 @@ a {
   padding: 14px 16px;
   overflow: auto;
   border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.96));
-  color: #0f172a;
+  border: 1px solid var(--app-code-border);
+  background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
+  color: var(--app-code-text);
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -237,6 +297,28 @@ a {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.schema-contract {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.schema-contract__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.schema-contract__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-code-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
 }
 
 .command-panel {
@@ -252,19 +334,20 @@ a {
   gap: 12px;
 }
 
-.execution-json-editor {
+.app-code-editor {
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--app-code-border);
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.98));
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.execution-json-editor__placeholder {
+.app-code-editor__placeholder {
   position: absolute;
   top: 12px;
   left: 52px;
-  color: rgba(15, 23, 42, 0.35);
+  color: var(--app-placeholder);
   font-size: 14px;
   pointer-events: none;
 }
@@ -274,8 +357,8 @@ a {
   padding: 16px;
   overflow: auto;
   border-radius: 12px;
-  background: #0f172a;
-  color: #dbeafe;
+  background: var(--app-code-preview-bg);
+  color: var(--app-code-preview-text);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -285,11 +368,11 @@ a {
   padding: 18px;
   overflow: auto;
   border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--app-code-border);
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98)),
-    linear-gradient(135deg, rgba(35, 87, 213, 0.18), transparent 55%);
-  color: #e2e8f0;
+    linear-gradient(180deg, var(--app-command-start), var(--app-command-end)),
+    linear-gradient(135deg, var(--app-command-accent), transparent 55%);
+  color: var(--app-command-text);
   font-size: 13px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -312,7 +395,7 @@ a {
 }
 
 .ant-table-tbody > tr.execution-history-row-active > td {
-  background: rgba(35, 87, 213, 0.08) !important;
+  background: var(--app-selection) !important;
 }
 
 .page-loading {
@@ -323,7 +406,7 @@ a {
 
 .ant-card {
   border-radius: 18px;
-  box-shadow: 0 10px 30px rgba(31, 41, 55, 0.06);
+  box-shadow: var(--app-card-shadow);
 }
 
 .json-preview {
