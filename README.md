@@ -9,7 +9,6 @@
 - **多运行方式**：支持 Web API 和 CLI 两种执行方式
 - **在线编辑器**：集成 Monaco Editor，提供语法高亮和代码补全
 - **执行追踪**：完整的执行记录和状态追踪
-- **可视化渲染**：基于 amis 渲染器，支持自定义表单和页面
 
 ## 技术栈
 
@@ -19,7 +18,6 @@
 | 脚本引擎 | Groovy 4.0 |
 | 前端 | React 18, Ant Design 5, Monaco Editor |
 | 数据库 | H2 (文件数据库) |
-| UI 渲染器 | Amis |
 
 ## 快速开始
 
@@ -72,8 +70,6 @@ scriptflow
 ├── scriptflow-app-spring        # Spring Boot Web 入口
 ├── scriptflow-app-cli           # Spring Boot CLI 入口
 ├── scriptflow-admin-ui          # React 管理界面
-├── scriptflow-page-builder      # 页面构建器
-└── scriptflow-renderer-amis     # Amis 渲染器适配
 ```
 
 ## 接口说明
