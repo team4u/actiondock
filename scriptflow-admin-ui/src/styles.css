@@ -258,6 +258,45 @@ a {
   gap: 12px;
 }
 
+.info-hint-group {
+  align-items: center;
+}
+
+.info-hint-group__label {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.info-hint {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
+  cursor: help;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.info-hint:hover {
+  background: var(--app-primary-soft-strong);
+  transform: translateY(-1px);
+}
+
+.info-hint:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+.app-info-tooltip .ant-tooltip-inner {
+  max-width: 420px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .script-list-toolbar {
   display: flex;
   align-items: center;

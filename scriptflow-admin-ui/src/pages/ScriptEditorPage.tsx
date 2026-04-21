@@ -52,6 +52,7 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
+import { InfoHint } from "../components/InfoHint";
 import {
   buildExecuteCliCommand,
   buildExecuteCurlCommand,
@@ -188,11 +189,9 @@ function SchemaFieldSummary({
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前 schema 没有可提取的字段清单" />
       )}
       {unsupportedFields.length > 0 ? (
-        <Alert
-          type="info"
-          showIcon
-          message="存在未结构化展示的字段"
-          description={`以下字段仅能通过 JSON 方式查看或传入：${unsupportedFields.join("、")}`}
+        <InfoHint
+          label="存在未结构化展示的字段"
+          content={`以下字段仅能通过 JSON 方式查看或传入：${unsupportedFields.join("、")}`}
         />
       ) : null}
     </div>
@@ -949,11 +948,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       label: "调用命令",
                       children: (
                         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                          <Alert
-                            type="info"
-                            showIcon
-                            message="可直接执行的 REST API 与 CLI 命令"
-                            description={
+                          <InfoHint
+                            label="可直接执行的 REST API 与 CLI 命令"
+                            content={
                               apiKey
                                 ? `REST 命令已使用当前页面 origin ${origin} 并自动附带 Authorization 头。`
                                 : `REST 命令已使用当前页面 origin ${origin}；当前未设置 API Key，因此不会附带 Authorization 头。`

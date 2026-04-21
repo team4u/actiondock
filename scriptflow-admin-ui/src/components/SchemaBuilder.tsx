@@ -7,6 +7,7 @@ import {
 import { Alert, Button, Empty, Input, Select, Space, Switch, Tabs, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { CodeEditor } from "./CodeEditor";
+import { InfoHint } from "./InfoHint";
 import type { SchemaEditorState, SchemaFieldDraft, SchemaFieldKind } from "../schema";
 import {
   createSchemaFieldDraft,
@@ -285,11 +286,9 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
             label: "JSON",
             children: (
               <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-                <Alert
-                  type="info"
-                  showIcon
-                  message={`${label}支持直接输入 JSON Schema`}
-                  description="保存时会校验为合法 JSON 对象；如果结构仍在 builder 支持范围内，可再切回可视化编辑。"
+                <InfoHint
+                  label={`${label}支持直接输入 JSON Schema`}
+                  content="保存时会校验为合法 JSON 对象；如果结构仍在 builder 支持范围内，可再切回可视化编辑。"
                 />
                 <CodeEditor value={jsonText} onChange={handleJsonChange} theme={theme} height="420px" />
                 {value.mode === "json" && jsonModeReason ? (
