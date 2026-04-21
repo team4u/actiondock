@@ -1,6 +1,6 @@
 ---
 name: generate-script
-description: 根据业务需求生成 ScriptFlow 的 Groovy 脚本和对应的输入输出 Schema。当用户说"帮我写一个脚本"、"生成脚本"、"创建一个 XX 功能的脚本"、或描述需要处理的业务逻辑时触发。必须主动询问输入参数和输出格式，不确定时要反问用户。
+description: 根据业务需求生成 ScriptFlow 的 Groovy 脚本及输入输出 Schema
 ---
 
 # Generate Script for ScriptFlow
