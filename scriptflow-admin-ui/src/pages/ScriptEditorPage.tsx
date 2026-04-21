@@ -2,6 +2,7 @@ import {
   ArrowLeftOutlined,
   CheckCircleOutlined,
   CodeOutlined,
+  CopyOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   RocketOutlined,
@@ -44,6 +45,15 @@ import {
   updateScript,
   validateScript
 } from "../api";
+import { getApiKey } from "../auth";
+import {
+  buildExecuteCliCommand,
+  buildExecuteCurlCommand,
+  buildExecutionInputFromValues,
+  buildScriptDetailCliCommand,
+  buildScriptDetailCurlCommand,
+  resolveExecutionCommandInput
+} from "../commands";
 import { SchemaBuilder } from "../components/SchemaBuilder";
 import {
   createEmptySchemaEditorState,
@@ -57,8 +67,8 @@ import type {
   ScriptDefinition,
   SubmitMode
 } from "../types";
-import type { SchemaEditorState, SchemaFieldDefinition } from "../schema";
-import { formatDateTime, prettyJson } from "../utils";
+import type { SchemaEditorState } from "../schema";
+import { copyText, formatDateTime, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
 
@@ -71,6 +81,8 @@ interface ScriptFormValues {
   name: string;
   type: "GROOVY";
 }
+
+type ExecutionInputMode = "SCHEMA" | "JSON";
 
 const DEFAULT_SOURCE = `def name = input.name ?: "World"
 return [message: "Hello, " + name + "!"]`;
@@ -102,20 +114,6 @@ function isExecutionActive(status: ExecutionStatus): boolean {
   return status === "PENDING" || status === "RUNNING";
 }
 
-function buildExecutionInput(
-  fields: SchemaFieldDefinition[],
-  values: Record<string, unknown>
-): Record<string, unknown> {
-  return fields.reduce<Record<string, unknown>>((result, field) => {
-    const value = values[field.name];
-    if (value === undefined || value === null || value === "") {
-      return result;
-    }
-    result[field.name] = value;
-    return result;
-  }, {});
-}
-
 function JsonPreview({
   title,
   value,
@@ -139,12 +137,86 @@ function JsonPreview({
   );
 }
 
+function JsonEditor({
+  value,
+  onChange,
+  placeholder
+}: {
+  value: string;
+  onChange: (nextValue: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="execution-json-editor">
+      <Editor
+        height="260px"
+        defaultLanguage="json"
+        language="json"
+        value={value}
+        onChange={(nextValue) => onChange(nextValue ?? "")}
+        theme="vs-light"
+        options={{
+          minimap: { enabled: false },
+          fontSize: 14,
+          scrollBeyondLastLine: false,
+          wordWrap: "on",
+          automaticLayout: true,
+          tabSize: 2,
+          lineNumbersMinChars: 3,
+          padding: { top: 12, bottom: 12 }
+        }}
+      />
+      {!value.trim() && (
+        <div className="execution-json-editor__placeholder">{placeholder}</div>
+      )}
+    </div>
+  );
+}
+
+function getCommandInputSourceLabel(source: "current-json" | "current-form" | "sample" | "empty"): string {
+  switch (source) {
+    case "current-json":
+      return "当前 JSON 输入";
+    case "current-form":
+      return "当前表单输入";
+    case "sample":
+      return "示例请求体";
+    default:
+      return "空对象";
+  }
+}
+
+function CommandPanel({
+  command,
+  onCopy,
+  title
+}: {
+  command: string;
+  onCopy: (value: string) => void;
+  title: string;
+}) {
+  return (
+    <div className="command-panel">
+      <div className="command-panel__header">
+        <Text strong>{title}</Text>
+        <Button icon={<CopyOutlined />} onClick={() => onCopy(command)}>
+          复制命令
+        </Button>
+      </div>
+      <pre className="command-preview">
+        <code>{command}</code>
+      </pre>
+    </div>
+  );
+}
+
 export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<ScriptFormValues>();
   const [executionForm] = Form.useForm<Record<string, unknown>>();
+  const watchedExecutionValues = Form.useWatch([], executionForm) as Record<string, unknown> | undefined;
   const [loading, setLoading] = useState(mode === "edit");
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -160,6 +232,8 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   );
   const [currentScript, setCurrentScript] = useState<ScriptDefinition | null>(null);
   const [executionMode, setExecutionMode] = useState<SubmitMode>("SYNC");
+  const [executionInputMode, setExecutionInputMode] = useState<ExecutionInputMode>("JSON");
+  const [executionJsonInput, setExecutionJsonInput] = useState("{}");
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
   const [currentExecution, setCurrentExecution] = useState<ExecutionRecord | null>(null);
   const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
@@ -168,11 +242,50 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
 
   const requestedTab = searchParams.get("tab");
   const activeTab =
-    mode === "create" ? "definition" : requestedTab === "execution" ? "execution" : "definition";
+    mode === "create"
+      ? "definition"
+      : requestedTab === "execution"
+        ? "execution"
+        : requestedTab === "commands"
+          ? "commands"
+          : "definition";
   const { supportedFields, unsupportedFields } = resolveSchemaFields(currentScript?.inputSchema);
   const { supportedFields: supportedOutputFields, unsupportedFields: unsupportedOutputFields } =
     resolveSchemaFields(currentScript?.outputSchema);
   const outputValues = isRecord(currentExecution?.output) ? currentExecution.output : {};
+  const supportsSchemaForm = supportedFields.length > 0;
+  const apiKey = getApiKey();
+  const origin = window.location.origin;
+  const commandInput = resolveExecutionCommandInput({
+    fields: supportedFields,
+    formValues: watchedExecutionValues,
+    inputMode: executionInputMode,
+    jsonInput: executionJsonInput
+  });
+  const detailCurlCommand = currentScript
+    ? buildScriptDetailCurlCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const detailCliCommand = currentScript ? buildScriptDetailCliCommand(currentScript.id) : "";
+  const executeCurlCommand = currentScript
+    ? buildExecuteCurlCommand({
+        apiKey,
+        input: commandInput.value,
+        mode: executionMode,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const executeCliCommand = currentScript
+    ? buildExecuteCliCommand({
+        input: commandInput.value,
+        mode: executionMode,
+        scriptId: currentScript.id
+      })
+    : "";
 
   const clearPolling = () => {
     if (pollingTimerRef.current !== null) {
@@ -286,6 +399,8 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
     clearPolling();
     executionForm.resetFields();
     setExecutionMode("SYNC");
+    setExecutionJsonInput("{}");
+    setExecutionInputMode(supportsSchemaForm ? "SCHEMA" : "JSON");
 
     if (!currentScript?.id) {
       setExecutionHistory([]);
@@ -296,7 +411,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
     setExecutionHistory([]);
     setCurrentExecution(null);
     void loadExecutionHistory(currentScript.id);
-  }, [currentScript?.id, executionForm]);
+  }, [currentScript?.id, executionForm, supportsSchemaForm]);
 
   useEffect(() => () => clearPolling(), []);
 
@@ -382,8 +497,13 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
 
     setExecuting(true);
     try {
-      const formValues = (await executionForm.validateFields()) as Record<string, unknown>;
-      const input = buildExecutionInput(supportedFields, formValues);
+      const input =
+        executionInputMode === "SCHEMA" && supportsSchemaForm
+          ? buildExecutionInputFromValues(
+              supportedFields,
+              (await executionForm.validateFields()) as Record<string, unknown>
+            )
+          : parseJsonText(executionJsonInput, "执行入参");
       const record = await executeScript({
         scriptId: currentScript.id,
         input,
@@ -414,12 +534,21 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
 
   const handleTabChange = (key: string) => {
     const nextParams = new URLSearchParams(searchParams);
-    if (key === "execution") {
-      nextParams.set("tab", "execution");
+    if (key === "execution" || key === "commands") {
+      nextParams.set("tab", key);
     } else {
       nextParams.delete("tab");
     }
     setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleCopyCommand = async (command: string) => {
+    try {
+      await copyText(command);
+      messageApi.success("命令已复制");
+    } catch {
+      messageApi.error("复制命令失败");
+    }
   };
 
   const historyColumns: ColumnsType<ExecutionRecord> = [
@@ -651,6 +780,113 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
               ...(currentScript
                 ? [
                     {
+                      key: "commands",
+                      label: "调用命令",
+                      children: (
+                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                          <Alert
+                            type="info"
+                            showIcon
+                            message="可直接执行的 REST API 与 CLI 命令"
+                            description={
+                              apiKey
+                                ? `REST 命令已使用当前页面 origin ${origin} 并自动附带 Authorization 头。`
+                                : `REST 命令已使用当前页面 origin ${origin}；当前未设置 API Key，因此不会附带 Authorization 头。`
+                            }
+                          />
+
+                          <Row gutter={[20, 20]}>
+                            <Col xs={24} xl={12}>
+                              <Card
+                                type="inner"
+                                title="查看详情"
+                                extra={<Text type="secondary">使用当前脚本 ID 生成</Text>}
+                              >
+                                <Tabs
+                                  items={[
+                                    {
+                                      key: "detail-rest",
+                                      label: "REST API",
+                                      children: (
+                                        <CommandPanel
+                                          title="详情查询 cURL"
+                                          command={detailCurlCommand}
+                                          onCopy={(command) => void handleCopyCommand(command)}
+                                        />
+                                      )
+                                    },
+                                    {
+                                      key: "detail-cli",
+                                      label: "CLI",
+                                      children: (
+                                        <CommandPanel
+                                          title="详情查询 CLI"
+                                          command={detailCliCommand}
+                                          onCopy={(command) => void handleCopyCommand(command)}
+                                        />
+                                      )
+                                    }
+                                  ]}
+                                />
+                              </Card>
+                            </Col>
+
+                            <Col xs={24} xl={12}>
+                              <Card
+                                type="inner"
+                                title="执行脚本"
+                                extra={<Text type="secondary">跟随当前调试配置生成</Text>}
+                              >
+                                <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                                  {commandInput.note && (
+                                    <Alert
+                                      type={commandInput.source === "sample" || commandInput.source === "empty" ? "warning" : "info"}
+                                      showIcon
+                                      message={commandInput.note}
+                                    />
+                                  )}
+                                  <Descriptions size="small" column={2}>
+                                    <Descriptions.Item label="执行模式">
+                                      {executionMode}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="入参来源">
+                                      {getCommandInputSourceLabel(commandInput.source)}
+                                    </Descriptions.Item>
+                                  </Descriptions>
+                                  <Tabs
+                                    items={[
+                                      {
+                                        key: "execute-rest",
+                                        label: "REST API",
+                                        children: (
+                                          <CommandPanel
+                                            title="执行脚本 cURL"
+                                            command={executeCurlCommand}
+                                            onCopy={(command) => void handleCopyCommand(command)}
+                                          />
+                                        )
+                                      },
+                                      {
+                                        key: "execute-cli",
+                                        label: "CLI",
+                                        children: (
+                                          <CommandPanel
+                                            title="执行脚本 CLI"
+                                            command={executeCliCommand}
+                                            onCopy={(command) => void handleCopyCommand(command)}
+                                          />
+                                        )
+                                      }
+                                    ]}
+                                  />
+                                </Space>
+                              </Card>
+                            </Col>
+                          </Row>
+                        </Space>
+                      )
+                    },
+                    {
                       key: "execution",
                       label: "执行调试",
                       children: (
@@ -675,7 +911,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                               type="info"
                               showIcon
                               message="部分输入字段暂不支持自动生成表单"
-                              description={`以下字段不会出现在执行表单中：${unsupportedFields.join("、")}`}
+                              description={`以下字段不会出现在执行表单中：${unsupportedFields.join("、")}。如需传入，请切换到 JSON 输入。`}
                             />
                           )}
 
@@ -700,79 +936,117 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                                     />
 
                                     {supportedFields.length > 0 ? (
-                                      <Form form={executionForm} layout="vertical">
-                                        {supportedFields.map((field) => {
-                                          const rules = field.required
-                                            ? [{ required: true, message: `请填写${field.label}` }]
-                                            : undefined;
+                                      <Tabs
+                                        activeKey={executionInputMode}
+                                        onChange={(key) => setExecutionInputMode(key as ExecutionInputMode)}
+                                        items={[
+                                          {
+                                            key: "SCHEMA",
+                                            label: "表单输入",
+                                            children: (
+                                              <Form form={executionForm} layout="vertical">
+                                                {supportedFields.map((field) => {
+                                                  const rules = field.required
+                                                    ? [{ required: true, message: `请填写${field.label}` }]
+                                                    : undefined;
 
-                                          if (field.kind === "enum") {
-                                            return (
-                                              <Form.Item
-                                                key={field.name}
-                                                label={field.label}
-                                                name={field.name}
-                                                rules={rules}
-                                              >
-                                                <Select
-                                                  allowClear
-                                                  placeholder={`请选择${field.label}`}
-                                                  options={(field.enumValues ?? []).map((value) => ({
-                                                    value,
-                                                    label: String(value)
-                                                  }))}
-                                                />
-                                              </Form.Item>
-                                            );
+                                                  if (field.kind === "enum") {
+                                                    return (
+                                                      <Form.Item
+                                                        key={field.name}
+                                                        label={field.label}
+                                                        name={field.name}
+                                                        rules={rules}
+                                                      >
+                                                        <Select
+                                                          allowClear
+                                                          placeholder={`请选择${field.label}`}
+                                                          options={(field.enumValues ?? []).map((value) => ({
+                                                            value,
+                                                            label: String(value)
+                                                          }))}
+                                                        />
+                                                      </Form.Item>
+                                                    );
+                                                  }
+
+                                                  if (field.kind === "boolean") {
+                                                    return (
+                                                      <Form.Item
+                                                        key={field.name}
+                                                        label={field.label}
+                                                        name={field.name}
+                                                        valuePropName="checked"
+                                                      >
+                                                        <Switch checkedChildren="true" unCheckedChildren="false" />
+                                                      </Form.Item>
+                                                    );
+                                                  }
+
+                                                  if (field.kind === "number" || field.kind === "integer") {
+                                                    return (
+                                                      <Form.Item
+                                                        key={field.name}
+                                                        label={field.label}
+                                                        name={field.name}
+                                                        rules={rules}
+                                                      >
+                                                        <InputNumber
+                                                          style={{ width: "100%" }}
+                                                          placeholder={`请输入${field.label}`}
+                                                          precision={field.kind === "integer" ? 0 : undefined}
+                                                        />
+                                                      </Form.Item>
+                                                    );
+                                                  }
+
+                                                  return (
+                                                    <Form.Item
+                                                      key={field.name}
+                                                      label={field.label}
+                                                      name={field.name}
+                                                      rules={rules}
+                                                    >
+                                                      <Input placeholder={`请输入${field.label}`} />
+                                                    </Form.Item>
+                                                  );
+                                                })}
+                                              </Form>
+                                            )
+                                          },
+                                          {
+                                            key: "JSON",
+                                            label: "JSON 输入",
+                                            children: (
+                                              <Form layout="vertical">
+                                                <Form.Item
+                                                  label="执行入参 JSON"
+                                                  extra="直接输入 JSON 对象执行，不依赖 inputSchema。"
+                                                >
+                                                  <JsonEditor
+                                                    value={executionJsonInput}
+                                                    onChange={setExecutionJsonInput}
+                                                    placeholder='{"name":"Alice"}'
+                                                  />
+                                                </Form.Item>
+                                              </Form>
+                                            )
                                           }
-
-                                          if (field.kind === "boolean") {
-                                            return (
-                                              <Form.Item
-                                                key={field.name}
-                                                label={field.label}
-                                                name={field.name}
-                                                valuePropName="checked"
-                                              >
-                                                <Switch checkedChildren="true" unCheckedChildren="false" />
-                                              </Form.Item>
-                                            );
-                                          }
-
-                                          if (field.kind === "number" || field.kind === "integer") {
-                                            return (
-                                              <Form.Item
-                                                key={field.name}
-                                                label={field.label}
-                                                name={field.name}
-                                                rules={rules}
-                                              >
-                                                <InputNumber
-                                                  style={{ width: "100%" }}
-                                                  placeholder={`请输入${field.label}`}
-                                                  precision={field.kind === "integer" ? 0 : undefined}
-                                                />
-                                              </Form.Item>
-                                            );
-                                          }
-
-                                          return (
-                                            <Form.Item
-                                              key={field.name}
-                                              label={field.label}
-                                              name={field.name}
-                                              rules={rules}
-                                            >
-                                              <Input placeholder={`请输入${field.label}`} />
-                                            </Form.Item>
-                                          );
-                                        })}
-                                      </Form>
-                                    ) : (
-                                      <Empty
-                                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                        description="当前脚本没有可填写的输入字段，将以空对象提交。"
+                                        ]}
                                       />
+                                    ) : (
+                                      <Form layout="vertical">
+                                        <Form.Item
+                                          label="执行入参 JSON"
+                                          extra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
+                                        >
+                                          <JsonEditor
+                                            value={executionJsonInput}
+                                            onChange={setExecutionJsonInput}
+                                            placeholder='{"name":"Alice"}'
+                                          />
+                                        </Form.Item>
+                                      </Form>
                                     )}
 
                                     <Button
@@ -854,13 +1128,16 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                                         })}
                                       </Form>
                                     ) : (
-                                      <Empty
-                                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                        description="当前脚本没有可渲染的输出字段"
+                                      <JsonPreview
+                                        title="输出 JSON 预览"
+                                        value={currentExecution.output}
+                                        emptyDescription="暂无输出结果"
                                       />
                                     )}
 
-                                    {currentExecution && unsupportedOutputFields.length > 0 && (
+                                    {currentExecution &&
+                                      supportedOutputFields.length > 0 &&
+                                      unsupportedOutputFields.length > 0 && (
                                       <JsonPreview
                                         title="输出 JSON 预览"
                                         value={currentExecution.output}

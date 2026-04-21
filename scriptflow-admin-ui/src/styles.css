@@ -159,6 +159,36 @@ a {
   gap: 12px;
 }
 
+.command-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.command-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.execution-json-editor {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.98));
+}
+
+.execution-json-editor__placeholder {
+  position: absolute;
+  top: 12px;
+  left: 52px;
+  color: rgba(15, 23, 42, 0.35);
+  font-size: 14px;
+  pointer-events: none;
+}
+
 .json-preview {
   margin: 0;
   padding: 16px;
@@ -168,6 +198,21 @@ a {
   color: #dbeafe;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.command-preview {
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98)),
+    linear-gradient(135deg, rgba(35, 87, 213, 0.18), transparent 55%);
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre;
 }
 
 .execution-history-row {
@@ -191,7 +236,8 @@ a {
 
 @media (max-width: 992px) {
   .schema-builder-toolbar,
-  .schema-field-card__header {
+  .schema-field-card__header,
+  .command-panel__header {
     flex-direction: column;
     align-items: stretch;
   }

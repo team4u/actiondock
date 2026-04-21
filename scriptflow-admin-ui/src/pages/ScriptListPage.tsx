@@ -1,7 +1,7 @@
-import { Button, Card, Space, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ApiError, listScripts } from "../api";
 import { formatDateTime } from "../utils";
 import type { ScriptDefinition } from "../types";
@@ -86,14 +86,7 @@ export function ScriptListPage() {
       {contextHolder}
       <Card
         title="脚本列表"
-        extra={
-          <Space>
-            <Text type="secondary">共 {scripts.length} 个脚本</Text>
-            <Button type="primary">
-              <Link to="/scripts/new">新建脚本</Link>
-            </Button>
-          </Space>
-        }
+        extra={<Text type="secondary">共 {scripts.length} 个脚本</Text>}
       >
         <Table
           rowKey="id"
