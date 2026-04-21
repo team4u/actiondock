@@ -83,7 +83,7 @@ import type {
   SubmitMode,
   ValidationErrorData
 } from "../types";
-import type { SchemaEditorState, SchemaFieldDefinition } from "../schema";
+import type { SchemaEditorState } from "../schema";
 import { copyText, formatDateTime, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
@@ -151,51 +151,6 @@ function JsonPreview({
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyDescription} />
       )}
-    </div>
-  );
-}
-
-function SchemaFieldSummary({
-  title,
-  fields,
-  unsupportedFields
-}: {
-  title: string;
-  fields: SchemaFieldDefinition[];
-  unsupportedFields: string[];
-}) {
-  if (fields.length === 0 && unsupportedFields.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="schema-contract">
-      <Text strong>{title}</Text>
-      {fields.length > 0 ? (
-        <div className="schema-contract__list">
-          {fields.map((field) => (
-            <div key={field.name} className="schema-contract__item">
-              <Space size={[8, 8]} wrap>
-                <Text strong>{field.label}</Text>
-                <Text code>{field.name}</Text>
-                <Tag>{field.kind}</Tag>
-                {field.required ? <Tag color="red">required</Tag> : <Tag>optional</Tag>}
-              </Space>
-              {field.enumValues && field.enumValues.length > 0 ? (
-                <Text type="secondary">枚举值: {field.enumValues.join(", ")}</Text>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前 schema 没有可提取的字段清单" />
-      )}
-      {unsupportedFields.length > 0 ? (
-        <InfoHint
-          label="存在未结构化展示的字段"
-          content={`以下字段仅能通过 JSON 方式查看或传入：${unsupportedFields.join("、")}`}
-        />
-      ) : null}
     </div>
   );
 }
@@ -786,9 +741,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   返回列表
                 </Button>
                 <Typography.Title level={4} style={{ margin: 0 }}>
-                  {mode === "create" ? "新建脚本" : currentScript?.name ?? id}
+                  {mode === "create" ? "新建脚本" : ""}
                 </Typography.Title>
-                <Text type="secondary">使用 Ant Design 表单、Groovy 编辑器和 Schema 构建器维护脚本定义。</Text>
               </Space>
             </Col>
             <Col>
@@ -842,6 +796,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
         {currentScript && (
           <Card>
+            <Typography.Title level={4} style={{ margin: "0 0 16px 0" }}>
+              {currentScript.name}
+            </Typography.Title>
             <Descriptions
               size="small"
               column={{
@@ -1119,28 +1076,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                             value={toolContractResponseExample}
                                             emptyDescription="当前没有可展示的 Schema 示例"
                                           />
-
-                                          <Row gutter={[16, 16]}>
-                                            {hasInputSchema ? (
-                                              <Col xs={24} xl={12}>
-                                                <SchemaFieldSummary
-                                                  title="入参"
-                                                  fields={supportedFields}
-                                                  unsupportedFields={unsupportedFields}
-                                                />
-                                              </Col>
-                                            ) : null}
-
-                                            {hasOutputSchema ? (
-                                              <Col xs={24} xl={12}>
-                                                <SchemaFieldSummary
-                                                  title="出参"
-                                                  fields={supportedOutputFields}
-                                                  unsupportedFields={unsupportedOutputFields}
-                                                />
-                                              </Col>
-                                            ) : null}
-                                          </Row>
                                         </Space>
                                       )
                                     }
@@ -1181,14 +1116,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                             ))}
                                           </div>
                                         }
-                                      />
-                                    )}
-
-                                    {hasInputSchema && (
-                                      <SchemaFieldSummary
-                                        title="参数清单"
-                                        fields={supportedFields}
-                                        unsupportedFields={unsupportedFields}
                                       />
                                     )}
 
@@ -1281,17 +1208,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 <Card
                                   type="inner"
                                   title="执行输出"
-                                  extra={<Text type="secondary">根据 outputSchema 渲染</Text>}
                                 >
                                   <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                                    {hasOutputSchema && (
-                                      <SchemaFieldSummary
-                                        title="输出字段清单"
-                                        fields={supportedOutputFields}
-                                        unsupportedFields={unsupportedOutputFields}
-                                      />
-                                    )}
-
                                     {!currentExecution ? (
                                       <Empty
                                         image={Empty.PRESENTED_IMAGE_SIMPLE}

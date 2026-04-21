@@ -1,4 +1,4 @@
-import { DownloadOutlined, ExportOutlined, UploadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExportOutlined, KeyOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 import { Button, Card, Modal, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
@@ -18,7 +18,7 @@ import type { ScriptDefinition } from "../types";
 
 const { Text } = Typography;
 
-export function ScriptListPage() {
+export function ScriptListPage({ onOpenApiKeyModal }: { onOpenApiKeyModal: () => void }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -265,6 +265,12 @@ export function ScriptListPage() {
             <Text type="secondary">已选择 {selectedScriptIds.length} 个脚本用于导出</Text>
           </Space>
           <Space wrap className="script-list-toolbar__actions">
+            <Button icon={<PlusOutlined />} type="primary" onClick={() => navigate("/scripts/new")}>
+              新建脚本
+            </Button>
+            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
+              API Key
+            </Button>
             <Button
               icon={<UploadOutlined />}
               loading={importing}

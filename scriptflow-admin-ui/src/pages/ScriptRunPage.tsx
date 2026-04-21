@@ -10,6 +10,7 @@ import {
   Card,
   Empty,
   Form,
+  Radio,
   Space,
   Spin,
   Tag,
@@ -17,9 +18,9 @@ import {
   message
 } from "antd";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ApiError, executeScript, getScript } from "../api";
+import { ApiError, executeScript, getExecution, getScript } from "../api";
 import { resolveSchemaFields } from "../schema";
 import {
   buildSchemaExecutionInput,
@@ -33,8 +34,10 @@ import {
   renderSchemaFieldInput
 } from "../schemaForm";
 import type {
+  ExecutionRecord,
   ExecutionResponse,
   ScriptDefinition,
+  SubmitMode,
   ValidationErrorData
 } from "../types";
 import { formatDateTime, prettyJson } from "../utils";
@@ -85,6 +88,9 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
   const [validationError, setValidationError] = useState<ValidationErrorData | null>(null);
   const [pageError, setPageError] = useState<PageStateError | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
+  const [executionMode, setExecutionMode] = useState<SubmitMode>("SYNC");
+  const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
+  const pollingTimerRef = useRef<number | null>(null);
 
   const { supportedFields: supportedInputFields, unsupportedFields: unsupportedInputFields } = useMemo(
     () => resolveSchemaFields(script?.inputSchema),
@@ -164,6 +170,52 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
     form.setFieldsValue(buildSchemaFieldInitialValues(supportedInputFields));
   }, [form, script, supportedInputFields]);
 
+  const clearPolling = () => {
+    if (pollingTimerRef.current !== null) {
+      window.clearTimeout(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+    setPollingExecutionId(null);
+  };
+
+  const isExecutionActive = (status: ExecutionRecord["status"]) => {
+    return status === "PENDING" || status === "RUNNING";
+  };
+
+  const pollExecution = async (executionId: string) => {
+    try {
+      const record = await getExecution(executionId);
+      setExecutionResult(record);
+
+      if (isExecutionActive(record.status)) {
+        setPollingExecutionId(executionId);
+        pollingTimerRef.current = window.setTimeout(() => {
+          void pollExecution(executionId);
+        }, 2000);
+        return;
+      }
+
+      clearPolling();
+      if (record.status === "SUCCESS") {
+        messageApi.success("执行完成");
+      } else if (record.status === "FAILED") {
+        messageApi.error(record.errorMessage || "执行失败");
+      }
+    } catch (error) {
+      clearPolling();
+      const detail = error instanceof ApiError ? error.message : "查询执行结果失败";
+      messageApi.error(detail);
+    }
+  };
+
+  const startPolling = (executionId: string) => {
+    clearPolling();
+    setPollingExecutionId(executionId);
+    pollingTimerRef.current = window.setTimeout(() => {
+      void pollExecution(executionId);
+    }, 2000);
+  };
+
   const handleExecute = async () => {
     if (!script?.id || !canExecute) {
       return;
@@ -183,17 +235,23 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
       const response = await executeScript({
         scriptId: script.id,
         input: buildSchemaExecutionInput(supportedInputFields, values),
-        mode: "SYNC"
+        mode: executionMode
       });
 
-      setExecutionResult(response);
-
-      if (response.status === "SUCCESS") {
-        messageApi.success("执行完成");
-      } else if (response.status === "FAILED") {
-        messageApi.error(response.errorMessage || "执行失败");
+      if (response.submitMode === "ASYNC" && isExecutionActive(response.status)) {
+        messageApi.success("异步执行已提交");
+        setExecutionResult(response);
+        startPolling(response.id);
       } else {
-        messageApi.info(`当前状态: ${response.status}`);
+        clearPolling();
+        setExecutionResult(response);
+        if (response.status === "SUCCESS") {
+          messageApi.success("执行完成");
+        } else if (response.status === "FAILED") {
+          messageApi.error(response.errorMessage || "执行失败");
+        } else {
+          messageApi.info(`当前状态: ${response.status}`);
+        }
       }
     } catch (error) {
       if (error instanceof ApiError && isValidationErrorData(error.data)) {
@@ -219,6 +277,7 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
   };
 
   const handleReset = () => {
+    clearPolling();
     form.resetFields();
     form.setFieldsValue(buildSchemaFieldInitialValues(supportedInputFields));
     setValidationError(null);
@@ -332,6 +391,18 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
               />
             ) : null}
 
+            <Radio.Group
+              value={executionMode}
+              optionType="button"
+              buttonStyle="solid"
+              onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
+              options={[
+                { label: "同步执行", value: "SYNC" },
+                { label: "异步执行", value: "ASYNC" }
+              ]}
+              style={{ marginBottom: 16 }}
+            />
+
             {supportedInputFields.length === 0 ? (
               <div className="run-panel__empty">
                 <Text strong>该脚本无需输入参数</Text>
@@ -383,12 +454,18 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
             ) : (
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <div className="run-result__summary">
-                  <Text type="secondary">状态：</Text>
-                  <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
-                    {executionResult.status}
-                  </Tag>
-                  <Text type="secondary">完成时间：</Text>
-                  <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
+                  {pollingExecutionId ? (
+                    <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
+                  ) : (
+                    <>
+                      <Text type="secondary">状态：</Text>
+                      <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
+                        {executionResult.status}
+                      </Tag>
+                      <Text type="secondary">完成时间：</Text>
+                      <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
+                    </>
+                  )}
                 </div>
 
                 {executionResult.errorMessage ? (

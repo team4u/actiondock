@@ -1,4 +1,4 @@
-import { KeyOutlined, MenuOutlined, PlusOutlined } from "@ant-design/icons";
+import { MenuOutlined } from "@ant-design/icons";
 import {
   App as AntdApp,
   Button,
@@ -117,17 +117,8 @@ function AdminShell({
               <Title level={3} style={{ margin: 0 }}>
                 脚本管理
               </Title>
-              <Text type="secondary">维护 Groovy 脚本定义、结构和发布状态</Text>
             </div>
           </div>
-          <Space className="app-header__actions" wrap>
-            <Button icon={<PlusOutlined />} type="primary" onClick={() => navigate("/scripts/new")}>
-              新建脚本
-            </Button>
-            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
-              API Key
-            </Button>
-          </Space>
         </Header>
         <Content className="app-content">
           <Suspense
@@ -139,7 +130,7 @@ function AdminShell({
           >
             <Routes>
               <Route path="/" element={<Navigate to="/scripts" replace />} />
-              <Route path="/scripts" element={<ScriptListPage />} />
+              <Route path="/scripts" element={<ScriptListPage onOpenApiKeyModal={onOpenApiKeyModal} />} />
               <Route
                 path="/scripts/new"
                 element={<ScriptEditorPage colorMode={colorMode} mode="create" />}
