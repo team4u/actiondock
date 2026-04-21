@@ -491,18 +491,22 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     };
   };
 
+  const persistCurrentScript = async (): Promise<ScriptDefinition> => {
+    const payload = await buildPayload();
+    const saved = mode === "create" ? await createScript(payload) : await updateScript(payload.id, payload);
+    setCurrentScript(saved);
+    return saved;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = await buildPayload();
-      const saved = mode === "create" ? await createScript(payload) : await updateScript(payload.id, payload);
+      const saved = await persistCurrentScript();
       messageApi.success("保存成功");
-      setCurrentScript(saved);
       if (mode === "create") {
         navigate(`/scripts/${saved.id}`, { replace: true });
         return;
       }
-      await loadScript(saved.id);
     } catch (error) {
       const detail = error instanceof ApiError || error instanceof Error ? error.message : "保存失败";
       messageApi.error(detail);
@@ -549,18 +553,45 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   };
 
   const handlePublish = async () => {
-    if (!currentScript?.id) {
-      messageApi.warning("请先保存脚本");
-      return;
-    }
     setPublishing(true);
+    let stage: "save" | "validate" | "publish" = "save";
+    let savedScript: ScriptDefinition | null = null;
+
     try {
-      await publishScript(currentScript.id);
-      messageApi.success("发布成功");
-      await loadScript(currentScript.id);
+      savedScript = await persistCurrentScript();
+
+      stage = "validate";
+      await validateScript(savedScript.id);
+
+      stage = "publish";
+      const published = await publishScript(savedScript.id);
+      setCurrentScript(published);
+      messageApi.success("保存、校验并发布成功");
+
+      if (mode === "create") {
+        navigate(`/scripts/${published.id}`, { replace: true });
+      }
     } catch (error) {
-      const detail = error instanceof ApiError ? error.message : "发布失败";
-      messageApi.error(detail);
+      const detail =
+        error instanceof ApiError || error instanceof Error
+          ? error.message
+          : stage === "save"
+            ? "保存失败"
+            : stage === "validate"
+              ? "校验失败"
+              : "发布失败";
+
+      if (stage === "validate") {
+        messageApi.error(`校验失败，当前修改已保存但未发布：${detail}`);
+      } else if (stage === "publish") {
+        messageApi.error(`发布失败，当前修改已保存且已校验：${detail}`);
+      } else {
+        messageApi.error(detail);
+      }
+
+      if (mode === "create" && savedScript?.id) {
+        navigate(`/scripts/${savedScript.id}`, { replace: true });
+      }
     } finally {
       setPublishing(false);
     }
