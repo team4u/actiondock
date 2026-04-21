@@ -172,6 +172,11 @@ a {
   align-items: flex-start;
 }
 
+.generated-script-textarea textarea {
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", "Menlo", monospace;
+  line-height: 1.6;
+}
+
 .schema-builder {
   min-height: 360px;
 }

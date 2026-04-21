@@ -4,6 +4,7 @@ import {
   CodeOutlined,
   CopyOutlined,
   DeleteOutlined,
+  ImportOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   RocketOutlined,
@@ -20,6 +21,7 @@ import {
   Grid,
   Input,
   InputNumber,
+  Modal,
   Popconfirm,
   Radio,
   Row,
@@ -67,9 +69,11 @@ import { SchemaBuilder } from "../components/SchemaBuilder";
 import {
   createEmptySchemaEditorState,
   deserializeSchema,
+  deserializeSchemaJsonText,
   resolveSchemaFields,
   serializeSchemaEditorState
 } from "../schema";
+import { parseGeneratedScriptText } from "../generatedScript";
 import {
   buildSchemaFieldRules,
   getSchemaFieldValuePropName,
@@ -226,6 +230,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [deletingExecutionId, setDeletingExecutionId] = useState<string | null>(null);
   const [clearingExecutionHistory, setClearingExecutionHistory] = useState(false);
   const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
+  const [generatedScriptModalOpen, setGeneratedScriptModalOpen] = useState(false);
+  const [generatedScriptText, setGeneratedScriptText] = useState("");
   const [messageApi, contextHolder] = message.useMessage();
   const pollingTimerRef = useRef<number | null>(null);
 
@@ -615,6 +621,33 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     }
   };
 
+  const handleImportGeneratedScript = () => {
+    try {
+      const parsed = parseGeneratedScriptText(generatedScriptText);
+      const nextInputSchemaState = deserializeSchemaJsonText(parsed.inputSchemaText, "输入结构");
+      const nextOutputSchemaState = deserializeSchemaJsonText(parsed.outputSchemaText, "输出结构");
+      const nextId = parsed.id.trim();
+      const nextName = parsed.name.trim();
+
+      form.setFieldsValue({
+        id: nextId,
+        name: nextName,
+        type: "GROOVY"
+      });
+      setSourceText(parsed.source);
+      setInputSchemaState(nextInputSchemaState);
+      setOutputSchemaState(nextOutputSchemaState);
+      setGeneratedScriptModalOpen(false);
+      setGeneratedScriptText("");
+      void form.validateFields(["id", "name"]).catch(() => undefined);
+
+      messageApi.success("已回填脚本内容");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "解析 generate-script 输出失败";
+      messageApi.error(detail);
+    }
+  };
+
   const handleDeleteExecution = async (record: ExecutionRecord) => {
     setDeletingExecutionId(record.id);
     try {
@@ -727,6 +760,31 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   return (
     <>
       {contextHolder}
+      <Modal
+        title="粘贴 generate-script 输出"
+        open={generatedScriptModalOpen}
+        okText="导入并回填"
+        cancelText="取消"
+        onOk={handleImportGeneratedScript}
+        onCancel={() => setGeneratedScriptModalOpen(false)}
+        width={760}
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Alert
+            type="info"
+            showIcon
+            message="仅支持固定五段格式"
+            description="必须包含“脚本 ID”“脚本名称”“Groovy 脚本”“Input Schema”“Output Schema”五段内容，缺少任一段都会导入失败。"
+          />
+          <Input.TextArea
+            className="generated-script-textarea"
+            value={generatedScriptText}
+            onChange={(event) => setGeneratedScriptText(event.target.value)}
+            placeholder={`请粘贴 generate-script 的完整输出，例如：\n### 脚本 ID\nhello-groovy\n\n### 脚本名称\nHello Groovy\n\n### Groovy 脚本\n\`\`\`groovy\n...\n\`\`\``}
+            autoSize={{ minRows: 14, maxRows: 22 }}
+          />
+        </Space>
+      </Modal>
       <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
         <Card>
           <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
@@ -747,6 +805,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             </Col>
             <Col>
               <Space className="page-card-actions" wrap>
+                {mode === "create" ? (
+                  <Button icon={<ImportOutlined />} onClick={() => setGeneratedScriptModalOpen(true)}>
+                    粘贴生成结果
+                  </Button>
+                ) : null}
                 {mode === "edit" && currentScript ? (
                   <Popconfirm
                     title="确认删除这个脚本？"

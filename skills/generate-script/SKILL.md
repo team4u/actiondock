@@ -6,9 +6,11 @@ description: 根据业务需求生成 ScriptFlow 的 Groovy 脚本及输入输�
 # Generate Script for ScriptFlow
 
 根据用户描述的业务需求，生成：
-1. **Groovy 脚本代码**
-2. **Input Schema（输入参数定义）**
-3. **Output Schema（输出结果定义）**
+1. **脚本 ID**
+2. **脚本名称**
+3. **Groovy 脚本代码**
+4. **Input Schema（输入参数定义）**
+5. **Output Schema（输出结果定义）**
 
 ## 项目上下文
 
@@ -77,7 +79,15 @@ return [
 
 ## 输出格式
 
-生成三个代码块，按顺序输出：
+按顺序输出以下 5 段固定格式内容：
+
+### 脚本 ID
+
+hello-groovy
+
+### 脚本名称
+
+Hello Groovy
 
 ### Groovy 脚本
 
@@ -107,3 +117,10 @@ return [
   }
 }
 ```
+
+要求：
+- 标题文案必须保持完全一致，便于前端自动解析
+- `脚本 ID` 与 `脚本名称` 段落正文使用纯文本，不要放进代码块
+- `Groovy 脚本`、`Input Schema（输入参数）`、`Output Schema（输出结果）` 必须各自只包含一个对应语言的代码块
+- 不要在这 5 段中间插入额外标题
+- 这 5 段都是必需的，不能省略
