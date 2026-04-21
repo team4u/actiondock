@@ -24,7 +24,7 @@ public class SampleDataInitializer implements CommandLineRunner {
     public void run(String... args) {
         try {
             scriptApplicationService.get("hello-groovy");
-        } catch (Exception ignored) {
+        } catch (IllegalArgumentException ignored) {
             ScriptDefinition script = new ScriptDefinition()
                     .setId("hello-groovy")
                     .setName("Hello Groovy")
@@ -52,7 +52,7 @@ public class SampleDataInitializer implements CommandLineRunner {
 
         try {
             pageDefinitionApplicationService.get("hello-page");
-        } catch (Exception ignored) {
+        } catch (IllegalArgumentException ignored) {
             pageDefinitionApplicationService.scaffold("hello-page", "hello-groovy");
         }
     }

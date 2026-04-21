@@ -20,8 +20,12 @@ public class ApiResponse<T> {
     }
 
     public static <T> ApiResponse<T> error(String msg) {
+        return error(msg, 500);
+    }
+
+    public static <T> ApiResponse<T> error(String msg, int status) {
         ApiResponse<T> response = new ApiResponse<>();
-        response.status = 500;
+        response.status = status;
         response.msg = msg;
         return response;
     }

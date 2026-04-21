@@ -34,7 +34,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         }
 
         String authorization = request.getHeader("Authorization");
-        String token = authorization == null ? null : authorization.replaceFirst("(?i)^Bearer\\\\s+", "");
+        String token = authorization == null ? null : authorization.replaceFirst("(?i)^Bearer\\s+", "");
         if (token == null || !apiKeys.contains(token)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
