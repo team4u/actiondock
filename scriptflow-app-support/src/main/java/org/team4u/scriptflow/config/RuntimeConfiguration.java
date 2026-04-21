@@ -12,7 +12,7 @@ import org.team4u.scriptflow.domain.port.ScriptRepository;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AppProperties.class)
 public class RuntimeConfiguration {
     @Bean

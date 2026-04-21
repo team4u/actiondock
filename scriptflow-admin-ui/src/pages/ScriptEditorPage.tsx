@@ -18,6 +18,7 @@ import {
   Descriptions,
   Empty,
   Form,
+  Grid,
   Input,
   InputNumber,
   Popconfirm,
@@ -76,6 +77,7 @@ import type { SchemaEditorState } from "../schema";
 import { copyText, formatDateTime, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 interface ScriptEditorPageProps {
   mode: "create" | "edit";
@@ -218,6 +220,8 @@ function CommandPanel({
 export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<ScriptFormValues>();
   const [executionForm] = Form.useForm<Record<string, unknown>>();
@@ -692,9 +696,9 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   return (
     <>
       {contextHolder}
-      <Space direction="vertical" size="large" style={{ width: "100%" }}>
+      <Space className="script-editor-page" direction="vertical" size="large" style={{ width: "100%" }}>
         <Card>
-          <Row justify="space-between" align="middle" gutter={[16, 16]}>
+          <Row className="page-card-header" justify="space-between" align="middle" gutter={[16, 16]}>
             <Col>
               <Space direction="vertical" size={2}>
                 <Button
@@ -712,7 +716,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
               </Space>
             </Col>
             <Col>
-              <Space wrap>
+              <Space className="page-card-actions" wrap>
                 {mode === "edit" && currentScript ? (
                   <Popconfirm
                     title="确认删除这个脚本？"
@@ -849,7 +853,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                               label: "source.groovy",
                               children: (
                                 <Editor
-                                  height="420px"
+                                  height="clamp(320px, 60vh, 420px)"
                                   defaultLanguage="groovy"
                                   language="groovy"
                                   value={sourceText}
@@ -954,7 +958,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                                       message={commandInput.note}
                                     />
                                   )}
-                                  <Descriptions size="small" column={2}>
+                                  <Descriptions size="small" column={isMobile ? 1 : 2}>
                                     <Descriptions.Item label="执行模式">
                                       {executionMode}
                                     </Descriptions.Item>
@@ -1328,7 +1332,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                             type="inner"
                             title="历史执行结果"
                             extra={
-                              <Space size="small" wrap>
+                              <Space className="history-card-actions" size="small" wrap>
                                 {pollingExecutionId && (
                                   <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
                                 )}
@@ -1360,11 +1364,13 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                             }
                           >
                             <Table
+                              className="execution-history-table"
                               rowKey="id"
                               loading={historyLoading}
                               columns={historyColumns}
                               dataSource={executionHistory}
                               pagination={{ pageSize: 5 }}
+                              scroll={{ x: 900 }}
                               locale={{ emptyText: "当前脚本暂无执行记录" }}
                               onRow={(record) => ({
                                 onClick: () => setCurrentExecution(record)

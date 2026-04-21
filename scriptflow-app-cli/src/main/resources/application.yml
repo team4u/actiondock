@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: classpath:runtime-common.yml
+  application:
+    name: scriptflow-app-cli
+  main:
+    web-application-type: none

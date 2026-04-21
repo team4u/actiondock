@@ -199,7 +199,7 @@ export function buildExecuteCurlCommand({
 }
 
 export function buildScriptDetailCliCommand(scriptId: string): string {
-  return `java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli script show --id ${shellQuote(
+  return `java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script show --id ${shellQuote(
     scriptId
   )}`;
 }
@@ -214,7 +214,7 @@ export function buildExecuteCliCommand({
   scriptId: string;
 }): string {
   return [
-    "java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli run",
+    "java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar run",
     `--id ${shellQuote(scriptId)}`,
     `--input ${shellQuote(JSON.stringify(input))}`,
     mode === "ASYNC" ? "--async true" : ""

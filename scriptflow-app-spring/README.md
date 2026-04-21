@@ -1,16 +1,16 @@
 # scriptflow-app-spring
 
-这个模块是最终启动入口：
+这个模块是 Web 启动入口：
 
-- Web 模式：Spring MVC
-- CLI 模式：同一个应用上下文，切到 `cli` 参数执行 picocli，只保留脚本相关命令
+- Web 模式：Spring MVC + 管理台
 
 示例：
 
 ```bash
 mvn -pl scriptflow-app-spring -am spring-boot:run
-java -jar target/scriptflow-app-spring.jar cli script list
 ```
+
+该命令会只启动 `scriptflow-app-spring`；CLI 模块默认不会参与 reactor 下的 `spring-boot:run`。
 
 开发阶段建议前后端分开启动：
 
@@ -36,3 +36,12 @@ java -jar target/scriptflow-app-spring.jar
 ```
 
 如果本地曾运行过包含 page 能力的旧版本，开发阶段请删除 `../data/dsl-runtime*` 后再重新启动，避免旧 H2 文件残留未使用的 page 表。
+
+CLI 已拆分为独立模块，请改用：
+
+```bash
+mvn -pl scriptflow-app-cli -am package
+java -jar ../scriptflow-app-cli/target/scriptflow-app-cli.jar script list
+```
+
+如果希望 CLI 与 Web 继续共用默认 H2 文件库，请从同一个工作目录启动两个 jar。

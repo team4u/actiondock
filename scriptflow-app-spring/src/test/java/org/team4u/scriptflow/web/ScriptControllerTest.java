@@ -2,11 +2,13 @@ package org.team4u.scriptflow.web;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.team4u.scriptflow.RuntimeApplication;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
@@ -19,7 +21,22 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(ScriptController.class)
+@SpringBootTest(
+        classes = RuntimeApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.config.name=does-not-exist",
+                "server.port=0",
+                "spring.datasource.url=jdbc:h2:mem:script-controller;DB_CLOSE_DELAY=-1",
+                "spring.datasource.driver-class-name=org.h2.Driver",
+                "spring.datasource.username=sa",
+                "spring.jpa.hibernate.ddl-auto=create-drop",
+                "spring.jpa.open-in-view=false",
+                "spring.h2.console.enabled=false",
+                "app.execution.async-pool-size=1"
+        }
+)
+@AutoConfigureMockMvc
 @Import(GlobalExceptionHandler.class)
 class ScriptControllerTest {
     @Autowired

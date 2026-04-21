@@ -2,22 +2,31 @@ package org.team4u.scriptflow.web;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
-import org.springframework.boot.autoconfigure.thymeleaf.ThymeleafAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
+import org.team4u.scriptflow.RuntimeApplication;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(
-        controllers = AdminUiController.class,
-        excludeAutoConfiguration = {
-                SecurityAutoConfiguration.class,
-                ThymeleafAutoConfiguration.class
+@SpringBootTest(
+        classes = RuntimeApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.config.name=does-not-exist",
+                "server.port=0",
+                "spring.datasource.url=jdbc:h2:mem:admin-ui-controller;DB_CLOSE_DELAY=-1",
+                "spring.datasource.driver-class-name=org.h2.Driver",
+                "spring.datasource.username=sa",
+                "spring.jpa.hibernate.ddl-auto=create-drop",
+                "spring.jpa.open-in-view=false",
+                "spring.h2.console.enabled=false",
+                "app.execution.async-pool-size=1"
         }
 )
+@AutoConfigureMockMvc
 class AdminUiControllerTest {
     @Autowired
     private MockMvc mockMvc;

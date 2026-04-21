@@ -16,6 +16,7 @@ body {
   background:
     radial-gradient(circle at top left, rgba(35, 87, 213, 0.08), transparent 24%),
     linear-gradient(180deg, #f8f9fb 0%, #f2f4f7 100%);
+  overflow-x: hidden;
 }
 
 a {
@@ -24,14 +25,24 @@ a {
 
 #root {
   min-height: 100vh;
+  min-width: 320px;
 }
 
 .app-shell {
   min-height: 100vh;
 }
 
+.app-shell,
+.app-shell .ant-layout {
+  min-width: 0;
+}
+
 .app-sider {
   border-inline-end: 1px solid rgba(5, 5, 5, 0.06);
+}
+
+.app-navigation {
+  height: 100%;
 }
 
 .brand-block {
@@ -56,14 +67,53 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
+}
+
+.app-header__main {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.app-header__title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-header__actions {
+  margin-inline-start: auto;
+}
+
+.mobile-nav-trigger {
+  flex: 0 0 auto;
+}
+
+.app-nav-drawer .ant-drawer-body {
+  padding: 0;
+}
+
+.app-nav-drawer .ant-drawer-header {
+  padding: 16px 20px 0;
+  border-bottom: 0;
+}
+
+.app-nav-drawer .ant-menu {
+  border-inline-end: 0 !important;
+  background: transparent;
 }
 
 .app-content {
   padding: 0 28px 28px;
+  min-width: 0;
 }
 
 .editor-footer {
   margin-top: 16px;
+  align-items: flex-start;
 }
 
 .schema-builder {
@@ -148,9 +198,39 @@ a {
   gap: 12px;
 }
 
-.tab-toolbar {
+.script-list-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.script-list-toolbar__meta,
+.script-list-toolbar__actions {
+  min-width: 0;
+}
+
+.script-import-summary,
+.script-import-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.script-import-result__code {
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.96));
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .execution-json-panel {
@@ -212,11 +292,23 @@ a {
   color: #e2e8f0;
   font-size: 13px;
   line-height: 1.7;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .execution-history-row {
   cursor: pointer;
+}
+
+.script-editor-page .ant-card-head {
+  padding-top: 6px;
+  padding-bottom: 14px;
+}
+
+.script-editor-page .ant-card-head-title,
+.script-editor-page .ant-card-extra {
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .ant-table-tbody > tr.execution-history-row-active > td {
@@ -234,7 +326,13 @@ a {
   box-shadow: 0 10px 30px rgba(31, 41, 55, 0.06);
 }
 
+.json-preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 992px) {
+  .script-list-toolbar,
   .schema-builder-toolbar,
   .schema-field-card__header,
   .command-panel__header {
@@ -244,5 +342,87 @@ a {
 
   .schema-field-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 16px 16px 8px;
+  }
+
+  .app-content {
+    padding: 0 16px 16px;
+  }
+
+  .app-header__main,
+  .app-header__actions,
+  .page-card-actions,
+  .script-list-toolbar__actions,
+  .history-card-actions {
+    width: 100%;
+  }
+
+  .app-header__actions .ant-space-item,
+  .page-card-actions .ant-space-item,
+  .script-list-toolbar__actions .ant-space-item {
+    width: 100%;
+  }
+
+  .app-header__actions .ant-btn,
+  .page-card-actions .ant-btn,
+  .script-list-toolbar__actions .ant-btn {
+    width: 100%;
+  }
+
+  .app-content .ant-card-head-wrapper {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .app-content .ant-card-extra {
+    margin-inline-start: 0;
+  }
+
+  .editor-footer {
+    width: 100%;
+  }
+
+  .editor-footer .ant-space-item:last-child {
+    min-width: 0;
+  }
+
+  .command-preview,
+  .json-preview,
+  .script-import-result__code {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 576px) {
+  .brand-block {
+    padding: 20px 16px 16px;
+  }
+
+  .schema-field-card,
+  .ant-card .ant-card-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .schema-builder-empty {
+    min-height: 280px;
+    padding: 20px 12px;
+  }
+
+  .schema-field-card__header .ant-space,
+  .command-panel__header .ant-btn,
+  .history-card-actions {
+    width: 100%;
+  }
+
+  .command-panel__header .ant-btn,
+  .history-card-actions .ant-btn {
+    width: 100%;
   }
 }

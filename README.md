@@ -16,8 +16,14 @@ scriptflow-core
 scriptflow-storage-jpa
   H2/JPA 持久化适配
 
+scriptflow-app-support
+  Web / CLI 共用运行时装配与脚本引擎配置
+
 scriptflow-app-spring
-  Spring Boot 入口，提供 Web API 和 CLI
+  Spring Boot Web 入口，提供 Web API 和管理台
+
+scriptflow-app-cli
+  Spring Boot CLI 入口，提供脚本查询与执行命令
 ```
 
 ## 运行
@@ -64,10 +70,16 @@ npm run dev
 
 ### CLI
 ```bash
-mvn -pl scriptflow-app-spring -am package
-java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli script list
-java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli run --id hello-groovy --input '{"name":"Alice"}'
+mvn -pl scriptflow-app-cli -am package
+java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script list
+java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar run --id hello-groovy --input '{"name":"Alice"}'
 ```
+
+说明：
+
+- `scriptflow-app-cli` 默认不参与 reactor 下的 `spring-boot:run`，避免 `mvn -pl scriptflow-app-spring -am spring-boot:run` 时误先启动 CLI。
+
+如果都从项目根目录启动，CLI 与 Web 默认共享同一个 H2 文件库 `./data/dsl-runtime`，但运行时上下文、依赖和打包产物已经分离。
 
 ## 一期接口
 

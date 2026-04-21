@@ -4,7 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class ScriptEngineConfiguration {
     @Bean
     public ScriptEngine scriptEngine() {

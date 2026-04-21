@@ -240,11 +240,11 @@ export function ScriptListPage() {
       />
       <Card title="脚本列表">
         <div className="script-list-toolbar">
-          <Space direction="vertical" size={2}>
+          <Space direction="vertical" size={2} className="script-list-toolbar__meta">
             <Text type="secondary">共 {scripts.length} 个脚本</Text>
             <Text type="secondary">已选择 {selectedScriptIds.length} 个脚本用于导出</Text>
           </Space>
-          <Space wrap>
+          <Space wrap className="script-list-toolbar__actions">
             <Button
               icon={<UploadOutlined />}
               loading={importing}
@@ -271,12 +271,14 @@ export function ScriptListPage() {
           </Space>
         </div>
         <Table
+          className="script-list-table"
           rowKey="id"
           loading={loading || importing}
           rowSelection={rowSelection}
           columns={columns}
           dataSource={scripts}
-          pagination={{ pageSize: 10 }}
+          pagination={{ pageSize: 10, responsive: true }}
+          scroll={{ x: 760 }}
         />
       </Card>
     </>
