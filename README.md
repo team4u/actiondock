@@ -4,23 +4,14 @@
 
 - 脚本定义
 - 执行实例
-- 页面定义
-- 页面组装
-- AMIS 渲染
 
-拆成清晰层次，而不是继续把 AMIS 细节塞进脚本定义里。
+拆成清晰层次，当前聚焦脚本定义与执行主链路。
 
 ## 模块
 
 ```text
 scriptflow-core
   领域模型、端口、应用服务
-
-scriptflow-page-builder
-  PageDefinition + ScriptDefinition -> ViewSchema
-
-scriptflow-renderer-amis
-  ViewSchema -> AMIS schema
 
 scriptflow-storage-jpa
   H2/JPA 持久化适配
@@ -34,6 +25,29 @@ scriptflow-app-spring
 ### Web
 ```bash
 mvn -pl scriptflow-app-spring -am spring-boot:run
+```
+
+开发阶段可以前后端分开启动：
+
+```bash
+# 后端
+mvn -pl scriptflow-app-spring -am spring-boot:run
+
+# 前端
+cd scriptflow-admin-ui
+npm install
+npm run dev
+```
+
+前端开发地址：
+
+- `http://localhost:5173/admin/scripts`
+
+如果需要把前端静态资源一起打进后端 jar，再执行：
+
+```bash
+mvn -pl scriptflow-app-spring -am package
+java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar
 ```
 
 管理控制台入口：
@@ -53,7 +67,6 @@ npm run dev
 mvn -pl scriptflow-app-spring -am package
 java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli script list
 java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli run --id hello-groovy --input '{"name":"Alice"}'
-java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli page schema --id hello-page
 ```
 
 ## 一期接口
@@ -72,22 +85,10 @@ java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar cli page schema
 - `GET /api/executions/{id}`
 - `GET /api/executions?scriptId=...`
 
-### Page 管理态
-- `GET /api/pages`
-- `POST /api/pages`
-- `GET /api/pages/{id}`
-- `PUT /api/pages/{id}`
-- `DELETE /api/pages/{id}`
-- `POST /api/pages/{pageId}/scaffold-from-script/{scriptId}`
-
-### Page 运行态
-- `GET /api/page-runtime/{id}/schema`
-- `POST /api/page-runtime/{id}/actions/{actionId}`
-- `POST /api/pages/{id}/submit`
-
 ## 说明
 
 - 数据库：H2 文件库
 - 脚本：Groovy
 - 鉴权：API Key，可为空
-- 当前环境没有 Maven，因此这里没有做实际编译；代码已经按 Spring Boot 3 / Java 21 组织
+- 当前仓库按 Spring Boot 3 / Java 21 组织
+- 开发阶段如果从旧版切换过来，删除本地 `data/dsl-runtime*` 以清理已下线的 page 数据

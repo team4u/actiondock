@@ -40,9 +40,7 @@ class JpaExecutionRepositoryAdapterTest {
                 .setStatus(ExecutionStatus.SUCCESS)
                 .setSubmitMode(SubmitMode.ASYNC)
                 .setInput(Map.of("name", "Alice"))
-                .setRawOutput(Map.of("message", "Hello"))
-                .setStructuredOutput(Map.of("message", "Hello"))
-                .setDisplayOutput(Map.of("message", "Hello"))
+                .setOutput(Map.of("message", "Hello"))
                 .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4))
                 .setStartedAt(LocalDateTime.of(2024, 1, 2, 3, 5))
                 .setFinishedAt(LocalDateTime.of(2024, 1, 2, 3, 6));
@@ -54,7 +52,8 @@ class JpaExecutionRepositoryAdapterTest {
         assertThat(stored.get().getStatus()).isEqualTo("SUCCESS");
         assertThat(stored.get().getSubmitMode()).isEqualTo("ASYNC");
         assertThat(stored.get().getInputJson()).contains("\"name\":\"Alice\"");
-        assertThat(saved.getDisplayOutput()).containsEntry("message", "Hello");
+        assertThat(stored.get().getOutputJson()).contains("\"message\":\"Hello\"");
+        assertThat(saved.getOutput()).containsEntry("message", "Hello");
         assertThat(found.getSubmitMode()).isEqualTo(SubmitMode.ASYNC);
         assertThat(records).singleElement().satisfies(value ->
                 assertThat(value.getStatus()).isEqualTo(ExecutionStatus.SUCCESS));

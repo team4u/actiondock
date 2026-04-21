@@ -17,16 +17,6 @@
         </dependency>
         <dependency>
             <groupId>org.team4u</groupId>
-            <artifactId>scriptflow-page-builder</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.team4u</groupId>
-            <artifactId>scriptflow-renderer-amis</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.team4u</groupId>
             <artifactId>scriptflow-storage-jpa</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -86,7 +76,7 @@
                 <executions>
                     <execution>
                         <id>admin-ui-install</id>
-                        <phase>generate-resources</phase>
+                        <phase>prepare-package</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
@@ -100,7 +90,7 @@
                     </execution>
                     <execution>
                         <id>admin-ui-build</id>
-                        <phase>generate-resources</phase>
+                        <phase>prepare-package</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
@@ -118,13 +108,16 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
                 <executions>
                     <execution>
                         <id>copy-admin-ui</id>
-                        <phase>process-resources</phase>
+                        <phase>prepare-package</phase>
                         <goals>
                             <goal>copy-resources</goal>
                         </goals>

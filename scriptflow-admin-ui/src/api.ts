@@ -1,5 +1,11 @@
 import { emitAuthRequired, getApiKey } from "./auth";
-import type { ApiErrorPayload, ApiResponse, ScriptDefinition } from "./types";
+import type {
+  ApiErrorPayload,
+  ApiResponse,
+  ExecuteRequest,
+  ExecutionRecord,
+  ScriptDefinition
+} from "./types";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json"
@@ -82,4 +88,21 @@ export function publishScript(id: string): Promise<ScriptDefinition> {
   return request<ScriptDefinition>(`/api/scripts/${id}/publish`, {
     method: "POST"
   });
+}
+
+export function executeScript(payload: ExecuteRequest): Promise<ExecutionRecord> {
+  return request<ExecutionRecord>("/api/executions", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getExecution(id: string): Promise<ExecutionRecord> {
+  return request<ExecutionRecord>(`/api/executions/${id}`);
+}
+
+export function listExecutions(scriptId: string): Promise<ExecutionRecord[]> {
+  const params = new URLSearchParams({ scriptId });
+  return request<ExecutionRecord[]>(`/api/executions?${params.toString()}`);
 }

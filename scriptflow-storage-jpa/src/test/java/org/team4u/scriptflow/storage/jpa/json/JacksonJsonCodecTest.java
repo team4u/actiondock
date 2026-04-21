@@ -2,8 +2,7 @@ package org.team4u.scriptflow.storage.jpa.json;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.team4u.scriptflow.domain.model.PageActionDefinition;
-import org.team4u.scriptflow.domain.model.PageLayout;
+import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
 import java.util.List;
 import java.util.Map;
@@ -16,16 +15,15 @@ class JacksonJsonCodecTest {
 
     @Test
     void writeAndReadRoundTripObjectsListsAndMaps() {
-        String objectJson = codec.write(new PageLayout().setFormMode("vertical"));
-        String listJson = codec.write(List.of(new PageActionDefinition().setId("submit").setType("SUBMIT")));
+        String objectJson = codec.write(new ScriptDefinition().setId("script-1").setName("Hello"));
+        String listJson = codec.write(List.of(new ScriptDefinition().setId("script-2")));
         String mapJson = codec.write(Map.of("name", "Alice"));
 
-        assertThat(codec.read(objectJson, PageLayout.class).getFormMode()).isEqualTo("vertical");
-        assertThat(codec.readList(listJson, PageActionDefinition.class))
+        assertThat(codec.read(objectJson, ScriptDefinition.class).getName()).isEqualTo("Hello");
+        assertThat(codec.readList(listJson, ScriptDefinition.class))
                 .singleElement()
-                .satisfies(action -> {
-                    assertThat(action.getId()).isEqualTo("submit");
-                    assertThat(action.getType()).isEqualTo("SUBMIT");
+                .satisfies(definition -> {
+                    assertThat(definition.getId()).isEqualTo("script-2");
                 });
         assertThat(codec.readMap(mapJson)).containsEntry("name", "Alice");
     }
@@ -33,17 +31,17 @@ class JacksonJsonCodecTest {
     @Test
     void blankJsonReturnsNullOrEmptyCollections() {
         assertThat(codec.write(null)).isNull();
-        assertThat(codec.read(" ", PageLayout.class)).isNull();
-        assertThat(codec.readList("", PageActionDefinition.class)).isEmpty();
+        assertThat(codec.read(" ", ScriptDefinition.class)).isNull();
+        assertThat(codec.readList("", ScriptDefinition.class)).isEmpty();
         assertThat(codec.readMap(null)).isEmpty();
     }
 
     @Test
     void invalidJsonThrowsIllegalStateException() {
-        assertThatThrownBy(() -> codec.read("{bad json}", PageLayout.class))
+        assertThatThrownBy(() -> codec.read("{bad json}", ScriptDefinition.class))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Cannot deserialize value");
-        assertThatThrownBy(() -> codec.readList("[", PageActionDefinition.class))
+        assertThatThrownBy(() -> codec.readList("[", ScriptDefinition.class))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Cannot deserialize list");
         assertThatThrownBy(() -> codec.readMap("{"))

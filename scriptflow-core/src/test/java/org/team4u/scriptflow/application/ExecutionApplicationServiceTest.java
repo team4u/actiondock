@@ -45,9 +45,7 @@ class ExecutionApplicationServiceTest {
         assertThat(record.getSubmitMode()).isEqualTo(SubmitMode.SYNC);
         assertThat(record.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(record.getInput()).containsEntry("name", "Alice");
-        assertThat(record.getRawOutput()).containsEntry("message", "Hello");
-        assertThat(record.getStructuredOutput()).containsEntry("message", "Hello");
-        assertThat(record.getDisplayOutput()).containsEntry("message", "Hello");
+        assertThat(record.getOutput()).containsEntry("message", "Hello");
         assertThat(record.getCreatedAt()).isNotNull();
         assertThat(record.getStartedAt()).isNotNull();
         assertThat(record.getFinishedAt()).isNotNull();
@@ -69,7 +67,7 @@ class ExecutionApplicationServiceTest {
 
         ExecutionRecord record = service.execute("script-1", null, SubmitMode.SYNC);
 
-        assertThat(record.getDisplayOutput()).containsEntry("result", 42);
+        assertThat(record.getOutput()).containsEntry("result", 42);
     }
 
     @Test
@@ -216,9 +214,7 @@ class ExecutionApplicationServiceTest {
                     .setStatus(source.getStatus())
                     .setSubmitMode(source.getSubmitMode())
                     .setInput(new LinkedHashMap<>(source.getInput()))
-                    .setRawOutput(new LinkedHashMap<>(source.getRawOutput()))
-                    .setStructuredOutput(new LinkedHashMap<>(source.getStructuredOutput()))
-                    .setDisplayOutput(new LinkedHashMap<>(source.getDisplayOutput()))
+                    .setOutput(new LinkedHashMap<>(source.getOutput()))
                     .setErrorMessage(source.getErrorMessage())
                     .setCreatedAt(source.getCreatedAt())
                     .setStartedAt(source.getStartedAt())

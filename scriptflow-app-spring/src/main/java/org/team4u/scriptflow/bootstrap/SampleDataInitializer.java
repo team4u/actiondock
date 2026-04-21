@@ -2,7 +2,6 @@ package org.team4u.scriptflow.bootstrap;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import org.team4u.scriptflow.application.PageDefinitionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptType;
@@ -12,12 +11,9 @@ import java.util.Map;
 @Component
 public class SampleDataInitializer implements CommandLineRunner {
     private final ScriptApplicationService scriptApplicationService;
-    private final PageDefinitionApplicationService pageDefinitionApplicationService;
 
-    public SampleDataInitializer(ScriptApplicationService scriptApplicationService,
-                                 PageDefinitionApplicationService pageDefinitionApplicationService) {
+    public SampleDataInitializer(ScriptApplicationService scriptApplicationService) {
         this.scriptApplicationService = scriptApplicationService;
-        this.pageDefinitionApplicationService = pageDefinitionApplicationService;
     }
 
     @Override
@@ -48,12 +44,6 @@ public class SampleDataInitializer implements CommandLineRunner {
                     ));
             scriptApplicationService.save(script);
             scriptApplicationService.publish("hello-groovy");
-        }
-
-        try {
-            pageDefinitionApplicationService.get("hello-page");
-        } catch (IllegalArgumentException ignored) {
-            pageDefinitionApplicationService.scaffold("hello-page", "hello-groovy");
         }
     }
 }

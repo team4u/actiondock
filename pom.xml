@@ -15,12 +15,10 @@
     <version>0.2.0</version>
     <packaging>pom</packaging>
     <name>scriptflow</name>
-    <description>Multi-module Spring Scriptflow runtime with H2, page builder and AMIS renderer</description>
+    <description>Multi-module Spring Scriptflow runtime with H2 and script execution</description>
 
     <modules>
         <module>scriptflow-core</module>
-        <module>scriptflow-page-builder</module>
-        <module>scriptflow-renderer-amis</module>
         <module>scriptflow-storage-jpa</module>
         <module>scriptflow-app-spring</module>
     </modules>
@@ -30,4 +28,16 @@
         <groovy.version>4.0.24</groovy.version>
         <picocli.version>4.7.6</picocli.version>
     </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -47,9 +47,7 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setStatus(record.getStatus().name());
         entity.setSubmitMode(record.getSubmitMode().name());
         entity.setInputJson(jsonCodec.write(record.getInput()));
-        entity.setRawOutputJson(jsonCodec.write(record.getRawOutput()));
-        entity.setStructuredOutputJson(jsonCodec.write(record.getStructuredOutput()));
-        entity.setDisplayOutputJson(jsonCodec.write(record.getDisplayOutput()));
+        entity.setOutputJson(jsonCodec.write(record.getOutput()));
         entity.setErrorMessage(record.getErrorMessage());
         entity.setCreatedAt(record.getCreatedAt());
         entity.setStartedAt(record.getStartedAt());
@@ -64,9 +62,7 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
                 .setStatus(ExecutionStatus.valueOf(entity.getStatus()))
                 .setSubmitMode(SubmitMode.valueOf(entity.getSubmitMode()))
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
-                .setRawOutput(jsonCodec.readMap(entity.getRawOutputJson()))
-                .setStructuredOutput(jsonCodec.readMap(entity.getStructuredOutputJson()))
-                .setDisplayOutput(jsonCodec.readMap(entity.getDisplayOutputJson()))
+                .setOutput(jsonCodec.readMap(entity.getOutputJson()))
                 .setErrorMessage(entity.getErrorMessage())
                 .setCreatedAt(entity.getCreatedAt())
                 .setStartedAt(entity.getStartedAt())

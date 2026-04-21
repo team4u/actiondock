@@ -66,6 +66,118 @@ a {
   margin-top: 16px;
 }
 
+.schema-builder {
+  min-height: 420px;
+}
+
+.schema-builder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.schema-builder-empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  border: 1px dashed rgba(35, 87, 213, 0.2);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(243, 246, 252, 0.96));
+}
+
+.schema-field-card {
+  padding: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.schema-field-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.schema-field-card__index {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(35, 87, 213, 0.12);
+  color: #2357d5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.schema-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.6fr);
+  gap: 14px 16px;
+}
+
+.schema-field-grid__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.schema-field-grid__item--compact {
+  min-width: 0;
+}
+
+.schema-field-grid__item--full {
+  grid-column: 1 / -1;
+}
+
+.schema-field-switch {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.schema-builder-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tab-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.execution-json-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.json-preview {
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.execution-history-row {
+  cursor: pointer;
+}
+
+.ant-table-tbody > tr.execution-history-row-active > td {
+  background: rgba(35, 87, 213, 0.08) !important;
+}
+
 .page-loading {
   min-height: 60vh;
   display: grid;
@@ -75,4 +187,16 @@ a {
 .ant-card {
   border-radius: 18px;
   box-shadow: 0 10px 30px rgba(31, 41, 55, 0.06);
+}
+
+@media (max-width: 992px) {
+  .schema-builder-toolbar,
+  .schema-field-card__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .schema-field-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -34,10 +34,10 @@ public class RunCommand implements Runnable {
     public void run() {
         Map<String, Object> payload = jsonCodec.readMap(input);
         ExecutionRecord record = service.execute(id, payload, async ? SubmitMode.ASYNC : SubmitMode.SYNC);
-        System.out.println(jsonCodec.write(record.getDisplayOutput().isEmpty() ? Map.of(
+        System.out.println(jsonCodec.write(record.getOutput().isEmpty() ? Map.of(
                 "executionId", record.getId(),
                 "status", record.getStatus().name(),
                 "errorMessage", record.getErrorMessage()
-        ) : record.getDisplayOutput()));
+        ) : record.getOutput()));
     }
 }

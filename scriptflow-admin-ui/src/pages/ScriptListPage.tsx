@@ -1,9 +1,8 @@
-import { CheckCircleOutlined, EditOutlined, RocketOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, listScripts, publishScript, validateScript } from "../api";
+import { ApiError, listScripts } from "../api";
 import { formatDateTime } from "../utils";
 import type { ScriptDefinition } from "../types";
 
@@ -14,7 +13,6 @@ export function ScriptListPage() {
   const [loading, setLoading] = useState(true);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
   const [messageApi, contextHolder] = message.useMessage();
-  const [actionKey, setActionKey] = useState<string>("");
 
   const loadScripts = async () => {
     setLoading(true);
@@ -36,33 +34,6 @@ export function ScriptListPage() {
   useEffect(() => {
     void loadScripts();
   }, []);
-
-  const runValidate = async (id: string) => {
-    setActionKey(`validate:${id}`);
-    try {
-      await validateScript(id);
-      messageApi.success("校验通过");
-    } catch (error) {
-      const detail = error instanceof ApiError ? error.message : "校验失败";
-      messageApi.error(detail);
-    } finally {
-      setActionKey("");
-    }
-  };
-
-  const runPublish = async (id: string) => {
-    setActionKey(`publish:${id}`);
-    try {
-      await publishScript(id);
-      messageApi.success("发布成功");
-      await loadScripts();
-    } catch (error) {
-      const detail = error instanceof ApiError ? error.message : "发布失败";
-      messageApi.error(detail);
-    } finally {
-      setActionKey("");
-    }
-  };
 
   const columns: ColumnsType<ScriptDefinition> = [
     {
@@ -107,33 +78,6 @@ export function ScriptListPage() {
       key: "updatedAt",
       width: 180,
       render: (value?: string) => formatDateTime(value)
-    },
-    {
-      title: "操作",
-      key: "actions",
-      width: 260,
-      render: (_, record) => (
-        <Space>
-          <Button icon={<EditOutlined />} onClick={() => navigate(`/scripts/${record.id}`)}>
-            编辑
-          </Button>
-          <Button
-            icon={<CheckCircleOutlined />}
-            loading={actionKey === `validate:${record.id}`}
-            onClick={() => void runValidate(record.id)}
-          >
-            校验
-          </Button>
-          <Button
-            type="primary"
-            icon={<RocketOutlined />}
-            loading={actionKey === `publish:${record.id}`}
-            onClick={() => void runPublish(record.id)}
-          >
-            发布
-          </Button>
-        </Space>
-      )
     }
   ];
 

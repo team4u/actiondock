@@ -10,9 +10,7 @@ public class ExecutionRecord {
     private ExecutionStatus status = ExecutionStatus.PENDING;
     private SubmitMode submitMode = SubmitMode.SYNC;
     private Map<String, Object> input = new LinkedHashMap<>();
-    private Map<String, Object> rawOutput = new LinkedHashMap<>();
-    private Map<String, Object> structuredOutput = new LinkedHashMap<>();
-    private Map<String, Object> displayOutput = new LinkedHashMap<>();
+    private Map<String, Object> output = new LinkedHashMap<>();
     private String errorMessage;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
@@ -63,30 +61,12 @@ public class ExecutionRecord {
         return this;
     }
 
-    public Map<String, Object> getRawOutput() {
-        return rawOutput;
+    public Map<String, Object> getOutput() {
+        return output;
     }
 
-    public ExecutionRecord setRawOutput(Map<String, Object> rawOutput) {
-        this.rawOutput = rawOutput == null ? new LinkedHashMap<>() : rawOutput;
-        return this;
-    }
-
-    public Map<String, Object> getStructuredOutput() {
-        return structuredOutput;
-    }
-
-    public ExecutionRecord setStructuredOutput(Map<String, Object> structuredOutput) {
-        this.structuredOutput = structuredOutput == null ? new LinkedHashMap<>() : structuredOutput;
-        return this;
-    }
-
-    public Map<String, Object> getDisplayOutput() {
-        return displayOutput;
-    }
-
-    public ExecutionRecord setDisplayOutput(Map<String, Object> displayOutput) {
-        this.displayOutput = displayOutput == null ? new LinkedHashMap<>() : displayOutput;
+    public ExecutionRecord setOutput(Map<String, Object> output) {
+        this.output = output == null ? new LinkedHashMap<>() : output;
         return this;
     }
 

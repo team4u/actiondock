@@ -59,10 +59,7 @@ public class ExecutionApplicationService {
             executionRepository.save(record);
 
             Object result = scriptEngine.execute(definition, record.getInput());
-            Map<String, Object> raw = toMap(result);
-            record.setRawOutput(raw);
-            record.setStructuredOutput(raw);
-            record.setDisplayOutput(raw);
+            record.setOutput(toMap(result));
             record.setStatus(ExecutionStatus.SUCCESS);
             record.setFinishedAt(LocalDateTime.now());
             return executionRepository.save(record);

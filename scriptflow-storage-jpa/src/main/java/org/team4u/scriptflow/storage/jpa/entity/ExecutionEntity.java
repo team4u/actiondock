@@ -27,13 +27,7 @@ public class ExecutionEntity {
     private String inputJson;
 
     @Lob
-    private String rawOutputJson;
-
-    @Lob
-    private String structuredOutputJson;
-
-    @Lob
-    private String displayOutputJson;
+    private String outputJson;
 
     @Lob
     private String errorMessage;
@@ -52,12 +46,8 @@ public class ExecutionEntity {
     public void setSubmitMode(String submitMode) { this.submitMode = submitMode; }
     public String getInputJson() { return inputJson; }
     public void setInputJson(String inputJson) { this.inputJson = inputJson; }
-    public String getRawOutputJson() { return rawOutputJson; }
-    public void setRawOutputJson(String rawOutputJson) { this.rawOutputJson = rawOutputJson; }
-    public String getStructuredOutputJson() { return structuredOutputJson; }
-    public void setStructuredOutputJson(String structuredOutputJson) { this.structuredOutputJson = structuredOutputJson; }
-    public String getDisplayOutputJson() { return displayOutputJson; }
-    public void setDisplayOutputJson(String displayOutputJson) { this.displayOutputJson = displayOutputJson; }
+    public String getOutputJson() { return outputJson; }
+    public void setOutputJson(String outputJson) { this.outputJson = outputJson; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     public LocalDateTime getCreatedAt() { return createdAt; }
