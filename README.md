@@ -36,6 +36,18 @@ scriptflow-app-spring
 mvn -pl scriptflow-app-spring -am spring-boot:run
 ```
 
+管理控制台入口：
+
+- `http://localhost:8080/admin/scripts`
+
+前端本地开发：
+
+```bash
+cd scriptflow-admin-ui
+npm install
+npm run dev
+```
+
 ### CLI
 ```bash
 mvn -pl scriptflow-app-spring -am package

@@ -28,6 +28,10 @@ bin
 /nbdist/
 /.nb-gradle/
 build/
+node_modules/
+scriptflow-admin-ui/dist/
+scriptflow-admin-ui/.vite/
+*.tsbuildinfo
 
 ### VS Code ###
 .vscode/

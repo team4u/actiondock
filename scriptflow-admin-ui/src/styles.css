@@ -1,0 +1,78 @@
+:root {
+  color: rgba(0, 0, 0, 0.88);
+  background: #f3f5f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(35, 87, 213, 0.08), transparent 24%),
+    linear-gradient(180deg, #f8f9fb 0%, #f2f4f7 100%);
+}
+
+a {
+  color: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-sider {
+  border-inline-end: 1px solid rgba(5, 5, 5, 0.06);
+}
+
+.brand-block {
+  padding: 24px 20px 18px;
+}
+
+.brand-kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: #2357d5;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-header {
+  height: auto;
+  padding: 20px 28px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-content {
+  padding: 0 28px 28px;
+}
+
+.editor-footer {
+  margin-top: 16px;
+}
+
+.page-loading {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+}
+
+.ant-card {
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(31, 41, 55, 0.06);
+}
