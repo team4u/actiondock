@@ -4,7 +4,7 @@ import {
   DeleteOutlined,
   PlusOutlined
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Input, Select, Space, Switch, Tabs, Typography } from "antd";
+import { Alert, Button, Empty, Input, InputNumber, Select, Space, Switch, Tabs, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { CodeEditor } from "./CodeEditor";
 import { InfoHint } from "./InfoHint";
@@ -25,6 +25,11 @@ const FIELD_TYPE_OPTIONS: Array<{ value: SchemaFieldKind; label: string }> = [
   { value: "boolean", label: "boolean" },
   { value: "enum", label: "enum" }
 ];
+
+const STRING_WIDGET_OPTIONS = [
+  { value: "input", label: "单行输入" },
+  { value: "textarea", label: "多行输入" }
+] as const;
 
 interface SchemaBuilderProps {
   label: string;
@@ -242,7 +247,12 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                 <Select
                                   value={field.type}
                                   options={FIELD_TYPE_OPTIONS}
-                                  onChange={(nextValue) => setField(field.id, { type: nextValue })}
+                                  onChange={(nextValue) =>
+                                    setField(field.id, {
+                                      type: nextValue,
+                                      widget: nextValue === "string" ? field.widget : "input"
+                                    })
+                                  }
                                 />
                               </div>
 
@@ -257,6 +267,44 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   />
                                 </div>
                               </div>
+
+                              {field.type === "string" && (
+                                <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                  <Text type="secondary">输入控件</Text>
+                                  <Select
+                                    value={field.widget}
+                                    options={[...STRING_WIDGET_OPTIONS]}
+                                    onChange={(nextValue) =>
+                                      setField(field.id, {
+                                        widget: nextValue,
+                                        rows: nextValue === "textarea" ? field.rows || 6 : field.rows
+                                      })
+                                    }
+                                  />
+                                </div>
+                              )}
+
+                              {field.type === "string" && field.widget === "textarea" && (
+                                <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                  <Text type="secondary">显示行数</Text>
+                                  <InputNumber
+                                    min={1}
+                                    precision={0}
+                                    value={field.rows}
+                                    status={fieldErrors.rows ? "error" : ""}
+                                    style={{ width: "100%" }}
+                                    placeholder="例如 6"
+                                    onChange={(nextValue) =>
+                                      setField(field.id, {
+                                        rows: typeof nextValue === "number" ? nextValue : 0
+                                      })
+                                    }
+                                  />
+                                  <Text type={fieldErrors.rows ? "danger" : "secondary"}>
+                                    {fieldErrors.rows ?? "正式页和调试页都会按这个初始高度渲染 textarea。"}
+                                  </Text>
+                                </div>
+                              )}
 
                               {field.type === "enum" && (
                                 <div className="schema-field-grid__item schema-field-grid__item--full">

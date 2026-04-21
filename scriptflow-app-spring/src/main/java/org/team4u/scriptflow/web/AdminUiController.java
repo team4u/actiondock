@@ -10,7 +10,8 @@ public class AdminUiController {
             "/admin/",
             "/admin/scripts",
             "/admin/scripts/new",
-            "/admin/scripts/{id:[A-Za-z0-9_-]+}"
+            "/admin/scripts/{id:[A-Za-z0-9_-]+}",
+            "/admin/run/{id:[A-Za-z0-9_-]+}"
     })
     public String index() {
         return "forward:/admin/index.html";

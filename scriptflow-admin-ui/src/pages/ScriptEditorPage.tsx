@@ -70,6 +70,12 @@ import {
   resolveSchemaFields,
   serializeSchemaEditorState
 } from "../schema";
+import {
+  buildSchemaFieldRules,
+  getSchemaFieldValuePropName,
+  renderSchemaFieldInput
+} from "../schemaForm";
+import { isValidationErrorData } from "../schemaExecution";
 import type {
   ExecutionRecord,
   ExecutionStatus,
@@ -147,10 +153,6 @@ function JsonPreview({
       )}
     </div>
   );
-}
-
-function isValidationErrorData(value: unknown): value is ValidationErrorData {
-  return Boolean(value) && typeof value === "object" && Array.isArray((value as ValidationErrorData).fieldErrors);
 }
 
 function SchemaFieldSummary({
@@ -1179,68 +1181,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                             children: (
                                               <Form form={executionForm} layout="vertical">
                                                 {supportedFields.map((field) => {
-                                                  const rules = field.required
-                                                    ? [{ required: true, message: `请填写${field.label}` }]
-                                                    : undefined;
-
-                                                  if (field.kind === "enum") {
-                                                    return (
-                                                      <Form.Item
-                                                        key={field.name}
-                                                        label={field.label}
-                                                        name={field.name}
-                                                        rules={rules}
-                                                      >
-                                                        <Select
-                                                          allowClear
-                                                          placeholder={`请选择${field.label}`}
-                                                          options={(field.enumValues ?? []).map((value) => ({
-                                                            value,
-                                                            label: String(value)
-                                                          }))}
-                                                        />
-                                                      </Form.Item>
-                                                    );
-                                                  }
-
-                                                  if (field.kind === "boolean") {
-                                                    return (
-                                                      <Form.Item
-                                                        key={field.name}
-                                                        label={field.label}
-                                                        name={field.name}
-                                                        valuePropName="checked"
-                                                      >
-                                                        <Switch checkedChildren="true" unCheckedChildren="false" />
-                                                      </Form.Item>
-                                                    );
-                                                  }
-
-                                                  if (field.kind === "number" || field.kind === "integer") {
-                                                    return (
-                                                      <Form.Item
-                                                        key={field.name}
-                                                        label={field.label}
-                                                        name={field.name}
-                                                        rules={rules}
-                                                      >
-                                                        <InputNumber
-                                                          style={{ width: "100%" }}
-                                                          placeholder={`请输入${field.label}`}
-                                                          precision={field.kind === "integer" ? 0 : undefined}
-                                                        />
-                                                      </Form.Item>
-                                                    );
-                                                  }
-
                                                   return (
                                                     <Form.Item
                                                       key={field.name}
                                                       label={field.label}
                                                       name={field.name}
-                                                      rules={rules}
+                                                      rules={buildSchemaFieldRules(field)}
+                                                      valuePropName={getSchemaFieldValuePropName(field)}
                                                     >
-                                                      <Input placeholder={`请输入${field.label}`} />
+                                                      {renderSchemaFieldInput(field)}
                                                     </Form.Item>
                                                   );
                                                 })}

@@ -1,6 +1,7 @@
 import { parseJsonText, prettyJson } from "./utils";
 
 export type SchemaFieldKind = "string" | "number" | "integer" | "boolean" | "enum";
+export type SchemaFieldWidget = "input" | "textarea";
 
 export interface SchemaFieldDraft {
   id: string;
@@ -9,6 +10,8 @@ export interface SchemaFieldDraft {
   type: SchemaFieldKind;
   required: boolean;
   enumText: string;
+  widget: SchemaFieldWidget;
+  rows: number;
 }
 
 export interface SchemaFieldDefinition {
@@ -16,12 +19,33 @@ export interface SchemaFieldDefinition {
   label: string;
   kind: SchemaFieldKind;
   required: boolean;
+  description?: string;
+  defaultValue?: unknown;
+  examples?: unknown[];
+  widget?: SchemaFieldWidget;
+  rows?: number;
   enumValues?: string[];
 }
 
 export interface SchemaFieldValidationErrors {
   name?: string;
   enumText?: string;
+  rows?: string;
+}
+
+interface ResolvedFieldUiConfig {
+  widget?: SchemaFieldWidget;
+  rows?: number;
+}
+
+interface ResolvedFieldMeta {
+  label: string;
+  kind: SchemaFieldKind | null;
+  enumValues?: string[];
+  description?: string;
+  defaultValue?: unknown;
+  examples?: unknown[];
+  ui: ResolvedFieldUiConfig;
 }
 
 export type SchemaEditorState =
@@ -37,7 +61,9 @@ export type SchemaEditorState =
 
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 const ROOT_KEYS = new Set(["type", "properties", "required"]);
-const FIELD_KEYS = new Set(["type", "title", "enum"]);
+const FIELD_KEYS = new Set(["type", "title", "enum", "x-ui"]);
+const UI_KEYS = new Set(["widget", "rows"]);
+const DEFAULT_TEXTAREA_ROWS = 6;
 
 let schemaFieldSequence = 0;
 
@@ -79,7 +105,9 @@ export function createSchemaFieldDraft(): SchemaFieldDraft {
     title: "",
     type: "string",
     required: false,
-    enumText: ""
+    enumText: "",
+    widget: "input",
+    rows: DEFAULT_TEXTAREA_ROWS
   };
 }
 
@@ -130,7 +158,11 @@ export function validateSchemaFields(
       fieldErrors.enumText = "请输入至少一个枚举值";
     }
 
-    if (fieldErrors.name || fieldErrors.enumText) {
+    if (field.widget === "textarea" && (!Number.isInteger(field.rows) || field.rows <= 0)) {
+      fieldErrors.rows = "请输入大于 0 的整数行数";
+    }
+
+    if (fieldErrors.name || fieldErrors.enumText || fieldErrors.rows) {
       errors[field.id] = {
         ...errors[field.id],
         ...fieldErrors
@@ -150,6 +182,114 @@ function failJson(reason: string, schema: Record<string, unknown>, jsonText?: st
     mode: "json",
     jsonText: jsonText ?? prettyJson(schema),
     reason
+  };
+}
+
+function parseTextareaRows(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+function parseFieldUi(
+  meta: Record<string, unknown>,
+  fieldName: string,
+  options: { strict: boolean; kind: SchemaFieldKind | null }
+): ResolvedFieldUiConfig {
+  if (options.kind !== "string") {
+    return {};
+  }
+
+  const ui = meta["x-ui"];
+
+  if (ui === undefined) {
+    return {};
+  }
+  if (!isRecord(ui)) {
+    if (options.strict) {
+      throw new Error(`字段 ${fieldName} 的 x-ui 必须是对象`);
+    }
+    return {};
+  }
+  if (hasUnsupportedKeys(ui, UI_KEYS)) {
+    if (options.strict) {
+      throw new Error(`字段 ${fieldName} 的 x-ui 含有 builder 不支持的扩展配置`);
+    }
+    return {};
+  }
+
+  const widgetValue = ui.widget;
+  if (widgetValue !== undefined && widgetValue !== "input" && widgetValue !== "textarea") {
+    if (options.strict) {
+      throw new Error(`字段 ${fieldName} 的 x-ui.widget 仅支持 input 或 textarea`);
+    }
+    return {};
+  }
+
+  const rowsValue = ui.rows;
+  const rows = rowsValue === undefined ? DEFAULT_TEXTAREA_ROWS : parseTextareaRows(rowsValue);
+  if (rowsValue !== undefined && rows === null) {
+    if (options.strict) {
+      throw new Error(`字段 ${fieldName} 的 x-ui.rows 必须是大于 0 的整数`);
+    }
+    return {
+      widget: widgetValue === "textarea" ? "textarea" : undefined,
+      rows: widgetValue === "textarea" ? DEFAULT_TEXTAREA_ROWS : undefined
+    };
+  }
+
+  if ((widgetValue ?? "input") !== "textarea" && rowsValue !== undefined) {
+    if (options.strict) {
+      throw new Error(`字段 ${fieldName} 的 x-ui.rows 仅能用于 textarea`);
+    }
+    return {};
+  }
+
+  if (widgetValue !== "textarea") {
+    return {};
+  }
+
+  return {
+    widget: "textarea",
+    rows: rows ?? DEFAULT_TEXTAREA_ROWS
+  };
+}
+
+function resolveFieldMeta(
+  name: string,
+  meta: Record<string, unknown>,
+  options: { strictUi: boolean }
+): ResolvedFieldMeta {
+  const label = typeof meta.title === "string" && meta.title.trim() ? meta.title : name;
+  const description = typeof meta.description === "string" ? meta.description : undefined;
+  const defaultValue = "default" in meta ? meta.default : undefined;
+  const examples = Array.isArray(meta.examples) ? meta.examples : undefined;
+  const enumValues = Array.isArray(meta.enum)
+    ? meta.enum.filter((item): item is string => typeof item === "string")
+    : undefined;
+
+  let kind: SchemaFieldKind | null = null;
+  if (enumValues && enumValues.length > 0) {
+    kind = "enum";
+  } else {
+    const type = typeof meta.type === "string" ? meta.type : "string";
+    if (type === "string" || type === "number" || type === "integer" || type === "boolean") {
+      kind = type;
+    }
+  }
+
+  return {
+    label,
+    kind,
+    description,
+    defaultValue,
+    examples,
+    enumValues,
+    ui: parseFieldUi(meta, name, {
+      strict: options.strictUi,
+      kind
+    })
   };
 }
 
@@ -202,7 +342,7 @@ export function deserializeSchema(
       return failJson(`字段 ${name} 使用了嵌套结构`, schema, jsonText);
     }
 
-    const title = typeof metaValue.title === "string" ? metaValue.title : "";
+    const fieldMeta = resolveFieldMeta(name, metaValue, { strictUi: true });
 
     if ("enum" in metaValue) {
       if (!Array.isArray(metaValue.enum) || metaValue.enum.some((item) => typeof item !== "string")) {
@@ -214,31 +354,29 @@ export function deserializeSchema(
       fields.push({
         id: createDraftId(),
         name,
-        title,
+        title: fieldMeta.label === name ? "" : fieldMeta.label,
         type: "enum",
         required: requiredSet.has(name),
-        enumText: metaValue.enum.join(", ")
+        enumText: metaValue.enum.join(", "),
+        widget: "input",
+        rows: DEFAULT_TEXTAREA_ROWS
       });
       continue;
     }
 
-    const type = metaValue.type;
-    if (
-      type !== "string" &&
-      type !== "number" &&
-      type !== "integer" &&
-      type !== "boolean"
-    ) {
+    if (!fieldMeta.kind || fieldMeta.kind === "enum") {
       return failJson(`字段 ${name} 的类型不在 builder 支持范围内`, schema, jsonText);
     }
 
     fields.push({
       id: createDraftId(),
       name,
-      title,
-      type,
+      title: fieldMeta.label === name ? "" : fieldMeta.label,
+      type: fieldMeta.kind,
       required: requiredSet.has(name),
-      enumText: ""
+      enumText: "",
+      widget: fieldMeta.ui.widget ?? "input",
+      rows: fieldMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS
     });
   }
 
@@ -291,6 +429,15 @@ function buildSchemaFromFields(
       if (enumValues.length > 0) {
         property.enum = enumValues;
       }
+    }
+    if (field.type === "string" && field.widget === "textarea") {
+      const ui: Record<string, unknown> = {
+        widget: "textarea"
+      };
+      if (field.rows !== DEFAULT_TEXTAREA_ROWS) {
+        ui.rows = field.rows;
+      }
+      property["x-ui"] = ui;
     }
 
     properties[name] = property;
@@ -346,34 +493,38 @@ export function resolveSchemaFields(schema?: Record<string, unknown>): {
 
   Object.entries(properties).forEach(([name, value]) => {
     const meta = isRecord(value) ? value : {};
-    const label = typeof meta.title === "string" && meta.title.trim() ? meta.title : name;
-    const enumValues = Array.isArray(meta.enum)
-      ? meta.enum.filter((item): item is string => typeof item === "string")
-      : undefined;
+    const fieldMeta = resolveFieldMeta(name, meta, { strictUi: false });
 
-    if (enumValues && enumValues.length > 0) {
+    if (fieldMeta.kind === "enum") {
       supportedFields.push({
         name,
-        label,
+        label: fieldMeta.label,
         kind: "enum",
         required: requiredFields.has(name),
-        enumValues
+        description: fieldMeta.description,
+        defaultValue: fieldMeta.defaultValue,
+        examples: fieldMeta.examples,
+        enumValues: fieldMeta.enumValues
       });
       return;
     }
 
-    const type = typeof meta.type === "string" ? meta.type : "string";
-    if (type === "string" || type === "number" || type === "integer" || type === "boolean") {
+    if (fieldMeta.kind) {
       supportedFields.push({
         name,
-        label,
-        kind: type,
-        required: requiredFields.has(name)
+        label: fieldMeta.label,
+        kind: fieldMeta.kind,
+        required: requiredFields.has(name),
+        description: fieldMeta.description,
+        defaultValue: fieldMeta.defaultValue,
+        examples: fieldMeta.examples,
+        widget: fieldMeta.ui.widget,
+        rows: fieldMeta.ui.rows
       });
       return;
     }
 
-    unsupportedFields.push(label);
+    unsupportedFields.push(fieldMeta.label);
   });
 
   return { supportedFields, unsupportedFields };

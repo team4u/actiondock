@@ -37,4 +37,11 @@ class AdminUiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(forwardedUrl("/admin/index.html"));
     }
+
+    @Test
+    void forwardsRunEntryToIndex() throws Exception {
+        mockMvc.perform(get("/admin/run/hello-groovy"))
+                .andExpect(status().isOk())
+                .andExpect(forwardedUrl("/admin/index.html"));
+    }
 }

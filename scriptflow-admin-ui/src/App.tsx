@@ -27,6 +27,9 @@ const ScriptListPage = lazy(() =>
 const ScriptEditorPage = lazy(() =>
   import("./pages/ScriptEditorPage").then((module) => ({ default: module.ScriptEditorPage }))
 );
+const ScriptRunPage = lazy(() =>
+  import("./pages/ScriptRunPage").then((module) => ({ default: module.ScriptRunPage }))
+);
 
 type ColorMode = "light" | "dark";
 
@@ -55,23 +58,21 @@ function useSystemColorMode(): ColorMode {
   return colorMode;
 }
 
-function AdminShell({ colorMode }: { colorMode: ColorMode }) {
+function AdminShell({
+  colorMode,
+  onOpenApiKeyModal
+}: {
+  colorMode: ColorMode;
+  onOpenApiKeyModal: () => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
   const isDark = colorMode === "dark";
-  const [apiKey, setApiKeyState] = useState(getApiKey());
-  const [modalOpen, setModalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  useEffect(() => onAuthRequired(() => setModalOpen(true)), []);
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
-
-  const saveApiKey = () => {
-    setApiKey(apiKey);
-    setModalOpen(false);
-  };
 
   const navigationMenu = (
     <div className="app-navigation">
@@ -123,7 +124,7 @@ function AdminShell({ colorMode }: { colorMode: ColorMode }) {
             <Button icon={<PlusOutlined />} type="primary" onClick={() => navigate("/scripts/new")}>
               新建脚本
             </Button>
-            <Button icon={<KeyOutlined />} onClick={() => setModalOpen(true)}>
+            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
               API Key
             </Button>
           </Space>
@@ -139,8 +140,15 @@ function AdminShell({ colorMode }: { colorMode: ColorMode }) {
             <Routes>
               <Route path="/" element={<Navigate to="/scripts" replace />} />
               <Route path="/scripts" element={<ScriptListPage />} />
-              <Route path="/scripts/new" element={<ScriptEditorPage colorMode={colorMode} mode="create" />} />
-              <Route path="/scripts/:id" element={<ScriptEditorPage colorMode={colorMode} mode="edit" />} />
+              <Route
+                path="/scripts/new"
+                element={<ScriptEditorPage colorMode={colorMode} mode="create" />}
+              />
+              <Route
+                path="/scripts/:id"
+                element={<ScriptEditorPage colorMode={colorMode} mode="edit" />}
+              />
+              <Route path="*" element={<Navigate to="/scripts" replace />} />
             </Routes>
           </Suspense>
         </Content>
@@ -154,22 +162,6 @@ function AdminShell({ colorMode }: { colorMode: ColorMode }) {
       >
         {navigationMenu}
       </Drawer>
-      <Modal
-        title="设置 API Key"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={saveApiKey}
-        okText="保存"
-      >
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Text type="secondary">如果服务端启用了 `app.auth.api-keys`，这里填入 Bearer Token。</Text>
-          <Input.Password
-            placeholder="输入 API Key"
-            value={apiKey}
-            onChange={(event) => setApiKeyState(event.target.value)}
-          />
-        </Space>
-      </Modal>
     </Layout>
   );
 }
@@ -177,10 +169,31 @@ function AdminShell({ colorMode }: { colorMode: ColorMode }) {
 export function App() {
   const colorMode = useSystemColorMode();
   const isDark = colorMode === "dark";
+  const [apiKey, setApiKeyState] = useState(getApiKey());
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = colorMode;
   }, [colorMode]);
+
+  useEffect(
+    () =>
+      onAuthRequired(() => {
+        setApiKeyState(getApiKey());
+        setAuthModalOpen(true);
+      }),
+    []
+  );
+
+  const openAuthModal = () => {
+    setApiKeyState(getApiKey());
+    setAuthModalOpen(true);
+  };
+
+  const saveApiKey = () => {
+    setApiKey(apiKey);
+    setAuthModalOpen(false);
+  };
 
   return (
     <ConfigProvider
@@ -209,7 +222,40 @@ export function App() {
       }}
     >
       <AntdApp>
-        <AdminShell colorMode={colorMode} />
+        <Suspense
+          fallback={
+            <div className="page-loading">
+              <Spin size="large" />
+            </div>
+          }
+        >
+          <Routes>
+            <Route
+              path="/run/:id"
+              element={<ScriptRunPage colorMode={colorMode} onOpenApiKeyModal={openAuthModal} />}
+            />
+            <Route
+              path="/*"
+              element={<AdminShell colorMode={colorMode} onOpenApiKeyModal={openAuthModal} />}
+            />
+          </Routes>
+        </Suspense>
+        <Modal
+          title="设置 API Key"
+          open={authModalOpen}
+          onCancel={() => setAuthModalOpen(false)}
+          onOk={saveApiKey}
+          okText="保存"
+        >
+          <Space direction="vertical" style={{ width: "100%" }}>
+            <Text type="secondary">如果服务端启用了 `app.auth.api-keys`，这里填入 Bearer Token。</Text>
+            <Input.Password
+              placeholder="输入 API Key"
+              value={apiKey}
+              onChange={(event) => setApiKeyState(event.target.value)}
+            />
+          </Space>
+        </Modal>
       </AntdApp>
     </ConfigProvider>
   );

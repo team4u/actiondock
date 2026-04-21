@@ -1,4 +1,4 @@
-import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExportOutlined, UploadOutlined } from "@ant-design/icons";
 import { Button, Card, Modal, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
@@ -218,6 +218,26 @@ export function ScriptListPage() {
       key: "updatedAt",
       width: 180,
       render: (value?: string) => formatDateTime(value)
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 140,
+      render: (_: unknown, record) => {
+        const isPublished = record.status === "PUBLISHED";
+
+        return (
+          <Button
+            type="link"
+            size="small"
+            icon={<ExportOutlined />}
+            disabled={!isPublished}
+            onClick={() => navigate(`/run/${record.id}`)}
+          >
+            正式使用
+          </Button>
+        );
+      }
     }
   ];
 

@@ -1,0 +1,425 @@
+import {
+  ArrowLeftOutlined,
+  KeyOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined
+} from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+  message
+} from "antd";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ApiError, executeScript, getScript } from "../api";
+import { resolveSchemaFields } from "../schema";
+import {
+  buildSchemaExecutionInput,
+  buildSchemaFieldInitialValues,
+  formatSchemaFieldSupplement,
+  isValidationErrorData
+} from "../schemaExecution";
+import {
+  buildSchemaFieldRules,
+  getSchemaFieldValuePropName,
+  renderSchemaFieldInput
+} from "../schemaForm";
+import type {
+  ExecutionResponse,
+  ScriptDefinition,
+  ValidationErrorData
+} from "../types";
+import { formatDateTime, prettyJson } from "../utils";
+
+const { Text, Title } = Typography;
+
+interface ScriptRunPageProps {
+  colorMode: "light" | "dark";
+  onOpenApiKeyModal: () => void;
+}
+
+interface PageStateError {
+  title: string;
+  description: string;
+}
+
+function StatusCallout({
+  title,
+  description,
+  action
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <Card className="run-status-card" bordered={false}>
+      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <div className="run-status-card__kicker">Script Runtime</div>
+        <Title level={3} className="run-status-card__title">
+          {title}
+        </Title>
+        <Text className="run-status-card__description">{description}</Text>
+        {action ? <div>{action}</div> : null}
+      </Space>
+    </Card>
+  );
+}
+
+export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPageProps) {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [script, setScript] = useState<ScriptDefinition | null>(null);
+  const [executionResult, setExecutionResult] = useState<ExecutionResponse | null>(null);
+  const [validationError, setValidationError] = useState<ValidationErrorData | null>(null);
+  const [pageError, setPageError] = useState<PageStateError | null>(null);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const { supportedFields: supportedInputFields, unsupportedFields: unsupportedInputFields } = useMemo(
+    () => resolveSchemaFields(script?.inputSchema),
+    [script?.inputSchema]
+  );
+  const { supportedFields: outputFields, unsupportedFields: unsupportedOutputFields } = useMemo(
+    () => resolveSchemaFields(script?.outputSchema),
+    [script?.outputSchema]
+  );
+  const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
+  const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
+
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      setPageError({
+        title: "缺少脚本标识",
+        description: "当前地址没有提供脚本 ID，无法加载正式使用页。"
+      });
+      return;
+    }
+
+    let disposed = false;
+
+    const load = async () => {
+      setLoading(true);
+      setPageError(null);
+      setExecutionResult(null);
+      setValidationError(null);
+      setScript(null);
+      form.resetFields();
+
+      try {
+        const loadedScript = await getScript(id);
+
+        if (disposed) {
+          return;
+        }
+
+        setScript(loadedScript);
+
+        if (loadedScript.status !== "PUBLISHED") {
+          setPageError({
+            title: "脚本尚未发布",
+            description: "正式使用页只对已发布脚本开放。请先回到管理台发布，再从正式入口进入。"
+          });
+        }
+      } catch (error) {
+        if (disposed) {
+          return;
+        }
+
+        const detail = error instanceof ApiError ? error.message : "加载正式使用页失败";
+        setPageError({
+          title: detail.toLowerCase().includes("not found") ? "脚本不存在" : "暂时无法打开正式页",
+          description: detail
+        });
+      } finally {
+        if (!disposed) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      disposed = true;
+    };
+  }, [form, id]);
+
+  useEffect(() => {
+    if (!script) {
+      return;
+    }
+    form.resetFields();
+    form.setFieldsValue(buildSchemaFieldInitialValues(supportedInputFields));
+  }, [form, script, supportedInputFields]);
+
+  const handleExecute = async () => {
+    if (!script?.id || !canExecute) {
+      return;
+    }
+
+    setExecuting(true);
+    setValidationError(null);
+    form.setFields(
+      supportedInputFields.map((field) => ({
+        name: field.name,
+        errors: []
+      }))
+    );
+
+    try {
+      const values = (await form.validateFields()) as Record<string, unknown>;
+      const response = await executeScript({
+        scriptId: script.id,
+        input: buildSchemaExecutionInput(supportedInputFields, values),
+        mode: "SYNC"
+      });
+
+      setExecutionResult(response);
+
+      if (response.status === "SUCCESS") {
+        messageApi.success("执行完成");
+      } else if (response.status === "FAILED") {
+        messageApi.error(response.errorMessage || "执行失败");
+      } else {
+        messageApi.info(`当前状态: ${response.status}`);
+      }
+    } catch (error) {
+      if (error instanceof ApiError && isValidationErrorData(error.data)) {
+        setValidationError(error.data);
+        const formFieldNames = new Set(supportedInputFields.map((field) => field.name));
+        form.setFields(
+          error.data.fieldErrors
+            .filter((fieldError) => formFieldNames.has(fieldError.field))
+            .map((fieldError) => ({
+              name: fieldError.field,
+              errors: [fieldError.message]
+            }))
+        );
+      } else {
+        setValidationError(null);
+      }
+
+      const detail = error instanceof ApiError || error instanceof Error ? error.message : "执行失败";
+      messageApi.error(detail);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const handleReset = () => {
+    form.resetFields();
+    form.setFieldsValue(buildSchemaFieldInitialValues(supportedInputFields));
+    setValidationError(null);
+    setExecutionResult(null);
+  };
+
+  const formatOutputValue = (value: unknown): string => {
+    if (value === undefined || value === null) {
+      return "-";
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    return JSON.stringify(value);
+  };
+
+  if (loading) {
+    return (
+      <div className="page-loading">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (pageError && !script) {
+    return (
+      <>
+        {contextHolder}
+        <div className={`run-page run-page--${colorMode}`}>
+          <div className="run-page__topbar">
+            <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate("/scripts")}>
+              返回脚本列表
+            </Button>
+            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
+              API Key
+            </Button>
+          </div>
+          <StatusCallout
+            title={pageError.title}
+            description={pageError.description}
+            action={
+              <Button type="primary" onClick={() => navigate("/scripts")}>
+                返回管理台
+              </Button>
+            }
+          />
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {contextHolder}
+      <div className={`run-page run-page--${colorMode}`}>
+        <div className="run-page__topbar">
+          <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate("/scripts")}>
+            返回脚本列表
+          </Button>
+          <Space wrap>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>
+              重置
+            </Button>
+            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
+              API Key
+            </Button>
+          </Space>
+        </div>
+
+        <header className="run-page__headline">
+          <Title className="run-page__title">{script?.name ?? id}</Title>
+        </header>
+
+        {pageError ? (
+          <StatusCallout title={pageError.title} description={pageError.description} />
+        ) : null}
+
+        <div className="run-page__layout">
+          <Card
+            className="run-panel run-panel--input"
+            title="输入"
+            extra={
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                loading={executing}
+                disabled={!canExecute}
+                onClick={() => void handleExecute()}
+              >
+                执行
+              </Button>
+            }
+          >
+            {unsupportedInputFields.length > 0 ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="当前脚本含复杂输入结构"
+                description={`正式页暂不支持这些字段类型：${unsupportedInputFields.join("、")}`}
+                style={{ marginBottom: 20 }}
+              />
+            ) : null}
+
+            {validationError ? (
+              <Alert
+                type="error"
+                showIcon
+                message="输入参数校验失败"
+                description={validationError.fieldErrors.map((item) => item.message).join("；")}
+                style={{ marginBottom: 20 }}
+              />
+            ) : null}
+
+            {supportedInputFields.length === 0 ? (
+              <div className="run-panel__empty">
+                <Text strong>该脚本无需输入参数</Text>
+                <Text type="secondary">点击“执行”后会以空对象提交。</Text>
+              </div>
+            ) : (
+              <Form form={form} layout="vertical" className="run-form">
+                {supportedInputFields.map((field) => {
+                  const supplement = formatSchemaFieldSupplement(field);
+
+                  return (
+                    <div key={field.name} className="run-field">
+                      <div className="run-field__header">
+                        <div>
+                          <Text className="run-field__label">{field.label}</Text>
+                          <Text className="run-field__name">{field.name}</Text>
+                        </div>
+                        {field.required ? <Tag color="red">必填</Tag> : <Tag>选填</Tag>}
+                      </div>
+                      <Form.Item
+                        name={field.name}
+                        rules={buildSchemaFieldRules(field)}
+                        valuePropName={getSchemaFieldValuePropName(field)}
+                        extra={supplement ?? undefined}
+                        style={{ marginBottom: 0 }}
+                      >
+                        {renderSchemaFieldInput(field, {
+                          booleanLabels: {
+                            checked: "是",
+                            unchecked: "否"
+                          }
+                        })}
+                      </Form.Item>
+                    </div>
+                  );
+                })}
+              </Form>
+            )}
+          </Card>
+
+          <Card className="run-panel run-panel--output" title="结果">
+            {!executionResult ? (
+              <div className="run-panel__empty">
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="执行后这里会显示正式输出"
+                />
+              </div>
+            ) : (
+              <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                <div className="run-result__summary">
+                  <div className="run-result__status">
+                    <Text type="secondary">状态</Text>
+                    <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
+                      {executionResult.status}
+                    </Tag>
+                  </div>
+                  <div className="run-result__status">
+                    <Text type="secondary">完成时间</Text>
+                    <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
+                  </div>
+                </div>
+
+                {executionResult.errorMessage ? (
+                  <Alert type="error" showIcon message={executionResult.errorMessage} />
+                ) : null}
+
+                {hasStructuredOutput ? (
+                  <div className="run-output-list">
+                    {outputFields.map((field) => (
+                      <div key={field.name} className="run-output-item">
+                        <Text className="run-output-item__label">{field.label}</Text>
+                        <Text className="run-output-item__value">
+                          {formatOutputValue(executionResult.output?.[field.name])}
+                        </Text>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <pre className="json-preview run-json-preview">
+                    {prettyJson(executionResult.output)}
+                  </pre>
+                )}
+              </Space>
+            )}
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}

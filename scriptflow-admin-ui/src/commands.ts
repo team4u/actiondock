@@ -1,4 +1,5 @@
 import type { SchemaFieldDefinition } from "./schema";
+import { buildSchemaExecutionInput } from "./schemaExecution";
 import type { SubmitMode } from "./types";
 
 type ExecutionInputMode = "SCHEMA" | "JSON";
@@ -23,14 +24,7 @@ export function buildExecutionInputFromValues(
   fields: SchemaFieldDefinition[],
   values: Record<string, unknown> | undefined
 ): Record<string, unknown> {
-  return fields.reduce<Record<string, unknown>>((result, field) => {
-    const value = values?.[field.name];
-    if (value === undefined || value === null || value === "") {
-      return result;
-    }
-    result[field.name] = value;
-    return result;
-  }, {});
+  return buildSchemaExecutionInput(fields, values);
 }
 
 export function buildExecutionInputExample(
