@@ -1,10 +1,19 @@
 package org.team4u.scriptflow.storage.jpa.repo;
 
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 import org.team4u.scriptflow.storage.jpa.entity.ExecutionEntity;
 
 import java.util.List;
 
 public interface SpringDataExecutionEntityRepository extends JpaRepository<ExecutionEntity, String> {
     List<ExecutionEntity> findByScriptIdOrderByCreatedAtDesc(String scriptId);
+
+    @Modifying
+    @Transactional
+    @Query("delete from ExecutionEntity e where e.scriptId = :scriptId")
+    int deleteAllByScriptId(@Param("scriptId") String scriptId);
 }

@@ -30,6 +30,18 @@ class SpringDataExecutionEntityRepositoryTest {
         assertThat(records).extracting(ExecutionEntity::getId).containsExactly("exec-2", "exec-1");
     }
 
+    @Test
+    void deleteAllByScriptIdRemovesMatchingRecordsOnly() {
+        repository.save(entity("exec-1", "script-1", LocalDateTime.of(2024, 1, 2, 3, 4)));
+        repository.save(entity("exec-2", "script-1", LocalDateTime.of(2024, 1, 2, 3, 5)));
+        repository.save(entity("exec-3", "script-2", LocalDateTime.of(2024, 1, 2, 3, 6)));
+
+        int deleted = repository.deleteAllByScriptId("script-1");
+
+        assertThat(deleted).isEqualTo(2);
+        assertThat(repository.findAll()).extracting(ExecutionEntity::getId).containsExactly("exec-3");
+    }
+
     private static ExecutionEntity entity(String id, String scriptId, LocalDateTime createdAt) {
         ExecutionEntity entity = new ExecutionEntity();
         entity.setId(id);

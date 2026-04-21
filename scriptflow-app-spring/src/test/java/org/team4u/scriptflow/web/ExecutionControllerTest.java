@@ -19,8 +19,10 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -73,5 +75,27 @@ class ExecutionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.msg").value("Execution not found: missing"));
+    }
+
+    @Test
+    void deleteRemovesSingleExecution() throws Exception {
+        doNothing().when(executionApplicationService).delete("exec-1");
+
+        mockMvc.perform(delete("/api/executions/exec-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.msg").value("删除成功"));
+
+        verify(executionApplicationService).delete("exec-1");
+    }
+
+    @Test
+    void clearRemovesExecutionHistoryForScript() throws Exception {
+        doNothing().when(executionApplicationService).clear("script-1");
+
+        mockMvc.perform(delete("/api/executions").queryParam("scriptId", "script-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.msg").value("清空成功"));
+
+        verify(executionApplicationService).clear("script-1");
     }
 }

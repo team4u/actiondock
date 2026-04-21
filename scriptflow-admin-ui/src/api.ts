@@ -78,6 +78,12 @@ export function updateScript(id: string, payload: ScriptDefinition): Promise<Scr
   });
 }
 
+export function deleteScript(id: string): Promise<void> {
+  return request<void>(`/api/scripts/${id}`, {
+    method: "DELETE"
+  });
+}
+
 export function validateScript(id: string): Promise<void> {
   return request<void>(`/api/scripts/${id}/validate`, {
     method: "POST"
@@ -105,4 +111,17 @@ export function getExecution(id: string): Promise<ExecutionRecord> {
 export function listExecutions(scriptId: string): Promise<ExecutionRecord[]> {
   const params = new URLSearchParams({ scriptId });
   return request<ExecutionRecord[]>(`/api/executions?${params.toString()}`);
+}
+
+export function deleteExecution(id: string): Promise<void> {
+  return request<void>(`/api/executions/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export function clearExecutions(scriptId: string): Promise<void> {
+  const params = new URLSearchParams({ scriptId });
+  return request<void>(`/api/executions?${params.toString()}`, {
+    method: "DELETE"
+  });
 }

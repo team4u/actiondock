@@ -35,6 +35,18 @@ public class ExecutionController {
         return ApiResponse.success(executionApplicationService.list(scriptId));
     }
 
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable String id) {
+        executionApplicationService.delete(id);
+        return ApiResponse.success(null, "删除成功");
+    }
+
+    @DeleteMapping
+    public ApiResponse<Void> clear(@RequestParam(required = false) String scriptId) {
+        executionApplicationService.clear(scriptId);
+        return ApiResponse.success(null, "清空成功");
+    }
+
     public static class ExecuteRequest {
         private String scriptId;
         private Map<String, Object> input;

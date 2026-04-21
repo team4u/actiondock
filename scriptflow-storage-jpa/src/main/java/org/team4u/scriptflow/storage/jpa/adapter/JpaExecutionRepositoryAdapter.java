@@ -40,6 +40,16 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         return repository.findAll().stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public void deleteById(String id) {
+        repository.deleteById(id);
+    }
+
+    @Override
+    public void deleteByScriptId(String scriptId) {
+        repository.deleteAllByScriptId(scriptId);
+    }
+
     private ExecutionEntity toEntity(ExecutionRecord record) {
         ExecutionEntity entity = new ExecutionEntity();
         entity.setId(record.getId());

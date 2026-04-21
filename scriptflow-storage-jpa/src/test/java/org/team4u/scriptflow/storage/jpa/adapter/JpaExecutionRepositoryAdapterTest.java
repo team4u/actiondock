@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class JpaExecutionRepositoryAdapterTest {
@@ -57,5 +58,17 @@ class JpaExecutionRepositoryAdapterTest {
         assertThat(found.getSubmitMode()).isEqualTo(SubmitMode.ASYNC);
         assertThat(records).singleElement().satisfies(value ->
                 assertThat(value.getStatus()).isEqualTo(ExecutionStatus.SUCCESS));
+    }
+
+    @Test
+    void deleteMethodsDelegateToRepository() {
+        SpringDataExecutionEntityRepository repository = mock(SpringDataExecutionEntityRepository.class);
+        JpaExecutionRepositoryAdapter adapter = new JpaExecutionRepositoryAdapter(repository, new JacksonJsonCodec(new ObjectMapper()));
+
+        adapter.deleteById("exec-1");
+        adapter.deleteByScriptId("script-1");
+
+        verify(repository).deleteById("exec-1");
+        verify(repository).deleteAllByScriptId("script-1");
     }
 }

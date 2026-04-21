@@ -152,6 +152,95 @@ class ExecutionApplicationServiceTest {
                 .hasMessage("Execution not found: missing");
     }
 
+    @Test
+    void deleteRemovesCompletedExecution() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        executionRepository.save(record("exec-1", "script-1", ExecutionStatus.SUCCESS));
+
+        service.delete("exec-1");
+
+        assertThat(executionRepository.findById("exec-1")).isEmpty();
+    }
+
+    @Test
+    void deleteRejectsActiveExecution() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        executionRepository.save(record("exec-1", "script-1", ExecutionStatus.RUNNING));
+
+        assertThatThrownBy(() -> service.delete("exec-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("执行仍在进行中，暂不支持删除");
+    }
+
+    @Test
+    void clearRemovesExecutionsForSingleScriptOnly() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        executionRepository.save(record("exec-1", "script-1", ExecutionStatus.SUCCESS));
+        executionRepository.save(record("exec-2", "script-1", ExecutionStatus.FAILED));
+        executionRepository.save(record("exec-3", "script-2", ExecutionStatus.SUCCESS));
+
+        service.clear("script-1");
+
+        assertThat(executionRepository.findById("exec-1")).isEmpty();
+        assertThat(executionRepository.findById("exec-2")).isEmpty();
+        assertThat(executionRepository.findById("exec-3")).isPresent();
+    }
+
+    @Test
+    void clearRejectsBlankScriptId() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        assertThatThrownBy(() -> service.clear(" "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("scriptId 不能为空");
+    }
+
+    @Test
+    void clearRejectsWhenActiveExecutionExists() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        executionRepository.save(record("exec-1", "script-1", ExecutionStatus.PENDING));
+
+        assertThatThrownBy(() -> service.clear("script-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("执行仍在进行中，暂不支持删除");
+    }
+
+    private static ExecutionRecord record(String id, String scriptId, ExecutionStatus status) {
+        return new ExecutionRecord()
+                .setId(id)
+                .setScriptId(scriptId)
+                .setStatus(status)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setInput(new LinkedHashMap<>())
+                .setOutput(new LinkedHashMap<>())
+                .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4));
+    }
+
     private static final class InMemoryScriptRepository implements ScriptRepository {
         private final Map<String, ScriptDefinition> store = new LinkedHashMap<>();
 
@@ -205,6 +294,16 @@ class ExecutionApplicationServiceTest {
         @Override
         public List<ExecutionRecord> findAll() {
             return store.values().stream().map(RecordingExecutionRepository::copy).toList();
+        }
+
+        @Override
+        public void deleteById(String id) {
+            store.remove(id);
+        }
+
+        @Override
+        public void deleteByScriptId(String scriptId) {
+            store.entrySet().removeIf(entry -> scriptId.equals(entry.getValue().getScriptId()));
         }
 
         private static ExecutionRecord copy(ExecutionRecord source) {

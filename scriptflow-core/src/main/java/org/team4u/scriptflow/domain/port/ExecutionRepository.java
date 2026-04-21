@@ -13,4 +13,8 @@ public interface ExecutionRepository {
     List<ExecutionRecord> findByScriptId(String scriptId);
 
     List<ExecutionRecord> findAll();
+
+    void deleteById(String id);
+
+    void deleteByScriptId(String scriptId);
 }

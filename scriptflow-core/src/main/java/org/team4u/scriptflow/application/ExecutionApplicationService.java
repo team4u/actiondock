@@ -97,4 +97,27 @@ public class ExecutionApplicationService {
         }
         return executionRepository.findByScriptId(scriptId);
     }
+
+    public void delete(String id) {
+        ExecutionRecord record = executionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Execution not found: " + id));
+        ensureExecutionDeletable(record);
+        executionRepository.deleteById(id);
+    }
+
+    public void clear(String scriptId) {
+        if (scriptId == null || scriptId.isBlank()) {
+            throw new IllegalArgumentException("scriptId 不能为空");
+        }
+
+        List<ExecutionRecord> records = executionRepository.findByScriptId(scriptId);
+        records.forEach(this::ensureExecutionDeletable);
+        executionRepository.deleteByScriptId(scriptId);
+    }
+
+    private void ensureExecutionDeletable(ExecutionRecord record) {
+        if (record.getStatus() == ExecutionStatus.PENDING || record.getStatus() == ExecutionStatus.RUNNING) {
+            throw new IllegalArgumentException("执行仍在进行中，暂不支持删除");
+        }
+    }
 }

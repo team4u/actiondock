@@ -3,6 +3,7 @@ import {
   CheckCircleOutlined,
   CodeOutlined,
   CopyOutlined,
+  DeleteOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   RocketOutlined,
@@ -19,6 +20,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Popconfirm,
   Radio,
   Row,
   Select,
@@ -36,7 +38,10 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ApiError,
+  clearExecutions,
   createScript,
+  deleteExecution,
+  deleteScript,
   executeScript,
   getExecution,
   getScript,
@@ -223,6 +228,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   const [publishing, setPublishing] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [deletingScript, setDeletingScript] = useState(false);
   const [sourceText, setSourceText] = useState(DEFAULT_SOURCE);
   const [inputSchemaState, setInputSchemaState] = useState<SchemaEditorState>(
     createEmptySchemaEditorState()
@@ -236,6 +242,8 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
   const [executionJsonInput, setExecutionJsonInput] = useState("{}");
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
   const [currentExecution, setCurrentExecution] = useState<ExecutionRecord | null>(null);
+  const [deletingExecutionId, setDeletingExecutionId] = useState<string | null>(null);
+  const [clearingExecutionHistory, setClearingExecutionHistory] = useState(false);
   const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const pollingTimerRef = useRef<number | null>(null);
@@ -254,6 +262,7 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
     resolveSchemaFields(currentScript?.outputSchema);
   const outputValues = isRecord(currentExecution?.output) ? currentExecution.output : {};
   const supportsSchemaForm = supportedFields.length > 0;
+  const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
   const apiKey = getApiKey();
   const origin = window.location.origin;
   const commandInput = resolveExecutionCommandInput({
@@ -300,10 +309,10 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
     setExecutionHistory(sorted);
     setCurrentExecution((previous) => {
       if (preferredExecutionId) {
-        return sorted.find((item) => item.id === preferredExecutionId) ?? previous;
+        return sorted.find((item) => item.id === preferredExecutionId) ?? sorted[0] ?? null;
       }
       if (previous?.id) {
-        return sorted.find((item) => item.id === previous.id) ?? previous;
+        return sorted.find((item) => item.id === previous.id) ?? sorted[0] ?? null;
       }
       return sorted[0] ?? null;
     });
@@ -471,6 +480,26 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
     }
   };
 
+  const handleDeleteScript = async () => {
+    if (!currentScript?.id) {
+      messageApi.warning("请先保存脚本");
+      return;
+    }
+
+    setDeletingScript(true);
+    try {
+      clearPolling();
+      await deleteScript(currentScript.id);
+      messageApi.success("删除成功");
+      navigate("/scripts", { replace: true });
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "删除脚本失败";
+      messageApi.error(detail);
+    } finally {
+      setDeletingScript(false);
+    }
+  };
+
   const handlePublish = async () => {
     if (!currentScript?.id) {
       messageApi.warning("请先保存脚本");
@@ -551,6 +580,42 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
     }
   };
 
+  const handleDeleteExecution = async (record: ExecutionRecord) => {
+    setDeletingExecutionId(record.id);
+    try {
+      if (pollingExecutionId === record.id) {
+        clearPolling();
+      }
+      await deleteExecution(record.id);
+      syncExecutionState(executionHistory.filter((item) => item.id !== record.id));
+      messageApi.success("删除成功");
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "删除执行记录失败";
+      messageApi.error(detail);
+    } finally {
+      setDeletingExecutionId(null);
+    }
+  };
+
+  const handleClearExecutionHistory = async () => {
+    if (!currentScript?.id) {
+      return;
+    }
+
+    setClearingExecutionHistory(true);
+    try {
+      clearPolling();
+      await clearExecutions(currentScript.id);
+      syncExecutionState([]);
+      messageApi.success("历史执行结果已清空");
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "清空执行历史失败";
+      messageApi.error(detail);
+    } finally {
+      setClearingExecutionHistory(false);
+    }
+  };
+
   const historyColumns: ColumnsType<ExecutionRecord> = [
     {
       title: "执行 ID",
@@ -587,6 +652,32 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
       key: "finishedAt",
       width: 180,
       render: (value?: string) => formatDateTime(value)
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_: unknown, record) => (
+        <Popconfirm
+          title="确认删除这条执行记录？"
+          okText="删除"
+          cancelText="取消"
+          onConfirm={() => void handleDeleteExecution(record)}
+          disabled={isExecutionActive(record.status)}
+        >
+          <Button
+            type="link"
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            loading={deletingExecutionId === record.id}
+            disabled={isExecutionActive(record.status)}
+            onClick={(event) => event.stopPropagation()}
+          >
+            删除
+          </Button>
+        </Popconfirm>
+      )
     }
   ];
 
@@ -622,6 +713,24 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
             </Col>
             <Col>
               <Space wrap>
+                {mode === "edit" && currentScript ? (
+                  <Popconfirm
+                    title="确认删除这个脚本？"
+                    description="删除后不可恢复。"
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true, loading: deletingScript }}
+                    onConfirm={() => void handleDeleteScript()}
+                  >
+                    <Button
+                      danger
+                      icon={<DeleteOutlined />}
+                      loading={deletingScript}
+                    >
+                      删除
+                    </Button>
+                  </Popconfirm>
+                ) : null}
                 <Button
                   icon={<CheckCircleOutlined />}
                   onClick={() => void handleValidate()}
@@ -891,21 +1000,6 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                       label: "执行调试",
                       children: (
                         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                          <div className="tab-toolbar">
-                            <Space>
-                              {pollingExecutionId && (
-                                <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
-                              )}
-                              <Button
-                                icon={<ReloadOutlined />}
-                                onClick={() => void loadExecutionHistory(currentScript.id)}
-                                loading={historyLoading}
-                              >
-                                刷新历史
-                              </Button>
-                            </Space>
-                          </div>
-
                           {unsupportedFields.length > 0 && (
                             <Alert
                               type="info"
@@ -1230,7 +1324,41 @@ export function ScriptEditorPage({ mode }: ScriptEditorPageProps) {
                             </Col>
                           </Row>
 
-                          <Card type="inner" title="历史执行结果">
+                          <Card
+                            type="inner"
+                            title="历史执行结果"
+                            extra={
+                              <Space size="small" wrap>
+                                {pollingExecutionId && (
+                                  <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
+                                )}
+                                <Button
+                                  icon={<ReloadOutlined />}
+                                  onClick={() => void loadExecutionHistory(currentScript.id)}
+                                  loading={historyLoading}
+                                >
+                                  刷新历史
+                                </Button>
+                                <Popconfirm
+                                  title="确认清空当前脚本的历史执行结果？"
+                                  okText="清空"
+                                  cancelText="取消"
+                                  onConfirm={() => void handleClearExecutionHistory()}
+                                  disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
+                                >
+                                  <Button
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    loading={clearingExecutionHistory}
+                                    disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    全部删除
+                                  </Button>
+                                </Popconfirm>
+                              </Space>
+                            }
+                          >
                             <Table
                               rowKey="id"
                               loading={historyLoading}
