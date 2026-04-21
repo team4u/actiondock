@@ -1,5 +1,5 @@
 export type ScriptStatus = "DRAFT" | "PUBLISHED";
-export type ScriptType = "GROOVY";
+export type ScriptType = "GROOVY" | "PYTHON";
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";

@@ -20,6 +20,7 @@ class JacksonJsonCodecTest {
         String mapJson = codec.write(Map.of("name", "Alice"));
 
         assertThat(codec.read(objectJson, ScriptDefinition.class).getName()).isEqualTo("Hello");
+        assertThat(codec.readUntyped("[1,2,3]")).isEqualTo(List.of(1, 2, 3));
         assertThat(codec.readList(listJson, ScriptDefinition.class))
                 .singleElement()
                 .satisfies(definition -> {
@@ -32,6 +33,7 @@ class JacksonJsonCodecTest {
     void blankJsonReturnsNullOrEmptyCollections() {
         assertThat(codec.write(null)).isNull();
         assertThat(codec.read(" ", ScriptDefinition.class)).isNull();
+        assertThat(codec.readUntyped(" ")).isNull();
         assertThat(codec.readList("", ScriptDefinition.class)).isEmpty();
         assertThat(codec.readMap(null)).isEmpty();
     }
@@ -39,6 +41,9 @@ class JacksonJsonCodecTest {
     @Test
     void invalidJsonThrowsIllegalStateException() {
         assertThatThrownBy(() -> codec.read("{bad json}", ScriptDefinition.class))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Cannot deserialize value");
+        assertThatThrownBy(() -> codec.readUntyped("{"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Cannot deserialize value");
         assertThatThrownBy(() -> codec.readList("[", ScriptDefinition.class))

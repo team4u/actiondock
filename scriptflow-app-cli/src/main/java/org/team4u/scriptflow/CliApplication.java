@@ -10,7 +10,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.team4u.scriptflow.cli.CliRootCommand;
 import org.team4u.scriptflow.cli.SpringFactory;
 import org.team4u.scriptflow.config.RuntimeConfiguration;
-import org.team4u.scriptflow.script.ScriptEngineConfiguration;
 import org.team4u.scriptflow.storage.jpa.StorageConfiguration;
 import org.team4u.scriptflow.storage.jpa.entity.ExecutionEntity;
 import org.team4u.scriptflow.storage.jpa.entity.ScriptEntity;
@@ -24,7 +23,7 @@ import picocli.CommandLine;
         SpringDataScriptEntityRepository.class,
         SpringDataExecutionEntityRepository.class
 })
-@Import({RuntimeConfiguration.class, ScriptEngineConfiguration.class, StorageConfiguration.class})
+@Import({RuntimeConfiguration.class, StorageConfiguration.class})
 public class CliApplication {
     public static void main(String[] args) {
         ConfigurableApplicationContext context = new SpringApplicationBuilder(CliApplication.class)

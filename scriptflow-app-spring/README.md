@@ -3,6 +3,7 @@
 这个模块是 Web 启动入口：
 
 - Web 模式：Spring MVC + 管理台
+- 当前管理台支持创建和编辑 `GROOVY` / `PYTHON` 两类脚本
 
 示例：
 
@@ -11,6 +12,8 @@ mvn -pl scriptflow-app-spring -am spring-boot:run
 ```
 
 该命令会只启动 `scriptflow-app-spring`；CLI 模块默认不会参与 reactor 下的 `spring-boot:run`。
+
+如果会执行 `PYTHON` 类型脚本，请先确认宿主机上存在 `python3`，并且脚本依赖的第三方包已经预装。
 
 开发阶段建议前后端分开启动：
 
@@ -33,6 +36,20 @@ npm run dev
 ```bash
 mvn -pl scriptflow-app-spring -am package
 java -jar target/scriptflow-app-spring.jar
+```
+
+常用运行配置：
+
+```yaml
+app:
+  auth:
+    api-keys:
+      - local-dev-key
+  execution:
+    async-pool-size: 4
+    python:
+      executable: python3
+      timeout-seconds: 30
 ```
 
 如果本地曾运行过包含 page 能力的旧版本，开发阶段请删除 `../data/dsl-runtime*` 后再重新启动，避免旧 H2 文件残留未使用的 page 表。

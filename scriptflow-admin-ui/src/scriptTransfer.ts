@@ -12,7 +12,7 @@ export interface ScriptImportAnalysis {
   overwriteIds: string[];
 }
 
-const SUPPORTED_SCRIPT_TYPE: ScriptType = "GROOVY";
+const SUPPORTED_SCRIPT_TYPES: ScriptType[] = ["GROOVY", "PYTHON"];
 const SUPPORTED_STATUSES: ScriptStatus[] = ["DRAFT", "PUBLISHED"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,8 +61,8 @@ function parseScriptDefinition(value: unknown, index: number): ScriptDefinition 
   if (!isNonEmptyString(source)) {
     throw new Error(`第 ${index + 1} 条脚本 ${id} 缺少合法 source`);
   }
-  if (type !== SUPPORTED_SCRIPT_TYPE) {
-    throw new Error(`第 ${index + 1} 条脚本 ${id} 的 type 仅支持 ${SUPPORTED_SCRIPT_TYPE}`);
+  if (!SUPPORTED_SCRIPT_TYPES.includes(type as ScriptType)) {
+    throw new Error(`第 ${index + 1} 条脚本 ${id} 的 type 仅支持 ${SUPPORTED_SCRIPT_TYPES.join(" / ")}`);
   }
   if (!SUPPORTED_STATUSES.includes(status as ScriptStatus)) {
     throw new Error(`第 ${index + 1} 条脚本 ${id} 的 status 不合法`);
@@ -74,7 +74,7 @@ function parseScriptDefinition(value: unknown, index: number): ScriptDefinition 
   return {
     id: id.trim(),
     name: name.trim(),
-    type: SUPPORTED_SCRIPT_TYPE,
+    type: type as ScriptType,
     source,
     inputSchema: assertSchemaObject(value.inputSchema, `第 ${index + 1} 条脚本 ${id} 的 inputSchema`),
     outputSchema: assertSchemaObject(value.outputSchema, `第 ${index + 1} 条脚本 ${id} 的 outputSchema`),

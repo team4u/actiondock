@@ -9,7 +9,6 @@ import org.team4u.scriptflow.auth.AuthConfiguration;
 import org.team4u.scriptflow.bootstrap.SampleDataInitializer;
 import org.team4u.scriptflow.config.RuntimeConfiguration;
 import org.team4u.scriptflow.config.WebCorsConfiguration;
-import org.team4u.scriptflow.script.ScriptEngineConfiguration;
 import org.team4u.scriptflow.storage.jpa.StorageConfiguration;
 import org.team4u.scriptflow.storage.jpa.entity.ExecutionEntity;
 import org.team4u.scriptflow.storage.jpa.entity.ScriptEntity;
@@ -23,7 +22,7 @@ import org.team4u.scriptflow.web.ScriptController;
         SpringDataScriptEntityRepository.class,
         SpringDataExecutionEntityRepository.class
 })
-@Import({RuntimeConfiguration.class, ScriptEngineConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class})
+@Import({RuntimeConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class})
 public class RuntimeApplication {
     public static void main(String[] args) {
         SpringApplication.run(RuntimeApplication.class, args);

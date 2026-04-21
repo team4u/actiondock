@@ -6,8 +6,12 @@ import org.springframework.context.annotation.Configuration;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
+import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
+import org.team4u.scriptflow.script.GroovyScriptEngine;
+import org.team4u.scriptflow.script.PythonScriptEngine;
+import org.team4u.scriptflow.script.RoutingScriptEngine;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -18,6 +22,14 @@ public class RuntimeConfiguration {
     @Bean
     public Executor executionExecutor(AppProperties properties) {
         return Executors.newFixedThreadPool(properties.getExecution().getAsyncPoolSize());
+    }
+
+    @Bean
+    public ScriptEngine scriptEngine(JsonCodec jsonCodec, AppProperties properties) {
+        return new RoutingScriptEngine(
+                new GroovyScriptEngine(),
+                new PythonScriptEngine(jsonCodec, properties.getExecution().getPython())
+        );
     }
 
     @Bean

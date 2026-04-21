@@ -31,9 +31,10 @@ public class ScriptCommands implements Runnable {
         @Override
         public void run() {
             for (ScriptDefinition definition : service.list()) {
-                System.out.printf("%s\t%s\t%s\t%s%n",
+                System.out.printf("%s\t%s\t%s\t%s\t%s%n",
                         definition.getId(),
                         definition.getName(),
+                        definition.getType(),
                         definition.getStatus(),
                         definition.getUpdatedAt());
             }
@@ -57,6 +58,7 @@ public class ScriptCommands implements Runnable {
             ScriptDefinition definition = service.get(id);
             System.out.println(definition.getId());
             System.out.println(definition.getName());
+            System.out.println(definition.getType());
             System.out.println(definition.getStatus());
             System.out.println(definition.getSource());
         }

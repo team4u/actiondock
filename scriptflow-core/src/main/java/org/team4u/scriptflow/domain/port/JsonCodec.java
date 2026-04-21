@@ -8,6 +8,8 @@ public interface JsonCodec {
 
     <T> T read(String json, Class<T> type);
 
+    Object readUntyped(String json);
+
     <T> List<T> readList(String json, Class<T> elementType);
 
     Map<String, Object> readMap(String json);

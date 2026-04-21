@@ -1,10 +1,11 @@
 # ScriptFlow
 
-**ScriptFlow** 是一个轻量级的脚本执行平台，支持通过 Groovy 编写脚本，提供 Web API 和管理界面来定义、执行和管理脚本。
+**ScriptFlow** 是一个轻量级的脚本执行平台，支持通过 Groovy 或 Python 编写脚本，提供 Web API、CLI 和管理界面来定义、执行和管理脚本。
 
 ## 功能特性
 
 - **脚本管理**：支持脚本的创建、编辑、发布和版本管理
+- **多脚本类型**：当前支持 `GROOVY` 与 `PYTHON`
 - **Schema 驱动**：通过 JSON Schema 定义输入/输出结构，自动校验和投影
 - **自动生成正式页**：已发布脚本自动生成专属执行页面，Schema 直接渲染为表单和结果展示，无需额外开发
 - **多运行方式**：支持正式页面、Web API 和 CLI 三种执行方式
@@ -16,7 +17,7 @@
 | 层级 | 技术 |
 |------|------|
 | 后端 | Java 21, Spring Boot 3.3 |
-| 脚本引擎 | Groovy 4.0 |
+| 脚本引擎 | Groovy 4.0, Host Python 3.x |
 | 前端 | React 18, Ant Design 5, Monaco Editor |
 | 数据库 | H2 (文件数据库) |
 
@@ -27,6 +28,7 @@
 - JDK 21+
 - Maven 3.9+
 - Node.js 18+（仅前端开发需要）
+- Python 3.x（仅执行 `PYTHON` 类型脚本需要，默认命令为 `python3`）
 
 ### 后端
 
@@ -40,6 +42,8 @@ mvn -pl scriptflow-app-spring -am spring-boot:run
 # 使用 CLI
 java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script list
 ```
+
+如果要执行 `PYTHON` 类型脚本，请确认启动机器上存在可用的 `python3`，并且所需第三方包已经预装在该解释器环境中。
 
 ### 前端（开发模式）
 
@@ -75,6 +79,11 @@ scriptflow
 
 ## 接口说明
 
+脚本定义中的 `type` 字段当前支持：
+
+- `GROOVY`
+- `PYTHON`
+
 ### 脚本管理
 
 | 方法 | 路径 | 说明 |
@@ -103,6 +112,8 @@ scriptflow
 
 ## 脚本示例
 
+### Groovy
+
 ```groovy
 def greet(name) {
     return "Hello, ${name}!"
@@ -110,6 +121,18 @@ def greet(name) {
 
 def result = greet(input.name)
 return [message: result, timestamp: System.currentTimeMillis()]
+```
+
+### Python
+
+`PYTHON` 类型脚本在平台中按“函数体”执行。运行时会自动注入 `input` 变量，你可以直接 `return` JSON 可序列化结果。
+
+```python
+name = input.get("name") or "World"
+return {
+  "message": f"Hello, {name}!",
+  "timestamp": 1710000000
+}
 ```
 
 **输入 Schema：**
@@ -122,6 +145,20 @@ return [message: result, timestamp: System.currentTimeMillis()]
   "required": ["name"]
 }
 ```
+
+## 脚本类型约定
+
+| 类型 | 编辑内容 | 输入访问方式 | 返回要求 |
+|------|----------|--------------|----------|
+| `GROOVY` | 完整 Groovy 脚本 | `input.name` / `input["name"]` | 任意返回值，平台会将非对象结果包装为 `result` |
+| `PYTHON` | Python 函数体，不需要手写 `def main` | `input.get("name")` / `input["name"]` | 必须返回 JSON 可序列化结果；非对象结果同样会被包装为 `result` |
+
+关于 `PYTHON` 的额外说明：
+
+- 校验阶段只检查 Python 语法是否合法，不检查第三方包是否已安装
+- 执行阶段通过宿主机 `python3` 子进程运行
+- 当前不支持每个脚本单独声明 `requirements.txt` 或虚拟环境
+- 当前默认信任脚本执行环境，请按受控内部工具使用
 
 **输出 Schema：**
 ```json
@@ -141,14 +178,30 @@ return [message: result, timestamp: System.currentTimeMillis()]
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `server.port` | 8080 | Web 服务端口 |
-| `scriptflow.data-dir` | `./data/dsl-runtime` | 数据存储目录 |
-| `scriptflow.api-key.enabled` | false | 是否启用 API Key 鉴权 |
-| `scriptflow.api-key.value` | - | API Key 值 |
+| `spring.datasource.url` | `jdbc:h2:file:./data/dsl-runtime;AUTO_SERVER=TRUE` | 默认 H2 文件库 |
+| `app.auth.api-keys` | `[]` | 可选 API Key 列表，非空时可由鉴权组件使用 |
+| `app.execution.async-pool-size` | `4` | 异步执行线程池大小 |
+| `app.execution.python.executable` | `python3` | `PYTHON` 脚本使用的解释器命令 |
+| `app.execution.python.timeout-seconds` | `30` | `PYTHON` 脚本单次执行超时时间 |
+
+示例：
+
+```yaml
+app:
+  auth:
+    api-keys:
+      - local-dev-key
+  execution:
+    async-pool-size: 8
+    python:
+      executable: python3
+      timeout-seconds: 60
+```
 
 ### H2 控制台
 
 H2 数据库 Web 控制台地址：`/h2-console`
-- JDBC URL：`jdbc:h2:./data/dsl-runtime`
+- JDBC URL：`jdbc:h2:file:./data/dsl-runtime;AUTO_SERVER=TRUE`
 - 用户名：`sa`
 - 密码：（空）
 

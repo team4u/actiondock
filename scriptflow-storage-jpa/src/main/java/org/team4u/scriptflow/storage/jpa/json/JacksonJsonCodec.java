@@ -38,6 +38,18 @@ public class JacksonJsonCodec implements JsonCodec {
     }
 
     @Override
+    public Object readUntyped(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, Object.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Cannot deserialize value", e);
+        }
+    }
+
+    @Override
     public <T> List<T> readList(String json, Class<T> elementType) {
         if (json == null || json.isBlank()) {
             return Collections.emptyList();

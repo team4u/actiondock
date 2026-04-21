@@ -33,7 +33,7 @@ class ScriptCommandsTest {
 
         String output = captureOutput(command::run);
 
-        assertThat(output).contains("script-1\tHello\tPUBLISHED\t2024-01-02T03:04");
+        assertThat(output).contains("script-1\tHello\tGROOVY\tPUBLISHED\t2024-01-02T03:04");
     }
 
     @Test
@@ -49,7 +49,7 @@ class ScriptCommandsTest {
 
         String output = captureOutput(command::run);
 
-        assertThat(output).contains("script-1", "Hello", "DRAFT", "return [:]");
+        assertThat(output).contains("script-1", "Hello", "GROOVY", "DRAFT", "return [:]");
     }
 
     @Test

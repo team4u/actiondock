@@ -84,6 +84,7 @@ import type {
   ExecutionRecord,
   ExecutionStatus,
   ScriptDefinition,
+  ScriptType,
   SubmitMode,
   ValidationErrorData
 } from "../types";
@@ -101,13 +102,43 @@ interface ScriptEditorPageProps {
 interface ScriptFormValues {
   id: string;
   name: string;
-  type: "GROOVY";
+  type: ScriptType;
 }
 
 type ExecutionInputMode = "SCHEMA" | "JSON";
 
-const DEFAULT_SOURCE = `def name = input.name ?: "World"
-return [message: "Hello, " + name + "!"]`;
+const DEFAULT_SOURCES: Record<ScriptType, string> = {
+  GROOVY: `def name = input.name ?: "World"
+return [message: "Hello, " + name + "!"]`,
+  PYTHON: `name = input.get("name") or "World"
+return {"message": f"Hello, {name}!"}`
+};
+
+function getDefaultSource(type: ScriptType): string {
+  return DEFAULT_SOURCES[type];
+}
+
+function getSourceFileName(type: ScriptType): string {
+  return type === "PYTHON" ? "source.py" : "source.groovy";
+}
+
+function getSourceLanguage(type: ScriptType): string {
+  return type === "PYTHON" ? "python" : "groovy";
+}
+
+function getScriptContentHint(type: ScriptType): string {
+  if (type === "PYTHON") {
+    return "Python 脚本会被当作函数体执行，可直接访问 input 并 return JSON 可序列化结果。";
+  }
+  return "Groovy 使用代码编辑器，输入输出结构支持 Builder 和 JSON 两种编辑方式。";
+}
+
+function getEditorFooterHint(type: ScriptType): string {
+  if (type === "PYTHON") {
+    return "保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Python 语法与执行结果由后端 Python 运行时校验。";
+  }
+  return "保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Groovy 语法通过后端校验接口确认。";
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -213,7 +244,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [executing, setExecuting] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deletingScript, setDeletingScript] = useState(false);
-  const [sourceText, setSourceText] = useState(DEFAULT_SOURCE);
+  const [sourceText, setSourceText] = useState(getDefaultSource("GROOVY"));
   const [inputSchemaState, setInputSchemaState] = useState<SchemaEditorState>(
     createEmptySchemaEditorState()
   );
@@ -234,6 +265,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [generatedScriptText, setGeneratedScriptText] = useState("");
   const [messageApi, contextHolder] = message.useMessage();
   const pollingTimerRef = useRef<number | null>(null);
+  const selectedScriptType = (Form.useWatch("type", form) as ScriptType | undefined) ?? "GROOVY";
+  const canImportGeneratedScript = selectedScriptType === "GROOVY";
 
   const requestedTab = searchParams.get("tab");
   const activeTab =
@@ -402,7 +435,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       });
       setCurrentScript(null);
       setExecutionValidationError(null);
-      setSourceText(DEFAULT_SOURCE);
+      setSourceText(getDefaultSource("GROOVY"));
       setInputSchemaState(createEmptySchemaEditorState());
       setOutputSchemaState(createEmptySchemaEditorState());
       setLoading(false);
@@ -441,7 +474,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     return {
       id: values.id.trim(),
       name: values.name.trim(),
-      type: "GROOVY",
+      type: values.type,
       source: sourceText,
       inputSchema,
       outputSchema,
@@ -648,6 +681,18 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     }
   };
 
+  const handleScriptTypeChange = (nextType: ScriptType) => {
+    const currentType = selectedScriptType;
+    if (
+      mode === "create" &&
+      (sourceText.trim() === "" ||
+        sourceText === getDefaultSource(currentType) ||
+        sourceText === getDefaultSource(nextType))
+    ) {
+      setSourceText(getDefaultSource(nextType));
+    }
+  };
+
   const handleDeleteExecution = async (record: ExecutionRecord) => {
     setDeletingExecutionId(record.id);
     try {
@@ -805,7 +850,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             </Col>
             <Col>
               <Space className="page-card-actions" wrap>
-                {mode === "create" ? (
+                {mode === "create" && canImportGeneratedScript ? (
                   <Button icon={<ImportOutlined />} onClick={() => setGeneratedScriptModalOpen(true)}>
                     粘贴生成结果
                   </Button>
@@ -878,6 +923,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   <Text type="secondary">{formatDateTime(currentScript.updatedAt)}</Text>
                 </Space>
               </Descriptions.Item>
+              <Descriptions.Item label="类型">{currentScript.type}</Descriptions.Item>
               <Descriptions.Item label="版本">{currentScript.version}</Descriptions.Item>
               <Descriptions.Item label="创建时间">{formatDateTime(currentScript.createdAt)}</Descriptions.Item>
             </Descriptions>
@@ -927,11 +973,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           </Form.Item>
                           <Form.Item label="类型" name="type">
                             <Select
-                              disabled
+                              onChange={handleScriptTypeChange}
                               options={[
                                 {
                                   value: "GROOVY",
                                   label: "GROOVY"
+                                },
+                                {
+                                  value: "PYTHON",
+                                  label: "PYTHON"
                                 }
                               ]}
                             />
@@ -942,17 +992,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                     <Col xs={24} xl={16}>
                       <Card
                         title="脚本内容"
-                        extra={<Text type="secondary">Groovy 使用代码编辑器，输入输出结构支持 Builder 和 JSON 两种编辑方式</Text>}
+                        extra={<Text type="secondary">{getScriptContentHint(selectedScriptType)}</Text>}
                       >
                         <Tabs
                           items={[
                             {
                               key: "source",
-                              label: "source.groovy",
+                              label: getSourceFileName(selectedScriptType),
                               children: (
                                 <CodeEditor
                                   height="clamp(320px, 60vh, 420px)"
-                                  language="groovy"
+                                  language={getSourceLanguage(selectedScriptType)}
                                   value={sourceText}
                                   onChange={setSourceText}
                                   theme={editorTheme}
@@ -988,7 +1038,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                         <Space className="editor-footer">
                           <CodeOutlined />
                           <Text type="secondary">
-                            保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Groovy 语法通过后端校验接口确认。
+                            {getEditorFooterHint(selectedScriptType)}
                           </Text>
                         </Space>
                       </Card>
