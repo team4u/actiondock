@@ -27,7 +27,7 @@ public class RuntimeConfiguration {
     @Bean
     public ScriptEngine scriptEngine(JsonCodec jsonCodec, AppProperties properties) {
         return new RoutingScriptEngine(
-                new GroovyScriptEngine(),
+                new GroovyScriptEngine(properties.getExecution().getGroovy()),
                 new PythonScriptEngine(jsonCodec, properties.getExecution().getPython())
         );
     }

@@ -47,6 +47,10 @@ app:
       - local-dev-key
   execution:
     async-pool-size: 4
+    groovy:
+      enabled: true
+      cache-max-size: 128
+      cache-expire-after-access-minutes: 30
     python:
       executable: python3
       timeout-seconds: 30

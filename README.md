@@ -123,6 +123,9 @@ def result = greet(input.name)
 return [message: result, timestamp: System.currentTimeMillis()]
 ```
 
+`GROOVY` 类型脚本支持使用 `@Grab` / `@GrabResolver` 声明依赖。依赖解析发生在脚本编译阶段，首次拉取依赖需要运行环境可访问对应 Maven 仓库，并会使用 Grape 本地缓存。
+默认会对相同源码的编译结果做内存缓存，避免重复编译；这只是“编译缓存”，不是执行结果缓存。
+
 ### Python
 
 `PYTHON` 类型脚本在平台中按“函数体”执行。运行时会自动注入 `input` 变量，你可以直接 `return` JSON 可序列化结果。
@@ -181,6 +184,9 @@ return {
 | `spring.datasource.url` | `jdbc:h2:file:./data/dsl-runtime;AUTO_SERVER=TRUE` | 默认 H2 文件库 |
 | `app.auth.api-keys` | `[]` | 可选 API Key 列表，非空时可由鉴权组件使用 |
 | `app.execution.async-pool-size` | `4` | 异步执行线程池大小 |
+| `app.execution.groovy.enabled` | `true` | 是否启用 `GROOVY` 脚本编译缓存 |
+| `app.execution.groovy.cache-max-size` | `128` | `GROOVY` 编译缓存最大条目数 |
+| `app.execution.groovy.cache-expire-after-access-minutes` | `30` | `GROOVY` 编译缓存空闲过期时间 |
 | `app.execution.python.executable` | `python3` | `PYTHON` 脚本使用的解释器命令 |
 | `app.execution.python.timeout-seconds` | `30` | `PYTHON` 脚本单次执行超时时间 |
 
@@ -193,6 +199,10 @@ app:
       - local-dev-key
   execution:
     async-pool-size: 8
+    groovy:
+      enabled: true
+      cache-max-size: 256
+      cache-expire-after-access-minutes: 60
     python:
       executable: python3
       timeout-seconds: 60

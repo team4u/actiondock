@@ -32,6 +32,7 @@ public class AppProperties {
 
     public static class Execution {
         private int asyncPoolSize = 4;
+        private final Groovy groovy = new Groovy();
         private final Python python = new Python();
 
         public int getAsyncPoolSize() {
@@ -42,8 +43,42 @@ public class AppProperties {
             this.asyncPoolSize = asyncPoolSize;
         }
 
+        public Groovy getGroovy() {
+            return groovy;
+        }
+
         public Python getPython() {
             return python;
+        }
+    }
+
+    public static class Groovy {
+        private boolean enabled = true;
+        private int cacheMaxSize = 128;
+        private int cacheExpireAfterAccessMinutes = 30;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getCacheMaxSize() {
+            return cacheMaxSize;
+        }
+
+        public void setCacheMaxSize(int cacheMaxSize) {
+            this.cacheMaxSize = cacheMaxSize;
+        }
+
+        public int getCacheExpireAfterAccessMinutes() {
+            return cacheExpireAfterAccessMinutes;
+        }
+
+        public void setCacheExpireAfterAccessMinutes(int cacheExpireAfterAccessMinutes) {
+            this.cacheExpireAfterAccessMinutes = cacheExpireAfterAccessMinutes;
         }
     }
 
