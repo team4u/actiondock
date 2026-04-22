@@ -47,10 +47,14 @@ function renderReadonlyField(field: SchemaFieldDefinition, value: unknown) {
 
 export function SchemaObjectResultView({
   schema,
-  value
+  value,
+  schemaName = "outputSchema",
+  valueName = "输出"
 }: {
   schema?: Record<string, unknown>;
   value?: Record<string, unknown>;
+  schemaName?: string;
+  valueName?: string;
 }) {
   const { supportedFields, unsupportedFields } = resolveSchemaFields(schema);
   const [mode, setMode] = useState<SchemaObjectResultMode>(supportedFields.length > 0 ? "SCHEMA" : "JSON");
@@ -65,7 +69,7 @@ export function SchemaObjectResultView({
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
       {supportedFields.length > 0 ? (
         <div className="schema-object-result__header">
-          <Text type="secondary">按 outputSchema 展示</Text>
+          <Text type="secondary">按 {schemaName} 展示</Text>
           <Segmented<SchemaObjectResultMode>
             size="small"
             value={mode}
@@ -86,7 +90,7 @@ export function SchemaObjectResultView({
             <Alert
               type="warning"
               showIcon
-              message="部分输出字段暂时无法可视化展示"
+              message={`部分${valueName}字段暂时无法可视化展示`}
               description={`以下字段请切换到 JSON 查看：${unsupportedFields.join(", ")}`}
             />
           ) : null}

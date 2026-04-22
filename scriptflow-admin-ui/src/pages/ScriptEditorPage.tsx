@@ -320,12 +320,12 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     setExecutionHistory(sorted);
     setCurrentExecution((previous) => {
       if (preferredExecutionId) {
-        return sorted.find((item) => item.id === preferredExecutionId) ?? sorted[0] ?? null;
+        return sorted.find((item) => item.id === preferredExecutionId) ?? null;
       }
       if (previous?.id) {
-        return sorted.find((item) => item.id === previous.id) ?? sorted[0] ?? null;
+        return sorted.find((item) => item.id === previous.id) ?? null;
       }
-      return sorted[0] ?? null;
+      return null;
     });
   };
 
@@ -1515,10 +1515,25 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       />
                                     )}
 
-                                    <SchemaObjectResultView
-                                      schema={currentScript?.outputSchema}
-                                      value={currentExecution.output}
-                                    />
+                                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                        <Text strong>输入值</Text>
+                                        <SchemaObjectResultView
+                                          schema={currentScript?.inputSchema}
+                                          value={currentExecution.input}
+                                          schemaName="inputSchema"
+                                          valueName="输入"
+                                        />
+                                      </Space>
+
+                                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                        <Text strong>输出值</Text>
+                                        <SchemaObjectResultView
+                                          schema={currentScript?.outputSchema}
+                                          value={currentExecution.output}
+                                        />
+                                      </Space>
+                                    </Space>
                                   </Space>
                                 ) : (
                                   <Empty description="执行后将在这里查看结果详情。" />
