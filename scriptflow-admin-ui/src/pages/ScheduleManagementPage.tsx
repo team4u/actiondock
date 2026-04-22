@@ -17,8 +17,9 @@ import {
   listSchedules
 } from "../api";
 import { TableLinkCell } from "../components/TableLinkCell";
-import type { ExecutionStatus, ScriptSchedule } from "../types";
-import { formatDateTime } from "../utils";
+import { useActionWithLoading } from "../hooks/useActionWithLoading";
+import type { ScriptSchedule } from "../types";
+import { formatDateTime, getExecutionStatusColor, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
 
@@ -26,7 +27,7 @@ export function ScheduleManagementPage() {
   const navigate = useNavigate();
   const [schedules, setSchedules] = useState<ScriptSchedule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+  const { actionId, withAction } = useActionWithLoading();
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadData = async () => {
@@ -37,8 +38,7 @@ export function ScheduleManagementPage() {
         [...scheduleData].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""))
       );
     } catch (error) {
-      const detail = error instanceof ApiError ? error.message : "加载定时任务失败";
-      messageApi.error(detail);
+      messageApi.error(getErrorMessage(error, "加载定时任务失败"));
     } finally {
       setLoading(false);
     }
@@ -56,30 +56,6 @@ export function ScheduleManagementPage() {
         : [nextSchedule, ...previous];
       return [...next].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
     });
-  };
-
-  const withAction = async (scheduleId: string, action: () => Promise<void>) => {
-    setActiveScheduleId(scheduleId);
-    try {
-      await action();
-    } finally {
-      setActiveScheduleId(null);
-    }
-  };
-
-  const getExecutionStatusColor = (status?: ExecutionStatus): string => {
-    switch (status) {
-      case "SUCCESS":
-        return "green";
-      case "FAILED":
-        return "red";
-      case "RUNNING":
-        return "processing";
-      case "PENDING":
-        return "gold";
-      default:
-        return "default";
-    }
   };
 
   const columns: ColumnsType<ScriptSchedule> = [
@@ -144,7 +120,7 @@ export function ScheduleManagementPage() {
             <Button
               size="small"
               icon={<PauseCircleOutlined />}
-              loading={activeScheduleId === record.id}
+              loading={actionId === record.id}
               onClick={() =>
                 void withAction(record.id, async () => {
                   upsertSchedule(await disableSchedule(record.id));
@@ -158,7 +134,7 @@ export function ScheduleManagementPage() {
             <Button
               size="small"
               icon={<PlayCircleOutlined />}
-              loading={activeScheduleId === record.id}
+              loading={actionId === record.id}
               onClick={() =>
                 void withAction(record.id, async () => {
                   upsertSchedule(await enableSchedule(record.id));
@@ -181,7 +157,7 @@ export function ScheduleManagementPage() {
               })
             }
           >
-            <Button size="small" danger icon={<DeleteOutlined />} loading={activeScheduleId === record.id}>
+            <Button size="small" danger icon={<DeleteOutlined />} loading={actionId === record.id}>
               删除
             </Button>
           </Popconfirm>

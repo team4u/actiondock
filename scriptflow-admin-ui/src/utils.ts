@@ -1,3 +1,31 @@
+import type { ExecutionStatus } from "./types";
+
+export function getExecutionStatusColor(status?: ExecutionStatus): string {
+  switch (status) {
+    case "SUCCESS":
+      return "green";
+    case "FAILED":
+      return "red";
+    case "RUNNING":
+      return "processing";
+    case "PENDING":
+      return "gold";
+    default:
+      return "default";
+  }
+}
+
+export function isExecutionActive(status: ExecutionStatus): boolean {
+  return status === "PENDING" || status === "RUNNING";
+}
+
+export function getErrorMessage(error: unknown, fallback = "操作失败"): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export function formatDateTime(value?: string): string {
   if (!value) {
     return "-";

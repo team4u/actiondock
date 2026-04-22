@@ -19,7 +19,9 @@ import {
   uninstallPlugin
 } from "../api";
 import { TableLinkCell } from "../components/TableLinkCell";
+import { useActionWithLoading } from "../hooks/useActionWithLoading";
 import type { PluginView } from "../types";
+import { getErrorMessage } from "../utils";
 
 const { Text } = Typography;
 
@@ -28,7 +30,7 @@ export function PluginManagementPage() {
   const [plugins, setPlugins] = useState<PluginView[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [actionPluginId, setActionPluginId] = useState<string | null>(null);
+  const { actionId, withAction } = useActionWithLoading();
   const [pendingUploadPluginId, setPendingUploadPluginId] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -59,15 +61,6 @@ export function PluginManagementPage() {
     });
   };
 
-  const withAction = async (pluginId: string, action: () => Promise<void>) => {
-    setActionPluginId(pluginId);
-    try {
-      await action();
-    } finally {
-      setActionPluginId(null);
-    }
-  };
-
   const handlePluginUpload = async (file?: File) => {
     const targetPluginId = pendingUploadPluginId;
     setPendingUploadPluginId(null);
@@ -81,21 +74,30 @@ export function PluginManagementPage() {
     }
 
     if (targetPluginId) {
-      setActionPluginId(targetPluginId);
+      void withAction(targetPluginId, async () => {
+        setUploading(true);
+        try {
+          const plugin = await upgradePlugin(targetPluginId, file);
+          replacePlugin(plugin);
+          messageApi.success(`插件已升级：${plugin.pluginId}`);
+        } catch (error) {
+          messageApi.error(getErrorMessage(error, "升级插件失败"));
+        } finally {
+          setUploading(false);
+        }
+      });
+      return;
     }
+
     setUploading(true);
     try {
-      const plugin = targetPluginId ? await upgradePlugin(targetPluginId, file) : await installPlugin(file);
+      const plugin = await installPlugin(file);
       replacePlugin(plugin);
-      messageApi.success(targetPluginId ? `插件已升级：${plugin.pluginId}` : `插件已安装：${plugin.pluginId}`);
+      messageApi.success(`插件已安装：${plugin.pluginId}`);
     } catch (error) {
-      const detail = error instanceof ApiError ? error.message : targetPluginId ? "升级插件失败" : "安装插件失败";
-      messageApi.error(detail);
+      messageApi.error(getErrorMessage(error, "安装插件失败"));
     } finally {
       setUploading(false);
-      if (targetPluginId) {
-        setActionPluginId(null);
-      }
     }
   };
 
@@ -143,7 +145,7 @@ export function PluginManagementPage() {
           <Button
             size="small"
             icon={<UploadOutlined />}
-            loading={actionPluginId === record.pluginId}
+            loading={actionId === record.pluginId}
             onClick={() => {
               setPendingUploadPluginId(record.pluginId);
               fileInputRef.current?.click();
@@ -155,7 +157,7 @@ export function PluginManagementPage() {
             <Button
               size="small"
               icon={<PauseCircleOutlined />}
-              loading={actionPluginId === record.pluginId}
+              loading={actionId === record.pluginId}
               onClick={() =>
                 void withAction(record.pluginId, async () => {
                   replacePlugin(await stopPlugin(record.pluginId));
@@ -171,7 +173,7 @@ export function PluginManagementPage() {
               type="primary"
               ghost
               icon={<PlayCircleOutlined />}
-              loading={actionPluginId === record.pluginId}
+              loading={actionId === record.pluginId}
               onClick={() =>
                 void withAction(record.pluginId, async () => {
                   replacePlugin(await startPlugin(record.pluginId));
@@ -199,7 +201,7 @@ export function PluginManagementPage() {
               size="small"
               danger
               icon={<DeleteOutlined />}
-              loading={actionPluginId === record.pluginId}
+              loading={actionId === record.pluginId}
             >
               卸载
             </Button>

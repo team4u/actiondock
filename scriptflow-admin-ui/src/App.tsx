@@ -14,6 +14,8 @@ import {
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { onAuthRequired } from "./auth";
+import { ColorModeContext, type ColorMode, useColorMode } from "./contexts/ColorModeContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -43,8 +45,6 @@ const ApiKeyManagementPage = lazy(() =>
   import("./pages/ApiKeyManagementPage").then((module) => ({ default: module.ApiKeyManagementPage }))
 );
 
-type ColorMode = "light" | "dark";
-
 function getSystemColorMode(): ColorMode {
   if (typeof window === "undefined") {
     return "light";
@@ -70,11 +70,12 @@ function useSystemColorMode(): ColorMode {
   return colorMode;
 }
 
-function AdminShell({ colorMode }: { colorMode: ColorMode }) {
+function AdminShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
+  const colorMode = useColorMode();
   const isDark = colorMode === "dark";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const selectedNavKey = location.pathname.startsWith("/plugins")
@@ -170,21 +171,21 @@ function AdminShell({ colorMode }: { colorMode: ColorMode }) {
               <Route path="/" element={<Navigate to="/scripts" replace />} />
               <Route path="/scripts" element={<ScriptListPage />} />
               <Route path="/schedules" element={<ScheduleManagementPage />} />
-              <Route path="/schedules/new" element={<ScheduleEditorPage colorMode={colorMode} mode="create" />} />
-              <Route path="/schedules/:id" element={<ScheduleEditorPage colorMode={colorMode} mode="edit" />} />
+              <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" />} />
+              <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
               <Route
                 path="/plugins/:pluginId"
-                element={<PluginDetailPage colorMode={colorMode} />}
+                element={<PluginDetailPage />}
               />
               <Route path="/settings/api-key" element={<ApiKeyManagementPage />} />
               <Route
                 path="/scripts/new"
-                element={<ScriptEditorPage colorMode={colorMode} mode="create" />}
+                element={<ScriptEditorPage mode="create" />}
               />
               <Route
                 path="/scripts/:id"
-                element={<ScriptEditorPage colorMode={colorMode} mode="edit" />}
+                element={<ScriptEditorPage mode="edit" />}
               />
               <Route path="*" element={<Navigate to="/scripts" replace />} />
             </Routes>
@@ -267,18 +268,22 @@ export function App() {
       }}
     >
       <AntdApp>
-        <Suspense
-          fallback={
-            <div className="page-loading">
-              <Spin size="large" />
-            </div>
-          }
-        >
-          <Routes>
-            <Route path="/run/:id" element={<ScriptRunPage colorMode={colorMode} />} />
-            <Route path="/*" element={<AdminShell colorMode={colorMode} />} />
-          </Routes>
-        </Suspense>
+        <ErrorBoundary>
+          <ColorModeContext.Provider value={colorMode}>
+          <Suspense
+            fallback={
+              <div className="page-loading">
+                <Spin size="large" />
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/run/:id" element={<ScriptRunPage />} />
+              <Route path="/*" element={<AdminShell />} />
+            </Routes>
+          </Suspense>
+        </ColorModeContext.Provider>
+        </ErrorBoundary>
       </AntdApp>
     </ConfigProvider>
   );

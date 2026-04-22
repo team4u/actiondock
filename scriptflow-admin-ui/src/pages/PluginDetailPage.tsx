@@ -24,6 +24,7 @@ import {
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useColorMode } from "../contexts/ColorModeContext";
 import {
   ApiError,
   getPlugin,
@@ -60,10 +61,6 @@ import { isErrorDetail } from "../types";
 import { copyText, parseJsonText, prettyJson } from "../utils";
 
 const { Text, Title } = Typography;
-
-interface PluginDetailPageProps {
-  colorMode: "light" | "dark";
-}
 
 type PluginDetailTab = "overview" | "config" | "debug" | "commands";
 
@@ -103,9 +100,10 @@ function resolvePluginScriptInputCommandInput(jsonText: string): {
   }
 }
 
-export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
+export function PluginDetailPage() {
   const { pluginId = "" } = useParams<{ pluginId: string }>();
   const navigate = useNavigate();
+  const colorMode = useColorMode();
   const [searchParams, setSearchParams] = useSearchParams();
   const [configForm] = Form.useForm<Record<string, any>>();
   const [argsForm] = Form.useForm<Record<string, any>>();

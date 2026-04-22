@@ -17,15 +17,16 @@ import {
   message
 } from "antd";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useColorMode } from "../contexts/ColorModeContext";
 import {
   ApiError,
   executePublishedScript,
-  getExecution,
   getPublishedScript
 } from "../api";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
+import { usePollingExecution } from "../hooks/usePollingExecution";
 import { resolveSchemaFields } from "../schema";
 import {
   buildSchemaExecutionInput,
@@ -39,19 +40,14 @@ import {
   renderSchemaFieldInput
 } from "../schemaForm";
 import type {
-  ExecutionRecord,
   ExecutionResponse,
   ScriptDefinition,
   SubmitMode,
   ValidationErrorData
 } from "../types";
-import { formatDateTime, prettyJson } from "../utils";
+import { formatDateTime, getErrorMessage, isExecutionActive, prettyJson } from "../utils";
 
 const { Text, Title } = Typography;
-
-interface ScriptRunPageProps {
-  colorMode: "light" | "dark";
-}
 
 interface PageStateError {
   title: string;
@@ -81,8 +77,9 @@ function StatusCallout({
   );
 }
 
-export function ScriptRunPage({ colorMode }: ScriptRunPageProps) {
+export function ScriptRunPage() {
   const { id } = useParams<{ id: string }>();
+  const colorMode = useColorMode();
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
@@ -93,8 +90,12 @@ export function ScriptRunPage({ colorMode }: ScriptRunPageProps) {
   const [pageError, setPageError] = useState<PageStateError | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [executionMode, setExecutionMode] = useState<SubmitMode>("SYNC");
-  const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
-  const pollingTimerRef = useRef<number | null>(null);
+  const { pollingExecutionId, startPolling, clearPolling } = usePollingExecution({
+    onPollResult: (record) => setExecutionResult(record),
+    onCompleted: () => messageApi.success("执行完成"),
+    onFailed: (record) => messageApi.error(record.errorMessage || "执行失败"),
+    onError: (error) => messageApi.error(getErrorMessage(error, "查询执行结果失败"))
+  });
 
   const { supportedFields: supportedInputFields, unsupportedFields: unsupportedInputFields } = useMemo(
     () => resolveSchemaFields(script?.inputSchema),
@@ -177,52 +178,6 @@ export function ScriptRunPage({ colorMode }: ScriptRunPageProps) {
     form.resetFields();
     form.setFieldsValue(executionInitialState.formValues);
   }, [executionInitialState.formValues, form, script]);
-
-  const clearPolling = () => {
-    if (pollingTimerRef.current !== null) {
-      window.clearTimeout(pollingTimerRef.current);
-      pollingTimerRef.current = null;
-    }
-    setPollingExecutionId(null);
-  };
-
-  const isExecutionActive = (status: ExecutionRecord["status"]) => {
-    return status === "PENDING" || status === "RUNNING";
-  };
-
-  const pollExecution = async (executionId: string) => {
-    try {
-      const record = await getExecution(executionId);
-      setExecutionResult(record);
-
-      if (isExecutionActive(record.status)) {
-        setPollingExecutionId(executionId);
-        pollingTimerRef.current = window.setTimeout(() => {
-          void pollExecution(executionId);
-        }, 2000);
-        return;
-      }
-
-      clearPolling();
-      if (record.status === "SUCCESS") {
-        messageApi.success("执行完成");
-      } else if (record.status === "FAILED") {
-        messageApi.error(record.errorMessage || "执行失败");
-      }
-    } catch (error) {
-      clearPolling();
-      const detail = error instanceof ApiError ? error.message : "查询执行结果失败";
-      messageApi.error(detail);
-    }
-  };
-
-  const startPolling = (executionId: string) => {
-    clearPolling();
-    setPollingExecutionId(executionId);
-    pollingTimerRef.current = window.setTimeout(() => {
-      void pollExecution(executionId);
-    }, 2000);
-  };
 
   const handleExecute = async () => {
     if (!script?.id || !canExecute) {
