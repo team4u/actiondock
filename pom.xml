@@ -32,6 +32,7 @@
         <groovy.version>4.0.24</groovy.version>
         <picocli.version>4.7.6</picocli.version>
         <pf4j.version>3.13.0</pf4j.version>
+        <hutool.version>5.8.36</hutool.version>
     </properties>
 
     <build>
