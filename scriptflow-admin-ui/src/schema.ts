@@ -10,7 +10,6 @@ export interface SchemaFieldDraft {
   type: SchemaFieldKind;
   required: boolean;
   description: string;
-  hasDefaultValue: boolean;
   defaultValue?: unknown;
   enumText: string;
   widget: SchemaFieldWidget;
@@ -110,7 +109,6 @@ export function createSchemaFieldDraft(): SchemaFieldDraft {
     type: "string",
     required: false,
     description: "",
-    hasDefaultValue: false,
     defaultValue: "",
     enumText: "",
     widget: "input",
@@ -185,7 +183,7 @@ export function validateSchemaFields(
       fieldErrors.rows = "请输入大于 0 的整数行数";
     }
 
-    if (field.hasDefaultValue) {
+    if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "") {
       if (field.type === "boolean") {
         if (typeof field.defaultValue !== "boolean") {
           fieldErrors.defaultValue = "布尔默认值必须是 true 或 false";
@@ -468,8 +466,7 @@ export function deserializeSchema(
         type: "enum",
         required: requiredSet.has(name),
         description: fieldMeta.description ?? "",
-        hasDefaultValue: defaultState.hasDefaultValue,
-        defaultValue: defaultState.defaultValue ?? createDraftDefaultValue("enum"),
+        defaultValue: defaultState.hasDefaultValue ? defaultState.defaultValue : undefined,
         enumText: metaValue.enum.join(", "),
         widget: "input",
         rows: DEFAULT_TEXTAREA_ROWS
@@ -488,8 +485,7 @@ export function deserializeSchema(
       type: fieldMeta.kind,
       required: requiredSet.has(name),
       description: fieldMeta.description ?? "",
-      hasDefaultValue: defaultState.hasDefaultValue,
-      defaultValue: defaultState.defaultValue ?? createDraftDefaultValue(fieldMeta.kind),
+      defaultValue: defaultState.hasDefaultValue ? defaultState.defaultValue : undefined,
       enumText: "",
       widget: fieldMeta.ui.widget ?? "input",
       rows: fieldMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS
@@ -544,7 +540,7 @@ function buildSchemaFromFields(
     if (description) {
       property.description = description;
     }
-    if (field.hasDefaultValue) {
+    if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "") {
       property.default = field.defaultValue;
     }
     if (field.type === "enum") {

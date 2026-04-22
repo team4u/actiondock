@@ -89,8 +89,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
   const buildTypePatch = (field: SchemaFieldDraft, nextType: SchemaFieldKind): Partial<SchemaFieldDraft> => ({
     type: nextType,
     widget: nextType === "string" ? field.widget : "input",
-    hasDefaultValue: false,
-    defaultValue: nextType === "boolean" ? false : nextType === "number" || nextType === "integer" ? 0 : ""
+    defaultValue: undefined
   });
 
   const setField = (fieldId: string, patch: Partial<SchemaFieldDraft>) => {
@@ -200,7 +199,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                       </Button>
                     </div>
                   ) : (
-                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                    <Space direction="vertical" size={6} style={{ width: "100%" }}>
                       {value.fields.map((field, index) => {
                         const fieldErrors = builderErrors[field.id] ?? {};
 
@@ -269,14 +268,12 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
 
                               <div className="schema-field-grid__item schema-field-grid__item--compact">
                                 <Text type="secondary">必填</Text>
-                                <div className="schema-field-switch">
-                                  <Switch
-                                    checked={field.required}
-                                    checkedChildren="是"
-                                    unCheckedChildren="否"
-                                    onChange={(checked) => setField(field.id, { required: checked })}
-                                  />
-                                </div>
+                                <Switch
+                                  checked={field.required}
+                                  checkedChildren="是"
+                                  unCheckedChildren="否"
+                                  onChange={(checked) => setField(field.id, { required: checked })}
+                                />
                               </div>
 
                               {field.type === "string" && (
@@ -297,111 +294,90 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
 
                               {field.type === "string" && field.widget === "textarea" && (
                                 <div className="schema-field-grid__item schema-field-grid__item--compact">
-                                  <Text type="secondary">显示行数</Text>
+                                  <Text type="secondary">行数</Text>
                                   <InputNumber
                                     min={1}
                                     precision={0}
                                     value={field.rows}
                                     status={fieldErrors.rows ? "error" : ""}
                                     style={{ width: "100%" }}
-                                    placeholder="例如 6"
+                                    placeholder="6"
                                     onChange={(nextValue) =>
                                       setField(field.id, {
                                         rows: typeof nextValue === "number" ? nextValue : 0
                                       })
                                     }
                                   />
-                                  <Text type={fieldErrors.rows ? "danger" : "secondary"}>
-                                    {fieldErrors.rows ?? "正式页和调试页都会按这个初始高度渲染 textarea。"}
-                                  </Text>
                                 </div>
                               )}
 
-                              <div className="schema-field-grid__item schema-field-grid__item--full">
+                              <div className="schema-field-grid__item schema-field-grid__item--description">
                                 <Text type="secondary">描述</Text>
                                 <Input.TextArea
                                   value={field.description}
-                                  autoSize={{ minRows: 2, maxRows: 4 }}
-                                  placeholder="例如 用于展示给调用方的字段说明"
+                                  autoSize={{ minRows: 1, maxRows: 2 }}
+                                  placeholder="字段说明"
                                   onChange={(event) => setField(field.id, { description: event.target.value })}
                                 />
                               </div>
 
-                              <div className="schema-field-grid__item schema-field-grid__item--compact">
+                              <div className="schema-field-grid__item schema-field-grid__item--default-value">
                                 <Text type="secondary">默认值</Text>
-                                <div className="schema-field-switch">
-                                  <Switch
-                                    checked={field.hasDefaultValue}
-                                    checkedChildren="已设置"
-                                    unCheckedChildren="未设置"
-                                    onChange={(checked) =>
+                                {field.type === "boolean" ? (
+                                  <Select
+                                    value={typeof field.defaultValue === "boolean" ? field.defaultValue : undefined}
+                                    status={fieldErrors.defaultValue ? "error" : ""}
+                                    placeholder="选择"
+                                    allowClear
+                                    options={BOOLEAN_DEFAULT_OPTIONS}
+                                    onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
+                                  />
+                                ) : field.type === "number" || field.type === "integer" ? (
+                                  <InputNumber
+                                    value={typeof field.defaultValue === "number" ? field.defaultValue : null}
+                                    status={fieldErrors.defaultValue ? "error" : ""}
+                                    style={{ width: "100%" }}
+                                    precision={field.type === "integer" ? 0 : undefined}
+                                    placeholder={field.type === "integer" ? "例如 1" : "例如 1.5"}
+                                    onChange={(nextValue) =>
                                       setField(field.id, {
-                                        hasDefaultValue: checked
+                                        defaultValue: typeof nextValue === "number" ? nextValue : undefined
                                       })
                                     }
                                   />
-                                </div>
+                                ) : field.type === "enum" ? (
+                                  <Select
+                                    value={typeof field.defaultValue === "string" ? field.defaultValue : undefined}
+                                    status={fieldErrors.defaultValue ? "error" : ""}
+                                    placeholder="选择"
+                                    allowClear
+                                    options={field.enumText
+                                      .split(",")
+                                      .map((item) => item.trim())
+                                      .filter(Boolean)
+                                      .map((item) => ({
+                                        value: item,
+                                        label: item
+                                      }))}
+                                    onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
+                                  />
+                                ) : field.widget === "textarea" ? (
+                                  <Input.TextArea
+                                    value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
+                                    status={fieldErrors.defaultValue ? "error" : ""}
+                                    autoSize={{ minRows: 1, maxRows: 3 }}
+                                    placeholder="默认值"
+                                    onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
+                                  />
+                                ) : (
+                                  <Input
+                                    value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
+                                    status={fieldErrors.defaultValue ? "error" : ""}
+                                    placeholder="默认值"
+                                    onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
+                                  />
+                                )}
                               </div>
-
-                              {field.hasDefaultValue ? (
-                                <div className="schema-field-grid__item schema-field-grid__item--full">
-                                  <Text type="secondary">默认值内容</Text>
-                                  {field.type === "boolean" ? (
-                                    <Select
-                                      value={typeof field.defaultValue === "boolean" ? field.defaultValue : false}
-                                      status={fieldErrors.defaultValue ? "error" : ""}
-                                      options={BOOLEAN_DEFAULT_OPTIONS}
-                                      onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
-                                    />
-                                  ) : field.type === "number" || field.type === "integer" ? (
-                                    <InputNumber
-                                      value={typeof field.defaultValue === "number" ? field.defaultValue : null}
-                                      status={fieldErrors.defaultValue ? "error" : ""}
-                                      style={{ width: "100%" }}
-                                      precision={field.type === "integer" ? 0 : undefined}
-                                      placeholder={field.type === "integer" ? "例如 1" : "例如 1.5"}
-                                      onChange={(nextValue) =>
-                                        setField(field.id, {
-                                          defaultValue: typeof nextValue === "number" ? nextValue : null
-                                        })
-                                      }
-                                    />
-                                  ) : field.type === "enum" ? (
-                                    <Select
-                                      value={typeof field.defaultValue === "string" ? field.defaultValue : undefined}
-                                      status={fieldErrors.defaultValue ? "error" : ""}
-                                      placeholder="请选择枚举默认值"
-                                      options={field.enumText
-                                        .split(",")
-                                        .map((item) => item.trim())
-                                        .filter(Boolean)
-                                        .map((item) => ({
-                                          value: item,
-                                          label: item
-                                        }))}
-                                      onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
-                                    />
-                                  ) : field.widget === "textarea" ? (
-                                    <Input.TextArea
-                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
-                                      status={fieldErrors.defaultValue ? "error" : ""}
-                                      autoSize={{ minRows: 2, maxRows: 6 }}
-                                      placeholder="输入字符串默认值"
-                                      onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
-                                    />
-                                  ) : (
-                                    <Input
-                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
-                                      status={fieldErrors.defaultValue ? "error" : ""}
-                                      placeholder="输入字符串默认值"
-                                      onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
-                                    />
-                                  )}
-                                  <Text type={fieldErrors.defaultValue ? "danger" : "secondary"}>
-                                    {fieldErrors.defaultValue ?? "默认值会在正式页和执行调试页初始化时自动回填。"}
-                                  </Text>
-                                </div>
-                              ) : null}
 
                               {field.type === "enum" && (
                                 <div className="schema-field-grid__item schema-field-grid__item--full">
@@ -409,12 +385,9 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   <Input
                                     value={field.enumText}
                                     status={fieldErrors.enumText ? "error" : ""}
-                                    placeholder="例如 success, failed, pending"
+                                    placeholder="success, failed, pending"
                                     onChange={(event) => setField(field.id, { enumText: event.target.value })}
                                   />
-                                  <Text type={fieldErrors.enumText ? "danger" : "secondary"}>
-                                    {fieldErrors.enumText ?? "使用逗号分隔，builder 会按字符串数组写入 enum。"}
-                                  </Text>
                                 </div>
                               )}
                             </div>
