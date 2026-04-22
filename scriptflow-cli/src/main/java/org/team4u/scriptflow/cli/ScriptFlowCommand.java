@@ -17,7 +17,12 @@ import java.util.concurrent.Callable;
 @Command(
         name = "scriptflow",
         mixinStandardHelpOptions = true,
-        description = "Thin REST CLI for ScriptFlow",
+        description = {
+                "ScriptFlow 的轻量 REST CLI。",
+                "连接配置优先级: 命令行参数 > 环境变量 > profile 文件 > 默认值。",
+                "环境变量: SCRIPTFLOW_PROFILE、SCRIPTFLOW_BASE_URL、SCRIPTFLOW_TOKEN。",
+                "默认 profile=default，baseUrl=http://localhost:8080，connectTimeoutMs=5000，readTimeoutMs=30000。"
+        },
         subcommands = {
                 ConfigCommands.class,
                 ScriptsCommands.class,
@@ -37,19 +42,19 @@ public class ScriptFlowCommand implements Runnable {
         DEBUG
     }
 
-    @Option(names = "--profile")
+    @Option(names = "--profile", description = "指定要使用的连接 profile；会覆盖环境变量和配置文件中的当前 profile。")
     String profile;
 
-    @Option(names = "--base-url")
+    @Option(names = "--base-url", description = "ScriptFlow 服务根地址，例如 http://localhost:8080；会覆盖环境变量和 profile 配置。")
     String baseUrl;
 
-    @Option(names = "--token")
+    @Option(names = "--token", description = "Bearer token；会覆盖环境变量和 profile 配置。")
     String token;
 
-    @Option(names = "--connect-timeout-ms")
+    @Option(names = "--connect-timeout-ms", description = "HTTP 连接超时时间，单位毫秒；默认 5000。")
     Integer connectTimeoutMs;
 
-    @Option(names = "--read-timeout-ms")
+    @Option(names = "--read-timeout-ms", description = "HTTP 读超时时间，单位毫秒；默认 30000。")
     Integer readTimeoutMs;
 
     @Spec

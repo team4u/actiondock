@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -150,6 +151,58 @@ class ScriptFlowCommandIntegrationTest {
         assertThat(stderrJson.path("msg").asText()).contains("顶层必须是 JSON 对象");
     }
 
+    @Test
+    void rootHelpExplainsConfigResolutionOrder() throws Exception {
+        ExecutionResult result = execute("--help");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(result.stdout()).contains("连接配置优先级: 命令行参数 > 环境变量 > profile 文件 > 默认值");
+        assertThat(result.stdout()).contains("SCRIPTFLOW_PROFILE");
+        assertThat(result.stdout()).contains("http://localhost:8080");
+    }
+
+    @Test
+    void executionsHelpExplainsDraftExecutionAndClearConstraint() throws Exception {
+        ExecutionResult submitHelp = execute("executions", "submit", "--help");
+        ExecutionResult clearHelp = execute("executions", "clear", "--help");
+
+        assertThat(submitHelp.exitCode()).isEqualTo(0);
+        assertThat(submitHelp.stdout()).contains("这里走的是 /api/executions");
+        assertThat(submitHelp.stdout()).contains("会使用当前保存内容");
+        assertThat(submitHelp.stdout()).contains("提交后等待执行结束；会轮询 /api/executions/{id}");
+        assertThat(clearHelp.exitCode()).isEqualTo(0);
+        assertThat(clearHelp.stdout()).contains("服务端要求必须提供 --script-id，不支持不带条件地全量清空");
+        assertThat(clearHelp.stdout()).contains("要清理执行记录的脚本 ID；服务端必填");
+    }
+
+    @Test
+    void scriptsAndSchedulesHelpExplainPublishedAndRequestBodyRules() throws Exception {
+        ExecutionResult executePublishedHelp = execute("scripts", "execute-published", "--help");
+        ExecutionResult discardDraftHelp = execute("scripts", "discard-draft", "--help");
+        ExecutionResult scheduleUpdateHelp = execute("schedules", "update", "--help");
+
+        assertThat(executePublishedHelp.exitCode()).isEqualTo(0);
+        assertThat(executePublishedHelp.stdout()).contains("执行指定脚本的已发布版本，不会使用当前未发布修改");
+        assertThat(discardDraftHelp.exitCode()).isEqualTo(0);
+        assertThat(discardDraftHelp.stdout()).contains("该命令要求脚本已经存在已发布版本");
+        assertThat(scheduleUpdateHelp.exitCode()).isEqualTo(0);
+        assertThat(scheduleUpdateHelp.stdout()).contains("请求体仍需带 scriptId，且服务端不允许借此把定时任务改挂到别的脚本上");
+    }
+
+    @Test
+    void pluginsHelpExplainsInvokeAndConfigPayloadShape() throws Exception {
+        ExecutionResult invokeHelp = execute("plugins", "invoke", "--help");
+        ExecutionResult configSetHelp = execute("plugins", "config", "set", "--help");
+
+        assertThat(invokeHelp.exitCode()).isEqualTo(0);
+        assertThat(invokeHelp.stdout()).contains("会额外返回 debug 区块");
+        assertThat(invokeHelp.stdout()).contains("原始 args");
+        assertThat(invokeHelp.stdout()).contains("scriptInput");
+        assertThat(configSetHelp.exitCode()).isEqualTo(0);
+        assertThat(configSetHelp.stdout()).contains("顶层包含 config 字");
+        assertThat(configSetHelp.stdout()).contains("{\"config\":{...}}");
+    }
+
     private ExecutionResult execute(String... args) throws Exception {
         ByteArrayOutputStream stdoutBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream stderrBytes = new ByteArrayOutputStream();
@@ -171,6 +224,8 @@ class ScriptFlowCommandIntegrationTest {
 
         CommandLine commandLine = new CommandLine(root);
         commandLine.setCaseInsensitiveEnumValuesAllowed(true);
+        commandLine.setOut(new PrintWriter(stdout, true, StandardCharsets.UTF_8));
+        commandLine.setErr(new PrintWriter(stderr, true, StandardCharsets.UTF_8));
         commandLine.setExecutionExceptionHandler((exception, cmd, parseResult) -> {
             CliOutput output = root.output();
             if (exception instanceof CliException cliException) {

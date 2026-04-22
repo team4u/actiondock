@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "scripts", subcommands = {
+@Command(name = "scripts", mixinStandardHelpOptions = true, description = "脚本草稿、发布版本和执行相关命令。", subcommands = {
         ScriptsCommands.ListScripts.class, ScriptsCommands.GetScript.class, ScriptsCommands.GetPublishedScript.class, ScriptsCommands.GetScriptSchema.class,
         ScriptsCommands.CreateScript.class, ScriptsCommands.UpdateScript.class, ScriptsCommands.DeleteScript.class, ScriptsCommands.ValidateScript.class,
         ScriptsCommands.PublishScript.class, ScriptsCommands.DiscardDraftScript.class, ScriptsCommands.ExecutePublishedScript.class
@@ -33,7 +33,7 @@ class ScriptsCommands implements Runnable {
         spec.commandLine().usage(root.services.stdout());
     }
 
-    @Command(name = "list")
+    @Command(name = "list", mixinStandardHelpOptions = true, description = "列出脚本草稿列表；请求会附带 includeUiSchema=true。")
     static class ListScripts implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
@@ -47,12 +47,12 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "get")
+    @Command(name = "get", mixinStandardHelpOptions = true, description = "获取指定脚本当前保存的定义；如果脚本已有未发布修改，这里返回的是当前草稿内容；请求会附带 includeUiSchema=true。")
     static class GetScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
         @Override
@@ -64,12 +64,12 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "get-published")
+    @Command(name = "get-published", mixinStandardHelpOptions = true, description = "获取指定脚本当前已发布版本的详情；如果脚本尚未发布，服务端会报错；请求会附带 includeUiSchema=true。")
     static class GetPublishedScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
         @Override
@@ -81,12 +81,12 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "schema")
+    @Command(name = "schema", mixinStandardHelpOptions = true, description = "获取指定脚本当前定义中的输入/输出 schema 摘要。")
     static class GetScriptSchema implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
         @Override
@@ -95,12 +95,16 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "create")
+    @Command(name = "create", mixinStandardHelpOptions = true, description = {
+            "创建脚本草稿。",
+            "--file 必须提供脚本定义 JSON 文件；顶层必须是 JSON 对象。",
+            "--file=- 时从 stdin 读取；请求会附带 includeUiSchema=true。"
+    })
     static class CreateScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Option(names = "--file", required = true)
+        @Option(names = "--file", required = true, description = "脚本定义 JSON 文件路径；传 - 表示从 stdin 读取。")
         String filePath;
 
         @Override
@@ -112,15 +116,19 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "update")
+    @Command(name = "update", mixinStandardHelpOptions = true, description = {
+            "更新指定脚本的草稿定义。",
+            "--file 必须提供完整脚本定义 JSON；顶层必须是 JSON 对象。",
+            "--file=- 时从 stdin 读取；请求会附带 includeUiSchema=true。"
+    })
     static class UpdateScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
-        @Option(names = "--file", required = true)
+        @Option(names = "--file", required = true, description = "脚本定义 JSON 文件路径；传 - 表示从 stdin 读取。")
         String filePath;
 
         @Override
@@ -136,12 +144,12 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "delete")
+    @Command(name = "delete", mixinStandardHelpOptions = true, description = "删除指定脚本。")
     static class DeleteScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
         @Override
@@ -150,12 +158,12 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "validate")
+    @Command(name = "validate", mixinStandardHelpOptions = true, description = "校验指定脚本当前保存定义是否可执行，不会发布脚本。")
     static class ValidateScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
         @Override
@@ -168,12 +176,16 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "publish")
+    @Command(name = "publish", mixinStandardHelpOptions = true, description = {
+            "发布指定脚本当前保存的定义。",
+            "服务端会把当前定义保存为 published snapshot，并将版本号加 1。",
+            "请求会附带 includeUiSchema=true。"
+    })
     static class PublishScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
         @Override
@@ -188,12 +200,16 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "discard-draft")
+    @Command(name = "discard-draft", mixinStandardHelpOptions = true, description = {
+            "丢弃指定脚本当前未发布修改，恢复为已发布快照。",
+            "该命令要求脚本已经存在已发布版本；否则服务端会报错。",
+            "请求会附带 includeUiSchema=true。"
+    })
     static class DiscardDraftScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
         @Override
@@ -208,33 +224,38 @@ class ScriptsCommands implements Runnable {
         }
     }
 
-    @Command(name = "execute-published")
+    @Command(name = "execute-published", mixinStandardHelpOptions = true, description = {
+            "执行指定脚本的已发布版本，不会使用当前未发布修改。",
+            "执行入参可通过 --input 或 --input-file 提供，二者只能选其一；顶层必须是 JSON 对象，不传时默认 {}。",
+            "--mode=SYNC/ASYNC 控制服务端提交模式；--wait 会在提交后按 executionId 轮询执行状态，直到状态不再是 PENDING/RUNNING 或超时。",
+            "--response-view=RESULT 返回业务结果，DEBUG 返回更完整的调试信息。"
+    })
     static class ExecutePublishedScript implements Callable<Integer> {
         @ParentCommand
         ScriptsCommands parent;
 
-        @Parameters(index = "0")
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "脚本 ID。")
         String scriptId;
 
-        @Option(names = "--input")
+        @Option(names = "--input", description = "内联执行入参 JSON；顶层必须是 JSON 对象，和 --input-file 二选一。")
         String input;
 
-        @Option(names = "--input-file")
+        @Option(names = "--input-file", description = "执行入参 JSON 文件路径；传 - 表示从 stdin 读取，和 --input 二选一。")
         String inputFile;
 
-        @Option(names = "--mode", defaultValue = "SYNC")
+        @Option(names = "--mode", defaultValue = "SYNC", description = "服务端提交模式：${COMPLETION-CANDIDATES}；默认 ${DEFAULT-VALUE}。")
         ScriptFlowCommand.SubmitModeOption mode;
 
-        @Option(names = "--response-view", defaultValue = "RESULT")
+        @Option(names = "--response-view", defaultValue = "RESULT", description = "返回视图：${COMPLETION-CANDIDATES}；RESULT 返回业务结果，DEBUG 返回调试细节；默认 ${DEFAULT-VALUE}。")
         ScriptFlowCommand.ResponseViewOption responseView;
 
-        @Option(names = "--wait")
+        @Option(names = "--wait", description = "提交后等待执行结束；会轮询 /api/executions/{id}，而不是改变 --mode。")
         boolean wait;
 
-        @Option(names = "--wait-timeout-seconds", defaultValue = "30")
+        @Option(names = "--wait-timeout-seconds", defaultValue = "30", description = "等待执行结束的超时时间，单位秒；仅在 --wait 时生效；默认 ${DEFAULT-VALUE}。")
         long waitTimeoutSeconds;
 
-        @Option(names = "--poll-interval-ms", defaultValue = "1000")
+        @Option(names = "--poll-interval-ms", defaultValue = "1000", description = "轮询 execution 状态的时间间隔，单位毫秒；仅在 --wait 时生效；默认 ${DEFAULT-VALUE}。")
         long pollIntervalMs;
 
         @Override

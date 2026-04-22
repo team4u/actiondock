@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "config", subcommands = {ConfigCommands.CurrentConfig.class, ConfigCommands.ProfileCommands.class})
+@Command(name = "config", mixinStandardHelpOptions = true, description = "CLI 连接配置和 profile 管理命令。", subcommands = {ConfigCommands.CurrentConfig.class, ConfigCommands.ProfileCommands.class})
 class ConfigCommands implements Runnable {
     @ParentCommand
     ScriptFlowCommand root;
@@ -29,7 +29,7 @@ class ConfigCommands implements Runnable {
         spec.commandLine().usage(root.services.stdout());
     }
 
-    @Command(name = "current")
+    @Command(name = "current", mixinStandardHelpOptions = true, description = "显示最终生效的连接配置，包括值来源、token 是否存在和配置文件路径。")
     static class CurrentConfig implements Callable<Integer> {
         @ParentCommand
         ConfigCommands parent;
@@ -40,7 +40,7 @@ class ConfigCommands implements Runnable {
         }
     }
 
-    @Command(name = "profile", subcommands = {ListProfiles.class, GetProfile.class, SetProfile.class, DeleteProfile.class})
+    @Command(name = "profile", mixinStandardHelpOptions = true, description = "管理本地 profile；配置文件位于 ~/.scriptflow/config.json。", subcommands = {ListProfiles.class, GetProfile.class, SetProfile.class, DeleteProfile.class})
     static class ProfileCommands implements Runnable {
         @ParentCommand
         ConfigCommands parent;
@@ -58,7 +58,7 @@ class ConfigCommands implements Runnable {
         }
     }
 
-    @Command(name = "list")
+    @Command(name = "list", mixinStandardHelpOptions = true, description = "列出所有本地 profile 名称和当前 profile。")
     static class ListProfiles implements Callable<Integer> {
         @ParentCommand
         ProfileCommands parent;
@@ -70,12 +70,12 @@ class ConfigCommands implements Runnable {
         }
     }
 
-    @Command(name = "get")
+    @Command(name = "get", mixinStandardHelpOptions = true, description = "查看单个本地 profile 的配置。")
     static class GetProfile implements Callable<Integer> {
         @ParentCommand
         ProfileCommands parent;
 
-        @Parameters(index = "0", description = "Profile name")
+        @Parameters(index = "0", paramLabel = "<profileName>", description = "Profile 名称。")
         String profileName;
 
         @Override
@@ -91,24 +91,28 @@ class ConfigCommands implements Runnable {
         }
     }
 
-    @Command(name = "set")
+    @Command(name = "set", mixinStandardHelpOptions = true, description = {
+            "创建或更新一个本地 profile，并将其设为当前 profile。",
+            "未提供的选项会保留该 profile 现有值；如果 profile 不存在则创建。",
+            "--base-url 会自动去掉末尾斜杠。"
+    })
     static class SetProfile implements Callable<Integer> {
         @ParentCommand
         ProfileCommands parent;
 
-        @Parameters(index = "0", description = "Profile name")
+        @Parameters(index = "0", paramLabel = "<profileName>", description = "要创建或更新的 profile 名称。")
         String profileName;
 
-        @Option(names = "--base-url")
+        @Option(names = "--base-url", description = "服务根地址，例如 http://localhost:8080。")
         String baseUrl;
 
-        @Option(names = "--token")
+        @Option(names = "--token", description = "Bearer token；传空白值会被规范化为 null。")
         String token;
 
-        @Option(names = "--connect-timeout-ms")
+        @Option(names = "--connect-timeout-ms", description = "HTTP 连接超时时间，单位毫秒。")
         Integer connectTimeoutMs;
 
-        @Option(names = "--read-timeout-ms")
+        @Option(names = "--read-timeout-ms", description = "HTTP 读超时时间，单位毫秒。")
         Integer readTimeoutMs;
 
         @Override
@@ -137,12 +141,12 @@ class ConfigCommands implements Runnable {
         }
     }
 
-    @Command(name = "delete")
+    @Command(name = "delete", mixinStandardHelpOptions = true, description = "删除本地 profile；如果删除的是当前 profile，则 currentProfile 会被清空。")
     static class DeleteProfile implements Callable<Integer> {
         @ParentCommand
         ProfileCommands parent;
 
-        @Parameters(index = "0", description = "Profile name")
+        @Parameters(index = "0", paramLabel = "<profileName>", description = "要删除的 profile 名称。")
         String profileName;
 
         @Override
