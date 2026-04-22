@@ -52,13 +52,13 @@ public class ScriptApplicationService {
     }
 
     public ScriptDefinition get(String id) {
-        return scriptRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Script not found: " + id));
+        return scriptRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + id));
     }
 
     public ScriptDefinition getPublished(String id) {
         ScriptDefinition definition = get(id);
         if (definition.getPublishedSnapshot() == null) {
-            throw new IllegalArgumentException("Script not published: " + id);
+            throw new IllegalArgumentException("脚本未发布: " + id);
         }
         return definition.toPublishedDefinition();
     }

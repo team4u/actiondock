@@ -153,10 +153,10 @@ export function PluginDetailPage() {
         inputMode: actionArgsInputMode,
         jsonInput: actionArgsText,
         fallbackValue: currentAction.exampleArgs,
-        emptyFallbackNote: "当前未填写动作参数，已回退到示例参数。",
-        emptyNoFallbackNote: "当前动作没有示例参数，已使用空对象。",
-        invalidFallbackNote: "当前动作参数 JSON 非法，已回退到示例参数。",
-        invalidNoFallbackNote: "当前动作参数 JSON 非法，且没有示例参数，已使用空对象。"
+        emptyFallbackNote: "未填写参数，已使用示例参数。",
+        emptyNoFallbackNote: "无示例参数，已使用空对象。",
+        invalidFallbackNote: "参数 JSON 非法，已使用示例参数。",
+        invalidNoFallbackNote: "参数 JSON 非法且无示例参数，已使用空对象。"
       })
     : { source: "empty" as const, value: {} };
   const commandScriptInput = resolvePluginScriptInputCommandInput(scriptInputText);
@@ -633,7 +633,7 @@ export function PluginDetailPage() {
                               <Form layout="vertical">
                                 <Form.Item
                                   label="脚本输入模拟"
-                                  extra="用于模拟插件上下文里的脚本输入，对应请求里的 scriptInput 字段，默认空对象。"
+                                  extra="模拟插件上下文中的脚本输入（scriptInput），默认空对象。"
                                 >
                                   <CodeEditor
                                     height="220px"

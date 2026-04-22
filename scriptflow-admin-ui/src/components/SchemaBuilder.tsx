@@ -68,8 +68,8 @@ function BuilderUnavailable({
     <Alert
       type="warning"
       showIcon
-      message={`${label}暂时无法切回可视化编辑`}
-      description={`${reason}，请继续使用 JSON 模式编辑。`}
+      message={`${label}暂不支持可视化编辑`}
+      description="请使用 JSON 模式编辑。"
     />
   );
 }
@@ -406,7 +406,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <InfoHint
                   label={`${label}支持直接输入 JSON Schema`}
-                  content="保存时会校验为合法 JSON 对象；如果结构仍在 builder 支持范围内，可再切回可视化编辑。"
+                  content="保存时校验 JSON 合法性。"
                 />
                 <CodeEditor value={jsonText} onChange={handleJsonChange} theme={theme} height="360px" />
                 {value.mode === "json" && jsonModeReason ? (

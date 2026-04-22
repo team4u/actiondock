@@ -49,12 +49,12 @@ public class ExecutionController {
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable String id) {
         executionApplicationService.delete(id);
-        return ApiResponse.success(null, "删除成功");
+        return ApiResponse.success(null, "已删除");
     }
 
     @DeleteMapping
     public ApiResponse<Void> clear(@RequestParam(required = false) String scriptId) {
         executionApplicationService.clear(scriptId);
-        return ApiResponse.success(null, "清空成功");
+        return ApiResponse.success(null, "已清空");
     }
 }

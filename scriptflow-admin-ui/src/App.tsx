@@ -101,7 +101,7 @@ function AdminShell() {
   const navigationMenu = (
     <div className="app-navigation">
       <div className="brand-block">
-        <Text className="brand-kicker">Runtime Console</Text>
+        <Text className="brand-kicker">控制台</Text>
         <Title level={4}>Scriptflow</Title>
         <Text type="secondary">脚本管理控制台</Text>
       </div>

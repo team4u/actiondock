@@ -46,7 +46,7 @@ public class ScheduleController {
     public ApiResponse<ScriptScheduleView> create(@RequestBody ScriptScheduleUpsertRequest request) {
         ScriptSchedule schedule = scheduleApplicationService.save(resolveScriptId(request), toDomain(request, null));
         scriptScheduleDispatcher.refreshScript(schedule.getScriptId());
-        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "定时任务已创建");
+        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已创建");
     }
 
     @PutMapping("/{scheduleId}")
@@ -55,11 +55,11 @@ public class ScheduleController {
         ScriptSchedule existing = scheduleApplicationService.getById(scheduleId);
         String scriptId = resolveScriptId(request);
         if (!existing.getScriptId().equals(scriptId)) {
-            throw new IllegalArgumentException("暂不支持修改定时任务所属脚本");
+            throw new IllegalArgumentException("不支持修改所属脚本");
         }
         ScriptSchedule schedule = scheduleApplicationService.save(scriptId, toDomain(request, scheduleId));
         scriptScheduleDispatcher.refreshScript(scriptId);
-        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "定时任务已更新");
+        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已更新");
     }
 
     @PostMapping("/{scheduleId}/enable")
@@ -67,7 +67,7 @@ public class ScheduleController {
         ScriptSchedule existing = scheduleApplicationService.getById(scheduleId);
         ScriptSchedule schedule = scheduleApplicationService.enable(existing.getScriptId(), scheduleId);
         scriptScheduleDispatcher.refreshScript(existing.getScriptId());
-        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "定时任务已启用");
+        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已启用");
     }
 
     @PostMapping("/{scheduleId}/disable")
@@ -75,7 +75,7 @@ public class ScheduleController {
         ScriptSchedule existing = scheduleApplicationService.getById(scheduleId);
         ScriptSchedule schedule = scheduleApplicationService.disable(existing.getScriptId(), scheduleId);
         scriptScheduleDispatcher.refreshScript(existing.getScriptId());
-        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "定时任务已停用");
+        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已停用");
     }
 
     @DeleteMapping("/{scheduleId}")
@@ -83,7 +83,7 @@ public class ScheduleController {
         ScriptSchedule existing = scheduleApplicationService.getById(scheduleId);
         scheduleApplicationService.delete(existing.getScriptId(), scheduleId);
         scriptScheduleDispatcher.refreshScript(existing.getScriptId());
-        return ApiResponse.success(null, "定时任务已删除");
+        return ApiResponse.success(null, "已删除");
     }
 
     private String resolveScriptId(ScriptScheduleUpsertRequest request) {

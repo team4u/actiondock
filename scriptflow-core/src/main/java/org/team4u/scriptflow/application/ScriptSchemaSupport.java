@@ -41,7 +41,7 @@ public class ScriptSchemaSupport {
                     fieldErrors.add(new SchemaFieldError(
                             field.name(),
                             "required",
-                            field.label() + " 为必填",
+                            field.label() + " 必填",
                             "present",
                             "missing"
                     ));
@@ -54,7 +54,7 @@ public class ScriptSchemaSupport {
                 fieldErrors.add(new SchemaFieldError(
                         field.name(),
                         "type_mismatch",
-                        field.label() + " 不能为 null",
+                        field.label() + " 不能为空",
                         field.kind(),
                         "null"
                 ));
@@ -69,7 +69,7 @@ public class ScriptSchemaSupport {
                 fieldErrors.add(new SchemaFieldError(
                         field.name(),
                         "type_mismatch",
-                        field.label() + " 必须是 " + field.kind(),
+                        field.label() + " 类型应为 " + field.kind(),
                         field.kind(),
                         detectType(value)
                 ));

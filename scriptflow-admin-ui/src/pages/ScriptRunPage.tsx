@@ -117,7 +117,7 @@ export function ScriptRunPage() {
       setLoading(false);
       setPageError({
         title: "缺少脚本标识",
-        description: "当前地址没有提供脚本 ID，无法加载正式使用页。"
+        description: "请在地址栏提供脚本 ID。"
       });
       return;
     }
@@ -149,7 +149,7 @@ export function ScriptRunPage() {
         if (detail.toLowerCase().includes("not published")) {
           setPageError({
             title: "脚本尚未发布",
-            description: "正式使用页只对已发布脚本开放。请先回到管理台发布，再从正式入口进入。"
+            description: "请先在管理台发布脚本。"
           });
           return;
         }

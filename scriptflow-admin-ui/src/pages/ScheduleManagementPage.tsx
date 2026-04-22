@@ -75,7 +75,7 @@ export function ScheduleManagementPage() {
       key: "enabled",
       width: 120,
       render: (_: unknown, record) => (
-        <Tag color={record.enabled ? "green" : "default"}>{record.enabled ? "ENABLED" : "DISABLED"}</Tag>
+        <Tag color={record.enabled ? "green" : "default"}>{record.enabled ? "已启用" : "已停用"}</Tag>
       )
     },
     {

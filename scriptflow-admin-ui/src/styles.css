@@ -26,6 +26,11 @@
   --app-command-text: #e2e8f0;
   --app-placeholder: rgba(15, 23, 42, 0.35);
   --app-selection: rgba(35, 87, 213, 0.08);
+  --app-radius-sm: 8px;
+  --app-radius-md: 10px;
+  --app-radius-lg: 14px;
+  --app-radius-xl: 18px;
+  --app-warm: #8a6a1f;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -182,7 +187,7 @@ a {
   padding: 12px;
   overflow: auto;
   border: 1px solid var(--app-code-border);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-card-start);
   color: var(--app-code-text);
   font-size: 12px;
@@ -213,14 +218,14 @@ a {
   place-items: center;
   gap: 10px;
   border: 1px dashed var(--app-primary-soft-strong);
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   background: linear-gradient(180deg, var(--app-card-start), var(--app-panel-end));
 }
 
 .schema-field-card {
   padding: 8px;
   border: 1px solid var(--app-code-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-md);
   background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -384,7 +389,7 @@ a {
   gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--app-code-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-md);
   background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
 }
 
@@ -431,7 +436,7 @@ a {
 .schema-field-list__empty {
   padding: 8px 0;
   border: 1px dashed var(--app-border-subtle);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: transparent;
 }
 
@@ -440,7 +445,7 @@ a {
 }
 
 .plugin-reference-collapse > .ant-collapse-item {
-  border-radius: 12px !important;
+  border-radius: var(--app-radius-md) !important;
   overflow: hidden;
   border: 1px solid var(--app-border-subtle);
   background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
@@ -455,14 +460,14 @@ a {
 }
 
 .plugin-reference-collapse--nested > .ant-collapse-item {
-  border-radius: 10px !important;
+  border-radius: var(--app-radius-md) !important;
 }
 
 .app-code-editor {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--app-code-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-md);
   background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
@@ -480,7 +485,7 @@ a {
   margin: 0;
   padding: 12px;
   overflow: auto;
-  border-radius: 10px;
+  border-radius: var(--app-radius-md);
   background: var(--app-code-preview-bg);
   color: var(--app-code-preview-text);
   font-size: 13px;
@@ -491,7 +496,7 @@ a {
   margin: 0;
   padding: 14px;
   overflow: auto;
-  border-radius: 10px;
+  border-radius: var(--app-radius-md);
   border: 1px solid var(--app-code-border);
   background:
     linear-gradient(180deg, var(--app-command-start), var(--app-command-end)),
@@ -602,7 +607,7 @@ a {
 }
 
 .run-status-card__kicker {
-  color: #8a6a1f;
+  color: var(--app-warm);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -645,14 +650,14 @@ a {
 
 .run-panel,
 .run-status-card {
-  border-radius: 18px !important;
-  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  border-radius: var(--app-radius-xl) !important;
+  border: 1px solid var(--app-border-subtle) !important;
   overflow: hidden;
 }
 
 .run-panel .ant-card-head,
 .run-status-card .ant-card-head {
-  border-bottom-color: rgba(148, 163, 184, 0.14);
+  border-bottom-color: var(--app-border-subtle);
 }
 
 .run-panel .ant-card-head-title {
@@ -691,8 +696,8 @@ a {
 
 .run-field {
   padding: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 14px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-lg);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(248, 250, 252, 0.78)),
     linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
@@ -744,8 +749,8 @@ a {
 
 .run-output-item {
   padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--app-radius-lg);
+  border: 1px solid var(--app-border-subtle);
   background:
     linear-gradient(135deg, rgba(255, 250, 239, 0.84), rgba(255, 255, 255, 0.72)),
     linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
@@ -770,7 +775,7 @@ a {
 }
 
 .ant-card {
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   box-shadow: var(--app-card-shadow);
 }
 

@@ -620,7 +620,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
           <Card>
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="当前没有可用的已发布脚本，先发布脚本后再创建定时任务。"
+              description="请先发布脚本后再创建定时任务。"
             />
           </Card>
         ) : (
@@ -631,7 +631,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                   type="warning"
                   showIcon
                   message="当前任务关联脚本暂不可用于调试"
-                  description="任务明细仍可查看和保存，但当前脚本没有可用的已发布版本或脚本已被删除，因此右侧手工调试已禁用。"
+                  description="当前脚本无可用的已发布版本，调试已禁用。"
                 />
               ) : null}
 
@@ -719,7 +719,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                       title={
                         <Space size={6}>
                           <span>手工调试</span>
-                          <InfoHint content="直接调用当前已发布脚本和左侧固定输入执行；不会写回定时任务，也不会替代真实调度触发。" />
+                          <InfoHint content="使用固定输入直接执行，不影响定时任务。" />
                         </Space>
                       }
                       extra={

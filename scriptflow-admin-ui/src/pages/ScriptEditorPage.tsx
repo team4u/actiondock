@@ -143,9 +143,9 @@ function getScriptContentHint(type: ScriptType): string {
 
 function getEditorFooterHint(type: ScriptType): string {
   if (type === "PYTHON") {
-    return "保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Python 语法与执行结果由后端 Python 运行时校验。";
+    return "保存时校验配置格式，脚本语法由运行时校验。";
   }
-  return "保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Groovy 语法通过后端校验接口确认。";
+  return "保存时校验配置格式，Groovy 语法通过后端校验。";
 }
 
 function sortExecutions(records: ExecutionRecord[]): ExecutionRecord[] {
@@ -764,14 +764,18 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       const parsed = parseGeneratedScriptText(generatedScriptText);
       const nextInputSchemaState = deserializeSchemaJsonText(parsed.inputSchemaText, "输入结构");
       const nextOutputSchemaState = deserializeSchemaJsonText(parsed.outputSchemaText, "输出结构");
-      const nextId = parsed.id.trim();
-      const nextName = parsed.name.trim();
-
-      form.setFieldsValue({
-        id: nextId,
-        name: nextName,
+      const nextFields: Partial<ScriptFormValues> = {
         type: "GROOVY"
-      });
+      };
+
+      if (parsed.id?.trim()) {
+        nextFields.id = parsed.id.trim();
+      }
+      if (parsed.name?.trim()) {
+        nextFields.name = parsed.name.trim();
+      }
+
+      form.setFieldsValue(nextFields);
       setSourceText(parsed.source);
       setInputSchemaState(nextInputSchemaState);
       setOutputSchemaState(nextOutputSchemaState);
@@ -779,9 +783,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       setGeneratedScriptText("");
       void form.validateFields(["id", "name"]).catch(() => undefined);
 
-      messageApi.success("已回填脚本内容");
+      messageApi.success("已回填源码并提取输入输出结构");
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "解析 generate-script 输出失败";
+      const detail = error instanceof Error ? error.message : "解析导入内容失败";
       messageApi.error(detail);
     }
   };
@@ -940,14 +944,14 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
           <Alert
             type="info"
             showIcon
-            message="仅支持固定五段格式"
-            description="必须包含“脚本 ID”“脚本名称”“Groovy 脚本”“Input Schema”“Output Schema”五段内容，缺少任一段都会导入失败。"
+            message="支持固定格式，也支持从 Groovy 源码智能提取"
+            description="带有显式 Input/Output Schema 时优先使用原始 Schema；仅粘贴源码时会自动提取输入输出结构，但不会自动填写 ID 和名称。"
           />
           <Input.TextArea
             className="generated-script-textarea"
             value={generatedScriptText}
             onChange={(event) => setGeneratedScriptText(event.target.value)}
-            placeholder={`请粘贴 generate-script 的完整输出，例如：\n### 脚本 ID\nhello-groovy\n\n### 脚本名称\nHello Groovy\n\n### Groovy 脚本\n\`\`\`groovy\n...\n\`\`\``}
+            placeholder={`支持两种粘贴方式，例如：\n\n1. 固定格式\n### 脚本 ID\nhello-groovy\n\n### 脚本名称\nHello Groovy\n\n### Groovy 脚本\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\`\n\n### Input Schema（输入参数）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n### Output Schema（输出结果）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n2. 直接粘贴源码\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\``}
             autoSize={{ minRows: 14, maxRows: 22 }}
           />
         </Space>
@@ -1006,14 +1010,14 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           <SchemaFieldList
                             schema={action.inputSchema}
                             title="输入字段"
-                            emptyDescription="当前动作没有声明输入字段。"
+                            emptyDescription="无输入字段"
                           />
                         </Col>
                         <Col xs={24} md={12}>
                           <SchemaFieldList
                             schema={action.outputSchema}
                             title="输出字段"
-                            emptyDescription="当前动作没有声明输出字段。"
+                            emptyDescription="无输出字段"
                           />
                         </Col>
                       </Row>
@@ -1128,7 +1132,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               <Descriptions.Item label="状态 / 更新时间">
                 <Space size={8} wrap>
                   <Tag color={currentScript.status === "PUBLISHED" ? "green" : "gold"}>
-                    {currentScript.status}
+                    {currentScript.status === "PUBLISHED" ? "已发布" : "草稿"}
                   </Tag>
                   {hasUnpublishedChanges ? <Tag color="orange">有未发布修改</Tag> : null}
                   <Text type="secondary">{formatDateTime(currentScript.updatedAt)}</Text>
@@ -1144,7 +1148,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 showIcon
                 style={{ marginTop: 16 }}
                 message="当前编辑内容尚未发布"
-                description="保存只会更新草稿，正式使用页仍然使用上一次发布的版本。需要生效时请再次点击“发布”，如需回退可直接“丢弃草稿”。"
+                description="保存为草稿，需点击「发布」生效。如需回退可「丢弃草稿」。"
               />
             ) : null}
           </Card>

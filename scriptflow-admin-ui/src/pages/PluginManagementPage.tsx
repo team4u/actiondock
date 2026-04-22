@@ -186,7 +186,7 @@ export function PluginManagementPage() {
           )}
           <Popconfirm
             title="确认卸载这个插件？"
-            description="会删除数据库记录、插件文件与保存的配置。"
+            description="将删除插件文件与相关配置。"
             okText="卸载"
             cancelText="取消"
             onConfirm={() =>

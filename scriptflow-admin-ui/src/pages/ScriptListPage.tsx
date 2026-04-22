@@ -202,7 +202,7 @@ export function ScriptListPage() {
       key: "status",
       width: 120,
       render: (status: ScriptDefinition["status"]) => (
-        <Tag color={status === "PUBLISHED" ? "green" : "gold"}>{status}</Tag>
+        <Tag color={status === "PUBLISHED" ? "green" : "gold"}>{status === "PUBLISHED" ? "已发布" : "草稿"}</Tag>
       )
     },
     {
@@ -261,7 +261,7 @@ export function ScriptListPage() {
         <div className="script-list-toolbar">
           <Space direction="vertical" size={2} className="script-list-toolbar__meta">
             <Text type="secondary">共 {scripts.length} 个脚本</Text>
-            <Text type="secondary">已选择 {selectedScriptIds.length} 个脚本用于导出</Text>
+            <Text type="secondary">已选 {selectedScriptIds.length} 个脚本</Text>
           </Space>
           <Space wrap className="script-list-toolbar__actions">
             <Button icon={<PlusOutlined />} type="primary" onClick={() => navigate("/scripts/new")}>
