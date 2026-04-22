@@ -77,4 +77,12 @@ public final class JsonInputSupport {
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
+
+    public static JsonNode readTree(ObjectMapper objectMapper, CliOutput output, String json) {
+        try {
+            return objectMapper.readTree(json);
+        } catch (Exception exception) {
+            throw CliException.validation(output, "请求体 JSON 解析失败");
+        }
+    }
 }
