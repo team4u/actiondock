@@ -257,37 +257,6 @@ export function buildExecuteCurlCommand({
   return lines.join(" \\\n");
 }
 
-export function buildScriptDetailCliCommand(scriptId: string): string {
-  return `java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script show --id ${shellQuote(
-    scriptId
-  )}`;
-}
-
-export function buildScriptContractCliCommand(scriptId: string): string {
-  return `java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script schema --id ${shellQuote(
-    scriptId
-  )}`;
-}
-
-export function buildExecuteCliCommand({
-  input,
-  mode,
-  scriptId
-}: {
-  input: Record<string, unknown>;
-  mode: SubmitMode;
-  scriptId: string;
-}): string {
-  return [
-    "java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar run",
-    `--id ${shellQuote(scriptId)}`,
-    `--input ${shellQuote(JSON.stringify(input))}`,
-    mode === "ASYNC" ? "--async true" : ""
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
 export function buildPluginInvokeCurlCommand({
   action,
   apiKey,
@@ -323,27 +292,4 @@ export function buildPluginInvokeCurlCommand({
   );
   lines.push(`  ${shellQuote(`${origin}/api/plugins/${pluginId}/actions/${action}/invoke`)}`);
   return lines.join(" \\\n");
-}
-
-export function buildPluginInvokeCliCommand({
-  action,
-  args,
-  pluginId,
-  responseView,
-  scriptInput
-}: {
-  action: string;
-  args: Record<string, unknown>;
-  pluginId: string;
-  responseView?: ExecutionResponseView;
-  scriptInput: Record<string, unknown>;
-}): string {
-  return [
-    "java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar plugin invoke",
-    `--plugin-id ${shellQuote(pluginId)}`,
-    `--action ${shellQuote(action)}`,
-    `--args ${shellQuote(JSON.stringify(args))}`,
-    `--script-input ${shellQuote(JSON.stringify(scriptInput))}`,
-    `--response-view ${shellQuote(responseView ?? "RESULT")}`
-  ].join(" ");
 }

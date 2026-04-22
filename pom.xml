@@ -22,7 +22,7 @@
         <module>scriptflow-plugin-api</module>
         <module>scriptflow-storage-jpa</module>
         <module>scriptflow-app-support</module>
-        <module>scriptflow-app-cli</module>
+        <module>scriptflow-cli</module>
         <module>scriptflow-app-spring</module>
         <module>scriptflow-plugin-template</module>
     </modules>

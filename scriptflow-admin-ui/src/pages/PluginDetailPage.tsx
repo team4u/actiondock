@@ -46,7 +46,6 @@ import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/S
 import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecutionInputFromValues,
-  buildPluginInvokeCliCommand,
   buildPluginInvokeCurlCommand,
   getCommandInputSourceLabel,
   resolveCommandObjectInput
@@ -390,17 +389,6 @@ export function PluginDetailPage() {
           responseView: "RESULT"
         })
       : "";
-  const invokeCliCommand =
-    plugin && currentAction
-      ? buildPluginInvokeCliCommand({
-          pluginId: plugin.pluginId,
-          action: currentAction.action,
-          args: commandArgsInput.value,
-          scriptInput: commandScriptInput.value,
-          responseView: "RESULT"
-        })
-      : "";
-
   if (loading && !plugin) {
     return (
       <div className="page-loading">
@@ -705,31 +693,10 @@ export function PluginDetailPage() {
                         脚本输入来源：{commandScriptInput.source === "current-json" ? "当前 JSON 输入" : "空对象"}
                       </Text>
                     </Space>
-                    <Tabs
-                      items={[
-                        {
-                          key: "rest",
-                          label: "REST API",
-                          children: (
-                            <CommandPanel
-                              title="调用动作 cURL"
-                              command={invokeCurlCommand}
-                              onCopy={(command) => void handleCopyCommand(command)}
-                            />
-                          )
-                        },
-                        {
-                          key: "cli",
-                          label: "CLI",
-                          children: (
-                            <CommandPanel
-                              title="调用动作 CLI"
-                              command={invokeCliCommand}
-                              onCopy={(command) => void handleCopyCommand(command)}
-                            />
-                          )
-                        }
-                      ]}
+                    <CommandPanel
+                      title="调用动作 cURL"
+                      command={invokeCurlCommand}
+                      onCopy={(command) => void handleCopyCommand(command)}
                     />
                   </Space>
                 ) : (

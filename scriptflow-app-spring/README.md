@@ -11,7 +11,7 @@
 mvn -pl scriptflow-app-spring -am spring-boot:run
 ```
 
-该命令会只启动 `scriptflow-app-spring`；CLI 模块默认不会参与 reactor 下的 `spring-boot:run`。
+该命令会只启动 `scriptflow-app-spring`。
 
 如果会执行 `PYTHON` 类型脚本，请先确认宿主机上存在 `python3`，并且脚本依赖的第三方包已经预装。
 
@@ -38,6 +38,16 @@ mvn -pl scriptflow-app-spring -am package
 java -jar target/scriptflow-app-spring.jar
 ```
 
+如果要配合官方 REST CLI 使用，可以在仓库根目录额外构建：
+
+```bash
+mvn -pl scriptflow-cli -am package
+java -jar ../scriptflow-cli/target/scriptflow-cli-0.2.0.jar \
+  --base-url http://localhost:8080 \
+  --token local-dev-key \
+  scripts list
+```
+
 常用运行配置：
 
 ```yaml
@@ -57,12 +67,3 @@ app:
 ```
 
 如果本地曾运行过包含 page 能力的旧版本，开发阶段请删除 `../data/dsl-runtime*` 后再重新启动，避免旧 H2 文件残留未使用的 page 表。
-
-CLI 已拆分为独立模块，请改用：
-
-```bash
-mvn -pl scriptflow-app-cli -am package
-java -jar ../scriptflow-app-cli/target/scriptflow-app-cli.jar script list
-```
-
-如果希望 CLI 与 Web 继续共用默认 H2 文件库，请从同一个工作目录启动两个 jar。

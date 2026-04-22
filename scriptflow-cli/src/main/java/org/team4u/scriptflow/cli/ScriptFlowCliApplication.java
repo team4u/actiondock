@@ -1,0 +1,31 @@
+package org.team4u.scriptflow.cli;
+
+import picocli.CommandLine;
+
+public final class ScriptFlowCliApplication {
+    private ScriptFlowCliApplication() {
+    }
+
+    public static void main(String[] args) {
+        ScriptFlowCommand root = new ScriptFlowCommand();
+        CommandLine commandLine = new CommandLine(root);
+        commandLine.setCaseInsensitiveEnumValuesAllowed(true);
+        commandLine.setExecutionExceptionHandler((exception, cmd, parseResult) -> {
+            CliOutput output = root.output();
+            if (exception instanceof CliException cliException) {
+                cliException.writeTo(output);
+                return cliException.exitCode();
+            }
+            CliException cliException = CliException.transport(output, exception.getMessage() == null ? "命令执行失败" : exception.getMessage());
+            cliException.writeTo(output);
+            return cliException.exitCode();
+        });
+        commandLine.setParameterExceptionHandler((exception, args1) -> {
+            CliException cliException = CliException.validation(root.output(), exception.getMessage());
+            cliException.writeTo(root.output());
+            return cliException.exitCode();
+        });
+        int exitCode = commandLine.execute(args);
+        System.exit(exitCode);
+    }
+}

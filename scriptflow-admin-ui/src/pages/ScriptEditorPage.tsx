@@ -63,11 +63,8 @@ import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import {
-  buildExecuteCliCommand,
   buildExecuteCurlCommand,
   buildExecutionInputFromValues,
-  buildScriptContractCliCommand,
-  buildScriptDetailCliCommand,
   buildScriptDetailCurlCommand,
   buildToolDetailCurlCommand,
   resolveExecutionCommandInput
@@ -290,8 +287,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
-  const detailCliCommand = currentScript ? buildScriptDetailCliCommand(currentScript.id) : "";
-  const toolDetailCliCommand = currentScript ? buildScriptContractCliCommand(currentScript.id) : "";
   const toolDetailCurlCommand = currentScript
     ? buildToolDetailCurlCommand({
         apiKey,
@@ -305,13 +300,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         input: commandInput.value,
         mode: executionMode,
         origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const executeCliCommand = currentScript
-    ? buildExecuteCliCommand({
-        input: commandInput.value,
-        mode: executionMode,
         scriptId: currentScript.id
       })
     : "";
@@ -1331,7 +1319,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       children: (
                         <Space direction="vertical" size={16} style={{ width: "100%" }}>
                           <InfoHint
-                            label="可直接执行的 REST API 与 CLI 命令"
+                            label="可直接执行的 REST API 命令"
                             content={
                               apiKey
                                 ? `REST 命令已使用当前页面 origin ${origin} 并自动附带 Authorization 头。`
@@ -1347,31 +1335,10 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 children: (
                                   <Space direction="vertical" size={12} style={{ width: "100%" }}>
                                     <Text type="secondary">使用当前脚本 ID 生成</Text>
-                                    <Tabs
-                                      items={[
-                                        {
-                                          key: "detail-rest",
-                                          label: "REST API",
-                                          children: (
-                                            <CommandPanel
-                                              title="详情查询 cURL"
-                                              command={detailCurlCommand}
-                                              onCopy={(command) => void handleCopyCommand(command)}
-                                            />
-                                          )
-                                        },
-                                        {
-                                          key: "detail-cli",
-                                          label: "CLI",
-                                          children: (
-                                            <CommandPanel
-                                              title="详情查询 CLI"
-                                              command={detailCliCommand}
-                                              onCopy={(command) => void handleCopyCommand(command)}
-                                            />
-                                          )
-                                        }
-                                      ]}
+                                    <CommandPanel
+                                      title="详情查询 cURL"
+                                      command={detailCurlCommand}
+                                      onCopy={(command) => void handleCopyCommand(command)}
                                     />
                                   </Space>
                                 )
@@ -1397,31 +1364,10 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                         {getCommandInputSourceLabel(commandInput.source)}
                                       </Descriptions.Item>
                                     </Descriptions>
-                                    <Tabs
-                                      items={[
-                                        {
-                                          key: "execute-rest",
-                                          label: "REST API",
-                                          children: (
-                                            <CommandPanel
-                                              title="执行脚本 cURL"
-                                              command={executeCurlCommand}
-                                              onCopy={(command) => void handleCopyCommand(command)}
-                                            />
-                                          )
-                                        },
-                                        {
-                                          key: "execute-cli",
-                                          label: "CLI",
-                                          children: (
-                                            <CommandPanel
-                                              title="执行脚本 CLI"
-                                              command={executeCliCommand}
-                                              onCopy={(command) => void handleCopyCommand(command)}
-                                            />
-                                          )
-                                        }
-                                      ]}
+                                    <CommandPanel
+                                      title="执行脚本 cURL"
+                                      command={executeCurlCommand}
+                                      onCopy={(command) => void handleCopyCommand(command)}
                                     />
                                   </Space>
                                 )
@@ -1434,31 +1380,10 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       children: (
                                         <Space direction="vertical" size={16} style={{ width: "100%" }}>
                                           <Text type="secondary">供模型与调用方查看输入输出定义</Text>
-                                          <Tabs
-                                            items={[
-                                              {
-                                                key: "contract-rest",
-                                                label: "REST API",
-                                                children: (
-                                                  <CommandPanel
-                                                    title="获取 Schema cURL"
-                                                    command={toolDetailCurlCommand}
-                                                    onCopy={(command) => void handleCopyCommand(command)}
-                                                  />
-                                                )
-                                              },
-                                              {
-                                                key: "contract-cli",
-                                                label: "CLI",
-                                                children: (
-                                                  <CommandPanel
-                                                    title="获取 Schema CLI"
-                                                    command={toolDetailCliCommand}
-                                                    onCopy={(command) => void handleCopyCommand(command)}
-                                                  />
-                                                )
-                                              }
-                                            ]}
+                                          <CommandPanel
+                                            title="获取 Schema cURL"
+                                            command={toolDetailCurlCommand}
+                                            onCopy={(command) => void handleCopyCommand(command)}
                                           />
 
                                           <JsonPreview

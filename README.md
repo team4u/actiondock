@@ -1,6 +1,6 @@
 # ScriptFlow
 
-**ScriptFlow** 是一个轻量级的脚本执行平台，支持通过 Groovy 或 Python 编写脚本，提供 Web API、CLI 和管理界面来定义、执行和管理脚本。
+**ScriptFlow** 是一个轻量级的脚本执行平台，支持通过 Groovy 或 Python 编写脚本，提供 Web API、薄封装 REST CLI 和管理界面来定义、执行和管理脚本。
 
 ## 功能特性
 
@@ -9,7 +9,7 @@
 - **插件扩展机制**：基于 PF4J 动态加载插件，支持安装、启动、停止、卸载和配置管理
 - **Schema 驱动**：通过 JSON Schema 定义输入/输出结构，自动校验和投影
 - **自动生成正式页**：已发布脚本自动生成专属执行页面，Schema 直接渲染为表单和结果展示，无需额外开发
-- **多运行方式**：支持正式页面、Web API 和 CLI 三种执行方式
+- **多运行方式**：支持正式页面、Web API 与薄封装 REST CLI 三种执行方式
 - **在线编辑器**：集成 Monaco Editor，提供语法高亮和代码补全
 - **执行追踪**：完整的执行记录和状态追踪
 
@@ -40,8 +40,9 @@ mvn clean package -DskipTests
 # 启动 Web 应用
 mvn -pl scriptflow-app-spring -am spring-boot:run
 
-# 使用 CLI
-java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar script list
+# 构建 CLI
+mvn -pl scriptflow-cli -am package
+
 ```
 
 如果要执行 `PYTHON` 类型脚本，请确认启动机器上存在可用的 `python3`，并且所需第三方包已经预装在该解释器环境中。
@@ -66,6 +67,34 @@ java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar
 
 管理控制台访问地址：`http://localhost:8080/admin/scripts`
 
+### CLI（薄封装 REST Client）
+
+CLI 不直接嵌入运行时，只负责调用现有 Web API。
+
+```bash
+# 查看当前生效配置
+java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar config current
+
+# 直接通过 flag 调用
+java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar \
+  --base-url http://localhost:8080 \
+  --token local-dev-key \
+  scripts list
+
+# 通过 profile 保存连接信息
+java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar config profile set local \
+  --base-url http://localhost:8080 \
+  --token local-dev-key
+java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar scripts list
+```
+
+CLI 配置优先级：
+
+- 命令行 flag
+- 环境变量 `SCRIPTFLOW_BASE_URL` / `SCRIPTFLOW_TOKEN` / `SCRIPTFLOW_PROFILE`
+- `~/.scriptflow/config.json`
+- 默认 `http://localhost:8080`
+
 ## 项目结构
 
 ```
@@ -74,9 +103,9 @@ scriptflow
 ├── scriptflow-plugin-api        # PF4J 插件扩展点与宿主交互协议
 ├── scriptflow-plugin-template   # 可编译的示例插件模板
 ├── scriptflow-storage-jpa       # H2/JPA 持久化适配
-├── scriptflow-app-support       # Web 与 CLI 共用的运行配置
+├── scriptflow-app-support       # 运行时共用配置
+├── scriptflow-cli               # 官方 REST CLI 客户端
 ├── scriptflow-app-spring        # Spring Boot Web 入口
-├── scriptflow-app-cli           # Spring Boot CLI 入口
 ├── scriptflow-admin-ui          # React 管理界面
 ```
 
@@ -392,7 +421,7 @@ scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/script
 - `概览`：查看插件基本信息、动作说明、输入字段、输出字段
 - `配置`：按 `configSchema` 以“表单输入 / JSON 输入”两种模式维护配置
 - `调试`：同步调用指定动作，可填写动作参数和“脚本输入模拟”
-- `调用命令`：基于当前调试参数生成 REST 和 CLI 命令
+- `调用命令`：基于当前调试参数生成 REST 命令
 
 说明：
 
@@ -481,26 +510,7 @@ curl -X POST \
 - `debug.args`
 - `debug.scriptInput`
 
-### 8. CLI
-
-CLI 已支持直接调用插件动作：
-
-```bash
-java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar plugin invoke \
-  --plugin-id 'scriptflow-demo-plugin' \
-  --action 'echo' \
-  --args '{"message":"hello"}' \
-  --script-input '{"name":"Alice"}' \
-  --response-view 'DEBUG'
-```
-
-说明：
-
-- `--response-view` 只支持 `RESULT` 和 `DEBUG`
-- CLI 与 Web 共用同一套插件运行时约定
-- 只要数据库中插件记录为启用，且对应文件位于 `app.plugins.dir`，CLI 进程启动后也会加载该插件
-
-### 9. 常见问题
+### 8. 常见问题
 
 **1. 为什么脚本校验时报“插件未启动”？**
 
