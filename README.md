@@ -205,9 +205,28 @@ return {
 
 执行日志约定：
 
-- 运行时会注入 `log.debug(...)`、`log.info(...)`、`log.warn(...)`、`log.error(...)`
+- 运行时会注入同一个 `log` 对象，支持 `log.debug(message)`、`log.info(message)`、`log.warn(message)`、`log.error(message)`
+- 四个级别的方法入参一致，当前都只接收一个 `message` 参数；平台会按 `String.valueOf(...)` / `str(...)` 方式转成文本保存
 - 日志会写入执行记录，可在执行历史、正式运行页和调试页查看
 - 当前只采集显式 `log.*`，不保证 `print/println` 会进入执行日志
+
+Groovy 示例：
+
+```groovy
+log.debug("raw input = ${input}")
+log.info("start script")
+log.warn("fallback to default name")
+log.error("downstream request failed")
+```
+
+Python 示例：
+
+```python
+log.debug(f"raw input = {input}")
+log.info("start script")
+log.warn("fallback to default name")
+log.error("downstream request failed")
+```
 
 **输出 Schema：**
 ```json
