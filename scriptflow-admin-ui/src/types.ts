@@ -117,3 +117,22 @@ export interface PluginConfigView {
   defaultConfig: Record<string, unknown>;
   config: Record<string, unknown>;
 }
+
+export interface PluginInvokeDebug {
+  args: Record<string, unknown>;
+  scriptInput: Record<string, unknown>;
+  rawResult: Record<string, unknown>;
+}
+
+export interface PluginInvokeResponse {
+  pluginId: string;
+  action: string;
+  result: Record<string, unknown>;
+  debug?: PluginInvokeDebug;
+}
+
+export interface PluginInvokeRequest {
+  args: Record<string, unknown>;
+  scriptInput: Record<string, unknown>;
+  responseView?: ExecutionResponseView;
+}

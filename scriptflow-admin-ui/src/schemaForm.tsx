@@ -2,6 +2,13 @@ import { Input, InputNumber, Select, Switch } from "antd";
 import type { Rule } from "antd/es/form";
 import type { SchemaFieldDefinition } from "./schema";
 
+export interface RenderSchemaFieldInputOptions {
+  booleanLabels?: {
+    checked: string;
+    unchecked: string;
+  };
+}
+
 export function buildSchemaFieldRules(field: SchemaFieldDefinition): Rule[] | undefined {
   if (!field.required) {
     return undefined;
@@ -33,12 +40,7 @@ export function getSchemaFieldValuePropName(field: SchemaFieldDefinition): "chec
 
 export function renderSchemaFieldInput(
   field: SchemaFieldDefinition,
-  options?: {
-    booleanLabels?: {
-      checked: string;
-      unchecked: string;
-    };
-  }
+  options?: RenderSchemaFieldInputOptions
 ) {
   if (field.kind === "enum") {
     return (

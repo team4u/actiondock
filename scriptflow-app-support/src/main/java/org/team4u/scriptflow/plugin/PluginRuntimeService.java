@@ -3,6 +3,7 @@ package org.team4u.scriptflow.plugin;
 import org.pf4j.DefaultPluginManager;
 import org.pf4j.PluginState;
 import org.pf4j.PluginWrapper;
+import org.team4u.scriptflow.application.ExecutionOutputProjector;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.PluginActionMetadata;
 import org.team4u.scriptflow.domain.model.PluginRegistration;
@@ -37,6 +38,7 @@ public class PluginRuntimeService {
     private final Path configRoot;
     private final DefaultPluginManager pluginManager;
     private final Map<String, PluginManifest> manifestCache;
+    private final ExecutionOutputProjector executionOutputProjector;
     private final boolean enabled;
 
     private PluginRuntimeService() {
@@ -46,6 +48,7 @@ public class PluginRuntimeService {
         this.configRoot = null;
         this.pluginManager = null;
         this.manifestCache = Map.of();
+        this.executionOutputProjector = null;
         this.enabled = false;
     }
 
@@ -60,6 +63,7 @@ public class PluginRuntimeService {
         this.configRoot = this.pluginsRoot.resolve(".scriptflow-config");
         this.pluginManager = new DefaultPluginManager(this.pluginsRoot);
         this.manifestCache = new HashMap<>();
+        this.executionOutputProjector = new ExecutionOutputProjector();
         this.enabled = true;
         initialize();
     }
@@ -76,6 +80,10 @@ public class PluginRuntimeService {
                 .sorted(Comparator.comparing(PluginRegistration::getPluginId))
                 .map(this::toPluginView)
                 .toList();
+    }
+
+    public synchronized PluginView get(String pluginId) {
+        return toPluginView(requireRegistration(pluginId));
     }
 
     public synchronized PluginConfigView getConfig(String pluginId) {
@@ -266,6 +274,37 @@ public class PluginRuntimeService {
         }
     }
 
+    public synchronized PluginInvokeView invokeForDebug(String pluginId,
+                                                        String action,
+                                                        Map<String, Object> args,
+                                                        Map<String, Object> scriptInput,
+                                                        boolean includeDebug) {
+        PluginRegistration registration = requireRegistration(pluginId);
+        PluginActionMetadata actionMetadata = requireActionMetadata(registration, action);
+        Map<String, Object> normalizedArgs = normalizeConfig(args);
+        Map<String, Object> normalizedScriptInput = normalizeConfig(scriptInput);
+        Map<String, Object> rawResult = normalizeResult(
+                invoke(
+                        pluginId,
+                        action,
+                        null,
+                        new ScriptExecutionContext().setSubmitMode(SubmitMode.SYNC),
+                        normalizedScriptInput,
+                        normalizedArgs
+                )
+        );
+        return new PluginInvokeView()
+                .setPluginId(pluginId)
+                .setAction(action)
+                .setResult(executionOutputProjector.project(rawResult, actionMetadata.getOutputSchema()))
+                .setDebug(includeDebug
+                        ? new PluginInvokeDebugView()
+                        .setArgs(normalizedArgs)
+                        .setScriptInput(normalizedScriptInput)
+                        .setRawResult(rawResult)
+                        : null);
+    }
+
     private void initialize() {
         try {
             Files.createDirectories(pluginsRoot);
@@ -292,6 +331,13 @@ public class PluginRuntimeService {
         ensureEnabled();
         return pluginRegistryRepository.findByPluginId(pluginId)
                 .orElseThrow(() -> new IllegalArgumentException("插件不存在: " + pluginId));
+    }
+
+    private PluginActionMetadata requireActionMetadata(PluginRegistration registration, String action) {
+        return registration.getActions().stream()
+                .filter(metadata -> action.equals(metadata.getAction()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("插件动作不存在: " + registration.getPluginId() + "/" + action));
     }
 
     private boolean isLoadedAndStarted(String pluginId) {
@@ -517,6 +563,20 @@ public class PluginRuntimeService {
 
     private Map<String, Object> normalizeConfig(Map<String, Object> config) {
         return config == null ? new LinkedHashMap<>() : new LinkedHashMap<>(config);
+    }
+
+    private Map<String, Object> normalizeResult(Object result) {
+        if (result == null) {
+            return new LinkedHashMap<>();
+        }
+        if (result instanceof Map<?, ?> source) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            source.forEach((key, value) -> normalized.put(String.valueOf(key), value));
+            return normalized;
+        }
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.put("result", result);
+        return normalized;
     }
 
     private Path uniquePluginPath(String fileName) {

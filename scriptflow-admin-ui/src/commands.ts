@@ -1,8 +1,8 @@
 import type { SchemaFieldDefinition } from "./schema";
 import { buildSchemaExecutionInput } from "./schemaExecution";
-import type { SubmitMode } from "./types";
+import type { ExecutionResponseView, SubmitMode } from "./types";
 
-type ExecutionInputMode = "SCHEMA" | "JSON";
+export type ObjectInputMode = "SCHEMA" | "JSON";
 
 type CommandInputSource = "current-json" | "current-form" | "sample" | "empty";
 
@@ -56,6 +56,19 @@ function parseCommandJson(value: string): Record<string, unknown> {
   return parsed;
 }
 
+export function getCommandInputSourceLabel(source: "current-json" | "current-form" | "sample" | "empty"): string {
+  switch (source) {
+    case "current-json":
+      return "当前 JSON 输入";
+    case "current-form":
+      return "当前表单输入";
+    case "sample":
+      return "示例请求体";
+    default:
+      return "空对象";
+  }
+}
+
 export function resolveExecutionCommandInput({
   fields,
   formValues,
@@ -64,11 +77,46 @@ export function resolveExecutionCommandInput({
 }: {
   fields: SchemaFieldDefinition[];
   formValues?: Record<string, unknown>;
-  inputMode: ExecutionInputMode;
+  inputMode: ObjectInputMode;
   jsonInput: string;
 }): ResolvedCommandInput {
+  return resolveCommandObjectInput({
+    fields,
+    formValues,
+    inputMode,
+    jsonInput,
+    fallbackValue: buildExecutionInputExample(fields),
+    emptyFallbackNote: "当前未填写执行入参，已回退到示例请求体。",
+    emptyNoFallbackNote: "当前脚本没有可推导的执行入参示例，已使用空对象。",
+    invalidFallbackNote: "当前 JSON 非法，已回退到示例请求体。",
+    invalidNoFallbackNote: "当前 JSON 非法，且没有可推导的示例请求体，已使用空对象。"
+  });
+}
+
+export function resolveCommandObjectInput({
+  fields,
+  formValues,
+  inputMode,
+  jsonInput,
+  fallbackValue,
+  emptyFallbackNote,
+  emptyNoFallbackNote,
+  invalidFallbackNote,
+  invalidNoFallbackNote
+}: {
+  fields: SchemaFieldDefinition[];
+  formValues?: Record<string, unknown>;
+  inputMode: ObjectInputMode;
+  jsonInput: string;
+  fallbackValue?: Record<string, unknown>;
+  emptyFallbackNote: string;
+  emptyNoFallbackNote?: string;
+  invalidFallbackNote: string;
+  invalidNoFallbackNote?: string;
+}): ResolvedCommandInput {
   const example = buildExecutionInputExample(fields);
-  const hasExample = Object.keys(example).length > 0;
+  const resolvedFallbackValue = fallbackValue ?? example;
+  const hasExample = Object.keys(resolvedFallbackValue).length > 0;
 
   if (inputMode === "SCHEMA" && fields.length > 0) {
     const currentFormInput = buildExecutionInputFromValues(fields, formValues);
@@ -80,13 +128,13 @@ export function resolveExecutionCommandInput({
     }
     if (hasExample) {
       return {
-        note: "当前未填写执行入参，已回退到示例请求体。",
+        note: emptyFallbackNote,
         source: "sample",
-        value: example
+        value: resolvedFallbackValue
       };
     }
     return {
-      note: "当前脚本没有可推导的执行入参示例，已使用空对象。",
+      note: emptyNoFallbackNote,
       source: "empty",
       value: {}
     };
@@ -96,9 +144,9 @@ export function resolveExecutionCommandInput({
   if (!trimmed || trimmed === "{}") {
     if (hasExample) {
       return {
-        note: "当前未填写执行入参，已回退到示例请求体。",
+        note: emptyFallbackNote,
         source: "sample",
-        value: example
+        value: resolvedFallbackValue
       };
     }
     return {
@@ -117,9 +165,9 @@ export function resolveExecutionCommandInput({
     }
     if (hasExample) {
       return {
-        note: "当前未填写执行入参，已回退到示例请求体。",
+        note: emptyFallbackNote,
         source: "sample",
-        value: example
+        value: resolvedFallbackValue
       };
     }
     return {
@@ -129,13 +177,13 @@ export function resolveExecutionCommandInput({
   } catch {
     if (hasExample) {
       return {
-        note: "当前 JSON 非法，已回退到示例请求体。",
+        note: invalidFallbackNote,
         source: "sample",
-        value: example
+        value: resolvedFallbackValue
       };
     }
     return {
-      note: "当前 JSON 非法，且没有可推导的示例请求体，已使用空对象。",
+      note: invalidNoFallbackNote,
       source: "empty",
       value: {}
     };
@@ -238,4 +286,64 @@ export function buildExecuteCliCommand({
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+export function buildPluginInvokeCurlCommand({
+  action,
+  apiKey,
+  args,
+  origin,
+  pluginId,
+  responseView,
+  scriptInput
+}: {
+  action: string;
+  apiKey?: string;
+  args: Record<string, unknown>;
+  origin: string;
+  pluginId: string;
+  responseView?: ExecutionResponseView;
+  scriptInput: Record<string, unknown>;
+}): string {
+  const lines = [
+    "curl -X POST",
+    `  -H ${shellQuote("Content-Type: application/json")}`
+  ];
+  if (apiKey) {
+    lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
+  }
+  lines.push(
+    `  -d ${shellQuote(
+      JSON.stringify({
+        args,
+        scriptInput,
+        responseView: responseView ?? "RESULT"
+      })
+    )}`
+  );
+  lines.push(`  ${shellQuote(`${origin}/api/plugins/${pluginId}/actions/${action}/invoke`)}`);
+  return lines.join(" \\\n");
+}
+
+export function buildPluginInvokeCliCommand({
+  action,
+  args,
+  pluginId,
+  responseView,
+  scriptInput
+}: {
+  action: string;
+  args: Record<string, unknown>;
+  pluginId: string;
+  responseView?: ExecutionResponseView;
+  scriptInput: Record<string, unknown>;
+}): string {
+  return [
+    "java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar plugin invoke",
+    `--plugin-id ${shellQuote(pluginId)}`,
+    `--action ${shellQuote(action)}`,
+    `--args ${shellQuote(JSON.stringify(args))}`,
+    `--script-input ${shellQuote(JSON.stringify(scriptInput))}`,
+    `--response-view ${shellQuote(responseView ?? "RESULT")}`
+  ].join(" ");
 }

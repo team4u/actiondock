@@ -1,4 +1,4 @@
-import { Alert, Segmented, Space, Tag, Typography } from "antd";
+import { Alert, Segmented, Space, Typography } from "antd";
 import { useState } from "react";
 import { resolveSchemaFields } from "../schema";
 import { prettyJson } from "../utils";
@@ -57,23 +57,21 @@ export function SchemaFieldList({ schema, title, emptyDescription }: SchemaField
               {supportedFields.map((field) => (
                 <div key={field.name} className="schema-field-list__item">
                   <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                    <Space wrap size={[8, 8]}>
+                    <Space wrap size={[8, 6]}>
                       <Text strong>{field.label}</Text>
-                      <Text code>{field.name}</Text>
-                      <Tag>{field.kind}</Tag>
-                      {field.required ? <Tag color="red">required</Tag> : <Tag>optional</Tag>}
-                      {field.widget === "textarea" ? <Tag color="blue">textarea</Tag> : null}
+                      <Text type="secondary">{field.name}</Text>
                     </Space>
+
+                    <Text type="secondary">
+                      {[field.kind, field.required ? "required" : "optional", field.widget === "textarea" ? "textarea" : ""]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
 
                     {field.description ? <Text type="secondary">{field.description}</Text> : null}
 
                     {field.enumValues && field.enumValues.length > 0 ? (
-                      <Space wrap size={[8, 8]}>
-                        <Text type="secondary">可选值</Text>
-                        {field.enumValues.map((value) => (
-                          <Tag key={`${field.name}-${value}`}>{value}</Tag>
-                        ))}
-                      </Space>
+                      <Text type="secondary">可选值：{field.enumValues.join(" / ")}</Text>
                     ) : null}
                   </Space>
                 </div>

@@ -6,6 +6,8 @@ import type {
   ExecutionResponse,
   ExecutionRecord,
   PluginConfigView,
+  PluginInvokeRequest,
+  PluginInvokeResponse,
   PluginView,
   ScriptDefinition
 } from "./types";
@@ -157,6 +159,10 @@ export function listPlugins(): Promise<PluginView[]> {
   return request<PluginView[]>("/api/plugins");
 }
 
+export function getPlugin(pluginId: string): Promise<PluginView> {
+  return request<PluginView>(`/api/plugins/${pluginId}`);
+}
+
 async function uploadPluginFile(path: string, file: File, fallbackMessage: string): Promise<PluginView> {
   const token = getApiKey();
   const formData = new FormData();
@@ -225,5 +231,17 @@ export function updatePluginConfig(pluginId: string, config: Record<string, unkn
     method: "PUT",
     headers: JSON_HEADERS,
     body: JSON.stringify({ config })
+  });
+}
+
+export function invokePluginAction(
+  pluginId: string,
+  action: string,
+  payload: PluginInvokeRequest
+): Promise<PluginInvokeResponse> {
+  return request<PluginInvokeResponse>(`/api/plugins/${pluginId}/actions/${action}/invoke`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
   });
 }

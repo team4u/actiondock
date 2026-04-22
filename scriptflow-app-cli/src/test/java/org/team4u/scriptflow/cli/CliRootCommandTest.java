@@ -13,7 +13,7 @@ class CliRootCommandTest {
     void runPrintsAvailableSubcommands() {
         String output = captureOutput(new CliRootCommand()::run);
 
-        assertThat(output).isEqualTo("Use subcommands: script | run");
+        assertThat(output).isEqualTo("Use subcommands: script | run | plugin");
     }
 
     private static String captureOutput(Runnable action) {

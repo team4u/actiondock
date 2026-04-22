@@ -10,6 +10,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.scriptflow.RuntimeApplication;
 import org.team4u.scriptflow.plugin.PluginConfigView;
+import org.team4u.scriptflow.plugin.PluginInvokeDebugView;
+import org.team4u.scriptflow.plugin.PluginInvokeView;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
 import org.team4u.scriptflow.plugin.PluginView;
 
@@ -21,6 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -69,6 +72,23 @@ class PluginControllerTest {
     }
 
     @Test
+    void getReturnsSinglePluginDescriptor() throws Exception {
+        when(pluginRuntimeService.get("demo-plugin")).thenReturn(
+                new PluginView()
+                        .setPluginId("demo-plugin")
+                        .setName("Demo")
+                        .setVersion("1.0.0")
+                        .setState("STARTED")
+                        .setStarted(true)
+        );
+
+        mockMvc.perform(get("/api/plugins/demo-plugin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
+                .andExpect(jsonPath("$.data.version").value("1.0.0"));
+    }
+
+    @Test
     void saveConfigPersistsJsonObject() throws Exception {
         when(pluginRuntimeService.saveConfig("demo-plugin", Map.of("prefix", "hello"))).thenReturn(
                 new PluginConfigView()
@@ -102,5 +122,41 @@ class PluginControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
                 .andExpect(jsonPath("$.data.version").value("2.0.0"));
+    }
+
+    @Test
+    void invokeReturnsPluginResultAndDebugPayload() throws Exception {
+        when(pluginRuntimeService.invokeForDebug(
+                eq("demo-plugin"),
+                eq("echo"),
+                eq(Map.of("message", "hello")),
+                eq(Map.of("name", "Alice")),
+                eq(true)
+        )).thenReturn(
+                new PluginInvokeView()
+                        .setPluginId("demo-plugin")
+                        .setAction("echo")
+                        .setResult(Map.of("message", "hello:world"))
+                        .setDebug(new PluginInvokeDebugView()
+                                .setArgs(Map.of("message", "hello"))
+                                .setScriptInput(Map.of("name", "Alice"))
+                                .setRawResult(Map.of("message", "hello:world")))
+        );
+
+        mockMvc.perform(post("/api/plugins/demo-plugin/actions/echo/invoke")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "args": {"message":"hello"},
+                                  "scriptInput": {"name":"Alice"},
+                                  "responseView": "DEBUG"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
+                .andExpect(jsonPath("$.data.action").value("echo"))
+                .andExpect(jsonPath("$.data.result.message").value("hello:world"))
+                .andExpect(jsonPath("$.data.debug.args.message").value("hello"))
+                .andExpect(jsonPath("$.data.debug.scriptInput.name").value("Alice"));
     }
 }

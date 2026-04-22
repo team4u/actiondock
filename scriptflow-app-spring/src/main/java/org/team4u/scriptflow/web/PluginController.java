@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.team4u.scriptflow.plugin.PluginConfigView;
+import org.team4u.scriptflow.plugin.PluginInvokeView;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
 import org.team4u.scriptflow.plugin.PluginView;
 
@@ -29,6 +30,11 @@ public class PluginController {
     @GetMapping
     public ApiResponse<List<PluginView>> list() {
         return ApiResponse.success(pluginRuntimeService.list());
+    }
+
+    @GetMapping("/{pluginId}")
+    public ApiResponse<PluginView> get(@PathVariable String pluginId) {
+        return ApiResponse.success(pluginRuntimeService.get(pluginId));
     }
 
     @PostMapping("/install")
@@ -67,6 +73,23 @@ public class PluginController {
         return ApiResponse.success(
                 pluginRuntimeService.saveConfig(pluginId, request == null ? null : request.getConfig()),
                 "插件配置已保存"
+        );
+    }
+
+    @PostMapping("/{pluginId}/actions/{action}/invoke")
+    public ApiResponse<PluginInvokeView> invoke(@PathVariable String pluginId,
+                                                @PathVariable String action,
+                                                @RequestBody(required = false) PluginInvokeRequest request) {
+        PluginInvokeRequest invokeRequest = request == null ? new PluginInvokeRequest() : request;
+        return ApiResponse.success(
+                pluginRuntimeService.invokeForDebug(
+                        pluginId,
+                        action,
+                        invokeRequest.getArgs(),
+                        invokeRequest.getScriptInput(),
+                        invokeRequest.getResponseView() == ExecutionResponseView.DEBUG
+                ),
+                "插件调用成功"
         );
     }
 

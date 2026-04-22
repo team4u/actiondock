@@ -112,12 +112,14 @@ scriptflow
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/plugins` | 获取插件列表 |
+| GET | `/api/plugins/{pluginId}` | 获取单个插件详情 |
 | POST | `/api/plugins/install` | 上传并安装插件包；若 `pluginId` 已存在则拒绝 |
 | POST | `/api/plugins/{pluginId}/upgrade` | 升级指定插件包，保留配置与启用状态 |
 | POST | `/api/plugins/{pluginId}/start` | 启动插件 |
 | POST | `/api/plugins/{pluginId}/stop` | 停止插件 |
 | GET | `/api/plugins/{pluginId}/config` | 获取插件配置 |
 | PUT | `/api/plugins/{pluginId}/config` | 更新插件配置 |
+| POST | `/api/plugins/{pluginId}/actions/{action}/invoke` | 同步调用插件动作，可返回 `RESULT` 或 `DEBUG` 视图 |
 | DELETE | `/api/plugins/{pluginId}` | 卸载插件并删除数据库记录、文件与配置 |
 
 ### 响应视图
@@ -247,11 +249,22 @@ app:
       timeout-seconds: 60
 ```
 
-## 插件使用说明
+## 插件开发与使用
 
-### 1. 打包插件模板
+### 1. 运行时约定
 
-项目内置了一个示例插件子模块 `scriptflow-plugin-template`，可以直接打包：
+插件运行时现在以数据库为准，而不是扫描目录自动装载全部 jar。
+
+- 插件元数据持久化在 `plugin_registration` 表
+- `app.plugins.dir` 只负责存放插件包和配置文件
+- 平台启动时只会根据 `plugin_registration.enabled=true` 的记录加载对应插件文件
+- 目录里额外存在的 jar 不会自动进 JVM
+- 停止插件会把数据库记录改为停用，并将插件从 JVM 卸载
+- 卸载插件会同时删除数据库记录、插件文件与 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json`
+
+### 2. 开发插件
+
+项目内置了一个可直接编译的模板模块 `scriptflow-plugin-template`：
 
 ```bash
 mvn -pl scriptflow-plugin-template package
@@ -263,33 +276,119 @@ mvn -pl scriptflow-plugin-template package
 scriptflow-plugin-template/target/scriptflow-plugin-template-0.2.0.jar
 ```
 
-这个示例插件会暴露：
-
-- `pluginId`: `scriptflow-demo-plugin`
-- `action`: `echo`
-
-模板插件的元数据位于：
-
-```text
-scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/scriptflow-demo-plugin.json
-```
-
-插件实现类返回插件 `id()`，宿主按约定路径加载 manifest：
+插件需要实现 `ScriptFlowPlugin`，并通过 `id()` 返回唯一插件标识。宿主会按约定从 jar 内加载 manifest：
 
 ```text
 META-INF/scriptflow/plugins/{pluginId}.json
 ```
 
-模板插件当前的最小实现思路是：
+模板插件当前把整份 manifest 放在资源文件中维护，包括：
 
-- 实现 `ScriptFlowPlugin`
-- `id()` 返回插件唯一标识
-- `validateConfig(...)` 负责校验插件级配置
-- `invoke(...)` 负责执行动作
-- `configSchema`、`defaultConfig`、`actions` 等元数据统一维护在 JSON 中
-- 每个动作可以同时声明 `inputSchema` 和 `outputSchema`
+- `pluginId`
+- `name`
+- `description`
+- `version`
+- `configSchema`
+- `defaultConfig`
+- `actions`
 
-默认配置示例：
+每个动作都可以声明：
+
+- `action`
+- `title`
+- `description`
+- `inputSchema`
+- `outputSchema`
+- `exampleArgs`
+
+模板示例 manifest 位于：
+
+```text
+scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/scriptflow-demo-plugin.json
+```
+
+模板示例当前暴露：
+
+- `pluginId`: `scriptflow-demo-plugin`
+- `action`: `echo`
+
+如果你要基于模板开发自定义插件，至少需要同时修改两处：
+
+1. Java 实现类中的 `id()`
+2. `META-INF/scriptflow/plugins/{pluginId}.json`
+
+### 3. 安装、升级、启停、删除
+
+管理入口：
+
+```text
+/admin/plugins
+```
+
+插件列表页保持轻量，只展示基础信息和行内操作。点击“详情”进入插件详情页。
+
+- “上传安装”用于新增插件
+- “升级”只针对当前行插件执行热替换
+- “启动”会把数据库记录设为启用，并把插件加载到 JVM
+- “停止”会把数据库记录设为停用，并把插件从 JVM 卸载
+- “卸载”会删除数据库记录、插件文件与持久化配置
+
+安装流程：
+
+1. 将插件包保存到 `app.plugins.dir`
+2. 通过 PF4J 临时加载并校验
+3. 读取 manifest
+4. 将插件元数据写入 `plugin_registration`
+5. 标记为启用并启动插件
+
+限制：
+
+- 安装接口要求数据库中不存在相同 `pluginId`
+- 重复上传同一 `pluginId` 不会自动覆盖，必须使用“升级”
+
+升级流程：
+
+1. 卸载当前 JVM 中的旧插件
+2. 写入新插件文件
+3. 校验新插件 `pluginId` 必须与升级目标一致
+4. 用新 manifest 刷新数据库元数据
+5. 保留原有配置文件
+6. 保留原有启用状态
+7. 删除旧插件文件
+
+升级失败会回滚数据库与文件状态；如果旧插件原先处于启用状态，也会尝试重新加载回 JVM。
+
+### 4. 插件详情页
+
+插件详情页与脚本详情页对齐，包含 4 个页签：
+
+- `概览`：查看插件基本信息、动作说明、输入字段、输出字段
+- `配置`：按 `configSchema` 以“表单输入 / JSON 输入”两种模式维护配置
+- `调试`：同步调用指定动作，可填写动作参数和 `scriptInput`
+- `调用命令`：基于当前调试参数生成 REST 和 CLI 命令
+
+说明：
+
+- 调试页只暴露动作参数和 `scriptInput`
+- `scriptId`、`scriptName`、`executionId`、`submitMode` 由运行时注入，不在页面上手工填写
+- 返回结果会先按动作 `outputSchema` 做投影；如果请求 `DEBUG` 视图，还会附带原始结果
+
+### 5. 插件配置
+
+插件配置页支持两种输入方式：
+
+- `表单输入`：根据 `configSchema` 渲染可视化字段
+- `JSON 输入`：直接维护完整配置对象
+
+配置约定：
+
+- 配置顶层必须是 JSON 对象
+- 表单模式只渲染当前前端支持的字段类型
+- 如果 schema 含有暂不支持的字段，仍可切到 JSON 模式完整编辑
+- 保存时会先做 JSON 解析，再调用插件自身 `validateConfig(...)`
+- 配置文件默认保存到 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json`
+
+模板插件的默认配置示例：
 
 ```json
 {
@@ -297,117 +396,9 @@ META-INF/scriptflow/plugins/{pluginId}.json
 }
 ```
 
-### 2. 安装插件
+### 6. 在 Groovy 中调用插件
 
-当前推荐通过管理界面安装：
-
-1. 启动 `scriptflow-app-spring`
-2. 打开 `http://localhost:8080/admin/plugins`
-3. 点击“上传安装”
-4. 选择插件 `jar`
-
-安装完成后，服务端会执行：
-
-1. 将插件包保存到 `app.plugins.dir`
-2. 通过 PF4J `load`
-3. 自动 `start`
-4. 将插件元数据写入 `plugin_registration` 表，并标记为启用
-
-如果其中任一步失败，安装会回滚并返回错误。
-
-限制与约定：
-
-- 安装接口要求插件 `pluginId` 在数据库中不存在
-- 如果上传的插件与现有 `pluginId` 冲突，安装会直接失败，不会自动覆盖
-- 插件元数据会持久化到 `plugin_registration` 表，而不是靠目录扫描推断
-- 平台启动时只会根据数据库中 `enabled=true` 的记录，从 `app.plugins.dir` 加载对应插件文件
-
-如果你要基于模板开发自定义插件，通常需要同时修改两处：
-
-1. Java 实现类中的 `id()`
-2. `META-INF/scriptflow/plugins/{pluginId}.json` 中的插件元数据
-
-### 3. 升级插件
-
-升级走插件列表每一行旁边的“升级”按钮，不复用“上传安装”。
-
-升级完成后，服务端会执行：
-
-1. 暂停并卸载当前已加载的旧插件
-2. 保存新的插件包到 `app.plugins.dir`
-3. 载入并校验新插件的 `pluginId`
-4. 用新 manifest 刷新数据库中的插件元数据
-5. 保留原有插件配置文件
-6. 保留原有启用状态；如果升级前是停用状态，升级后不会自动留在 JVM 中
-7. 删除旧插件文件
-
-如果升级失败，服务端会回滚到升级前状态，包括：
-
-- 删除本次上传的新文件
-- 恢复原数据库注册信息
-- 原插件之前若处于启用状态，则重新加载回 JVM
-
-### 4. 启动、停止、卸载
-
-插件管理页支持以下操作：
-
-- **启动**：将数据库中的插件记录标记为启用，并把对应插件加载到 JVM
-- **停止**：停止插件，并将数据库记录标记为 disabled
-- **卸载**：停止并卸载插件，同时删除数据库记录、插件文件与保存的配置文件
-
-说明：
-
-- 平台启动时不会扫描整个插件目录自动加载所有文件
-- 只有 `plugin_registration` 表中 `enabled=true` 的插件，才会从 `app.plugins.dir` 加载到 JVM
-- 已停止的插件不会通过脚本校验，也不能在 Groovy 中调用
-- 卸载后，数据库记录、插件文件与对应配置文件会一并删除
-
-### 5. 插件配置
-
-管理界面支持两种方式编辑插件配置：
-
-- **表单输入**：根据 `configSchema` 自动渲染配置表单
-- **JSON 输入**：直接编辑完整配置对象
-
-配置行为：
-
-- 配置内容必须是 JSON 对象
-- 表单模式会按 `configSchema` 渲染支持的字段
-- 如果 `configSchema` 中含有当前表单模式不支持的字段，仍然可以切到 JSON 模式完整维护
-- 保存时会先做基础 JSON 校验，再调用插件自身的 `validateConfig(...)`
-- 配置文件默认保存到：
-
-```bash
-${app.plugins.dir}/.scriptflow-config/{pluginId}.json
-```
-
-模板插件的配置示例：
-
-```json
-{
-  "prefix": "hello"
-}
-```
-
-此时执行：
-
-```groovy
-plugins.invoke("scriptflow-demo-plugin", "echo", [message: "world"])
-```
-
-返回结果类似：
-
-```json
-{
-  "message": "hello:world",
-  "scriptId": "script-1",
-  "executionId": "..."
-}
-```
-
-### 6. Groovy 中调用插件
-
-最常见的调用方式：
+Groovy 运行时通过统一门面调用插件动作：
 
 ```groovy
 def result = plugins.invoke("scriptflow-demo-plugin", "echo", [
@@ -426,61 +417,62 @@ def value = plugins.invoke("some-plugin", "ping")
 return [result: value]
 ```
 
-建议：
+调用约定：
 
-- 把插件调用结果先赋值给局部变量，再组合最终返回值
-- 插件动作的 `exampleArgs` 可以在脚本编辑页的“插件参考”面板里直接复制
-- 如果某个插件可能不可用，请在脚本里显式做 `try/catch`
+- 统一入口是 `plugins.invoke("pluginId", "action")` 或 `plugins.invoke("pluginId", "action", [:])`
+- `pluginId` 与 `action` 必须是字符串字面量
+- 第三个参数按 `Map<String, Object>` 处理；省略时默认空对象
+- 只有“已启用且已加载”的插件才能通过脚本校验并在运行时调用
+- 插件动作返回非对象时，平台会包装成 `{ "result": ... }`
 
-例如：
+脚本编辑页里的“插件参考”面板只展示已启动插件，支持：
 
-```groovy
-try {
-  return plugins.invoke("scriptflow-demo-plugin", "echo", [message: "safe"])
-} catch (Exception ex) {
-  return [message: "fallback", reason: ex.message]
-}
+- 名称 / `pluginId` 模糊查询
+- 分页查看
+- 点击插件名称弹出参考详情
+- 按动作查看输入字段、输出字段和复制调用片段
+
+### 7. 直接调试插件动作
+
+REST 调试接口：
+
+```bash
+curl -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"args":{"message":"hello"},"scriptInput":{"name":"Alice"},"responseView":"DEBUG"}' \
+  'http://localhost:8080/api/plugins/scriptflow-demo-plugin/actions/echo/invoke'
 ```
 
-### 7. 管理界面说明
+请求体字段：
 
-插件管理入口：
+- `args`：动作参数
+- `scriptInput`：模拟脚本上下文中的 `scriptInput`
+- `responseView`：`RESULT` 或 `DEBUG`
 
-```text
-/admin/plugins
+`DEBUG` 视图会额外返回：
+
+- `debug.args`
+- `debug.scriptInput`
+- `debug.rawResult`
+
+### 8. CLI
+
+CLI 已支持直接调用插件动作：
+
+```bash
+java -jar scriptflow-app-cli/target/scriptflow-app-cli.jar plugin invoke \
+  --plugin-id 'scriptflow-demo-plugin' \
+  --action 'echo' \
+  --args '{"message":"hello"}' \
+  --script-input '{"name":"Alice"}' \
+  --response-view 'DEBUG'
 ```
 
-插件管理页支持：
+说明：
 
-- 顶部“上传安装”用于新增插件
-- 每个插件行内单独“升级”按钮用于替换该插件版本
-- 启动、停止、配置、删除都以插件行为单位操作
-
-脚本编辑页中，当脚本类型为 `GROOVY` 时，会显示“插件参考”面板，内容包括：
-
-- 已启动插件列表
-- 插件与方法两级折叠
-- 每个动作的说明
-- 输入字段与输出字段的可视化列表
-- 输入/输出 Schema 的 JSON / 字段列表切换视图
-- `exampleArgs`
-- 可直接复制的 `plugins.invoke(...)` 代码片段
-
-### 8. CLI 说明
-
-当前 CLI 不提供插件管理命令，但 CLI 运行脚本时会共享同一套插件运行时。
-
-也就是说：
-
-- 只要 CLI 进程使用的 `app.plugins.dir` 与 Web 服务一致
-- 且数据库中已经存在该插件记录并标记为启用
-- 且对应插件文件存在于该目录中
-
-那么通过 CLI 执行 Groovy 脚本时，同样可以调用：
-
-```groovy
-plugins.invoke("pluginId", "action", [:])
-```
+- `--response-view` 只支持 `RESULT` 和 `DEBUG`
+- CLI 与 Web 共用同一套插件运行时约定
+- 只要数据库中插件记录为启用，且对应文件位于 `app.plugins.dir`，CLI 进程启动后也会加载该插件
 
 ### 9. 常见问题
 

@@ -38,7 +38,7 @@ import {
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ApiError,
@@ -58,8 +58,11 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
+import { CommandPanel } from "../components/CommandPanel";
 import { InfoHint } from "../components/InfoHint";
+import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
+import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import {
   buildExecuteCliCommand,
   buildExecuteCurlCommand,
@@ -79,11 +82,6 @@ import {
   serializeSchemaEditorState
 } from "../schema";
 import { parseGeneratedScriptText } from "../generatedScript";
-import {
-  buildSchemaFieldRules,
-  getSchemaFieldValuePropName,
-  renderSchemaFieldInput
-} from "../schemaForm";
 import { isValidationErrorData } from "../schemaExecution";
 import type {
   ExecutionRecord,
@@ -173,29 +171,6 @@ function isExecutionActive(status: ExecutionStatus): boolean {
   return status === "PENDING" || status === "RUNNING";
 }
 
-function JsonPreview({
-  title,
-  value,
-  emptyDescription
-}: {
-  title: string;
-  value?: Record<string, unknown>;
-  emptyDescription: string;
-}) {
-  const hasValue = Boolean(value && Object.keys(value).length > 0);
-
-  return (
-    <div className="execution-json-panel">
-      <Text strong>{title}</Text>
-      {hasValue ? (
-        <pre className="json-preview">{prettyJson(value)}</pre>
-      ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyDescription} />
-      )}
-    </div>
-  );
-}
-
 function getCommandInputSourceLabel(source: "current-json" | "current-form" | "sample" | "empty"): string {
   switch (source) {
     case "current-json":
@@ -207,30 +182,6 @@ function getCommandInputSourceLabel(source: "current-json" | "current-form" | "s
     default:
       return "空对象";
   }
-}
-
-function CommandPanel({
-  command,
-  onCopy,
-  title
-}: {
-  command: string;
-  onCopy: (value: string) => void;
-  title: string;
-}) {
-  return (
-    <div className="command-panel">
-      <div className="command-panel__header">
-        <Text strong>{title}</Text>
-        <Button icon={<CopyOutlined />} onClick={() => onCopy(command)}>
-          复制命令
-        </Button>
-      </div>
-      <pre className="command-preview">
-        <code>{command}</code>
-      </pre>
-    </div>
-  );
 }
 
 export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
@@ -272,11 +223,25 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
   const [generatedScriptModalOpen, setGeneratedScriptModalOpen] = useState(false);
   const [generatedScriptText, setGeneratedScriptText] = useState("");
+  const [referencePluginId, setReferencePluginId] = useState<string | null>(null);
+  const [pluginReferenceQuery, setPluginReferenceQuery] = useState("");
+  const [pluginReferencePage, setPluginReferencePage] = useState(1);
+  const [pluginReferencePageSize, setPluginReferencePageSize] = useState(10);
   const [messageApi, contextHolder] = message.useMessage();
   const pollingTimerRef = useRef<number | null>(null);
   const selectedScriptType = (Form.useWatch("type", form) as ScriptType | undefined) ?? "GROOVY";
   const canImportGeneratedScript = selectedScriptType === "GROOVY";
   const pluginReferences = availablePlugins.filter((plugin) => plugin.started);
+  const deferredPluginReferenceQuery = useDeferredValue(pluginReferenceQuery);
+  const filteredPluginReferences = pluginReferences.filter((plugin) => {
+    const normalizedQuery = deferredPluginReferenceQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return true;
+    }
+    const haystack = `${plugin.name || ""} ${plugin.pluginId}`.toLowerCase();
+    return normalizedQuery.split(/\s+/).every((keyword) => haystack.includes(keyword));
+  });
+  const referencePlugin = pluginReferences.find((plugin) => plugin.pluginId === referencePluginId) ?? null;
 
   const requestedTab = searchParams.get("tab");
   const activeTab =
@@ -486,6 +451,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   useEffect(() => {
     if (selectedScriptType !== "GROOVY") {
       setAvailablePlugins([]);
+      setReferencePluginId(null);
       return;
     }
 
@@ -513,6 +479,23 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       cancelled = true;
     };
   }, [messageApi, selectedScriptType]);
+
+  useEffect(() => {
+    if (referencePluginId && !pluginReferences.some((plugin) => plugin.pluginId === referencePluginId)) {
+      setReferencePluginId(null);
+    }
+  }, [pluginReferences, referencePluginId]);
+
+  useEffect(() => {
+    setPluginReferencePage(1);
+  }, [deferredPluginReferenceQuery]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredPluginReferences.length / pluginReferencePageSize));
+    if (pluginReferencePage > maxPage) {
+      setPluginReferencePage(maxPage);
+    }
+  }, [filteredPluginReferences.length, pluginReferencePage, pluginReferencePageSize]);
 
   const buildPayload = async (): Promise<ScriptDefinition> => {
     const values = await form.validateFields();
@@ -721,6 +704,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     }
   };
 
+  const buildPluginInvokeSnippet = (pluginId: string, action: string, exampleArgs: Record<string, unknown>) =>
+    `plugins.invoke("${pluginId}", "${action}", ${JSON.stringify(exampleArgs, null, 2)})`;
+
   const handleImportGeneratedScript = () => {
     try {
       const parsed = parseGeneratedScriptText(generatedScriptText);
@@ -896,6 +882,81 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             autoSize={{ minRows: 14, maxRows: 22 }}
           />
         </Space>
+      </Modal>
+      <Modal
+        title={referencePlugin ? referencePlugin.name || referencePlugin.pluginId : "插件参考"}
+        open={Boolean(referencePlugin)}
+        onCancel={() => setReferencePluginId(null)}
+        footer={null}
+        width={860}
+        destroyOnHidden
+      >
+        {referencePlugin ? (
+          <Space direction="vertical" size={14} style={{ width: "100%" }}>
+            <Text type="secondary">
+              {[referencePlugin.pluginId, `${referencePlugin.actions.length} 个方法`, referencePlugin.version ? `v${referencePlugin.version}` : ""]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+            {referencePlugin.description ? <Text type="secondary">{referencePlugin.description}</Text> : null}
+            <Collapse
+              className="plugin-reference-collapse plugin-reference-collapse--nested"
+              items={referencePlugin.actions.map((action) => {
+                const snippet = buildPluginInvokeSnippet(
+                  referencePlugin.pluginId,
+                  action.action,
+                  action.exampleArgs
+                );
+                return {
+                  key: `${referencePlugin.pluginId}-${action.action}`,
+                  label: (
+                    <Space wrap size={[8, 8]}>
+                      <Text strong>{action.title || action.action}</Text>
+                      {action.title && action.title !== action.action ? (
+                        <Text type="secondary">{action.action}</Text>
+                      ) : null}
+                    </Space>
+                  ),
+                  extra: (
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleCopyCommand(snippet);
+                      }}
+                    >
+                      复制调用
+                    </Button>
+                  ),
+                  children: (
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                      {action.description ? <Text type="secondary">{action.description}</Text> : null}
+                      <Row gutter={[12, 12]}>
+                        <Col xs={24} md={12}>
+                          <SchemaFieldList
+                            schema={action.inputSchema}
+                            title="输入字段"
+                            emptyDescription="当前动作没有声明输入字段。"
+                          />
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <SchemaFieldList
+                            schema={action.outputSchema}
+                            title="输出字段"
+                            emptyDescription="当前动作没有声明输出字段。"
+                          />
+                        </Col>
+                      </Row>
+                      <Text strong>调用示例</Text>
+                      <pre className="json-preview">{snippet}</pre>
+                    </Space>
+                  )
+                };
+              })}
+            />
+          </Space>
+        ) : null}
       </Modal>
       <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
         <Card>
@@ -1136,7 +1197,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                             type="inner"
                             title="插件参考"
                             style={{ marginTop: 16 }}
-                            extra={<Text type="secondary">仅展示已启动插件</Text>}
+                            extra={<Text type="secondary">支持名称 / ID 查询</Text>}
                             loading={pluginsLoading}
                           >
                             {pluginReferences.length === 0 ? (
@@ -1145,71 +1206,42 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 description="当前没有已启动插件，可前往插件管理页安装并启动。"
                               />
                             ) : (
-                              <Collapse
-                                className="plugin-reference-collapse"
-                                items={pluginReferences.map((plugin) => ({
-                                  key: plugin.pluginId,
-                                  label: (
-                                    <Space wrap size={[8, 8]}>
-                                      <Text strong>{plugin.name || plugin.pluginId}</Text>
-                                      <Text code>{plugin.pluginId}</Text>
-                                    </Space>
-                                  ),
-                                  children: (
-                                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                                      {plugin.description ? (
-                                        <Text type="secondary">{plugin.description}</Text>
-                                      ) : null}
-                                      <Collapse
-                                        className="plugin-reference-collapse plugin-reference-collapse--nested"
-                                        items={plugin.actions.map((action) => {
-                                          const snippet = `plugins.invoke("${plugin.pluginId}", "${action.action}", ${JSON.stringify(action.exampleArgs, null, 2)})`;
-                                          return {
-                                            key: `${plugin.pluginId}-${action.action}`,
-                                            label: (
-                                              <Space wrap size={[8, 8]}>
-                                                <Text strong>{action.title || action.action}</Text>
-                                                <Text code>{action.action}</Text>
-                                              </Space>
-                                            ),
-                                            extra: (
-                                              <Button
-                                                size="small"
-                                                icon={<CopyOutlined />}
-                                                onClick={(event) => {
-                                                  event.stopPropagation();
-                                                  void handleCopyCommand(snippet);
-                                                }}
-                                              >
-                                                复制调用
-                                              </Button>
-                                            ),
-                                            children: (
-                                              <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                                                {action.description ? (
-                                                  <Text type="secondary">{action.description}</Text>
-                                                ) : null}
-                                                <SchemaFieldList
-                                                  schema={action.inputSchema}
-                                                  title="输入字段"
-                                                  emptyDescription="当前动作没有声明输入字段。"
-                                                />
-                                                <SchemaFieldList
-                                                  schema={action.outputSchema}
-                                                  title="输出字段"
-                                                  emptyDescription="当前动作没有声明输出字段。"
-                                                />
-                                                <Text strong>调用示例</Text>
-                                                <pre className="json-preview">{snippet}</pre>
-                                              </Space>
-                                            )
-                                          };
-                                        })}
-                                      />
-                                    </Space>
-                                  )
-                                }))}
-                              />
+                              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                                <Input.Search
+                                  allowClear
+                                  value={pluginReferenceQuery}
+                                  onChange={(event) => setPluginReferenceQuery(event.target.value)}
+                                  placeholder="搜索插件名称或 pluginId"
+                                />
+                                <Table<PluginView>
+                                  size="small"
+                                  rowKey="pluginId"
+                                  showHeader={false}
+                                  columns={[
+                                    {
+                                      key: "name",
+                                      dataIndex: "name",
+                                      render: (_value: string, plugin) => plugin.name || plugin.pluginId
+                                    }
+                                  ]}
+                                  dataSource={filteredPluginReferences}
+                                  pagination={{
+                                    current: pluginReferencePage,
+                                    pageSize: pluginReferencePageSize,
+                                    showSizeChanger: true,
+                                    pageSizeOptions: [10, 20, 50],
+                                    showTotal: (total) => `共 ${total} 个插件`,
+                                    onChange: (page, pageSize) => {
+                                      setPluginReferencePage(page);
+                                      setPluginReferencePageSize(pageSize);
+                                    }
+                                  }}
+                                  locale={{ emptyText: "没有匹配的插件" }}
+                                  onRow={(plugin) => ({
+                                    onClick: () => setReferencePluginId(plugin.pluginId)
+                                  })}
+                                />
+                              </Space>
                             )}
                           </Card>
                         ) : null}
@@ -1415,68 +1447,19 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       ]}
                                     />
 
-                                    {supportedFields.length > 0 ? (
-                                      <Tabs
-                                        activeKey={executionInputMode}
-                                        onChange={(key) => setExecutionInputMode(key as ExecutionInputMode)}
-                                        items={[
-                                          {
-                                            key: "SCHEMA",
-                                            label: "表单输入",
-                                            children: (
-                                              <Form form={executionForm} layout="vertical">
-                                                {supportedFields.map((field) => {
-                                                  return (
-                                                    <Form.Item
-                                                      key={field.name}
-                                                      label={field.label}
-                                                      name={field.name}
-                                                      rules={buildSchemaFieldRules(field)}
-                                                      valuePropName={getSchemaFieldValuePropName(field)}
-                                                    >
-                                                      {renderSchemaFieldInput(field)}
-                                                    </Form.Item>
-                                                  );
-                                                })}
-                                              </Form>
-                                            )
-                                          },
-                                          {
-                                            key: "JSON",
-                                            label: "JSON 输入",
-                                            children: (
-                                              <Form layout="vertical">
-                                                <Form.Item
-                                                  label="执行入参 JSON"
-                                                  extra="直接输入 JSON 对象执行，不依赖 inputSchema。"
-                                                >
-                                                  <CodeEditor
-                                                    value={executionJsonInput}
-                                                    onChange={setExecutionJsonInput}
-                                                    placeholder='{"name":"Alice"}'
-                                                    theme={editorTheme}
-                                                  />
-                                                </Form.Item>
-                                              </Form>
-                                            )
-                                          }
-                                        ]}
-                                      />
-                                    ) : (
-                                      <Form layout="vertical">
-                                        <Form.Item
-                                          label="执行入参 JSON"
-                                          extra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
-                                        >
-                                          <CodeEditor
-                                            value={executionJsonInput}
-                                            onChange={setExecutionJsonInput}
-                                            placeholder='{"name":"Alice"}'
-                                            theme={editorTheme}
-                                          />
-                                        </Form.Item>
-                                      </Form>
-                                    )}
+                                    <SchemaObjectEditor
+                                      form={executionForm}
+                                      supportedFields={supportedFields}
+                                      unsupportedFields={unsupportedFields}
+                                      inputMode={executionInputMode}
+                                      onInputModeChange={(key) => setExecutionInputMode(key as ExecutionInputMode)}
+                                      jsonText={executionJsonInput}
+                                      onJsonTextChange={setExecutionJsonInput}
+                                      jsonLabel="执行入参 JSON"
+                                      jsonExtra="直接输入 JSON 对象执行，不依赖 inputSchema。"
+                                      noSchemaExtra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
+                                      editorTheme={editorTheme}
+                                    />
 
                                     <Button
                                       type="primary"

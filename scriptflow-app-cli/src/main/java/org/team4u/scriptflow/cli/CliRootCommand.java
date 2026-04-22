@@ -7,11 +7,11 @@ import picocli.CommandLine.Command;
 @Command(
         name = "dsl-runtime",
         mixinStandardHelpOptions = true,
-        subcommands = {ScriptCommands.class, RunCommand.class}
+        subcommands = {ScriptCommands.class, RunCommand.class, PluginCommands.class}
 )
 public class CliRootCommand implements Runnable {
     @Override
     public void run() {
-        System.out.println("Use subcommands: script | run");
+        System.out.println("Use subcommands: script | run | plugin");
     }
 }

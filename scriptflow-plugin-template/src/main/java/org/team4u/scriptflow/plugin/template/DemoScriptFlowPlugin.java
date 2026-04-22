@@ -4,6 +4,7 @@ import org.pf4j.Extension;
 import org.team4u.scriptflow.plugin.api.ScriptFlowPlugin;
 import org.team4u.scriptflow.plugin.api.ScriptPluginContext;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Extension
@@ -26,11 +27,15 @@ public class DemoScriptFlowPlugin implements ScriptFlowPlugin {
         if ("echo".equals(action)) {
             String prefix = String.valueOf(context.getPluginConfig().getOrDefault("prefix", "demo"));
             String message = String.valueOf(args.getOrDefault("message", ""));
-            return Map.of(
-                    "message", prefix + ":" + message,
-                    "scriptId", context.getScriptId(),
-                    "executionId", context.getExecutionId()
-            );
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("message", prefix + ":" + message);
+            if (context.getScriptId() != null) {
+                result.put("scriptId", context.getScriptId());
+            }
+            if (context.getExecutionId() != null) {
+                result.put("executionId", context.getExecutionId());
+            }
+            return result;
         }
         throw new IllegalArgumentException("Unsupported action: " + action);
     }

@@ -33,6 +33,9 @@ const ScriptRunPage = lazy(() =>
 const PluginManagementPage = lazy(() =>
   import("./pages/PluginManagementPage").then((module) => ({ default: module.PluginManagementPage }))
 );
+const PluginDetailPage = lazy(() =>
+  import("./pages/PluginDetailPage").then((module) => ({ default: module.PluginDetailPage }))
+);
 
 type ColorMode = "light" | "dark";
 
@@ -147,6 +150,10 @@ function AdminShell({
               <Route path="/" element={<Navigate to="/scripts" replace />} />
               <Route path="/scripts" element={<ScriptListPage onOpenApiKeyModal={onOpenApiKeyModal} />} />
               <Route path="/plugins" element={<PluginManagementPage onOpenApiKeyModal={onOpenApiKeyModal} />} />
+              <Route
+                path="/plugins/:pluginId"
+                element={<PluginDetailPage colorMode={colorMode} />}
+              />
               <Route
                 path="/scripts/new"
                 element={<ScriptEditorPage colorMode={colorMode} mode="create" />}

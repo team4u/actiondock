@@ -55,6 +55,7 @@ class PluginRuntimeServiceTest {
         });
         assertThat(repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().isEnabled()).isTrue();
         assertThat(service.getConfig("scriptflow-demo-plugin").getConfig()).containsEntry("prefix", "demo");
+        assertThat(service.get("scriptflow-demo-plugin").getPluginId()).isEqualTo("scriptflow-demo-plugin");
 
         service.saveConfig("scriptflow-demo-plugin", Map.of("prefix", "hello"));
         Object value = service.invoke(
@@ -71,6 +72,20 @@ class PluginRuntimeServiceTest {
                 "scriptId", "script-1",
                 "executionId", "exec-1"
         ));
+
+        PluginInvokeView debugInvoke = service.invokeForDebug(
+                "scriptflow-demo-plugin",
+                "echo",
+                Map.of("message", "debug"),
+                Map.of("name", "Alice"),
+                true
+        );
+
+        assertThat(debugInvoke.getResult()).containsEntry("message", "hello:debug");
+        assertThat(debugInvoke.getDebug()).isNotNull();
+        assertThat(debugInvoke.getDebug().getArgs()).containsEntry("message", "debug");
+        assertThat(debugInvoke.getDebug().getScriptInput()).containsEntry("name", "Alice");
+        assertThat(debugInvoke.getDebug().getRawResult()).containsEntry("message", "hello:debug");
 
         PluginView stopped = service.stop("scriptflow-demo-plugin");
         assertThat(stopped.isStarted()).isFalse();

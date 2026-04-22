@@ -397,17 +397,19 @@ a {
 }
 
 .schema-field-list__item {
-  padding: 12px 14px;
-  border: 1px solid var(--app-border-subtle);
-  border-radius: 10px;
-  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+  padding: 10px 0;
+  border-bottom: 1px solid var(--app-border-subtle);
+}
+
+.schema-field-list__item:last-child {
+  border-bottom: none;
 }
 
 .schema-field-list__empty {
-  padding: 10px 12px;
+  padding: 8px 0;
   border: 1px dashed var(--app-border-subtle);
-  border-radius: 10px;
-  background: rgba(127, 127, 127, 0.04);
+  border-radius: 8px;
+  background: transparent;
 }
 
 .plugin-reference-collapse {
@@ -851,6 +853,7 @@ a {
   .run-result__summary {
     display: block;
   }
+
 }
 
 @media (max-width: 576px) {
