@@ -181,11 +181,11 @@ function AdminShell() {
               <Route path="/settings/api-key" element={<ApiKeyManagementPage />} />
               <Route
                 path="/scripts/new"
-                element={<ScriptEditorPage mode="create" />}
+                element={<ScriptEditorPage mode="create" colorMode={colorMode} />}
               />
               <Route
                 path="/scripts/:id"
-                element={<ScriptEditorPage mode="edit" />}
+                element={<ScriptEditorPage mode="edit" colorMode={colorMode} />}
               />
               <Route path="*" element={<Navigate to="/scripts" replace />} />
             </Routes>
