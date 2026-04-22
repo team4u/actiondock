@@ -375,6 +375,37 @@ DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
 String prefix = config.getPrefix();
 ```
 
+也可以在 `validateConfig(...)` 中复用同一套绑定逻辑：
+
+```java
+@Override
+public void validateConfig(Map<String, Object> config) {
+    PluginConfigBinder.bind(config, DemoPluginConfig.class);
+}
+```
+
+模板插件当前的推荐写法是：
+
+- `DemoPluginConfig` 只负责承载类型，不在类字段里重复声明模板默认值
+- 默认值统一写在 manifest 的 `defaultConfig`
+- `validateConfig(...)` 和运行时 `context.getPluginConfig(...)` 都基于最终生效配置工作
+
+示例：
+
+```java
+public class DemoPluginConfig {
+    private String prefix;
+
+    public String getPrefix() {
+        return prefix;
+    }
+
+    public void setPrefix(String prefix) {
+        this.prefix = prefix;
+    }
+}
+```
+
 如果你要基于模板开发自定义插件，至少需要同时修改两处：
 
 1. Java 实现类中的 `id()`
@@ -451,6 +482,29 @@ String prefix = config.getPrefix();
 - 保存时会先做 JSON 解析，再按 `defaultConfig + 用户配置` 合并为最终生效配置，再调用插件自身 `validateConfig(...)`
 - 配置文件默认保存到 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json`
 - 运行时 `context.getPluginConfig()` 与保存时 `validateConfig(...)` 看到的是同一份最终生效配置
+
+最终生效配置的优先级：
+
+1. manifest `defaultConfig`
+2. 用户当前保存的配置覆盖项
+
+说明：
+
+- 持久化文件中保存的是“用户覆盖项”，不是展开后的完整配置
+- 插件在 `validateConfig(...)` 和 `invoke(...)` 中拿到的是已经合并后的最终配置
+- 模板插件建议把默认值只维护在 manifest，避免 Java 配置类和 manifest 出现双份默认值
+
+如果插件希望把配置对象映射到强类型类，可以直接使用：
+
+```java
+DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
+```
+
+`PluginConfigBinder` 的默认行为：
+
+- 未声明的额外字段会忽略
+- 类型不匹配会抛出 `IllegalArgumentException`
+- 如果配置类自身有字段初始化默认值，绑定时会保留这些值；模板插件当前不依赖这一点，而是以 manifest `defaultConfig` 为准
 
 模板插件的默认配置示例：
 
