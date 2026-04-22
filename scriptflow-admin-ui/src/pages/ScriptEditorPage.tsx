@@ -57,6 +57,7 @@ import {
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { CommandPanel } from "../components/CommandPanel";
+import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
 import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
@@ -80,6 +81,10 @@ import {
   resolveSchemaFields,
   serializeSchemaEditorState
 } from "../schema";
+import {
+  buildSchemaObjectEditorJsonText,
+  parseSchemaObjectEditorJsonText
+} from "../schemaObjectEditorSupport";
 import { parseGeneratedScriptText } from "../generatedScript";
 import { isValidationErrorData } from "../schemaExecution";
 import type {
@@ -662,8 +667,14 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         startPolling(response.id, currentScript.id);
       } else {
         clearPolling();
-        messageApi.success("执行完成");
         await loadExecutionHistory(currentScript.id, response.id);
+        if (response.status === "SUCCESS") {
+          messageApi.success("执行完成");
+        } else if (response.status === "FAILED") {
+          messageApi.error(response.errorMessage || "执行失败");
+        } else {
+          messageApi.info(`当前状态: ${response.status}`);
+        }
       }
     } catch (error) {
       if (error instanceof ApiError && isValidationErrorData(error.data)) {
@@ -675,6 +686,32 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       messageApi.error(detail);
     } finally {
       setExecuting(false);
+    }
+  };
+
+  const handleExecutionInputModeChange = (nextMode: string) => {
+    if (nextMode === "JSON") {
+      try {
+        const formInput = buildExecutionInputFromValues(
+          supportedFields,
+          executionForm.getFieldsValue(true) as Record<string, unknown>
+        );
+        setExecutionJsonInput(buildSchemaObjectEditorJsonText(executionJsonInput, "执行入参", formInput));
+        setExecutionInputMode("JSON");
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "切换到 JSON 模式失败";
+        messageApi.error(detail);
+      }
+      return;
+    }
+
+    try {
+      const parsed = parseSchemaObjectEditorJsonText(executionJsonInput, "执行入参");
+      executionForm.setFieldsValue(parsed as Record<string, any>);
+      setExecutionInputMode("SCHEMA");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "当前 JSON 不是合法执行入参";
+      messageApi.error(detail);
     }
   };
 
@@ -1445,7 +1482,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                     supportedFields={supportedFields}
                                     unsupportedFields={unsupportedFields}
                                     inputMode={executionInputMode}
-                                    onInputModeChange={(key) => setExecutionInputMode(key as ExecutionInputMode)}
+                                    onInputModeChange={handleExecutionInputModeChange}
                                     jsonText={executionJsonInput}
                                     onJsonTextChange={setExecutionJsonInput}
                                     jsonLabel="执行入参 JSON"
@@ -1506,14 +1543,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       </Descriptions.Item>
                                     </Descriptions>
 
-                                    {currentExecution.errorMessage && (
-                                      <Alert
-                                        type="error"
-                                        showIcon
-                                        message="执行失败"
-                                        description={currentExecution.errorMessage}
-                                      />
-                                    )}
+                                    <ErrorDetailPanel
+                                      title="执行失败"
+                                      message={currentExecution.errorMessage}
+                                      detail={currentExecution.errorDetail}
+                                    />
 
                                     <Space direction="vertical" size={16} style={{ width: "100%" }}>
                                       <Space direction="vertical" size={8} style={{ width: "100%" }}>

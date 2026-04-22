@@ -92,12 +92,15 @@ public class ExecutionApplicationService {
                             .setSubmitMode(record.getSubmitMode())
             );
             record.setOutput(toMap(result));
+            record.setErrorMessage(null);
+            record.setErrorDetail(null);
             record.setStatus(ExecutionStatus.SUCCESS);
             record.setFinishedAt(LocalDateTime.now());
             return executionRepository.save(record);
         } catch (Exception ex) {
             record.setStatus(ExecutionStatus.FAILED);
-            record.setErrorMessage(ex.getMessage());
+            record.setErrorMessage(ErrorDetailSupport.summarize(ex));
+            record.setErrorDetail(ErrorDetailSupport.describe(ex));
             record.setFinishedAt(LocalDateTime.now());
             return executionRepository.save(record);
         }

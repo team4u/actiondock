@@ -32,6 +32,11 @@ public class ExecutionEntity {
     @Lob
     private String errorMessage;
 
+    private String errorType;
+
+    @Lob
+    private String errorStackTrace;
+
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
@@ -50,6 +55,10 @@ public class ExecutionEntity {
     public void setOutputJson(String outputJson) { this.outputJson = outputJson; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public String getErrorType() { return errorType; }
+    public void setErrorType(String errorType) { this.errorType = errorType; }
+    public String getErrorStackTrace() { return errorStackTrace; }
+    public void setErrorStackTrace(String errorStackTrace) { this.errorStackTrace = errorStackTrace; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getStartedAt() { return startedAt; }

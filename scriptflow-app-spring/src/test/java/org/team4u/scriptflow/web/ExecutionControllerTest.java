@@ -13,6 +13,7 @@ import org.team4u.scriptflow.RuntimeApplication;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.InvalidExecutionInputException;
 import org.team4u.scriptflow.application.SchemaFieldError;
+import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
@@ -125,6 +126,35 @@ class ExecutionControllerTest {
     }
 
     @Test
+    void executeReturnsStructuredErrorDetailForFailedExecution() throws Exception {
+        when(executionApplicationService.execute(eq("script-1"), any(), eq(SubmitMode.SYNC))).thenReturn(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("script-1")
+                .setStatus(ExecutionStatus.FAILED)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setInput(Map.of("name", "Alice"))
+                .setOutput(Map.of())
+                .setErrorMessage("boom")
+                .setErrorDetail(new ErrorDetail()
+                        .setType("java.lang.IllegalStateException")
+                        .setStackTrace("java.lang.IllegalStateException: boom")));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setOutputSchema(Map.of("type", "object")));
+
+        mockMvc.perform(post("/api/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scriptId":"script-1","input":{"name":"Alice"}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andExpect(jsonPath("$.data.errorMessage").value("boom"))
+                .andExpect(jsonPath("$.data.errorDetail.type").value("java.lang.IllegalStateException"))
+                .andExpect(jsonPath("$.data.errorDetail.stackTrace").value("java.lang.IllegalStateException: boom"));
+    }
+
+    @Test
     void listPassesScriptIdFilterThrough() throws Exception {
         when(executionApplicationService.list("script-1")).thenReturn(List.of(new ExecutionRecord().setId("exec-1")));
 
@@ -140,7 +170,9 @@ class ExecutionControllerTest {
         mockMvc.perform(get("/api/executions/missing"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.msg").value("Execution not found: missing"));
+                .andExpect(jsonPath("$.msg").value("Execution not found: missing"))
+                .andExpect(jsonPath("$.data.type").value("java.lang.IllegalArgumentException"))
+                .andExpect(jsonPath("$.data.stackTrace").exists());
     }
 
     @Test

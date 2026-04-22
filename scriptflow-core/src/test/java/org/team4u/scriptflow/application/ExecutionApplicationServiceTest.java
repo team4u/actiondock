@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.application;
 
 import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
@@ -129,6 +130,9 @@ class ExecutionApplicationServiceTest {
 
         assertThat(record.getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(record.getErrorMessage()).isEqualTo("boom");
+        assertThat(record.getErrorDetail()).isNotNull();
+        assertThat(record.getErrorDetail().getType()).isEqualTo(IllegalStateException.class.getName());
+        assertThat(record.getErrorDetail().getStackTrace()).contains("IllegalStateException: boom");
         assertThat(record.getFinishedAt()).isNotNull();
         assertThat(executionRepository.savedSnapshots)
                 .extracting(ExecutionRecord::getStatus)
@@ -405,9 +409,19 @@ class ExecutionApplicationServiceTest {
                     .setInput(new LinkedHashMap<>(source.getInput()))
                     .setOutput(new LinkedHashMap<>(source.getOutput()))
                     .setErrorMessage(source.getErrorMessage())
+                    .setErrorDetail(copy(source.getErrorDetail()))
                     .setCreatedAt(source.getCreatedAt())
                     .setStartedAt(source.getStartedAt())
                     .setFinishedAt(source.getFinishedAt());
+        }
+
+        private static ErrorDetail copy(ErrorDetail source) {
+            if (source == null) {
+                return null;
+            }
+            return new ErrorDetail()
+                    .setType(source.getType())
+                    .setStackTrace(source.getStackTrace());
         }
     }
 

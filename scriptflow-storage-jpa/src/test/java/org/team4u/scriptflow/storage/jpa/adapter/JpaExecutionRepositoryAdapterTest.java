@@ -2,6 +2,7 @@ package org.team4u.scriptflow.storage.jpa.adapter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.SubmitMode;
@@ -42,6 +43,10 @@ class JpaExecutionRepositoryAdapterTest {
                 .setSubmitMode(SubmitMode.ASYNC)
                 .setInput(Map.of("name", "Alice"))
                 .setOutput(Map.of("message", "Hello"))
+                .setErrorMessage("boom")
+                .setErrorDetail(new ErrorDetail()
+                        .setType("java.lang.IllegalStateException")
+                        .setStackTrace("java.lang.IllegalStateException: boom"))
                 .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4))
                 .setStartedAt(LocalDateTime.of(2024, 1, 2, 3, 5))
                 .setFinishedAt(LocalDateTime.of(2024, 1, 2, 3, 6));
@@ -54,7 +59,11 @@ class JpaExecutionRepositoryAdapterTest {
         assertThat(stored.get().getSubmitMode()).isEqualTo("ASYNC");
         assertThat(stored.get().getInputJson()).contains("\"name\":\"Alice\"");
         assertThat(stored.get().getOutputJson()).contains("\"message\":\"Hello\"");
+        assertThat(stored.get().getErrorType()).isEqualTo("java.lang.IllegalStateException");
+        assertThat(stored.get().getErrorStackTrace()).contains("IllegalStateException");
         assertThat(saved.getOutput()).containsEntry("message", "Hello");
+        assertThat(found.getErrorDetail()).isNotNull();
+        assertThat(found.getErrorDetail().getType()).isEqualTo("java.lang.IllegalStateException");
         assertThat(found.getSubmitMode()).isEqualTo(SubmitMode.ASYNC);
         assertThat(records).singleElement().satisfies(value ->
                 assertThat(value.getStatus()).isEqualTo(ExecutionStatus.SUCCESS));

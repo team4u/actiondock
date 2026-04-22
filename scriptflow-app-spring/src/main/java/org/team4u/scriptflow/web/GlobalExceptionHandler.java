@@ -1,6 +1,8 @@
 package org.team4u.scriptflow.web;
 
 import org.team4u.scriptflow.application.InvalidExecutionInputException;
+import org.team4u.scriptflow.application.ErrorDetailSupport;
+import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -18,12 +20,20 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException exception) {
-        return ResponseEntity.badRequest().body(ApiResponse.error(exception.getMessage(), 400));
+    public ResponseEntity<ApiResponse<ErrorDetail>> handleIllegalArgument(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                400,
+                ErrorDetailSupport.describe(exception)
+        ));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleException(Exception exception) {
-        return ResponseEntity.internalServerError().body(ApiResponse.error(exception.getMessage(), 500));
+    public ResponseEntity<ApiResponse<ErrorDetail>> handleException(Exception exception) {
+        return ResponseEntity.internalServerError().body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                500,
+                ErrorDetailSupport.describe(exception)
+        ));
     }
 }

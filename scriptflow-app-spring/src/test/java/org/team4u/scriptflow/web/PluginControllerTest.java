@@ -158,4 +158,30 @@ class PluginControllerTest {
                 .andExpect(jsonPath("$.data.debug.args.message").value("hello"))
                 .andExpect(jsonPath("$.data.debug.scriptInput.name").value("Alice"));
     }
+
+    @Test
+    void invokeReturnsStructuredErrorDetailWhenPluginFails() throws Exception {
+        when(pluginRuntimeService.invokeForDebug(
+                eq("demo-plugin"),
+                eq("echo"),
+                eq(Map.of("message", "hello")),
+                eq(Map.of("name", "Alice")),
+                eq(false)
+        )).thenThrow(new IllegalStateException("plugin failed"));
+
+        mockMvc.perform(post("/api/plugins/demo-plugin/actions/echo/invoke")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "args": {"message":"hello"},
+                                  "scriptInput": {"name":"Alice"},
+                                  "responseView": "RESULT"
+                                }
+                                """))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.msg").value("plugin failed"))
+                .andExpect(jsonPath("$.data.type").value("java.lang.IllegalStateException"))
+                .andExpect(jsonPath("$.data.stackTrace").exists());
+    }
 }

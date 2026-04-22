@@ -35,9 +35,15 @@ export interface ExecutionRecord {
   input: Record<string, unknown>;
   output: Record<string, unknown>;
   errorMessage?: string;
+  errorDetail?: ErrorDetail;
   createdAt?: string;
   startedAt?: string;
   finishedAt?: string;
+}
+
+export interface ErrorDetail {
+  type: string;
+  stackTrace: string;
 }
 
 export interface ExecutionResponseDebug {
@@ -52,6 +58,7 @@ export interface ExecutionResponse {
   submitMode: SubmitMode;
   output: Record<string, unknown>;
   errorMessage?: string;
+  errorDetail?: ErrorDetail;
   createdAt?: string;
   startedAt?: string;
   finishedAt?: string;
@@ -89,6 +96,15 @@ export interface ApiErrorPayload {
   status?: number;
   msg?: string;
   data?: unknown;
+}
+
+export function isErrorDetail(value: unknown): value is ErrorDetail {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as ErrorDetail).type === "string" &&
+    typeof (value as ErrorDetail).stackTrace === "string"
+  );
 }
 
 export interface PluginAction {

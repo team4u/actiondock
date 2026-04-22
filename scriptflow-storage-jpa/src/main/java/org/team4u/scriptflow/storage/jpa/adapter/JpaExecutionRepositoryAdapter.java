@@ -2,6 +2,7 @@ package org.team4u.scriptflow.storage.jpa.adapter;
 
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
+import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
@@ -59,6 +60,8 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setInputJson(jsonCodec.write(record.getInput()));
         entity.setOutputJson(jsonCodec.write(record.getOutput()));
         entity.setErrorMessage(record.getErrorMessage());
+        entity.setErrorType(record.getErrorDetail() == null ? null : record.getErrorDetail().getType());
+        entity.setErrorStackTrace(record.getErrorDetail() == null ? null : record.getErrorDetail().getStackTrace());
         entity.setCreatedAt(record.getCreatedAt());
         entity.setStartedAt(record.getStartedAt());
         entity.setFinishedAt(record.getFinishedAt());
@@ -74,8 +77,18 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
                 .setOutput(jsonCodec.readMap(entity.getOutputJson()))
                 .setErrorMessage(entity.getErrorMessage())
+                .setErrorDetail(toErrorDetail(entity))
                 .setCreatedAt(entity.getCreatedAt())
                 .setStartedAt(entity.getStartedAt())
                 .setFinishedAt(entity.getFinishedAt());
+    }
+
+    private ErrorDetail toErrorDetail(ExecutionEntity entity) {
+        if (entity.getErrorType() == null && entity.getErrorStackTrace() == null) {
+            return null;
+        }
+        return new ErrorDetail()
+                .setType(entity.getErrorType())
+                .setStackTrace(entity.getErrorStackTrace());
     }
 }

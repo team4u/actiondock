@@ -38,6 +38,7 @@ import {
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { CommandPanel } from "../components/CommandPanel";
+import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
 import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/SchemaObjectEditor";
@@ -49,8 +50,13 @@ import {
   getCommandInputSourceLabel,
   resolveCommandObjectInput
 } from "../commands";
+import {
+  buildSchemaObjectEditorJsonText,
+  parseSchemaObjectEditorJsonText
+} from "../schemaObjectEditorSupport";
 import { resolveSchemaFields } from "../schema";
-import type { PluginAction, PluginConfigView, PluginInvokeResponse, PluginView } from "../types";
+import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView } from "../types";
+import { isErrorDetail } from "../types";
 import { copyText, parseJsonText, prettyJson } from "../utils";
 
 const { Text, Title } = Typography;
@@ -60,6 +66,11 @@ interface PluginDetailPageProps {
 }
 
 type PluginDetailTab = "overview" | "config" | "debug" | "commands";
+
+interface PluginDebugErrorState {
+  message: string;
+  detail?: ErrorDetail;
+}
 
 function getActionLabel(action: PluginAction): string {
   return action.title || action.action;
@@ -114,6 +125,7 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
   const [scriptInputText, setScriptInputText] = useState("{}");
   const [debugExecuting, setDebugExecuting] = useState(false);
   const [debugResult, setDebugResult] = useState<PluginInvokeResponse | null>(null);
+  const [debugError, setDebugError] = useState<PluginDebugErrorState | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -214,6 +226,7 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
     setActionArgsText(prettyJson(currentAction.exampleArgs));
     setActionArgsInputMode(actionSupportedFields.length > 0 ? "SCHEMA" : "JSON");
     setDebugResult(null);
+    setDebugError(null);
   }, [actionSupportedFields.length, argsForm, currentAction]);
 
   const handleTabChange = (key: string) => {
@@ -241,9 +254,13 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
     }
     if (nextMode === "JSON") {
       try {
-        const baseConfig = parseJsonText(configText, "插件配置");
-        const nextConfig = { ...baseConfig, ...configForm.getFieldsValue(true) };
-        setConfigText(prettyJson(nextConfig));
+        setConfigText(
+          buildSchemaObjectEditorJsonText(
+            configText,
+            "插件配置",
+            configForm.getFieldsValue(true) as Record<string, unknown>
+          )
+        );
         setConfigInputMode("JSON");
       } catch (error) {
         const detail = error instanceof Error ? error.message : "切换到 JSON 模式失败";
@@ -253,7 +270,7 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
     }
 
     try {
-      const parsed = parseJsonText(configText, "插件配置");
+      const parsed = parseSchemaObjectEditorJsonText(configText, "插件配置");
       configForm.setFieldsValue(parsed);
       setConfigInputMode("SCHEMA");
     } catch (error) {
@@ -269,7 +286,7 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
     if (nextMode === "JSON") {
       try {
         const nextArgs = buildExecutionInputFromValues(actionSupportedFields, argsForm.getFieldsValue(true));
-        setActionArgsText(prettyJson(nextArgs));
+        setActionArgsText(buildSchemaObjectEditorJsonText(actionArgsText, "动作参数", nextArgs));
         setActionArgsInputMode("JSON");
       } catch (error) {
         const detail = error instanceof Error ? error.message : "切换到 JSON 模式失败";
@@ -279,7 +296,7 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
     }
 
     try {
-      const parsed = parseJsonText(actionArgsText, "动作参数");
+      const parsed = parseSchemaObjectEditorJsonText(actionArgsText, "动作参数");
       argsForm.setFieldsValue(parsed);
       setActionArgsInputMode("SCHEMA");
     } catch (error) {
@@ -337,16 +354,21 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
     try {
       const args = await resolveActionArgsPayload();
       const scriptInput = parseJsonText(scriptInputText, "脚本输入");
-      setDebugResult(
-        await invokePluginAction(plugin.pluginId, currentAction.action, {
-          args,
-          scriptInput,
-          responseView: "RESULT"
-        })
-      );
+      const response = await invokePluginAction(plugin.pluginId, currentAction.action, {
+        args,
+        scriptInput,
+        responseView: "RESULT"
+      });
+      setDebugResult(response);
+      setDebugError(null);
       messageApi.success("插件调用成功");
     } catch (error) {
       const detail = error instanceof ApiError || error instanceof Error ? error.message : "插件调用失败";
+      setDebugResult(null);
+      setDebugError({
+        message: detail,
+        detail: error instanceof ApiError && isErrorDetail(error.data) ? error.data : undefined
+      });
       messageApi.error(detail);
     } finally {
       setDebugExecuting(false);
@@ -639,7 +661,13 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
                         </Col>
                         <Col xs={24} xl={14} className="equal-height-col">
                           <Card type="inner" title="调试结果" className="equal-height-card">
-                            {!debugResult ? (
+                            {debugError ? (
+                              <ErrorDetailPanel
+                                title="插件调用失败"
+                                message={debugError.message}
+                                detail={debugError.detail}
+                              />
+                            ) : !debugResult ? (
                               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="执行后将在这里查看动作返回结果" />
                             ) : (
                               <SchemaObjectResultView

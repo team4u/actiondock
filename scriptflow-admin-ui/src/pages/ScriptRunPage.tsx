@@ -26,6 +26,7 @@ import {
   getExecution,
   getPublishedScript
 } from "../api";
+import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { resolveSchemaFields } from "../schema";
 import {
   buildSchemaExecutionInput,
@@ -472,9 +473,11 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
                   )}
                 </div>
 
-                {executionResult.errorMessage ? (
-                  <Alert type="error" showIcon message={executionResult.errorMessage} />
-                ) : null}
+                <ErrorDetailPanel
+                  title="执行失败"
+                  message={executionResult.errorMessage}
+                  detail={executionResult.errorDetail}
+                />
 
                 {hasStructuredOutput ? (
                   <div className="run-output-list">

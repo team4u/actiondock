@@ -20,6 +20,7 @@ public class ExecutionRecord {
     private Map<String, Object> input = new LinkedHashMap<>();
     private Map<String, Object> output = new LinkedHashMap<>();
     private String errorMessage;
+    private ErrorDetail errorDetail;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
@@ -115,6 +116,15 @@ public class ExecutionRecord {
 
     public ExecutionRecord setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+        return this;
+    }
+
+    public ErrorDetail getErrorDetail() {
+        return errorDetail;
+    }
+
+    public ExecutionRecord setErrorDetail(ErrorDetail errorDetail) {
+        this.errorDetail = errorDetail;
         return this;
     }
 

@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.web;
 
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
+import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 
 import java.time.LocalDateTime;
@@ -13,6 +14,7 @@ public record ExecutionResponse(
         SubmitMode submitMode,
         Map<String, Object> output,
         String errorMessage,
+        ErrorDetail errorDetail,
         LocalDateTime createdAt,
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
