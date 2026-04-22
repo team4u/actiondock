@@ -171,8 +171,8 @@ function AdminShell() {
               <Route path="/" element={<Navigate to="/scripts" replace />} />
               <Route path="/scripts" element={<ScriptListPage />} />
               <Route path="/schedules" element={<ScheduleManagementPage />} />
-              <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" />} />
-              <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" />} />
+              <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
+              <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
               <Route
                 path="/plugins/:pluginId"
