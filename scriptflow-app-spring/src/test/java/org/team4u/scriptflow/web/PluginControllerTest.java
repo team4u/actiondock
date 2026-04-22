@@ -139,8 +139,7 @@ class PluginControllerTest {
                         .setResult(Map.of("message", "hello:world"))
                         .setDebug(new PluginInvokeDebugView()
                                 .setArgs(Map.of("message", "hello"))
-                                .setScriptInput(Map.of("name", "Alice"))
-                                .setRawResult(Map.of("message", "hello:world")))
+                                .setScriptInput(Map.of("name", "Alice")))
         );
 
         mockMvc.perform(post("/api/plugins/demo-plugin/actions/echo/invoke")

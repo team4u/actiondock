@@ -121,7 +121,6 @@ export interface PluginConfigView {
 export interface PluginInvokeDebug {
   args: Record<string, unknown>;
   scriptInput: Record<string, unknown>;
-  rawResult: Record<string, unknown>;
 }
 
 export interface PluginInvokeResponse {

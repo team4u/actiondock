@@ -39,9 +39,9 @@ import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { CommandPanel } from "../components/CommandPanel";
 import { InfoHint } from "../components/InfoHint";
-import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/SchemaObjectEditor";
+import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecutionInputFromValues,
   buildPluginInvokeCliCommand,
@@ -341,7 +341,7 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
         await invokePluginAction(plugin.pluginId, currentAction.action, {
           args,
           scriptInput,
-          responseView: "DEBUG"
+          responseView: "RESULT"
         })
       );
       messageApi.success("插件调用成功");
@@ -588,34 +588,33 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
                       <Alert type="warning" showIcon message="插件未启动，当前不能执行调试。" />
                     ) : null}
                     {plugin?.actions.length ? (
-                      <Row gutter={[16, 16]}>
-                        <Col xs={24} xl={10}>
-                          <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                            <Card type="inner" title="动作参数">
-                              <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                                <Form layout="vertical">
-                                  <Form.Item label="动作名称">
-                                    <Select value={currentAction?.action} options={actionOptions} onChange={setSelectedActionName} />
-                                  </Form.Item>
-                                </Form>
-                                <SchemaObjectEditor
-                                  form={argsForm}
-                                  supportedFields={actionSupportedFields}
-                                  unsupportedFields={actionUnsupportedFields}
-                                  inputMode={actionArgsInputMode}
-                                  onInputModeChange={handleActionArgsModeChange}
-                                  jsonText={actionArgsText}
-                                  onJsonTextChange={setActionArgsText}
-                                  jsonLabel="动作参数 JSON"
-                                  jsonExtra="直接输入动作参数对象；命令生成也会跟随这里的内容。"
-                                  noSchemaExtra="当前动作没有可渲染的输入 schema，请直接输入动作参数对象。"
-                                  editorTheme={editorTheme}
-                                />
-                              </Space>
-                            </Card>
-                            <Card type="inner" title="脚本输入">
+                      <Row gutter={[16, 16]} align="stretch" className="equal-height-row">
+                        <Col xs={24} xl={10} className="equal-height-col">
+                          <Card type="inner" title="动作参数" className="equal-height-card">
+                            <Space direction="vertical" size={16} style={{ width: "100%" }}>
                               <Form layout="vertical">
-                                <Form.Item label="scriptInput JSON" extra="用于模拟插件上下文里的 scriptInput，默认空对象。">
+                                <Form.Item label="动作名称">
+                                  <Select value={currentAction?.action} options={actionOptions} onChange={setSelectedActionName} />
+                                </Form.Item>
+                              </Form>
+                              <SchemaObjectEditor
+                                form={argsForm}
+                                supportedFields={actionSupportedFields}
+                                unsupportedFields={actionUnsupportedFields}
+                                inputMode={actionArgsInputMode}
+                                onInputModeChange={handleActionArgsModeChange}
+                                jsonText={actionArgsText}
+                                onJsonTextChange={setActionArgsText}
+                                jsonLabel="动作参数 JSON"
+                                jsonExtra="直接输入动作参数对象；命令生成也会跟随这里的内容。"
+                                noSchemaExtra="当前动作没有可渲染的输入 schema，请直接输入动作参数对象。"
+                                editorTheme={editorTheme}
+                              />
+                              <Form layout="vertical">
+                                <Form.Item
+                                  label="脚本输入模拟"
+                                  extra="用于模拟插件上下文里的脚本输入，对应请求里的 scriptInput 字段，默认空对象。"
+                                >
                                   <CodeEditor
                                     height="220px"
                                     language="json"
@@ -625,41 +624,29 @@ export function PluginDetailPage({ colorMode }: PluginDetailPageProps) {
                                   />
                                 </Form.Item>
                               </Form>
-                            </Card>
-                            <Button
-                              type="primary"
-                              icon={<PlayCircleOutlined />}
-                              onClick={() => void handleDebugExecute()}
-                              loading={debugExecuting}
-                              disabled={!plugin?.started || !currentAction}
-                              block
-                            >
-                              调试动作
-                            </Button>
-                          </Space>
-                        </Col>
-                        <Col xs={24} xl={14}>
-                          <Card type="inner" title="调试结果">
-                            <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                              {!debugResult ? (
-                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="执行后将在这里查看动作返回结果" />
-                              ) : (
-                                <>
-                                  <JsonPreview
-                                    title="结果"
-                                    value={debugResult.result}
-                                    emptyDescription="当前动作没有返回结果"
-                                  />
-                                  {debugResult.debug ? (
-                                    <JsonPreview
-                                      title="原始结果"
-                                      value={debugResult.debug.rawResult}
-                                      emptyDescription="当前没有原始结果"
-                                    />
-                                  ) : null}
-                                </>
-                              )}
+                              <Button
+                                type="primary"
+                                icon={<PlayCircleOutlined />}
+                                onClick={() => void handleDebugExecute()}
+                                loading={debugExecuting}
+                                disabled={!plugin?.started || !currentAction}
+                                block
+                              >
+                                调试动作
+                              </Button>
                             </Space>
+                          </Card>
+                        </Col>
+                        <Col xs={24} xl={14} className="equal-height-col">
+                          <Card type="inner" title="调试结果" className="equal-height-card">
+                            {!debugResult ? (
+                              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="执行后将在这里查看动作返回结果" />
+                            ) : (
+                              <SchemaObjectResultView
+                                schema={currentAction?.outputSchema}
+                                value={debugResult.result}
+                              />
+                            )}
                           </Card>
                         </Col>
                       </Row>

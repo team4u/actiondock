@@ -85,7 +85,6 @@ class PluginRuntimeServiceTest {
         assertThat(debugInvoke.getDebug()).isNotNull();
         assertThat(debugInvoke.getDebug().getArgs()).containsEntry("message", "debug");
         assertThat(debugInvoke.getDebug().getScriptInput()).containsEntry("name", "Alice");
-        assertThat(debugInvoke.getDebug().getRawResult()).containsEntry("message", "hello:debug");
 
         PluginView stopped = service.stop("scriptflow-demo-plugin");
         assertThat(stopped.isStarted()).isFalse();

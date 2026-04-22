@@ -364,14 +364,14 @@ scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/script
 
 - `概览`：查看插件基本信息、动作说明、输入字段、输出字段
 - `配置`：按 `configSchema` 以“表单输入 / JSON 输入”两种模式维护配置
-- `调试`：同步调用指定动作，可填写动作参数和 `scriptInput`
+- `调试`：同步调用指定动作，可填写动作参数和“脚本输入模拟”
 - `调用命令`：基于当前调试参数生成 REST 和 CLI 命令
 
 说明：
 
-- 调试页只暴露动作参数和 `scriptInput`
+- 调试页只暴露动作参数和“脚本输入模拟”
 - `scriptId`、`scriptName`、`executionId`、`submitMode` 由运行时注入，不在页面上手工填写
-- 返回结果会先按动作 `outputSchema` 做投影；如果请求 `DEBUG` 视图，还会附带原始结果
+- 返回结果只会按动作 `outputSchema` 投影；如果请求 `DEBUG` 视图，只会额外附带调试上下文
 
 ### 5. 插件配置
 
@@ -446,14 +446,13 @@ curl -X POST \
 请求体字段：
 
 - `args`：动作参数
-- `scriptInput`：模拟脚本上下文中的 `scriptInput`
+- `scriptInput`：模拟脚本上下文中的脚本输入；在界面上显示为“脚本输入模拟”
 - `responseView`：`RESULT` 或 `DEBUG`
 
 `DEBUG` 视图会额外返回：
 
 - `debug.args`
 - `debug.scriptInput`
-- `debug.rawResult`
 
 ### 8. CLI
 

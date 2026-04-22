@@ -22,7 +22,6 @@ import {
   Form,
   Grid,
   Input,
-  InputNumber,
   Modal,
   Popconfirm,
   Radio,
@@ -30,7 +29,6 @@ import {
   Select,
   Space,
   Spin,
-  Switch,
   Table,
   Tabs,
   Tag,
@@ -63,6 +61,7 @@ import { InfoHint } from "../components/InfoHint";
 import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
+import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecuteCliCommand,
   buildExecuteCurlCommand,
@@ -142,10 +141,6 @@ function getEditorFooterHint(type: ScriptType): string {
     return "保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Python 语法与执行结果由后端 Python 运行时校验。";
   }
   return "保存时 Builder 模式会校验字段配置，JSON 模式会校验对象格式，Groovy 语法通过后端校验接口确认。";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function sortExecutions(records: ExecutionRecord[]): ExecutionRecord[] {
@@ -253,14 +248,12 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
           ? "commands"
           : "definition";
   const { supportedFields, unsupportedFields } = resolveSchemaFields(currentScript?.inputSchema);
-  const { supportedFields: supportedOutputFields, unsupportedFields: unsupportedOutputFields } =
-    resolveSchemaFields(currentScript?.outputSchema);
+  const { supportedFields: supportedOutputFields } = resolveSchemaFields(currentScript?.outputSchema);
   const hasInputSchema = Boolean(currentScript?.inputSchema && Object.keys(currentScript.inputSchema).length > 0);
   const hasOutputSchema = Boolean(currentScript?.outputSchema && Object.keys(currentScript.outputSchema).length > 0);
   const hasUnpublishedChanges = Boolean(
     currentScript?.status === "PUBLISHED" && currentScript.hasUnpublishedChanges
   );
-  const outputValues = isRecord(currentExecution?.output) ? currentExecution.output : {};
   const supportsSchemaForm = supportedFields.length > 0;
   const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
   const apiKey = getApiKey();
@@ -1408,153 +1401,77 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       label: "执行调试",
                       children: (
                         <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                          <Row gutter={[16, 16]}>
-                            <Col xs={24} xl={10}>
-                              <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                                <Card
-                                  type="inner"
-                                  title="执行入参"
-                                  extra={<Text type="secondary">根据 inputSchema 自动生成</Text>}
-                                >
-                                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                                    {executionValidationError && (
-                                      <Alert
-                                        type="error"
-                                        showIcon
-                                        message="参数校验失败"
-                                        description={
-                                          <div>
-                                            {executionValidationError.fieldErrors.map((fieldError) => (
-                                              <div key={`${fieldError.field}-${fieldError.reason}`}>
-                                                <Text code>{fieldError.field}</Text>
-                                                {" - "}
-                                                {fieldError.message}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        }
-                                      />
-                                    )}
-
-                                    <Radio.Group
-                                      value={executionMode}
-                                      optionType="button"
-                                      buttonStyle="solid"
-                                      onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
-                                      options={[
-                                        { label: "同步执行", value: "SYNC" },
-                                        { label: "异步执行", value: "ASYNC" }
-                                      ]}
-                                    />
-
-                                    <SchemaObjectEditor
-                                      form={executionForm}
-                                      supportedFields={supportedFields}
-                                      unsupportedFields={unsupportedFields}
-                                      inputMode={executionInputMode}
-                                      onInputModeChange={(key) => setExecutionInputMode(key as ExecutionInputMode)}
-                                      jsonText={executionJsonInput}
-                                      onJsonTextChange={setExecutionJsonInput}
-                                      jsonLabel="执行入参 JSON"
-                                      jsonExtra="直接输入 JSON 对象执行，不依赖 inputSchema。"
-                                      noSchemaExtra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
-                                      editorTheme={editorTheme}
-                                    />
-
-                                    <Button
-                                      type="primary"
-                                      icon={<PlayCircleOutlined />}
-                                      onClick={() => void handleExecute()}
-                                      loading={executing}
-                                      block
-                                    >
-                                      执行脚本
-                                    </Button>
-                                  </Space>
-                                </Card>
-
-                                <Card
-                                  type="inner"
-                                  title="执行输出"
-                                >
-                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                                    {!currentExecution ? (
-                                      <Empty
-                                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                        description="执行后将在这里查看输出结果"
-                                      />
-                                    ) : supportedOutputFields.length > 0 ? (
-                                      <Form layout="vertical" disabled>
-                                        {supportedOutputFields.map((field) => {
-                                          const value = outputValues[field.name];
-
-                                          if (field.kind === "enum") {
-                                            return (
-                                              <Form.Item key={field.name} label={field.label}>
-                                                <Select
-                                                  value={value}
-                                                  options={(field.enumValues ?? []).map((item) => ({
-                                                    value: item,
-                                                    label: String(item)
-                                                  }))}
-                                                />
-                                              </Form.Item>
-                                            );
-                                          }
-
-                                          if (field.kind === "boolean") {
-                                            return (
-                                              <Form.Item key={field.name} label={field.label}>
-                                                <Switch
-                                                  checked={value === true}
-                                                  checkedChildren="true"
-                                                  unCheckedChildren="false"
-                                                />
-                                              </Form.Item>
-                                            );
-                                          }
-
-                                          if (field.kind === "number" || field.kind === "integer") {
-                                            return (
-                                              <Form.Item key={field.name} label={field.label}>
-                                                <InputNumber style={{ width: "100%" }} value={value as number | null} />
-                                              </Form.Item>
-                                            );
-                                          }
-
-                                          return (
-                                            <Form.Item key={field.name} label={field.label}>
-                                              <Input value={typeof value === "string" ? value : value == null ? "" : String(value)} />
-                                            </Form.Item>
-                                          );
-                                        })}
-                                      </Form>
-                                    ) : (
-                                      <JsonPreview
-                                        title="输出 JSON 预览"
-                                        value={currentExecution.output}
-                                        emptyDescription="暂无输出结果"
-                                      />
-                                    )}
-
-                                    {currentExecution &&
-                                      supportedOutputFields.length > 0 &&
-                                      unsupportedOutputFields.length > 0 && (
-                                      <JsonPreview
-                                        title="输出 JSON 预览"
-                                        value={currentExecution.output}
-                                        emptyDescription="暂无输出结果"
-                                      />
-                                    )}
-                                  </Space>
-                                </Card>
-                              </Space>
-                            </Col>
-
-                            <Col xs={24} xl={14}>
+                          <Row gutter={[16, 16]} align="stretch" className="equal-height-row">
+                            <Col xs={24} xl={10} className="equal-height-col">
                               <Card
                                 type="inner"
-                                title="最近一次执行"
+                                title="执行入参"
+                                extra={<Text type="secondary">根据 inputSchema 自动生成</Text>}
+                                className="equal-height-card"
+                              >
+                                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                                  {executionValidationError && (
+                                    <Alert
+                                      type="error"
+                                      showIcon
+                                      message="参数校验失败"
+                                      description={
+                                        <div>
+                                          {executionValidationError.fieldErrors.map((fieldError) => (
+                                            <div key={`${fieldError.field}-${fieldError.reason}`}>
+                                              <Text code>{fieldError.field}</Text>
+                                              {" - "}
+                                              {fieldError.message}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      }
+                                    />
+                                  )}
+
+                                  <Radio.Group
+                                    value={executionMode}
+                                    optionType="button"
+                                    buttonStyle="solid"
+                                    onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
+                                    options={[
+                                      { label: "同步执行", value: "SYNC" },
+                                      { label: "异步执行", value: "ASYNC" }
+                                    ]}
+                                  />
+
+                                  <SchemaObjectEditor
+                                    form={executionForm}
+                                    supportedFields={supportedFields}
+                                    unsupportedFields={unsupportedFields}
+                                    inputMode={executionInputMode}
+                                    onInputModeChange={(key) => setExecutionInputMode(key as ExecutionInputMode)}
+                                    jsonText={executionJsonInput}
+                                    onJsonTextChange={setExecutionJsonInput}
+                                    jsonLabel="执行入参 JSON"
+                                    jsonExtra="直接输入 JSON 对象执行，不依赖 inputSchema。"
+                                    noSchemaExtra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
+                                    editorTheme={editorTheme}
+                                  />
+
+                                  <Button
+                                    type="primary"
+                                    icon={<PlayCircleOutlined />}
+                                    onClick={() => void handleExecute()}
+                                    loading={executing}
+                                    block
+                                  >
+                                    执行脚本
+                                  </Button>
+                                </Space>
+                              </Card>
+                            </Col>
+
+                            <Col xs={24} xl={14} className="equal-height-col">
+                              <Card
+                                type="inner"
+                                title="执行结果"
+                                className="equal-height-card"
                                 extra={
                                   currentExecution ? (
                                     <Tag color={getExecutionStatusColor(currentExecution.status)}>
@@ -1598,31 +1515,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       />
                                     )}
 
-                                    <Tabs
-                                      items={[
-                                        {
-                                          key: "input",
-                                          label: "输入",
-                                          children: (
-                                            <JsonPreview
-                                              title="提交参数"
-                                              value={currentExecution.input}
-                                              emptyDescription="该次执行没有输入参数"
-                                            />
-                                          )
-                                        },
-                                        {
-                                          key: "display",
-                                          label: "输出",
-                                          children: (
-                                            <JsonPreview
-                                              title="执行结果"
-                                              value={currentExecution.output}
-                                              emptyDescription="暂无输出结果"
-                                            />
-                                          )
-                                        }
-                                      ]}
+                                    <SchemaObjectResultView
+                                      schema={currentScript?.outputSchema}
+                                      value={currentExecution.output}
                                     />
                                   </Space>
                                 ) : (

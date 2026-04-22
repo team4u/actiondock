@@ -283,7 +283,7 @@ public class PluginRuntimeService {
         PluginActionMetadata actionMetadata = requireActionMetadata(registration, action);
         Map<String, Object> normalizedArgs = normalizeConfig(args);
         Map<String, Object> normalizedScriptInput = normalizeConfig(scriptInput);
-        Map<String, Object> rawResult = normalizeResult(
+        Map<String, Object> pluginResult = normalizeResult(
                 invoke(
                         pluginId,
                         action,
@@ -296,12 +296,11 @@ public class PluginRuntimeService {
         return new PluginInvokeView()
                 .setPluginId(pluginId)
                 .setAction(action)
-                .setResult(executionOutputProjector.project(rawResult, actionMetadata.getOutputSchema()))
+                .setResult(executionOutputProjector.project(pluginResult, actionMetadata.getOutputSchema()))
                 .setDebug(includeDebug
                         ? new PluginInvokeDebugView()
                         .setArgs(normalizedArgs)
                         .setScriptInput(normalizedScriptInput)
-                        .setRawResult(rawResult)
                         : null);
     }
 

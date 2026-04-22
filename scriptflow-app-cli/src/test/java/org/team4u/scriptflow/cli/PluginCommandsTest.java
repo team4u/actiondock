@@ -36,8 +36,7 @@ class PluginCommandsTest {
                 .setResult(Map.of("message", "hello:world"))
                 .setDebug(new PluginInvokeDebugView()
                         .setArgs(Map.of("message", "hello"))
-                        .setScriptInput(Map.of("name", "Alice"))
-                        .setRawResult(Map.of("message", "hello:world")));
+                        .setScriptInput(Map.of("name", "Alice")));
         when(pluginRuntimeService.invokeForDebug(
                 eq("demo-plugin"),
                 eq("echo"),
