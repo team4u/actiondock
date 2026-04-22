@@ -7,6 +7,7 @@ import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
+import org.team4u.scriptflow.domain.port.ScriptScheduleRepository;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -24,7 +25,9 @@ import static org.mockito.Mockito.when;
 class ScriptApplicationServiceTest {
     private final ScriptRepository scriptRepository = mock(ScriptRepository.class);
     private final ScriptEngine scriptEngine = mock(ScriptEngine.class);
-    private final ScriptApplicationService service = new ScriptApplicationService(scriptRepository, scriptEngine);
+    private final ScriptScheduleRepository scriptScheduleRepository = mock(ScriptScheduleRepository.class);
+    private final ScriptApplicationService service =
+            new ScriptApplicationService(scriptRepository, scriptEngine, scriptScheduleRepository);
 
     @Test
     void saveSetsDefaultsForNewScript() {
@@ -225,5 +228,13 @@ class ScriptApplicationServiceTest {
         when(scriptRepository.findAll()).thenReturn(definitions);
 
         assertThat(service.list()).containsExactlyElementsOf(definitions);
+    }
+
+    @Test
+    void deleteRemovesSchedulesBeforeDeletingScript() {
+        service.delete("script-1");
+
+        verify(scriptScheduleRepository).deleteByScriptId("script-1");
+        verify(scriptRepository).deleteById("script-1");
     }
 }

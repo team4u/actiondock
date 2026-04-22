@@ -17,8 +17,13 @@ class ScriptSchemaSupportTest {
                 "type", "object",
                 "required", List.of("name"),
                 "properties", Map.of(
-                        "name", Map.of("type", "string", "title", "Name", "description", "用户名"),
-                        "mode", Map.of("enum", List.of("FAST", "SAFE")),
+                        "name", Map.of(
+                                "type", "string",
+                                "title", "Name",
+                                "description", "用户名",
+                                "default", "guest"
+                        ),
+                        "mode", Map.of("enum", List.of("FAST", "SAFE"), "default", "FAST"),
                         "profile", Map.of("type", "object", "title", "Profile")
                 )
         ));
@@ -26,9 +31,15 @@ class ScriptSchemaSupportTest {
         assertThat(summary.fields()).extracting(ScriptSchemaSupport.SchemaField::name)
                 .containsExactlyInAnyOrder("name", "mode", "profile");
         assertThat(summary.fields()).anySatisfy(field -> {
+            assertThat(field.name()).isEqualTo("name");
+            assertThat(field.description()).isEqualTo("用户名");
+            assertThat(field.defaultValue()).isEqualTo("guest");
+        });
+        assertThat(summary.fields()).anySatisfy(field -> {
             assertThat(field.name()).isEqualTo("mode");
             assertThat(field.kind()).isEqualTo("enum");
             assertThat(field.enumValues()).containsExactly("FAST", "SAFE");
+            assertThat(field.defaultValue()).isEqualTo("FAST");
         });
         assertThat(summary.fields()).anySatisfy(field -> {
             assertThat(field.name()).isEqualTo("profile");

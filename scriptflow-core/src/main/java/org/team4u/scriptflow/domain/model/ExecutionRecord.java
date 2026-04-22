@@ -17,6 +17,8 @@ public class ExecutionRecord {
     private String scriptId;
     private ExecutionStatus status = ExecutionStatus.PENDING;
     private SubmitMode submitMode = SubmitMode.SYNC;
+    private ExecutionTriggerSource triggerSource = ExecutionTriggerSource.MANUAL;
+    private String scheduleId;
     private Map<String, Object> input = new LinkedHashMap<>();
     private Map<String, Object> output = new LinkedHashMap<>();
     private String errorMessage;
@@ -68,6 +70,24 @@ public class ExecutionRecord {
 
     public ExecutionRecord setSubmitMode(SubmitMode submitMode) {
         this.submitMode = submitMode;
+        return this;
+    }
+
+    public ExecutionTriggerSource getTriggerSource() {
+        return triggerSource;
+    }
+
+    public ExecutionRecord setTriggerSource(ExecutionTriggerSource triggerSource) {
+        this.triggerSource = triggerSource == null ? ExecutionTriggerSource.MANUAL : triggerSource;
+        return this;
+    }
+
+    public String getScheduleId() {
+        return scheduleId;
+    }
+
+    public ExecutionRecord setScheduleId(String scheduleId) {
+        this.scheduleId = scheduleId;
         return this;
     }
 

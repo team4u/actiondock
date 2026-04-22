@@ -13,5 +13,6 @@ class AppPropertiesTest {
         assertThat(properties.getExecution().getGroovy().isEnabled()).isTrue();
         assertThat(properties.getExecution().getGroovy().getCacheMaxSize()).isEqualTo(128);
         assertThat(properties.getExecution().getGroovy().getCacheExpireAfterAccessMinutes()).isEqualTo(30);
+        assertThat(properties.getSchedules().getPoolSize()).isEqualTo(2);
     }
 }

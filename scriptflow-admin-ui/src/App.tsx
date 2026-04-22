@@ -5,18 +5,15 @@ import {
   ConfigProvider,
   Drawer,
   Grid,
-  Input,
   Layout,
   Menu,
-  Modal,
-  Space,
   Spin,
   theme,
   Typography
 } from "antd";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { getApiKey, onAuthRequired, setApiKey } from "./auth";
+import { onAuthRequired } from "./auth";
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -35,6 +32,15 @@ const PluginManagementPage = lazy(() =>
 );
 const PluginDetailPage = lazy(() =>
   import("./pages/PluginDetailPage").then((module) => ({ default: module.PluginDetailPage }))
+);
+const ScheduleManagementPage = lazy(() =>
+  import("./pages/ScheduleManagementPage").then((module) => ({ default: module.ScheduleManagementPage }))
+);
+const ScheduleEditorPage = lazy(() =>
+  import("./pages/ScheduleEditorPage").then((module) => ({ default: module.ScheduleEditorPage }))
+);
+const ApiKeyManagementPage = lazy(() =>
+  import("./pages/ApiKeyManagementPage").then((module) => ({ default: module.ApiKeyManagementPage }))
 );
 
 type ColorMode = "light" | "dark";
@@ -64,20 +70,30 @@ function useSystemColorMode(): ColorMode {
   return colorMode;
 }
 
-function AdminShell({
-  colorMode,
-  onOpenApiKeyModal
-}: {
-  colorMode: ColorMode;
-  onOpenApiKeyModal: () => void;
-}) {
+function AdminShell({ colorMode }: { colorMode: ColorMode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
   const isDark = colorMode === "dark";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const title = location.pathname.startsWith("/plugins") ? "插件管理" : "脚本管理";
+  const selectedNavKey = location.pathname.startsWith("/plugins")
+    ? "plugins"
+    : location.pathname.startsWith("/schedules")
+      ? "schedules"
+      : location.pathname.startsWith("/settings")
+        ? "settings"
+        : location.pathname.startsWith("/scripts")
+          ? "scripts"
+          : "";
+  const title =
+    selectedNavKey === "plugins"
+      ? "插件管理"
+      : selectedNavKey === "schedules"
+        ? "定时任务"
+        : selectedNavKey === "settings"
+          ? "API Key 管理"
+          : "脚本管理";
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
 
@@ -91,13 +107,7 @@ function AdminShell({
       <Menu
         mode="inline"
         theme={isDark ? "dark" : "light"}
-        selectedKeys={[
-          location.pathname.startsWith("/plugins")
-            ? "plugins"
-            : location.pathname.startsWith("/scripts")
-              ? "scripts"
-              : ""
-        ]}
+        selectedKeys={[selectedNavKey]}
         items={[
           {
             key: "scripts",
@@ -108,6 +118,16 @@ function AdminShell({
             key: "plugins",
             label: "插件管理",
             onClick: () => navigate("/plugins")
+          },
+          {
+            key: "schedules",
+            label: "定时任务",
+            onClick: () => navigate("/schedules")
+          },
+          {
+            key: "settings",
+            label: "API Key 管理",
+            onClick: () => navigate("/settings/api-key")
           }
         ]}
       />
@@ -148,12 +168,16 @@ function AdminShell({
           >
             <Routes>
               <Route path="/" element={<Navigate to="/scripts" replace />} />
-              <Route path="/scripts" element={<ScriptListPage onOpenApiKeyModal={onOpenApiKeyModal} />} />
-              <Route path="/plugins" element={<PluginManagementPage onOpenApiKeyModal={onOpenApiKeyModal} />} />
+              <Route path="/scripts" element={<ScriptListPage />} />
+              <Route path="/schedules" element={<ScheduleManagementPage />} />
+              <Route path="/schedules/new" element={<ScheduleEditorPage colorMode={colorMode} mode="create" />} />
+              <Route path="/schedules/:id" element={<ScheduleEditorPage colorMode={colorMode} mode="edit" />} />
+              <Route path="/plugins" element={<PluginManagementPage />} />
               <Route
                 path="/plugins/:pluginId"
                 element={<PluginDetailPage colorMode={colorMode} />}
               />
+              <Route path="/settings/api-key" element={<ApiKeyManagementPage />} />
               <Route
                 path="/scripts/new"
                 element={<ScriptEditorPage colorMode={colorMode} mode="create" />}
@@ -183,8 +207,8 @@ function AdminShell({
 export function App() {
   const colorMode = useSystemColorMode();
   const isDark = colorMode === "dark";
-  const [apiKey, setApiKeyState] = useState(getApiKey());
-  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     document.documentElement.dataset.theme = colorMode;
@@ -193,21 +217,18 @@ export function App() {
   useEffect(
     () =>
       onAuthRequired(() => {
-        setApiKeyState(getApiKey());
-        setAuthModalOpen(true);
+        if (location.pathname === "/settings/api-key") {
+          return;
+        }
+
+        navigate("/settings/api-key", {
+          state: {
+            from: `${location.pathname}${location.search}${location.hash}`
+          }
+        });
       }),
-    []
+    [location.hash, location.pathname, location.search, navigate]
   );
-
-  const openAuthModal = () => {
-    setApiKeyState(getApiKey());
-    setAuthModalOpen(true);
-  };
-
-  const saveApiKey = () => {
-    setApiKey(apiKey);
-    setAuthModalOpen(false);
-  };
 
   return (
     <ConfigProvider
@@ -254,32 +275,10 @@ export function App() {
           }
         >
           <Routes>
-            <Route
-              path="/run/:id"
-              element={<ScriptRunPage colorMode={colorMode} onOpenApiKeyModal={openAuthModal} />}
-            />
-            <Route
-              path="/*"
-              element={<AdminShell colorMode={colorMode} onOpenApiKeyModal={openAuthModal} />}
-            />
+            <Route path="/run/:id" element={<ScriptRunPage colorMode={colorMode} />} />
+            <Route path="/*" element={<AdminShell colorMode={colorMode} />} />
           </Routes>
         </Suspense>
-        <Modal
-          title="设置 API Key"
-          open={authModalOpen}
-          onCancel={() => setAuthModalOpen(false)}
-          onOk={saveApiKey}
-          okText="保存"
-        >
-          <Space direction="vertical" style={{ width: "100%" }}>
-            <Text type="secondary">如果服务端启用了 `app.auth.api-keys`，这里填入 Bearer Token。</Text>
-            <Input.Password
-              placeholder="输入 API Key"
-              value={apiKey}
-              onChange={(event) => setApiKeyState(event.target.value)}
-            />
-          </Space>
-        </Modal>
       </AntdApp>
     </ConfigProvider>
   );

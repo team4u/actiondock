@@ -14,6 +14,7 @@ import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.when;
@@ -55,7 +56,12 @@ class SchemaControllerTest {
                         "type", "object",
                         "required", List.of("name"),
                         "properties", Map.of(
-                                "name", Map.of("type", "string", "title", "Name"),
+                                "name", Map.of(
+                                        "type", "string",
+                                        "title", "Name",
+                                        "description", "脚本名称",
+                                        "default", "guest"
+                                ),
                                 "profile", Map.of("type", "object", "title", "Profile")
                         )
                 ))
@@ -70,6 +76,8 @@ class SchemaControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.input[?(@.name=='name')]").exists())
                 .andExpect(jsonPath("$.data.input[?(@.name=='profile')]").exists())
+                .andExpect(jsonPath("$.data.input[?(@.name=='name')].description").value(contains("脚本名称")))
+                .andExpect(jsonPath("$.data.input[?(@.name=='name')].defaultValue").value(contains("guest")))
                 .andExpect(jsonPath("$.data.input[?(@.name=='profile')][0].required").doesNotExist())
                 .andExpect(jsonPath("$.data.output[0].name").value("message"))
                 .andExpect(jsonPath("$.data.output[0].required").doesNotExist())

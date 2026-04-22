@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.web;
 
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
+import org.team4u.scriptflow.domain.model.ExecutionTriggerSource;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 
@@ -12,6 +13,8 @@ public record ExecutionResponse(
         String scriptId,
         ExecutionStatus status,
         SubmitMode submitMode,
+        ExecutionTriggerSource triggerSource,
+        String scheduleId,
         Map<String, Object> output,
         String errorMessage,
         ErrorDetail errorDetail,

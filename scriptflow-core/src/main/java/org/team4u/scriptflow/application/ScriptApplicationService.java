@@ -3,6 +3,7 @@ package org.team4u.scriptflow.application;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
+import org.team4u.scriptflow.domain.port.ScriptScheduleRepository;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 
@@ -12,10 +13,14 @@ import java.util.List;
 public class ScriptApplicationService {
     private final ScriptRepository scriptRepository;
     private final ScriptEngine scriptEngine;
+    private final ScriptScheduleRepository scriptScheduleRepository;
 
-    public ScriptApplicationService(ScriptRepository scriptRepository, ScriptEngine scriptEngine) {
+    public ScriptApplicationService(ScriptRepository scriptRepository,
+                                    ScriptEngine scriptEngine,
+                                    ScriptScheduleRepository scriptScheduleRepository) {
         this.scriptRepository = scriptRepository;
         this.scriptEngine = scriptEngine;
+        this.scriptScheduleRepository = scriptScheduleRepository;
     }
 
     public ScriptDefinition save(ScriptDefinition definition) {
@@ -63,6 +68,7 @@ public class ScriptApplicationService {
     }
 
     public void delete(String id) {
+        scriptScheduleRepository.deleteByScriptId(id);
         scriptRepository.deleteById(id);
     }
 

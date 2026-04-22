@@ -3,6 +3,7 @@ package org.team4u.scriptflow.web;
 import org.springframework.web.bind.annotation.*;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
+import org.team4u.scriptflow.schedule.ScriptScheduleDispatcher;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
@@ -13,12 +14,15 @@ import java.util.List;
 public class ScriptController {
     private final ScriptApplicationService scriptApplicationService;
     private final ExecutionApplicationService executionApplicationService;
+    private final ScriptScheduleDispatcher scriptScheduleDispatcher;
     private final ExecutionResponseMapper executionResponseMapper;
 
     public ScriptController(ScriptApplicationService scriptApplicationService,
-                            ExecutionApplicationService executionApplicationService) {
+                            ExecutionApplicationService executionApplicationService,
+                            ScriptScheduleDispatcher scriptScheduleDispatcher) {
         this.scriptApplicationService = scriptApplicationService;
         this.executionApplicationService = executionApplicationService;
+        this.scriptScheduleDispatcher = scriptScheduleDispatcher;
         this.executionResponseMapper = new ExecutionResponseMapper();
     }
 
@@ -66,6 +70,7 @@ public class ScriptController {
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable String id) {
         scriptApplicationService.delete(id);
+        scriptScheduleDispatcher.refreshScript(id);
         return ApiResponse.success(null);
     }
 

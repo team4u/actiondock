@@ -1,15 +1,19 @@
 package org.team4u.scriptflow.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
+import org.team4u.scriptflow.application.ScheduleApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
+import org.team4u.scriptflow.domain.port.ScheduleExpressionValidator;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
+import org.team4u.scriptflow.domain.port.ScriptScheduleRepository;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
 import org.team4u.scriptflow.script.GroovyScriptEngine;
 import org.team4u.scriptflow.script.PythonScriptEngine;
@@ -42,8 +46,24 @@ public class RuntimeConfiguration {
     }
 
     @Bean
-    public ScriptApplicationService scriptApplicationService(ScriptRepository scriptRepository, ScriptEngine scriptEngine) {
-        return new ScriptApplicationService(scriptRepository, scriptEngine);
+    @ConditionalOnMissingBean(ScheduleExpressionValidator.class)
+    public ScheduleExpressionValidator defaultScheduleExpressionValidator() {
+        return expression -> {
+        };
+    }
+
+    @Bean
+    public ScriptApplicationService scriptApplicationService(ScriptRepository scriptRepository,
+                                                             ScriptEngine scriptEngine,
+                                                             ScriptScheduleRepository scriptScheduleRepository) {
+        return new ScriptApplicationService(scriptRepository, scriptEngine, scriptScheduleRepository);
+    }
+
+    @Bean
+    public ScheduleApplicationService scheduleApplicationService(ScriptScheduleRepository scriptScheduleRepository,
+                                                                 ScriptRepository scriptRepository,
+                                                                 ScheduleExpressionValidator scheduleExpressionValidator) {
+        return new ScheduleApplicationService(scriptScheduleRepository, scriptRepository, scheduleExpressionValidator);
     }
 
     @Bean

@@ -3,6 +3,7 @@ export type ScriptType = "GROOVY" | "PYTHON";
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
+export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED";
 
 export interface PublishedScriptSnapshot {
   name: string;
@@ -32,6 +33,8 @@ export interface ExecutionRecord {
   scriptId: string;
   status: ExecutionStatus;
   submitMode: SubmitMode;
+  triggerSource: ExecutionTriggerSource;
+  scheduleId?: string;
   input: Record<string, unknown>;
   output: Record<string, unknown>;
   errorMessage?: string;
@@ -56,6 +59,8 @@ export interface ExecutionResponse {
   scriptId: string;
   status: ExecutionStatus;
   submitMode: SubmitMode;
+  triggerSource: ExecutionTriggerSource;
+  scheduleId?: string;
   output: Record<string, unknown>;
   errorMessage?: string;
   errorDetail?: ErrorDetail;
@@ -70,6 +75,29 @@ export interface ExecuteRequest {
   input: Record<string, unknown>;
   mode: SubmitMode;
   responseView?: ExecutionResponseView;
+}
+
+export interface ScriptSchedule {
+  id: string;
+  scriptId: string;
+  name: string;
+  cronExpression: string;
+  input: Record<string, unknown>;
+  enabled: boolean;
+  nextRunAt?: string;
+  lastTriggeredAt?: string;
+  lastExecutionId?: string;
+  lastExecutionStatus?: ExecutionStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScriptScheduleUpsertRequest {
+  scriptId: string;
+  name: string;
+  cronExpression: string;
+  input: Record<string, unknown>;
+  enabled: boolean;
 }
 
 export interface ApiResponse<T> {

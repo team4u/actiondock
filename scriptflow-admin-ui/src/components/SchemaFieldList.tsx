@@ -1,6 +1,7 @@
 import { Alert, Segmented, Space, Typography } from "antd";
 import { useState } from "react";
 import { resolveSchemaFields } from "../schema";
+import { formatSchemaFieldSupplement } from "../schemaExecution";
 import { prettyJson } from "../utils";
 
 const { Text } = Typography;
@@ -56,24 +57,30 @@ export function SchemaFieldList({ schema, title, emptyDescription }: SchemaField
             <div className="schema-field-list">
               {supportedFields.map((field) => (
                 <div key={field.name} className="schema-field-list__item">
-                  <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                    <Space wrap size={[8, 6]}>
-                      <Text strong>{field.label}</Text>
-                      <Text type="secondary">{field.name}</Text>
-                    </Space>
+                  {(() => {
+                    const supplement = formatSchemaFieldSupplement(field);
 
-                    <Text type="secondary">
-                      {[field.kind, field.required ? "required" : "optional", field.widget === "textarea" ? "textarea" : ""]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Text>
+                    return (
+                      <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                        <Space wrap size={[8, 6]}>
+                          <Text strong>{field.label}</Text>
+                          <Text type="secondary">{field.name}</Text>
+                        </Space>
 
-                    {field.description ? <Text type="secondary">{field.description}</Text> : null}
+                        <Text type="secondary">
+                          {[field.kind, field.required ? "required" : "optional", field.widget === "textarea" ? "textarea" : ""]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </Text>
 
-                    {field.enumValues && field.enumValues.length > 0 ? (
-                      <Text type="secondary">可选值：{field.enumValues.join(" / ")}</Text>
-                    ) : null}
-                  </Space>
+                        {supplement ? <Text type="secondary">{supplement}</Text> : null}
+
+                        {field.enumValues && field.enumValues.length > 0 ? (
+                          <Text type="secondary">可选值：{field.enumValues.join(" / ")}</Text>
+                        ) : null}
+                      </Space>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

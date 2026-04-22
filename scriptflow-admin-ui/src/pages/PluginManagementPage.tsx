@@ -1,6 +1,5 @@
 import {
   DeleteOutlined,
-  KeyOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
@@ -19,11 +18,12 @@ import {
   upgradePlugin,
   uninstallPlugin
 } from "../api";
+import { TableLinkCell } from "../components/TableLinkCell";
 import type { PluginView } from "../types";
 
 const { Text } = Typography;
 
-export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal: () => void }) {
+export function PluginManagementPage() {
   const navigate = useNavigate();
   const [plugins, setPlugins] = useState<PluginView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,9 +105,7 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
       dataIndex: "pluginId",
       key: "pluginId",
       render: (value: string) => (
-        <Button type="link" style={{ paddingInline: 0 }} onClick={() => navigate(`/plugins/${value}`)}>
-          {value}
-        </Button>
+        <TableLinkCell to={`/plugins/${value}`}>{value}</TableLinkCell>
       )
     },
     {
@@ -232,9 +230,6 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
             <Text type="secondary">已启动 {plugins.filter((item) => item.started).length} 个</Text>
           </Space>
           <Space wrap className="script-list-toolbar__actions">
-            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
-              API Key
-            </Button>
             <Button icon={<ReloadOutlined />} onClick={() => void loadPlugins()} loading={loading}>
               刷新
             </Button>

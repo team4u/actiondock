@@ -929,3 +929,10 @@ a {
     padding: 14px;
   }
 }
+
+.schedule-json-preview {
+  margin-bottom: 0 !important;
+  max-width: 240px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

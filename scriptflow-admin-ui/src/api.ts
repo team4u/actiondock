@@ -9,6 +9,8 @@ import type {
   PluginInvokeRequest,
   PluginInvokeResponse,
   PluginView,
+  ScriptSchedule,
+  ScriptScheduleUpsertRequest,
   ScriptDefinition
 } from "./types";
 
@@ -151,6 +153,48 @@ export function deleteExecution(id: string): Promise<void> {
 export function clearExecutions(scriptId: string): Promise<void> {
   const params = new URLSearchParams({ scriptId });
   return request<void>(`/api/executions?${params.toString()}`, {
+    method: "DELETE"
+  });
+}
+
+export function listSchedules(): Promise<ScriptSchedule[]> {
+  return request<ScriptSchedule[]>("/api/schedules");
+}
+
+export function getSchedule(id: string): Promise<ScriptSchedule> {
+  return request<ScriptSchedule>(`/api/schedules/${id}`);
+}
+
+export function createSchedule(payload: ScriptScheduleUpsertRequest): Promise<ScriptSchedule> {
+  return request<ScriptSchedule>("/api/schedules", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateSchedule(id: string, payload: ScriptScheduleUpsertRequest): Promise<ScriptSchedule> {
+  return request<ScriptSchedule>(`/api/schedules/${id}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function enableSchedule(id: string): Promise<ScriptSchedule> {
+  return request<ScriptSchedule>(`/api/schedules/${id}/enable`, {
+    method: "POST"
+  });
+}
+
+export function disableSchedule(id: string): Promise<ScriptSchedule> {
+  return request<ScriptSchedule>(`/api/schedules/${id}/disable`, {
+    method: "POST"
+  });
+}
+
+export function deleteSchedule(id: string): Promise<void> {
+  return request<void>(`/api/schedules/${id}`, {
     method: "DELETE"
   });
 }

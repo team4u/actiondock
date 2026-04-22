@@ -1,6 +1,7 @@
 import { Alert, Form, Tabs } from "antd";
 import type { FormInstance } from "antd/es/form";
 import type { SchemaFieldDefinition } from "../schema";
+import { formatSchemaFieldDescription } from "../schemaExecution";
 import { CodeEditor } from "./CodeEditor";
 import {
   buildSchemaFieldRules,
@@ -69,7 +70,7 @@ export function SchemaObjectEditor({
                       name={field.name}
                       rules={buildSchemaFieldRules(field)}
                       valuePropName={getSchemaFieldValuePropName(field)}
-                      extra={field.description}
+                      extra={formatSchemaFieldDescription(field) ?? undefined}
                     >
                       {renderSchemaFieldInput(field, fieldInputOptions)}
                     </Form.Item>
@@ -81,7 +82,7 @@ export function SchemaObjectEditor({
               key: "JSON",
               label: "JSON 输入",
               children: (
-                <Form layout="vertical">
+                <Form form={form} layout="vertical">
                   <Form.Item label={jsonLabel} extra={jsonExtra}>
                     <CodeEditor
                       height={editorHeight}
@@ -97,7 +98,7 @@ export function SchemaObjectEditor({
           ]}
         />
       ) : (
-        <Form layout="vertical">
+        <Form form={form} layout="vertical">
           <Form.Item label={jsonLabel} extra={noSchemaExtra}>
             <CodeEditor
               height={editorHeight}

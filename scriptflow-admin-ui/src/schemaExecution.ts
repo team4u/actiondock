@@ -1,5 +1,6 @@
 import type { SchemaFieldDefinition } from "./schema";
 import type { ValidationErrorData } from "./types";
+import { prettyJson } from "./utils";
 
 function readSchemaFieldDefaultValue(field: SchemaFieldDefinition): unknown {
   const value = field.defaultValue;
@@ -31,13 +32,27 @@ export function buildSchemaFieldInitialValues(
   }, {});
 }
 
+export function buildSchemaFieldInitialState(fields: SchemaFieldDefinition[]): {
+  formValues: Record<string, unknown>;
+  jsonText: string;
+} {
+  const formValues = buildSchemaFieldInitialValues(fields);
+  return {
+    formValues,
+    jsonText: prettyJson(formValues)
+  };
+}
+
 export function buildSchemaExecutionInput(
   fields: SchemaFieldDefinition[],
   values: Record<string, unknown> | undefined
 ): Record<string, unknown> {
   return fields.reduce<Record<string, unknown>>((result, field) => {
     const value = values?.[field.name];
-    if (value === undefined || value === null || value === "") {
+    if (value === undefined || value === null) {
+      return result;
+    }
+    if (value === "" && field.defaultValue !== "") {
       return result;
     }
     result[field.name] = value;
@@ -51,11 +66,19 @@ export function formatSchemaFieldSupplement(field: SchemaFieldDefinition): strin
   if (field.description) {
     segments.push(field.description);
   }
+  if (field.defaultValue !== undefined) {
+    segments.push(`默认值: ${JSON.stringify(field.defaultValue)}`);
+  }
   if (field.examples && field.examples.length > 0) {
     segments.push(`示例: ${field.examples.map((item) => JSON.stringify(item)).join(" / ")}`);
   }
 
   return segments.length > 0 ? segments.join("  ") : null;
+}
+
+export function formatSchemaFieldDescription(field: SchemaFieldDefinition): string | null {
+  const description = field.description?.trim();
+  return description ? description : null;
 }
 
 export function isValidationErrorData(value: unknown): value is ValidationErrorData {

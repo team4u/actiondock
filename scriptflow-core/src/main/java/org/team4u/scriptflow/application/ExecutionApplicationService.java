@@ -5,6 +5,7 @@ import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.model.SubmitMode;
+import org.team4u.scriptflow.domain.model.ExecutionTriggerSource;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
@@ -36,15 +37,28 @@ public class ExecutionApplicationService {
 
     public ExecutionRecord execute(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
         ScriptDefinition scriptDefinition = getScript(scriptId);
-        return execute(scriptDefinition, input, submitMode);
+        return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
     }
 
     public ExecutionRecord executePublished(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
         ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
-        return execute(scriptDefinition, input, submitMode);
+        return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
     }
 
-    private ExecutionRecord execute(ScriptDefinition scriptDefinition, Map<String, Object> input, SubmitMode submitMode) {
+    public ExecutionRecord executePublished(String scriptId,
+                                            Map<String, Object> input,
+                                            SubmitMode submitMode,
+                                            ExecutionTriggerSource triggerSource,
+                                            String scheduleId) {
+        ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
+        return execute(scriptDefinition, input, submitMode, triggerSource, scheduleId);
+    }
+
+    private ExecutionRecord execute(ScriptDefinition scriptDefinition,
+                                    Map<String, Object> input,
+                                    SubmitMode submitMode,
+                                    ExecutionTriggerSource triggerSource,
+                                    String scheduleId) {
         Map<String, Object> payload = input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
         scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
 
@@ -52,6 +66,8 @@ public class ExecutionApplicationService {
                 .setId(UUID.randomUUID().toString())
                 .setScriptId(scriptDefinition.getId())
                 .setSubmitMode(submitMode == null ? SubmitMode.SYNC : submitMode)
+                .setTriggerSource(triggerSource)
+                .setScheduleId(scheduleId)
                 .setInput(payload)
                 .setCreatedAt(LocalDateTime.now());
 

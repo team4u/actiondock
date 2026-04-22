@@ -9,6 +9,9 @@ export interface SchemaFieldDraft {
   title: string;
   type: SchemaFieldKind;
   required: boolean;
+  description: string;
+  hasDefaultValue: boolean;
+  defaultValue?: unknown;
   enumText: string;
   widget: SchemaFieldWidget;
   rows: number;
@@ -31,6 +34,7 @@ export interface SchemaFieldValidationErrors {
   name?: string;
   enumText?: string;
   rows?: string;
+  defaultValue?: string;
 }
 
 interface ResolvedFieldUiConfig {
@@ -61,7 +65,7 @@ export type SchemaEditorState =
 
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 const ROOT_KEYS = new Set(["type", "properties", "required"]);
-const FIELD_KEYS = new Set(["type", "title", "enum", "x-ui"]);
+const FIELD_KEYS = new Set(["type", "title", "description", "default", "enum", "x-ui"]);
 const UI_KEYS = new Set(["widget", "rows"]);
 const DEFAULT_TEXTAREA_ROWS = 6;
 
@@ -105,6 +109,9 @@ export function createSchemaFieldDraft(): SchemaFieldDraft {
     title: "",
     type: "string",
     required: false,
+    description: "",
+    hasDefaultValue: false,
+    defaultValue: "",
     enumText: "",
     widget: "input",
     rows: DEFAULT_TEXTAREA_ROWS
@@ -125,6 +132,22 @@ export function parseEnumValues(enumText: string): string[] {
       .map((item) => item.trim())
       .filter(Boolean)
   );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function createDraftDefaultValue(kind: SchemaFieldKind): unknown {
+  switch (kind) {
+    case "boolean":
+      return false;
+    case "number":
+    case "integer":
+      return 0;
+    default:
+      return "";
+  }
 }
 
 export function validateSchemaFields(
@@ -162,7 +185,30 @@ export function validateSchemaFields(
       fieldErrors.rows = "请输入大于 0 的整数行数";
     }
 
-    if (fieldErrors.name || fieldErrors.enumText || fieldErrors.rows) {
+    if (field.hasDefaultValue) {
+      if (field.type === "boolean") {
+        if (typeof field.defaultValue !== "boolean") {
+          fieldErrors.defaultValue = "布尔默认值必须是 true 或 false";
+        }
+      } else if (field.type === "number") {
+        if (!isFiniteNumber(field.defaultValue)) {
+          fieldErrors.defaultValue = "数字默认值必须是合法数字";
+        }
+      } else if (field.type === "integer") {
+        if (!isFiniteNumber(field.defaultValue) || !Number.isInteger(field.defaultValue)) {
+          fieldErrors.defaultValue = "整数默认值必须是整数";
+        }
+      } else if (field.type === "enum") {
+        const enumValues = parseEnumValues(field.enumText);
+        if (typeof field.defaultValue !== "string" || !enumValues.includes(field.defaultValue)) {
+          fieldErrors.defaultValue = "默认值必须是枚举值之一";
+        }
+      } else if (typeof field.defaultValue !== "string") {
+        fieldErrors.defaultValue = "字符串默认值必须是文本";
+      }
+    }
+
+    if (fieldErrors.name || fieldErrors.enumText || fieldErrors.rows || fieldErrors.defaultValue) {
       errors[field.id] = {
         ...errors[field.id],
         ...fieldErrors
@@ -256,6 +302,65 @@ function parseFieldUi(
   };
 }
 
+function parseFieldDefaultValue(
+  meta: Record<string, unknown>,
+  fieldName: string,
+  options: {
+    strict: boolean;
+    kind: SchemaFieldKind | null;
+    enumValues?: string[];
+  }
+): { hasDefaultValue: boolean; defaultValue?: unknown } {
+  if (!("default" in meta)) {
+    return {
+      hasDefaultValue: false,
+      defaultValue: options.kind ? createDraftDefaultValue(options.kind) : undefined
+    };
+  }
+
+  const defaultValue = meta.default;
+  let valid = true;
+
+  switch (options.kind) {
+    case "boolean":
+      valid = typeof defaultValue === "boolean";
+      break;
+    case "number":
+      valid = isFiniteNumber(defaultValue);
+      break;
+    case "integer":
+      valid = isFiniteNumber(defaultValue) && Number.isInteger(defaultValue);
+      break;
+    case "enum":
+      valid =
+        typeof defaultValue === "string" &&
+        Array.isArray(options.enumValues) &&
+        options.enumValues.includes(defaultValue);
+      break;
+    case "string":
+      valid = typeof defaultValue === "string";
+      break;
+    default:
+      valid = false;
+      break;
+  }
+
+  if (!valid) {
+    if (options.strict) {
+      throw new Error(`字段 ${fieldName} 的 default 与字段类型不匹配`);
+    }
+    return {
+      hasDefaultValue: true,
+      defaultValue
+    };
+  }
+
+  return {
+    hasDefaultValue: true,
+    defaultValue
+  };
+}
+
 function resolveFieldMeta(
   name: string,
   meta: Record<string, unknown>,
@@ -343,6 +448,11 @@ export function deserializeSchema(
     }
 
     const fieldMeta = resolveFieldMeta(name, metaValue, { strictUi: true });
+    const defaultState = parseFieldDefaultValue(metaValue, name, {
+      strict: true,
+      kind: fieldMeta.kind,
+      enumValues: fieldMeta.enumValues
+    });
 
     if ("enum" in metaValue) {
       if (!Array.isArray(metaValue.enum) || metaValue.enum.some((item) => typeof item !== "string")) {
@@ -357,6 +467,9 @@ export function deserializeSchema(
         title: fieldMeta.label === name ? "" : fieldMeta.label,
         type: "enum",
         required: requiredSet.has(name),
+        description: fieldMeta.description ?? "",
+        hasDefaultValue: defaultState.hasDefaultValue,
+        defaultValue: defaultState.defaultValue ?? createDraftDefaultValue("enum"),
         enumText: metaValue.enum.join(", "),
         widget: "input",
         rows: DEFAULT_TEXTAREA_ROWS
@@ -374,6 +487,9 @@ export function deserializeSchema(
       title: fieldMeta.label === name ? "" : fieldMeta.label,
       type: fieldMeta.kind,
       required: requiredSet.has(name),
+      description: fieldMeta.description ?? "",
+      hasDefaultValue: defaultState.hasDefaultValue,
+      defaultValue: defaultState.defaultValue ?? createDraftDefaultValue(fieldMeta.kind),
       enumText: "",
       widget: fieldMeta.ui.widget ?? "input",
       rows: fieldMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS
@@ -417,12 +533,19 @@ function buildSchemaFromFields(
       return;
     }
     const title = field.title.trim();
+    const description = field.description.trim();
     const property: Record<string, unknown> = {
       type: field.type === "enum" ? "string" : field.type
     };
 
     if (title) {
       property.title = title;
+    }
+    if (description) {
+      property.description = description;
+    }
+    if (field.hasDefaultValue) {
+      property.default = field.defaultValue;
     }
     if (field.type === "enum") {
       const enumValues = parseEnumValues(field.enumText);

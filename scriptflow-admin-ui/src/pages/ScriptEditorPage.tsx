@@ -36,7 +36,7 @@ import {
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ApiError,
@@ -57,12 +57,11 @@ import {
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { CommandPanel } from "../components/CommandPanel";
-import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
+import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { InfoHint } from "../components/InfoHint";
 import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
-import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecuteCliCommand,
   buildExecuteCurlCommand,
@@ -86,10 +85,11 @@ import {
   parseSchemaObjectEditorJsonText
 } from "../schemaObjectEditorSupport";
 import { parseGeneratedScriptText } from "../generatedScript";
-import { isValidationErrorData } from "../schemaExecution";
+import { buildSchemaFieldInitialState, isValidationErrorData } from "../schemaExecution";
 import type {
   ExecutionRecord,
   ExecutionStatus,
+  ExecutionTriggerSource,
   PluginView,
   ScriptDefinition,
   ScriptType,
@@ -169,6 +169,10 @@ function getExecutionStatusColor(status: ExecutionStatus): string {
 
 function isExecutionActive(status: ExecutionStatus): boolean {
   return status === "PENDING" || status === "RUNNING";
+}
+
+function getTriggerSourceLabel(source: ExecutionTriggerSource): string {
+  return source === "SCHEDULED" ? "定时任务" : "手动触发";
 }
 
 function getCommandInputSourceLabel(source: "current-json" | "current-form" | "sample" | "empty"): string {
@@ -252,8 +256,18 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         : requestedTab === "commands"
           ? "commands"
           : "definition";
-  const { supportedFields, unsupportedFields } = resolveSchemaFields(currentScript?.inputSchema);
-  const { supportedFields: supportedOutputFields } = resolveSchemaFields(currentScript?.outputSchema);
+  const { supportedFields, unsupportedFields } = useMemo(
+    () => resolveSchemaFields(currentScript?.inputSchema),
+    [currentScript?.inputSchema]
+  );
+  const { supportedFields: supportedOutputFields } = useMemo(
+    () => resolveSchemaFields(currentScript?.outputSchema),
+    [currentScript?.outputSchema]
+  );
+  const executionInitialState = useMemo(
+    () => buildSchemaFieldInitialState(supportedFields),
+    [supportedFields]
+  );
   const hasInputSchema = Boolean(currentScript?.inputSchema && Object.keys(currentScript.inputSchema).length > 0);
   const hasOutputSchema = Boolean(currentScript?.outputSchema && Object.keys(currentScript.outputSchema).length > 0);
   const hasUnpublishedChanges = Boolean(
@@ -429,8 +443,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   useEffect(() => {
     clearPolling();
     executionForm.resetFields();
+    executionForm.setFieldsValue(executionInitialState.formValues as Record<string, any>);
     setExecutionMode("SYNC");
-    setExecutionJsonInput("{}");
+    setExecutionJsonInput(executionInitialState.jsonText);
     setExecutionInputMode(supportsSchemaForm ? "SCHEMA" : "JSON");
 
     if (!currentScript?.id) {
@@ -442,7 +457,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     setExecutionHistory([]);
     setCurrentExecution(null);
     void loadExecutionHistory(currentScript.id);
-  }, [currentScript?.id, executionForm, supportsSchemaForm]);
+  }, [currentScript?.id, executionForm, executionInitialState, supportsSchemaForm]);
 
   useEffect(() => () => clearPolling(), []);
 
@@ -715,6 +730,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     }
   };
 
+  const handleResetExecutionInput = () => {
+    executionForm.resetFields();
+    executionForm.setFieldsValue(executionInitialState.formValues as Record<string, any>);
+    setExecutionJsonInput(executionInitialState.jsonText);
+    setExecutionValidationError(null);
+  };
+
   const handleTabChange = (key: string) => {
     const nextParams = new URLSearchParams(searchParams);
     if (key === "execution" || key === "commands") {
@@ -834,6 +856,23 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       dataIndex: "submitMode",
       key: "submitMode",
       width: 120
+    },
+    {
+      title: "来源",
+      key: "triggerSource",
+      width: 160,
+      render: (_: unknown, record) => (
+        <Space direction="vertical" size={2}>
+          <Tag color={record.triggerSource === "SCHEDULED" ? "blue" : "default"}>
+            {getTriggerSourceLabel(record.triggerSource)}
+          </Tag>
+          {record.scheduleId ? (
+            <Text type="secondary" code>
+              {record.scheduleId}
+            </Text>
+          ) : null}
+        </Space>
+      )
     },
     {
       title: "创建时间",
@@ -1491,88 +1530,46 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                     editorTheme={editorTheme}
                                   />
 
-                                  <Button
-                                    type="primary"
-                                    icon={<PlayCircleOutlined />}
-                                    onClick={() => void handleExecute()}
-                                    loading={executing}
-                                    block
-                                  >
-                                    执行脚本
-                                  </Button>
+                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                                    <Button icon={<ReloadOutlined />} onClick={handleResetExecutionInput} block>
+                                      重置为默认值
+                                    </Button>
+                                    <Button
+                                      type="primary"
+                                      icon={<PlayCircleOutlined />}
+                                      onClick={() => void handleExecute()}
+                                      loading={executing}
+                                      block
+                                    >
+                                      执行脚本
+                                    </Button>
+                                  </Space>
                                 </Space>
                               </Card>
                             </Col>
 
                             <Col xs={24} xl={14} className="equal-height-col">
-                              <Card
-                                type="inner"
-                                title="执行结果"
-                                className="equal-height-card"
-                                extra={
-                                  currentExecution ? (
-                                    <Tag color={getExecutionStatusColor(currentExecution.status)}>
-                                      {currentExecution.status}
-                                    </Tag>
-                                  ) : (
-                                    <Text type="secondary">暂无结果</Text>
-                                  )
-                                }
-                              >
-                                {currentExecution ? (
-                                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                                    <Descriptions
-                                      size="small"
-                                      column={{
-                                        xs: 1,
-                                        sm: 2,
-                                        lg: 4
-                                      }}
-                                    >
-                                      <Descriptions.Item label="执行 ID">
-                                        <Text code>{currentExecution.id}</Text>
-                                      </Descriptions.Item>
-                                      <Descriptions.Item label="提交方式">
-                                        {currentExecution.submitMode}
-                                      </Descriptions.Item>
-                                      <Descriptions.Item label="创建时间">
-                                        {formatDateTime(currentExecution.createdAt)}
-                                      </Descriptions.Item>
-                                      <Descriptions.Item label="完成时间">
-                                        {formatDateTime(currentExecution.finishedAt)}
-                                      </Descriptions.Item>
-                                    </Descriptions>
-
-                                    <ErrorDetailPanel
-                                      title="执行失败"
-                                      message={currentExecution.errorMessage}
-                                      detail={currentExecution.errorDetail}
-                                    />
-
-                                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                                        <Text strong>输入值</Text>
-                                        <SchemaObjectResultView
-                                          schema={currentScript?.inputSchema}
-                                          value={currentExecution.input}
-                                          schemaName="inputSchema"
-                                          valueName="输入"
-                                        />
-                                      </Space>
-
-                                      <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                                        <Text strong>输出值</Text>
-                                        <SchemaObjectResultView
-                                          schema={currentScript?.outputSchema}
-                                          value={currentExecution.output}
-                                        />
-                                      </Space>
-                                    </Space>
-                                  </Space>
-                                ) : (
+                              {currentExecution ? (
+                                <ExecutionResultCard
+                                  execution={currentExecution}
+                                  inputSchema={currentScript?.inputSchema}
+                                  outputSchema={currentScript?.outputSchema}
+                                  showTriggerSource={true}
+                                  titleExtra={
+                                    currentExecution ? (
+                                      <Tag color={getExecutionStatusColor(currentExecution.status)}>
+                                        {currentExecution.status}
+                                      </Tag>
+                                    ) : (
+                                      <Text type="secondary">暂无结果</Text>
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <Card type="inner" title="执行结果" className="equal-height-card">
                                   <Empty description="执行后将在这里查看结果详情。" />
-                                )}
-                              </Card>
+                                </Card>
+                              )}
                             </Col>
                           </Row>
 

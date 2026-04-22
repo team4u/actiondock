@@ -1,6 +1,5 @@
 import {
   ArrowLeftOutlined,
-  KeyOutlined,
   PlayCircleOutlined,
   ReloadOutlined
 } from "@ant-design/icons";
@@ -30,7 +29,7 @@ import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { resolveSchemaFields } from "../schema";
 import {
   buildSchemaExecutionInput,
-  buildSchemaFieldInitialValues,
+  buildSchemaFieldInitialState,
   formatSchemaFieldSupplement,
   isValidationErrorData
 } from "../schemaExecution";
@@ -52,7 +51,6 @@ const { Text, Title } = Typography;
 
 interface ScriptRunPageProps {
   colorMode: "light" | "dark";
-  onOpenApiKeyModal: () => void;
 }
 
 interface PageStateError {
@@ -83,7 +81,7 @@ function StatusCallout({
   );
 }
 
-export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPageProps) {
+export function ScriptRunPage({ colorMode }: ScriptRunPageProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [form] = Form.useForm();
@@ -105,6 +103,10 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
   const { supportedFields: outputFields, unsupportedFields: unsupportedOutputFields } = useMemo(
     () => resolveSchemaFields(script?.outputSchema),
     [script?.outputSchema]
+  );
+  const executionInitialState = useMemo(
+    () => buildSchemaFieldInitialState(supportedInputFields),
+    [supportedInputFields]
   );
   const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
   const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
@@ -173,8 +175,8 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
       return;
     }
     form.resetFields();
-    form.setFieldsValue(buildSchemaFieldInitialValues(supportedInputFields));
-  }, [form, script, supportedInputFields]);
+    form.setFieldsValue(executionInitialState.formValues);
+  }, [executionInitialState.formValues, form, script]);
 
   const clearPolling = () => {
     if (pollingTimerRef.current !== null) {
@@ -284,7 +286,7 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
   const handleReset = () => {
     clearPolling();
     form.resetFields();
-    form.setFieldsValue(buildSchemaFieldInitialValues(supportedInputFields));
+    form.setFieldsValue(executionInitialState.formValues);
     setValidationError(null);
     setExecutionResult(null);
   };
@@ -316,9 +318,6 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
             <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate("/scripts")}>
               返回脚本列表
             </Button>
-            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
-              API Key
-            </Button>
           </div>
           <StatusCallout
             title={pageError.title}
@@ -342,14 +341,9 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
           <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate("/scripts")}>
             返回脚本列表
           </Button>
-          <Space wrap>
-            <Button icon={<ReloadOutlined />} onClick={handleReset}>
-              重置
-            </Button>
-            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
-              API Key
-            </Button>
-          </Space>
+          <Button icon={<ReloadOutlined />} onClick={handleReset}>
+            重置为默认值
+          </Button>
         </div>
 
         <header className="run-page__headline">

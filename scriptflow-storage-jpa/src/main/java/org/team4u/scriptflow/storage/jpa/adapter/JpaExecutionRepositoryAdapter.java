@@ -4,6 +4,7 @@ import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.domain.model.SubmitMode;
+import org.team4u.scriptflow.domain.model.ExecutionTriggerSource;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.storage.jpa.entity.ExecutionEntity;
@@ -57,6 +58,8 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setScriptId(record.getScriptId());
         entity.setStatus(record.getStatus().name());
         entity.setSubmitMode(record.getSubmitMode().name());
+        entity.setTriggerSource(record.getTriggerSource().name());
+        entity.setScheduleId(record.getScheduleId());
         entity.setInputJson(jsonCodec.write(record.getInput()));
         entity.setOutputJson(jsonCodec.write(record.getOutput()));
         entity.setErrorMessage(record.getErrorMessage());
@@ -74,6 +77,10 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
                 .setScriptId(entity.getScriptId())
                 .setStatus(ExecutionStatus.valueOf(entity.getStatus()))
                 .setSubmitMode(SubmitMode.valueOf(entity.getSubmitMode()))
+                .setTriggerSource(entity.getTriggerSource() == null
+                        ? ExecutionTriggerSource.MANUAL
+                        : ExecutionTriggerSource.valueOf(entity.getTriggerSource()))
+                .setScheduleId(entity.getScheduleId())
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
                 .setOutput(jsonCodec.readMap(entity.getOutputJson()))
                 .setErrorMessage(entity.getErrorMessage())

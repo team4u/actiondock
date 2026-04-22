@@ -21,3 +21,5 @@ app:
       enabled: true
       cache-max-size: 128
       cache-expire-after-access-minutes: 30
+  schedules:
+    pool-size: 2

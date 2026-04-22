@@ -1,4 +1,4 @@
-import { DownloadOutlined, ExportOutlined, KeyOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExportOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 import { Button, Card, Modal, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
@@ -6,6 +6,7 @@ import type { ChangeEvent, Key } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, createScript, listScripts, updateScript } from "../api";
+import { TableLinkCell } from "../components/TableLinkCell";
 import {
   analyzeScriptImport,
   buildScriptExportBundle,
@@ -18,7 +19,7 @@ import type { ScriptDefinition } from "../types";
 
 const { Text } = Typography;
 
-export function ScriptListPage({ onOpenApiKeyModal }: { onOpenApiKeyModal: () => void }) {
+export function ScriptListPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -181,9 +182,7 @@ export function ScriptListPage({ onOpenApiKeyModal }: { onOpenApiKeyModal: () =>
       dataIndex: "id",
       key: "id",
       render: (value: string) => (
-        <Button type="link" onClick={() => navigate(`/scripts/${value}`)} style={{ padding: 0 }}>
-          {value}
-        </Button>
+        <TableLinkCell to={`/scripts/${value}`}>{value}</TableLinkCell>
       )
     },
     {
@@ -267,9 +266,6 @@ export function ScriptListPage({ onOpenApiKeyModal }: { onOpenApiKeyModal: () =>
           <Space wrap className="script-list-toolbar__actions">
             <Button icon={<PlusOutlined />} type="primary" onClick={() => navigate("/scripts/new")}>
               新建脚本
-            </Button>
-            <Button icon={<KeyOutlined />} onClick={onOpenApiKeyModal}>
-              API Key
             </Button>
             <Button
               icon={<UploadOutlined />}

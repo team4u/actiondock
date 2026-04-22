@@ -31,6 +31,11 @@ const STRING_WIDGET_OPTIONS = [
   { value: "textarea", label: "多行输入" }
 ] as const;
 
+const BOOLEAN_DEFAULT_OPTIONS = [
+  { value: true, label: "true" },
+  { value: false, label: "false" }
+];
+
 interface SchemaBuilderProps {
   label: string;
   value: SchemaEditorState;
@@ -80,6 +85,13 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
 
   const builderErrors = value.mode === "builder" ? validateSchemaFields(value.fields) : {};
   const jsonText = formatSchemaEditorState(value);
+
+  const buildTypePatch = (field: SchemaFieldDraft, nextType: SchemaFieldKind): Partial<SchemaFieldDraft> => ({
+    type: nextType,
+    widget: nextType === "string" ? field.widget : "input",
+    hasDefaultValue: false,
+    defaultValue: nextType === "boolean" ? false : nextType === "number" || nextType === "integer" ? 0 : ""
+  });
 
   const setField = (fieldId: string, patch: Partial<SchemaFieldDraft>) => {
     updateBuilderFields(value, onChange, (fields) =>
@@ -249,8 +261,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   options={FIELD_TYPE_OPTIONS}
                                   onChange={(nextValue) =>
                                     setField(field.id, {
-                                      type: nextValue,
-                                      widget: nextValue === "string" ? field.widget : "input"
+                                      ...buildTypePatch(field, nextValue)
                                     })
                                   }
                                 />
@@ -305,6 +316,92 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   </Text>
                                 </div>
                               )}
+
+                              <div className="schema-field-grid__item schema-field-grid__item--full">
+                                <Text type="secondary">描述</Text>
+                                <Input.TextArea
+                                  value={field.description}
+                                  autoSize={{ minRows: 2, maxRows: 4 }}
+                                  placeholder="例如 用于展示给调用方的字段说明"
+                                  onChange={(event) => setField(field.id, { description: event.target.value })}
+                                />
+                              </div>
+
+                              <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                <Text type="secondary">默认值</Text>
+                                <div className="schema-field-switch">
+                                  <Switch
+                                    checked={field.hasDefaultValue}
+                                    checkedChildren="已设置"
+                                    unCheckedChildren="未设置"
+                                    onChange={(checked) =>
+                                      setField(field.id, {
+                                        hasDefaultValue: checked
+                                      })
+                                    }
+                                  />
+                                </div>
+                              </div>
+
+                              {field.hasDefaultValue ? (
+                                <div className="schema-field-grid__item schema-field-grid__item--full">
+                                  <Text type="secondary">默认值内容</Text>
+                                  {field.type === "boolean" ? (
+                                    <Select
+                                      value={typeof field.defaultValue === "boolean" ? field.defaultValue : false}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      options={BOOLEAN_DEFAULT_OPTIONS}
+                                      onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
+                                    />
+                                  ) : field.type === "number" || field.type === "integer" ? (
+                                    <InputNumber
+                                      value={typeof field.defaultValue === "number" ? field.defaultValue : null}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      style={{ width: "100%" }}
+                                      precision={field.type === "integer" ? 0 : undefined}
+                                      placeholder={field.type === "integer" ? "例如 1" : "例如 1.5"}
+                                      onChange={(nextValue) =>
+                                        setField(field.id, {
+                                          defaultValue: typeof nextValue === "number" ? nextValue : null
+                                        })
+                                      }
+                                    />
+                                  ) : field.type === "enum" ? (
+                                    <Select
+                                      value={typeof field.defaultValue === "string" ? field.defaultValue : undefined}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      placeholder="请选择枚举默认值"
+                                      options={field.enumText
+                                        .split(",")
+                                        .map((item) => item.trim())
+                                        .filter(Boolean)
+                                        .map((item) => ({
+                                          value: item,
+                                          label: item
+                                        }))}
+                                      onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
+                                    />
+                                  ) : field.widget === "textarea" ? (
+                                    <Input.TextArea
+                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      autoSize={{ minRows: 2, maxRows: 6 }}
+                                      placeholder="输入字符串默认值"
+                                      onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
+                                    />
+                                  ) : (
+                                    <Input
+                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      placeholder="输入字符串默认值"
+                                      onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
+                                    />
+                                  )}
+                                  <Text type={fieldErrors.defaultValue ? "danger" : "secondary"}>
+                                    {fieldErrors.defaultValue ?? "默认值会在正式页和执行调试页初始化时自动回填。"}
+                                  </Text>
+                                </div>
+                              ) : null}
 
                               {field.type === "enum" && (
                                 <div className="schema-field-grid__item schema-field-grid__item--full">

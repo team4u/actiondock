@@ -22,6 +22,8 @@ final class ExecutionResponseMapper {
                 record.getScriptId(),
                 record.getStatus(),
                 record.getSubmitMode(),
+                record.getTriggerSource(),
+                record.getScheduleId(),
                 executionOutputProjector.project(rawOutput, scriptDefinition.getOutputSchema()),
                 record.getErrorMessage(),
                 record.getErrorDetail(),

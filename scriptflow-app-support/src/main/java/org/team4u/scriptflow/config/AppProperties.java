@@ -10,6 +10,7 @@ public class AppProperties {
     private final Auth auth = new Auth();
     private final Plugins plugins = new Plugins();
     private final Execution execution = new Execution();
+    private final Schedules schedules = new Schedules();
 
     public Auth getAuth() {
         return auth;
@@ -21,6 +22,10 @@ public class AppProperties {
 
     public Plugins getPlugins() {
         return plugins;
+    }
+
+    public Schedules getSchedules() {
+        return schedules;
     }
 
     public static class Auth {
@@ -117,6 +122,18 @@ public class AppProperties {
 
         public void setTimeoutSeconds(int timeoutSeconds) {
             this.timeoutSeconds = timeoutSeconds;
+        }
+    }
+
+    public static class Schedules {
+        private int poolSize = 2;
+
+        public int getPoolSize() {
+            return poolSize;
+        }
+
+        public void setPoolSize(int poolSize) {
+            this.poolSize = poolSize;
         }
     }
 }

@@ -23,6 +23,11 @@ public class ExecutionEntity {
     @Column(nullable = false)
     private String submitMode;
 
+    @Column(nullable = false)
+    private String triggerSource = "MANUAL";
+
+    private String scheduleId;
+
     @Lob
     private String inputJson;
 
@@ -49,6 +54,10 @@ public class ExecutionEntity {
     public void setStatus(String status) { this.status = status; }
     public String getSubmitMode() { return submitMode; }
     public void setSubmitMode(String submitMode) { this.submitMode = submitMode; }
+    public String getTriggerSource() { return triggerSource; }
+    public void setTriggerSource(String triggerSource) { this.triggerSource = triggerSource; }
+    public String getScheduleId() { return scheduleId; }
+    public void setScheduleId(String scheduleId) { this.scheduleId = scheduleId; }
     public String getInputJson() { return inputJson; }
     public void setInputJson(String inputJson) { this.inputJson = inputJson; }
     public String getOutputJson() { return outputJson; }
