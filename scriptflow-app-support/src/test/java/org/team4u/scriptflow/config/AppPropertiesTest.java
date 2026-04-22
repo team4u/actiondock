@@ -9,6 +9,7 @@ class AppPropertiesTest {
     void executionGroovyUsesExpectedDefaults() {
         AppProperties properties = new AppProperties();
 
+        assertThat(properties.getPlugins().getDir()).isEqualTo("./plugins");
         assertThat(properties.getExecution().getGroovy().isEnabled()).isTrue();
         assertThat(properties.getExecution().getGroovy().getCacheMaxSize()).isEqualTo(128);
         assertThat(properties.getExecution().getGroovy().getCacheExpireAfterAccessMinutes()).isEqualTo(30);

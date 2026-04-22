@@ -7,6 +7,7 @@ import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
+import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
@@ -26,8 +27,10 @@ public class RuntimeConfiguration {
     }
 
     @Bean
-    public PluginRuntimeService pluginRuntimeService(JsonCodec jsonCodec, AppProperties properties) {
-        return new PluginRuntimeService(jsonCodec, properties.getPlugins());
+    public PluginRuntimeService pluginRuntimeService(JsonCodec jsonCodec,
+                                                     PluginRegistryRepository pluginRegistryRepository,
+                                                     AppProperties properties) {
+        return new PluginRuntimeService(jsonCodec, pluginRegistryRepository, properties.getPlugins());
     }
 
     @Bean

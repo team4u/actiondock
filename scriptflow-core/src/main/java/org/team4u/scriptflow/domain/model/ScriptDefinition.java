@@ -3,6 +3,14 @@ package org.team4u.scriptflow.domain.model;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * 脚本定义实体，表示一个可执行的脚本配置。
+ * <p>
+ * 脚本定义包含脚本的源代码、类型、输入输出模式以及发布状态。
+ * 支持草稿和发布两种状态，通过快照机制实现版本管理。
+ *
+ * @author jay.wu
+ */
 public class ScriptDefinition {
     private String id;
     private String name;
@@ -91,6 +99,14 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 获取已发布快照的副本。
+     * <p>
+     * 如果脚本已发布且存在快照，返回快照的深拷贝以防止意外修改。
+     * 如果脚本状态为已发布但无存储快照，则基于当前内容创建临时快照。
+     *
+     * @return 发布的快照副本，如果未发布则返回 null
+     */
     public PublishedScriptSnapshot getPublishedSnapshot() {
         PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
         return snapshot == null ? null : snapshot.copy();
@@ -101,10 +117,23 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 检查是否存在存储的发布快照。
+     *
+     * @return 如果存在存储的发布快照返回 true
+     */
     public boolean hasStoredPublishedSnapshot() {
         return publishedSnapshot != null;
     }
 
+    /**
+     * 创建当前状态的快照。
+     * <p>
+     * 快照包含脚本的当前名称、类型、源代码和输入输出模式。
+     * 用于保存脚本的发布版本。
+     *
+     * @return 基于当前内容创建的新快照实例
+     */
     public PublishedScriptSnapshot snapshotCurrent() {
         return new PublishedScriptSnapshot()
                 .setName(name)
@@ -114,11 +143,27 @@ public class ScriptDefinition {
                 .setOutputSchema(outputSchema);
     }
 
+    /**
+     * 检查是否存在未发布的更改。
+     * <p>
+     * 通过比较已发布快照与当前内容来判断是否有未发布的修改。
+     *
+     * @return 如果存在未发布的更改返回 true
+     */
     public boolean getHasUnpublishedChanges() {
         PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
         return snapshot != null && !snapshot.equals(snapshotCurrent());
     }
 
+    /**
+     * 将脚本转换为已发布状态的定义。
+     * <p>
+     * 基于存储的发布快照创建一个新的脚本定义，设置状态为已发布。
+     * 用于执行已发布的脚本版本，确保用户获取的是经过审批的稳定版本。
+     *
+     * @return 已发布状态的脚本定义
+     * @throws IllegalStateException 如果脚本尚未发布
+     */
     public ScriptDefinition toPublishedDefinition() {
         PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
         if (snapshot == null) {
@@ -157,6 +202,14 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 解析已发布的快照。
+     * <p>
+     * 优先返回存储的快照，如果没有存储快照但状态为已发布，
+     * 则基于当前内容创建临时快照。
+     *
+     * @return 发布的快照，如果未发布则返回 null
+     */
     private PublishedScriptSnapshot resolvePublishedSnapshot() {
         if (publishedSnapshot != null) {
             return publishedSnapshot;

@@ -1,5 +1,13 @@
 package org.team4u.scriptflow.domain.model;
 
+/**
+ * 脚本执行上下文，在脚本执行过程中传递的运行时信息。
+ * <p>
+ * 上下文对象封装了执行相关的元数据，包括执行ID和提交模式。
+ * 由脚本引擎在执行时创建并传递给被执行的脚本。
+ *
+ * @author jay.wu
+ */
 public class ScriptExecutionContext {
     private String executionId;
     private SubmitMode submitMode;

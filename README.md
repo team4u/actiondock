@@ -117,7 +117,7 @@ scriptflow
 | POST | `/api/plugins/{pluginId}/stop` | 停止插件 |
 | GET | `/api/plugins/{pluginId}/config` | 获取插件配置 |
 | PUT | `/api/plugins/{pluginId}/config` | 更新插件配置 |
-| DELETE | `/api/plugins/{pluginId}` | 卸载插件并删除文件与配置 |
+| DELETE | `/api/plugins/{pluginId}` | 卸载插件并删除数据库记录、文件与配置 |
 
 ### 响应视图
 
@@ -289,7 +289,7 @@ scriptflow-plugin-template/target/scriptflow-plugin-template-0.2.0.jar
 1. 将插件包保存到 `app.plugins.dir`
 2. 通过 PF4J `load`
 3. 自动 `start`
-4. 注册插件动作元数据
+4. 将插件元数据写入 `plugin_registration` 表，并标记为启用
 
 如果其中任一步失败，安装会回滚并返回错误。
 
@@ -297,14 +297,16 @@ scriptflow-plugin-template/target/scriptflow-plugin-template-0.2.0.jar
 
 插件管理页支持以下操作：
 
-- **启动**：重新启用并启动插件
-- **停止**：停止插件，并将其标记为 disabled
-- **卸载**：停止并卸载插件，同时删除插件文件与保存的配置文件
+- **启动**：将数据库中的插件记录标记为启用，并把对应插件加载到 JVM
+- **停止**：停止插件，并将数据库记录标记为 disabled
+- **卸载**：停止并卸载插件，同时删除数据库记录、插件文件与保存的配置文件
 
 说明：
 
+- 平台启动时不会扫描整个插件目录自动加载所有文件
+- 只有 `plugin_registration` 表中 `enabled=true` 的插件，才会从 `app.plugins.dir` 加载到 JVM
 - 已停止的插件不会通过脚本校验，也不能在 Groovy 中调用
-- 卸载后，插件文件与对应配置文件会一并删除
+- 卸载后，数据库记录、插件文件与对应配置文件会一并删除
 
 ### 4. 插件配置
 
@@ -404,7 +406,8 @@ try {
 也就是说：
 
 - 只要 CLI 进程使用的 `app.plugins.dir` 与 Web 服务一致
-- 且对应插件已经存在于该目录中
+- 且数据库中已经存在该插件记录并标记为启用
+- 且对应插件文件存在于该目录中
 
 那么通过 CLI 执行 Groovy 脚本时，同样可以调用：
 

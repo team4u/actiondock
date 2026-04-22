@@ -4,6 +4,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * 已发布脚本的快照，记录脚本发布时的完整状态。
+ * <p>
+ * 快照包含脚本的名称、类型、源代码和输入输出模式。
+ * 用于保存和恢复已发布的脚本版本，确保历史版本的可追溯性。
+ *
+ * @author jay.wu
+ */
 public class PublishedScriptSnapshot {
     private String name;
     private ScriptType type = ScriptType.GROOVY;
@@ -14,6 +22,11 @@ public class PublishedScriptSnapshot {
     public PublishedScriptSnapshot() {
     }
 
+    /**
+     * 拷贝构造函数，基于另一个快照创建新实例。
+     *
+     * @param other 要拷贝的源快照
+     */
     public PublishedScriptSnapshot(PublishedScriptSnapshot other) {
         if (other == null) {
             return;
@@ -70,6 +83,11 @@ public class PublishedScriptSnapshot {
         return this;
     }
 
+    /**
+     * 创建当前快照的深拷贝。
+     *
+     * @return 新的快照实例，包含相同的数据
+     */
     public PublishedScriptSnapshot copy() {
         return new PublishedScriptSnapshot(this);
     }

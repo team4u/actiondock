@@ -12,16 +12,19 @@ import org.team4u.scriptflow.cli.SpringFactory;
 import org.team4u.scriptflow.config.RuntimeConfiguration;
 import org.team4u.scriptflow.storage.jpa.StorageConfiguration;
 import org.team4u.scriptflow.storage.jpa.entity.ExecutionEntity;
+import org.team4u.scriptflow.storage.jpa.entity.PluginRegistrationEntity;
 import org.team4u.scriptflow.storage.jpa.entity.ScriptEntity;
 import org.team4u.scriptflow.storage.jpa.repo.SpringDataExecutionEntityRepository;
+import org.team4u.scriptflow.storage.jpa.repo.SpringDataPluginRegistrationRepository;
 import org.team4u.scriptflow.storage.jpa.repo.SpringDataScriptEntityRepository;
 import picocli.CommandLine;
 
 @SpringBootApplication(scanBasePackageClasses = CliRootCommand.class)
-@EntityScan(basePackageClasses = {ScriptEntity.class, ExecutionEntity.class})
+@EntityScan(basePackageClasses = {ScriptEntity.class, ExecutionEntity.class, PluginRegistrationEntity.class})
 @EnableJpaRepositories(basePackageClasses = {
         SpringDataScriptEntityRepository.class,
-        SpringDataExecutionEntityRepository.class
+        SpringDataExecutionEntityRepository.class,
+        SpringDataPluginRegistrationRepository.class
 })
 @Import({RuntimeConfiguration.class, StorageConfiguration.class})
 public class CliApplication {

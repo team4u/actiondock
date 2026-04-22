@@ -4,6 +4,14 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 脚本执行记录，表示一次脚本执行的历史轨迹。
+ * <p>
+ * 记录包含执行的输入参数、输出结果、执行状态以及时间戳信息。
+ * 支持同步和异步两种提交模式，可追踪执行的完整生命周期。
+ *
+ * @author jay.wu
+ */
 public class ExecutionRecord {
     private String id;
     private String scriptId;
@@ -34,6 +42,11 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取执行状态。
+     *
+     * @return 当前执行状态
+     */
     public ExecutionStatus getStatus() {
         return status;
     }
@@ -43,6 +56,11 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取提交模式。
+     *
+     * @return 同步或异步提交模式
+     */
     public SubmitMode getSubmitMode() {
         return submitMode;
     }
@@ -52,6 +70,13 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取执行输入参数。
+     * <p>
+     * 返回参数映射表的引用，键为参数名，值为参数值。
+     *
+     * @return 输入参数映射，如果为空则返回空 Map
+     */
     public Map<String, Object> getInput() {
         return input;
     }
@@ -61,6 +86,13 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取执行输出结果。
+     * <p>
+     * 返回结果映射表的引用，键为输出名，值为输出值。
+     *
+     * @return 输出结果映射，如果为空则返回空 Map
+     */
     public Map<String, Object> getOutput() {
         return output;
     }
@@ -70,6 +102,13 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取错误信息。
+     * <p>
+     * 仅在执行失败时包含错误描述，成功执行时为 null。
+     *
+     * @return 错误信息，如果无错误则返回 null
+     */
     public String getErrorMessage() {
         return errorMessage;
     }
@@ -79,6 +118,11 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取记录创建时间。
+     *
+     * @return 创建时间戳
+     */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -88,6 +132,11 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取执行开始时间。
+     *
+     * @return 开始执行的时间戳，未开始则为 null
+     */
     public LocalDateTime getStartedAt() {
         return startedAt;
     }
@@ -97,6 +146,11 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取执行完成时间。
+     *
+     * @return 执行完成的时间戳，未完成则为 null
+     */
     public LocalDateTime getFinishedAt() {
         return finishedAt;
     }

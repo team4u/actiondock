@@ -4,17 +4,22 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.team4u.scriptflow.config.AppProperties;
+import org.team4u.scriptflow.domain.model.PluginRegistration;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.port.JsonCodec;
+import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -34,12 +39,14 @@ class PluginRuntimeServiceTest {
         Path pluginJar = buildPluginJar(Files.createTempFile("scriptflow-plugin-upload-", ".jar"));
         AppProperties.Plugins properties = new AppProperties.Plugins();
         properties.setDir(tempDir.toString());
-        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, properties);
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
 
         PluginView installed = service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
 
         assertThat(installed.getPluginId()).isEqualTo("scriptflow-demo-plugin");
         assertThat(installed.isStarted()).isTrue();
+        assertThat(repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().isEnabled()).isTrue();
         assertThat(service.getConfig("scriptflow-demo-plugin").getConfig()).containsEntry("prefix", "demo");
 
         service.saveConfig("scriptflow-demo-plugin", Map.of("prefix", "hello"));
@@ -60,6 +67,7 @@ class PluginRuntimeServiceTest {
 
         PluginView stopped = service.stop("scriptflow-demo-plugin");
         assertThat(stopped.isStarted()).isFalse();
+        assertThat(repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().isEnabled()).isFalse();
         assertThatThrownBy(() -> service.assertActionAvailable("scriptflow-demo-plugin", "echo"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("未启动");
@@ -69,7 +77,42 @@ class PluginRuntimeServiceTest {
         service.uninstall("scriptflow-demo-plugin");
 
         assertThat(service.list()).isEmpty();
+        assertThat(repository.findAll()).isEmpty();
         assertThat(Files.exists(tempDir.resolve(".scriptflow-config").resolve("scriptflow-demo-plugin.json"))).isFalse();
+    }
+
+    @Test
+    void initializesOnlyEnabledPluginsFromRegistry() throws IOException {
+        Path pluginJar = buildPluginJar(tempDir.resolve("enabled-plugin.jar"));
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        repository.save(new PluginRegistration()
+                .setPluginId("scriptflow-demo-plugin")
+                .setName("ScriptFlow Demo Plugin")
+                .setVersion("0.2.0")
+                .setDescription("Demo")
+                .setFileName(pluginJar.getFileName().toString())
+                .setEnabled(true));
+        repository.save(new PluginRegistration()
+                .setPluginId("disabled-plugin")
+                .setName("Disabled")
+                .setFileName("disabled.jar")
+                .setEnabled(false));
+
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        assertThat(service.list()).hasSize(2);
+        assertThat(service.list().stream()
+                .filter(item -> "scriptflow-demo-plugin".equals(item.getPluginId()))
+                .findFirst()
+                .orElseThrow()
+                .isStarted()).isTrue();
+        assertThat(service.list().stream()
+                .filter(item -> "disabled-plugin".equals(item.getPluginId()))
+                .findFirst()
+                .orElseThrow()
+                .isStarted()).isFalse();
     }
 
     private Path buildPluginJar(Path destination) throws IOException {
@@ -135,7 +178,17 @@ class PluginRuntimeServiceTest {
 
         @Override
         public <T> List<T> readList(String json, Class<T> elementType) {
-            throw new UnsupportedOperationException("Not needed for this test");
+            try {
+                if (json == null || json.isBlank()) {
+                    return List.of();
+                }
+                return objectMapper.readValue(
+                        json,
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, elementType)
+                );
+            } catch (Exception e) {
+                throw new IllegalStateException("Cannot deserialize list", e);
+            }
         }
 
         @Override
@@ -146,6 +199,59 @@ class PluginRuntimeServiceTest {
             } catch (Exception e) {
                 throw new IllegalStateException("Cannot deserialize map", e);
             }
+        }
+    }
+
+    private static final class InMemoryPluginRegistryRepository implements PluginRegistryRepository {
+        private final Map<String, PluginRegistration> values = new ConcurrentHashMap<>();
+
+        @Override
+        public PluginRegistration save(PluginRegistration registration) {
+            PluginRegistration copy = copy(registration);
+            values.put(copy.getPluginId(), copy);
+            return copy(copy);
+        }
+
+        @Override
+        public Optional<PluginRegistration> findByPluginId(String pluginId) {
+            PluginRegistration registration = values.get(pluginId);
+            return registration == null ? Optional.empty() : Optional.of(copy(registration));
+        }
+
+        @Override
+        public List<PluginRegistration> findAll() {
+            return values.values().stream().map(this::copy).toList();
+        }
+
+        @Override
+        public List<PluginRegistration> findEnabled() {
+            List<PluginRegistration> enabled = new ArrayList<>();
+            values.values().forEach(registration -> {
+                if (registration.isEnabled()) {
+                    enabled.add(copy(registration));
+                }
+            });
+            return enabled;
+        }
+
+        @Override
+        public void deleteByPluginId(String pluginId) {
+            values.remove(pluginId);
+        }
+
+        private PluginRegistration copy(PluginRegistration registration) {
+            return new PluginRegistration()
+                    .setPluginId(registration.getPluginId())
+                    .setName(registration.getName())
+                    .setDescription(registration.getDescription())
+                    .setVersion(registration.getVersion())
+                    .setFileName(registration.getFileName())
+                    .setConfigSchema(registration.getConfigSchema())
+                    .setDefaultConfig(registration.getDefaultConfig())
+                    .setActions(registration.getActions())
+                    .setEnabled(registration.isEnabled())
+                    .setInstalledAt(registration.getInstalledAt())
+                    .setUpdatedAt(registration.getUpdatedAt());
         }
     }
 }
