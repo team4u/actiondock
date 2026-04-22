@@ -9,6 +9,7 @@ import {
 } from "antd";
 import type { ReactNode } from "react";
 import { ErrorDetailPanel } from "./ErrorDetailPanel";
+import { ExecutionLogPanel } from "./ExecutionLogPanel";
 import { SchemaObjectResultView } from "./SchemaObjectResultView";
 import type { ExecutionRecord, ExecutionResponse, ExecutionStatus } from "../types";
 import { formatDateTime, prettyJson } from "../utils";
@@ -162,6 +163,8 @@ export function ExecutionResultCard({
               </pre>
             </div>
           ) : null}
+
+          <ExecutionLogPanel logs={execution.logs} />
         </Space>
       </Space>
     </Card>

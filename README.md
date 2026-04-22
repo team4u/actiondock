@@ -138,6 +138,7 @@ def greet(name) {
 }
 
 def result = greet(input.name)
+log.info("Greeting generated for ${input.name}")
 return [message: result, timestamp: System.currentTimeMillis()]
 ```
 
@@ -170,6 +171,7 @@ return [
 
 ```python
 name = input.get("name") or "World"
+log.info(f"Preparing greeting for {name}")
 return {
   "message": f"Hello, {name}!",
   "timestamp": 1710000000
@@ -200,6 +202,12 @@ return {
 - 执行阶段通过宿主机 `python3` 子进程运行
 - 当前不支持每个脚本单独声明 `requirements.txt` 或虚拟环境
 - 当前默认信任脚本执行环境，请按受控内部工具使用
+
+执行日志约定：
+
+- 运行时会注入 `log.debug(...)`、`log.info(...)`、`log.warn(...)`、`log.error(...)`
+- 日志会写入执行记录，可在执行历史、正式运行页和调试页查看
+- 当前只采集显式 `log.*`，不保证 `print/println` 会进入执行日志
 
 **输出 Schema：**
 ```json

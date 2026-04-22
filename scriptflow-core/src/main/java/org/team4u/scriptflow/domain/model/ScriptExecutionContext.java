@@ -11,6 +11,7 @@ package org.team4u.scriptflow.domain.model;
 public class ScriptExecutionContext {
     private String executionId;
     private SubmitMode submitMode;
+    private ScriptExecutionLogger logger = ScriptExecutionLogger.noop();
 
     public String getExecutionId() {
         return executionId;
@@ -28,5 +29,28 @@ public class ScriptExecutionContext {
     public ScriptExecutionContext setSubmitMode(SubmitMode submitMode) {
         this.submitMode = submitMode;
         return this;
+    }
+
+    public ScriptExecutionLogger getLogger() {
+        return logger;
+    }
+
+    public ScriptExecutionContext setLogger(ScriptExecutionLogger logger) {
+        this.logger = logger == null ? ScriptExecutionLogger.noop() : logger;
+        return this;
+    }
+
+    public void log(ExecutionLogLevel level, String message) {
+        logger.log(level, message);
+    }
+
+    @FunctionalInterface
+    public interface ScriptExecutionLogger {
+        void log(ExecutionLogLevel level, String message);
+
+        static ScriptExecutionLogger noop() {
+            return (level, message) -> {
+            };
+        }
     }
 }

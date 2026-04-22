@@ -774,6 +774,48 @@ a {
   min-height: 220px;
 }
 
+.execution-log-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.execution-log-panel__empty {
+  padding: 14px 16px;
+  border: 1px dashed var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
+}
+
+.execution-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.execution-log-entry {
+  padding: 12px 14px;
+  border: 1px solid var(--app-code-border);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
+}
+
+.execution-log-entry__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.execution-log-entry__message {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--app-code-text);
+  font: 13px/1.6 "SFMono-Regular", "SF Mono", "JetBrains Mono", "Consolas", monospace;
+}
+
 .ant-card {
   border-radius: var(--app-radius-lg);
   box-shadow: var(--app-card-shadow);

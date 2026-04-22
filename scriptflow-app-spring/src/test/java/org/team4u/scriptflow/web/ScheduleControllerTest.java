@@ -117,7 +117,7 @@ class ScheduleControllerTest {
                                 {"scriptId":"other-script","name":"Nightly","cronExpression":"0 0 2 * * *","input":{},"enabled":true}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.msg").value("暂不支持修改定时任务所属脚本"));
+                .andExpect(jsonPath("$.msg").value("不支持修改所属脚本"));
     }
 
     @Test
@@ -126,7 +126,7 @@ class ScheduleControllerTest {
 
         mockMvc.perform(delete("/api/schedules/schedule-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.msg").value("定时任务已删除"));
+                .andExpect(jsonPath("$.msg").value("已删除"));
 
         verify(scheduleApplicationService).delete("script-1", "schedule-1");
         verify(scriptScheduleDispatcher).refreshScript("script-1");

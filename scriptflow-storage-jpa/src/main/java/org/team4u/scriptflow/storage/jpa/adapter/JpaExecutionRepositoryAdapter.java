@@ -3,6 +3,7 @@ package org.team4u.scriptflow.storage.jpa.adapter;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.model.ExecutionTriggerSource;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
@@ -62,6 +63,7 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setScheduleId(record.getScheduleId());
         entity.setInputJson(jsonCodec.write(record.getInput()));
         entity.setOutputJson(jsonCodec.write(record.getOutput()));
+        entity.setLogsJson(jsonCodec.write(record.getLogs()));
         entity.setErrorMessage(record.getErrorMessage());
         entity.setErrorType(record.getErrorDetail() == null ? null : record.getErrorDetail().getType());
         entity.setErrorStackTrace(record.getErrorDetail() == null ? null : record.getErrorDetail().getStackTrace());
@@ -83,6 +85,7 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
                 .setScheduleId(entity.getScheduleId())
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
                 .setOutput(jsonCodec.readMap(entity.getOutputJson()))
+                .setLogs(jsonCodec.readList(entity.getLogsJson(), ExecutionLogEntry.class))
                 .setErrorMessage(entity.getErrorMessage())
                 .setErrorDetail(toErrorDetail(entity))
                 .setCreatedAt(entity.getCreatedAt())

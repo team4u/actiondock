@@ -3,10 +3,12 @@ package org.team4u.scriptflow.script;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.config.AppProperties;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -77,6 +79,29 @@ class PythonScriptEngineTest {
                 .hasMessage("Python 脚本执行超时");
     }
 
+    @Test
+    void executeStreamsLogsThroughInjectedLogger() {
+        List<String> logs = new ArrayList<>();
+        ScriptExecutionContext context = new ScriptExecutionContext()
+                .setLogger((level, message) -> logs.add(level + ":" + message));
+
+        Object result = engine.execute(
+                new ScriptDefinition().setSource("""
+                        log.info("hello")
+                        log.error(input.get("name"))
+                        return {"ok": True}
+                        """),
+                Map.of("name", "Alice"),
+                context
+        );
+
+        assertThat(result).isEqualTo(Map.of("ok", true));
+        assertThat(logs).containsExactly(
+                ExecutionLogLevel.INFO + ":hello",
+                ExecutionLogLevel.ERROR + ":Alice"
+        );
+    }
+
     private static AppProperties.Python pythonProperties(int timeoutSeconds) {
         AppProperties.Python properties = new AppProperties.Python();
         properties.setExecutable("python3");
@@ -121,7 +146,11 @@ class PythonScriptEngineTest {
 
         @Override
         public Map<String, Object> readMap(String json) {
-            throw new UnsupportedOperationException("Not needed for this test");
+            try {
+                return json == null || json.isBlank() ? Map.of() : objectMapper.readValue(json, Map.class);
+            } catch (Exception e) {
+                throw new IllegalStateException("Cannot deserialize map", e);
+            }
         }
     }
 }

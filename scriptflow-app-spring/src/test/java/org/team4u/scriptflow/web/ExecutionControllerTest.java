@@ -15,11 +15,14 @@ import org.team4u.scriptflow.application.InvalidExecutionInputException;
 import org.team4u.scriptflow.application.SchemaFieldError;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
 import org.team4u.scriptflow.application.ScriptApplicationService;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -70,6 +73,10 @@ class ExecutionControllerTest {
                 .setStatus(ExecutionStatus.SUCCESS)
                 .setSubmitMode(SubmitMode.SYNC)
                 .setInput(Map.of("name", "Alice"))
+                .setLogs(List.of(new ExecutionLogEntry()
+                        .setLevel(ExecutionLogLevel.INFO)
+                        .setMessage("hello")
+                        .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4))))
                 .setOutput(Map.of("message", "Hello", "secret", "token")));
         when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
                 .setId("script-1")
@@ -105,6 +112,10 @@ class ExecutionControllerTest {
                 .setStatus(ExecutionStatus.SUCCESS)
                 .setSubmitMode(SubmitMode.SYNC)
                 .setInput(Map.of("name", "Alice"))
+                .setLogs(List.of(new ExecutionLogEntry()
+                        .setLevel(ExecutionLogLevel.INFO)
+                        .setMessage("hello")
+                        .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4))))
                 .setOutput(Map.of("message", "Hello", "secret", "token")));
         when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
                 .setId("script-1")
@@ -120,6 +131,8 @@ class ExecutionControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.output.message").value("Hello"))
+                .andExpect(jsonPath("$.data.logs[0].level").value("INFO"))
+                .andExpect(jsonPath("$.data.logs[0].message").value("hello"))
                 .andExpect(jsonPath("$.data.debug.input.name").value("Alice"))
                 .andExpect(jsonPath("$.data.debug.rawOutput.message").value("Hello"))
                 .andExpect(jsonPath("$.data.debug.rawOutput.secret").value("token"));
@@ -201,7 +214,7 @@ class ExecutionControllerTest {
 
         mockMvc.perform(delete("/api/executions/exec-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.msg").value("删除成功"));
+                .andExpect(jsonPath("$.msg").value("已删除"));
 
         verify(executionApplicationService).delete("exec-1");
     }
@@ -212,7 +225,7 @@ class ExecutionControllerTest {
 
         mockMvc.perform(delete("/api/executions").queryParam("scriptId", "script-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.msg").value("清空成功"));
+                .andExpect(jsonPath("$.msg").value("已清空"));
 
         verify(executionApplicationService).clear("script-1");
     }

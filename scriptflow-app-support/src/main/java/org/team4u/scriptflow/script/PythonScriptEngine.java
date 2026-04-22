@@ -1,13 +1,16 @@
 package org.team4u.scriptflow.script;
 
 import org.team4u.scriptflow.config.AppProperties;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -18,8 +21,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public class PythonScriptEngine implements ScriptEngine {
+    private static final String LOG_PREFIX = "__SCRIPTFLOW_LOG__";
     private static final String VALIDATION_RUNNER = """
             import py_compile
             import sys
@@ -45,7 +50,7 @@ public class PythonScriptEngine implements ScriptEngine {
                     "-c",
                     VALIDATION_RUNNER,
                     scriptPath.toAbsolutePath().toString()
-            ), null);
+            ), null, null);
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本校验超时");
             }
@@ -69,7 +74,12 @@ public class PythonScriptEngine implements ScriptEngine {
             scriptPath = writeScriptFile(definition.getSource(), true);
             ProcessResult result = runCommand(
                     List.of(resolveExecutable(), scriptPath.toAbsolutePath().toString()),
-                    jsonCodec.write(input == null ? Map.of() : input)
+                    jsonCodec.write(input == null ? Map.of() : input),
+                    event -> {
+                        if (executionContext != null) {
+                            executionContext.log(event.level(), event.message());
+                        }
+                    }
             );
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本执行超时");
@@ -88,13 +98,14 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
-    private ProcessResult runCommand(List<String> command, String stdin)
+    private ProcessResult runCommand(List<String> command, String stdin, Consumer<LogEvent> logConsumer)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command);
         Process process = processBuilder.start();
         CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()));
-        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() -> readStream(process.getErrorStream()));
+        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
+                readErrorStream(process.getErrorStream(), logConsumer == null ? event -> { } : logConsumer));
 
         try (OutputStream stdinStream = process.getOutputStream()) {
             if (stdin != null) {
@@ -150,6 +161,26 @@ public class PythonScriptEngine implements ScriptEngine {
         lines.add("import json");
         lines.add("import sys");
         lines.add("");
+        lines.add("class __ScriptFlowLog:");
+        lines.add("    def _write(self, level, message):");
+        lines.add("        payload = json.dumps({\"level\": level, \"message\": str(message)}, ensure_ascii=False)");
+        lines.add("        sys.stderr.write(\"" + LOG_PREFIX + "\" + payload + \"\\n\")");
+        lines.add("        sys.stderr.flush()");
+        lines.add("");
+        lines.add("    def debug(self, message):");
+        lines.add("        self._write(\"DEBUG\", message)");
+        lines.add("");
+        lines.add("    def info(self, message):");
+        lines.add("        self._write(\"INFO\", message)");
+        lines.add("");
+        lines.add("    def warn(self, message):");
+        lines.add("        self._write(\"WARN\", message)");
+        lines.add("");
+        lines.add("    def error(self, message):");
+        lines.add("        self._write(\"ERROR\", message)");
+        lines.add("");
+        lines.add("log = __ScriptFlowLog()");
+        lines.add("");
         lines.add("def __scriptflow_main(input):");
         lines.addAll(indent(normalizedSource));
         return String.join("\n", lines) + "\n";
@@ -169,6 +200,52 @@ public class PythonScriptEngine implements ScriptEngine {
             return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read Python process output", e);
+        }
+    }
+
+    private String readErrorStream(InputStream stream, Consumer<LogEvent> logConsumer) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                LogEvent event = parseLogEvent(line);
+                if (event != null) {
+                    logConsumer.accept(event);
+                    continue;
+                }
+                if (output.length() > 0) {
+                    output.append('\n');
+                }
+                output.append(line);
+            }
+            return output.toString();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read Python process output", e);
+        }
+    }
+
+    private LogEvent parseLogEvent(String line) {
+        if (line == null || !line.startsWith(LOG_PREFIX)) {
+            return null;
+        }
+        try {
+            Map<String, Object> value = jsonCodec.readMap(line.substring(LOG_PREFIX.length()));
+            Object level = value.get("level");
+            Object message = value.get("message");
+            return new LogEvent(resolveLevel(level), message == null ? "" : String.valueOf(message));
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private ExecutionLogLevel resolveLevel(Object value) {
+        if (value == null) {
+            return ExecutionLogLevel.INFO;
+        }
+        try {
+            return ExecutionLogLevel.valueOf(String.valueOf(value).trim().toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            return ExecutionLogLevel.INFO;
         }
     }
 
@@ -195,5 +272,8 @@ public class PythonScriptEngine implements ScriptEngine {
     }
 
     record ProcessResult(int exitCode, String stdout, String stderr, boolean timedOut) {
+    }
+
+    record LogEvent(ExecutionLogLevel level, String message) {
     }
 }

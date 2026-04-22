@@ -1,7 +1,9 @@
 package org.team4u.scriptflow.domain.model;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -21,6 +23,7 @@ public class ExecutionRecord {
     private String scheduleId;
     private Map<String, Object> input = new LinkedHashMap<>();
     private Map<String, Object> output = new LinkedHashMap<>();
+    private List<ExecutionLogEntry> logs = new ArrayList<>();
     private String errorMessage;
     private ErrorDetail errorDetail;
     private LocalDateTime createdAt;
@@ -120,6 +123,15 @@ public class ExecutionRecord {
 
     public ExecutionRecord setOutput(Map<String, Object> output) {
         this.output = output == null ? new LinkedHashMap<>() : output;
+        return this;
+    }
+
+    public List<ExecutionLogEntry> getLogs() {
+        return logs;
+    }
+
+    public ExecutionRecord setLogs(List<ExecutionLogEntry> logs) {
+        this.logs = logs == null ? new ArrayList<>() : new ArrayList<>(logs);
         return this;
     }
 

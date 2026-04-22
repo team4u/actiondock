@@ -3,6 +3,7 @@ package org.team4u.scriptflow.web;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ExecutionTriggerSource;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ public record ExecutionResponse(
         ExecutionTriggerSource triggerSource,
         String scheduleId,
         Map<String, Object> output,
+        java.util.List<ExecutionLogEntry> logs,
         String errorMessage,
         ErrorDetail errorDetail,
         LocalDateTime createdAt,

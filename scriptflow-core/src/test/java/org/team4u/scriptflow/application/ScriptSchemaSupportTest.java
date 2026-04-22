@@ -60,7 +60,7 @@ class ScriptSchemaSupportTest {
                 .satisfies(error -> {
                     InvalidExecutionInputException exception = (InvalidExecutionInputException) error;
                     assertThat(exception.getFieldErrors()).containsExactly(
-                            new SchemaFieldError("name", "required", "Name 为必填", "present", "missing")
+                            new SchemaFieldError("name", "required", "Name 必填", "present", "missing")
                     );
                 });
     }
@@ -81,7 +81,7 @@ class ScriptSchemaSupportTest {
                 .satisfies(error -> {
                     InvalidExecutionInputException exception = (InvalidExecutionInputException) error;
                     assertThat(exception.getFieldErrors()).containsExactlyInAnyOrder(
-                            new SchemaFieldError("age", "type_mismatch", "Age 必须是 integer", "integer", "string"),
+                            new SchemaFieldError("age", "type_mismatch", "Age 类型应为 integer", "integer", "string"),
                             new SchemaFieldError("mode", "enum_mismatch", "Mode 必须是枚举值之一: FAST, SAFE", "enum(FAST, SAFE)", "DEBUG")
                     );
                 });

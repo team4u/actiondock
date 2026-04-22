@@ -11,12 +11,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.scriptflow.RuntimeApplication;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
@@ -164,6 +167,10 @@ class ScriptControllerTest {
                         .setScriptId("script-1")
                         .setStatus(ExecutionStatus.SUCCESS)
                         .setSubmitMode(SubmitMode.SYNC)
+                        .setLogs(java.util.List.of(new ExecutionLogEntry()
+                                .setLevel(ExecutionLogLevel.INFO)
+                                .setMessage("published")
+                                .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4))))
                         .setOutput(Map.of("message", "live")));
         when(scriptApplicationService.getPublished("script-1"))
                 .thenReturn(new ScriptDefinition()
@@ -184,6 +191,7 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.status").value(0))
                 .andExpect(jsonPath("$.data.id").value("exec-1"))
                 .andExpect(jsonPath("$.data.scriptId").value("script-1"))
+                .andExpect(jsonPath("$.data.logs[0].message").value("published"))
                 .andExpect(jsonPath("$.data.output.message").value("live"));
     }
 

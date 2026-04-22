@@ -3,13 +3,17 @@ package org.team4u.scriptflow.script;
 import groovy.lang.Script;
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.config.AppProperties;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -140,6 +144,29 @@ class GroovyScriptEngineTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> values = (Map<String, Object>) result;
         assertThat(values).containsEntry("joined", "hello-grab");
+    }
+
+    @Test
+    void executeWritesLogsThroughInjectedLogger() {
+        List<String> logs = new ArrayList<>();
+        ScriptExecutionContext context = new ScriptExecutionContext()
+                .setLogger((level, message) -> logs.add(level + ":" + message));
+
+        Object result = engine.execute(
+                new ScriptDefinition().setSource("""
+                        log.info("hello")
+                        log.warn(input.name)
+                        return [ok: true]
+                        """),
+                Map.of("name", "Alice"),
+                context
+        );
+
+        assertThat(result).isEqualTo(Map.of("ok", true));
+        assertThat(logs).containsExactly(
+                ExecutionLogLevel.INFO + ":hello",
+                ExecutionLogLevel.WARN + ":Alice"
+        );
     }
 
     @Test

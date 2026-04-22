@@ -1,6 +1,8 @@
 package org.team4u.scriptflow.application;
 
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
@@ -95,6 +97,7 @@ public class ExecutionApplicationService {
     }
 
     private ExecutionRecord run(ScriptDefinition definition, ExecutionRecord record) {
+        ExecutionLogCollector logCollector = new ExecutionLogCollector(record);
         try {
             record.setStatus(ExecutionStatus.RUNNING);
             record.setStartedAt(LocalDateTime.now());
@@ -106,19 +109,11 @@ public class ExecutionApplicationService {
                     new ScriptExecutionContext()
                             .setExecutionId(record.getId())
                             .setSubmitMode(record.getSubmitMode())
+                            .setLogger(logCollector::append)
             );
-            record.setOutput(toMap(result));
-            record.setErrorMessage(null);
-            record.setErrorDetail(null);
-            record.setStatus(ExecutionStatus.SUCCESS);
-            record.setFinishedAt(LocalDateTime.now());
-            return executionRepository.save(record);
+            return logCollector.completeSuccess(toMap(result));
         } catch (Exception ex) {
-            record.setStatus(ExecutionStatus.FAILED);
-            record.setErrorMessage(ErrorDetailSupport.summarize(ex));
-            record.setErrorDetail(ErrorDetailSupport.describe(ex));
-            record.setFinishedAt(LocalDateTime.now());
-            return executionRepository.save(record);
+            return logCollector.completeFailure(ex);
         }
     }
 
@@ -169,6 +164,46 @@ public class ExecutionApplicationService {
     private void ensureExecutionDeletable(ExecutionRecord record) {
         if (record.getStatus() == ExecutionStatus.PENDING || record.getStatus() == ExecutionStatus.RUNNING) {
             throw new IllegalArgumentException("执行进行中，无法删除");
+        }
+    }
+
+    private final class ExecutionLogCollector {
+        private final ExecutionRecord record;
+        private final Object monitor = new Object();
+
+        private ExecutionLogCollector(ExecutionRecord record) {
+            this.record = record;
+        }
+
+        private void append(ExecutionLogLevel level, String message) {
+            synchronized (monitor) {
+                record.getLogs().add(new ExecutionLogEntry()
+                        .setLevel(level)
+                        .setMessage(message)
+                        .setCreatedAt(LocalDateTime.now()));
+                executionRepository.save(record);
+            }
+        }
+
+        private ExecutionRecord completeSuccess(Map<String, Object> output) {
+            synchronized (monitor) {
+                record.setOutput(output);
+                record.setErrorMessage(null);
+                record.setErrorDetail(null);
+                record.setStatus(ExecutionStatus.SUCCESS);
+                record.setFinishedAt(LocalDateTime.now());
+                return executionRepository.save(record);
+            }
+        }
+
+        private ExecutionRecord completeFailure(Exception exception) {
+            synchronized (monitor) {
+                record.setStatus(ExecutionStatus.FAILED);
+                record.setErrorMessage(ErrorDetailSupport.summarize(exception));
+                record.setErrorDetail(ErrorDetailSupport.describe(exception));
+                record.setFinishedAt(LocalDateTime.now());
+                return executionRepository.save(record);
+            }
         }
     }
 }

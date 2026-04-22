@@ -3,6 +3,8 @@ package org.team4u.scriptflow.storage.jpa.adapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.SubmitMode;
@@ -43,6 +45,9 @@ class JpaExecutionRepositoryAdapterTest {
                 .setSubmitMode(SubmitMode.ASYNC)
                 .setInput(Map.of("name", "Alice"))
                 .setOutput(Map.of("message", "Hello"))
+                .setLogs(List.of(new ExecutionLogEntry()
+                        .setLevel(ExecutionLogLevel.INFO)
+                        .setMessage("start")))
                 .setErrorMessage("boom")
                 .setErrorDetail(new ErrorDetail()
                         .setType("java.lang.IllegalStateException")
@@ -59,9 +64,14 @@ class JpaExecutionRepositoryAdapterTest {
         assertThat(stored.get().getSubmitMode()).isEqualTo("ASYNC");
         assertThat(stored.get().getInputJson()).contains("\"name\":\"Alice\"");
         assertThat(stored.get().getOutputJson()).contains("\"message\":\"Hello\"");
+        assertThat(stored.get().getLogsJson()).contains("\"message\":\"start\"");
         assertThat(stored.get().getErrorType()).isEqualTo("java.lang.IllegalStateException");
         assertThat(stored.get().getErrorStackTrace()).contains("IllegalStateException");
         assertThat(saved.getOutput()).containsEntry("message", "Hello");
+        assertThat(found.getLogs()).singleElement().satisfies(log -> {
+            assertThat(log.getLevel()).isEqualTo(ExecutionLogLevel.INFO);
+            assertThat(log.getMessage()).isEqualTo("start");
+        });
         assertThat(found.getErrorDetail()).isNotNull();
         assertThat(found.getErrorDetail().getType()).isEqualTo("java.lang.IllegalStateException");
         assertThat(found.getSubmitMode()).isEqualTo(SubmitMode.ASYNC);

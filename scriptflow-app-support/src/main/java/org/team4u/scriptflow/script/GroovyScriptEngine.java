@@ -5,6 +5,7 @@ import groovy.lang.GroovyShell;
 import groovy.lang.Script;
 import org.codehaus.groovy.runtime.InvokerHelper;
 import org.team4u.scriptflow.config.AppProperties;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
@@ -55,7 +56,39 @@ public class GroovyScriptEngine implements ScriptEngine {
     private Binding newBinding(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         Binding binding = new Binding();
         binding.setVariable("input", input == null ? Map.of() : input);
+        binding.setVariable("log", new ScriptLogger(executionContext));
         binding.setVariable("plugins", new GroovyPlugins(pluginRuntimeService, definition, input, executionContext));
         return binding;
+    }
+
+    static final class ScriptLogger {
+        private final ScriptExecutionContext executionContext;
+
+        ScriptLogger(ScriptExecutionContext executionContext) {
+            this.executionContext = executionContext;
+        }
+
+        public void debug(Object message) {
+            write(ExecutionLogLevel.DEBUG, message);
+        }
+
+        public void info(Object message) {
+            write(ExecutionLogLevel.INFO, message);
+        }
+
+        public void warn(Object message) {
+            write(ExecutionLogLevel.WARN, message);
+        }
+
+        public void error(Object message) {
+            write(ExecutionLogLevel.ERROR, message);
+        }
+
+        private void write(ExecutionLogLevel level, Object message) {
+            if (executionContext == null) {
+                return;
+            }
+            executionContext.log(level, String.valueOf(message));
+        }
     }
 }

@@ -26,6 +26,7 @@ import {
   getPublishedScript
 } from "../api";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
+import { ExecutionLogPanel } from "../components/ExecutionLogPanel";
 import { usePollingExecution } from "../hooks/usePollingExecution";
 import { resolveSchemaFields } from "../schema";
 import {
@@ -444,6 +445,8 @@ export function ScriptRunPage() {
                     {prettyJson(executionResult.output)}
                   </pre>
                 )}
+
+                <ExecutionLogPanel logs={executionResult.logs} />
               </Space>
             )}
           </Card>

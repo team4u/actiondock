@@ -2,9 +2,11 @@ package org.team4u.scriptflow.web;
 
 import org.team4u.scriptflow.application.ExecutionOutputProjector;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 final class ExecutionResponseMapper {
@@ -25,6 +27,7 @@ final class ExecutionResponseMapper {
                 record.getTriggerSource(),
                 record.getScheduleId(),
                 executionOutputProjector.project(rawOutput, scriptDefinition.getOutputSchema()),
+                copyLogs(record.getLogs()),
                 record.getErrorMessage(),
                 record.getErrorDetail(),
                 record.getCreatedAt(),
@@ -36,5 +39,9 @@ final class ExecutionResponseMapper {
 
     private Map<String, Object> copy(Map<String, Object> value) {
         return value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
+    }
+
+    private List<ExecutionLogEntry> copyLogs(List<ExecutionLogEntry> value) {
+        return value == null ? List.of() : List.copyOf(value);
     }
 }

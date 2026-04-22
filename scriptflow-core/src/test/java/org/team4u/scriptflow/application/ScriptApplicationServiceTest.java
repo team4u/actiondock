@@ -210,7 +210,7 @@ class ScriptApplicationServiceTest {
 
         assertThatThrownBy(() -> service.discardDraft("script-1"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Script not published: script-1");
+                .hasMessage("脚本未发布: script-1");
     }
 
     @Test
@@ -219,7 +219,7 @@ class ScriptApplicationServiceTest {
 
         assertThatThrownBy(() -> service.get("missing"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Script not found: missing");
+                .hasMessage("脚本不存在: missing");
     }
 
     @Test

@@ -2,10 +2,13 @@ package org.team4u.scriptflow.application;
 
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
+import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.model.SubmitMode;
@@ -140,6 +143,58 @@ class ExecutionApplicationServiceTest {
     }
 
     @Test
+    void executePersistsLogsBeforeCompletion() {
+        scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
+        when(scriptEngine.execute(any(), any(), any())).thenAnswer(invocation -> {
+            ScriptExecutionContext context = invocation.getArgument(2);
+            context.log(ExecutionLogLevel.INFO, "start");
+            context.log(ExecutionLogLevel.WARN, "watch-out");
+            return Map.of("message", "Hello");
+        });
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        ExecutionRecord record = service.execute("script-1", Map.of(), SubmitMode.SYNC);
+
+        assertThat(record.getLogs())
+                .extracting(ExecutionLogEntry::getMessage)
+                .containsExactly("start", "watch-out");
+        assertThat(executionRepository.savedSnapshots)
+                .extracting(snapshot -> snapshot.getLogs().size())
+                .containsExactly(0, 1, 2, 2);
+    }
+
+    @Test
+    void executeKeepsLogsWhenExecutionFails() {
+        scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("throw new RuntimeException()"));
+        when(scriptEngine.execute(any(), any(), any())).thenAnswer(invocation -> {
+            ScriptExecutionContext context = invocation.getArgument(2);
+            context.log(ExecutionLogLevel.ERROR, "about to fail");
+            throw new IllegalStateException("boom");
+        });
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        ExecutionRecord record = service.execute("script-1", Map.of(), SubmitMode.SYNC);
+
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(record.getLogs())
+                .extracting(ExecutionLogEntry::getMessage)
+                .containsExactly("about to fail");
+        assertThat(executionRepository.savedSnapshots.get(executionRepository.savedSnapshots.size() - 1).getLogs())
+                .extracting(ExecutionLogEntry::getLevel)
+                .containsExactly(ExecutionLogLevel.ERROR);
+    }
+
+    @Test
     void executeSchedulesAsyncWorkAndReturnsPendingRecordImmediately() {
         scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
         when(scriptEngine.execute(any(), any(), any())).thenReturn(Map.of("message", "done"));
@@ -210,7 +265,7 @@ class ExecutionApplicationServiceTest {
 
         assertThatThrownBy(() -> service.executePublished("script-1", Map.of(), SubmitMode.SYNC))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Script not published: script-1");
+                .hasMessage("脚本未发布: script-1");
     }
 
     @Test
@@ -243,7 +298,7 @@ class ExecutionApplicationServiceTest {
 
         assertThatThrownBy(() -> service.get("missing"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Execution not found: missing");
+                .hasMessage("执行记录不存在: missing");
     }
 
     @Test
@@ -273,7 +328,7 @@ class ExecutionApplicationServiceTest {
 
         assertThatThrownBy(() -> service.delete("exec-1"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("执行仍在进行中，暂不支持删除");
+                .hasMessage("执行进行中，无法删除");
     }
 
     @Test
@@ -321,7 +376,7 @@ class ExecutionApplicationServiceTest {
 
         assertThatThrownBy(() -> service.clear("script-1"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("执行仍在进行中，暂不支持删除");
+                .hasMessage("执行进行中，无法删除");
     }
 
     private static ExecutionRecord record(String id, String scriptId, ExecutionStatus status) {
@@ -406,8 +461,16 @@ class ExecutionApplicationServiceTest {
                     .setScriptId(source.getScriptId())
                     .setStatus(source.getStatus())
                     .setSubmitMode(source.getSubmitMode())
+                    .setTriggerSource(source.getTriggerSource())
+                    .setScheduleId(source.getScheduleId())
                     .setInput(new LinkedHashMap<>(source.getInput()))
                     .setOutput(new LinkedHashMap<>(source.getOutput()))
+                    .setLogs(source.getLogs().stream()
+                            .map(log -> new ExecutionLogEntry()
+                                    .setLevel(log.getLevel())
+                                    .setMessage(log.getMessage())
+                                    .setCreatedAt(log.getCreatedAt()))
+                            .toList())
                     .setErrorMessage(source.getErrorMessage())
                     .setErrorDetail(copy(source.getErrorDetail()))
                     .setCreatedAt(source.getCreatedAt())

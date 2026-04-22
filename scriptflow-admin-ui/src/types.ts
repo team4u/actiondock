@@ -4,6 +4,7 @@ export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
 export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED";
+export type ExecutionLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 export interface PublishedScriptSnapshot {
   name: string;
@@ -37,11 +38,18 @@ export interface ExecutionRecord {
   scheduleId?: string;
   input: Record<string, unknown>;
   output: Record<string, unknown>;
+  logs: ExecutionLogEntry[];
   errorMessage?: string;
   errorDetail?: ErrorDetail;
   createdAt?: string;
   startedAt?: string;
   finishedAt?: string;
+}
+
+export interface ExecutionLogEntry {
+  level: ExecutionLogLevel;
+  message: string;
+  createdAt?: string;
 }
 
 export interface ErrorDetail {
@@ -62,6 +70,7 @@ export interface ExecutionResponse {
   triggerSource: ExecutionTriggerSource;
   scheduleId?: string;
   output: Record<string, unknown>;
+  logs: ExecutionLogEntry[];
   errorMessage?: string;
   errorDetail?: ErrorDetail;
   createdAt?: string;

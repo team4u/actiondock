@@ -35,6 +35,9 @@ public class ExecutionEntity {
     private String outputJson;
 
     @Lob
+    private String logsJson;
+
+    @Lob
     private String errorMessage;
 
     private String errorType;
@@ -62,6 +65,8 @@ public class ExecutionEntity {
     public void setInputJson(String inputJson) { this.inputJson = inputJson; }
     public String getOutputJson() { return outputJson; }
     public void setOutputJson(String outputJson) { this.outputJson = outputJson; }
+    public String getLogsJson() { return logsJson; }
+    public void setLogsJson(String logsJson) { this.logsJson = logsJson; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     public String getErrorType() { return errorType; }

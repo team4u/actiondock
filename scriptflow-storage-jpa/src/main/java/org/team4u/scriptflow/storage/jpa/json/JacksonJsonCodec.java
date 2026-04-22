@@ -15,6 +15,7 @@ public class JacksonJsonCodec implements JsonCodec {
 
     public JacksonJsonCodec(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper.copy()
+                .findAndRegisterModules()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
