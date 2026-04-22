@@ -2,6 +2,7 @@ package org.team4u.scriptflow.storage.jpa.adapter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.ScriptType;
@@ -40,6 +41,12 @@ class JpaScriptRepositoryAdapterTest {
                 .setSource("return [:]")
                 .setInputSchema(new LinkedHashMap<>(Map.of("type", "object")))
                 .setOutputSchema(new LinkedHashMap<>(Map.of("properties", Map.of("message", Map.of("type", "string")))))
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Published Hello")
+                        .setType(ScriptType.PYTHON)
+                        .setSource("return {'message': 'published'}")
+                        .setInputSchema(new LinkedHashMap<>(Map.of("type", "object")))
+                        .setOutputSchema(new LinkedHashMap<>(Map.of("type", "object"))))
                 .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(3)
                 .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4))
@@ -51,7 +58,11 @@ class JpaScriptRepositoryAdapterTest {
         assertThat(stored.get().getType()).isEqualTo("GROOVY");
         assertThat(stored.get().getStatus()).isEqualTo("PUBLISHED");
         assertThat(stored.get().getInputSchemaJson()).contains("\"type\":\"object\"");
+        assertThat(stored.get().getPublishedType()).isEqualTo("PYTHON");
+        assertThat(stored.get().getPublishedSource()).isEqualTo("return {'message': 'published'}");
         assertThat(saved.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
+        assertThat(found.getPublishedSnapshot()).isNotNull();
+        assertThat(found.getPublishedSnapshot().getType()).isEqualTo(ScriptType.PYTHON);
         assertThat(found.getOutputSchema()).containsKey("properties");
         assertThat(found.getVersion()).isEqualTo(3);
     }

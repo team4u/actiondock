@@ -20,7 +20,12 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ApiError, executeScript, getExecution, getScript } from "../api";
+import {
+  ApiError,
+  executePublishedScript,
+  getExecution,
+  getPublishedScript
+} from "../api";
 import { resolveSchemaFields } from "../schema";
 import {
   buildSchemaExecutionInput,
@@ -124,26 +129,26 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
       form.resetFields();
 
       try {
-        const loadedScript = await getScript(id);
+        const loadedScript = await getPublishedScript(id);
 
         if (disposed) {
           return;
         }
 
         setScript(loadedScript);
-
-        if (loadedScript.status !== "PUBLISHED") {
-          setPageError({
-            title: "脚本尚未发布",
-            description: "正式使用页只对已发布脚本开放。请先回到管理台发布，再从正式入口进入。"
-          });
-        }
       } catch (error) {
         if (disposed) {
           return;
         }
 
         const detail = error instanceof ApiError ? error.message : "加载正式使用页失败";
+        if (detail.toLowerCase().includes("not published")) {
+          setPageError({
+            title: "脚本尚未发布",
+            description: "正式使用页只对已发布脚本开放。请先回到管理台发布，再从正式入口进入。"
+          });
+          return;
+        }
         setPageError({
           title: detail.toLowerCase().includes("not found") ? "脚本不存在" : "暂时无法打开正式页",
           description: detail
@@ -232,8 +237,7 @@ export function ScriptRunPage({ colorMode, onOpenApiKeyModal }: ScriptRunPagePro
 
     try {
       const values = (await form.validateFields()) as Record<string, unknown>;
-      const response = await executeScript({
-        scriptId: script.id,
+      const response = await executePublishedScript(script.id, {
         input: buildSchemaExecutionInput(supportedInputFields, values),
         mode: executionMode
       });

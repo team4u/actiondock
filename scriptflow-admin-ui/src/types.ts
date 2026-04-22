@@ -4,6 +4,14 @@ export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
 
+export interface PublishedScriptSnapshot {
+  name: string;
+  type: ScriptType;
+  source: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+}
+
 export interface ScriptDefinition {
   id: string;
   name: string;
@@ -13,6 +21,8 @@ export interface ScriptDefinition {
   outputSchema: Record<string, unknown>;
   status: ScriptStatus;
   version: number;
+  publishedSnapshot?: PublishedScriptSnapshot;
+  hasUnpublishedChanges?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

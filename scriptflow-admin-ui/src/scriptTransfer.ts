@@ -1,4 +1,9 @@
-import type { ScriptDefinition, ScriptStatus, ScriptType } from "./types";
+import type {
+  PublishedScriptSnapshot,
+  ScriptDefinition,
+  ScriptStatus,
+  ScriptType
+} from "./types";
 
 export interface ScriptExportBundleV1 {
   version: 1;
@@ -38,6 +43,37 @@ function assertSchemaObject(value: unknown, fieldName: string): Record<string, u
     throw new Error(`${fieldName} 必须是对象`);
   }
   return value;
+}
+
+function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScriptSnapshot | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new Error(`${fieldName} 必须是对象`);
+  }
+
+  const name = value.name;
+  const type = value.type;
+  const source = value.source;
+
+  if (!isNonEmptyString(name)) {
+    throw new Error(`${fieldName}.name 缺少合法值`);
+  }
+  if (!SUPPORTED_SCRIPT_TYPES.includes(type as ScriptType)) {
+    throw new Error(`${fieldName}.type 仅支持 ${SUPPORTED_SCRIPT_TYPES.join(" / ")}`);
+  }
+  if (!isNonEmptyString(source)) {
+    throw new Error(`${fieldName}.source 缺少合法值`);
+  }
+
+  return {
+    name: name.trim(),
+    type: type as ScriptType,
+    source,
+    inputSchema: assertSchemaObject(value.inputSchema, `${fieldName}.inputSchema`),
+    outputSchema: assertSchemaObject(value.outputSchema, `${fieldName}.outputSchema`)
+  };
 }
 
 function parseScriptDefinition(value: unknown, index: number): ScriptDefinition {
@@ -80,6 +116,7 @@ function parseScriptDefinition(value: unknown, index: number): ScriptDefinition 
     outputSchema: assertSchemaObject(value.outputSchema, `第 ${index + 1} 条脚本 ${id} 的 outputSchema`),
     status: status as ScriptStatus,
     version: Number(version),
+    publishedSnapshot: parsePublishedSnapshot(value.publishedSnapshot, `第 ${index + 1} 条脚本 ${id} 的 publishedSnapshot`),
     createdAt: assertOptionalString(value.createdAt, `第 ${index + 1} 条脚本 ${id} 的 createdAt`),
     updatedAt: assertOptionalString(value.updatedAt, `第 ${index + 1} 条脚本 ${id} 的 updatedAt`)
   };

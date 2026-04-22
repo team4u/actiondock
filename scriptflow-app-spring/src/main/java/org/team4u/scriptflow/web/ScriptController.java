@@ -1,7 +1,9 @@
 package org.team4u.scriptflow.web;
 
 import org.springframework.web.bind.annotation.*;
+import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
+import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
 import java.util.List;
@@ -10,9 +12,14 @@ import java.util.List;
 @RequestMapping("/api/scripts")
 public class ScriptController {
     private final ScriptApplicationService scriptApplicationService;
+    private final ExecutionApplicationService executionApplicationService;
+    private final ExecutionResponseMapper executionResponseMapper;
 
-    public ScriptController(ScriptApplicationService scriptApplicationService) {
+    public ScriptController(ScriptApplicationService scriptApplicationService,
+                            ExecutionApplicationService executionApplicationService) {
         this.scriptApplicationService = scriptApplicationService;
+        this.executionApplicationService = executionApplicationService;
+        this.executionResponseMapper = new ExecutionResponseMapper();
     }
 
     @GetMapping
@@ -36,6 +43,14 @@ public class ScriptController {
             @RequestParam(defaultValue = "false") boolean includeUiSchema
     ) {
         return ApiResponse.success(toResponse(scriptApplicationService.get(id), includeUiSchema));
+    }
+
+    @GetMapping("/{id}/published")
+    public ApiResponse<ScriptDefinition> publishedDetail(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "false") boolean includeUiSchema
+    ) {
+        return ApiResponse.success(toResponse(scriptApplicationService.getPublished(id), includeUiSchema));
     }
 
     @PutMapping("/{id}")
@@ -66,6 +81,24 @@ public class ScriptController {
             @RequestParam(defaultValue = "false") boolean includeUiSchema
     ) {
         return ApiResponse.success(toResponse(scriptApplicationService.publish(id), includeUiSchema), "发布成功");
+    }
+
+    @PostMapping("/{id}/discard-draft")
+    public ApiResponse<ScriptDefinition> discardDraft(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "false") boolean includeUiSchema
+    ) {
+        return ApiResponse.success(toResponse(scriptApplicationService.discardDraft(id), includeUiSchema), "草稿已丢弃");
+    }
+
+    @PostMapping("/{id}/published/execute")
+    public ApiResponse<ExecutionResponse> executePublished(@PathVariable String id, @RequestBody ExecuteRequest request) {
+        ExecutionRecord record = executionApplicationService.executePublished(id, request.getInput(), request.getMode());
+        ScriptDefinition scriptDefinition = scriptApplicationService.getPublished(id);
+        return ApiResponse.success(
+                executionResponseMapper.toResponse(record, scriptDefinition, request.getResponseView()),
+                "已受理"
+        );
     }
 
     private ScriptDefinition toResponse(ScriptDefinition definition, boolean includeUiSchema) {

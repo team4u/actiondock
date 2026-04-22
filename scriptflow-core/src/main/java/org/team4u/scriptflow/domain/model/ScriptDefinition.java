@@ -13,6 +13,7 @@ public class ScriptDefinition {
     private Map<String, Object> outputSchema = new LinkedHashMap<>();
     private ScriptStatus status = ScriptStatus.DRAFT;
     private Integer version = 1;
+    private PublishedScriptSnapshot publishedSnapshot;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -91,6 +92,54 @@ public class ScriptDefinition {
         return this;
     }
 
+    public PublishedScriptSnapshot getPublishedSnapshot() {
+        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        return snapshot == null ? null : snapshot.copy();
+    }
+
+    public ScriptDefinition setPublishedSnapshot(PublishedScriptSnapshot publishedSnapshot) {
+        this.publishedSnapshot = publishedSnapshot == null ? null : publishedSnapshot.copy();
+        return this;
+    }
+
+    public boolean hasStoredPublishedSnapshot() {
+        return publishedSnapshot != null;
+    }
+
+    public PublishedScriptSnapshot snapshotCurrent() {
+        return new PublishedScriptSnapshot()
+                .setName(name)
+                .setType(type)
+                .setSource(source)
+                .setInputSchema(inputSchema)
+                .setOutputSchema(outputSchema);
+    }
+
+    public boolean getHasUnpublishedChanges() {
+        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        return snapshot != null && !snapshot.equals(snapshotCurrent());
+    }
+
+    public ScriptDefinition toPublishedDefinition() {
+        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        if (snapshot == null) {
+            throw new IllegalStateException("Script not published: " + id);
+        }
+
+        return new ScriptDefinition()
+                .setId(id)
+                .setName(snapshot.getName())
+                .setType(snapshot.getType())
+                .setSource(snapshot.getSource())
+                .setInputSchema(snapshot.getInputSchema())
+                .setOutputSchema(snapshot.getOutputSchema())
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setVersion(version)
+                .setPublishedSnapshot(snapshot)
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt);
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -107,5 +156,15 @@ public class ScriptDefinition {
     public ScriptDefinition setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
         return this;
+    }
+
+    private PublishedScriptSnapshot resolvePublishedSnapshot() {
+        if (publishedSnapshot != null) {
+            return publishedSnapshot;
+        }
+        if (status == ScriptStatus.PUBLISHED) {
+            return snapshotCurrent();
+        }
+        return null;
     }
 }

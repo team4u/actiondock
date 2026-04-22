@@ -3,7 +3,10 @@ package org.team4u.scriptflow.application;
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptStatus;
+import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
@@ -158,6 +161,52 @@ class ExecutionApplicationServiceTest {
         assertThat(executionRepository.savedSnapshots)
                 .extracting(ExecutionRecord::getStatus)
                 .containsExactly(ExecutionStatus.PENDING, ExecutionStatus.RUNNING, ExecutionStatus.SUCCESS);
+    }
+
+    @Test
+    void executePublishedRunsPublishedSnapshotInsteadOfDraft() {
+        scriptRepository.save(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Draft")
+                .setType(ScriptType.PYTHON)
+                .setSource("return {'message': 'draft'}")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Live")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return [message: 'live']")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")))
+                .setStatus(ScriptStatus.PUBLISHED));
+        when(scriptEngine.execute(any(), any())).thenReturn(Map.of("message", "live"));
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        ExecutionRecord record = service.executePublished("script-1", Map.of("name", "Alice"), SubmitMode.SYNC);
+
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
+        assertThat(executionRepository.savedSnapshots)
+                .extracting(ExecutionRecord::getScriptId)
+                .containsOnly("script-1");
+        assertThat(scriptRepository.findById("script-1").orElseThrow().getSource()).isEqualTo("return {'message': 'draft'}");
+    }
+
+    @Test
+    void executePublishedRejectsUnpublishedScript() {
+        scriptRepository.save(new ScriptDefinition().setId("script-1").setStatus(ScriptStatus.DRAFT));
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        assertThatThrownBy(() -> service.executePublished("script-1", Map.of(), SubmitMode.SYNC))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Script not published: script-1");
     }
 
     @Test

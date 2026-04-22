@@ -2,6 +2,7 @@ package org.team4u.scriptflow.application;
 
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 
@@ -36,13 +37,25 @@ public class ScriptApplicationService {
             if (definition.getStatus() == null) {
                 definition.setStatus(existing.getStatus());
             }
+            if (!definition.hasStoredPublishedSnapshot()) {
+                definition.setPublishedSnapshot(existing.getPublishedSnapshot());
+            }
         }
+        normalizePublicationState(definition);
         definition.setUpdatedAt(now);
         return scriptRepository.save(definition);
     }
 
     public ScriptDefinition get(String id) {
         return scriptRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Script not found: " + id));
+    }
+
+    public ScriptDefinition getPublished(String id) {
+        ScriptDefinition definition = get(id);
+        if (definition.getPublishedSnapshot() == null) {
+            throw new IllegalArgumentException("Script not published: " + id);
+        }
+        return definition.toPublishedDefinition();
     }
 
     public List<ScriptDefinition> list() {
@@ -59,9 +72,26 @@ public class ScriptApplicationService {
 
     public ScriptDefinition publish(String id) {
         ScriptDefinition definition = get(id);
+        definition.setPublishedSnapshot(definition.snapshotCurrent());
         definition.setStatus(ScriptStatus.PUBLISHED);
         definition.setVersion((definition.getVersion() == null ? 0 : definition.getVersion()) + 1);
         definition.setUpdatedAt(LocalDateTime.now());
         return scriptRepository.save(definition);
+    }
+
+    public ScriptDefinition discardDraft(String id) {
+        ScriptDefinition published = getPublished(id);
+        published.setUpdatedAt(LocalDateTime.now());
+        return scriptRepository.save(published);
+    }
+
+    private void normalizePublicationState(ScriptDefinition definition) {
+        if (definition.hasStoredPublishedSnapshot()) {
+            definition.setStatus(ScriptStatus.PUBLISHED);
+            return;
+        }
+        if (definition.getStatus() == ScriptStatus.PUBLISHED) {
+            definition.setPublishedSnapshot(definition.snapshotCurrent());
+        }
     }
 }

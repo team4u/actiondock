@@ -9,14 +9,20 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.scriptflow.RuntimeApplication;
+import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
+import org.team4u.scriptflow.domain.model.ExecutionRecord;
+import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptStatus;
+import org.team4u.scriptflow.domain.model.SubmitMode;
 
 import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -50,6 +56,9 @@ class ScriptControllerTest {
     @MockBean
     private ScriptApplicationService scriptApplicationService;
 
+    @MockBean
+    private ExecutionApplicationService executionApplicationService;
+
     @Test
     void detailReturnsWrappedScriptDefinition() throws Exception {
         when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition().setId("script-1").setName("Hello"));
@@ -59,6 +68,22 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.status").value(0))
                 .andExpect(jsonPath("$.data.id").value("script-1"))
                 .andExpect(jsonPath("$.data.name").value("Hello"));
+    }
+
+    @Test
+    void publishedDetailReturnsWrappedPublishedDefinition() throws Exception {
+        when(scriptApplicationService.getPublished("script-1"))
+                .thenReturn(new ScriptDefinition()
+                        .setId("script-1")
+                        .setName("Live")
+                        .setStatus(ScriptStatus.PUBLISHED));
+
+        mockMvc.perform(get("/api/scripts/script-1/published"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(0))
+                .andExpect(jsonPath("$.data.id").value("script-1"))
+                .andExpect(jsonPath("$.data.name").value("Live"))
+                .andExpect(jsonPath("$.data.status").value("PUBLISHED"));
     }
 
     @Test
@@ -118,6 +143,48 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.data.name").value("Updated"));
 
         verify(scriptApplicationService).save(any(ScriptDefinition.class));
+    }
+
+    @Test
+    void discardDraftDelegatesToApplicationService() throws Exception {
+        when(scriptApplicationService.discardDraft("script-1"))
+                .thenReturn(new ScriptDefinition().setId("script-1").setName("Live"));
+
+        mockMvc.perform(post("/api/scripts/script-1/discard-draft"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("script-1"))
+                .andExpect(jsonPath("$.data.name").value("Live"));
+    }
+
+    @Test
+    void publishedExecuteUsesPathIdAndPublishedSchemaProjection() throws Exception {
+        when(executionApplicationService.executePublished(eq("script-1"), any(), eq(SubmitMode.SYNC)))
+                .thenReturn(new ExecutionRecord()
+                        .setId("exec-1")
+                        .setScriptId("script-1")
+                        .setStatus(ExecutionStatus.SUCCESS)
+                        .setSubmitMode(SubmitMode.SYNC)
+                        .setOutput(Map.of("message", "live")));
+        when(scriptApplicationService.getPublished("script-1"))
+                .thenReturn(new ScriptDefinition()
+                        .setId("script-1")
+                        .setOutputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "message", Map.of("type", "string")
+                                )
+                        )));
+
+        mockMvc.perform(post("/api/scripts/script-1/published/execute")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scriptId":"other","input":{"name":"Alice"},"mode":"SYNC"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(0))
+                .andExpect(jsonPath("$.data.id").value("exec-1"))
+                .andExpect(jsonPath("$.data.scriptId").value("script-1"))
+                .andExpect(jsonPath("$.data.output.message").value("live"));
     }
 
     @Test

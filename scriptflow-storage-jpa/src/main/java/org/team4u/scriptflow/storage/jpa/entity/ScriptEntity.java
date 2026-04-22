@@ -30,6 +30,19 @@ public class ScriptEntity {
     @Lob
     private String outputSchemaJson;
 
+    private String publishedName;
+
+    private String publishedType;
+
+    @Lob
+    private String publishedSource;
+
+    @Lob
+    private String publishedInputSchemaJson;
+
+    @Lob
+    private String publishedOutputSchemaJson;
+
     private String status;
     private Integer versionValue;
     private LocalDateTime createdAt;
@@ -47,6 +60,16 @@ public class ScriptEntity {
     public void setInputSchemaJson(String inputSchemaJson) { this.inputSchemaJson = inputSchemaJson; }
     public String getOutputSchemaJson() { return outputSchemaJson; }
     public void setOutputSchemaJson(String outputSchemaJson) { this.outputSchemaJson = outputSchemaJson; }
+    public String getPublishedName() { return publishedName; }
+    public void setPublishedName(String publishedName) { this.publishedName = publishedName; }
+    public String getPublishedType() { return publishedType; }
+    public void setPublishedType(String publishedType) { this.publishedType = publishedType; }
+    public String getPublishedSource() { return publishedSource; }
+    public void setPublishedSource(String publishedSource) { this.publishedSource = publishedSource; }
+    public String getPublishedInputSchemaJson() { return publishedInputSchemaJson; }
+    public void setPublishedInputSchemaJson(String publishedInputSchemaJson) { this.publishedInputSchemaJson = publishedInputSchemaJson; }
+    public String getPublishedOutputSchemaJson() { return publishedOutputSchemaJson; }
+    public void setPublishedOutputSchemaJson(String publishedOutputSchemaJson) { this.publishedOutputSchemaJson = publishedOutputSchemaJson; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Integer getVersionValue() { return versionValue; }

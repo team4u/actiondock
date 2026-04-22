@@ -1,13 +1,16 @@
 package org.team4u.scriptflow.application;
 
 import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
+import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +48,15 @@ class ScriptApplicationServiceTest {
         LocalDateTime createdAt = LocalDateTime.of(2024, 1, 2, 3, 4);
         when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
                 .setId("script-1")
+                .setName("Published")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [message: 'published']")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Published")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return [message: 'published']")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")))
                 .setCreatedAt(createdAt)
                 .setVersion(7)
                 .setStatus(ScriptStatus.PUBLISHED)));
@@ -60,6 +72,9 @@ class ScriptApplicationServiceTest {
         assertThat(saved.getCreatedAt()).isEqualTo(createdAt);
         assertThat(saved.getVersion()).isEqualTo(7);
         assertThat(saved.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
+        assertThat(saved.getPublishedSnapshot()).isNotNull();
+        assertThat(saved.getPublishedSnapshot().getSource()).isEqualTo("return [message: 'published']");
+        assertThat(saved.getHasUnpublishedChanges()).isTrue();
         assertThat(saved.getUpdatedAt()).isAfterOrEqualTo(createdAt);
     }
 
@@ -77,6 +92,11 @@ class ScriptApplicationServiceTest {
     void publishMarksScriptAsPublishedAndIncrementsVersion() {
         when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
                 .setId("script-1")
+                .setName("Draft")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [message: 'draft']")
+                .setInputSchema(Map.of("type", "object"))
+                .setOutputSchema(Map.of("type", "object"))
                 .setVersion(2)
                 .setStatus(ScriptStatus.DRAFT)));
         when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -85,7 +105,72 @@ class ScriptApplicationServiceTest {
 
         assertThat(published.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
         assertThat(published.getVersion()).isEqualTo(3);
+        assertThat(published.getPublishedSnapshot()).isNotNull();
+        assertThat(published.getPublishedSnapshot().getSource()).isEqualTo("return [message: 'draft']");
+        assertThat(published.getHasUnpublishedChanges()).isFalse();
         assertThat(published.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void getPublishedReturnsPublishedSnapshotContent() {
+        when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Draft")
+                .setType(ScriptType.PYTHON)
+                .setSource("return {'message': 'draft'}")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Live")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return [message: 'live']")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("properties", Map.of("message", Map.of("type", "string")))))
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setVersion(4)));
+
+        ScriptDefinition published = service.getPublished("script-1");
+
+        assertThat(published.getName()).isEqualTo("Live");
+        assertThat(published.getType()).isEqualTo(ScriptType.GROOVY);
+        assertThat(published.getSource()).isEqualTo("return [message: 'live']");
+        assertThat(published.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
+        assertThat(published.getHasUnpublishedChanges()).isFalse();
+    }
+
+    @Test
+    void discardDraftRestoresPublishedSnapshotWithoutIncrementingVersion() {
+        when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Draft")
+                .setType(ScriptType.PYTHON)
+                .setSource("return {'message': 'draft'}")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Live")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return [message: 'live']")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")))
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setVersion(5)));
+        when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScriptDefinition discarded = service.discardDraft("script-1");
+
+        assertThat(discarded.getName()).isEqualTo("Live");
+        assertThat(discarded.getType()).isEqualTo(ScriptType.GROOVY);
+        assertThat(discarded.getSource()).isEqualTo("return [message: 'live']");
+        assertThat(discarded.getVersion()).isEqualTo(5);
+        assertThat(discarded.getHasUnpublishedChanges()).isFalse();
+    }
+
+    @Test
+    void discardDraftRejectsUnpublishedScript() {
+        when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("script-1")
+                .setStatus(ScriptStatus.DRAFT)));
+
+        assertThatThrownBy(() -> service.discardDraft("script-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Script not published: script-1");
     }
 
     @Test

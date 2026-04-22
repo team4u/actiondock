@@ -66,6 +66,10 @@ export function getScript(id: string): Promise<ScriptDefinition> {
   return request<ScriptDefinition>(`/api/scripts/${id}?includeUiSchema=true`);
 }
 
+export function getPublishedScript(id: string): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${id}/published?includeUiSchema=true`);
+}
+
 export function createScript(payload: ScriptDefinition): Promise<ScriptDefinition> {
   return request<ScriptDefinition>("/api/scripts?includeUiSchema=true", {
     method: "POST",
@@ -100,8 +104,25 @@ export function publishScript(id: string): Promise<ScriptDefinition> {
   });
 }
 
+export function discardDraft(id: string): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${id}/discard-draft?includeUiSchema=true`, {
+    method: "POST"
+  });
+}
+
 export function executeScript(payload: ExecuteRequest): Promise<ExecutionResponse> {
   return request<ExecutionResponse>("/api/executions", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function executePublishedScript(
+  id: string,
+  payload: Omit<ExecuteRequest, "scriptId">
+): Promise<ExecutionResponse> {
+  return request<ExecutionResponse>(`/api/scripts/${id}/published/execute`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)

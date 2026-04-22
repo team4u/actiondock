@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.storage.jpa.adapter;
 
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.port.JsonCodec;
@@ -42,12 +43,18 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
 
     private ScriptEntity toEntity(ScriptDefinition definition) {
         ScriptEntity entity = new ScriptEntity();
+        PublishedScriptSnapshot publishedSnapshot = definition.getPublishedSnapshot();
         entity.setId(definition.getId());
         entity.setName(definition.getName());
         entity.setType(definition.getType().name());
         entity.setSource(definition.getSource());
         entity.setInputSchemaJson(jsonCodec.write(definition.getInputSchema()));
         entity.setOutputSchemaJson(jsonCodec.write(definition.getOutputSchema()));
+        entity.setPublishedName(publishedSnapshot == null ? null : publishedSnapshot.getName());
+        entity.setPublishedType(publishedSnapshot == null ? null : publishedSnapshot.getType().name());
+        entity.setPublishedSource(publishedSnapshot == null ? null : publishedSnapshot.getSource());
+        entity.setPublishedInputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getInputSchema()));
+        entity.setPublishedOutputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getOutputSchema()));
         entity.setStatus(definition.getStatus().name());
         entity.setVersionValue(definition.getVersion());
         entity.setCreatedAt(definition.getCreatedAt());
@@ -63,9 +70,24 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setSource(entity.getSource())
                 .setInputSchema(jsonCodec.readMap(entity.getInputSchemaJson()))
                 .setOutputSchema(jsonCodec.readMap(entity.getOutputSchemaJson()))
+                .setPublishedSnapshot(toSnapshot(entity))
                 .setStatus(ScriptStatus.valueOf(entity.getStatus()))
                 .setVersion(entity.getVersionValue())
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
+    }
+
+    private PublishedScriptSnapshot toSnapshot(ScriptEntity entity) {
+        if (entity.getPublishedType() == null && entity.getPublishedSource() == null && entity.getPublishedName() == null
+                && entity.getPublishedInputSchemaJson() == null && entity.getPublishedOutputSchemaJson() == null) {
+            return null;
+        }
+
+        return new PublishedScriptSnapshot()
+                .setName(entity.getPublishedName())
+                .setType(entity.getPublishedType() == null ? ScriptType.GROOVY : ScriptType.valueOf(entity.getPublishedType()))
+                .setSource(entity.getPublishedSource())
+                .setInputSchema(jsonCodec.readMap(entity.getPublishedInputSchemaJson()))
+                .setOutputSchema(jsonCodec.readMap(entity.getPublishedOutputSchemaJson()));
     }
 }

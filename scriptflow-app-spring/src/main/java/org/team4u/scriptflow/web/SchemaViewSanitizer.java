@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.web;
 
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,10 +20,23 @@ final class SchemaViewSanitizer {
                 .setSource(definition.getSource())
                 .setInputSchema(sanitizeSchema(definition.getInputSchema()))
                 .setOutputSchema(sanitizeSchema(definition.getOutputSchema()))
+                .setPublishedSnapshot(sanitizeSnapshot(definition.getPublishedSnapshot()))
                 .setStatus(definition.getStatus())
                 .setVersion(definition.getVersion())
                 .setCreatedAt(definition.getCreatedAt())
                 .setUpdatedAt(definition.getUpdatedAt());
+    }
+
+    static PublishedScriptSnapshot sanitizeSnapshot(PublishedScriptSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        return new PublishedScriptSnapshot()
+                .setName(snapshot.getName())
+                .setType(snapshot.getType())
+                .setSource(snapshot.getSource())
+                .setInputSchema(sanitizeSchema(snapshot.getInputSchema()))
+                .setOutputSchema(sanitizeSchema(snapshot.getOutputSchema()));
     }
 
     static Map<String, Object> sanitizeSchema(Map<String, Object> schema) {

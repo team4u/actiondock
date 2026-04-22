@@ -6,6 +6,7 @@ import {
   DeleteOutlined,
   ImportOutlined,
   PlayCircleOutlined,
+  RollbackOutlined,
   ReloadOutlined,
   RocketOutlined,
   SaveOutlined
@@ -42,6 +43,7 @@ import {
   ApiError,
   clearExecutions,
   createScript,
+  discardDraft,
   deleteExecution,
   deleteScript,
   executeScript,
@@ -241,6 +243,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [discardingDraft, setDiscardingDraft] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deletingScript, setDeletingScript] = useState(false);
@@ -282,6 +285,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     resolveSchemaFields(currentScript?.outputSchema);
   const hasInputSchema = Boolean(currentScript?.inputSchema && Object.keys(currentScript.inputSchema).length > 0);
   const hasOutputSchema = Boolean(currentScript?.outputSchema && Object.keys(currentScript.outputSchema).length > 0);
+  const hasUnpublishedChanges = Boolean(
+    currentScript?.status === "PUBLISHED" && currentScript.hasUnpublishedChanges
+  );
   const outputValues = isRecord(currentExecution?.output) ? currentExecution.output : {};
   const supportsSchemaForm = supportedFields.length > 0;
   const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
@@ -404,20 +410,24 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     }, 2000);
   };
 
+  const applyScriptToEditor = (script: ScriptDefinition) => {
+    setCurrentScript(script);
+    setExecutionValidationError(null);
+    form.setFieldsValue({
+      id: script.id,
+      name: script.name,
+      type: script.type
+    });
+    setSourceText(script.source);
+    setInputSchemaState(deserializeSchema(script.inputSchema));
+    setOutputSchemaState(deserializeSchema(script.outputSchema));
+  };
+
   const loadScript = async (scriptId: string) => {
     setLoading(true);
     try {
       const script = await getScript(scriptId);
-      setCurrentScript(script);
-      setExecutionValidationError(null);
-      form.setFieldsValue({
-        id: script.id,
-        name: script.name,
-        type: script.type
-      });
-      setSourceText(script.source);
-      setInputSchemaState(deserializeSchema(script.inputSchema));
-      setOutputSchemaState(deserializeSchema(script.outputSchema));
+      applyScriptToEditor(script);
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "加载脚本失败";
       messageApi.error(detail);
@@ -480,6 +490,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       outputSchema,
       status: currentScript?.status ?? "DRAFT",
       version: currentScript?.version ?? 1,
+      publishedSnapshot: currentScript?.publishedSnapshot,
       createdAt: currentScript?.createdAt,
       updatedAt: currentScript?.updatedAt
     };
@@ -488,7 +499,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const persistCurrentScript = async (): Promise<ScriptDefinition> => {
     const payload = await buildPayload();
     const saved = mode === "create" ? await createScript(payload) : await updateScript(payload.id, payload);
-    setCurrentScript(saved);
+    applyScriptToEditor(saved);
     return saved;
   };
 
@@ -559,7 +570,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
       stage = "publish";
       const published = await publishScript(savedScript.id);
-      setCurrentScript(published);
+      applyScriptToEditor(published);
       messageApi.success("保存、校验并发布成功");
 
       if (mode === "create") {
@@ -588,6 +599,24 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       }
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!currentScript?.id || !hasUnpublishedChanges) {
+      return;
+    }
+
+    setDiscardingDraft(true);
+    try {
+      const discarded = await discardDraft(currentScript.id);
+      applyScriptToEditor(discarded);
+      messageApi.success("草稿已丢弃");
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "丢弃草稿失败";
+      messageApi.error(detail);
+    } finally {
+      setDiscardingDraft(false);
     }
   };
 
@@ -880,6 +909,19 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 >
                   校验
                 </Button>
+                {hasUnpublishedChanges ? (
+                  <Popconfirm
+                    title="确认丢弃当前草稿？"
+                    description="会恢复到最近一次发布的版本，未发布修改将被移除。"
+                    okText="丢弃草稿"
+                    cancelText="取消"
+                    onConfirm={() => void handleDiscardDraft()}
+                  >
+                    <Button icon={<RollbackOutlined />} loading={discardingDraft}>
+                      丢弃草稿
+                    </Button>
+                  </Popconfirm>
+                ) : null}
                 <Button
                   icon={<RocketOutlined />}
                   type="primary"
@@ -920,6 +962,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   <Tag color={currentScript.status === "PUBLISHED" ? "green" : "gold"}>
                     {currentScript.status}
                   </Tag>
+                  {hasUnpublishedChanges ? <Tag color="orange">有未发布修改</Tag> : null}
                   <Text type="secondary">{formatDateTime(currentScript.updatedAt)}</Text>
                 </Space>
               </Descriptions.Item>
@@ -927,6 +970,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               <Descriptions.Item label="版本">{currentScript.version}</Descriptions.Item>
               <Descriptions.Item label="创建时间">{formatDateTime(currentScript.createdAt)}</Descriptions.Item>
             </Descriptions>
+            {hasUnpublishedChanges ? (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginTop: 16 }}
+                message="当前编辑内容尚未发布"
+                description="保存只会更新草稿，正式使用页仍然使用上一次发布的版本。需要生效时请再次点击“发布”，如需回退可直接“丢弃草稿”。"
+              />
+            ) : null}
           </Card>
         )}
 

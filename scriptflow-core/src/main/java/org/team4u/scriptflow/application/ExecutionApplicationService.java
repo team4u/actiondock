@@ -34,14 +34,22 @@ public class ExecutionApplicationService {
     }
 
     public ExecutionRecord execute(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
-        ScriptDefinition scriptDefinition = scriptRepository.findById(scriptId)
-                .orElseThrow(() -> new IllegalArgumentException("Script not found: " + scriptId));
+        ScriptDefinition scriptDefinition = getScript(scriptId);
+        return execute(scriptDefinition, input, submitMode);
+    }
+
+    public ExecutionRecord executePublished(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
+        ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
+        return execute(scriptDefinition, input, submitMode);
+    }
+
+    private ExecutionRecord execute(ScriptDefinition scriptDefinition, Map<String, Object> input, SubmitMode submitMode) {
         Map<String, Object> payload = input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
-        scriptSchemaSupport.validateInput(scriptId, payload, scriptDefinition.getInputSchema());
+        scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
 
         ExecutionRecord record = new ExecutionRecord()
                 .setId(UUID.randomUUID().toString())
-                .setScriptId(scriptId)
+                .setScriptId(scriptDefinition.getId())
                 .setSubmitMode(submitMode == null ? SubmitMode.SYNC : submitMode)
                 .setInput(payload)
                 .setCreatedAt(LocalDateTime.now());
@@ -54,6 +62,19 @@ public class ExecutionApplicationService {
         }
 
         return run(scriptDefinition, record);
+    }
+
+    private ScriptDefinition getScript(String scriptId) {
+        return scriptRepository.findById(scriptId)
+                .orElseThrow(() -> new IllegalArgumentException("Script not found: " + scriptId));
+    }
+
+    private ScriptDefinition getPublishedScript(String scriptId) {
+        ScriptDefinition definition = getScript(scriptId);
+        if (definition.getPublishedSnapshot() == null) {
+            throw new IllegalArgumentException("Script not published: " + scriptId);
+        }
+        return definition.toPublishedDefinition();
     }
 
     private ExecutionRecord run(ScriptDefinition definition, ExecutionRecord record) {
