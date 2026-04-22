@@ -96,6 +96,7 @@ export interface PluginAction {
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
   exampleArgs: Record<string, unknown>;
 }
 

@@ -46,6 +46,10 @@ class PluginRuntimeServiceTest {
 
         assertThat(installed.getPluginId()).isEqualTo("scriptflow-demo-plugin");
         assertThat(installed.isStarted()).isTrue();
+        assertThat(installed.getActions()).singleElement().satisfies(action -> {
+            assertThat(action.getInputSchema()).containsEntry("type", "object");
+            assertThat(action.getOutputSchema()).containsEntry("type", "object");
+        });
         assertThat(repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().isEnabled()).isTrue();
         assertThat(service.getConfig("scriptflow-demo-plugin").getConfig()).containsEntry("prefix", "demo");
 
@@ -127,6 +131,11 @@ class PluginRuntimeServiceTest {
         try (JarOutputStream outputStream = new JarOutputStream(Files.newOutputStream(destination), manifest)) {
             addClass(outputStream, org.team4u.scriptflow.plugin.template.TemplatePlugin.class);
             addClass(outputStream, org.team4u.scriptflow.plugin.template.DemoScriptFlowPlugin.class);
+            addResource(
+                    outputStream,
+                    "META-INF/scriptflow/plugins/scriptflow-demo-plugin.json",
+                    "META-INF/scriptflow/plugins/scriptflow-demo-plugin.json"
+            );
             outputStream.putNextEntry(new JarEntry("META-INF/extensions.idx"));
             outputStream.write("org.team4u.scriptflow.plugin.template.DemoScriptFlowPlugin\n".getBytes());
             outputStream.closeEntry();
@@ -140,6 +149,17 @@ class PluginRuntimeServiceTest {
         try (InputStream inputStream = type.getClassLoader().getResourceAsStream(entryName)) {
             if (inputStream == null) {
                 throw new IllegalStateException("Missing class bytes for " + type.getName());
+            }
+            outputStream.write(inputStream.readAllBytes());
+        }
+        outputStream.closeEntry();
+    }
+
+    private void addResource(JarOutputStream outputStream, String entryName, String resourceName) throws IOException {
+        outputStream.putNextEntry(new JarEntry(entryName));
+        try (InputStream inputStream = PluginRuntimeServiceTest.class.getClassLoader().getResourceAsStream(resourceName)) {
+            if (inputStream == null) {
+                throw new IllegalStateException("Missing resource bytes for " + resourceName);
             }
             outputStream.write(inputStream.readAllBytes());
         }

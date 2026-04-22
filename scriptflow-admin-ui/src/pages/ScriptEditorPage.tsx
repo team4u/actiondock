@@ -16,6 +16,7 @@ import {
   Button,
   Card,
   Col,
+  Collapse,
   Descriptions,
   Empty,
   Form,
@@ -58,6 +59,7 @@ import {
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { InfoHint } from "../components/InfoHint";
+import { SchemaFieldList } from "../components/SchemaFieldList";
 import {
   buildExecuteCliCommand,
   buildExecuteCurlCommand,
@@ -1143,46 +1145,71 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 description="当前没有已启动插件，可前往插件管理页安装并启动。"
                               />
                             ) : (
-                              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                                {pluginReferences.map((plugin) => (
-                                  <Card
-                                    key={plugin.pluginId}
-                                    type="inner"
-                                    title={plugin.name || plugin.pluginId}
-                                    extra={<Text code>{plugin.pluginId}</Text>}
-                                  >
-                                    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                              <Collapse
+                                className="plugin-reference-collapse"
+                                items={pluginReferences.map((plugin) => ({
+                                  key: plugin.pluginId,
+                                  label: (
+                                    <Space wrap size={[8, 8]}>
+                                      <Text strong>{plugin.name || plugin.pluginId}</Text>
+                                      <Text code>{plugin.pluginId}</Text>
+                                    </Space>
+                                  ),
+                                  children: (
+                                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
                                       {plugin.description ? (
                                         <Text type="secondary">{plugin.description}</Text>
                                       ) : null}
-                                      {plugin.actions.map((action) => {
-                                        const snippet = `plugins.invoke("${plugin.pluginId}", "${action.action}", ${JSON.stringify(action.exampleArgs, null, 2)})`;
-                                        return (
-                                          <div key={`${plugin.pluginId}-${action.action}`} className="plugin-action-reference">
-                                            <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                                              <Space wrap>
+                                      <Collapse
+                                        className="plugin-reference-collapse plugin-reference-collapse--nested"
+                                        items={plugin.actions.map((action) => {
+                                          const snippet = `plugins.invoke("${plugin.pluginId}", "${action.action}", ${JSON.stringify(action.exampleArgs, null, 2)})`;
+                                          return {
+                                            key: `${plugin.pluginId}-${action.action}`,
+                                            label: (
+                                              <Space wrap size={[8, 8]}>
                                                 <Text strong>{action.title || action.action}</Text>
-                                                <Tag>{action.action}</Tag>
-                                                <Button
-                                                  size="small"
-                                                  icon={<CopyOutlined />}
-                                                  onClick={() => void handleCopyCommand(snippet)}
-                                                >
-                                                  复制调用
-                                                </Button>
+                                                <Text code>{action.action}</Text>
                                               </Space>
-                                              {action.description ? (
-                                                <Text type="secondary">{action.description}</Text>
-                                              ) : null}
-                                              <pre className="json-preview">{snippet}</pre>
-                                            </Space>
-                                          </div>
-                                        );
-                                      })}
+                                            ),
+                                            extra: (
+                                              <Button
+                                                size="small"
+                                                icon={<CopyOutlined />}
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  void handleCopyCommand(snippet);
+                                                }}
+                                              >
+                                                复制调用
+                                              </Button>
+                                            ),
+                                            children: (
+                                              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                                {action.description ? (
+                                                  <Text type="secondary">{action.description}</Text>
+                                                ) : null}
+                                                <SchemaFieldList
+                                                  schema={action.inputSchema}
+                                                  title="输入字段"
+                                                  emptyDescription="当前动作没有声明输入字段。"
+                                                />
+                                                <SchemaFieldList
+                                                  schema={action.outputSchema}
+                                                  title="输出字段"
+                                                  emptyDescription="当前动作没有声明输出字段。"
+                                                />
+                                                <Text strong>调用示例</Text>
+                                                <pre className="json-preview">{snippet}</pre>
+                                              </Space>
+                                            )
+                                          };
+                                        })}
+                                      />
                                     </Space>
-                                  </Card>
-                                ))}
-                              </Space>
+                                  )
+                                }))}
+                              />
                             )}
                           </Card>
                         ) : null}

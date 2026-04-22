@@ -29,6 +29,23 @@
           }
         }
       },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "scriptId": {
+            "type": "string",
+            "title": "Script ID"
+          },
+          "executionId": {
+            "type": "string",
+            "title": "Execution ID"
+          }
+        }
+      },
       "exampleArgs": {
         "message": "hello"
       }

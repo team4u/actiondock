@@ -14,5 +14,6 @@ class PluginManifestLoaderTest {
         assertThat(manifest.getDefaultConfig()).containsEntry("prefix", "sample");
         assertThat(manifest.getActions()).hasSize(1);
         assertThat(manifest.getActions().getFirst().getAction()).isEqualTo("echo");
+        assertThat(manifest.getActions().getFirst().getOutputSchema()).containsEntry("type", "object");
     }
 }

@@ -8,6 +8,7 @@ public class PluginActionManifest {
     private String title;
     private String description;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
+    private Map<String, Object> outputSchema = new LinkedHashMap<>();
     private Map<String, Object> exampleArgs = new LinkedHashMap<>();
 
     public String getAction() {
@@ -43,6 +44,15 @@ public class PluginActionManifest {
 
     public PluginActionManifest setInputSchema(Map<String, Object> inputSchema) {
         this.inputSchema = inputSchema == null ? new LinkedHashMap<>() : new LinkedHashMap<>(inputSchema);
+        return this;
+    }
+
+    public Map<String, Object> getOutputSchema() {
+        return outputSchema;
+    }
+
+    public PluginActionManifest setOutputSchema(Map<String, Object> outputSchema) {
+        this.outputSchema = outputSchema == null ? new LinkedHashMap<>() : new LinkedHashMap<>(outputSchema);
         return this;
     }
 

@@ -332,6 +332,7 @@ public class PluginRuntimeService {
                                 .setTitle(action.getTitle())
                                 .setDescription(action.getDescription())
                                 .setInputSchema(action.getInputSchema())
+                                .setOutputSchema(action.getOutputSchema())
                                 .setExampleArgs(action.getExampleArgs()))
                         .toList())
                 .setEnabled(enabled)
@@ -382,6 +383,7 @@ public class PluginRuntimeService {
                 .setTitle(actionMetadata.getTitle())
                 .setDescription(actionMetadata.getDescription())
                 .setInputSchema(actionMetadata.getInputSchema())
+                .setOutputSchema(actionMetadata.getOutputSchema())
                 .setExampleArgs(actionMetadata.getExampleArgs());
     }
 

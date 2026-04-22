@@ -286,6 +286,7 @@ META-INF/scriptflow/plugins/{pluginId}.json
 - `validateConfig(...)` 负责校验插件级配置
 - `invoke(...)` 负责执行动作
 - `configSchema`、`defaultConfig`、`actions` 等元数据统一维护在 JSON 中
+- 每个动作可以同时声明 `inputSchema` 和 `outputSchema`
 
 默认配置示例：
 
@@ -335,11 +336,16 @@ META-INF/scriptflow/plugins/{pluginId}.json
 
 ### 4. 插件配置
 
-管理界面支持编辑插件级 JSON 配置。
+管理界面支持两种方式编辑插件配置：
+
+- **表单输入**：根据 `configSchema` 自动渲染配置表单
+- **JSON 输入**：直接编辑完整配置对象
 
 配置行为：
 
 - 配置内容必须是 JSON 对象
+- 表单模式会按 `configSchema` 渲染支持的字段
+- 如果 `configSchema` 中含有当前表单模式不支持的字段，仍然可以切到 JSON 模式完整维护
 - 保存时会先做基础 JSON 校验，再调用插件自身的 `validateConfig(...)`
 - 配置文件默认保存到：
 
@@ -421,6 +427,7 @@ try {
 - 已启动插件列表
 - 每个动作的说明
 - `inputSchema`
+- `outputSchema`
 - `exampleArgs`
 - 可直接复制的 `plugins.invoke(...)` 代码片段
 

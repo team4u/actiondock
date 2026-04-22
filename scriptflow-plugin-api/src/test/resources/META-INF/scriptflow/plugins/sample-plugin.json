@@ -28,6 +28,14 @@
           }
         }
       },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "exampleArgs": {
         "message": "hello"
       }

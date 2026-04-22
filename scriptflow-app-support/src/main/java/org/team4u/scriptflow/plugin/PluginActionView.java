@@ -8,6 +8,7 @@ public class PluginActionView {
     private String title;
     private String description;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
+    private Map<String, Object> outputSchema = new LinkedHashMap<>();
     private Map<String, Object> exampleArgs = new LinkedHashMap<>();
 
     public String getAction() {
@@ -43,6 +44,15 @@ public class PluginActionView {
 
     public PluginActionView setInputSchema(Map<String, Object> inputSchema) {
         this.inputSchema = inputSchema == null ? new LinkedHashMap<>() : new LinkedHashMap<>(inputSchema);
+        return this;
+    }
+
+    public Map<String, Object> getOutputSchema() {
+        return outputSchema;
+    }
+
+    public PluginActionView setOutputSchema(Map<String, Object> outputSchema) {
+        this.outputSchema = outputSchema == null ? new LinkedHashMap<>() : new LinkedHashMap<>(outputSchema);
         return this;
     }
 

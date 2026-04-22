@@ -384,6 +384,55 @@ a {
   border-top: 1px solid var(--app-border-subtle);
 }
 
+.schema-field-list {
+  display: grid;
+  gap: 10px;
+}
+
+.schema-field-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.schema-field-list__item {
+  padding: 12px 14px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+}
+
+.schema-field-list__empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--app-border-subtle);
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.04);
+}
+
+.plugin-reference-collapse {
+  background: transparent;
+}
+
+.plugin-reference-collapse > .ant-collapse-item {
+  border-radius: 12px !important;
+  overflow: hidden;
+  border: 1px solid var(--app-border-subtle);
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+}
+
+.plugin-reference-collapse > .ant-collapse-item + .ant-collapse-item {
+  margin-top: 12px;
+}
+
+.plugin-reference-collapse > .ant-collapse-item > .ant-collapse-header {
+  align-items: center !important;
+}
+
+.plugin-reference-collapse--nested > .ant-collapse-item {
+  border-radius: 10px !important;
+}
+
 .app-code-editor {
   position: relative;
   overflow: hidden;

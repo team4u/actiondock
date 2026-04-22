@@ -16,6 +16,7 @@ public class PluginActionMetadata {
     private String title;
     private String description;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
+    private Map<String, Object> outputSchema = new LinkedHashMap<>();
     private Map<String, Object> exampleArgs = new LinkedHashMap<>();
 
     public String getAction() {
@@ -68,6 +69,22 @@ public class PluginActionMetadata {
 
     public PluginActionMetadata setInputSchema(Map<String, Object> inputSchema) {
         this.inputSchema = inputSchema == null ? new LinkedHashMap<>() : new LinkedHashMap<>(inputSchema);
+        return this;
+    }
+
+    /**
+     * 获取动作的输出结果模式。
+     * <p>
+     * 定义插件动作返回结果的字段结构，用于在界面上直观展示返回值约定。
+     *
+     * @return 输出模式映射
+     */
+    public Map<String, Object> getOutputSchema() {
+        return outputSchema;
+    }
+
+    public PluginActionMetadata setOutputSchema(Map<String, Object> outputSchema) {
+        this.outputSchema = outputSchema == null ? new LinkedHashMap<>() : new LinkedHashMap<>(outputSchema);
         return this;
     }
 
