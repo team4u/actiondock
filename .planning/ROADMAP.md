@@ -1,12 +1,12 @@
 # Roadmap: ScriptFlow 代码注释规范化
 
-**Last updated:** 2026-04-22 after initialization
+**Last updated:** 2026-04-22 after planning
 
 ## Phases
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|-----------------|
-| 1 | Domain 层注释 | 为域模型层添加专业注释 | COMMENT-01, COMMENT-02, COMMENT-03 | 4/4 criteria met |
+| 1 | Domain 层注释 | 为域模型层添加专业注释 | COMMENT-01 (done), COMMENT-02, COMMENT-03 | 4/4 criteria met |
 | 2 | API 层注释 | 为控制器和接口添加注释 | COMMENT-04 | 3/3 criteria met |
 | 3 | Storage 层注释 | 为持久化层添加注释 | COMMENT-05 | 3/3 criteria met |
 
@@ -16,10 +16,16 @@
 
 **Goal:** 为 scriptflow-core 模块的域模型层添加符合 Java 规范的专业 Javadoc 注释
 
-**Requirements:** COMMENT-01, COMMENT-02, COMMENT-03
+**Requirements:** COMMENT-01 (DONE), COMMENT-02, COMMENT-03
+
+**Plans:** 2 plans in 2 waves
+
+**Plan list:**
+- [ ] 01-01-PLAN.md - Application 层服务类注释 (Wave 1)
+- [ ] 01-02-PLAN.md - Port 层接口注释 (Wave 2)
 
 **Success Criteria:**
-1. `scriptflow-core/domain/model/` 下所有实体类具有完整 Javadoc
+1. `scriptflow-core/domain/model/` 下所有实体类具有完整 Javadoc (已完成)
 2. `scriptflow-core/application/` 下所有服务类具有方法级注释
 3. `scriptflow-core/domain/port/` 下所有接口具有 Javadoc
 4. 所有注释符合 JavaDoc 规范，包含 @param, @return, @throws 等标签
@@ -57,3 +63,4 @@
 - 每个 Phase 可独立执行
 - 注释风格应与 ScriptDefinition.java 现有注释保持一致
 - 优先处理核心业务类 (ScriptDefinition, ScriptApplicationService)
+- Phase 1 的 Domain 层 (COMMENT-01) 已完成，无需重复处理
