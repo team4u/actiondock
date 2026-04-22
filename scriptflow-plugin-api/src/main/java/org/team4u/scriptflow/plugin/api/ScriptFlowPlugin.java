@@ -5,7 +5,7 @@ import org.pf4j.ExtensionPoint;
 import java.util.Map;
 
 public interface ScriptFlowPlugin extends ExtensionPoint {
-    PluginManifest descriptor();
+    String id();
 
     default void validateConfig(Map<String, Object> config) {
     }

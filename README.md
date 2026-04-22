@@ -267,6 +267,26 @@ scriptflow-plugin-template/target/scriptflow-plugin-template-0.2.0.jar
 - `pluginId`: `scriptflow-demo-plugin`
 - `action`: `echo`
 
+模板插件的元数据位于：
+
+```text
+scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/scriptflow-demo-plugin.json
+```
+
+插件实现类返回插件 `id()`，宿主按约定路径加载 manifest：
+
+```text
+META-INF/scriptflow/plugins/{pluginId}.json
+```
+
+模板插件当前的最小实现思路是：
+
+- 实现 `ScriptFlowPlugin`
+- `id()` 返回插件唯一标识
+- `validateConfig(...)` 负责校验插件级配置
+- `invoke(...)` 负责执行动作
+- `configSchema`、`defaultConfig`、`actions` 等元数据统一维护在 JSON 中
+
 默认配置示例：
 
 ```json
@@ -292,6 +312,11 @@ scriptflow-plugin-template/target/scriptflow-plugin-template-0.2.0.jar
 4. 将插件元数据写入 `plugin_registration` 表，并标记为启用
 
 如果其中任一步失败，安装会回滚并返回错误。
+
+如果你要基于模板开发自定义插件，通常需要同时修改两处：
+
+1. Java 实现类中的 `id()`
+2. `META-INF/scriptflow/plugins/{pluginId}.json` 中的插件元数据
 
 ### 3. 启动、停止、卸载
 

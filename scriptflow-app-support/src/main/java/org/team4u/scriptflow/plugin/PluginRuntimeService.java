@@ -12,6 +12,7 @@ import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
 import org.team4u.scriptflow.plugin.api.PluginManifest;
+import org.team4u.scriptflow.plugin.api.PluginManifestLoader;
 import org.team4u.scriptflow.plugin.api.PluginRuntimeException;
 import org.team4u.scriptflow.plugin.api.ScriptFlowPlugin;
 import org.team4u.scriptflow.plugin.api.ScriptPluginContext;
@@ -291,7 +292,14 @@ public class PluginRuntimeService {
 
     private PluginManifest cacheManifest(String pluginId) {
         ScriptFlowPlugin extension = requireLoadedExtension(pluginId);
-        PluginManifest manifest = extension.descriptor();
+        String declaredPluginId = extension.id();
+        if (declaredPluginId == null || declaredPluginId.isBlank()) {
+            throw new IllegalArgumentException("插件 ID 不能为空: " + pluginId);
+        }
+        if (!pluginId.equals(declaredPluginId)) {
+            throw new IllegalArgumentException("插件扩展 ID 不匹配: " + pluginId);
+        }
+        PluginManifest manifest = PluginManifestLoader.load(extension.getClass(), pluginId);
         if (manifest == null) {
             throw new IllegalArgumentException("插件描述不能为空: " + pluginId);
         }
