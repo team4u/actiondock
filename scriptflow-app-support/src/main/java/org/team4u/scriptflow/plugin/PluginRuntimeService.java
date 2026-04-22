@@ -136,6 +136,63 @@ public class PluginRuntimeService {
         }
     }
 
+    public synchronized PluginView upgrade(String pluginId, String originalFilename, byte[] content) {
+        ensureEnabled();
+        if (content == null || content.length == 0) {
+            throw new IllegalArgumentException("插件文件不能为空");
+        }
+
+        PluginRegistration current = requireRegistration(pluginId);
+        PluginRegistration backup = cloneRegistration(current);
+        Path oldPluginPath = resolvePluginPath(current);
+        boolean wasEnabled = current.isEnabled();
+        String fileName = sanitizeFilename(originalFilename);
+        Path destination = uniquePluginPath(fileName);
+        String loadedPluginId = null;
+        PluginRegistration saved = null;
+
+        try {
+            unloadIfLoaded(pluginId);
+
+            Files.createDirectories(pluginsRoot);
+            Files.write(destination, content);
+            loadedPluginId = loadPlugin(destination);
+            if (!pluginId.equals(loadedPluginId)) {
+                throw new IllegalArgumentException("插件 ID 与升级目标不一致: " + loadedPluginId);
+            }
+
+            PluginManifest manifest = cacheManifest(pluginId);
+            saved = pluginRegistryRepository.save(mergeRegistrationWithFileName(backup, manifest, destination.getFileName().toString()));
+
+            if (!wasEnabled) {
+                unloadIfLoaded(pluginId);
+            }
+
+            if (!oldPluginPath.equals(destination)) {
+                Files.deleteIfExists(oldPluginPath);
+            }
+            return toPluginView(saved);
+        } catch (Exception exception) {
+            if (loadedPluginId != null) {
+                unloadIfLoaded(loadedPluginId);
+            }
+            try {
+                Files.deleteIfExists(destination);
+            } catch (IOException ignored) {
+            }
+            if (saved != null) {
+                pluginRegistryRepository.save(backup);
+            }
+            if (wasEnabled) {
+                try {
+                    loadRegisteredPlugin(backup);
+                } catch (Exception ignored) {
+                }
+            }
+            throw new PluginRuntimeException("升级插件失败: " + exception.getMessage(), exception);
+        }
+    }
+
     public synchronized PluginView start(String pluginId) {
         ensureEnabled();
         PluginRegistration registration = requireRegistration(pluginId);
@@ -342,6 +399,12 @@ public class PluginRuntimeService {
 
     private PluginRegistration mergeRegistration(PluginRegistration existing, PluginManifest manifest, boolean enabled) {
         return toRegistration(manifest, existing.getFileName(), enabled, existing);
+    }
+
+    private PluginRegistration mergeRegistrationWithFileName(PluginRegistration existing,
+                                                             PluginManifest manifest,
+                                                             String fileName) {
+        return toRegistration(manifest, fileName, existing.isEnabled(), existing);
     }
 
     private PluginRegistration cloneRegistration(PluginRegistration registration) {

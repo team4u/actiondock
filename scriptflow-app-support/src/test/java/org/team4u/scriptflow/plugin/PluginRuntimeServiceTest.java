@@ -36,7 +36,10 @@ class PluginRuntimeServiceTest {
 
     @Test
     void supportsInstallConfigInvokeStopAndUninstall() throws IOException {
-        Path pluginJar = buildPluginJar(Files.createTempFile("scriptflow-plugin-upload-", ".jar"));
+        Path pluginJar = buildPluginJar(
+                Files.createTempFile("scriptflow-plugin-upload-", ".jar"),
+                demoPluginManifestJson("0.2.0", "ScriptFlow Demo Plugin")
+        );
         AppProperties.Plugins properties = new AppProperties.Plugins();
         properties.setDir(tempDir.toString());
         InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
@@ -87,7 +90,7 @@ class PluginRuntimeServiceTest {
 
     @Test
     void initializesOnlyEnabledPluginsFromRegistry() throws IOException {
-        Path pluginJar = buildPluginJar(tempDir.resolve("enabled-plugin.jar"));
+        Path pluginJar = buildPluginJar(tempDir.resolve("enabled-plugin.jar"), demoPluginManifestJson("0.2.0", "ScriptFlow Demo Plugin"));
         InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
         repository.save(new PluginRegistration()
                 .setPluginId("scriptflow-demo-plugin")
@@ -119,7 +122,59 @@ class PluginRuntimeServiceTest {
                 .isStarted()).isFalse();
     }
 
-    private Path buildPluginJar(Path destination) throws IOException {
+    @Test
+    void upgradeReloadsEnabledPluginAndPreservesConfig() throws IOException {
+        Path pluginJar = buildPluginJar(tempDir.resolve("demo-plugin.jar"), demoPluginManifestJson("0.2.0", "ScriptFlow Demo Plugin"));
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+        service.saveConfig("scriptflow-demo-plugin", Map.of("prefix", "hello"));
+        String oldFileName = repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().getFileName();
+
+        Path upgradedJar = buildPluginJar(
+                tempDir.resolve("demo-plugin-upgraded.jar"),
+                demoPluginManifestJson("0.3.0", "ScriptFlow Demo Plugin Upgraded")
+        );
+
+        PluginView upgraded = service.upgrade("scriptflow-demo-plugin", "demo-plugin-upgraded.jar", Files.readAllBytes(upgradedJar));
+
+        assertThat(upgraded.isStarted()).isTrue();
+        assertThat(upgraded.getVersion()).isEqualTo("0.3.0");
+        assertThat(upgraded.getName()).isEqualTo("ScriptFlow Demo Plugin Upgraded");
+        assertThat(repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().getFileName())
+                .startsWith("demo-plugin-upgraded")
+                .endsWith(".jar");
+        assertThat(service.getConfig("scriptflow-demo-plugin").getConfig()).containsEntry("prefix", "hello");
+        assertThat(Files.exists(tempDir.resolve(oldFileName))).isFalse();
+    }
+
+    @Test
+    void upgradeKeepsDisabledPluginStopped() throws IOException {
+        Path pluginJar = buildPluginJar(tempDir.resolve("demo-plugin.jar"), demoPluginManifestJson("0.2.0", "ScriptFlow Demo Plugin"));
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+        service.stop("scriptflow-demo-plugin");
+
+        Path upgradedJar = buildPluginJar(
+                tempDir.resolve("demo-plugin-upgraded.jar"),
+                demoPluginManifestJson("0.3.1", "ScriptFlow Demo Plugin Disabled")
+        );
+
+        PluginView upgraded = service.upgrade("scriptflow-demo-plugin", "demo-plugin-upgraded.jar", Files.readAllBytes(upgradedJar));
+
+        assertThat(upgraded.isStarted()).isFalse();
+        assertThat(upgraded.getState()).isEqualTo("DISABLED");
+        assertThat(repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().isEnabled()).isFalse();
+    }
+
+    private Path buildPluginJar(Path destination, String manifestJson) throws IOException {
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
@@ -131,11 +186,7 @@ class PluginRuntimeServiceTest {
         try (JarOutputStream outputStream = new JarOutputStream(Files.newOutputStream(destination), manifest)) {
             addClass(outputStream, org.team4u.scriptflow.plugin.template.TemplatePlugin.class);
             addClass(outputStream, org.team4u.scriptflow.plugin.template.DemoScriptFlowPlugin.class);
-            addResource(
-                    outputStream,
-                    "META-INF/scriptflow/plugins/scriptflow-demo-plugin.json",
-                    "META-INF/scriptflow/plugins/scriptflow-demo-plugin.json"
-            );
+            addResource(outputStream, "META-INF/scriptflow/plugins/scriptflow-demo-plugin.json", manifestJson);
             outputStream.putNextEntry(new JarEntry("META-INF/extensions.idx"));
             outputStream.write("org.team4u.scriptflow.plugin.template.DemoScriptFlowPlugin\n".getBytes());
             outputStream.closeEntry();
@@ -155,15 +206,69 @@ class PluginRuntimeServiceTest {
         outputStream.closeEntry();
     }
 
-    private void addResource(JarOutputStream outputStream, String entryName, String resourceName) throws IOException {
+    private void addResource(JarOutputStream outputStream, String entryName, String content) throws IOException {
         outputStream.putNextEntry(new JarEntry(entryName));
-        try (InputStream inputStream = PluginRuntimeServiceTest.class.getClassLoader().getResourceAsStream(resourceName)) {
-            if (inputStream == null) {
-                throw new IllegalStateException("Missing resource bytes for " + resourceName);
-            }
-            outputStream.write(inputStream.readAllBytes());
-        }
+        outputStream.write(content.getBytes());
         outputStream.closeEntry();
+    }
+
+    private String demoPluginManifestJson(String version, String name) {
+        return """
+                {
+                  "pluginId": "scriptflow-demo-plugin",
+                  "name": "%s",
+                  "description": "Template plugin exposing sample actions to Groovy scripts.",
+                  "version": "%s",
+                  "configSchema": {
+                    "type": "object",
+                    "properties": {
+                      "prefix": {
+                        "type": "string",
+                        "title": "Prefix"
+                      }
+                    }
+                  },
+                  "defaultConfig": {
+                    "prefix": "demo"
+                  },
+                  "actions": [
+                    {
+                      "action": "echo",
+                      "title": "Echo message",
+                      "description": "Return a message prefixed by plugin configuration.",
+                      "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                          "message": {
+                            "type": "string",
+                            "title": "Message"
+                          }
+                        }
+                      },
+                      "outputSchema": {
+                        "type": "object",
+                        "properties": {
+                          "message": {
+                            "type": "string",
+                            "title": "Message"
+                          },
+                          "scriptId": {
+                            "type": "string",
+                            "title": "Script ID"
+                          },
+                          "executionId": {
+                            "type": "string",
+                            "title": "Execution ID"
+                          }
+                        }
+                      },
+                      "exampleArgs": {
+                        "message": "hello"
+                      }
+                    }
+                  ]
+                }
+                """.formatted(name, version);
     }
 
     private static final class TestJsonCodec implements JsonCodec {

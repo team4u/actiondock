@@ -39,6 +39,14 @@ public class PluginController {
         );
     }
 
+    @PostMapping("/{pluginId}/upgrade")
+    public ApiResponse<PluginView> upgrade(@PathVariable String pluginId, @RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.success(
+                pluginRuntimeService.upgrade(pluginId, file.getOriginalFilename(), file.getBytes()),
+                "插件已升级"
+        );
+    }
+
     @PostMapping("/{pluginId}/start")
     public ApiResponse<PluginView> start(@PathVariable String pluginId) {
         return ApiResponse.success(pluginRuntimeService.start(pluginId), "插件已启动");

@@ -6,6 +6,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.scriptflow.RuntimeApplication;
 import org.team4u.scriptflow.plugin.PluginConfigView;
@@ -15,8 +16,11 @@ import org.team4u.scriptflow.plugin.PluginView;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -80,5 +84,23 @@ class PluginControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
                 .andExpect(jsonPath("$.data.config.prefix").value("hello"));
+    }
+
+    @Test
+    void upgradeReturnsUpdatedPlugin() throws Exception {
+        when(pluginRuntimeService.upgrade(eq("demo-plugin"), eq("demo.jar"), any(byte[].class))).thenReturn(
+                new PluginView()
+                        .setPluginId("demo-plugin")
+                        .setName("Demo")
+                        .setVersion("2.0.0")
+                        .setState("STARTED")
+                        .setStarted(true)
+        );
+
+        mockMvc.perform(multipart("/api/plugins/demo-plugin/upgrade")
+                        .file(new MockMultipartFile("file", "demo.jar", "application/java-archive", "jar".getBytes())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
+                .andExpect(jsonPath("$.data.version").value("2.0.0"));
     }
 }

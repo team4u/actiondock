@@ -112,7 +112,8 @@ scriptflow
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/plugins` | 获取插件列表 |
-| POST | `/api/plugins/install` | 上传并安装插件包 |
+| POST | `/api/plugins/install` | 上传并安装插件包；若 `pluginId` 已存在则拒绝 |
+| POST | `/api/plugins/{pluginId}/upgrade` | 升级指定插件包，保留配置与启用状态 |
 | POST | `/api/plugins/{pluginId}/start` | 启动插件 |
 | POST | `/api/plugins/{pluginId}/stop` | 停止插件 |
 | GET | `/api/plugins/{pluginId}/config` | 获取插件配置 |
@@ -314,12 +315,39 @@ META-INF/scriptflow/plugins/{pluginId}.json
 
 如果其中任一步失败，安装会回滚并返回错误。
 
+限制与约定：
+
+- 安装接口要求插件 `pluginId` 在数据库中不存在
+- 如果上传的插件与现有 `pluginId` 冲突，安装会直接失败，不会自动覆盖
+- 插件元数据会持久化到 `plugin_registration` 表，而不是靠目录扫描推断
+- 平台启动时只会根据数据库中 `enabled=true` 的记录，从 `app.plugins.dir` 加载对应插件文件
+
 如果你要基于模板开发自定义插件，通常需要同时修改两处：
 
 1. Java 实现类中的 `id()`
 2. `META-INF/scriptflow/plugins/{pluginId}.json` 中的插件元数据
 
-### 3. 启动、停止、卸载
+### 3. 升级插件
+
+升级走插件列表每一行旁边的“升级”按钮，不复用“上传安装”。
+
+升级完成后，服务端会执行：
+
+1. 暂停并卸载当前已加载的旧插件
+2. 保存新的插件包到 `app.plugins.dir`
+3. 载入并校验新插件的 `pluginId`
+4. 用新 manifest 刷新数据库中的插件元数据
+5. 保留原有插件配置文件
+6. 保留原有启用状态；如果升级前是停用状态，升级后不会自动留在 JVM 中
+7. 删除旧插件文件
+
+如果升级失败，服务端会回滚到升级前状态，包括：
+
+- 删除本次上传的新文件
+- 恢复原数据库注册信息
+- 原插件之前若处于启用状态，则重新加载回 JVM
+
+### 4. 启动、停止、卸载
 
 插件管理页支持以下操作：
 
@@ -334,7 +362,7 @@ META-INF/scriptflow/plugins/{pluginId}.json
 - 已停止的插件不会通过脚本校验，也不能在 Groovy 中调用
 - 卸载后，数据库记录、插件文件与对应配置文件会一并删除
 
-### 4. 插件配置
+### 5. 插件配置
 
 管理界面支持两种方式编辑插件配置：
 
@@ -377,7 +405,7 @@ plugins.invoke("scriptflow-demo-plugin", "echo", [message: "world"])
 }
 ```
 
-### 5. Groovy 中调用插件
+### 6. Groovy 中调用插件
 
 最常见的调用方式：
 
@@ -414,7 +442,7 @@ try {
 }
 ```
 
-### 6. 管理界面说明
+### 7. 管理界面说明
 
 插件管理入口：
 
@@ -422,16 +450,23 @@ try {
 /admin/plugins
 ```
 
+插件管理页支持：
+
+- 顶部“上传安装”用于新增插件
+- 每个插件行内单独“升级”按钮用于替换该插件版本
+- 启动、停止、配置、删除都以插件行为单位操作
+
 脚本编辑页中，当脚本类型为 `GROOVY` 时，会显示“插件参考”面板，内容包括：
 
 - 已启动插件列表
+- 插件与方法两级折叠
 - 每个动作的说明
-- `inputSchema`
-- `outputSchema`
+- 输入字段与输出字段的可视化列表
+- 输入/输出 Schema 的 JSON / 字段列表切换视图
 - `exampleArgs`
 - 可直接复制的 `plugins.invoke(...)` 代码片段
 
-### 7. CLI 说明
+### 8. CLI 说明
 
 当前 CLI 不提供插件管理命令，但 CLI 运行脚本时会共享同一套插件运行时。
 
@@ -447,7 +482,7 @@ try {
 plugins.invoke("pluginId", "action", [:])
 ```
 
-### 8. 常见问题
+### 9. 常见问题
 
 **1. 为什么脚本校验时报“插件未启动”？**
 
@@ -464,6 +499,14 @@ plugins.invoke("pluginId", "action", [:])
 **4. 插件类能否直接在 Groovy 中 `import`？**
 
 不建议，也没有作为平台约定支持。当前稳定方式是通过宿主注入的 `plugins.invoke(...)` 门面进行跨类加载器调用。
+
+**5. 反复上传同一个插件 jar 会自动覆盖吗？**
+
+不会。顶部“上传安装”只处理新增插件；如果数据库里已经有相同 `pluginId`，安装会失败。需要在对应插件行点击“升级”。
+
+**6. 升级插件后会丢失配置吗？**
+
+不会。升级会保留 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json` 中的现有配置，并保留原先启用/停用状态。
 
 ### H2 控制台
 

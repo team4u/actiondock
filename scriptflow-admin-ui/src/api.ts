@@ -157,7 +157,7 @@ export function listPlugins(): Promise<PluginView[]> {
   return request<PluginView[]>("/api/plugins");
 }
 
-export async function installPlugin(file: File): Promise<PluginView> {
+async function uploadPluginFile(path: string, file: File, fallbackMessage: string): Promise<PluginView> {
   const token = getApiKey();
   const formData = new FormData();
   formData.append("file", file);
@@ -167,7 +167,7 @@ export async function installPlugin(file: File): Promise<PluginView> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch("/api/plugins/install", {
+  const response = await fetch(path, {
     method: "POST",
     headers,
     body: formData
@@ -180,7 +180,7 @@ export async function installPlugin(file: File): Promise<PluginView> {
 
   const payload = (await response.json()) as ApiResponse<PluginView> | ApiErrorPayload;
   if (!response.ok) {
-    const message = "msg" in payload && payload.msg ? payload.msg : "上传插件失败";
+    const message = "msg" in payload && payload.msg ? payload.msg : fallbackMessage;
     const data = "data" in payload ? payload.data : undefined;
     throw new ApiError(message, response.status, data);
   }
@@ -188,6 +188,14 @@ export async function installPlugin(file: File): Promise<PluginView> {
     throw new ApiError("接口返回格式不正确", 500);
   }
   return payload.data as PluginView;
+}
+
+export async function installPlugin(file: File): Promise<PluginView> {
+  return uploadPluginFile("/api/plugins/install", file, "上传插件失败");
+}
+
+export async function upgradePlugin(pluginId: string, file: File): Promise<PluginView> {
+  return uploadPluginFile(`/api/plugins/${pluginId}/upgrade`, file, "升级插件失败");
 }
 
 export function startPlugin(pluginId: string): Promise<PluginView> {

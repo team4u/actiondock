@@ -31,6 +31,7 @@ import {
   listPlugins,
   startPlugin,
   stopPlugin,
+  upgradePlugin,
   uninstallPlugin,
   updatePluginConfig
 } from "../api";
@@ -61,6 +62,7 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
   const [currentConfig, setCurrentConfig] = useState<PluginConfigView | null>(null);
   const [configText, setConfigText] = useState("{}");
   const [configInputMode, setConfigInputMode] = useState<PluginConfigInputMode>("JSON");
+  const [pendingUploadPluginId, setPendingUploadPluginId] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { supportedFields: configSupportedFields, unsupportedFields: configUnsupportedFields } = resolveSchemaFields(
@@ -117,7 +119,10 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
     }
   };
 
-  const handleInstallChange = async (file?: File) => {
+  const handlePluginUpload = async (file?: File) => {
+    const targetPluginId = pendingUploadPluginId;
+    setPendingUploadPluginId(null);
+
     if (!file) {
       return;
     }
@@ -127,16 +132,22 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
       return;
     }
 
+    if (targetPluginId) {
+      setActionPluginId(targetPluginId);
+    }
     setUploading(true);
     try {
-      const installed = await installPlugin(file);
-      replacePlugin(installed);
-      messageApi.success(`插件已安装：${installed.pluginId}`);
+      const plugin = targetPluginId ? await upgradePlugin(targetPluginId, file) : await installPlugin(file);
+      replacePlugin(plugin);
+      messageApi.success(targetPluginId ? `插件已升级：${plugin.pluginId}` : `插件已安装：${plugin.pluginId}`);
     } catch (error) {
-      const detail = error instanceof ApiError ? error.message : "安装插件失败";
+      const detail = error instanceof ApiError ? error.message : targetPluginId ? "升级插件失败" : "安装插件失败";
       messageApi.error(detail);
     } finally {
       setUploading(false);
+      if (targetPluginId) {
+        setActionPluginId(null);
+      }
     }
   };
 
@@ -272,6 +283,17 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
         <Space wrap>
           <Button
             size="small"
+            icon={<UploadOutlined />}
+            loading={actionPluginId === record.pluginId}
+            onClick={() => {
+              setPendingUploadPluginId(record.pluginId);
+              fileInputRef.current?.click();
+            }}
+          >
+            升级
+          </Button>
+          <Button
+            size="small"
             icon={<SettingOutlined />}
             disabled={!record.configurable}
             onClick={() => void openConfigModal(record.pluginId)}
@@ -347,7 +369,7 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          void handleInstallChange(file);
+          void handlePluginUpload(file);
         }}
       />
       <Modal
@@ -458,7 +480,10 @@ export function PluginManagementPage({ onOpenApiKeyModal }: { onOpenApiKeyModal:
             <Button
               type="primary"
               icon={<UploadOutlined />}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                setPendingUploadPluginId(null);
+                fileInputRef.current?.click();
+              }}
               loading={uploading}
             >
               上传安装
