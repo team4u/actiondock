@@ -73,19 +73,19 @@ CLI 不直接嵌入运行时，只负责调用现有 Web API。
 
 ```bash
 # 查看当前生效配置
-java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar config current
+java -jar scriptflow-cli/target/scriptflow-cli.jar config current
 
 # 直接通过 flag 调用
-java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar \
+java -jar scriptflow-cli/target/scriptflow-cli.jar \
   --base-url http://localhost:8080 \
   --token local-dev-key \
   scripts list
 
 # 通过 profile 保存连接信息
-java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar config profile set local \
+java -jar scriptflow-cli/target/scriptflow-cli.jar config profile set local \
   --base-url http://localhost:8080 \
   --token local-dev-key
-java -jar scriptflow-cli/target/scriptflow-cli-0.2.0.jar scripts list
+java -jar scriptflow-cli/target/scriptflow-cli.jar scripts list
 ```
 
 CLI 配置优先级：

@@ -16,14 +16,14 @@ mvn -pl scriptflow-cli -am package
 示例：
 
 ```bash
-java -jar target/scriptflow-cli-0.2.0.jar config current
+java -jar target/scriptflow-cli.jar config current
 
-java -jar target/scriptflow-cli-0.2.0.jar \
+java -jar target/scriptflow-cli.jar \
   --base-url http://localhost:8080 \
   --token local-dev-key \
   scripts list
 
-java -jar target/scriptflow-cli-0.2.0.jar executions submit \
+java -jar target/scriptflow-cli.jar executions submit \
   --script-id hello-groovy \
   --input '{"name":"Alice"}' \
   --wait

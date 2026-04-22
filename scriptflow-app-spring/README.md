@@ -42,7 +42,7 @@ java -jar target/scriptflow-app-spring.jar
 
 ```bash
 mvn -pl scriptflow-cli -am package
-java -jar ../scriptflow-cli/target/scriptflow-cli-0.2.0.jar \
+java -jar ../scriptflow-cli/target/scriptflow-cli.jar \
   --base-url http://localhost:8080 \
   --token local-dev-key \
   scripts list
