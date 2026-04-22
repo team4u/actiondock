@@ -90,3 +90,29 @@ export interface ApiErrorPayload {
   msg?: string;
   data?: unknown;
 }
+
+export interface PluginAction {
+  action: string;
+  title: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  exampleArgs: Record<string, unknown>;
+}
+
+export interface PluginView {
+  pluginId: string;
+  name: string;
+  description: string;
+  version: string;
+  state: string;
+  started: boolean;
+  configurable: boolean;
+  actions: PluginAction[];
+}
+
+export interface PluginConfigView {
+  pluginId: string;
+  configSchema: Record<string, unknown>;
+  defaultConfig: Record<string, unknown>;
+  config: Record<string, unknown>;
+}

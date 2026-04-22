@@ -21,8 +21,8 @@ public class PublishedScriptSnapshot {
         this.name = other.getName();
         this.type = other.getType();
         this.source = other.getSource();
-        this.inputSchema = copyMap(other.getInputSchema());
-        this.outputSchema = copyMap(other.getOutputSchema());
+        this.inputSchema = SchemaValueCopier.copyMap(other.getInputSchema());
+        this.outputSchema = SchemaValueCopier.copyMap(other.getOutputSchema());
     }
 
     public String getName() {
@@ -57,7 +57,7 @@ public class PublishedScriptSnapshot {
     }
 
     public PublishedScriptSnapshot setInputSchema(Map<String, Object> inputSchema) {
-        this.inputSchema = copyMap(inputSchema);
+        this.inputSchema = SchemaValueCopier.copyMap(inputSchema);
         return this;
     }
 
@@ -66,16 +66,12 @@ public class PublishedScriptSnapshot {
     }
 
     public PublishedScriptSnapshot setOutputSchema(Map<String, Object> outputSchema) {
-        this.outputSchema = copyMap(outputSchema);
+        this.outputSchema = SchemaValueCopier.copyMap(outputSchema);
         return this;
     }
 
     public PublishedScriptSnapshot copy() {
         return new PublishedScriptSnapshot(this);
-    }
-
-    private static Map<String, Object> copyMap(Map<String, Object> value) {
-        return value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
     }
 
     @Override

@@ -19,16 +19,19 @@
 
     <modules>
         <module>scriptflow-core</module>
+        <module>scriptflow-plugin-api</module>
         <module>scriptflow-storage-jpa</module>
         <module>scriptflow-app-support</module>
         <module>scriptflow-app-cli</module>
         <module>scriptflow-app-spring</module>
+        <module>scriptflow-plugin-template</module>
     </modules>
 
     <properties>
         <java.version>21</java.version>
         <groovy.version>4.0.24</groovy.version>
         <picocli.version>4.7.6</picocli.version>
+        <pf4j.version>3.13.0</pf4j.version>
     </properties>
 
     <build>

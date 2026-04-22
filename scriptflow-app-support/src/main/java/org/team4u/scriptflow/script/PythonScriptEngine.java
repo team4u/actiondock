@@ -2,6 +2,7 @@ package org.team4u.scriptflow.script;
 
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 
@@ -62,7 +63,7 @@ public class PythonScriptEngine implements ScriptEngine {
     }
 
     @Override
-    public Object execute(ScriptDefinition definition, Map<String, Object> input) {
+    public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         Path scriptPath = null;
         try {
             scriptPath = writeScriptFile(definition.getSource(), true);

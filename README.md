@@ -6,6 +6,7 @@
 
 - **脚本管理**：支持脚本的创建、编辑、发布和版本管理
 - **多脚本类型**：当前支持 `GROOVY` 与 `PYTHON`
+- **插件扩展机制**：基于 PF4J 动态加载插件，支持安装、启动、停止、卸载和配置管理
 - **Schema 驱动**：通过 JSON Schema 定义输入/输出结构，自动校验和投影
 - **自动生成正式页**：已发布脚本自动生成专属执行页面，Schema 直接渲染为表单和结果展示，无需额外开发
 - **多运行方式**：支持正式页面、Web API 和 CLI 三种执行方式
@@ -70,6 +71,8 @@ java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar
 ```
 scriptflow
 ├── scriptflow-core              # 核心领域模型与应用服务
+├── scriptflow-plugin-api        # PF4J 插件扩展点与宿主交互协议
+├── scriptflow-plugin-template   # 可编译的示例插件模板
 ├── scriptflow-storage-jpa       # H2/JPA 持久化适配
 ├── scriptflow-app-support       # Web 与 CLI 共用的运行配置
 ├── scriptflow-app-spring        # Spring Boot Web 入口
@@ -104,6 +107,18 @@ scriptflow
 | GET | `/api/executions/{id}` | 获取执行记录 |
 | GET | `/api/executions?scriptId=...` | 按脚本获取执行记录 |
 
+### 插件管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/plugins` | 获取插件列表 |
+| POST | `/api/plugins/install` | 上传并安装插件包 |
+| POST | `/api/plugins/{pluginId}/start` | 启动插件 |
+| POST | `/api/plugins/{pluginId}/stop` | 停止插件 |
+| GET | `/api/plugins/{pluginId}/config` | 获取插件配置 |
+| PUT | `/api/plugins/{pluginId}/config` | 更新插件配置 |
+| DELETE | `/api/plugins/{pluginId}` | 卸载插件并删除文件与配置 |
+
 ### 响应视图
 
 执行接口支持 `responseView` 参数：
@@ -125,6 +140,26 @@ return [message: result, timestamp: System.currentTimeMillis()]
 
 `GROOVY` 类型脚本支持使用 `@Grab` / `@GrabResolver` 声明依赖。依赖解析发生在脚本编译阶段，首次拉取依赖需要运行环境可访问对应 Maven 仓库，并会使用 Grape 本地缓存。
 默认会对相同源码的编译结果做内存缓存，避免重复编译；这只是“编译缓存”，不是执行结果缓存。
+
+如果已经加载并启动插件，Groovy 脚本还可以通过统一门面调用插件动作：
+
+```groovy
+def result = plugins.invoke("scriptflow-demo-plugin", "echo", [
+  message: "hello"
+])
+
+return [
+  pluginMessage: result.message
+]
+```
+
+插件调用约定：
+
+- 统一入口为 `plugins.invoke("pluginId", "action")` 或 `plugins.invoke("pluginId", "action", [key: value])`
+- `pluginId` 与 `action` 必须写成字符串字面量，不能从变量动态拼接
+- 第三个参数必须是 `Map<String, Object>` 风格的 Groovy Map；省略时按空 Map 处理
+- 保存/校验 Groovy 脚本时，会检查引用的插件和动作是否存在且已启动
+- 插件调用异常会直接中断脚本；如果要降级处理，请在脚本里自行 `try/catch`
 
 ### Python
 
@@ -189,11 +224,14 @@ return {
 | `app.execution.groovy.cache-expire-after-access-minutes` | `30` | `GROOVY` 编译缓存空闲过期时间 |
 | `app.execution.python.executable` | `python3` | `PYTHON` 脚本使用的解释器命令 |
 | `app.execution.python.timeout-seconds` | `30` | `PYTHON` 脚本单次执行超时时间 |
+| `app.plugins.dir` | `./plugins` | PF4J 插件目录 |
 
 示例：
 
 ```yaml
 app:
+  plugins:
+    dir: ./plugins
   auth:
     api-keys:
       - local-dev-key
@@ -207,6 +245,190 @@ app:
       executable: python3
       timeout-seconds: 60
 ```
+
+## 插件使用说明
+
+### 1. 打包插件模板
+
+项目内置了一个示例插件子模块 `scriptflow-plugin-template`，可以直接打包：
+
+```bash
+mvn -pl scriptflow-plugin-template package
+```
+
+产物默认位于：
+
+```bash
+scriptflow-plugin-template/target/scriptflow-plugin-template-0.2.0.jar
+```
+
+这个示例插件会暴露：
+
+- `pluginId`: `scriptflow-demo-plugin`
+- `action`: `echo`
+
+默认配置示例：
+
+```json
+{
+  "prefix": "demo"
+}
+```
+
+### 2. 安装插件
+
+当前推荐通过管理界面安装：
+
+1. 启动 `scriptflow-app-spring`
+2. 打开 `http://localhost:8080/admin/plugins`
+3. 点击“上传安装”
+4. 选择插件 `jar`
+
+安装完成后，服务端会执行：
+
+1. 将插件包保存到 `app.plugins.dir`
+2. 通过 PF4J `load`
+3. 自动 `start`
+4. 注册插件动作元数据
+
+如果其中任一步失败，安装会回滚并返回错误。
+
+### 3. 启动、停止、卸载
+
+插件管理页支持以下操作：
+
+- **启动**：重新启用并启动插件
+- **停止**：停止插件，并将其标记为 disabled
+- **卸载**：停止并卸载插件，同时删除插件文件与保存的配置文件
+
+说明：
+
+- 已停止的插件不会通过脚本校验，也不能在 Groovy 中调用
+- 卸载后，插件文件与对应配置文件会一并删除
+
+### 4. 插件配置
+
+管理界面支持编辑插件级 JSON 配置。
+
+配置行为：
+
+- 配置内容必须是 JSON 对象
+- 保存时会先做基础 JSON 校验，再调用插件自身的 `validateConfig(...)`
+- 配置文件默认保存到：
+
+```bash
+${app.plugins.dir}/.scriptflow-config/{pluginId}.json
+```
+
+模板插件的配置示例：
+
+```json
+{
+  "prefix": "hello"
+}
+```
+
+此时执行：
+
+```groovy
+plugins.invoke("scriptflow-demo-plugin", "echo", [message: "world"])
+```
+
+返回结果类似：
+
+```json
+{
+  "message": "hello:world",
+  "scriptId": "script-1",
+  "executionId": "..."
+}
+```
+
+### 5. Groovy 中调用插件
+
+最常见的调用方式：
+
+```groovy
+def result = plugins.invoke("scriptflow-demo-plugin", "echo", [
+  message: input.name ?: "World"
+])
+
+return [
+  echoed: result.message
+]
+```
+
+无参调用：
+
+```groovy
+def value = plugins.invoke("some-plugin", "ping")
+return [result: value]
+```
+
+建议：
+
+- 把插件调用结果先赋值给局部变量，再组合最终返回值
+- 插件动作的 `exampleArgs` 可以在脚本编辑页的“插件参考”面板里直接复制
+- 如果某个插件可能不可用，请在脚本里显式做 `try/catch`
+
+例如：
+
+```groovy
+try {
+  return plugins.invoke("scriptflow-demo-plugin", "echo", [message: "safe"])
+} catch (Exception ex) {
+  return [message: "fallback", reason: ex.message]
+}
+```
+
+### 6. 管理界面说明
+
+插件管理入口：
+
+```text
+/admin/plugins
+```
+
+脚本编辑页中，当脚本类型为 `GROOVY` 时，会显示“插件参考”面板，内容包括：
+
+- 已启动插件列表
+- 每个动作的说明
+- `inputSchema`
+- `exampleArgs`
+- 可直接复制的 `plugins.invoke(...)` 代码片段
+
+### 7. CLI 说明
+
+当前 CLI 不提供插件管理命令，但 CLI 运行脚本时会共享同一套插件运行时。
+
+也就是说：
+
+- 只要 CLI 进程使用的 `app.plugins.dir` 与 Web 服务一致
+- 且对应插件已经存在于该目录中
+
+那么通过 CLI 执行 Groovy 脚本时，同样可以调用：
+
+```groovy
+plugins.invoke("pluginId", "action", [:])
+```
+
+### 8. 常见问题
+
+**1. 为什么脚本校验时报“插件未启动”？**
+
+因为 Groovy 校验会检查 `plugins.invoke("pluginId", "action", ...)` 中引用的插件和动作是否可用。已停止插件会导致校验失败。
+
+**2. 为什么不支持 `plugins.invoke(pluginIdVar, actionVar, args)`？**
+
+当前实现要求前两个参数必须是字符串字面量，这样平台才能在校验阶段静态检查插件和动作是否存在。
+
+**3. Python 脚本能否调用插件？**
+
+当前版本不支持。插件门面只注入到 `GROOVY` 脚本运行时。
+
+**4. 插件类能否直接在 Groovy 中 `import`？**
+
+不建议，也没有作为平台约定支持。当前稳定方式是通过宿主注入的 `plugins.invoke(...)` 门面进行跨类加载器调用。
 
 ### H2 控制台
 

@@ -9,6 +9,7 @@ import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
+import org.team4u.scriptflow.plugin.PluginRuntimeService;
 import org.team4u.scriptflow.script.GroovyScriptEngine;
 import org.team4u.scriptflow.script.PythonScriptEngine;
 import org.team4u.scriptflow.script.RoutingScriptEngine;
@@ -25,9 +26,14 @@ public class RuntimeConfiguration {
     }
 
     @Bean
-    public ScriptEngine scriptEngine(JsonCodec jsonCodec, AppProperties properties) {
+    public PluginRuntimeService pluginRuntimeService(JsonCodec jsonCodec, AppProperties properties) {
+        return new PluginRuntimeService(jsonCodec, properties.getPlugins());
+    }
+
+    @Bean
+    public ScriptEngine scriptEngine(JsonCodec jsonCodec, AppProperties properties, PluginRuntimeService pluginRuntimeService) {
         return new RoutingScriptEngine(
-                new GroovyScriptEngine(properties.getExecution().getGroovy()),
+                new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService),
                 new PythonScriptEngine(jsonCodec, properties.getExecution().getPython())
         );
     }

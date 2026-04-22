@@ -378,6 +378,12 @@ a {
   gap: 10px;
 }
 
+.plugin-action-reference + .plugin-action-reference {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--app-border-subtle);
+}
+
 .app-code-editor {
   position: relative;
   overflow: hidden;

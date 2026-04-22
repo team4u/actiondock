@@ -9,6 +9,7 @@ public class AdminUiController {
             "/admin",
             "/admin/",
             "/admin/scripts",
+            "/admin/plugins",
             "/admin/scripts/new",
             "/admin/scripts/{id:[A-Za-z0-9_-]+}",
             "/admin/run/{id:[A-Za-z0-9_-]+}"

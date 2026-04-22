@@ -48,6 +48,7 @@ import {
   deleteScript,
   executeScript,
   getExecution,
+  listPlugins,
   getScript,
   listExecutions,
   publishScript,
@@ -85,6 +86,7 @@ import { isValidationErrorData } from "../schemaExecution";
 import type {
   ExecutionRecord,
   ExecutionStatus,
+  PluginView,
   ScriptDefinition,
   ScriptType,
   SubmitMode,
@@ -248,6 +250,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deletingScript, setDeletingScript] = useState(false);
   const [sourceText, setSourceText] = useState(getDefaultSource("GROOVY"));
+  const [availablePlugins, setAvailablePlugins] = useState<PluginView[]>([]);
+  const [pluginsLoading, setPluginsLoading] = useState(false);
   const [inputSchemaState, setInputSchemaState] = useState<SchemaEditorState>(
     createEmptySchemaEditorState()
   );
@@ -270,6 +274,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const pollingTimerRef = useRef<number | null>(null);
   const selectedScriptType = (Form.useWatch("type", form) as ScriptType | undefined) ?? "GROOVY";
   const canImportGeneratedScript = selectedScriptType === "GROOVY";
+  const pluginReferences = availablePlugins.filter((plugin) => plugin.started);
 
   const requestedTab = searchParams.get("tab");
   const activeTab =
@@ -475,6 +480,37 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   }, [currentScript?.id, executionForm, supportsSchemaForm]);
 
   useEffect(() => () => clearPolling(), []);
+
+  useEffect(() => {
+    if (selectedScriptType !== "GROOVY") {
+      setAvailablePlugins([]);
+      return;
+    }
+
+    let cancelled = false;
+    setPluginsLoading(true);
+    void listPlugins()
+      .then((plugins) => {
+        if (!cancelled) {
+          setAvailablePlugins(plugins);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const detail = error instanceof ApiError ? error.message : "加载插件信息失败";
+          messageApi.error(detail);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPluginsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messageApi, selectedScriptType]);
 
   const buildPayload = async (): Promise<ScriptDefinition> => {
     const values = await form.validateFields();
@@ -1093,6 +1129,63 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                             {getEditorFooterHint(selectedScriptType)}
                           </Text>
                         </Space>
+                        {selectedScriptType === "GROOVY" ? (
+                          <Card
+                            type="inner"
+                            title="插件参考"
+                            style={{ marginTop: 16 }}
+                            extra={<Text type="secondary">仅展示已启动插件</Text>}
+                            loading={pluginsLoading}
+                          >
+                            {pluginReferences.length === 0 ? (
+                              <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="当前没有已启动插件，可前往插件管理页安装并启动。"
+                              />
+                            ) : (
+                              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                                {pluginReferences.map((plugin) => (
+                                  <Card
+                                    key={plugin.pluginId}
+                                    type="inner"
+                                    title={plugin.name || plugin.pluginId}
+                                    extra={<Text code>{plugin.pluginId}</Text>}
+                                  >
+                                    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                      {plugin.description ? (
+                                        <Text type="secondary">{plugin.description}</Text>
+                                      ) : null}
+                                      {plugin.actions.map((action) => {
+                                        const snippet = `plugins.invoke("${plugin.pluginId}", "${action.action}", ${JSON.stringify(action.exampleArgs, null, 2)})`;
+                                        return (
+                                          <div key={`${plugin.pluginId}-${action.action}`} className="plugin-action-reference">
+                                            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                                              <Space wrap>
+                                                <Text strong>{action.title || action.action}</Text>
+                                                <Tag>{action.action}</Tag>
+                                                <Button
+                                                  size="small"
+                                                  icon={<CopyOutlined />}
+                                                  onClick={() => void handleCopyCommand(snippet)}
+                                                >
+                                                  复制调用
+                                                </Button>
+                                              </Space>
+                                              {action.description ? (
+                                                <Text type="secondary">{action.description}</Text>
+                                              ) : null}
+                                              <pre className="json-preview">{snippet}</pre>
+                                            </Space>
+                                          </div>
+                                        );
+                                      })}
+                                    </Space>
+                                  </Card>
+                                ))}
+                              </Space>
+                            )}
+                          </Card>
+                        ) : null}
                       </Card>
                     </Col>
                   </Row>

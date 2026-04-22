@@ -5,6 +5,8 @@ import type {
   ExecuteRequest,
   ExecutionResponse,
   ExecutionRecord,
+  PluginConfigView,
+  PluginView,
   ScriptDefinition
 } from "./types";
 
@@ -148,5 +150,72 @@ export function clearExecutions(scriptId: string): Promise<void> {
   const params = new URLSearchParams({ scriptId });
   return request<void>(`/api/executions?${params.toString()}`, {
     method: "DELETE"
+  });
+}
+
+export function listPlugins(): Promise<PluginView[]> {
+  return request<PluginView[]>("/api/plugins");
+}
+
+export async function installPlugin(file: File): Promise<PluginView> {
+  const token = getApiKey();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const headers = new Headers();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch("/api/plugins/install", {
+    method: "POST",
+    headers,
+    body: formData
+  });
+
+  if (response.status === 401) {
+    emitAuthRequired();
+    throw new ApiError("API Key 无效或缺失", 401);
+  }
+
+  const payload = (await response.json()) as ApiResponse<PluginView> | ApiErrorPayload;
+  if (!response.ok) {
+    const message = "msg" in payload && payload.msg ? payload.msg : "上传插件失败";
+    const data = "data" in payload ? payload.data : undefined;
+    throw new ApiError(message, response.status, data);
+  }
+  if (!("data" in payload)) {
+    throw new ApiError("接口返回格式不正确", 500);
+  }
+  return payload.data as PluginView;
+}
+
+export function startPlugin(pluginId: string): Promise<PluginView> {
+  return request<PluginView>(`/api/plugins/${pluginId}/start`, {
+    method: "POST"
+  });
+}
+
+export function stopPlugin(pluginId: string): Promise<PluginView> {
+  return request<PluginView>(`/api/plugins/${pluginId}/stop`, {
+    method: "POST"
+  });
+}
+
+export function uninstallPlugin(pluginId: string): Promise<void> {
+  return request<void>(`/api/plugins/${pluginId}`, {
+    method: "DELETE"
+  });
+}
+
+export function getPluginConfig(pluginId: string): Promise<PluginConfigView> {
+  return request<PluginConfigView>(`/api/plugins/${pluginId}/config`);
+}
+
+export function updatePluginConfig(pluginId: string, config: Record<string, unknown>): Promise<PluginConfigView> {
+  return request<PluginConfigView>(`/api/plugins/${pluginId}/config`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ config })
   });
 }

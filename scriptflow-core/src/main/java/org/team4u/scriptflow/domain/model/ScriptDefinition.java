@@ -1,7 +1,6 @@
 package org.team4u.scriptflow.domain.model;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class ScriptDefinition {
@@ -9,8 +8,8 @@ public class ScriptDefinition {
     private String name;
     private ScriptType type = ScriptType.GROOVY;
     private String source;
-    private Map<String, Object> inputSchema = new LinkedHashMap<>();
-    private Map<String, Object> outputSchema = new LinkedHashMap<>();
+    private Map<String, Object> inputSchema = SchemaValueCopier.copyMap(null);
+    private Map<String, Object> outputSchema = SchemaValueCopier.copyMap(null);
     private ScriptStatus status = ScriptStatus.DRAFT;
     private Integer version = 1;
     private PublishedScriptSnapshot publishedSnapshot;
@@ -61,7 +60,7 @@ public class ScriptDefinition {
     }
 
     public ScriptDefinition setInputSchema(Map<String, Object> inputSchema) {
-        this.inputSchema = inputSchema == null ? new LinkedHashMap<>() : inputSchema;
+        this.inputSchema = SchemaValueCopier.copyMap(inputSchema);
         return this;
     }
 
@@ -70,7 +69,7 @@ public class ScriptDefinition {
     }
 
     public ScriptDefinition setOutputSchema(Map<String, Object> outputSchema) {
-        this.outputSchema = outputSchema == null ? new LinkedHashMap<>() : outputSchema;
+        this.outputSchema = SchemaValueCopier.copyMap(outputSchema);
         return this;
     }
 

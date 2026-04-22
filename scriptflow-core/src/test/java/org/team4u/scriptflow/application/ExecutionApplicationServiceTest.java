@@ -35,7 +35,7 @@ class ExecutionApplicationServiceTest {
     @Test
     void executeRunsSynchronouslyAndPersistsSuccessState() {
         scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
-        when(scriptEngine.execute(any(), any())).thenReturn(Map.of("message", "Hello"));
+        when(scriptEngine.execute(any(), any(), any())).thenReturn(Map.of("message", "Hello"));
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
                 executionRepository,
@@ -60,7 +60,7 @@ class ExecutionApplicationServiceTest {
     @Test
     void executeWrapsScalarResultsIntoResultField() {
         scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return 42"));
-        when(scriptEngine.execute(any(), any())).thenReturn(42);
+        when(scriptEngine.execute(any(), any(), any())).thenReturn(42);
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
                 executionRepository,
@@ -100,7 +100,7 @@ class ExecutionApplicationServiceTest {
     @Test
     void executeSkipsValidationWhenSchemaMissing() {
         scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
-        when(scriptEngine.execute(any(), any())).thenReturn(Map.of("ok", true));
+        when(scriptEngine.execute(any(), any(), any())).thenReturn(Map.of("ok", true));
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
                 executionRepository,
@@ -117,7 +117,7 @@ class ExecutionApplicationServiceTest {
     @Test
     void executeCapturesFailures() {
         scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("throw new RuntimeException()"));
-        when(scriptEngine.execute(any(), any())).thenThrow(new IllegalStateException("boom"));
+        when(scriptEngine.execute(any(), any(), any())).thenThrow(new IllegalStateException("boom"));
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
                 executionRepository,
@@ -138,7 +138,7 @@ class ExecutionApplicationServiceTest {
     @Test
     void executeSchedulesAsyncWorkAndReturnsPendingRecordImmediately() {
         scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
-        when(scriptEngine.execute(any(), any())).thenReturn(Map.of("message", "done"));
+        when(scriptEngine.execute(any(), any(), any())).thenReturn(Map.of("message", "done"));
         ControllableExecutor executor = new ControllableExecutor();
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
@@ -177,7 +177,7 @@ class ExecutionApplicationServiceTest {
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("type", "object")))
                 .setStatus(ScriptStatus.PUBLISHED));
-        when(scriptEngine.execute(any(), any())).thenReturn(Map.of("message", "live"));
+        when(scriptEngine.execute(any(), any(), any())).thenReturn(Map.of("message", "live"));
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
                 executionRepository,
@@ -213,8 +213,8 @@ class ExecutionApplicationServiceTest {
     void listUsesScriptFilterOnlyWhenProvided() {
         scriptRepository.save(new ScriptDefinition().setId("script-1"));
         scriptRepository.save(new ScriptDefinition().setId("script-2"));
-        when(scriptEngine.execute(eq(scriptRepository.findById("script-1").orElseThrow()), any())).thenReturn(Map.of("value", 1));
-        when(scriptEngine.execute(eq(scriptRepository.findById("script-2").orElseThrow()), any())).thenReturn(Map.of("value", 2));
+        when(scriptEngine.execute(eq(scriptRepository.findById("script-1").orElseThrow()), any(), any())).thenReturn(Map.of("value", 1));
+        when(scriptEngine.execute(eq(scriptRepository.findById("script-2").orElseThrow()), any(), any())).thenReturn(Map.of("value", 2));
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
                 executionRepository,

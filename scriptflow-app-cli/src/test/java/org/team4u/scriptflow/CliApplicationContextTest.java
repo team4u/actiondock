@@ -4,11 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
-import org.team4u.scriptflow.auth.AuthConfiguration;
-import org.team4u.scriptflow.bootstrap.SampleDataInitializer;
 import org.team4u.scriptflow.cli.CliRootCommand;
-import org.team4u.scriptflow.config.WebCorsConfiguration;
-import org.team4u.scriptflow.web.AdminUiController;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,9 +27,9 @@ class CliApplicationContextTest {
     @Test
     void contextLoadsCliBeansWithoutWebArtifacts() {
         assertThat(applicationContext.getBean(CliRootCommand.class)).isNotNull();
-        assertThat(applicationContext.getBeansOfType(AdminUiController.class)).isEmpty();
-        assertThat(applicationContext.getBeansOfType(WebCorsConfiguration.class)).isEmpty();
-        assertThat(applicationContext.getBeansOfType(AuthConfiguration.class)).isEmpty();
-        assertThat(applicationContext.getBeansOfType(SampleDataInitializer.class)).isEmpty();
+        assertThat(applicationContext.containsBean("adminUiController")).isFalse();
+        assertThat(applicationContext.containsBean("apiKeyAuthFilter")).isFalse();
+        assertThat(applicationContext.containsBean("sampleDataInitializer")).isFalse();
+        assertThat(applicationContext.containsBean("webCorsConfiguration")).isFalse();
     }
 }

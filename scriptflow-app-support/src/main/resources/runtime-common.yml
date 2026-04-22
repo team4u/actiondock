@@ -13,6 +13,8 @@ spring:
         format_sql: true
 
 app:
+  plugins:
+    dir: ./plugins
   execution:
     async-pool-size: 4
     groovy:

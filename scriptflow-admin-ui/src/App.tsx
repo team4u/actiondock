@@ -30,6 +30,9 @@ const ScriptEditorPage = lazy(() =>
 const ScriptRunPage = lazy(() =>
   import("./pages/ScriptRunPage").then((module) => ({ default: module.ScriptRunPage }))
 );
+const PluginManagementPage = lazy(() =>
+  import("./pages/PluginManagementPage").then((module) => ({ default: module.PluginManagementPage }))
+);
 
 type ColorMode = "light" | "dark";
 
@@ -71,6 +74,7 @@ function AdminShell({
   const isMobile = !screens.lg;
   const isDark = colorMode === "dark";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const title = location.pathname.startsWith("/plugins") ? "插件管理" : "脚本管理";
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
 
@@ -84,12 +88,23 @@ function AdminShell({
       <Menu
         mode="inline"
         theme={isDark ? "dark" : "light"}
-        selectedKeys={[location.pathname.startsWith("/scripts") ? "scripts" : ""]}
+        selectedKeys={[
+          location.pathname.startsWith("/plugins")
+            ? "plugins"
+            : location.pathname.startsWith("/scripts")
+              ? "scripts"
+              : ""
+        ]}
         items={[
           {
             key: "scripts",
             label: "脚本管理",
             onClick: () => navigate("/scripts")
+          },
+          {
+            key: "plugins",
+            label: "插件管理",
+            onClick: () => navigate("/plugins")
           }
         ]}
       />
@@ -115,7 +130,7 @@ function AdminShell({
             ) : null}
             <div className="app-header__title">
               <Title level={3} style={{ margin: 0 }}>
-                脚本管理
+                {title}
               </Title>
             </div>
           </div>
@@ -131,6 +146,7 @@ function AdminShell({
             <Routes>
               <Route path="/" element={<Navigate to="/scripts" replace />} />
               <Route path="/scripts" element={<ScriptListPage onOpenApiKeyModal={onOpenApiKeyModal} />} />
+              <Route path="/plugins" element={<PluginManagementPage onOpenApiKeyModal={onOpenApiKeyModal} />} />
               <Route
                 path="/scripts/new"
                 element={<ScriptEditorPage colorMode={colorMode} mode="create" />}

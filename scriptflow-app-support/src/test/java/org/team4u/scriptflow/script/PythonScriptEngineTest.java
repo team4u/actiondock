@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 
 import java.util.List;
@@ -33,7 +34,8 @@ class PythonScriptEngineTest {
     void executeEvaluatesScriptAgainstInputMap() {
         Object result = engine.execute(
                 new ScriptDefinition().setSource("name = input.get(\"name\") or \"World\"\nreturn {\"message\": f\"Hello, {name}\"}"),
-                Map.of("name", "Alice")
+                Map.of("name", "Alice"),
+                null
         );
 
         assertThat(result).isEqualTo(Map.of("message", "Hello, Alice"));
@@ -41,8 +43,8 @@ class PythonScriptEngineTest {
 
     @Test
     void executeReturnsJsonArraysAndScalars() {
-        Object listResult = engine.execute(new ScriptDefinition().setSource("return [1, 2, 3]"), null);
-        Object scalarResult = engine.execute(new ScriptDefinition().setSource("return True"), null);
+        Object listResult = engine.execute(new ScriptDefinition().setSource("return [1, 2, 3]"), null, null);
+        Object scalarResult = engine.execute(new ScriptDefinition().setSource("return True"), null, null);
 
         assertThat(listResult).isEqualTo(List.of(1, 2, 3));
         assertThat(scalarResult).isEqualTo(true);
@@ -52,6 +54,7 @@ class PythonScriptEngineTest {
     void executeRejectsNonJsonSerializableResults() {
         assertThatThrownBy(() -> engine.execute(
                 new ScriptDefinition().setSource("return {\"bad\": {1, 2}}"),
+                null,
                 null
         ))
                 .isInstanceOf(IllegalStateException.class)
@@ -67,7 +70,8 @@ class PythonScriptEngineTest {
 
         assertThatThrownBy(() -> timeoutEngine.execute(
                 new ScriptDefinition().setSource("import time\ntime.sleep(2)\nreturn {\"ok\": True}"),
-                null
+                null,
+                new ScriptExecutionContext()
         ))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Python 脚本执行超时");

@@ -4,6 +4,7 @@ import groovy.lang.Script;
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.plugin.PluginRuntimeService;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -38,7 +39,7 @@ class GroovyScriptEngineTest {
 
     @Test
     void executeEvaluatesScriptAgainstInputMap() {
-        Object result = engine.execute(new ScriptDefinition().setSource("return [message: 'Hello, ' + input.name]"), Map.of("name", "Alice"));
+        Object result = engine.execute(new ScriptDefinition().setSource("return [message: 'Hello, ' + input.name]"), Map.of("name", "Alice"), null);
 
         assertThat(result).isInstanceOf(Map.class);
         @SuppressWarnings("unchecked")
@@ -48,7 +49,7 @@ class GroovyScriptEngineTest {
 
     @Test
     void executeUsesEmptyInputWhenNullPayloadProvided() {
-        Object result = engine.execute(new ScriptDefinition().setSource("return input.isEmpty()"), null);
+        Object result = engine.execute(new ScriptDefinition().setSource("return input.isEmpty()"), null, null);
 
         assertThat(result).isEqualTo(true);
     }
@@ -58,8 +59,8 @@ class GroovyScriptEngineTest {
         CountingGroovyScriptEngine countingEngine = new CountingGroovyScriptEngine(groovyProperties(), new MutableClock());
         ScriptDefinition definition = new ScriptDefinition().setSource("return [message: 'Hello, ' + input.name]");
 
-        countingEngine.execute(definition, Map.of("name", "Alice"));
-        countingEngine.execute(definition, Map.of("name", "Bob"));
+        countingEngine.execute(definition, Map.of("name", "Alice"), null);
+        countingEngine.execute(definition, Map.of("name", "Bob"), null);
 
         assertThat(countingEngine.compileCount()).isEqualTo(1);
     }
@@ -70,7 +71,7 @@ class GroovyScriptEngineTest {
         ScriptDefinition definition = new ScriptDefinition().setSource("return [message: 'ok']");
 
         countingEngine.validate(definition);
-        countingEngine.execute(definition, Map.of());
+        countingEngine.execute(definition, Map.of(), null);
 
         assertThat(countingEngine.compileCount()).isEqualTo(1);
     }
@@ -79,8 +80,8 @@ class GroovyScriptEngineTest {
     void executeRecompilesWhenSourceChanges() {
         CountingGroovyScriptEngine countingEngine = new CountingGroovyScriptEngine(groovyProperties(), new MutableClock());
 
-        countingEngine.execute(new ScriptDefinition().setSource("return [value: 1]"), Map.of());
-        countingEngine.execute(new ScriptDefinition().setSource("return [value: 2]"), Map.of());
+        countingEngine.execute(new ScriptDefinition().setSource("return [value: 1]"), Map.of(), null);
+        countingEngine.execute(new ScriptDefinition().setSource("return [value: 2]"), Map.of(), null);
 
         assertThat(countingEngine.compileCount()).isEqualTo(2);
     }
@@ -92,8 +93,8 @@ class GroovyScriptEngineTest {
         CountingGroovyScriptEngine countingEngine = new CountingGroovyScriptEngine(properties, new MutableClock());
         ScriptDefinition definition = new ScriptDefinition().setSource("return [message: 'Hello']");
 
-        countingEngine.execute(definition, Map.of());
-        countingEngine.execute(definition, Map.of());
+        countingEngine.execute(definition, Map.of(), null);
+        countingEngine.execute(definition, Map.of(), null);
 
         assertThat(countingEngine.compileCount()).isEqualTo(2);
     }
@@ -104,9 +105,9 @@ class GroovyScriptEngineTest {
         properties.setCacheMaxSize(1);
         CountingGroovyScriptEngine countingEngine = new CountingGroovyScriptEngine(properties, new MutableClock());
 
-        countingEngine.execute(new ScriptDefinition().setSource("return [value: 1]"), Map.of());
-        countingEngine.execute(new ScriptDefinition().setSource("return [value: 2]"), Map.of());
-        countingEngine.execute(new ScriptDefinition().setSource("return [value: 1]"), Map.of());
+        countingEngine.execute(new ScriptDefinition().setSource("return [value: 1]"), Map.of(), null);
+        countingEngine.execute(new ScriptDefinition().setSource("return [value: 2]"), Map.of(), null);
+        countingEngine.execute(new ScriptDefinition().setSource("return [value: 1]"), Map.of(), null);
 
         assertThat(countingEngine.compileCount()).isEqualTo(3);
     }
@@ -119,9 +120,9 @@ class GroovyScriptEngineTest {
         CountingGroovyScriptEngine countingEngine = new CountingGroovyScriptEngine(properties, clock);
         ScriptDefinition definition = new ScriptDefinition().setSource("return [value: 1]");
 
-        countingEngine.execute(definition, Map.of());
+        countingEngine.execute(definition, Map.of(), null);
         clock.advance(Duration.ofMinutes(2));
-        countingEngine.execute(definition, Map.of());
+        countingEngine.execute(definition, Map.of(), null);
 
         assertThat(countingEngine.compileCount()).isEqualTo(2);
     }
@@ -133,7 +134,7 @@ class GroovyScriptEngineTest {
                 import org.apache.ivy.util.StringUtils
 
                 return [joined: StringUtils.join(input.parts, '-')]
-                """), Map.of("parts", new String[]{"hello", "grab"}));
+                """), Map.of("parts", new String[]{"hello", "grab"}), null);
 
         assertThat(result).isInstanceOf(Map.class);
         @SuppressWarnings("unchecked")
@@ -148,9 +149,9 @@ class GroovyScriptEngineTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
         try {
-            Future<Object> first = executor.submit(() -> countingEngine.execute(definition, Map.of("name", "Alice")));
+            Future<Object> first = executor.submit(() -> countingEngine.execute(definition, Map.of("name", "Alice"), null));
             assertThat(countingEngine.awaitCompileStart()).isTrue();
-            Future<Object> second = executor.submit(() -> countingEngine.execute(definition, Map.of("name", "Bob")));
+            Future<Object> second = executor.submit(() -> countingEngine.execute(definition, Map.of("name", "Bob"), null));
 
             Thread.sleep(100);
             countingEngine.releaseCompile();
@@ -171,7 +172,7 @@ class GroovyScriptEngineTest {
         private final AtomicInteger compileCount = new AtomicInteger();
 
         private CountingGroovyScriptEngine(AppProperties.Groovy properties, Clock clock) {
-            super(properties, clock);
+            super(properties, clock, PluginRuntimeService.disabled());
         }
 
         @Override

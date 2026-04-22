@@ -8,6 +8,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
     private final Auth auth = new Auth();
+    private final Plugins plugins = new Plugins();
     private final Execution execution = new Execution();
 
     public Auth getAuth() {
@@ -16,6 +17,10 @@ public class AppProperties {
 
     public Execution getExecution() {
         return execution;
+    }
+
+    public Plugins getPlugins() {
+        return plugins;
     }
 
     public static class Auth {
@@ -49,6 +54,18 @@ public class AppProperties {
 
         public Python getPython() {
             return python;
+        }
+    }
+
+    public static class Plugins {
+        private String dir = "./plugins";
+
+        public String getDir() {
+            return dir;
+        }
+
+        public void setDir(String dir) {
+            this.dir = dir;
         }
     }
 

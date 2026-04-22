@@ -3,6 +3,7 @@ package org.team4u.scriptflow.application;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
 import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
@@ -83,7 +84,13 @@ public class ExecutionApplicationService {
             record.setStartedAt(LocalDateTime.now());
             executionRepository.save(record);
 
-            Object result = scriptEngine.execute(definition, record.getInput());
+            Object result = scriptEngine.execute(
+                    definition,
+                    record.getInput(),
+                    new ScriptExecutionContext()
+                            .setExecutionId(record.getId())
+                            .setSubmitMode(record.getSubmitMode())
+            );
             record.setOutput(toMap(result));
             record.setStatus(ExecutionStatus.SUCCESS);
             record.setFinishedAt(LocalDateTime.now());

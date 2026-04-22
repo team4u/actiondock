@@ -9,6 +9,7 @@ import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -109,6 +110,42 @@ class ScriptApplicationServiceTest {
         assertThat(published.getPublishedSnapshot().getSource()).isEqualTo("return [message: 'draft']");
         assertThat(published.getHasUnpublishedChanges()).isFalse();
         assertThat(published.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void publishSnapshotKeepsNestedSchemaIndependentFromDraftChanges() {
+        Map<String, Object> nestedField = new LinkedHashMap<>(Map.of("type", "string"));
+        Map<String, Object> inputSchema = new LinkedHashMap<>();
+        inputSchema.put("type", "object");
+        inputSchema.put("properties", new LinkedHashMap<>(Map.of("message", nestedField)));
+
+        ScriptDefinition draft = new ScriptDefinition()
+                .setId("script-1")
+                .setName("Draft")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [message: 'draft']")
+                .setInputSchema(inputSchema)
+                .setOutputSchema(Map.of("type", "object"))
+                .setVersion(1)
+                .setStatus(ScriptStatus.DRAFT);
+        when(scriptRepository.findById("script-1")).thenReturn(Optional.of(draft));
+        when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScriptDefinition published = service.publish("script-1");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> currentProperties = (Map<String, Object>) published.getInputSchema().get("properties");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> publishedProperties =
+                (Map<String, Object>) published.getPublishedSnapshot().getInputSchema().get("properties");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> currentMessageField = (Map<String, Object>) currentProperties.get("message");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> publishedMessageField = (Map<String, Object>) publishedProperties.get("message");
+
+        currentMessageField.put("title", "Message");
+
+        assertThat(publishedMessageField).doesNotContainKey("title");
+        assertThat(published.getHasUnpublishedChanges()).isTrue();
     }
 
     @Test

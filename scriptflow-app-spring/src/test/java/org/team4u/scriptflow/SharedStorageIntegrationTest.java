@@ -2,9 +2,14 @@ package org.team4u.scriptflow;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Import;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
@@ -12,6 +17,12 @@ import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.model.SubmitMode;
+import org.team4u.scriptflow.config.RuntimeConfiguration;
+import org.team4u.scriptflow.storage.jpa.StorageConfiguration;
+import org.team4u.scriptflow.storage.jpa.entity.ExecutionEntity;
+import org.team4u.scriptflow.storage.jpa.entity.ScriptEntity;
+import org.team4u.scriptflow.storage.jpa.repo.SpringDataExecutionEntityRepository;
+import org.team4u.scriptflow.storage.jpa.repo.SpringDataScriptEntityRepository;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -41,7 +52,7 @@ class SharedStorageIntegrationTest {
             scriptApplicationService.publish("integration-script");
         }
 
-        try (ConfigurableApplicationContext cliContext = new SpringApplicationBuilder(CliApplication.class)
+        try (ConfigurableApplicationContext cliContext = new SpringApplicationBuilder(CliLikeTestApplication.class)
                 .web(WebApplicationType.NONE)
                 .properties(runtimeProperties(dbUrl, "none"))
                 .run()) {
@@ -69,5 +80,16 @@ class SharedStorageIntegrationTest {
                 "spring.h2.console.enabled=false",
                 "app.execution.async-pool-size=1"
         };
+    }
+
+    @SpringBootConfiguration
+    @EnableAutoConfiguration
+    @EntityScan(basePackageClasses = {ScriptEntity.class, ExecutionEntity.class})
+    @EnableJpaRepositories(basePackageClasses = {
+            SpringDataScriptEntityRepository.class,
+            SpringDataExecutionEntityRepository.class
+    })
+    @Import({RuntimeConfiguration.class, StorageConfiguration.class})
+    static class CliLikeTestApplication {
     }
 }

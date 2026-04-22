@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.script;
 
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 
@@ -21,8 +22,8 @@ public class RoutingScriptEngine implements ScriptEngine {
     }
 
     @Override
-    public Object execute(ScriptDefinition definition, Map<String, Object> input) {
-        return resolve(definition).execute(definition, input);
+    public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
+        return resolve(definition).execute(definition, input, executionContext);
     }
 
     private ScriptEngine resolve(ScriptDefinition definition) {
