@@ -1,6 +1,8 @@
 package org.team4u.scriptflow.plugin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.pf4j.Plugin;
+import org.pf4j.PluginWrapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.team4u.scriptflow.config.AppProperties;
@@ -10,6 +12,8 @@ import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
+import org.team4u.scriptflow.plugin.api.ScriptFlowPlugin;
+import org.team4u.scriptflow.plugin.api.ScriptPluginContext;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -188,24 +192,69 @@ class PluginRuntimeServiceTest {
         assertThat(repository.findByPluginId("scriptflow-demo-plugin").orElseThrow().isEnabled()).isFalse();
     }
 
+    @Test
+    void saveConfigValidatesAndReturnsEffectiveConfig() throws IOException {
+        Path pluginJar = buildPluginJar(
+                tempDir.resolve("effective-config-plugin.jar"),
+                effectiveConfigManifestJson(),
+                EffectiveConfigValidationBootstrap.class,
+                EffectiveConfigValidationPlugin.class
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        service.install("effective-config-plugin.jar", Files.readAllBytes(pluginJar));
+
+        PluginConfigView saved = service.saveConfig("effective-config-plugin", Map.of());
+
+        assertThat(saved.getConfig()).containsEntry("prefix", "demo");
+        assertThat(service.getConfig("effective-config-plugin").getConfig()).containsEntry("prefix", "demo");
+        assertThat(Files.readString(tempDir.resolve(".scriptflow-config").resolve("effective-config-plugin.json")))
+                .isEqualTo("{}");
+    }
+
     private Path buildPluginJar(Path destination, String manifestJson) throws IOException {
+        return buildPluginJar(
+                destination,
+                manifestJson,
+                org.team4u.scriptflow.plugin.template.TemplatePlugin.class,
+                org.team4u.scriptflow.plugin.template.DemoScriptFlowPlugin.class,
+                org.team4u.scriptflow.plugin.template.DemoPluginConfig.class
+        );
+    }
+
+    private Path buildPluginJar(Path destination,
+                                String manifestJson,
+                                Class<?> pluginClass,
+                                Class<?> extensionClass,
+                                Class<?>... additionalClasses) throws IOException {
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
-        attributes.putValue("Plugin-Id", "scriptflow-demo-plugin");
-        attributes.putValue("Plugin-Class", "org.team4u.scriptflow.plugin.template.TemplatePlugin");
+        attributes.putValue("Plugin-Id", pluginIdFromManifest(manifestJson));
+        attributes.putValue("Plugin-Class", pluginClass.getName());
         attributes.putValue("Plugin-Version", "0.2.0");
         attributes.putValue("Plugin-Provider", "team4u");
 
         try (JarOutputStream outputStream = new JarOutputStream(Files.newOutputStream(destination), manifest)) {
-            addClass(outputStream, org.team4u.scriptflow.plugin.template.TemplatePlugin.class);
-            addClass(outputStream, org.team4u.scriptflow.plugin.template.DemoScriptFlowPlugin.class);
-            addResource(outputStream, "META-INF/scriptflow/plugins/scriptflow-demo-plugin.json", manifestJson);
+            addClass(outputStream, pluginClass);
+            addClass(outputStream, extensionClass);
+            for (Class<?> additionalClass : additionalClasses) {
+                addClass(outputStream, additionalClass);
+            }
+            String pluginId = pluginIdFromManifest(manifestJson);
+            addResource(outputStream, "META-INF/scriptflow/plugins/" + pluginId + ".json", manifestJson);
             outputStream.putNextEntry(new JarEntry("META-INF/extensions.idx"));
-            outputStream.write("org.team4u.scriptflow.plugin.template.DemoScriptFlowPlugin\n".getBytes());
+            outputStream.write((extensionClass.getName() + "\n").getBytes());
             outputStream.closeEntry();
         }
         return destination;
+    }
+
+    private String pluginIdFromManifest(String manifestJson) {
+        return jsonCodec.read(manifestJson, Map.class).get("pluginId").toString();
     }
 
     private void addClass(JarOutputStream outputStream, Class<?> type) throws IOException {
@@ -283,6 +332,42 @@ class PluginRuntimeServiceTest {
                   ]
                 }
                 """.formatted(name, version);
+    }
+
+    private String effectiveConfigManifestJson() {
+        return """
+                {
+                  "pluginId": "effective-config-plugin",
+                  "name": "Effective Config Plugin",
+                  "description": "Validates effective config values.",
+                  "version": "0.2.0",
+                  "configSchema": {
+                    "type": "object",
+                    "properties": {
+                      "prefix": {
+                        "type": "string",
+                        "title": "Prefix"
+                      }
+                    }
+                  },
+                  "defaultConfig": {
+                    "prefix": "demo"
+                  },
+                  "actions": [
+                    {
+                      "action": "echo",
+                      "title": "Echo message",
+                      "description": "Return a message prefixed by plugin configuration.",
+                      "inputSchema": {
+                        "type": "object"
+                      },
+                      "outputSchema": {
+                        "type": "object"
+                      }
+                    }
+                  ]
+                }
+                """;
     }
 
     private static final class TestJsonCodec implements JsonCodec {
@@ -391,6 +476,31 @@ class PluginRuntimeServiceTest {
                     .setEnabled(registration.isEnabled())
                     .setInstalledAt(registration.getInstalledAt())
                     .setUpdatedAt(registration.getUpdatedAt());
+        }
+    }
+
+    public static final class EffectiveConfigValidationBootstrap extends Plugin {
+        public EffectiveConfigValidationBootstrap(PluginWrapper wrapper) {
+            super(wrapper);
+        }
+    }
+
+    public static final class EffectiveConfigValidationPlugin implements ScriptFlowPlugin {
+        @Override
+        public String id() {
+            return "effective-config-plugin";
+        }
+
+        @Override
+        public void validateConfig(Map<String, Object> config) {
+            if (!"demo".equals(config.get("prefix"))) {
+                throw new IllegalArgumentException("expected merged default config");
+            }
+        }
+
+        @Override
+        public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
+            return Map.of("prefix", context.getPluginConfig().get("prefix"));
         }
     }
 }

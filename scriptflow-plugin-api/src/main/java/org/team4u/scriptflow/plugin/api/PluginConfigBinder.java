@@ -1,0 +1,68 @@
+package org.team4u.scriptflow.plugin.api;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.lang.reflect.Constructor;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+public final class PluginConfigBinder {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+    private PluginConfigBinder() {
+    }
+
+    public static <T> T bind(Map<String, Object> source, Class<T> type) {
+        if (type == null) {
+            throw new IllegalArgumentException("type must not be null");
+        }
+
+        T target = instantiate(type);
+        if (source == null || source.isEmpty()) {
+            return target;
+        }
+
+        try {
+            return OBJECT_MAPPER.readerForUpdating(target)
+                    .readValue(OBJECT_MAPPER.writeValueAsString(source));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException(buildBindingErrorMessage(type, exception), exception);
+        }
+    }
+
+    private static <T> T instantiate(Class<T> type) {
+        try {
+            Constructor<T> constructor = type.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalArgumentException("Cannot instantiate config type: " + type.getName(), exception);
+        }
+    }
+
+    private static String buildBindingErrorMessage(Class<?> type, JsonProcessingException exception) {
+        if (exception instanceof JsonMappingException mappingException) {
+            String path = mappingException.getPath().stream()
+                    .map(reference -> {
+                        if (reference.getFieldName() != null) {
+                            return reference.getFieldName();
+                        }
+                        if (reference.getIndex() >= 0) {
+                            return "[" + reference.getIndex() + "]";
+                        }
+                        return null;
+                    })
+                    .filter(segment -> segment != null && !segment.isBlank())
+                    .collect(Collectors.joining("."));
+            if (!path.isBlank()) {
+                return "Cannot bind plugin config to " + type.getName() + " at " + path + ": "
+                        + mappingException.getOriginalMessage();
+            }
+        }
+        return "Cannot bind plugin config to " + type.getName() + ": " + exception.getOriginalMessage();
+    }
+}

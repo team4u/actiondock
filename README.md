@@ -368,6 +368,13 @@ scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/script
 - `pluginId`: `scriptflow-demo-plugin`
 - `action`: `echo`
 
+模板插件推荐直接定义强类型配置类，并通过 `ScriptPluginContext#getPluginConfig(Class<T>)` 读取：
+
+```java
+DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
+String prefix = config.getPrefix();
+```
+
 如果你要基于模板开发自定义插件，至少需要同时修改两处：
 
 1. Java 实现类中的 `id()`
@@ -441,8 +448,9 @@ scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/script
 - 配置顶层必须是 JSON 对象
 - 表单模式只渲染当前前端支持的字段类型
 - 如果 schema 含有暂不支持的字段，仍可切到 JSON 模式完整编辑
-- 保存时会先做 JSON 解析，再调用插件自身 `validateConfig(...)`
+- 保存时会先做 JSON 解析，再按 `defaultConfig + 用户配置` 合并为最终生效配置，再调用插件自身 `validateConfig(...)`
 - 配置文件默认保存到 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json`
+- 运行时 `context.getPluginConfig()` 与保存时 `validateConfig(...)` 看到的是同一份最终生效配置
 
 模板插件的默认配置示例：
 

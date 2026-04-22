@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.plugin.template;
 
 import org.pf4j.Extension;
+import org.team4u.scriptflow.plugin.api.PluginConfigBinder;
 import org.team4u.scriptflow.plugin.api.ScriptFlowPlugin;
 import org.team4u.scriptflow.plugin.api.ScriptPluginContext;
 
@@ -16,16 +17,14 @@ public class DemoScriptFlowPlugin implements ScriptFlowPlugin {
 
     @Override
     public void validateConfig(Map<String, Object> config) {
-        Object prefix = config.get("prefix");
-        if (prefix != null && !(prefix instanceof String)) {
-            throw new IllegalArgumentException("Plugin config field 'prefix' must be a string");
-        }
+        PluginConfigBinder.bind(config, DemoPluginConfig.class);
     }
 
     @Override
     public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
         if ("echo".equals(action)) {
-            String prefix = String.valueOf(context.getPluginConfig().getOrDefault("prefix", "demo"));
+            DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
+            String prefix = String.valueOf(config.getPrefix());
             String message = String.valueOf(args.getOrDefault("message", ""));
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("message", prefix + ":" + message);

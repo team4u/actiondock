@@ -60,6 +60,10 @@ public class ScriptPluginContext {
         return pluginConfig;
     }
 
+    public <T> T getPluginConfig(Class<T> type) {
+        return PluginConfigBinder.bind(pluginConfig, type);
+    }
+
     public ScriptPluginContext setPluginConfig(Map<String, Object> pluginConfig) {
         this.pluginConfig = pluginConfig == null ? new LinkedHashMap<>() : new LinkedHashMap<>(pluginConfig);
         return this;

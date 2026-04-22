@@ -98,16 +98,17 @@ public class PluginRuntimeService {
     public synchronized PluginConfigView saveConfig(String pluginId, Map<String, Object> config) {
         PluginRegistration registration = requireRegistration(pluginId);
         Map<String, Object> normalized = normalizeConfig(config);
+        Map<String, Object> effectiveConfig = mergeConfig(registration.getDefaultConfig(), normalized);
         ScriptFlowPlugin plugin = findLoadedExtension(pluginId);
         if (plugin != null) {
-            plugin.validateConfig(normalized);
+            plugin.validateConfig(effectiveConfig);
         }
         writeConfig(pluginId, normalized);
         return new PluginConfigView()
                 .setPluginId(pluginId)
                 .setConfigSchema(registration.getConfigSchema())
                 .setDefaultConfig(registration.getDefaultConfig())
-                .setConfig(normalized);
+                .setConfig(effectiveConfig);
     }
 
     public synchronized PluginView install(String originalFilename, byte[] content) {
@@ -496,9 +497,13 @@ public class PluginRuntimeService {
     }
 
     private Map<String, Object> loadEffectiveConfig(PluginRegistration registration) {
-        Map<String, Object> config = new LinkedHashMap<>(registration.getDefaultConfig());
-        config.putAll(readConfig(registration.getPluginId()));
-        return config;
+        return mergeConfig(registration.getDefaultConfig(), readConfig(registration.getPluginId()));
+    }
+
+    private Map<String, Object> mergeConfig(Map<String, Object> defaultConfig, Map<String, Object> overrides) {
+        Map<String, Object> merged = normalizeConfig(defaultConfig);
+        merged.putAll(normalizeConfig(overrides));
+        return merged;
     }
 
     private Map<String, Object> readConfig(String pluginId) {
