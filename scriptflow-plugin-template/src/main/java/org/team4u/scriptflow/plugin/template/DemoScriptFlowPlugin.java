@@ -24,10 +24,9 @@ public class DemoScriptFlowPlugin implements ScriptFlowPlugin {
     public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
         if ("echo".equals(action)) {
             DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
-            String prefix = String.valueOf(config.getPrefix());
             String message = String.valueOf(args.getOrDefault("message", ""));
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("message", prefix + ":" + message);
+            result.put("message", config.getPrefix() + ":" + message);
             if (context.getScriptId() != null) {
                 result.put("scriptId", context.getScriptId());
             }
