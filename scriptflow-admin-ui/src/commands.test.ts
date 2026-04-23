@@ -2,16 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
-  buildExecutePowerShellCliCommand,
   buildPluginInvokeCliCommand,
   buildPluginInvokeCmdCliCommand,
-  buildPluginInvokePowerShellCliCommand,
   buildScriptDetailCliCommand,
   buildScriptDetailCmdCliCommand,
-  buildScriptDetailPowerShellCliCommand,
   buildToolDetailCliCommand,
-  buildToolDetailCmdCliCommand,
-  buildToolDetailPowerShellCliCommand
+  buildToolDetailCmdCliCommand
 } from "./commands";
 
 describe("CLI command builders", () => {
@@ -39,16 +35,6 @@ describe("CLI command builders", () => {
   scripts schema 'hello-groovy'`);
 
     expect(
-      buildScriptDetailPowerShellCliCommand({
-        apiKey: "local-dev-key",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(
-      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' --token 'local-dev-key' scripts get 'hello-groovy'"
-    );
-
-    expect(
       buildToolDetailCmdCliCommand({
         apiKey: "local-dev-key",
         origin: "http://localhost:8080",
@@ -56,16 +42,6 @@ describe("CLI command builders", () => {
       })
     ).toBe(
       'java -jar scriptflow-cli.jar --base-url "http://localhost:8080" --token "local-dev-key" scripts schema "hello-groovy"'
-    );
-
-    expect(
-      buildToolDetailPowerShellCliCommand({
-        apiKey: "local-dev-key",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(
-      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' --token 'local-dev-key' scripts schema 'hello-groovy'"
     );
 
     expect(
@@ -97,18 +73,6 @@ describe("CLI command builders", () => {
   --mode ASYNC`);
 
     expect(
-      buildExecutePowerShellCliCommand({
-        apiKey: "secret-token",
-        input: { name: "O'Reilly" },
-        mode: "ASYNC",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(
-      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' --token 'secret-token' executions submit --script-id 'hello-groovy' --input '{\"name\":\"O''Reilly\"}' --mode ASYNC"
-    );
-
-    expect(
       buildExecuteCmdCliCommand({
         apiKey: "secret-token",
         input: { name: 'Alice "Ops"' },
@@ -137,19 +101,6 @@ describe("CLI command builders", () => {
   --args '{"topic":"ops"}' \\
   --script-input '{"locale":"zh-CN"}' \\
   --response-view RESULT`);
-
-    expect(
-      buildPluginInvokePowerShellCliCommand({
-        action: "summarize",
-        args: { topic: "ops" },
-        origin: "http://localhost:8080",
-        pluginId: "plugin-a",
-        responseView: "RESULT",
-        scriptInput: { locale: "zh-CN" }
-      })
-    ).toBe(
-      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' plugins invoke 'plugin-a' 'summarize' --args '{\"topic\":\"ops\"}' --script-input '{\"locale\":\"zh-CN\"}' --response-view RESULT"
-    );
 
     expect(
       buildPluginInvokeCmdCliCommand({

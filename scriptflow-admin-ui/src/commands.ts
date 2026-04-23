@@ -20,10 +20,6 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function powerShellQuote(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
-
 function cmdQuote(value: string): string {
   const escaped = value
     .replace(/(\\*)"/g, "$1$1\\\"")
@@ -54,23 +50,6 @@ function buildCliCommandPrefix({
     lines.push(`  --token ${shellQuote(apiKey)}`);
   }
   return lines;
-}
-
-function buildPowerShellCliCommandPrefix({
-  apiKey,
-  origin
-}: {
-  apiKey?: string;
-  origin: string;
-}): string[] {
-  const parts = [
-    "java -jar scriptflow-cli.jar",
-    `--base-url ${powerShellQuote(origin)}`
-  ];
-  if (apiKey) {
-    parts.push(`--token ${powerShellQuote(apiKey)}`);
-  }
-  return parts;
 }
 
 function buildCmdCliCommandPrefix({
@@ -291,20 +270,6 @@ export function buildScriptDetailCliCommand({
   return joinCommandLines(lines);
 }
 
-export function buildScriptDetailPowerShellCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildPowerShellCliCommandPrefix({ apiKey, origin });
-  parts.push("scripts", "get", powerShellQuote(scriptId));
-  return joinSingleLineCommand(parts);
-}
-
 export function buildScriptDetailCmdCliCommand({
   apiKey,
   origin,
@@ -348,20 +313,6 @@ export function buildToolDetailCliCommand({
   const lines = buildCliCommandPrefix({ apiKey, origin });
   lines.push(`  scripts schema ${shellQuote(scriptId)}`);
   return joinCommandLines(lines);
-}
-
-export function buildToolDetailPowerShellCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildPowerShellCliCommandPrefix({ apiKey, origin });
-  parts.push("scripts", "schema", powerShellQuote(scriptId));
-  return joinSingleLineCommand(parts);
 }
 
 export function buildToolDetailCmdCliCommand({
@@ -430,33 +381,6 @@ export function buildExecuteCliCommand({
   lines.push(`  --input ${shellQuote(JSON.stringify(input))}`);
   lines.push(`  --mode ${mode}`);
   return joinCommandLines(lines);
-}
-
-export function buildExecutePowerShellCliCommand({
-  apiKey,
-  input,
-  mode,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  input: Record<string, unknown>;
-  mode: SubmitMode;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildPowerShellCliCommandPrefix({ apiKey, origin });
-  parts.push(
-    "executions",
-    "submit",
-    "--script-id",
-    powerShellQuote(scriptId),
-    "--input",
-    powerShellQuote(JSON.stringify(input)),
-    "--mode",
-    mode
-  );
-  return joinSingleLineCommand(parts);
 }
 
 export function buildExecuteCmdCliCommand({
@@ -546,39 +470,6 @@ export function buildPluginInvokeCliCommand({
   lines.push(`  --script-input ${shellQuote(JSON.stringify(scriptInput))}`);
   lines.push(`  --response-view ${responseView ?? "RESULT"}`);
   return joinCommandLines(lines);
-}
-
-export function buildPluginInvokePowerShellCliCommand({
-  action,
-  apiKey,
-  args,
-  origin,
-  pluginId,
-  responseView,
-  scriptInput
-}: {
-  action: string;
-  apiKey?: string;
-  args: Record<string, unknown>;
-  origin: string;
-  pluginId: string;
-  responseView?: ExecutionResponseView;
-  scriptInput: Record<string, unknown>;
-}): string {
-  const parts = buildPowerShellCliCommandPrefix({ apiKey, origin });
-  parts.push(
-    "plugins",
-    "invoke",
-    powerShellQuote(pluginId),
-    powerShellQuote(action),
-    "--args",
-    powerShellQuote(JSON.stringify(args)),
-    "--script-input",
-    powerShellQuote(JSON.stringify(scriptInput)),
-    "--response-view",
-    responseView ?? "RESULT"
-  );
-  return joinSingleLineCommand(parts);
 }
 
 export function buildPluginInvokeCmdCliCommand({

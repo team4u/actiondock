@@ -66,16 +66,13 @@ import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
-  buildExecutePowerShellCliCommand,
   buildExecuteCurlCommand,
   buildExecutionInputFromValues,
   buildScriptDetailCliCommand,
   buildScriptDetailCmdCliCommand,
-  buildScriptDetailPowerShellCliCommand,
   buildScriptDetailCurlCommand,
   buildToolDetailCliCommand,
   buildToolDetailCmdCliCommand,
-  buildToolDetailPowerShellCliCommand,
   buildToolDetailCurlCommand,
   resolveExecutionCommandInput
 } from "../commands";
@@ -304,13 +301,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
-  const detailPowerShellCliCommand = currentScript
-    ? buildScriptDetailPowerShellCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
   const detailCmdCliCommand = currentScript
     ? buildScriptDetailCmdCliCommand({
         apiKey,
@@ -327,13 +317,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     : "";
   const toolDetailCliCommand = currentScript
     ? buildToolDetailCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const toolDetailPowerShellCliCommand = currentScript
-    ? buildToolDetailPowerShellCliCommand({
         apiKey,
         origin,
         scriptId: currentScript.id
@@ -357,15 +340,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     : "";
   const executeCliCommand = currentScript
     ? buildExecuteCliCommand({
-        apiKey,
-        input: commandInput.value,
-        mode: executionMode,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const executePowerShellCliCommand = currentScript
-    ? buildExecutePowerShellCliCommand({
         apiKey,
         input: commandInput.value,
         mode: executionMode,
@@ -1431,12 +1405,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                           title: "详情查询命令",
                                           command: detailCliCommand,
                                           variants: [
-                                            { key: "detail-cli-linux", label: "Linux/macOS", command: detailCliCommand },
-                                            {
-                                              key: "detail-cli-powershell",
-                                              label: "PowerShell",
-                                              command: detailPowerShellCliCommand
-                                            },
+                                            { key: "detail-cli-linux", label: "bash/zsh", command: detailCliCommand },
                                             { key: "detail-cli-cmd", label: "cmd", command: detailCmdCliCommand }
                                           ]
                                         }
@@ -1481,12 +1450,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                           title: "执行脚本命令",
                                           command: executeCliCommand,
                                           variants: [
-                                            { key: "execute-cli-linux", label: "Linux/macOS", command: executeCliCommand },
-                                            {
-                                              key: "execute-cli-powershell",
-                                              label: "PowerShell",
-                                              command: executePowerShellCliCommand
-                                            },
+                                            { key: "execute-cli-linux", label: "bash/zsh", command: executeCliCommand },
                                             { key: "execute-cli-cmd", label: "cmd", command: executeCmdCliCommand }
                                           ]
                                         }
@@ -1518,12 +1482,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                                 title: "获取 Schema 命令",
                                                 command: toolDetailCliCommand,
                                                 variants: [
-                                                  { key: "schema-cli-linux", label: "Linux/macOS", command: toolDetailCliCommand },
-                                                  {
-                                                    key: "schema-cli-powershell",
-                                                    label: "PowerShell",
-                                                    command: toolDetailPowerShellCliCommand
-                                                  },
+                                                  { key: "schema-cli-linux", label: "bash/zsh", command: toolDetailCliCommand },
                                                   { key: "schema-cli-cmd", label: "cmd", command: toolDetailCmdCliCommand }
                                                 ]
                                               }
