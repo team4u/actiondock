@@ -67,15 +67,18 @@ import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
+  buildExecutePowerShellCliCommand,
   buildExecuteCurlCommand,
   buildExecutePowerShellCommand,
   buildExecutionInputFromValues,
   buildScriptDetailCliCommand,
   buildScriptDetailCmdCliCommand,
+  buildScriptDetailPowerShellCliCommand,
   buildScriptDetailCurlCommand,
   buildScriptDetailPowerShellCommand,
   buildToolDetailCliCommand,
   buildToolDetailCmdCliCommand,
+  buildToolDetailPowerShellCliCommand,
   buildToolDetailCurlCommand,
   buildToolDetailPowerShellCommand,
   resolveExecutionCommandInput
@@ -337,6 +340,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const detailPowerShellCliCommand = currentScript
+    ? buildScriptDetailPowerShellCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
   const detailPowerShellCommand = currentScript
     ? buildScriptDetailPowerShellCommand({
         apiKey,
@@ -360,6 +370,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     : "";
   const toolDetailCmdCliCommand = currentScript
     ? buildToolDetailCmdCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const toolDetailPowerShellCliCommand = currentScript
+    ? buildToolDetailPowerShellCliCommand({
         apiKey,
         origin,
         scriptId: currentScript.id
@@ -399,6 +416,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const executePowerShellCliCommand = currentScript
+    ? buildExecutePowerShellCliCommand({
+        apiKey,
+        input: commandInput.value,
+        mode: executionMode,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
   const executePowerShellCommand = currentScript
     ? buildExecutePowerShellCommand({
         apiKey,
@@ -412,18 +438,21 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     { key: "detail-http-bash", family: "HTTP", environment: "bash/zsh", command: detailCurlCommand },
     { key: "detail-http-powershell", family: "HTTP", environment: "PowerShell", command: detailPowerShellCommand },
     { key: "detail-cli-bash", family: "CLI", environment: "bash/zsh", command: detailCliCommand },
+    { key: "detail-cli-powershell", family: "CLI", environment: "PowerShell", command: detailPowerShellCliCommand },
     { key: "detail-cli-cmd", family: "CLI", environment: "cmd", command: detailCmdCliCommand }
   ]);
   const executeCommandPresets = buildCommandPresets([
     { key: "execute-http-bash", family: "HTTP", environment: "bash/zsh", command: executeCurlCommand },
     { key: "execute-http-powershell", family: "HTTP", environment: "PowerShell", command: executePowerShellCommand },
     { key: "execute-cli-bash", family: "CLI", environment: "bash/zsh", command: executeCliCommand },
+    { key: "execute-cli-powershell", family: "CLI", environment: "PowerShell", command: executePowerShellCliCommand },
     { key: "execute-cli-cmd", family: "CLI", environment: "cmd", command: executeCmdCliCommand }
   ]);
   const schemaCommandPresets = buildCommandPresets([
     { key: "schema-http-bash", family: "HTTP", environment: "bash/zsh", command: toolDetailCurlCommand },
     { key: "schema-http-powershell", family: "HTTP", environment: "PowerShell", command: toolDetailPowerShellCommand },
     { key: "schema-cli-bash", family: "CLI", environment: "bash/zsh", command: toolDetailCliCommand },
+    { key: "schema-cli-powershell", family: "CLI", environment: "PowerShell", command: toolDetailPowerShellCliCommand },
     { key: "schema-cli-cmd", family: "CLI", environment: "cmd", command: toolDetailCmdCliCommand }
   ]);
   const toolContractResponseExample = currentScript

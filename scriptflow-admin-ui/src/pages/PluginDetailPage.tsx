@@ -48,6 +48,7 @@ import {
   buildExecutionInputFromValues,
   buildPluginInvokeCliCommand,
   buildPluginInvokeCmdCliCommand,
+  buildPluginInvokePowerShellCliCommand,
   buildPluginInvokeCurlCommand,
   buildPluginInvokePowerShellCommand,
   getCommandInputSourceLabel,
@@ -416,6 +417,18 @@ export function PluginDetailPage() {
           responseView: "RESULT"
         })
       : "";
+  const invokePowerShellCliCommand =
+    plugin && currentAction
+      ? buildPluginInvokePowerShellCliCommand({
+          apiKey,
+          origin,
+          pluginId: plugin.pluginId,
+          action: currentAction.action,
+          args: commandArgsInput.value,
+          scriptInput: commandScriptInput.value,
+          responseView: "RESULT"
+        })
+      : "";
   const invokePowerShellCommand =
     plugin && currentAction
       ? buildPluginInvokePowerShellCommand({
@@ -432,6 +445,7 @@ export function PluginDetailPage() {
     { key: "invoke-http-bash", family: "HTTP", environment: "bash/zsh", command: invokeCurlCommand },
     { key: "invoke-http-powershell", family: "HTTP", environment: "PowerShell", command: invokePowerShellCommand },
     { key: "invoke-cli-bash", family: "CLI", environment: "bash/zsh", command: invokeCliCommand },
+    { key: "invoke-cli-powershell", family: "CLI", environment: "PowerShell", command: invokePowerShellCliCommand },
     { key: "invoke-cli-cmd", family: "CLI", environment: "cmd", command: invokeCmdCliCommand }
   ]);
   if (loading && !plugin) {

@@ -148,6 +148,39 @@ function buildCmdCliCommandPrefix({
   return parts;
 }
 
+function buildPowerShellCliArgumentParts({
+  apiKey,
+  origin
+}: {
+  apiKey?: string;
+  origin: string;
+}): string[] {
+  const parts = [
+    "-jar scriptflow-cli.jar",
+    `--base-url ${cmdQuote(origin)}`
+  ];
+  if (apiKey) {
+    parts.push(`--token ${cmdQuote(apiKey)}`);
+  }
+  return parts;
+}
+
+function buildPowerShellCliJsonVariableSection(variableName: string, payload: Record<string, unknown>): string {
+  return [
+    `${variableName} = @'`,
+    JSON.stringify(payload, null, 2),
+    `'@ | ConvertFrom-Json | ConvertTo-Json -Compress`
+  ].join("\n");
+}
+
+function buildPowerShellCliEscapedVariableSection(variableName: string, escapedVariableName: string): string {
+  return `${escapedVariableName} = ${variableName}.Replace('"', '\\"')`;
+}
+
+function buildPowerShellCliStartProcessSection(argLineExpression: string): string {
+  return [`$argLine = ${argLineExpression}`, "Start-Process java -ArgumentList $argLine -Wait -NoNewWindow"].join("\n\n");
+}
+
 export function buildExecutionInputFromValues(
   fields: SchemaFieldDefinition[],
   values: Record<string, unknown> | undefined
@@ -379,6 +412,20 @@ export function buildScriptDetailCmdCliCommand({
   return joinSingleLineCommand(parts);
 }
 
+export function buildScriptDetailPowerShellCliCommand({
+  apiKey,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  origin: string;
+  scriptId: string;
+}): string {
+  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
+  parts.push("scripts", "get", cmdQuote(scriptId));
+  return buildPowerShellCliStartProcessSection(powerShellQuote(joinSingleLineCommand(parts)));
+}
+
 export function buildToolDetailCurlCommand({
   apiKey,
   origin,
@@ -438,6 +485,20 @@ export function buildToolDetailCmdCliCommand({
   const parts = buildCmdCliCommandPrefix({ apiKey, origin });
   parts.push("scripts", "schema", cmdQuote(scriptId));
   return joinSingleLineCommand(parts);
+}
+
+export function buildToolDetailPowerShellCliCommand({
+  apiKey,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  origin: string;
+  scriptId: string;
+}): string {
+  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
+  parts.push("scripts", "schema", cmdQuote(scriptId));
+  return buildPowerShellCliStartProcessSection(powerShellQuote(joinSingleLineCommand(parts)));
 }
 
 export function buildExecuteCurlCommand({
@@ -544,6 +605,38 @@ export function buildExecuteCmdCliCommand({
     mode
   );
   return joinSingleLineCommand(parts);
+}
+
+export function buildExecutePowerShellCliCommand({
+  apiKey,
+  input,
+  mode,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  input: Record<string, unknown>;
+  mode: SubmitMode;
+  origin: string;
+  scriptId: string;
+}): string {
+  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
+  const prefix = `${joinSingleLineCommand([
+    ...parts,
+    "executions",
+    "submit",
+    "--script-id",
+    cmdQuote(scriptId),
+    "--input"
+  ])} "`;
+  const suffix = `" --mode ${mode}`;
+  return joinPowerShellScript([
+    buildPowerShellCliJsonVariableSection("$json", input),
+    buildPowerShellCliEscapedVariableSection("$json", "$jsonEscaped"),
+    buildPowerShellCliStartProcessSection(
+      `${powerShellQuote(prefix)} + $jsonEscaped + ${powerShellQuote(suffix)}`
+    )
+  ]);
 }
 
 export function buildPluginInvokeCurlCommand({
@@ -668,4 +761,43 @@ export function buildPluginInvokeCmdCliCommand({
     responseView ?? "RESULT"
   );
   return joinSingleLineCommand(parts);
+}
+
+export function buildPluginInvokePowerShellCliCommand({
+  action,
+  apiKey,
+  args,
+  origin,
+  pluginId,
+  responseView,
+  scriptInput
+}: {
+  action: string;
+  apiKey?: string;
+  args: Record<string, unknown>;
+  origin: string;
+  pluginId: string;
+  responseView?: ExecutionResponseView;
+  scriptInput: Record<string, unknown>;
+}): string {
+  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
+  const prefix = `${joinSingleLineCommand([
+    ...parts,
+    "plugins",
+    "invoke",
+    cmdQuote(pluginId),
+    cmdQuote(action),
+    "--args"
+  ])} "`;
+  const middle = `" --script-input "`;
+  const suffix = `" --response-view ${responseView ?? "RESULT"}`;
+  return joinPowerShellScript([
+    buildPowerShellCliJsonVariableSection("$argsJson", args),
+    buildPowerShellCliEscapedVariableSection("$argsJson", "$argsJsonEscaped"),
+    buildPowerShellCliJsonVariableSection("$scriptInputJson", scriptInput),
+    buildPowerShellCliEscapedVariableSection("$scriptInputJson", "$scriptInputJsonEscaped"),
+    buildPowerShellCliStartProcessSection(
+      `${powerShellQuote(prefix)} + $argsJsonEscaped + ${powerShellQuote(middle)} + $scriptInputJsonEscaped + ${powerShellQuote(suffix)}`
+    )
+  ]);
 }
