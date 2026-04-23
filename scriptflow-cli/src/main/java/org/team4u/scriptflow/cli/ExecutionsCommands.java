@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "executions", mixinStandardHelpOptions = true, description = "执行记录的提交、查询和清理命令。", subcommands = {ExecutionsCommands.SubmitExecution.class, ExecutionsCommands.GetExecution.class, ExecutionsCommands.ListExecutions.class, ExecutionsCommands.DeleteExecution.class, ExecutionsCommands.ClearExecutions.class})
+@Command(name = "executions", mixinStandardHelpOptions = true, description = "Commands for submitting, querying, and clearing execution records.", subcommands = {ExecutionsCommands.SubmitExecution.class, ExecutionsCommands.GetExecution.class, ExecutionsCommands.ListExecutions.class, ExecutionsCommands.DeleteExecution.class, ExecutionsCommands.ClearExecutions.class})
 /**
  * 执行记录命令组，提供执行提交、查询和清理等子命令。
  *
@@ -35,45 +35,45 @@ class ExecutionsCommands implements Runnable {
     }
 
     @Command(name = "submit", mixinStandardHelpOptions = true, description = {
-            "提交一次脚本执行。",
-            "--script-id 指定要执行的当前脚本定义；这里走的是 /api/executions，不要求脚本已发布，因此会使用当前保存内容。",
-            "执行入参可通过 --input 或 --input-file 提供，二者只能选其一；顶层必须是 JSON 对象，不传时默认 {}。",
-            "--mode=SYNC/ASYNC 控制服务端提交模式；--wait 会在提交后按 executionId 轮询执行状态，直到状态不再是 PENDING/RUNNING 或超时。",
-            "--response-view=RESULT 返回业务结果，DEBUG 返回更完整的调试信息。"
+            "Submit a script execution.",
+            "--script-id selects the current saved script definition. This command calls /api/executions, so the script does not need to be published and the current saved content is used.",
+            "Execution input can be provided with --input or --input-file, but not both. The top level must be a JSON object. If omitted, {} is used.",
+            "--mode=SYNC/ASYNC controls the server-side submit mode. --wait polls execution status by executionId until it is no longer PENDING/RUNNING or until timeout.",
+            "--response-view=RESULT returns the business result. DEBUG returns more detailed debug information."
     })
     static class SubmitExecution implements Callable<Integer> {
         @ParentCommand
         ExecutionsCommands parent;
 
-        @Option(names = "--script-id", required = true, description = "要执行的脚本 ID。")
+        @Option(names = "--script-id", required = true, description = "Script ID to execute.")
         String scriptId;
 
-        @Option(names = "--input", description = "内联执行入参 JSON；顶层必须是 JSON 对象，和 --input-file 二选一。")
+        @Option(names = "--input", description = "Inline execution input JSON. The top level must be a JSON object. Mutually exclusive with --input-file.")
         String input;
 
-        @Option(names = "--input-file", description = "执行入参 JSON 文件路径；传 - 表示从 stdin 读取，和 --input 二选一。")
+        @Option(names = "--input-file", description = "Path to the execution input JSON file. Use - to read from stdin. Mutually exclusive with --input.")
         String inputFile;
 
-        @Option(names = "--mode", defaultValue = "SYNC", description = "服务端提交模式：${COMPLETION-CANDIDATES}；默认 ${DEFAULT-VALUE}。")
+        @Option(names = "--mode", defaultValue = "SYNC", description = "Server submit mode: ${COMPLETION-CANDIDATES}. Default: ${DEFAULT-VALUE}.")
         ScriptFlowCommand.SubmitModeOption mode;
 
-        @Option(names = "--response-view", defaultValue = "RESULT", description = "返回视图：${COMPLETION-CANDIDATES}；RESULT 返回业务结果，DEBUG 返回调试细节；默认 ${DEFAULT-VALUE}。")
+        @Option(names = "--response-view", defaultValue = "RESULT", description = "Response view: ${COMPLETION-CANDIDATES}. RESULT returns the business result, DEBUG returns debug details. Default: ${DEFAULT-VALUE}.")
         ScriptFlowCommand.ResponseViewOption responseView;
 
-        @Option(names = "--wait", description = "提交后等待执行结束；会轮询 /api/executions/{id}，而不是改变 --mode。")
+        @Option(names = "--wait", description = "Wait for execution completion after submission. This polls /api/executions/{id}; it does not change --mode.")
         boolean wait;
 
-        @Option(names = "--wait-timeout-seconds", defaultValue = "30", description = "等待执行结束的超时时间，单位秒；仅在 --wait 时生效；默认 ${DEFAULT-VALUE}。")
+        @Option(names = "--wait-timeout-seconds", defaultValue = "30", description = "Timeout for waiting on execution completion, in seconds. Only applies with --wait. Default: ${DEFAULT-VALUE}.")
         long waitTimeoutSeconds;
 
-        @Option(names = "--poll-interval-ms", defaultValue = "1000", description = "轮询 execution 状态的时间间隔，单位毫秒；仅在 --wait 时生效；默认 ${DEFAULT-VALUE}。")
+        @Option(names = "--poll-interval-ms", defaultValue = "1000", description = "Polling interval for execution status, in milliseconds. Only applies with --wait. Default: ${DEFAULT-VALUE}.")
         long pollIntervalMs;
 
         @Override
         public Integer call() {
             ScriptFlowCommand root = parent.root();
             ScriptFlowApiClient client = root.apiClient();
-            String resolvedInput = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), input, inputFile, "执行入参");
+            String resolvedInput = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), input, inputFile, "Execution input");
             String body = root.jsonObject(Map.of(
                     "scriptId", scriptId,
                     "input", JsonInputSupport.readTree(root.objectMapper(), root.output(), resolvedInput),
@@ -88,12 +88,12 @@ class ExecutionsCommands implements Runnable {
         }
     }
 
-    @Command(name = "get", mixinStandardHelpOptions = true, description = "获取单次执行的详情。")
+    @Command(name = "get", mixinStandardHelpOptions = true, description = "Get the details of a single execution.")
     static class GetExecution implements Callable<Integer> {
         @ParentCommand
         ExecutionsCommands parent;
 
-        @Parameters(index = "0", paramLabel = "<executionId>", description = "执行记录 ID。")
+        @Parameters(index = "0", paramLabel = "<executionId>", description = "Execution record ID.")
         String executionId;
 
         @Override
@@ -102,12 +102,12 @@ class ExecutionsCommands implements Runnable {
         }
     }
 
-    @Command(name = "list", mixinStandardHelpOptions = true, description = "列出执行记录；可通过 --script-id 只看某个脚本的执行历史。")
+    @Command(name = "list", mixinStandardHelpOptions = true, description = "List execution records. Use --script-id to filter by script.")
     static class ListExecutions implements Callable<Integer> {
         @ParentCommand
         ExecutionsCommands parent;
 
-        @Option(names = "--script-id", description = "按脚本 ID 过滤执行记录。")
+        @Option(names = "--script-id", description = "Filter execution records by script ID.")
         String scriptId;
 
         @Override
@@ -120,12 +120,12 @@ class ExecutionsCommands implements Runnable {
         }
     }
 
-    @Command(name = "delete", mixinStandardHelpOptions = true, description = "删除单条执行记录。")
+    @Command(name = "delete", mixinStandardHelpOptions = true, description = "Delete a single execution record.")
     static class DeleteExecution implements Callable<Integer> {
         @ParentCommand
         ExecutionsCommands parent;
 
-        @Parameters(index = "0", paramLabel = "<executionId>", description = "执行记录 ID。")
+        @Parameters(index = "0", paramLabel = "<executionId>", description = "Execution record ID.")
         String executionId;
 
         @Override
@@ -134,12 +134,12 @@ class ExecutionsCommands implements Runnable {
         }
     }
 
-    @Command(name = "clear", mixinStandardHelpOptions = true, description = "按脚本清空执行记录；服务端要求必须提供 --script-id，不支持不带条件地全量清空。")
+    @Command(name = "clear", mixinStandardHelpOptions = true, description = "Clear execution records for a script. The server requires --script-id and does not support unconditional full clearing.")
     static class ClearExecutions implements Callable<Integer> {
         @ParentCommand
         ExecutionsCommands parent;
 
-        @Option(names = "--script-id", description = "要清理执行记录的脚本 ID；服务端必填。")
+        @Option(names = "--script-id", description = "Script ID whose execution records should be cleared. Required by the server.")
         String scriptId;
 
         @Override

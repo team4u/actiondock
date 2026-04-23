@@ -21,7 +21,7 @@ public final class ScriptFlowCliApplication {
                 cliException.writeTo(output);
                 return cliException.exitCode();
             }
-            CliException cliException = CliException.transport(output, exception.getMessage() == null ? "命令执行失败" : exception.getMessage());
+            CliException cliException = CliException.transport(output, exception.getMessage() == null ? "Command execution failed" : exception.getMessage());
             cliException.writeTo(output);
             return cliException.exitCode();
         });

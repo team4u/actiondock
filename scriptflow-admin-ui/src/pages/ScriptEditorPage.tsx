@@ -65,11 +65,17 @@ import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import {
   buildExecuteCliCommand,
+  buildExecuteCmdCliCommand,
+  buildExecutePowerShellCliCommand,
   buildExecuteCurlCommand,
   buildExecutionInputFromValues,
   buildScriptDetailCliCommand,
+  buildScriptDetailCmdCliCommand,
+  buildScriptDetailPowerShellCliCommand,
   buildScriptDetailCurlCommand,
   buildToolDetailCliCommand,
+  buildToolDetailCmdCliCommand,
+  buildToolDetailPowerShellCliCommand,
   buildToolDetailCurlCommand,
   resolveExecutionCommandInput
 } from "../commands";
@@ -298,6 +304,20 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const detailPowerShellCliCommand = currentScript
+    ? buildScriptDetailPowerShellCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const detailCmdCliCommand = currentScript
+    ? buildScriptDetailCmdCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
   const toolDetailCurlCommand = currentScript
     ? buildToolDetailCurlCommand({
         apiKey,
@@ -307,6 +327,20 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     : "";
   const toolDetailCliCommand = currentScript
     ? buildToolDetailCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const toolDetailPowerShellCliCommand = currentScript
+    ? buildToolDetailPowerShellCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const toolDetailCmdCliCommand = currentScript
+    ? buildToolDetailCmdCliCommand({
         apiKey,
         origin,
         scriptId: currentScript.id
@@ -323,6 +357,24 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     : "";
   const executeCliCommand = currentScript
     ? buildExecuteCliCommand({
+        apiKey,
+        input: commandInput.value,
+        mode: executionMode,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const executePowerShellCliCommand = currentScript
+    ? buildExecutePowerShellCliCommand({
+        apiKey,
+        input: commandInput.value,
+        mode: executionMode,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const executeCmdCliCommand = currentScript
+    ? buildExecuteCmdCliCommand({
         apiKey,
         input: commandInput.value,
         mode: executionMode,
@@ -1377,7 +1429,16 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                           key: "detail-cli",
                                           label: "CLI",
                                           title: "详情查询命令",
-                                          command: detailCliCommand
+                                          command: detailCliCommand,
+                                          variants: [
+                                            { key: "detail-cli-linux", label: "Linux/macOS", command: detailCliCommand },
+                                            {
+                                              key: "detail-cli-powershell",
+                                              label: "PowerShell",
+                                              command: detailPowerShellCliCommand
+                                            },
+                                            { key: "detail-cli-cmd", label: "cmd", command: detailCmdCliCommand }
+                                          ]
                                         }
                                       ]}
                                       onCopy={(command) => void handleCopyCommand(command)}
@@ -1418,7 +1479,16 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                           key: "execute-cli",
                                           label: "CLI",
                                           title: "执行脚本命令",
-                                          command: executeCliCommand
+                                          command: executeCliCommand,
+                                          variants: [
+                                            { key: "execute-cli-linux", label: "Linux/macOS", command: executeCliCommand },
+                                            {
+                                              key: "execute-cli-powershell",
+                                              label: "PowerShell",
+                                              command: executePowerShellCliCommand
+                                            },
+                                            { key: "execute-cli-cmd", label: "cmd", command: executeCmdCliCommand }
+                                          ]
                                         }
                                       ]}
                                       onCopy={(command) => void handleCopyCommand(command)}
@@ -1446,7 +1516,16 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                                 key: "schema-cli",
                                                 label: "CLI",
                                                 title: "获取 Schema 命令",
-                                                command: toolDetailCliCommand
+                                                command: toolDetailCliCommand,
+                                                variants: [
+                                                  { key: "schema-cli-linux", label: "Linux/macOS", command: toolDetailCliCommand },
+                                                  {
+                                                    key: "schema-cli-powershell",
+                                                    label: "PowerShell",
+                                                    command: toolDetailPowerShellCliCommand
+                                                  },
+                                                  { key: "schema-cli-cmd", label: "cmd", command: toolDetailCmdCliCommand }
+                                                ]
                                               }
                                             ]}
                                             onCopy={(command) => void handleCopyCommand(command)}

@@ -27,7 +27,7 @@ public final class CliOutput {
     }
 
     public ObjectNode success(JsonNode data) {
-        return envelope(0, "处理成功", data);
+        return envelope(0, "Success", data);
     }
 
     public ObjectNode success(JsonNode data, String message) {
@@ -66,7 +66,7 @@ public final class CliOutput {
         try {
             stream.println(objectMapper.writeValueAsString(value));
         } catch (Exception exception) {
-            throw new IllegalStateException("JSON 输出失败", exception);
+            throw new IllegalStateException("Failed to write JSON output", exception);
         }
     }
 }

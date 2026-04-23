@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   buildExecuteCliCommand,
+  buildExecuteCmdCliCommand,
+  buildExecutePowerShellCliCommand,
   buildPluginInvokeCliCommand,
+  buildPluginInvokeCmdCliCommand,
+  buildPluginInvokePowerShellCliCommand,
   buildScriptDetailCliCommand,
-  buildToolDetailCliCommand
+  buildScriptDetailCmdCliCommand,
+  buildScriptDetailPowerShellCliCommand,
+  buildToolDetailCliCommand,
+  buildToolDetailCmdCliCommand,
+  buildToolDetailPowerShellCliCommand
 } from "./commands";
 
 describe("CLI command builders", () => {
@@ -29,6 +37,46 @@ describe("CLI command builders", () => {
   --base-url 'http://localhost:8080' \\
   --token 'local-dev-key' \\
   scripts schema 'hello-groovy'`);
+
+    expect(
+      buildScriptDetailPowerShellCliCommand({
+        apiKey: "local-dev-key",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(
+      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' --token 'local-dev-key' scripts get 'hello-groovy'"
+    );
+
+    expect(
+      buildToolDetailCmdCliCommand({
+        apiKey: "local-dev-key",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(
+      'java -jar scriptflow-cli.jar --base-url "http://localhost:8080" --token "local-dev-key" scripts schema "hello-groovy"'
+    );
+
+    expect(
+      buildToolDetailPowerShellCliCommand({
+        apiKey: "local-dev-key",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(
+      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' --token 'local-dev-key' scripts schema 'hello-groovy'"
+    );
+
+    expect(
+      buildScriptDetailCmdCliCommand({
+        apiKey: "local-dev-key",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(
+      'java -jar scriptflow-cli.jar --base-url "http://localhost:8080" --token "local-dev-key" scripts get "hello-groovy"'
+    );
   });
 
   it("builds execution command with inline input", () => {
@@ -47,6 +95,30 @@ describe("CLI command builders", () => {
   --script-id 'hello-groovy' \\
   --input '{"name":"Alice"}' \\
   --mode ASYNC`);
+
+    expect(
+      buildExecutePowerShellCliCommand({
+        apiKey: "secret-token",
+        input: { name: "O'Reilly" },
+        mode: "ASYNC",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(
+      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' --token 'secret-token' executions submit --script-id 'hello-groovy' --input '{\"name\":\"O''Reilly\"}' --mode ASYNC"
+    );
+
+    expect(
+      buildExecuteCmdCliCommand({
+        apiKey: "secret-token",
+        input: { name: 'Alice "Ops"' },
+        mode: "ASYNC",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(
+      'java -jar scriptflow-cli.jar --base-url "http://localhost:8080" --token "secret-token" executions submit --script-id "hello-groovy" --input "{\\"name\\":\\"Alice \\\\\\"Ops\\\\\\"\\"}" --mode ASYNC'
+    );
   });
 
   it("builds plugin invoke command with args and script input", () => {
@@ -65,5 +137,31 @@ describe("CLI command builders", () => {
   --args '{"topic":"ops"}' \\
   --script-input '{"locale":"zh-CN"}' \\
   --response-view RESULT`);
+
+    expect(
+      buildPluginInvokePowerShellCliCommand({
+        action: "summarize",
+        args: { topic: "ops" },
+        origin: "http://localhost:8080",
+        pluginId: "plugin-a",
+        responseView: "RESULT",
+        scriptInput: { locale: "zh-CN" }
+      })
+    ).toBe(
+      "java -jar scriptflow-cli.jar --base-url 'http://localhost:8080' plugins invoke 'plugin-a' 'summarize' --args '{\"topic\":\"ops\"}' --script-input '{\"locale\":\"zh-CN\"}' --response-view RESULT"
+    );
+
+    expect(
+      buildPluginInvokeCmdCliCommand({
+        action: "summarize",
+        args: { topic: 'ops "night"' },
+        origin: "http://localhost:8080",
+        pluginId: "plugin-a",
+        responseView: "RESULT",
+        scriptInput: { locale: "zh-CN" }
+      })
+    ).toBe(
+      'java -jar scriptflow-cli.jar --base-url "http://localhost:8080" plugins invoke "plugin-a" "summarize" --args "{\\"topic\\":\\"ops \\\\\\"night\\\\\\"\\"}" --script-input "{\\"locale\\":\\"zh-CN\\"}" --response-view RESULT'
+    );
   });
 });

@@ -10,7 +10,7 @@ import picocli.CommandLine.Spec;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "schedules", mixinStandardHelpOptions = true, description = "定时任务的查询和维护命令。", subcommands = {
+@Command(name = "schedules", mixinStandardHelpOptions = true, description = "Commands for querying and maintaining schedules.", subcommands = {
         SchedulesCommands.ListSchedules.class, SchedulesCommands.GetSchedule.class, SchedulesCommands.CreateSchedule.class, SchedulesCommands.UpdateSchedule.class,
         SchedulesCommands.EnableSchedule.class, SchedulesCommands.DisableSchedule.class, SchedulesCommands.DeleteSchedule.class
 })
@@ -35,12 +35,12 @@ class SchedulesCommands implements Runnable {
         spec.commandLine().usage(root.services.stdout());
     }
 
-    @Command(name = "list", mixinStandardHelpOptions = true, description = "列出定时任务；带 --script-id 时只列出该脚本下的定时任务，不带则列出全部。")
+    @Command(name = "list", mixinStandardHelpOptions = true, description = "List schedules. With --script-id, only schedules for that script are returned; without it, all schedules are listed.")
     static class ListSchedules implements Callable<Integer> {
         @ParentCommand
         SchedulesCommands parent;
 
-        @Option(names = "--script-id", description = "只列出指定脚本下的定时任务。")
+        @Option(names = "--script-id", description = "Only list schedules for the specified script.")
         String scriptId;
 
         @Override
@@ -55,12 +55,12 @@ class SchedulesCommands implements Runnable {
         }
     }
 
-    @Command(name = "get", mixinStandardHelpOptions = true, description = "获取单个定时任务详情。")
+    @Command(name = "get", mixinStandardHelpOptions = true, description = "Get details for a single schedule.")
     static class GetSchedule implements Callable<Integer> {
         @ParentCommand
         SchedulesCommands parent;
 
-        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "定时任务 ID。")
+        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
         @Override
@@ -70,44 +70,44 @@ class SchedulesCommands implements Runnable {
     }
 
     @Command(name = "create", mixinStandardHelpOptions = true, description = {
-            "创建定时任务。",
-            "--file 必须提供定时任务请求体 JSON；顶层必须是 JSON 对象。",
-            "请求体走 /api/schedules，全局创建时必须包含 scriptId；常见字段还有 name、cronExpression、input、enabled。",
-            "--file=- 时从 stdin 读取。"
+            "Create a schedule.",
+            "--file is required and must provide the schedule request body as JSON with a JSON object at the top level.",
+            "The request is sent to /api/schedules. Global creation requires scriptId. Common fields include name, cronExpression, input, and enabled.",
+            "Use --file=- to read from stdin."
     })
     static class CreateSchedule implements Callable<Integer> {
         @ParentCommand
         SchedulesCommands parent;
 
-        @Option(names = "--file", required = true, description = "定时任务请求体 JSON 文件路径；传 - 表示从 stdin 读取。")
+        @Option(names = "--file", required = true, description = "Path to the schedule request body JSON file. Use - to read from stdin.")
         String filePath;
 
         @Override
         public Integer call() {
-            String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "定时任务请求体");
+            String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Schedule request body");
             return parent.root().emit(parent.root().apiClient().postJson("/api/schedules", Map.of(), body));
         }
     }
 
     @Command(name = "update", mixinStandardHelpOptions = true, description = {
-            "更新指定定时任务。",
-            "--file 必须提供定时任务请求体 JSON；顶层必须是 JSON 对象。",
-            "请求体仍需带 scriptId，且服务端不允许借此把定时任务改挂到别的脚本上。",
-            "--file=- 时从 stdin 读取。"
+            "Update a schedule.",
+            "--file is required and must provide the schedule request body as JSON with a JSON object at the top level.",
+            "The payload must still include scriptId, and the server does not allow moving a schedule to a different script through this request.",
+            "Use --file=- to read from stdin."
     })
     static class UpdateSchedule implements Callable<Integer> {
         @ParentCommand
         SchedulesCommands parent;
 
-        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "定时任务 ID。")
+        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
-        @Option(names = "--file", required = true, description = "定时任务请求体 JSON 文件路径；传 - 表示从 stdin 读取。")
+        @Option(names = "--file", required = true, description = "Path to the schedule request body JSON file. Use - to read from stdin.")
         String filePath;
 
         @Override
         public Integer call() {
-            String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "定时任务请求体");
+            String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Schedule request body");
             return parent.root().emit(parent.root().apiClient().putJson(
                     "/api/schedules/" + parent.root().encodePath(scheduleId),
                     Map.of(),
@@ -116,12 +116,12 @@ class SchedulesCommands implements Runnable {
         }
     }
 
-    @Command(name = "enable", mixinStandardHelpOptions = true, description = "启用指定定时任务。")
+    @Command(name = "enable", mixinStandardHelpOptions = true, description = "Enable a schedule.")
     static class EnableSchedule implements Callable<Integer> {
         @ParentCommand
         SchedulesCommands parent;
 
-        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "定时任务 ID。")
+        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
         @Override
@@ -130,12 +130,12 @@ class SchedulesCommands implements Runnable {
         }
     }
 
-    @Command(name = "disable", mixinStandardHelpOptions = true, description = "停用指定定时任务。")
+    @Command(name = "disable", mixinStandardHelpOptions = true, description = "Disable a schedule.")
     static class DisableSchedule implements Callable<Integer> {
         @ParentCommand
         SchedulesCommands parent;
 
-        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "定时任务 ID。")
+        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
         @Override
@@ -144,12 +144,12 @@ class SchedulesCommands implements Runnable {
         }
     }
 
-    @Command(name = "delete", mixinStandardHelpOptions = true, description = "删除指定定时任务。")
+    @Command(name = "delete", mixinStandardHelpOptions = true, description = "Delete a schedule.")
     static class DeleteSchedule implements Callable<Integer> {
         @ParentCommand
         SchedulesCommands parent;
 
-        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "定时任务 ID。")
+        @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
         @Override

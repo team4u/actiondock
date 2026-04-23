@@ -406,6 +406,13 @@ a {
   gap: 10px;
 }
 
+.command-panel__variants {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
 .plugin-action-reference + .plugin-action-reference {
   margin-top: 12px;
   padding-top: 12px;

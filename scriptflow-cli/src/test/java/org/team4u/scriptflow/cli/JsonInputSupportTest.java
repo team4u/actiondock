@@ -31,7 +31,7 @@ class JsonInputSupportTest {
                 """);
         CliOutput output = createOutput();
 
-        String normalized = JsonInputSupport.readRequiredJsonObject(output, objectMapper, jsonFile.toString(), "请求体");
+        String normalized = JsonInputSupport.readRequiredJsonObject(output, objectMapper, jsonFile.toString(), "Request body");
 
         assertThat(normalized).isEqualTo("{\"name\":\"demo\",\"enabled\":true}");
     }
@@ -42,7 +42,7 @@ class JsonInputSupportTest {
         InputStream originalIn = System.in;
         try {
             System.setIn(new ByteArrayInputStream("{\"name\":\"stdin\"}".getBytes()));
-            String normalized = JsonInputSupport.readRequiredJsonObject(output, objectMapper, "-", "请求体");
+            String normalized = JsonInputSupport.readRequiredJsonObject(output, objectMapper, "-", "Request body");
             assertThat(normalized).isEqualTo("{\"name\":\"stdin\"}");
         } finally {
             System.setIn(originalIn);
@@ -53,7 +53,7 @@ class JsonInputSupportTest {
     void rejectsNonObjectJson() {
         CliOutput output = createOutput();
 
-        assertThatThrownBy(() -> JsonInputSupport.readOptionalJsonObject(output, objectMapper, "[]", null, "执行入参"))
+        assertThatThrownBy(() -> JsonInputSupport.readOptionalJsonObject(output, objectMapper, "[]", null, "Execution input"))
                 .isInstanceOf(CliException.class)
                 .extracting("exitCode")
                 .isEqualTo(CliException.EXIT_VALIDATION);

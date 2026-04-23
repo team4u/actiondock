@@ -6,6 +6,11 @@ interface CommandTabItem {
   key: string;
   label: string;
   title: string;
+  variants?: Array<{
+    command: string;
+    key: string;
+    label: string;
+  }>;
 }
 
 export function CommandTabsPanel({
@@ -20,7 +25,7 @@ export function CommandTabsPanel({
       items={items.map((item) => ({
         key: item.key,
         label: item.label,
-        children: <CommandPanel title={item.title} command={item.command} onCopy={onCopy} />
+        children: <CommandPanel title={item.title} command={item.command} variants={item.variants} onCopy={onCopy} />
       }))}
     />
   );

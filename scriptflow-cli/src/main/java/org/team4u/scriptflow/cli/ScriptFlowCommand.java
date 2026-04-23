@@ -18,10 +18,10 @@ import java.util.concurrent.Callable;
         name = "scriptflow",
         mixinStandardHelpOptions = true,
         description = {
-                "ScriptFlow 的轻量 REST CLI。",
-                "连接配置优先级: 命令行参数 > 环境变量 > profile 文件 > 默认值。",
-                "环境变量: SCRIPTFLOW_PROFILE、SCRIPTFLOW_BASE_URL、SCRIPTFLOW_TOKEN。",
-                "默认 profile=default，baseUrl=http://localhost:8080，connectTimeoutMs=5000，readTimeoutMs=30000。"
+                "Lightweight REST CLI for ScriptFlow.",
+                "Connection config precedence: command-line flags > environment variables > profile file > defaults.",
+                "Environment variables: SCRIPTFLOW_PROFILE, SCRIPTFLOW_BASE_URL, SCRIPTFLOW_TOKEN.",
+                "Defaults: profile=default, baseUrl=http://localhost:8080, connectTimeoutMs=5000, readTimeoutMs=30000."
         },
         subcommands = {
                 ConfigCommands.class,
@@ -49,19 +49,19 @@ public class ScriptFlowCommand implements Runnable {
         DEBUG
     }
 
-    @Option(names = "--profile", description = "指定要使用的连接 profile；会覆盖环境变量和配置文件中的当前 profile。")
+    @Option(names = "--profile", description = "Profile to use for this command. Overrides the current profile from env vars and the config file.")
     String profile;
 
-    @Option(names = "--base-url", description = "ScriptFlow 服务根地址，例如 http://localhost:8080；会覆盖环境变量和 profile 配置。")
+    @Option(names = "--base-url", description = "ScriptFlow service base URL, for example http://localhost:8080. Overrides env vars and profile config.")
     String baseUrl;
 
-    @Option(names = "--token", description = "Bearer token；会覆盖环境变量和 profile 配置。")
+    @Option(names = "--token", description = "Bearer token. Overrides env vars and profile config.")
     String token;
 
-    @Option(names = "--connect-timeout-ms", description = "HTTP 连接超时时间，单位毫秒；默认 5000。")
+    @Option(names = "--connect-timeout-ms", description = "HTTP connect timeout in milliseconds. Default: 5000.")
     Integer connectTimeoutMs;
 
-    @Option(names = "--read-timeout-ms", description = "HTTP 读超时时间，单位毫秒；默认 30000。")
+    @Option(names = "--read-timeout-ms", description = "HTTP read timeout in milliseconds. Default: 30000.")
     Integer readTimeoutMs;
 
     @Spec
@@ -97,7 +97,7 @@ public class ScriptFlowCommand implements Runnable {
         try {
             return configService.load();
         } catch (UncheckedIOException exception) {
-            throw CliException.config(output, "CLI 配置文件解析失败");
+            throw CliException.config(output, "Failed to parse CLI config file");
         }
     }
 
@@ -105,7 +105,7 @@ public class ScriptFlowCommand implements Runnable {
         try {
             configService.save(file);
         } catch (UncheckedIOException exception) {
-            throw CliException.config(output, "CLI 配置文件保存失败");
+            throw CliException.config(output, "Failed to save CLI config file");
         }
     }
 
@@ -119,7 +119,7 @@ public class ScriptFlowCommand implements Runnable {
                     readTimeoutMs
             ));
         } catch (UncheckedIOException exception) {
-            throw CliException.config(output, "CLI 配置文件解析失败");
+            throw CliException.config(output, "Failed to parse CLI config file");
         }
     }
 
@@ -148,7 +148,7 @@ public class ScriptFlowCommand implements Runnable {
         try {
             return objectMapper().writeValueAsString(value);
         } catch (Exception exception) {
-            throw CliException.validation(output, "请求体 JSON 生成失败");
+            throw CliException.validation(output, "Failed to build request body JSON");
         }
     }
 
@@ -163,7 +163,7 @@ public class ScriptFlowCommand implements Runnable {
         JsonNode initialData = initialEnvelope.path("data");
         String executionId = textValue(initialData.path("id"));
         if (executionId == null) {
-            throw CliException.business(output, "服务端未返回 executionId");
+            throw CliException.business(output, "Server response did not include executionId");
         }
         String currentStatus = textValue(initialData.path("status"));
         if (isTerminalStatus(currentStatus)) {
@@ -177,7 +177,7 @@ public class ScriptFlowCommand implements Runnable {
                 services.sleeper().sleep(pollIntervalMs);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                throw CliException.transport(output, "等待执行结果时被中断");
+                throw CliException.transport(output, "Interrupted while waiting for execution result");
             }
             lastEnvelope = client.get("/api/executions/" + encodePath(executionId), Map.of());
             currentStatus = textValue(lastEnvelope.path("data").path("status"));
@@ -188,7 +188,7 @@ public class ScriptFlowCommand implements Runnable {
 
         throw CliException.timeout(
                 output,
-                "等待执行结果超时",
+                "Timed out while waiting for execution result",
                 objectMapper().valueToTree(Map.of(
                         "executionId", executionId,
                         "lastStatus", currentStatus,

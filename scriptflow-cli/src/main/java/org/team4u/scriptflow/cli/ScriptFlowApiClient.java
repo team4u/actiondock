@@ -81,28 +81,28 @@ public final class ScriptFlowApiClient {
             JsonNode parsed = parse(response.body());
             if (response.httpStatus() >= 200 && response.httpStatus() < 300) {
                 if (parsed == null) {
-                    throw CliException.transport(output, "服务端返回了非 JSON 响应");
+                    throw CliException.transport(output, "Server returned a non-JSON response");
                 }
                 return parsed;
             }
             if (response.httpStatus() == 401) {
                 if (parsed != null) {
-                    throw CliException.fromServer(CliException.EXIT_CONFIG, "API Key 无效或缺失", parsed);
+                    throw CliException.fromServer(CliException.EXIT_CONFIG, "API key is invalid or missing", parsed);
                 }
-                throw CliException.config(output, "API Key 无效或缺失");
+                throw CliException.config(output, "API key is invalid or missing");
             }
             if (parsed != null) {
-                throw CliException.fromServer(CliException.EXIT_BUSINESS, "服务端返回错误", parsed);
+                throw CliException.fromServer(CliException.EXIT_BUSINESS, "Server returned an error", parsed);
             }
             throw CliException.transport(
                     output,
-                    "HTTP 请求失败",
+                    "HTTP request failed",
                     objectMapper.valueToTree(Map.of("httpStatus", response.httpStatus(), "body", response.body()))
             );
         } catch (CliException exception) {
             throw exception;
         } catch (RestClientException exception) {
-            throw CliException.transport(output, "HTTP 请求失败: " + exception.getMessage());
+            throw CliException.transport(output, "HTTP request failed: " + exception.getMessage());
         }
     }
 

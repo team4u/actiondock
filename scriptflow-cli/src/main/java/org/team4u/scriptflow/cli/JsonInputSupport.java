@@ -20,7 +20,7 @@ public final class JsonInputSupport {
 
     public static String readRequiredJsonObject(CliOutput output, ObjectMapper objectMapper, String filePath, String label) {
         if (filePath == null || filePath.isBlank()) {
-            throw CliException.validation(output, label + " 文件不能为空");
+            throw CliException.validation(output, label + " file path must not be empty");
         }
         return normalizeJsonObject(output, objectMapper, readText(output, filePath, label), label);
     }
@@ -31,7 +31,7 @@ public final class JsonInputSupport {
                                                 String filePath,
                                                 String label) {
         if (hasText(inlineValue) && hasText(filePath)) {
-            throw CliException.validation(output, label + " 只能通过内联 JSON 或文件提供其一");
+            throw CliException.validation(output, label + " must be provided either as inline JSON or as a file, but not both");
         }
         if (hasText(inlineValue)) {
             return normalizeJsonObject(output, objectMapper, inlineValue, label);
@@ -44,13 +44,13 @@ public final class JsonInputSupport {
 
     public static byte[] readBinaryFile(CliOutput output, String filePath, String label) {
         if (!hasText(filePath)) {
-            throw CliException.validation(output, label + " 文件不能为空");
+            throw CliException.validation(output, label + " file path must not be empty");
         }
         Path path = Path.of(filePath);
         try {
             return Files.readAllBytes(path);
         } catch (IOException exception) {
-            throw CliException.validation(output, label + " 文件读取失败: " + path);
+            throw CliException.validation(output, "Failed to read " + label + " file: " + path);
         }
     }
 
@@ -61,7 +61,7 @@ public final class JsonInputSupport {
             }
             return Files.readString(Path.of(filePath), StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            throw CliException.validation(output, label + " 文件读取失败: " + filePath);
+            throw CliException.validation(output, "Failed to read " + label + " file: " + filePath);
         }
     }
 
@@ -69,13 +69,13 @@ public final class JsonInputSupport {
         try {
             JsonNode parsed = objectMapper.readTree(rawJson);
             if (!(parsed instanceof ObjectNode)) {
-                throw CliException.validation(output, label + " 顶层必须是 JSON 对象");
+                throw CliException.validation(output, label + " must be a JSON object at the top level");
             }
             return objectMapper.writeValueAsString(parsed);
         } catch (CliException exception) {
             throw exception;
         } catch (Exception exception) {
-            throw CliException.validation(output, label + " 不是合法 JSON");
+            throw CliException.validation(output, label + " is not valid JSON");
         }
     }
 
@@ -87,7 +87,7 @@ public final class JsonInputSupport {
         try {
             return objectMapper.readTree(json);
         } catch (Exception exception) {
-            throw CliException.validation(output, "请求体 JSON 解析失败");
+            throw CliException.validation(output, "Failed to parse request body JSON");
         }
     }
 }

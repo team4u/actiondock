@@ -47,7 +47,9 @@ import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecutionInputFromValues,
   buildPluginInvokeCliCommand,
+  buildPluginInvokeCmdCliCommand,
   buildPluginInvokeCurlCommand,
+  buildPluginInvokePowerShellCliCommand,
   getCommandInputSourceLabel,
   resolveCommandObjectInput
 } from "../commands";
@@ -402,6 +404,30 @@ export function PluginDetailPage() {
           responseView: "RESULT"
         })
       : "";
+  const invokePowerShellCliCommand =
+    plugin && currentAction
+      ? buildPluginInvokePowerShellCliCommand({
+          apiKey,
+          origin,
+          pluginId: plugin.pluginId,
+          action: currentAction.action,
+          args: commandArgsInput.value,
+          scriptInput: commandScriptInput.value,
+          responseView: "RESULT"
+        })
+      : "";
+  const invokeCmdCliCommand =
+    plugin && currentAction
+      ? buildPluginInvokeCmdCliCommand({
+          apiKey,
+          origin,
+          pluginId: plugin.pluginId,
+          action: currentAction.action,
+          args: commandArgsInput.value,
+          scriptInput: commandScriptInput.value,
+          responseView: "RESULT"
+        })
+      : "";
   if (loading && !plugin) {
     return (
       <div className="page-loading">
@@ -728,7 +754,16 @@ export function PluginDetailPage() {
                           key: "invoke-cli",
                           label: "CLI",
                           title: "调用动作命令",
-                          command: invokeCliCommand
+                          command: invokeCliCommand,
+                          variants: [
+                            { key: "invoke-cli-linux", label: "Linux/macOS", command: invokeCliCommand },
+                            {
+                              key: "invoke-cli-powershell",
+                              label: "PowerShell",
+                              command: invokePowerShellCliCommand
+                            },
+                            { key: "invoke-cli-cmd", label: "cmd", command: invokeCmdCliCommand }
+                          ]
                         }
                       ]}
                       onCopy={(command) => void handleCopyCommand(command)}

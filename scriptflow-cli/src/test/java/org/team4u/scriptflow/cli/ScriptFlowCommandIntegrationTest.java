@@ -48,7 +48,7 @@ class ScriptFlowCommandIntegrationTest {
         server.register("GET", "/api/scripts", request -> {
             requestRef.set(request);
             return Response.json(200, """
-                    {"status":0,"msg":"处理成功","data":[{"id":"hello"}]}
+                    {"status":0,"msg":"Success","data":[{"id":"hello"}]}
                     """);
         });
 
@@ -69,18 +69,18 @@ class ScriptFlowCommandIntegrationTest {
         server.register("POST", "/api/executions", request -> {
             submitRef.set(request);
             return Response.json(200, """
-                    {"status":0,"msg":"已受理","data":{"id":"exec-1","status":"PENDING"}}
+                    {"status":0,"msg":"Accepted","data":{"id":"exec-1","status":"PENDING"}}
                     """);
         });
         server.register("GET", "/api/executions/exec-1", request -> {
             int current = pollCount.incrementAndGet();
             if (current == 1) {
                 return Response.json(200, """
-                        {"status":0,"msg":"处理成功","data":{"id":"exec-1","status":"RUNNING"}}
+                        {"status":0,"msg":"Success","data":{"id":"exec-1","status":"RUNNING"}}
                         """);
             }
             return Response.json(200, """
-                    {"status":0,"msg":"处理成功","data":{"id":"exec-1","status":"SUCCESS","output":{"ok":true}}}
+                    {"status":0,"msg":"Success","data":{"id":"exec-1","status":"SUCCESS","output":{"ok":true}}}
                     """);
         });
 
@@ -107,7 +107,7 @@ class ScriptFlowCommandIntegrationTest {
         server.register("POST", "/api/plugins/install", request -> {
             requestRef.set(request);
             return Response.json(200, """
-                    {"status":0,"msg":"插件安装成功","data":{"pluginId":"demo"}}
+                    {"status":0,"msg":"Plugin installed","data":{"pluginId":"demo"}}
                     """);
         });
 
@@ -128,7 +128,7 @@ class ScriptFlowCommandIntegrationTest {
         server.register("GET", "/api/scripts/hello/schedules", request -> {
             requestRef.set(request);
             return Response.json(200, """
-                    {"status":0,"msg":"处理成功","data":[{"id":"s1"}]}
+                    {"status":0,"msg":"Success","data":[{"id":"s1"}]}
                     """);
         });
 
@@ -148,7 +148,7 @@ class ScriptFlowCommandIntegrationTest {
         assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
         JsonNode stderrJson = parseJson(result.stderr());
         assertThat(stderrJson.path("status").asInt()).isEqualTo(CliException.EXIT_VALIDATION);
-        assertThat(stderrJson.path("msg").asText()).contains("顶层必须是 JSON 对象");
+        assertThat(stderrJson.path("msg").asText()).contains("must be a JSON object at the top level");
     }
 
     @Test
@@ -156,7 +156,8 @@ class ScriptFlowCommandIntegrationTest {
         ExecutionResult result = execute("--help");
 
         assertThat(result.exitCode()).isEqualTo(0);
-        assertThat(result.stdout()).contains("连接配置优先级: 命令行参数 > 环境变量 > profile 文件 > 默认值");
+        assertThat(result.stdout()).contains("Connection config precedence");
+        assertThat(result.stdout()).contains("profile file > defaults");
         assertThat(result.stdout()).contains("SCRIPTFLOW_PROFILE");
         assertThat(result.stdout()).contains("http://localhost:8080");
     }
@@ -167,12 +168,17 @@ class ScriptFlowCommandIntegrationTest {
         ExecutionResult clearHelp = execute("executions", "clear", "--help");
 
         assertThat(submitHelp.exitCode()).isEqualTo(0);
-        assertThat(submitHelp.stdout()).contains("这里走的是 /api/executions");
-        assertThat(submitHelp.stdout()).contains("会使用当前保存内容");
-        assertThat(submitHelp.stdout()).contains("提交后等待执行结束；会轮询 /api/executions/{id}");
+        assertThat(submitHelp.stdout()).contains("This command calls");
+        assertThat(submitHelp.stdout()).contains("/api/executions");
+        assertThat(submitHelp.stdout()).contains("current");
+        assertThat(submitHelp.stdout()).contains("saved content is used");
+        assertThat(submitHelp.stdout()).contains("polls /api/executions/{id}");
+        assertThat(submitHelp.stdout()).contains("it does not change --mode");
         assertThat(clearHelp.exitCode()).isEqualTo(0);
-        assertThat(clearHelp.stdout()).contains("服务端要求必须提供 --script-id，不支持不带条件地全量清空");
-        assertThat(clearHelp.stdout()).contains("要清理执行记录的脚本 ID；服务端必填");
+        assertThat(clearHelp.stdout()).contains("The server requires --script-id");
+        assertThat(clearHelp.stdout()).contains("unconditional full clearing");
+        assertThat(clearHelp.stdout()).contains("Script ID whose execution records should be cleared");
+        assertThat(clearHelp.stdout()).contains("Required");
     }
 
     @Test
@@ -182,11 +188,13 @@ class ScriptFlowCommandIntegrationTest {
         ExecutionResult scheduleUpdateHelp = execute("schedules", "update", "--help");
 
         assertThat(executePublishedHelp.exitCode()).isEqualTo(0);
-        assertThat(executePublishedHelp.stdout()).contains("执行指定脚本的已发布版本，不会使用当前未发布修改");
+        assertThat(executePublishedHelp.stdout()).contains("Execute the published version of a script");
+        assertThat(executePublishedHelp.stdout()).contains("ignore any current unpublished");
         assertThat(discardDraftHelp.exitCode()).isEqualTo(0);
-        assertThat(discardDraftHelp.stdout()).contains("该命令要求脚本已经存在已发布版本");
+        assertThat(discardDraftHelp.stdout()).contains("requires the script to already have a published version");
         assertThat(scheduleUpdateHelp.exitCode()).isEqualTo(0);
-        assertThat(scheduleUpdateHelp.stdout()).contains("请求体仍需带 scriptId，且服务端不允许借此把定时任务改挂到别的脚本上");
+        assertThat(scheduleUpdateHelp.stdout()).contains("the server does not allow moving");
+        assertThat(scheduleUpdateHelp.stdout()).contains("schedule to a different script");
     }
 
     @Test
@@ -195,11 +203,12 @@ class ScriptFlowCommandIntegrationTest {
         ExecutionResult configSetHelp = execute("plugins", "config", "set", "--help");
 
         assertThat(invokeHelp.exitCode()).isEqualTo(0);
-        assertThat(invokeHelp.stdout()).contains("会额外返回 debug 区块");
-        assertThat(invokeHelp.stdout()).contains("原始 args");
+        assertThat(invokeHelp.stdout()).contains("additionally returns");
+        assertThat(invokeHelp.stdout()).contains("debug block");
+        assertThat(invokeHelp.stdout()).contains("raw args");
         assertThat(invokeHelp.stdout()).contains("scriptInput");
         assertThat(configSetHelp.exitCode()).isEqualTo(0);
-        assertThat(configSetHelp.stdout()).contains("顶层包含 config 字");
+        assertThat(configSetHelp.stdout()).contains("top level contains a config field");
         assertThat(configSetHelp.stdout()).contains("{\"config\":{...}}");
     }
 
@@ -232,7 +241,7 @@ class ScriptFlowCommandIntegrationTest {
                 cliException.writeTo(output);
                 return cliException.exitCode();
             }
-            CliException cliException = CliException.transport(output, exception.getMessage() == null ? "命令执行失败" : exception.getMessage());
+            CliException cliException = CliException.transport(output, exception.getMessage() == null ? "Command execution failed" : exception.getMessage());
             cliException.writeTo(output);
             return cliException.exitCode();
         });
