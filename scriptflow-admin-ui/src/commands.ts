@@ -20,6 +20,27 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
+function joinCommandLines(lines: string[]): string {
+  return lines.join(" \\\n");
+}
+
+function buildCliCommandPrefix({
+  apiKey,
+  origin
+}: {
+  apiKey?: string;
+  origin: string;
+}): string[] {
+  const lines = [
+    "java -jar scriptflow-cli.jar",
+    `  --base-url ${shellQuote(origin)}`
+  ];
+  if (apiKey) {
+    lines.push(`  --token ${shellQuote(apiKey)}`);
+  }
+  return lines;
+}
+
 export function buildExecutionInputFromValues(
   fields: SchemaFieldDefinition[],
   values: Record<string, unknown> | undefined
@@ -204,7 +225,21 @@ export function buildScriptDetailCurlCommand({
     lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
   }
   lines.push(`  ${shellQuote(`${origin}/api/scripts/${scriptId}`)}`);
-  return lines.join(" \\\n");
+  return joinCommandLines(lines);
+}
+
+export function buildScriptDetailCliCommand({
+  apiKey,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  origin: string;
+  scriptId: string;
+}): string {
+  const lines = buildCliCommandPrefix({ apiKey, origin });
+  lines.push(`  scripts get ${shellQuote(scriptId)}`);
+  return joinCommandLines(lines);
 }
 
 export function buildToolDetailCurlCommand({
@@ -221,7 +256,21 @@ export function buildToolDetailCurlCommand({
     lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
   }
   lines.push(`  ${shellQuote(`${origin}/api/schema/${scriptId}`)}`);
-  return lines.join(" \\\n");
+  return joinCommandLines(lines);
+}
+
+export function buildToolDetailCliCommand({
+  apiKey,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  origin: string;
+  scriptId: string;
+}): string {
+  const lines = buildCliCommandPrefix({ apiKey, origin });
+  lines.push(`  scripts schema ${shellQuote(scriptId)}`);
+  return joinCommandLines(lines);
 }
 
 export function buildExecuteCurlCommand({
@@ -254,7 +303,28 @@ export function buildExecuteCurlCommand({
     )}`
   );
   lines.push(`  ${shellQuote(`${origin}/api/executions`)}`);
-  return lines.join(" \\\n");
+  return joinCommandLines(lines);
+}
+
+export function buildExecuteCliCommand({
+  apiKey,
+  input,
+  mode,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  input: Record<string, unknown>;
+  mode: SubmitMode;
+  origin: string;
+  scriptId: string;
+}): string {
+  const lines = buildCliCommandPrefix({ apiKey, origin });
+  lines.push("  executions submit");
+  lines.push(`  --script-id ${shellQuote(scriptId)}`);
+  lines.push(`  --input ${shellQuote(JSON.stringify(input))}`);
+  lines.push(`  --mode ${mode}`);
+  return joinCommandLines(lines);
 }
 
 export function buildPluginInvokeCurlCommand({
@@ -291,5 +361,30 @@ export function buildPluginInvokeCurlCommand({
     )}`
   );
   lines.push(`  ${shellQuote(`${origin}/api/plugins/${pluginId}/actions/${action}/invoke`)}`);
-  return lines.join(" \\\n");
+  return joinCommandLines(lines);
+}
+
+export function buildPluginInvokeCliCommand({
+  action,
+  apiKey,
+  args,
+  origin,
+  pluginId,
+  responseView,
+  scriptInput
+}: {
+  action: string;
+  apiKey?: string;
+  args: Record<string, unknown>;
+  origin: string;
+  pluginId: string;
+  responseView?: ExecutionResponseView;
+  scriptInput: Record<string, unknown>;
+}): string {
+  const lines = buildCliCommandPrefix({ apiKey, origin });
+  lines.push(`  plugins invoke ${shellQuote(pluginId)} ${shellQuote(action)}`);
+  lines.push(`  --args ${shellQuote(JSON.stringify(args))}`);
+  lines.push(`  --script-input ${shellQuote(JSON.stringify(scriptInput))}`);
+  lines.push(`  --response-view ${responseView ?? "RESULT"}`);
+  return joinCommandLines(lines);
 }

@@ -57,16 +57,19 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
-import { CommandPanel } from "../components/CommandPanel";
+import { CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { InfoHint } from "../components/InfoHint";
 import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import {
+  buildExecuteCliCommand,
   buildExecuteCurlCommand,
   buildExecutionInputFromValues,
+  buildScriptDetailCliCommand,
   buildScriptDetailCurlCommand,
+  buildToolDetailCliCommand,
   buildToolDetailCurlCommand,
   resolveExecutionCommandInput
 } from "../commands";
@@ -288,6 +291,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const detailCliCommand = currentScript
+    ? buildScriptDetailCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
   const toolDetailCurlCommand = currentScript
     ? buildToolDetailCurlCommand({
         apiKey,
@@ -295,8 +305,24 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const toolDetailCliCommand = currentScript
+    ? buildToolDetailCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
   const executeCurlCommand = currentScript
     ? buildExecuteCurlCommand({
+        apiKey,
+        input: commandInput.value,
+        mode: executionMode,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const executeCliCommand = currentScript
+    ? buildExecuteCliCommand({
         apiKey,
         input: commandInput.value,
         mode: executionMode,
@@ -1323,11 +1349,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       children: (
                         <Space direction="vertical" size={16} style={{ width: "100%" }}>
                           <InfoHint
-                            label="可直接执行的 REST API 命令"
+                            label="可直接执行的 REST API / CLI 命令"
                             content={
                               apiKey
-                                ? `REST 命令已使用当前页面 origin ${origin} 并自动附带 Authorization 头。`
-                                : `REST 命令已使用当前页面 origin ${origin}；当前未设置 API Key，因此不会附带 Authorization 头。`
+                                ? `命令已使用当前页面 origin ${origin}；cURL 会附带 Authorization 头，CLI 会附带 --token。`
+                                : `命令已使用当前页面 origin ${origin}；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
                             }
                           />
 
@@ -1339,9 +1365,21 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 children: (
                                   <Space direction="vertical" size={12} style={{ width: "100%" }}>
                                     <Text type="secondary">使用当前脚本 ID 生成</Text>
-                                    <CommandPanel
-                                      title="详情查询 cURL"
-                                      command={detailCurlCommand}
+                                    <CommandTabsPanel
+                                      items={[
+                                        {
+                                          key: "detail-curl-linux",
+                                          label: "cURL",
+                                          title: "详情查询命令",
+                                          command: detailCurlCommand
+                                        },
+                                        {
+                                          key: "detail-cli",
+                                          label: "CLI",
+                                          title: "详情查询命令",
+                                          command: detailCliCommand
+                                        }
+                                      ]}
                                       onCopy={(command) => void handleCopyCommand(command)}
                                     />
                                   </Space>
@@ -1368,9 +1406,21 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                         {getCommandInputSourceLabel(commandInput.source)}
                                       </Descriptions.Item>
                                     </Descriptions>
-                                    <CommandPanel
-                                      title="执行脚本 cURL"
-                                      command={executeCurlCommand}
+                                    <CommandTabsPanel
+                                      items={[
+                                        {
+                                          key: "execute-curl-linux",
+                                          label: "cURL",
+                                          title: "执行脚本命令",
+                                          command: executeCurlCommand
+                                        },
+                                        {
+                                          key: "execute-cli",
+                                          label: "CLI",
+                                          title: "执行脚本命令",
+                                          command: executeCliCommand
+                                        }
+                                      ]}
                                       onCopy={(command) => void handleCopyCommand(command)}
                                     />
                                   </Space>
@@ -1384,9 +1434,21 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       children: (
                                         <Space direction="vertical" size={16} style={{ width: "100%" }}>
                                           <Text type="secondary">供模型与调用方查看输入输出定义</Text>
-                                          <CommandPanel
-                                            title="获取 Schema cURL"
-                                            command={toolDetailCurlCommand}
+                                          <CommandTabsPanel
+                                            items={[
+                                              {
+                                                key: "schema-curl-linux",
+                                                label: "cURL",
+                                                title: "获取 Schema 命令",
+                                                command: toolDetailCurlCommand
+                                              },
+                                              {
+                                                key: "schema-cli",
+                                                label: "CLI",
+                                                title: "获取 Schema 命令",
+                                                command: toolDetailCliCommand
+                                              }
+                                            ]}
                                             onCopy={(command) => void handleCopyCommand(command)}
                                           />
 

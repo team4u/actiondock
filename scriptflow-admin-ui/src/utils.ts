@@ -73,3 +73,7 @@ export async function copyText(value: string): Promise<void> {
     document.body.removeChild(textarea);
   }
 }
+
+export function toSingleLineCommand(value: string): string {
+  return value.replace(/ \\\n\s*/g, " ").trim();
+}

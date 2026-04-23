@@ -38,7 +38,7 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
-import { CommandPanel } from "../components/CommandPanel";
+import { CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
 import { SchemaFieldList } from "../components/SchemaFieldList";
@@ -46,6 +46,7 @@ import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/S
 import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecutionInputFromValues,
+  buildPluginInvokeCliCommand,
   buildPluginInvokeCurlCommand,
   getCommandInputSourceLabel,
   resolveCommandObjectInput
@@ -389,6 +390,18 @@ export function PluginDetailPage() {
           responseView: "RESULT"
         })
       : "";
+  const invokeCliCommand =
+    plugin && currentAction
+      ? buildPluginInvokeCliCommand({
+          apiKey,
+          origin,
+          pluginId: plugin.pluginId,
+          action: currentAction.action,
+          args: commandArgsInput.value,
+          scriptInput: commandScriptInput.value,
+          responseView: "RESULT"
+        })
+      : "";
   if (loading && !plugin) {
     return (
       <div className="page-loading">
@@ -689,8 +702,8 @@ export function PluginDetailPage() {
                       label="调用命令会跟随当前动作和调试入参变化"
                       content={
                         apiKey
-                          ? `REST 命令已使用当前页面 origin ${origin} 并自动附带 Authorization 头。`
-                          : `REST 命令已使用当前页面 origin ${origin}；当前未设置 API Key，因此不会附带 Authorization 头。`
+                          ? `命令已使用当前页面 origin ${origin}；cURL 会附带 Authorization 头，CLI 会附带 --token。`
+                          : `命令已使用当前页面 origin ${origin}；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
                       }
                     />
                     {commandArgsInput.note ? <Alert type="info" showIcon message={commandArgsInput.note} /> : null}
@@ -703,9 +716,21 @@ export function PluginDetailPage() {
                         脚本输入来源：{commandScriptInput.source === "current-json" ? "当前 JSON 输入" : "空对象"}
                       </Text>
                     </Space>
-                    <CommandPanel
-                      title="调用动作 cURL"
-                      command={invokeCurlCommand}
+                    <CommandTabsPanel
+                      items={[
+                        {
+                          key: "invoke-curl-linux",
+                          label: "cURL",
+                          title: "调用动作命令",
+                          command: invokeCurlCommand
+                        },
+                        {
+                          key: "invoke-cli",
+                          label: "CLI",
+                          title: "调用动作命令",
+                          command: invokeCliCommand
+                        }
+                      ]}
                       onCopy={(command) => void handleCopyCommand(command)}
                     />
                   </Space>
