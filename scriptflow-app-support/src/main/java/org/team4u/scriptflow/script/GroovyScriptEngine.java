@@ -9,7 +9,6 @@ import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
-import org.team4u.scriptflow.plugin.GroovyPluginCallAnalyzer;
 import org.team4u.scriptflow.plugin.GroovyPlugins;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
 
@@ -19,7 +18,6 @@ import java.util.Map;
 public class GroovyScriptEngine implements ScriptEngine {
     private final CompiledGroovyScriptCache compiledScriptCache;
     private final PluginRuntimeService pluginRuntimeService;
-    private final GroovyPluginCallAnalyzer pluginCallAnalyzer = new GroovyPluginCallAnalyzer();
 
     public GroovyScriptEngine() {
         this(new AppProperties.Groovy(), PluginRuntimeService.disabled());
@@ -36,8 +34,6 @@ public class GroovyScriptEngine implements ScriptEngine {
 
     @Override
     public void validate(ScriptDefinition definition) {
-        pluginCallAnalyzer.findCalls(definition.getSource()).forEach(call ->
-                pluginRuntimeService.assertActionAvailable(call.pluginId(), call.action()));
         compiledScriptCache.getOrCompile(definition.getSource());
     }
 
