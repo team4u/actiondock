@@ -1,4 +1,5 @@
 import {
+  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
@@ -12,6 +13,7 @@ import {
   Empty,
   Form,
   Input,
+  List,
   Popconfirm,
   Space,
   Table,
@@ -29,7 +31,7 @@ import {
   updateConfigValue
 } from "../api";
 import type { ConfigValue, ConfigValueRequest } from "../types";
-import { formatDateTime, getErrorMessage } from "../utils";
+import { copyText, formatDateTime, getErrorMessage } from "../utils";
 
 const { Paragraph, Text } = Typography;
 
@@ -42,6 +44,7 @@ interface EditorState {
 
 export function ConfigValueManagementPage() {
   const [form] = Form.useForm<ConfigValueRequest>();
+  const watchedKey = Form.useWatch("key", form);
   const [items, setItems] = useState<ConfigValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
@@ -207,6 +210,41 @@ export function ConfigValueManagementPage() {
     }
   ];
 
+  const normalizedKey = typeof watchedKey === "string" ? watchedKey.trim() : "";
+  const referenceItems = normalizedKey
+    ? [
+        {
+          label: "JSON 配置值",
+          value: `\${config.${normalizedKey}}`
+        },
+        {
+          label: "Bearer / 前缀拼接",
+          value: `Bearer \${config.${normalizedKey}}`
+        },
+        {
+          label: "Groovy 脚本",
+          value: `config["${normalizedKey}"]`
+        },
+        {
+          label: "Python 脚本",
+          value: `config.get("${normalizedKey}")`
+        },
+        {
+          label: "插件调用参数",
+          value: `plugins.invoke("plugin-id", "action", [token: "\${config.${normalizedKey}}"])`
+        }
+      ]
+    : [];
+
+  const handleCopy = async (value: string) => {
+    try {
+      await copyText(value);
+      messageApi.success("已复制");
+    } catch {
+      messageApi.error("复制失败");
+    }
+  };
+
   return (
     <>
       {contextHolder}
@@ -298,6 +336,35 @@ export function ConfigValueManagementPage() {
             <Input.TextArea rows={3} placeholder="这个值会被哪些脚本或插件复用" />
           </Form.Item>
         </Form>
+
+        <Card size="small" title="可复制引用" style={{ marginTop: 16 }}>
+          {referenceItems.length === 0 ? (
+            <Text type="secondary">先填写 Key，这里会自动生成不同场景可直接复制的引用片段。</Text>
+          ) : (
+            <List
+              dataSource={referenceItems}
+              renderItem={(item) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      key={item.label}
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={() => void handleCopy(item.value)}
+                    >
+                      复制
+                    </Button>
+                  ]}
+                >
+                  <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                    <Text strong>{item.label}</Text>
+                    <Text code>{item.value}</Text>
+                  </Space>
+                </List.Item>
+              )}
+            />
+          )}
+        </Card>
       </Drawer>
     </>
   );

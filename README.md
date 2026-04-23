@@ -151,6 +151,16 @@ scriptflow
 | POST | `/api/plugins/{pluginId}/actions/{action}/invoke` | 同步调用插件动作，可返回 `RESULT` 或 `DEBUG` 视图 |
 | DELETE | `/api/plugins/{pluginId}` | 卸载插件并删除数据库记录、文件与配置 |
 
+### 配置值管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/config-values` | 获取所有全局配置值 |
+| GET | `/api/config-values/{key}` | 获取单个配置值 |
+| POST | `/api/config-values` | 创建配置值 |
+| PUT | `/api/config-values/{key}` | 更新配置值 |
+| DELETE | `/api/config-values/{key}` | 删除配置值 |
+
 ### 响应视图
 
 执行接口支持 `responseView` 参数：
@@ -193,6 +203,15 @@ return [
 - 保存/校验 Groovy 脚本时，只做 Groovy 语法与编译校验，不检查引用的插件和动作
 - 插件调用异常会直接中断脚本；如果要降级处理，请在脚本里自行 `try/catch`
 
+Groovy / Python 脚本运行时还会注入只读 `config` 变量，内容来自平台维护的“配置值管理”：
+
+```groovy
+return [
+  apiBase: config["service.base_url"],
+  authorization: "Bearer ${config['openai.api_key']}"
+]
+```
+
 ### Python
 
 `PYTHON` 类型脚本在平台中按“函数体”执行。运行时会自动注入 `input` 变量，你可以直接 `return` JSON 可序列化结果。
@@ -203,6 +222,15 @@ log.info(f"Preparing greeting for {name}")
 return {
   "message": f"Hello, {name}!",
   "timestamp": 1710000000
+}
+```
+
+也可以直接读取注入的只读 `config`：
+
+```python
+return {
+  "apiBase": config.get("service.base_url"),
+  "authorization": f"Bearer {config.get('openai.api_key', '')}"
 }
 ```
 
@@ -268,6 +296,66 @@ log.error("downstream request failed")
 ```
 
 ## 配置说明
+
+### 全局配置值管理
+
+平台支持维护一组全局字符串配置值，供脚本、插件配置、调度输入和调试参数复用。
+
+管理方式：
+
+- 管理台新增“配置值管理”菜单
+- REST API 使用 `/api/config-values`
+- 当前只做明文存储，不做加密
+
+数据结构：
+
+- `key`：唯一标识，例如 `openai.api_key`、`service.base_url`
+- `value`：字符串值
+- `description`：可选说明
+
+占位符语法：
+
+- 使用 `${config.some.key}` 引用全局配置值
+- 支持整串替换，也支持嵌入字符串中，例如 `Bearer ${config.openai.api_key}`
+- 配置值本身也可以引用其他配置值
+- 如果引用缺失或出现循环引用，保存或运行时会报错
+
+创建示例：
+
+```bash
+curl -X POST http://localhost:8080/api/config-values \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "key": "service.base_url",
+    "value": "https://api.example.com/v1",
+    "description": "主业务接口地址"
+  }'
+```
+
+再创建一个复用前一个值的配置值：
+
+```bash
+curl -X POST http://localhost:8080/api/config-values \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "key": "service.health_url",
+    "value": "${config.service.base_url}/health"
+  }'
+```
+
+使用范围：
+
+- 脚本运行时：直接读取 `config["some.key"]`
+- 插件配置：在 JSON 或表单对应的字符串字段中填写 `${config.some.key}`
+- 插件调试参数：`args` / `scriptInput` 中可填写 `${config.some.key}`
+- 手工执行脚本输入：请求体 `input` 中可填写 `${config.some.key}`
+- 定时任务固定输入：`input` 中可填写 `${config.some.key}`
+
+说明：
+
+- 保存的原始 JSON 会保留占位符，不会写回展开后的死值
+- 实际执行、插件调用、调试运行时才会按最新配置值解析
+- 修改配置值后，后续运行会自动看到新值，无需重新保存脚本或插件配置
 
 ### 默认配置
 
@@ -480,7 +568,8 @@ public class DemoPluginConfig {
 - 配置顶层必须是 JSON 对象
 - 表单模式只渲染当前前端支持的字段类型
 - 如果 schema 含有暂不支持的字段，仍可切到 JSON 模式完整编辑
-- 保存时会先做 JSON 解析，再按 `defaultConfig + 用户配置` 合并为最终生效配置，再调用插件自身 `validateConfig(...)`
+- 字符串字段支持填写 `${config.some.key}` 引用平台全局配置值
+- 保存时会先做 JSON 解析，再按 `defaultConfig + 用户配置` 合并为最终生效配置，解析配置值引用后，再调用插件自身 `validateConfig(...)`
 - 配置文件默认保存到 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json`
 - 运行时 `context.getPluginConfig()` 与保存时 `validateConfig(...)` 看到的是同一份最终生效配置
 
@@ -492,7 +581,7 @@ public class DemoPluginConfig {
 说明：
 
 - 持久化文件中保存的是“用户覆盖项”，不是展开后的完整配置
-- 插件在 `validateConfig(...)` 和 `invoke(...)` 中拿到的是已经合并后的最终配置
+- 插件在 `validateConfig(...)` 和 `invoke(...)` 中拿到的是已经合并且已解析配置值引用的最终配置
 - 模板插件建议把默认值只维护在 manifest，避免 Java 配置类和 manifest 出现双份默认值
 
 如果插件希望把配置对象映射到强类型类，可以直接使用：
@@ -569,12 +658,54 @@ curl -X POST \
 - `scriptInput`：模拟脚本上下文中的脚本输入；在界面上显示为“脚本输入模拟”
 - `responseView`：`RESULT` 或 `DEBUG`
 
+`args` 和 `scriptInput` 中的字符串同样支持 `${config.some.key}`。
+
 `DEBUG` 视图会额外返回：
 
 - `debug.args`
 - `debug.scriptInput`
 
-### 8. 常见问题
+### 8. 手工执行与定时任务中使用配置值
+
+脚本执行接口和定时任务固定输入都支持使用配置值占位符。
+
+手工执行示例：
+
+```bash
+curl -X POST http://localhost:8080/api/executions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "scriptId": "demo-script",
+    "mode": "SYNC",
+    "input": {
+      "baseUrl": "${config.service.base_url}",
+      "authorization": "Bearer ${config.openai.api_key}"
+    }
+  }'
+```
+
+定时任务固定输入示例：
+
+```json
+{
+  "scriptId": "demo-script",
+  "name": "nightly-sync",
+  "cronExpression": "0 0 2 * * *",
+  "enabled": true,
+  "input": {
+    "baseUrl": "${config.service.base_url}",
+    "healthUrl": "${config.service.health_url}"
+  }
+}
+```
+
+行为说明：
+
+- 定时任务保存时会先解析占位符，再按脚本 `inputSchema` 校验
+- 定时任务真正触发执行时，会再次按最新配置值解析
+- 正式使用页和管理台里的“执行 / 调试”入口也遵循相同规则
+
+### 9. 常见问题
 
 **1. 为什么脚本保存能通过，但运行时报“插件未启动”或“插件动作不存在”？**
 
