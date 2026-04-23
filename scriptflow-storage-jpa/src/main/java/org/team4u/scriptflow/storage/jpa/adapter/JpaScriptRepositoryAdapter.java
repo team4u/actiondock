@@ -12,6 +12,11 @@ import org.team4u.scriptflow.storage.jpa.repo.SpringDataScriptEntityRepository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JPA 脚本定义仓储适配器，将领域层 ScriptRepository 端口适配到 JPA 实现。
+ *
+ * @author jay.wu
+ */
 public class JpaScriptRepositoryAdapter implements ScriptRepository {
     private final SpringDataScriptEntityRepository repository;
     private final JsonCodec jsonCodec;

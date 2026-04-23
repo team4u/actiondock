@@ -8,6 +8,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 模式视图清洗器，移除 Schema 中的 UI 扩展字段（ui、x-ui）。
+ *
+ * @author jay.wu
+ */
 final class SchemaViewSanitizer {
     private SchemaViewSanitizer() {
     }

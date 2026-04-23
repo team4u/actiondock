@@ -6,6 +6,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.PrintStream;
 
+/**
+ * CLI 输出工具，以 JSON 格式输出统一信封到 stdout 或 stderr。
+ *
+ * @author jay.wu
+ */
 public final class CliOutput {
     private final ObjectMapper objectMapper;
     private final PrintStream stdout;

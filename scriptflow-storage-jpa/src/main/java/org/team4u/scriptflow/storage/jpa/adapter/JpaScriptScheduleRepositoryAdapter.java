@@ -9,6 +9,11 @@ import org.team4u.scriptflow.storage.jpa.repo.SpringDataScriptScheduleEntityRepo
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JPA 脚本调度仓储适配器，将领域层 ScriptScheduleRepository 端口适配到 JPA 实现。
+ *
+ * @author jay.wu
+ */
 public class JpaScriptScheduleRepositoryAdapter implements ScriptScheduleRepository {
     private final SpringDataScriptScheduleEntityRepository repository;
     private final JsonCodec jsonCodec;

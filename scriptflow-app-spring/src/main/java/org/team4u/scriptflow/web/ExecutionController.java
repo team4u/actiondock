@@ -8,6 +8,11 @@ import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
 import java.util.List;
 
+/**
+ * 执行记录 REST 控制器，提供脚本执行的提交、查询和删除端点。
+ *
+ * @author jay.wu
+ */
 @RestController
 @RequestMapping("/api/executions")
 public class ExecutionController {

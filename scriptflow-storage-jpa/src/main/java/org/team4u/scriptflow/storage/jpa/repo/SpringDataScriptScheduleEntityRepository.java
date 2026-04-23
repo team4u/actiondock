@@ -9,6 +9,11 @@ import org.team4u.scriptflow.storage.jpa.entity.ScriptScheduleEntity;
 
 import java.util.List;
 
+/**
+ * Spring Data JPA 脚本调度实体仓储。
+ *
+ * @author jay.wu
+ */
 public interface SpringDataScriptScheduleEntityRepository extends JpaRepository<ScriptScheduleEntity, String> {
     List<ScriptScheduleEntity> findAllByOrderByCreatedAtDesc();
 

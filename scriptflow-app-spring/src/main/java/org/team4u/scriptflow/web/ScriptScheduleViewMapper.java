@@ -9,6 +9,11 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 脚本调度视图映射器，将调度实体转换为包含下次执行时间和最近执行状态的视图。
+ *
+ * @author jay.wu
+ */
 final class ScriptScheduleViewMapper {
     private final ExecutionRepository executionRepository;
 

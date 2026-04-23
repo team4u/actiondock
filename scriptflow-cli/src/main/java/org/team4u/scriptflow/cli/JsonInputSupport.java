@@ -9,6 +9,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/**
+ * JSON 输入工具，支持从文件、stdin 或内联字符串读取和校验 JSON 对象。
+ *
+ * @author jay.wu
+ */
 public final class JsonInputSupport {
     private JsonInputSupport() {
     }

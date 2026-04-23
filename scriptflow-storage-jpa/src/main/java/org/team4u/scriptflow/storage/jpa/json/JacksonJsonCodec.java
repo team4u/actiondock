@@ -10,6 +10,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 基于 Jackson 的 JSON 编解码器实现。
+ * <p>
+ * 为领域层 JsonCodec 端口提供具体的序列化与反序列化能力。
+ *
+ * @author jay.wu
+ */
 public class JacksonJsonCodec implements JsonCodec {
     private final ObjectMapper objectMapper;
 

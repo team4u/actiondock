@@ -2,6 +2,11 @@ package org.team4u.scriptflow.domain.model;
 
 import java.time.LocalDateTime;
 
+/**
+ * 执行日志条目，记录脚本执行过程中产生的单条日志信息。
+ *
+ * @author jay.wu
+ */
 public class ExecutionLogEntry {
     private ExecutionLogLevel level = ExecutionLogLevel.INFO;
     private String message;

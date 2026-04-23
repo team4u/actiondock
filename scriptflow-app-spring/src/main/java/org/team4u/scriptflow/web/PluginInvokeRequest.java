@@ -3,6 +3,11 @@ package org.team4u.scriptflow.web;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 插件调用请求，包含动作参数和模拟脚本输入。
+ *
+ * @author jay.wu
+ */
 public class PluginInvokeRequest {
     private Map<String, Object> args = new LinkedHashMap<>();
     private Map<String, Object> scriptInput = new LinkedHashMap<>();

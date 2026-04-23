@@ -3,6 +3,11 @@ package org.team4u.scriptflow.web;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 脚本调度创建/更新请求。
+ *
+ * @author jay.wu
+ */
 public class ScriptScheduleUpsertRequest {
     private String scriptId;
     private String name;

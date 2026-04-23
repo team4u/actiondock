@@ -5,6 +5,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 插件清单，描述插件的元信息、配置模式和动作列表。
+ * <p>
+ * 每个插件的清单以 JSON 文件形式存储在 classpath 中。
+ *
+ * @author jay.wu
+ */
 public class PluginManifest {
     private String pluginId;
     private String name;

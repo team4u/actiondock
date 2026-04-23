@@ -12,6 +12,11 @@ import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.ScheduleExpressionValidator;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 
+/**
+ * 调度模块配置，注册任务调度器和调度分发器。
+ *
+ * @author jay.wu
+ */
 @Configuration(proxyBeanMethods = false)
 public class ScheduleConfiguration {
     @Bean

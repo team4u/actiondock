@@ -6,6 +6,11 @@ import org.team4u.scriptflow.application.ScriptSchemaSupport;
 import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
+/**
+ * 模式字段视图，展示单个字段的元信息。
+ *
+ * @author jay.wu
+ */
 public record SchemaFieldView(
         String name,
         String label,

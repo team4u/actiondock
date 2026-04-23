@@ -9,6 +9,11 @@ import org.team4u.scriptflow.storage.jpa.entity.ExecutionEntity;
 
 import java.util.List;
 
+/**
+ * Spring Data JPA 执行记录实体仓储。
+ *
+ * @author jay.wu
+ */
 public interface SpringDataExecutionEntityRepository extends JpaRepository<ExecutionEntity, String> {
     List<ExecutionEntity> findByScriptIdOrderByCreatedAtDesc(String scriptId);
 

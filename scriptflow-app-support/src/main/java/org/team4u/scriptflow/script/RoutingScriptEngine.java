@@ -8,6 +8,13 @@ import org.team4u.scriptflow.domain.port.ScriptEngine;
 import java.util.EnumMap;
 import java.util.Map;
 
+/**
+ * 路由脚本引擎，根据脚本类型分发到对应的引擎实现。
+ * <p>
+ * 支持 Groovy 和 Python 两种脚本类型的路由。
+ *
+ * @author jay.wu
+ */
 public class RoutingScriptEngine implements ScriptEngine {
     private final Map<ScriptType, ScriptEngine> delegates = new EnumMap<>(ScriptType.class);
 

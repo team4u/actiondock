@@ -18,6 +18,13 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
+/**
+ * Groovy 脚本编译缓存，基于 LRU 策略管理已编译的脚本类。
+ * <p>
+ * 通过源码 SHA-256 哈希作为缓存键，支持并发编译去重和过期淘汰。
+ *
+ * @author jay.wu
+ */
 final class CompiledGroovyScriptCache {
     private final boolean enabled;
     private final int maxSize;

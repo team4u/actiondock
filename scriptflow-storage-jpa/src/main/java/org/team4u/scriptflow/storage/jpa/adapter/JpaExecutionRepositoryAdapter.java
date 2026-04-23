@@ -14,6 +14,11 @@ import org.team4u.scriptflow.storage.jpa.repo.SpringDataExecutionEntityRepositor
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JPA 执行记录仓储适配器，将领域层 ExecutionRepository 端口适配到 JPA 实现。
+ *
+ * @author jay.wu
+ */
 public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
     private final SpringDataExecutionEntityRepository repository;
     private final JsonCodec jsonCodec;

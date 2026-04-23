@@ -17,6 +17,11 @@ import java.util.concurrent.Callable;
         ScriptsCommands.CreateScript.class, ScriptsCommands.UpdateScript.class, ScriptsCommands.DeleteScript.class, ScriptsCommands.ValidateScript.class,
         ScriptsCommands.PublishScript.class, ScriptsCommands.DiscardDraftScript.class, ScriptsCommands.ExecutePublishedScript.class
 })
+/**
+ * 脚本管理命令组，提供脚本的 CRUD、发布和执行等子命令。
+ *
+ * @author jay.wu
+ */
 class ScriptsCommands implements Runnable {
     @ParentCommand
     ScriptFlowCommand root;

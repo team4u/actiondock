@@ -4,6 +4,14 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 脚本定时调度配置，定义脚本的 Cron 定时执行规则。
+ * <p>
+ * 每个调度绑定一个脚本定义，通过 Cron 表达式控制执行周期，
+ * 支持启用/禁用和记录最近一次触发信息。
+ *
+ * @author jay.wu
+ */
 public class ScriptSchedule {
     private String id;
     private String scriptId;

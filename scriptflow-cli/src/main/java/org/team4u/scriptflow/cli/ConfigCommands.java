@@ -13,6 +13,11 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 
 @Command(name = "config", mixinStandardHelpOptions = true, description = "CLI 连接配置和 profile 管理命令。", subcommands = {ConfigCommands.CurrentConfig.class, ConfigCommands.ProfileCommands.class})
+/**
+ * 配置管理命令组，提供连接配置查看和 profile 管理等子命令。
+ *
+ * @author jay.wu
+ */
 class ConfigCommands implements Runnable {
     @ParentCommand
     ScriptFlowCommand root;

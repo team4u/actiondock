@@ -1,5 +1,10 @@
 package org.team4u.scriptflow.domain.model;
 
+/**
+ * 错误详情，记录脚本执行过程中的异常信息。
+ *
+ * @author jay.wu
+ */
 public class ErrorDetail {
     private String type;
     private String stackTrace;

@@ -9,6 +9,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 执行结果映射器，将执行记录转换为 API 响应对象。
+ *
+ * @author jay.wu
+ */
 final class ExecutionResponseMapper {
     private final ExecutionOutputProjector executionOutputProjector = new ExecutionOutputProjector();
 

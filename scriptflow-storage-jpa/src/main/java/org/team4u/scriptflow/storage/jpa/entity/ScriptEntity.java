@@ -8,6 +8,13 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
+/**
+ * 脚本定义 JPA 实体，对应 script_definition 表。
+ * <p>
+ * 包含脚本草稿内容和已发布快照的平铺字段。
+ *
+ * @author jay.wu
+ */
 @Entity
 @Table(name = "script_definition")
 public class ScriptEntity {

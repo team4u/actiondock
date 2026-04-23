@@ -12,6 +12,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 调度应用服务，提供脚本定时调度配置的管理能力。
+ * <p>
+ * 管理调度的创建、启停、删除以及触发记录更新，
+ * 确保调度关联的脚本已发布且 Cron 表达式合法。
+ *
+ * @author jay.wu
+ */
 public class ScheduleApplicationService {
     private final ScriptScheduleRepository scriptScheduleRepository;
     private final ScriptRepository scriptRepository;

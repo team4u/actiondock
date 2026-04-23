@@ -8,6 +8,11 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
+/**
+ * 执行记录 JPA 实体，对应 execution_record 表。
+ *
+ * @author jay.wu
+ */
 @Entity
 @Table(name = "execution_record")
 public class ExecutionEntity {

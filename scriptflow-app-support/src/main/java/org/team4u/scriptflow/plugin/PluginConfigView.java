@@ -3,6 +3,11 @@ package org.team4u.scriptflow.plugin;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 插件配置视图，展示插件的配置模式、默认配置和当前生效配置。
+ *
+ * @author jay.wu
+ */
 public class PluginConfigView {
     private String pluginId;
     private Map<String, Object> configSchema = new LinkedHashMap<>();

@@ -8,6 +8,11 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
+/**
+ * 插件注册 JPA 实体，对应 plugin_registration 表。
+ *
+ * @author jay.wu
+ */
 @Entity
 @Table(name = "plugin_registration")
 public class PluginRegistrationEntity {

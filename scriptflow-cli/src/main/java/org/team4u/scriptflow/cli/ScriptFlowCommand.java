@@ -31,6 +31,13 @@ import java.util.concurrent.Callable;
                 SchedulesCommands.class
         }
 )
+/**
+ * CLI 根命令，提供全局连接配置和通用工具方法。
+ * <p>
+ * 包含 scripts、executions、plugins、schedules、config 五个子命令组。
+ *
+ * @author jay.wu
+ */
 public class ScriptFlowCommand implements Runnable {
     enum SubmitModeOption {
         SYNC,

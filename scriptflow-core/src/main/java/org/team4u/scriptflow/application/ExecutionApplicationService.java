@@ -19,6 +19,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
+/**
+ * 执行应用服务，提供脚本执行的提交、查询和管理能力。
+ * <p>
+ * 支持同步和异步两种提交模式，自动进行输入参数校验，
+ * 并通过日志收集器在执行过程中持续记录执行日志。
+ *
+ * @author jay.wu
+ */
 public class ExecutionApplicationService {
     private final ScriptRepository scriptRepository;
     private final ExecutionRepository executionRepository;

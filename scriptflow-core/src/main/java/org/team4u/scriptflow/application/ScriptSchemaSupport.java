@@ -9,6 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 脚本模式（Schema）校验与摘要工具。
+ * <p>
+ * 基于 JSON Schema 规范解析脚本的输入模式，提供字段摘要提取和输入参数校验能力。
+ * 支持的类型包括 string、number、integer、boolean 和 enum。
+ *
+ * @author jay.wu
+ */
 public class ScriptSchemaSupport {
     public SchemaSummary summarize(Map<String, Object> schema) {
         ParsedSchema parsedSchema = parse(schema);

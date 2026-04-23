@@ -4,6 +4,11 @@ import org.team4u.scriptflow.domain.model.SubmitMode;
 
 import java.util.Map;
 
+/**
+ * 脚本执行请求参数。
+ *
+ * @author jay.wu
+ */
 public class ExecuteRequest {
     private String scriptId;
     private Map<String, Object> input;

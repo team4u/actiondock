@@ -15,6 +15,11 @@ import org.team4u.scriptflow.schedule.ScriptScheduleDispatcher;
 
 import java.util.List;
 
+/**
+ * 全局调度 REST 控制器，提供定时调度的管理和启停端点。
+ *
+ * @author jay.wu
+ */
 @RestController
 @RequestMapping("/api/schedules")
 public class ScheduleController {

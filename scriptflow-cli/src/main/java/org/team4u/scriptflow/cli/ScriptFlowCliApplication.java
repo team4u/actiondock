@@ -2,6 +2,11 @@ package org.team4u.scriptflow.cli;
 
 import picocli.CommandLine;
 
+/**
+ * ScriptFlow CLI 应用入口，基于 Picocli 构建命令行交互。
+ *
+ * @author jay.wu
+ */
 public final class ScriptFlowCliApplication {
     private ScriptFlowCliApplication() {
     }

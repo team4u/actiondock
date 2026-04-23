@@ -10,6 +10,11 @@ import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
 import java.util.Map;
 
+/**
+ * 模式（Schema）REST 控制器，提供脚本输入输出模式的摘要查询端点。
+ *
+ * @author jay.wu
+ */
 @RestController
 @RequestMapping("/api/schema")
 public class SchemaController {

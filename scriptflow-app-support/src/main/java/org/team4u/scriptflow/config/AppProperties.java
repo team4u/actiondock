@@ -5,6 +5,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 应用配置属性，绑定 {@code app.*} 前缀的配置项。
+ * <p>
+ * 包含认证、插件、执行引擎和调度等子配置。
+ *
+ * @author jay.wu
+ */
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
     private final Auth auth = new Auth();

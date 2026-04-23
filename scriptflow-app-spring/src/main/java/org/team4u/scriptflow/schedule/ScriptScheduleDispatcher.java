@@ -24,6 +24,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
+/**
+ * 脚本调度分发器，基于 Spring TaskScheduler 管理 Cron 定时任务的注册和执行。
+ * <p>
+ * 应用启动时自动加载所有已启用的调度，并在调度变更时动态刷新任务。
+ *
+ * @author jay.wu
+ */
 public class ScriptScheduleDispatcher {
     private static final Logger log = LoggerFactory.getLogger(ScriptScheduleDispatcher.class);
 

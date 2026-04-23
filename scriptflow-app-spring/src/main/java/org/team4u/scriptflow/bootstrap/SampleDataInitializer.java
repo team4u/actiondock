@@ -8,6 +8,11 @@ import org.team4u.scriptflow.domain.model.ScriptType;
 
 import java.util.Map;
 
+/**
+ * 示例数据初始化器，应用启动时自动创建示例 Groovy 脚本。
+ *
+ * @author jay.wu
+ */
 @Component
 public class SampleDataInitializer implements CommandLineRunner {
     private final ScriptApplicationService scriptApplicationService;

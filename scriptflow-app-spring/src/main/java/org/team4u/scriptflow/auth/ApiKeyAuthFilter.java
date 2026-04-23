@@ -10,6 +10,11 @@ import org.team4u.scriptflow.config.AppProperties;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * API Key 认证过滤器，通过 Bearer Token 验证 API 请求。
+ *
+ * @author jay.wu
+ */
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
     private final AppProperties properties;
 

@@ -5,6 +5,11 @@ import org.team4u.scriptflow.domain.model.ExecutionStatus;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * 脚本调度视图，包含调度详情及最近执行状态。
+ *
+ * @author jay.wu
+ */
 public record ScriptScheduleView(
         String id,
         String scriptId,

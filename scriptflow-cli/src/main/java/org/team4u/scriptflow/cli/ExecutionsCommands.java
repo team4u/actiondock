@@ -13,6 +13,11 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 
 @Command(name = "executions", mixinStandardHelpOptions = true, description = "执行记录的提交、查询和清理命令。", subcommands = {ExecutionsCommands.SubmitExecution.class, ExecutionsCommands.GetExecution.class, ExecutionsCommands.ListExecutions.class, ExecutionsCommands.DeleteExecution.class, ExecutionsCommands.ClearExecutions.class})
+/**
+ * 执行记录命令组，提供执行提交、查询和清理等子命令。
+ *
+ * @author jay.wu
+ */
 class ExecutionsCommands implements Runnable {
     @ParentCommand
     ScriptFlowCommand root;

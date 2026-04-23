@@ -8,6 +8,13 @@ import org.team4u.scriptflow.plugin.api.ScriptPluginContext;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 示例插件实现，提供 echo 动作用于演示插件开发流程。
+ * <p>
+ * 将输入消息加上配置前缀后原样返回。
+ *
+ * @author jay.wu
+ */
 @Extension
 public class DemoScriptFlowPlugin implements ScriptFlowPlugin {
     @Override

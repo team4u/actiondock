@@ -2,6 +2,11 @@ package org.team4u.scriptflow.cli;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+/**
+ * CLI 异常，封装各类错误场景并携带结构化的退出码和 JSON 载荷。
+ *
+ * @author jay.wu
+ */
 public final class CliException extends RuntimeException {
     public static final int EXIT_VALIDATION = 2;
     public static final int EXIT_CONFIG = 3;

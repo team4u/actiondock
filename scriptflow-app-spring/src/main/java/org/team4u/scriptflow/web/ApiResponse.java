@@ -1,5 +1,10 @@
 package org.team4u.scriptflow.web;
 
+/**
+ * 统一 API 响应封装，包含状态码、消息和数据。
+ *
+ * @author jay.wu
+ */
 public class ApiResponse<T> {
     private int status;
     private String msg;

@@ -10,6 +10,14 @@ import org.team4u.scriptflow.domain.port.ScriptRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 脚本应用服务，提供脚本定义的 CRUD 操作和发布管理。
+ * <p>
+ * 封装脚本创建、查询、更新、删除、发布、取消发布及脚本校验等业务逻辑，
+ * 维护脚本的发布状态和版本号。
+ *
+ * @author jay.wu
+ */
 public class ScriptApplicationService {
     private final ScriptRepository scriptRepository;
     private final ScriptEngine scriptEngine;

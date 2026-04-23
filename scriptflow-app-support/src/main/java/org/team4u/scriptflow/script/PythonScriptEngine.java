@@ -23,6 +23,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+/**
+ * Python 脚本引擎，通过子进程方式执行 Python 脚本。
+ * <p>
+ * 将用户脚本包装为标准化的 Python 入口函数，通过 stdin/stdout 传递 JSON 数据，
+ * 并支持通过 stderr 的特殊前缀协议收集脚本日志。
+ *
+ * @author jay.wu
+ */
 public class PythonScriptEngine implements ScriptEngine {
     private static final String LOG_PREFIX = "__SCRIPTFLOW_LOG__";
     private static final String VALIDATION_RUNNER = """

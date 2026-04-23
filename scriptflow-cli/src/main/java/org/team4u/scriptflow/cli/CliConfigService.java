@@ -11,6 +11,13 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * CLI 配置服务，管理连接 profile 的加载、保存和多层级配置解析。
+ * <p>
+ * 配置优先级：命令行参数 > 环境变量 > profile 文件 > 默认值。
+ *
+ * @author jay.wu
+ */
 public final class CliConfigService {
     public static final String ENV_PROFILE = "SCRIPTFLOW_PROFILE";
     public static final String ENV_BASE_URL = "SCRIPTFLOW_BASE_URL";

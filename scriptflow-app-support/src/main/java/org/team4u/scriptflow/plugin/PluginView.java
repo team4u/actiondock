@@ -3,6 +3,11 @@ package org.team4u.scriptflow.plugin;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 插件视图，用于 API 响应中展示插件的概要信息。
+ *
+ * @author jay.wu
+ */
 public class PluginView {
     private String pluginId;
     private String name;

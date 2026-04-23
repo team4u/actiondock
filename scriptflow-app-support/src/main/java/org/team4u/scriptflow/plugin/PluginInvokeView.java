@@ -3,6 +3,11 @@ package org.team4u.scriptflow.plugin;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 插件调用结果视图，包含调用返回值和可选的调试信息。
+ *
+ * @author jay.wu
+ */
 public class PluginInvokeView {
     private String pluginId;
     private String action;

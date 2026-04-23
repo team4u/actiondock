@@ -22,6 +22,11 @@ import org.team4u.scriptflow.script.RoutingScriptEngine;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+/**
+ * 运行时配置，注册应用服务、脚本引擎和插件运行时等核心 Bean。
+ *
+ * @author jay.wu
+ */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AppProperties.class)
 public class RuntimeConfiguration {

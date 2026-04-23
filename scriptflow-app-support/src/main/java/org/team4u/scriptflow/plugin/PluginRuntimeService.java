@@ -29,6 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * 插件运行时服务，管理插件的完整生命周期。
+ * <p>
+ * 基于 PF4J 框架提供插件的安装、启停、卸载、配置管理和动作调用能力。
+ *
+ * @author jay.wu
+ */
 public class PluginRuntimeService {
     private static final PluginRuntimeService DISABLED = new PluginRuntimeService();
 

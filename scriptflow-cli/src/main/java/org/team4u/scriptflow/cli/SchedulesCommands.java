@@ -14,6 +14,11 @@ import java.util.concurrent.Callable;
         SchedulesCommands.ListSchedules.class, SchedulesCommands.GetSchedule.class, SchedulesCommands.CreateSchedule.class, SchedulesCommands.UpdateSchedule.class,
         SchedulesCommands.EnableSchedule.class, SchedulesCommands.DisableSchedule.class, SchedulesCommands.DeleteSchedule.class
 })
+/**
+ * 定时调度命令组，提供调度的查询、创建、启停和删除等子命令。
+ *
+ * @author jay.wu
+ */
 class SchedulesCommands implements Runnable {
     @ParentCommand
     ScriptFlowCommand root;

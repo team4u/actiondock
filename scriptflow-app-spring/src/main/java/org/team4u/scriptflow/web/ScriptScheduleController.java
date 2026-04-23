@@ -15,6 +15,11 @@ import org.team4u.scriptflow.schedule.ScriptScheduleDispatcher;
 
 import java.util.List;
 
+/**
+ * 脚本级调度 REST 控制器，管理指定脚本下的定时调度配置。
+ *
+ * @author jay.wu
+ */
 @RestController
 @RequestMapping("/api/scripts/{scriptId}/schedules")
 public class ScriptScheduleController {

@@ -10,6 +10,11 @@ import org.team4u.scriptflow.storage.jpa.repo.SpringDataPluginRegistrationReposi
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JPA 插件注册仓储适配器，将领域层 PluginRegistryRepository 端口适配到 JPA 实现。
+ *
+ * @author jay.wu
+ */
 public class JpaPluginRegistryRepositoryAdapter implements PluginRegistryRepository {
     private final SpringDataPluginRegistrationRepository repository;
     private final JsonCodec jsonCodec;

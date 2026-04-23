@@ -9,6 +9,11 @@ import org.team4u.scriptflow.domain.model.ScriptDefinition;
 
 import java.util.List;
 
+/**
+ * 脚本管理 REST 控制器，提供脚本定义的 CRUD、发布和执行端点。
+ *
+ * @author jay.wu
+ */
 @RestController
 @RequestMapping("/api/scripts")
 public class ScriptController {

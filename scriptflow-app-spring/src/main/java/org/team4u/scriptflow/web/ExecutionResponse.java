@@ -9,6 +9,11 @@ import org.team4u.scriptflow.domain.model.SubmitMode;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * 脚本执行结果响应，包含执行状态、输出和可选的调试信息。
+ *
+ * @author jay.wu
+ */
 public record ExecutionResponse(
         String id,
         String scriptId,

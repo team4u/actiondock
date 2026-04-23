@@ -9,6 +9,11 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
+/**
+ * 脚本调度 JPA 实体，对应 script_schedule 表。
+ *
+ * @author jay.wu
+ */
 @Entity
 @Table(name = "script_schedule", indexes = {
         @Index(name = "idx_script_schedule_script_id", columnList = "scriptId"),

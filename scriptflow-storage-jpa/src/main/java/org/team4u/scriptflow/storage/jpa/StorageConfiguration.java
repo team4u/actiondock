@@ -18,6 +18,11 @@ import org.team4u.scriptflow.storage.jpa.repo.SpringDataPluginRegistrationReposi
 import org.team4u.scriptflow.storage.jpa.repo.SpringDataScriptEntityRepository;
 import org.team4u.scriptflow.storage.jpa.repo.SpringDataScriptScheduleEntityRepository;
 
+/**
+ * JPA 存储层配置，注册仓储端口适配器和 JSON 编解码器 Bean。
+ *
+ * @author jay.wu
+ */
 @Configuration
 public class StorageConfiguration {
     @Bean

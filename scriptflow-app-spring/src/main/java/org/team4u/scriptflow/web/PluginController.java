@@ -18,6 +18,11 @@ import org.team4u.scriptflow.plugin.PluginView;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * 插件管理 REST 控制器，提供插件的安装、启停、配置和调用端点。
+ *
+ * @author jay.wu
+ */
 @RestController
 @RequestMapping("/api/plugins")
 public class PluginController {

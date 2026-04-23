@@ -2,6 +2,11 @@ package org.team4u.scriptflow.application;
 
 import java.util.List;
 
+/**
+ * 无效执行输入异常，当脚本输入参数不符合模式定义时抛出。
+ *
+ * @author jay.wu
+ */
 public class InvalidExecutionInputException extends IllegalArgumentException {
     private final String code;
     private final String scriptId;

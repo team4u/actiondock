@@ -30,6 +30,11 @@ import org.team4u.scriptflow.web.ScriptController;
         SpringDataScriptScheduleEntityRepository.class
 })
 @Import({RuntimeConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class, ScheduleConfiguration.class})
+/**
+ * ScriptFlow 运行时应用入口。
+ *
+ * @author jay.wu
+ */
 public class RuntimeApplication {
     public static void main(String[] args) {
         SpringApplication.run(RuntimeApplication.class, args);

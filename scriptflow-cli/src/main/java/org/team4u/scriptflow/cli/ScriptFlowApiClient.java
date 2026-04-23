@@ -19,6 +19,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Map;
 
+/**
+ * ScriptFlow REST API 客户端，封装与 ScriptFlow 服务端的 HTTP 通信。
+ *
+ * @author jay.wu
+ */
 public final class ScriptFlowApiClient {
     private final CliOutput output;
     private final ObjectMapper objectMapper;

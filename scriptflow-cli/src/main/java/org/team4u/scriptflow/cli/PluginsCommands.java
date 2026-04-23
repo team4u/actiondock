@@ -16,6 +16,11 @@ import java.util.concurrent.Callable;
         PluginsCommands.ListPlugins.class, PluginsCommands.GetPlugin.class, PluginsCommands.InstallPlugin.class, PluginsCommands.UpgradePlugin.class,
         PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class
 })
+/**
+ * 插件管理命令组，提供插件的安装、启停、调用和配置等子命令。
+ *
+ * @author jay.wu
+ */
 class PluginsCommands implements Runnable {
     @ParentCommand
     ScriptFlowCommand root;

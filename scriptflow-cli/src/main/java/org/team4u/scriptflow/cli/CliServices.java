@@ -7,6 +7,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
+/**
+ * CLI 基础服务容器，提供 JSON 序列化、IO 流、环境变量和 API 客户端工厂等依赖。
+ *
+ * @author jay.wu
+ */
 public final class CliServices {
     @FunctionalInterface
     public interface Sleeper {

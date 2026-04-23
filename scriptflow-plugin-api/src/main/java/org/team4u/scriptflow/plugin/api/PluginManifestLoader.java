@@ -5,6 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
 
+/**
+ * 插件清单加载器，从 classpath 资源中读取并解析插件清单文件。
+ * <p>
+ * 约定清单文件位于 {@code META-INF/scriptflow/plugins/<pluginId>.json}。
+ *
+ * @author jay.wu
+ */
 public final class PluginManifestLoader {
     private static final String MANIFEST_ROOT = "META-INF/scriptflow/plugins/";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

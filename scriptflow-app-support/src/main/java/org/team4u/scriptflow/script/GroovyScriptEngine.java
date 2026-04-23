@@ -15,6 +15,13 @@ import org.team4u.scriptflow.plugin.PluginRuntimeService;
 import java.time.Clock;
 import java.util.Map;
 
+/**
+ * Groovy 脚本引擎，基于 GroovyShell 提供脚本编译和执行能力。
+ * <p>
+ * 通过编译缓存优化重复执行的脚本，并为脚本提供 input、log、plugins 等绑定变量。
+ *
+ * @author jay.wu
+ */
 public class GroovyScriptEngine implements ScriptEngine {
     private final CompiledGroovyScriptCache compiledScriptCache;
     private final PluginRuntimeService pluginRuntimeService;

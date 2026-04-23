@@ -5,6 +5,11 @@ import org.team4u.scriptflow.domain.model.ErrorDetail;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
+/**
+ * 错误详情工具类，提供异常信息的摘要提取和详情构建。
+ *
+ * @author jay.wu
+ */
 public final class ErrorDetailSupport {
     private ErrorDetailSupport() {
     }

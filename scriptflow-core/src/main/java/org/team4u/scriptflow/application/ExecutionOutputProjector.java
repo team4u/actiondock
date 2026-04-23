@@ -3,6 +3,13 @@ package org.team4u.scriptflow.application;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 执行输出投影器，根据输出模式（outputSchema）过滤脚本执行结果。
+ * <p>
+ * 仅保留模式中声明的字段，实现输出字段的裁剪和规范化。
+ *
+ * @author jay.wu
+ */
 public class ExecutionOutputProjector {
     public Map<String, Object> project(Map<String, Object> rawOutput, Map<String, Object> outputSchema) {
         Map<String, Object> source = rawOutput == null ? new LinkedHashMap<>() : new LinkedHashMap<>(rawOutput);

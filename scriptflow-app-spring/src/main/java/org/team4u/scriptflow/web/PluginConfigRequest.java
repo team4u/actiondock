@@ -3,6 +3,11 @@ package org.team4u.scriptflow.web;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 插件配置更新请求。
+ *
+ * @author jay.wu
+ */
 public class PluginConfigRequest {
     private Map<String, Object> config = new LinkedHashMap<>();
 

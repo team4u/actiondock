@@ -7,6 +7,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+/**
+ * 全局异常处理器，将异常转换为统一的 API 响应格式。
+ *
+ * @author jay.wu
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidExecutionInputException.class)

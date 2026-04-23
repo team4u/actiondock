@@ -3,6 +3,11 @@ package org.team4u.scriptflow.plugin;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 插件调用调试视图，记录调用时的原始参数和脚本输入。
+ *
+ * @author jay.wu
+ */
 public class PluginInvokeDebugView {
     private Map<String, Object> args = new LinkedHashMap<>();
     private Map<String, Object> scriptInput = new LinkedHashMap<>();

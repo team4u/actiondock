@@ -5,6 +5,11 @@ import org.team4u.scriptflow.domain.model.ScriptSchedule;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 脚本调度仓储端口，提供定时调度配置的持久化操作。
+ *
+ * @author jay.wu
+ */
 public interface ScriptScheduleRepository {
     ScriptSchedule save(ScriptSchedule schedule);
 

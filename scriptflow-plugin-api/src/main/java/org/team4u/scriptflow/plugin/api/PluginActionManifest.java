@@ -3,6 +3,11 @@ package org.team4u.scriptflow.plugin.api;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 插件动作清单，描述单个插件动作的元信息、输入输出模式和示例参数。
+ *
+ * @author jay.wu
+ */
 public class PluginActionManifest {
     private String action;
     private String title;
