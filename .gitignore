@@ -37,3 +37,4 @@ scriptflow-admin-ui/.vite/
 .vscode/
 data/
 .cx-index.db
+plugins/
