@@ -322,7 +322,9 @@ class ExecutionApplicationServiceTest {
         service.execute("script-2", Map.of(), SubmitMode.SYNC);
 
         assertThat(service.list("script-1")).hasSize(1);
-        assertThat(service.list(" ")).hasSize(2);
+        assertThatThrownBy(() -> service.list(" "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("scriptId 不能为空");
     }
 
     @Test

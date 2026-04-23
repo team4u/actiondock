@@ -197,7 +197,31 @@ export function PluginDetailPage() {
   };
 
   useEffect(() => {
-    void Promise.all([loadPlugin(), loadConfig()]);
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setConfigLoading(true);
+      try {
+        const [pluginResult, configResult] = await Promise.all([
+          getPlugin(pluginId),
+          getPluginConfig(pluginId),
+        ]);
+        if (cancelled) return;
+        setPlugin(pluginResult);
+        setCurrentConfig(configResult);
+      } catch (error) {
+        if (cancelled) return;
+        const detail = error instanceof ApiError ? error.message : "加载插件详情失败";
+        messageApi.error(detail);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setConfigLoading(false);
+        }
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
   }, [pluginId]);
 
   useEffect(() => {
@@ -348,6 +372,9 @@ export function PluginDetailPage() {
     setActionLoading(label);
     try {
       await action();
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : `${label}操作失败`;
+      messageApi.error(detail);
     } finally {
       setActionLoading(null);
     }

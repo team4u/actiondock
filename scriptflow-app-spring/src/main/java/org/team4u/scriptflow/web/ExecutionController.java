@@ -47,7 +47,7 @@ public class ExecutionController {
     }
 
     @GetMapping
-    public ApiResponse<List<ExecutionRecord>> list(@RequestParam(required = false) String scriptId) {
+    public ApiResponse<List<ExecutionRecord>> list(@RequestParam String scriptId) {
         return ApiResponse.success(executionApplicationService.list(scriptId));
     }
 

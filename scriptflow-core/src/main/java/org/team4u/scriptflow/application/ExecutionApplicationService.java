@@ -15,7 +15,6 @@ import org.team4u.scriptflow.domain.port.ScriptRepository;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -137,6 +136,17 @@ public class ExecutionApplicationService {
             return logCollector.completeSuccess(toMap(result));
         } catch (Exception ex) {
             return logCollector.completeFailure(ex);
+        } catch (Throwable t) {
+            // 兜底：确保不会因 Error（如 OOM）导致记录永久卡在 RUNNING
+            try {
+                record.setStatus(ExecutionStatus.FAILED);
+                record.setErrorMessage("Fatal error: " + t.getClass().getName());
+                record.setFinishedAt(LocalDateTime.now());
+                executionRepository.save(record);
+            } catch (Exception ignored) {
+                // 持久化也失败时已无能为力
+            }
+            throw t;
         }
     }
 
@@ -162,7 +172,7 @@ public class ExecutionApplicationService {
 
     public List<ExecutionRecord> list(String scriptId) {
         if (scriptId == null || scriptId.isBlank()) {
-            return executionRepository.findAll();
+            throw new IllegalArgumentException("scriptId 不能为空");
         }
         return executionRepository.findByScriptId(scriptId);
     }
@@ -204,7 +214,11 @@ public class ExecutionApplicationService {
                         .setLevel(level)
                         .setMessage(message)
                         .setCreatedAt(LocalDateTime.now()));
-                executionRepository.save(record);
+                try {
+                    executionRepository.save(record);
+                } catch (Exception ignored) {
+                    // 日志持久化失败不应中断脚本执行
+                }
             }
         }
 
@@ -215,7 +229,7 @@ public class ExecutionApplicationService {
                 record.setErrorDetail(null);
                 record.setStatus(ExecutionStatus.SUCCESS);
                 record.setFinishedAt(LocalDateTime.now());
-                return executionRepository.save(record);
+                return safeSave(record);
             }
         }
 
@@ -225,7 +239,16 @@ public class ExecutionApplicationService {
                 record.setErrorMessage(ErrorDetailSupport.summarize(exception));
                 record.setErrorDetail(ErrorDetailSupport.describe(exception));
                 record.setFinishedAt(LocalDateTime.now());
+                return safeSave(record);
+            }
+        }
+
+        private ExecutionRecord safeSave(ExecutionRecord record) {
+            try {
                 return executionRepository.save(record);
+            } catch (Exception ex) {
+                // 持久化失败时返回内存中的记录，确保调用方拿到正确的最终状态
+                return record;
             }
         }
     }

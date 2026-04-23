@@ -5,8 +5,7 @@ spring:
     name: scriptflow-app-spring
   h2:
     console:
-      enabled: true
-      path: /h2-console
+      enabled: false
 
 server:
   port: 8080

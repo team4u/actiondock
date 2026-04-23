@@ -564,7 +564,25 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   };
 
   useEffect(() => {
-    void loadScriptReferences();
+    let cancelled = false;
+    const load = async () => {
+      setScriptsLoading(true);
+      try {
+        const result = await listScripts();
+        if (cancelled) return;
+        setAvailableScripts(result);
+      } catch (error) {
+        if (cancelled) return;
+        const detail = error instanceof ApiError ? error.message : "加载脚本参考失败";
+        messageApi.error(detail);
+      } finally {
+        if (!cancelled) {
+          setScriptsLoading(false);
+        }
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
   }, [messageApi]);
 
   useEffect(() => {
