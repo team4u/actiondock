@@ -32,6 +32,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message
 } from "antd";
@@ -1122,7 +1123,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   <Tag color={currentScript.status === "PUBLISHED" ? "green" : "gold"}>
                     {currentScript.status === "PUBLISHED" ? "已发布" : "草稿"}
                   </Tag>
-                  {hasUnpublishedChanges ? <Tag color="orange">有未发布修改</Tag> : null}
+                  {hasUnpublishedChanges ? (
+                    <Tooltip title="保存为草稿，需点击「发布」生效。如需回退可「丢弃草稿」。">
+                      <Tag color="orange">未发布修改</Tag>
+                    </Tooltip>
+                  ) : null}
                   <Text type="secondary">{formatDateTime(currentScript.updatedAt)}</Text>
                 </Space>
               </Descriptions.Item>
@@ -1130,15 +1135,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               <Descriptions.Item label="版本">{currentScript.version}</Descriptions.Item>
               <Descriptions.Item label="创建时间">{formatDateTime(currentScript.createdAt)}</Descriptions.Item>
             </Descriptions>
-            {hasUnpublishedChanges ? (
-              <Alert
-                type="warning"
-                showIcon
-                style={{ marginTop: 16 }}
-                message="当前编辑内容尚未发布"
-                description="保存为草稿，需点击「发布」生效。如需回退可「丢弃草稿」。"
-              />
-            ) : null}
           </Card>
         )}
 
@@ -1163,41 +1159,49 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                             type: "GROOVY"
                           }}
                         >
-                          <Form.Item
-                            label="脚本 ID"
-                            name="id"
-                            rules={[
-                              { required: true, message: "请输入脚本 ID" },
-                              {
-                                pattern: /^[A-Za-z0-9_-]+$/,
-                                message: "仅支持字母、数字、下划线和中横线"
-                              }
-                            ]}
-                          >
-                            <Input disabled={mode === "edit"} placeholder="例如 hello-groovy" />
-                          </Form.Item>
-                          <Form.Item
-                            label="名称"
-                            name="name"
-                            rules={[{ required: true, message: "请输入脚本名称" }]}
-                          >
-                            <Input placeholder="例如 Hello Groovy" />
-                          </Form.Item>
-                          <Form.Item label="类型" name="type">
-                            <Select
-                              onChange={handleScriptTypeChange}
-                              options={[
-                                {
-                                  value: "GROOVY",
-                                  label: "GROOVY"
-                                },
-                                {
-                                  value: "PYTHON",
-                                  label: "PYTHON"
-                                }
-                              ]}
-                            />
-                          </Form.Item>
+                          <Row gutter={12}>
+                            <Col xs={24} md={12} xl={24}>
+                              <Form.Item
+                                label="脚本 ID"
+                                name="id"
+                                rules={[
+                                  { required: true, message: "请输入脚本 ID" },
+                                  {
+                                    pattern: /^[A-Za-z0-9_-]+$/,
+                                    message: "仅支持字母、数字、下划线和中横线"
+                                  }
+                                ]}
+                              >
+                                <Input disabled={mode === "edit"} placeholder="例如 hello-groovy" />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={24} md={12} xl={16}>
+                              <Form.Item
+                                label="名称"
+                                name="name"
+                                rules={[{ required: true, message: "请输入脚本名称" }]}
+                              >
+                                <Input placeholder="例如 Hello Groovy" />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={24} md={12} xl={8}>
+                              <Form.Item label="类型" name="type">
+                                <Select
+                                  onChange={handleScriptTypeChange}
+                                  options={[
+                                    {
+                                      value: "GROOVY",
+                                      label: "GROOVY"
+                                    },
+                                    {
+                                      value: "PYTHON",
+                                      label: "PYTHON"
+                                    }
+                                  ]}
+                                />
+                              </Form.Item>
+                            </Col>
+                          </Row>
                         </Form>
                       </Card>
                     </Col>
@@ -1434,16 +1438,32 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                     />
                                   )}
 
-                                  <Radio.Group
-                                    value={executionMode}
-                                    optionType="button"
-                                    buttonStyle="solid"
-                                    onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
-                                    options={[
-                                      { label: "同步执行", value: "SYNC" },
-                                      { label: "异步执行", value: "ASYNC" }
-                                    ]}
-                                  />
+                                  <div className="script-editor-page__execution-toolbar">
+                                    <Radio.Group
+                                      value={executionMode}
+                                      optionType="button"
+                                      buttonStyle="solid"
+                                      onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
+                                      options={[
+                                        { label: "同步执行", value: "SYNC" },
+                                        { label: "异步执行", value: "ASYNC" }
+                                      ]}
+                                    />
+
+                                    <Space size={12} wrap className="script-editor-page__execution-actions">
+                                      <Button icon={<ReloadOutlined />} onClick={handleResetExecutionInput}>
+                                        重置
+                                      </Button>
+                                      <Button
+                                        type="primary"
+                                        icon={<PlayCircleOutlined />}
+                                        onClick={() => void handleExecute()}
+                                        loading={executing}
+                                      >
+                                        执行
+                                      </Button>
+                                    </Space>
+                                  </div>
 
                                   <SchemaObjectEditor
                                     form={executionForm}
@@ -1459,20 +1479,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                     editorTheme={editorTheme}
                                   />
 
-                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                                    <Button icon={<ReloadOutlined />} onClick={handleResetExecutionInput} block>
-                                      重置为默认值
-                                    </Button>
-                                    <Button
-                                      type="primary"
-                                      icon={<PlayCircleOutlined />}
-                                      onClick={() => void handleExecute()}
-                                      loading={executing}
-                                      block
-                                    >
-                                      执行脚本
-                                    </Button>
-                                  </Space>
                                 </Space>
                               </Card>
                             </Col>
@@ -1486,9 +1492,14 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   showTriggerSource={true}
                                   titleExtra={
                                     currentExecution ? (
-                                      <Tag color={getExecutionStatusColor(currentExecution.status)}>
-                                        {currentExecution.status}
-                                      </Tag>
+                                      <Space size={8} wrap className="execution-result-card__header-extra">
+                                        <Text code className="execution-result-card__header-id">
+                                          {currentExecution.id}
+                                        </Text>
+                                        <Tag color={getExecutionStatusColor(currentExecution.status)}>
+                                          {currentExecution.status}
+                                        </Tag>
+                                      </Space>
                                     ) : (
                                       <Text type="secondary">暂无结果</Text>
                                     )

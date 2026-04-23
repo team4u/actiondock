@@ -1,8 +1,5 @@
 import {
-  Alert,
   Card,
-  Descriptions,
-  Empty,
   Space,
   Tag,
   Typography
@@ -57,6 +54,17 @@ function getTriggerSourceLabel(source: string): string {
   }
 }
 
+function getSubmitModeLabel(mode: string): string {
+  switch (mode) {
+    case "SYNC":
+      return "同步";
+    case "ASYNC":
+      return "异步";
+    default:
+      return mode;
+  }
+}
+
 function hasInput(result: ExecutionResult): result is ExecutionRecord {
   return "input" in result;
 }
@@ -70,7 +78,6 @@ export function ExecutionResultCard({
   titleExtra,
   showTriggerSource = false,
   pollingExecutionId,
-  emptyDescription = "执行后将在这里查看结果详情。",
   errorTitle = "执行失败"
 }: ExecutionResultCardProps) {
   const inputValue = inputOverride ?? (hasInput(execution) ? execution.input : undefined);
@@ -79,52 +86,52 @@ export function ExecutionResultCard({
 
   return (
     <Card
+      className="equal-height-card"
       type="inner"
-      title={title}
-      extra={
-        titleExtra ?? (
-          <Tag color={getExecutionStatusColor(execution.status)}>
-            {execution.status}
-          </Tag>
-        )
+      title={
+        <div className="execution-result-card__title-row">
+          <span className="execution-result-card__title-text">{title}</span>
+          {titleExtra ?? (
+            <Space size={8} wrap className="execution-result-card__header-extra">
+              <Text code className="execution-result-card__header-id">
+                {execution.id}
+              </Text>
+              <Tag color={getExecutionStatusColor(execution.status)}>
+                {execution.status}
+              </Tag>
+            </Space>
+          )}
+        </div>
       }
     >
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Descriptions
-          size="small"
-          column={{
-            xs: 1,
-            sm: 2,
-            lg: showTriggerSource ? 4 : 3
-          }}
-        >
-          <Descriptions.Item label="执行 ID">
-            <Text code>{execution.id}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="状态">
-            <Tag color={getExecutionStatusColor(execution.status)}>{execution.status}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="提交方式">
-            {execution.submitMode}
-          </Descriptions.Item>
+        <div className="execution-result-card__meta">
+          <div className="execution-result-card__meta-item">
+            <Text type="secondary">方式</Text>
+            <Text>{getSubmitModeLabel(execution.submitMode)}</Text>
+          </div>
+
           {showTriggerSource ? (
-            <Descriptions.Item label="触发来源">
-              <Space direction="vertical" size={2}>
-                <Tag color={execution.triggerSource === "SCHEDULED" ? "blue" : "default"}>
-                  {getTriggerSourceLabel(execution.triggerSource)}
-                </Tag>
-                {execution.scheduleId ? (
-                  <Text type="secondary" code>
-                    {execution.scheduleId}
-                  </Text>
-                ) : null}
-              </Space>
-            </Descriptions.Item>
+            <div className="execution-result-card__meta-item">
+              <Text type="secondary">触发</Text>
+              <Tag color={execution.triggerSource === "SCHEDULED" ? "blue" : "default"}>
+                {getTriggerSourceLabel(execution.triggerSource)}
+              </Tag>
+              {execution.scheduleId ? (
+                <Text code className="execution-result-card__meta-code">
+                  {execution.scheduleId}
+                </Text>
+              ) : null}
+            </div>
           ) : null}
-          <Descriptions.Item label="完成时间">
-            {pollingExecutionId ? `轮询中: ${pollingExecutionId.slice(0, 8)}` : formatDateTime(execution.finishedAt)}
-          </Descriptions.Item>
-        </Descriptions>
+
+          <div className="execution-result-card__meta-item">
+            <Text type="secondary">完成</Text>
+            <Text>
+              {pollingExecutionId ? `轮询中 ${pollingExecutionId.slice(0, 8)}` : formatDateTime(execution.finishedAt)}
+            </Text>
+          </div>
+        </div>
 
         <ErrorDetailPanel
           title={errorTitle}
