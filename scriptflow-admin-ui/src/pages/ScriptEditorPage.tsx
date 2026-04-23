@@ -58,7 +58,7 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
-import { CommandTabsPanel } from "../components/CommandTabsPanel";
+import { buildCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { InfoHint } from "../components/InfoHint";
 import { JsonPreview } from "../components/JsonPreview";
@@ -408,6 +408,24 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const detailCommandPresets = buildCommandPresets([
+    { key: "detail-http-bash", family: "HTTP", environment: "bash/zsh", command: detailCurlCommand },
+    { key: "detail-http-powershell", family: "HTTP", environment: "PowerShell", command: detailPowerShellCommand },
+    { key: "detail-cli-bash", family: "CLI", environment: "bash/zsh", command: detailCliCommand },
+    { key: "detail-cli-cmd", family: "CLI", environment: "cmd", command: detailCmdCliCommand }
+  ]);
+  const executeCommandPresets = buildCommandPresets([
+    { key: "execute-http-bash", family: "HTTP", environment: "bash/zsh", command: executeCurlCommand },
+    { key: "execute-http-powershell", family: "HTTP", environment: "PowerShell", command: executePowerShellCommand },
+    { key: "execute-cli-bash", family: "CLI", environment: "bash/zsh", command: executeCliCommand },
+    { key: "execute-cli-cmd", family: "CLI", environment: "cmd", command: executeCmdCliCommand }
+  ]);
+  const schemaCommandPresets = buildCommandPresets([
+    { key: "schema-http-bash", family: "HTTP", environment: "bash/zsh", command: toolDetailCurlCommand },
+    { key: "schema-http-powershell", family: "HTTP", environment: "PowerShell", command: toolDetailPowerShellCommand },
+    { key: "schema-cli-bash", family: "CLI", environment: "bash/zsh", command: toolDetailCliCommand },
+    { key: "schema-cli-cmd", family: "CLI", environment: "cmd", command: toolDetailCmdCliCommand }
+  ]);
   const toolContractResponseExample = currentScript
     ? {
         status: 0,
@@ -1726,99 +1744,51 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                             label="可直接执行的 REST API / CLI 命令"
                             content={
                               apiKey
-                                ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-RestMethod，并会附带 Authorization 头；CLI 会附带 --token。`
-                                : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-RestMethod；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
+                                ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
+                                : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
                             }
                           />
 
-                          <Tabs
+                          <Collapse
+                            accordion
+                            defaultActiveKey={["command-execute"]}
                             items={[
-                              {
-                                key: "command-detail",
-                                label: "查看详情",
-                                children: (
-                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                                    <Text type="secondary">使用当前脚本 ID 生成</Text>
-                                    <CommandTabsPanel
-                                      items={[
-                                        {
-                                          key: "detail-curl-linux",
-                                          label: "HTTP",
-                                          title: "详情查询命令",
-                                          command: detailCurlCommand,
-                                          variants: [
-                                            { key: "detail-http-bash", label: "bash/zsh", command: detailCurlCommand },
-                                            {
-                                              key: "detail-http-powershell",
-                                              label: "PowerShell",
-                                              command: detailPowerShellCommand
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          key: "detail-cli",
-                                          label: "CLI",
-                                          title: "详情查询命令",
-                                          command: detailCliCommand,
-                                          variants: [
-                                            { key: "detail-cli-linux", label: "bash/zsh", command: detailCliCommand },
-                                            { key: "detail-cli-cmd", label: "cmd", command: detailCmdCliCommand }
-                                          ]
-                                        }
-                                      ]}
-                                      onCopy={(command) => void handleCopyCommand(command)}
-                                    />
-                                  </Space>
-                                )
-                              },
                               {
                                 key: "command-execute",
                                 label: "执行脚本",
                                 children: (
                                   <Space direction="vertical" size={12} style={{ width: "100%" }}>
                                     <Text type="secondary">跟随当前调试配置生成</Text>
-                                    {commandInput.note && (
+                                    {commandInput.note ? (
                                       <Alert
                                         type={commandInput.source === "sample" || commandInput.source === "empty" ? "warning" : "info"}
                                         showIcon
                                         message={commandInput.note}
                                       />
-                                    )}
+                                    ) : null}
                                     <Descriptions size="small" column={isMobile ? 1 : 2}>
-                                      <Descriptions.Item label="执行模式">
-                                        {executionMode}
-                                      </Descriptions.Item>
+                                      <Descriptions.Item label="执行模式">{executionMode}</Descriptions.Item>
                                       <Descriptions.Item label="入参来源">
                                         {getCommandInputSourceLabel(commandInput.source)}
                                       </Descriptions.Item>
                                     </Descriptions>
                                     <CommandTabsPanel
-                                      items={[
-                                        {
-                                          key: "execute-curl-linux",
-                                          label: "HTTP",
-                                          title: "执行脚本命令",
-                                          command: executeCurlCommand,
-                                          variants: [
-                                            { key: "execute-http-bash", label: "bash/zsh", command: executeCurlCommand },
-                                            {
-                                              key: "execute-http-powershell",
-                                              label: "PowerShell",
-                                              command: executePowerShellCommand
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          key: "execute-cli",
-                                          label: "CLI",
-                                          title: "执行脚本命令",
-                                          command: executeCliCommand,
-                                          variants: [
-                                            { key: "execute-cli-linux", label: "bash/zsh", command: executeCliCommand },
-                                            { key: "execute-cli-cmd", label: "cmd", command: executeCmdCliCommand }
-                                          ]
-                                        }
-                                      ]}
+                                      title="执行脚本命令"
+                                      presets={executeCommandPresets}
+                                      onCopy={(command) => void handleCopyCommand(command)}
+                                    />
+                                  </Space>
+                                )
+                              },
+                              {
+                                key: "command-detail",
+                                label: "查看详情",
+                                children: (
+                                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                                    <Text type="secondary">使用当前脚本 ID 生成，可用于查询脚本定义详情。</Text>
+                                    <CommandTabsPanel
+                                      title="详情查询命令"
+                                      presets={detailCommandPresets}
                                       onCopy={(command) => void handleCopyCommand(command)}
                                     />
                                   </Space>
@@ -1831,37 +1801,12 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       label: "Schema",
                                       children: (
                                         <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                                          <Text type="secondary">供模型与调用方查看输入输出定义</Text>
+                                          <Text type="secondary">供模型与调用方查看输入输出定义。</Text>
                                           <CommandTabsPanel
-                                            items={[
-                                              {
-                                                key: "schema-curl-linux",
-                                                label: "HTTP",
-                                                title: "获取 Schema 命令",
-                                                command: toolDetailCurlCommand,
-                                                variants: [
-                                                  { key: "schema-http-bash", label: "bash/zsh", command: toolDetailCurlCommand },
-                                                  {
-                                                    key: "schema-http-powershell",
-                                                    label: "PowerShell",
-                                                    command: toolDetailPowerShellCommand
-                                                  }
-                                                ]
-                                              },
-                                              {
-                                                key: "schema-cli",
-                                                label: "CLI",
-                                                title: "获取 Schema 命令",
-                                                command: toolDetailCliCommand,
-                                                variants: [
-                                                  { key: "schema-cli-linux", label: "bash/zsh", command: toolDetailCliCommand },
-                                                  { key: "schema-cli-cmd", label: "cmd", command: toolDetailCmdCliCommand }
-                                                ]
-                                              }
-                                            ]}
+                                            title="获取 Schema 命令"
+                                            presets={schemaCommandPresets}
                                             onCopy={(command) => void handleCopyCommand(command)}
                                           />
-
                                           <JsonPreview
                                             title="Schema 响应示例"
                                             value={toolContractResponseExample}

@@ -1,32 +1,24 @@
-import { Tabs } from "antd";
-import { CommandPanel } from "./CommandPanel";
+import { CommandPanel, type CommandPreset } from "./CommandPanel";
 
-interface CommandTabItem {
-  command: string;
-  key: string;
-  label: string;
+export interface CommandPanelGroup {
+  presets: CommandPreset[];
   title: string;
-  variants?: Array<{
-    command: string;
-    key: string;
-    label: string;
-  }>;
 }
 
 export function CommandTabsPanel({
-  items,
+  title,
+  presets,
   onCopy
 }: {
-  items: CommandTabItem[];
+  title: string;
+  presets: CommandPanelGroup["presets"];
   onCopy: (value: string) => void;
 }) {
-  return (
-    <Tabs
-      items={items.map((item) => ({
-        key: item.key,
-        label: item.label,
-        children: <CommandPanel title={item.title} command={item.command} variants={item.variants} onCopy={onCopy} />
-      }))}
-    />
-  );
+  return <CommandPanel title={title} presets={presets} onCopy={onCopy} />;
+}
+
+export type { CommandPreset } from "./CommandPanel";
+
+export function buildCommandPresets(presets: CommandPreset[]): CommandPreset[] {
+  return presets.filter((item) => item.command.trim().length > 0);
 }

@@ -38,7 +38,7 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
-import { CommandTabsPanel } from "../components/CommandTabsPanel";
+import { buildCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
 import { SchemaFieldList } from "../components/SchemaFieldList";
@@ -428,6 +428,12 @@ export function PluginDetailPage() {
           responseView: "RESULT"
         })
       : "";
+  const invokeCommandPresets = buildCommandPresets([
+    { key: "invoke-http-bash", family: "HTTP", environment: "bash/zsh", command: invokeCurlCommand },
+    { key: "invoke-http-powershell", family: "HTTP", environment: "PowerShell", command: invokePowerShellCommand },
+    { key: "invoke-cli-bash", family: "CLI", environment: "bash/zsh", command: invokeCliCommand },
+    { key: "invoke-cli-cmd", family: "CLI", environment: "cmd", command: invokeCmdCliCommand }
+  ]);
   if (loading && !plugin) {
     return (
       <div className="page-loading">
@@ -722,57 +728,38 @@ export function PluginDetailPage() {
               {
                 key: "commands",
                 label: "调用命令",
-                children: currentAction ? (
-                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                    <InfoHint
-                      label="调用命令会跟随当前动作和调试入参变化"
-                      content={
-                        apiKey
-                          ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-RestMethod，并会附带 Authorization 头；CLI 会附带 --token。`
-                          : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-RestMethod；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
-                      }
-                    />
-                    {commandArgsInput.note ? <Alert type="info" showIcon message={commandArgsInput.note} /> : null}
-                    {commandScriptInput.note ? <Alert type="warning" showIcon message={commandScriptInput.note} /> : null}
-                    <Space direction="vertical" size={8}>
-                      <Text strong>当前动作</Text>
-                      <Text>{getActionLabel(currentAction)}</Text>
-                      <Text type="secondary">动作参数来源：{getCommandInputSourceLabel(commandArgsInput.source)}</Text>
-                      <Text type="secondary">
-                        脚本输入来源：{commandScriptInput.source === "current-json" ? "当前 JSON 输入" : "空对象"}
-                      </Text>
-                    </Space>
-                    <CommandTabsPanel
-                      items={[
-                        {
-                          key: "invoke-curl-linux",
-                          label: "HTTP",
-                          title: "调用动作命令",
-                          command: invokeCurlCommand,
-                          variants: [
-                            { key: "invoke-http-bash", label: "bash/zsh", command: invokeCurlCommand },
-                            {
-                              key: "invoke-http-powershell",
-                              label: "PowerShell",
-                              command: invokePowerShellCommand
-                            }
-                          ]
-                        },
-                        {
-                          key: "invoke-cli",
-                          label: "CLI",
-                          title: "调用动作命令",
-                          command: invokeCliCommand,
-                          variants: [
-                            { key: "invoke-cli-linux", label: "bash/zsh", command: invokeCliCommand },
-                            { key: "invoke-cli-cmd", label: "cmd", command: invokeCmdCliCommand }
-                          ]
-                        }
-                      ]}
-                      onCopy={(command) => void handleCopyCommand(command)}
-                    />
-                  </Space>
-                ) : (
+	                children: currentAction ? (
+	                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
+	                    <InfoHint
+	                      label="调用命令会跟随当前动作和调试入参变化"
+	                      content={
+	                        apiKey
+	                          ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
+	                          : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
+	                      }
+	                    />
+	                    {commandArgsInput.note ? <Alert type="info" showIcon message={commandArgsInput.note} /> : null}
+	                    {commandScriptInput.note ? <Alert type="warning" showIcon message={commandScriptInput.note} /> : null}
+	                    <Space direction="vertical" size={8}>
+	                      <Text strong>当前动作</Text>
+	                      <Select
+	                        value={currentAction.action}
+	                        options={actionOptions}
+	                        onChange={setSelectedActionName}
+	                        style={{ width: "100%" }}
+	                      />
+	                      <Text type="secondary">动作参数来源：{getCommandInputSourceLabel(commandArgsInput.source)}</Text>
+	                      <Text type="secondary">
+	                        脚本输入来源：{commandScriptInput.source === "current-json" ? "当前 JSON 输入" : "空对象"}
+	                      </Text>
+	                    </Space>
+	                    <CommandTabsPanel
+	                      title="调用动作命令"
+	                      presets={invokeCommandPresets}
+	                      onCopy={(command) => void handleCopyCommand(command)}
+	                    />
+	                  </Space>
+	                ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前插件没有可生成命令的动作。" />
                 )
               }

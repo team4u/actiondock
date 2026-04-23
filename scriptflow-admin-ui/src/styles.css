@@ -413,6 +413,13 @@ a {
   gap: 12px;
 }
 
+.command-panel__selectors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .plugin-action-reference + .plugin-action-reference {
   margin-top: 12px;
   padding-top: 12px;
@@ -956,6 +963,7 @@ a {
   .schema-builder-toolbar,
   .schema-field-card__header,
   .command-panel__header,
+  .command-panel__variants,
   .schema-object-result__header {
     flex-direction: column;
     align-items: stretch;
