@@ -188,3 +188,17 @@ export interface PluginInvokeRequest {
   scriptInput: Record<string, unknown>;
   responseView?: ExecutionResponseView;
 }
+
+export interface ConfigValue {
+  key: string;
+  value: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ConfigValueRequest {
+  key: string;
+  value: string;
+  description?: string;
+}

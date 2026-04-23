@@ -59,6 +59,7 @@ public class GroovyScriptEngine implements ScriptEngine {
     private Binding newBinding(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         Binding binding = new Binding();
         binding.setVariable("input", input == null ? Map.of() : input);
+        binding.setVariable("config", executionContext == null ? Map.of() : executionContext.getConfig());
         binding.setVariable("log", new ScriptLogger(executionContext));
         binding.setVariable("plugins", new GroovyPlugins(pluginRuntimeService, definition, input, executionContext));
         return binding;

@@ -560,6 +560,11 @@ export function PluginDetailPage() {
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="插件配置不存在或加载失败。" />
                 ) : (
                   <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Alert
+                      type="info"
+                      showIcon
+                      message="字符串字段支持使用 ${config.xxx} 引用全局配置值；插件真正执行时会按最新值解析。"
+                    />
                     <SchemaObjectEditor
                       form={configForm}
                       supportedFields={configSupportedFields}
@@ -600,6 +605,11 @@ export function PluginDetailPage() {
                         <Col xs={24} xl={10} className="equal-height-col">
                           <Card type="inner" title="动作参数" className="equal-height-card">
                             <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                              <Alert
+                                type="info"
+                                showIcon
+                                message="调试参数和脚本输入模拟里的字符串也支持 ${config.xxx}。"
+                              />
                               <Form layout="vertical">
                                 <Form.Item label="动作名称">
                                   <Select value={currentAction?.action} options={actionOptions} onChange={setSelectedActionName} />
@@ -621,7 +631,7 @@ export function PluginDetailPage() {
                               <Form layout="vertical">
                                 <Form.Item
                                   label="脚本输入模拟"
-                                  extra="模拟插件上下文中的脚本输入（scriptInput），默认空对象。"
+                                  extra="模拟插件上下文中的脚本输入（scriptInput），默认空对象；字符串支持 ${config.xxx}。"
                                 >
                                   <CodeEditor
                                     height="220px"

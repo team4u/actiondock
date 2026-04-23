@@ -5,11 +5,14 @@ import org.pf4j.Plugin;
 import org.pf4j.PluginWrapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.team4u.scriptflow.application.ConfigValueApplicationService;
 import org.team4u.scriptflow.config.AppProperties;
+import org.team4u.scriptflow.domain.model.ConfigValue;
 import org.team4u.scriptflow.domain.model.PluginRegistration;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
 import org.team4u.scriptflow.domain.model.SubmitMode;
+import org.team4u.scriptflow.domain.port.ConfigValueRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
 import org.team4u.scriptflow.plugin.api.ScriptFlowPlugin;
@@ -238,6 +241,52 @@ class PluginRuntimeServiceTest {
         );
 
         assertThat(result).containsEntry("message", "demo:hello");
+    }
+
+    @Test
+    void resolvesConfigPlaceholdersForPluginConfigAndDebugInputs() throws IOException {
+        Path pluginJar = buildPluginJar(
+                tempDir.resolve("demo-plugin.jar"),
+                demoPluginManifestJson("0.2.0", "ScriptFlow Demo Plugin")
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        InMemoryConfigValueRepository configRepository = new InMemoryConfigValueRepository();
+        ConfigValueApplicationService configService = new ConfigValueApplicationService(configRepository);
+        configService.create(new ConfigValue().setKey("plugin_prefix").setValue("hello"));
+        configService.create(new ConfigValue().setKey("message").setValue("debug"));
+        configService.create(new ConfigValue().setKey("user_name").setValue("Alice"));
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties, configService);
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+        service.saveConfig("scriptflow-demo-plugin", Map.of("prefix", "${config.plugin_prefix}"));
+
+        assertThat(service.getConfig("scriptflow-demo-plugin").getConfig())
+                .containsEntry("prefix", "${config.plugin_prefix}");
+
+        Map<String, Object> result = (Map<String, Object>) service.invoke(
+                "scriptflow-demo-plugin",
+                "echo",
+                null,
+                new ScriptExecutionContext().setSubmitMode(SubmitMode.SYNC).setConfig(configService.snapshot()),
+                Map.of("name", "Alice"),
+                Map.of("message", "world")
+        );
+
+        assertThat(result).containsEntry("message", "hello:world");
+
+        PluginInvokeView debug = service.invokeForDebug(
+                "scriptflow-demo-plugin",
+                "echo",
+                Map.of("message", "${config.message}"),
+                Map.of("name", "${config.user_name}"),
+                true
+        );
+
+        assertThat(debug.getResult()).containsEntry("message", "hello:debug");
+        assertThat(debug.getDebug().getArgs()).containsEntry("message", "debug");
+        assertThat(debug.getDebug().getScriptInput()).containsEntry("name", "Alice");
     }
 
     private Path buildPluginJar(Path destination, String manifestJson) throws IOException {
@@ -501,6 +550,37 @@ class PluginRuntimeServiceTest {
                     .setEnabled(registration.isEnabled())
                     .setInstalledAt(registration.getInstalledAt())
                     .setUpdatedAt(registration.getUpdatedAt());
+        }
+    }
+
+    private static final class InMemoryConfigValueRepository implements ConfigValueRepository {
+        private final Map<String, ConfigValue> values = new ConcurrentHashMap<>();
+
+        @Override
+        public ConfigValue save(ConfigValue configValue) {
+            ConfigValue copy = new ConfigValue()
+                    .setKey(configValue.getKey())
+                    .setValue(configValue.getValue())
+                    .setDescription(configValue.getDescription())
+                    .setCreatedAt(configValue.getCreatedAt())
+                    .setUpdatedAt(configValue.getUpdatedAt());
+            values.put(copy.getKey(), copy);
+            return copy;
+        }
+
+        @Override
+        public Optional<ConfigValue> findByKey(String key) {
+            return Optional.ofNullable(values.get(key));
+        }
+
+        @Override
+        public List<ConfigValue> findAll() {
+            return new ArrayList<>(values.values());
+        }
+
+        @Override
+        public void deleteByKey(String key) {
+            values.remove(key);
         }
     }
 

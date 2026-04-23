@@ -102,6 +102,20 @@ class PythonScriptEngineTest {
         );
     }
 
+    @Test
+    void executeExposesConfigBinding() {
+        ScriptExecutionContext context = new ScriptExecutionContext()
+                .setConfig(Map.of("api_key", "secret-value"));
+
+        Object result = engine.execute(
+                new ScriptDefinition().setSource("return {\"apiKey\": config.get(\"api_key\")}"),
+                Map.of(),
+                context
+        );
+
+        assertThat(result).isEqualTo(Map.of("apiKey", "secret-value"));
+    }
+
     private static AppProperties.Python pythonProperties(int timeoutSeconds) {
         AppProperties.Python properties = new AppProperties.Python();
         properties.setExecutable("python3");

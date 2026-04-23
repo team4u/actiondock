@@ -24,13 +24,26 @@ public class ScheduleApplicationService {
     private final ScriptScheduleRepository scriptScheduleRepository;
     private final ScriptRepository scriptRepository;
     private final ScheduleExpressionValidator scheduleExpressionValidator;
+    private final ScriptSchemaSupport scriptSchemaSupport;
+    private final ConfigValueApplicationService configValueApplicationService;
 
     public ScheduleApplicationService(ScriptScheduleRepository scriptScheduleRepository,
                                       ScriptRepository scriptRepository,
                                       ScheduleExpressionValidator scheduleExpressionValidator) {
+        this(scriptScheduleRepository, scriptRepository, scheduleExpressionValidator, ConfigValueApplicationService.disabled());
+    }
+
+    public ScheduleApplicationService(ScriptScheduleRepository scriptScheduleRepository,
+                                      ScriptRepository scriptRepository,
+                                      ScheduleExpressionValidator scheduleExpressionValidator,
+                                      ConfigValueApplicationService configValueApplicationService) {
         this.scriptScheduleRepository = scriptScheduleRepository;
         this.scriptRepository = scriptRepository;
         this.scheduleExpressionValidator = scheduleExpressionValidator;
+        this.scriptSchemaSupport = new ScriptSchemaSupport();
+        this.configValueApplicationService = configValueApplicationService == null
+                ? ConfigValueApplicationService.disabled()
+                : configValueApplicationService;
     }
 
     public List<ScriptSchedule> list(String scriptId) {
@@ -83,6 +96,9 @@ public class ScheduleApplicationService {
                 .setInput(copy(schedule.getInput()))
                 .setEnabled(schedule.isEnabled())
                 .setUpdatedAt(now);
+        scriptSchemaSupport.validateInput(script.getId(),
+                configValueApplicationService.resolveMap(target.getInput()),
+                script.getPublishedSnapshot().getInputSchema());
         return scriptScheduleRepository.save(target);
     }
 

@@ -3,6 +3,7 @@ package org.team4u.scriptflow.plugin;
 import org.pf4j.DefaultPluginManager;
 import org.pf4j.PluginState;
 import org.pf4j.PluginWrapper;
+import org.team4u.scriptflow.application.ConfigValueApplicationService;
 import org.team4u.scriptflow.application.ExecutionOutputProjector;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.PluginActionMetadata;
@@ -46,6 +47,7 @@ public class PluginRuntimeService {
     private final DefaultPluginManager pluginManager;
     private final Map<String, PluginManifest> manifestCache;
     private final ExecutionOutputProjector executionOutputProjector;
+    private final ConfigValueApplicationService configValueApplicationService;
     private final boolean enabled;
 
     private PluginRuntimeService() {
@@ -56,12 +58,20 @@ public class PluginRuntimeService {
         this.pluginManager = null;
         this.manifestCache = Map.of();
         this.executionOutputProjector = null;
+        this.configValueApplicationService = ConfigValueApplicationService.disabled();
         this.enabled = false;
     }
 
     public PluginRuntimeService(JsonCodec jsonCodec,
                                 PluginRegistryRepository pluginRegistryRepository,
                                 AppProperties.Plugins properties) {
+        this(jsonCodec, pluginRegistryRepository, properties, ConfigValueApplicationService.disabled());
+    }
+
+    public PluginRuntimeService(JsonCodec jsonCodec,
+                                PluginRegistryRepository pluginRegistryRepository,
+                                AppProperties.Plugins properties,
+                                ConfigValueApplicationService configValueApplicationService) {
         this.jsonCodec = jsonCodec;
         this.pluginRegistryRepository = pluginRegistryRepository;
         this.pluginsRoot = Path.of(properties == null || properties.getDir() == null || properties.getDir().isBlank()
@@ -71,6 +81,9 @@ public class PluginRuntimeService {
         this.pluginManager = new DefaultPluginManager(this.pluginsRoot);
         this.manifestCache = new HashMap<>();
         this.executionOutputProjector = new ExecutionOutputProjector();
+        this.configValueApplicationService = configValueApplicationService == null
+                ? ConfigValueApplicationService.disabled()
+                : configValueApplicationService;
         this.enabled = true;
         initialize();
     }
@@ -99,13 +112,13 @@ public class PluginRuntimeService {
                 .setPluginId(pluginId)
                 .setConfigSchema(registration.getConfigSchema())
                 .setDefaultConfig(registration.getDefaultConfig())
-                .setConfig(loadEffectiveConfig(registration));
+                .setConfig(loadRawEffectiveConfig(registration));
     }
 
     public synchronized PluginConfigView saveConfig(String pluginId, Map<String, Object> config) {
         PluginRegistration registration = requireRegistration(pluginId);
         Map<String, Object> normalized = normalizeConfig(config);
-        Map<String, Object> effectiveConfig = mergeConfig(registration.getDefaultConfig(), normalized);
+        Map<String, Object> effectiveConfig = resolveRuntimeConfig(registration.getDefaultConfig(), normalized);
         ScriptFlowPlugin plugin = findLoadedExtension(pluginId);
         if (plugin != null) {
             plugin.validateConfig(effectiveConfig);
@@ -115,7 +128,7 @@ public class PluginRuntimeService {
                 .setPluginId(pluginId)
                 .setConfigSchema(registration.getConfigSchema())
                 .setDefaultConfig(registration.getDefaultConfig())
-                .setConfig(effectiveConfig);
+                .setConfig(loadRawEffectiveConfig(registration));
     }
 
     public synchronized PluginView install(String originalFilename, byte[] content) {
@@ -272,7 +285,7 @@ public class PluginRuntimeService {
                             .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
                             .setSubmitMode(resolveSubmitMode(executionContext))
                             .setScriptInput(input)
-                            .setPluginConfig(loadEffectiveConfig(registration)),
+                            .setPluginConfig(loadRuntimeConfig(registration)),
                     args == null ? Map.of() : new LinkedHashMap<>(args)
             );
         } catch (PluginRuntimeException exception) {
@@ -289,14 +302,16 @@ public class PluginRuntimeService {
                                                         boolean includeDebug) {
         PluginRegistration registration = requireRegistration(pluginId);
         PluginActionMetadata actionMetadata = requireActionMetadata(registration, action);
-        Map<String, Object> normalizedArgs = normalizeConfig(args);
-        Map<String, Object> normalizedScriptInput = normalizeConfig(scriptInput);
+        Map<String, Object> normalizedArgs = configValueApplicationService.resolveMap(args);
+        Map<String, Object> normalizedScriptInput = configValueApplicationService.resolveMap(scriptInput);
         Map<String, Object> pluginResult = normalizeResult(
                 invoke(
                         pluginId,
                         action,
                         null,
-                        new ScriptExecutionContext().setSubmitMode(SubmitMode.SYNC),
+                        new ScriptExecutionContext()
+                                .setSubmitMode(SubmitMode.SYNC)
+                                .setConfig(configValueApplicationService.snapshot()),
                         normalizedScriptInput,
                         normalizedArgs
                 )
@@ -503,8 +518,16 @@ public class PluginRuntimeService {
                 .setExampleArgs(actionMetadata.getExampleArgs());
     }
 
-    private Map<String, Object> loadEffectiveConfig(PluginRegistration registration) {
+    private Map<String, Object> loadRawEffectiveConfig(PluginRegistration registration) {
         return mergeConfig(registration.getDefaultConfig(), readConfig(registration.getPluginId()));
+    }
+
+    private Map<String, Object> loadRuntimeConfig(PluginRegistration registration) {
+        return resolveRuntimeConfig(registration.getDefaultConfig(), readConfig(registration.getPluginId()));
+    }
+
+    private Map<String, Object> resolveRuntimeConfig(Map<String, Object> defaultConfig, Map<String, Object> overrides) {
+        return configValueApplicationService.resolveMap(mergeConfig(defaultConfig, overrides));
     }
 
     private Map<String, Object> mergeConfig(Map<String, Object> defaultConfig, Map<String, Object> overrides) {

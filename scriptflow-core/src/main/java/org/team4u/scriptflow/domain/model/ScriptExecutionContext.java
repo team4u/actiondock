@@ -1,5 +1,8 @@
 package org.team4u.scriptflow.domain.model;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 脚本执行上下文，在脚本执行过程中传递的运行时信息。
  * <p>
@@ -12,6 +15,7 @@ public class ScriptExecutionContext {
     private String executionId;
     private SubmitMode submitMode;
     private ScriptExecutionLogger logger = ScriptExecutionLogger.noop();
+    private Map<String, String> config = Map.of();
 
     public String getExecutionId() {
         return executionId;
@@ -37,6 +41,15 @@ public class ScriptExecutionContext {
 
     public ScriptExecutionContext setLogger(ScriptExecutionLogger logger) {
         this.logger = logger == null ? ScriptExecutionLogger.noop() : logger;
+        return this;
+    }
+
+    public Map<String, String> getConfig() {
+        return config;
+    }
+
+    public ScriptExecutionContext setConfig(Map<String, String> config) {
+        this.config = config == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(config));
         return this;
     }
 

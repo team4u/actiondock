@@ -58,7 +58,7 @@ public class PythonScriptEngine implements ScriptEngine {
                     "-c",
                     VALIDATION_RUNNER,
                     scriptPath.toAbsolutePath().toString()
-            ), null, null);
+            ), null, "{}", null);
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本校验超时");
             }
@@ -83,6 +83,7 @@ public class PythonScriptEngine implements ScriptEngine {
             ProcessResult result = runCommand(
                     List.of(resolveExecutable(), scriptPath.toAbsolutePath().toString()),
                     jsonCodec.write(input == null ? Map.of() : input),
+                    jsonCodec.write(executionContext == null ? Map.of() : executionContext.getConfig()),
                     event -> {
                         if (executionContext != null) {
                             executionContext.log(event.level(), event.message());
@@ -106,10 +107,14 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
-    private ProcessResult runCommand(List<String> command, String stdin, Consumer<LogEvent> logConsumer)
+    private ProcessResult runCommand(List<String> command,
+                                     String stdin,
+                                     String configJson,
+                                     Consumer<LogEvent> logConsumer)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command);
+        processBuilder.environment().put("SCRIPTFLOW_CONFIG_JSON", configJson == null ? "{}" : configJson);
         Process process = processBuilder.start();
         CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()));
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
@@ -155,6 +160,8 @@ public class PythonScriptEngine implements ScriptEngine {
                 if __name__ == "__main__":
                     payload_text = sys.stdin.read()
                     input = {} if not payload_text.strip() else json.loads(payload_text)
+                    config_text = os.environ.get("SCRIPTFLOW_CONFIG_JSON", "")
+                    config = {} if not config_text.strip() else json.loads(config_text)
                     result = __scriptflow_main(input)
                     json.dump(result, sys.stdout, ensure_ascii=False)
                 """;
@@ -167,6 +174,7 @@ public class PythonScriptEngine implements ScriptEngine {
         }
         List<String> lines = new ArrayList<>();
         lines.add("import json");
+        lines.add("import os");
         lines.add("import sys");
         lines.add("");
         lines.add("class __ScriptFlowLog:");

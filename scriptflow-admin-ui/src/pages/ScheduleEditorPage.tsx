@@ -692,6 +692,12 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                       <div>
                         <Text strong>固定输入</Text>
                         <div style={{ marginTop: 12 }}>
+                          <Alert
+                            type="info"
+                            showIcon
+                            message="固定输入中的字符串支持 ${config.xxx}；保存时会先解析并按脚本 inputSchema 校验。"
+                            style={{ marginBottom: 12 }}
+                          />
                           <SchemaObjectEditor
                             form={inputForm}
                             supportedFields={supportedInputFields}

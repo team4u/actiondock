@@ -2,6 +2,8 @@ import { emitAuthRequired, getApiKey } from "./auth";
 import type {
   ApiErrorPayload,
   ApiResponse,
+  ConfigValue,
+  ConfigValueRequest,
   ExecuteRequest,
   ExecutionResponse,
   ExecutionRecord,
@@ -287,5 +289,35 @@ export function invokePluginAction(
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
+  });
+}
+
+export function listConfigValues(): Promise<ConfigValue[]> {
+  return request<ConfigValue[]>("/api/config-values");
+}
+
+export function getConfigValue(key: string): Promise<ConfigValue> {
+  return request<ConfigValue>(`/api/config-values/${encodeURIComponent(key)}`);
+}
+
+export function createConfigValue(payload: ConfigValueRequest): Promise<ConfigValue> {
+  return request<ConfigValue>("/api/config-values", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateConfigValue(key: string, payload: ConfigValueRequest): Promise<ConfigValue> {
+  return request<ConfigValue>(`/api/config-values/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteConfigValue(key: string): Promise<void> {
+  return request<void>(`/api/config-values/${encodeURIComponent(key)}`, {
+    method: "DELETE"
   });
 }

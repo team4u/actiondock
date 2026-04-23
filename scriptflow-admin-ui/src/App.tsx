@@ -44,6 +44,9 @@ const ScheduleEditorPage = lazy(() =>
 const ApiKeyManagementPage = lazy(() =>
   import("./pages/ApiKeyManagementPage").then((module) => ({ default: module.ApiKeyManagementPage }))
 );
+const ConfigValueManagementPage = lazy(() =>
+  import("./pages/ConfigValueManagementPage").then((module) => ({ default: module.ConfigValueManagementPage }))
+);
 
 function getSystemColorMode(): ColorMode {
   if (typeof window === "undefined") {
@@ -82,6 +85,8 @@ function AdminShell() {
     ? "plugins"
     : location.pathname.startsWith("/schedules")
       ? "schedules"
+      : location.pathname.startsWith("/config-values")
+        ? "config-values"
       : location.pathname.startsWith("/settings")
         ? "settings"
         : location.pathname.startsWith("/scripts")
@@ -92,6 +97,8 @@ function AdminShell() {
       ? "插件管理"
       : selectedNavKey === "schedules"
         ? "定时任务"
+        : selectedNavKey === "config-values"
+          ? "配置值管理"
         : selectedNavKey === "settings"
           ? "API Key 管理"
           : "脚本管理";
@@ -124,6 +131,11 @@ function AdminShell() {
             key: "schedules",
             label: "定时任务",
             onClick: () => navigate("/schedules")
+          },
+          {
+            key: "config-values",
+            label: "配置值管理",
+            onClick: () => navigate("/config-values")
           },
           {
             key: "settings",
@@ -174,6 +186,7 @@ function AdminShell() {
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
+              <Route path="/config-values" element={<ConfigValueManagementPage />} />
               <Route
                 path="/plugins/:pluginId"
                 element={<PluginDetailPage />}

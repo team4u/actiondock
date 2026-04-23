@@ -1,10 +1,12 @@
 package org.team4u.scriptflow.application;
 
 import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.domain.model.ConfigValue;
 import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptSchedule;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
+import org.team4u.scriptflow.domain.port.ConfigValueRepository;
 import org.team4u.scriptflow.domain.port.ScheduleExpressionValidator;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 import org.team4u.scriptflow.domain.port.ScriptScheduleRepository;
@@ -79,6 +81,40 @@ class ScheduleApplicationServiceTest {
                 .setCronExpression("bad")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("bad cron");
+    }
+
+    @Test
+    void saveValidatesResolvedInputButPreservesRawPlaceholders() {
+        scriptRepository.save(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Published")
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Published")
+                        .setSource("return [:]")
+                        .setInputSchema(Map.of(
+                                "type", "object",
+                                "required", List.of("endpoint"),
+                                "properties", Map.of(
+                                        "endpoint", Map.of("type", "string")
+                                )
+                        ))));
+        InMemoryConfigValueRepository configRepository = new InMemoryConfigValueRepository();
+        ConfigValueApplicationService configService = new ConfigValueApplicationService(configRepository);
+        configService.create(new ConfigValue().setKey("endpoint").setValue("https://svc.example.com"));
+        ScheduleApplicationService serviceWithConfig = new ScheduleApplicationService(
+                scriptScheduleRepository,
+                scriptRepository,
+                validator,
+                configService
+        );
+
+        ScriptSchedule saved = serviceWithConfig.save("script-1", new ScriptSchedule()
+                .setName("Nightly")
+                .setCronExpression("0 0 * * * *")
+                .setInput(Map.of("endpoint", "${config.endpoint}")));
+
+        assertThat(saved.getInput()).containsEntry("endpoint", "${config.endpoint}");
     }
 
     @Test
@@ -202,6 +238,31 @@ class ScheduleApplicationServiceTest {
                     .setLastExecutionId(schedule.getLastExecutionId())
                     .setCreatedAt(schedule.getCreatedAt())
                     .setUpdatedAt(schedule.getUpdatedAt());
+        }
+    }
+
+    private static final class InMemoryConfigValueRepository implements ConfigValueRepository {
+        private final Map<String, ConfigValue> storage = new LinkedHashMap<>();
+
+        @Override
+        public ConfigValue save(ConfigValue configValue) {
+            storage.put(configValue.getKey(), configValue);
+            return configValue;
+        }
+
+        @Override
+        public Optional<ConfigValue> findByKey(String key) {
+            return Optional.ofNullable(storage.get(key));
+        }
+
+        @Override
+        public List<ConfigValue> findAll() {
+            return new ArrayList<>(storage.values());
+        }
+
+        @Override
+        public void deleteByKey(String key) {
+            storage.remove(key);
         }
     }
 }

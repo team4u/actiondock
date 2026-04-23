@@ -346,6 +346,13 @@ export function ScriptRunPage() {
               />
             ) : null}
 
+            <Alert
+              type="info"
+              showIcon
+              message="字符串输入支持 ${config.xxx}；脚本内部也可通过只读变量 config 读取全局配置值。"
+              style={{ marginBottom: 14 }}
+            />
+
             <Radio.Group
               value={executionMode}
               optionType="button"

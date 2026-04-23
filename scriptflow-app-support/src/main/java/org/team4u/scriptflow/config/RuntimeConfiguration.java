@@ -4,9 +4,11 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.team4u.scriptflow.application.ConfigValueApplicationService;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScheduleApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
+import org.team4u.scriptflow.domain.port.ConfigValueRepository;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
@@ -36,10 +38,16 @@ public class RuntimeConfiguration {
     }
 
     @Bean
+    public ConfigValueApplicationService configValueApplicationService(ConfigValueRepository configValueRepository) {
+        return new ConfigValueApplicationService(configValueRepository);
+    }
+
+    @Bean
     public PluginRuntimeService pluginRuntimeService(JsonCodec jsonCodec,
                                                      PluginRegistryRepository pluginRegistryRepository,
+                                                     ConfigValueApplicationService configValueApplicationService,
                                                      AppProperties properties) {
-        return new PluginRuntimeService(jsonCodec, pluginRegistryRepository, properties.getPlugins());
+        return new PluginRuntimeService(jsonCodec, pluginRegistryRepository, properties.getPlugins(), configValueApplicationService);
     }
 
     @Bean
@@ -67,15 +75,17 @@ public class RuntimeConfiguration {
     @Bean
     public ScheduleApplicationService scheduleApplicationService(ScriptScheduleRepository scriptScheduleRepository,
                                                                  ScriptRepository scriptRepository,
-                                                                 ScheduleExpressionValidator scheduleExpressionValidator) {
-        return new ScheduleApplicationService(scriptScheduleRepository, scriptRepository, scheduleExpressionValidator);
+                                                                 ScheduleExpressionValidator scheduleExpressionValidator,
+                                                                 ConfigValueApplicationService configValueApplicationService) {
+        return new ScheduleApplicationService(scriptScheduleRepository, scriptRepository, scheduleExpressionValidator, configValueApplicationService);
     }
 
     @Bean
     public ExecutionApplicationService executionApplicationService(ScriptRepository scriptRepository,
                                                                    ExecutionRepository executionRepository,
                                                                    ScriptEngine scriptEngine,
-                                                                   Executor executor) {
-        return new ExecutionApplicationService(scriptRepository, executionRepository, scriptEngine, executor);
+                                                                   Executor executor,
+                                                                   ConfigValueApplicationService configValueApplicationService) {
+        return new ExecutionApplicationService(scriptRepository, executionRepository, scriptEngine, executor, configValueApplicationService);
     }
 }

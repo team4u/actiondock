@@ -33,16 +33,28 @@ public class ExecutionApplicationService {
     private final ScriptEngine scriptEngine;
     private final Executor executor;
     private final ScriptSchemaSupport scriptSchemaSupport;
+    private final ConfigValueApplicationService configValueApplicationService;
 
     public ExecutionApplicationService(ScriptRepository scriptRepository,
                                        ExecutionRepository executionRepository,
                                        ScriptEngine scriptEngine,
                                        Executor executor) {
+        this(scriptRepository, executionRepository, scriptEngine, executor, ConfigValueApplicationService.disabled());
+    }
+
+    public ExecutionApplicationService(ScriptRepository scriptRepository,
+                                       ExecutionRepository executionRepository,
+                                       ScriptEngine scriptEngine,
+                                       Executor executor,
+                                       ConfigValueApplicationService configValueApplicationService) {
         this.scriptRepository = scriptRepository;
         this.executionRepository = executionRepository;
         this.scriptEngine = scriptEngine;
         this.executor = executor;
         this.scriptSchemaSupport = new ScriptSchemaSupport();
+        this.configValueApplicationService = configValueApplicationService == null
+                ? ConfigValueApplicationService.disabled()
+                : configValueApplicationService;
     }
 
     public ExecutionRecord execute(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
@@ -69,7 +81,7 @@ public class ExecutionApplicationService {
                                     SubmitMode submitMode,
                                     ExecutionTriggerSource triggerSource,
                                     String scheduleId) {
-        Map<String, Object> payload = input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
+        Map<String, Object> payload = configValueApplicationService.resolveMap(input);
         scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
 
         ExecutionRecord record = new ExecutionRecord()
@@ -117,6 +129,7 @@ public class ExecutionApplicationService {
                     new ScriptExecutionContext()
                             .setExecutionId(record.getId())
                             .setSubmitMode(record.getSubmitMode())
+                            .setConfig(configValueApplicationService.snapshot())
                             .setLogger(logCollector::append)
             );
             return logCollector.completeSuccess(toMap(result));

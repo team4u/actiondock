@@ -8,5 +8,6 @@ export const ROUTES = {
   SCHEDULE_DETAIL: "/schedules/:id",
   PLUGINS: "/plugins",
   PLUGIN_DETAIL: "/plugins/:pluginId",
+  CONFIG_VALUES: "/config-values",
   API_KEY: "/settings/api-key"
 } as const;

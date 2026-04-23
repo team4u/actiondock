@@ -180,6 +180,20 @@ class GroovyScriptEngineTest {
     }
 
     @Test
+    void executeExposesConfigBinding() {
+        ScriptExecutionContext context = new ScriptExecutionContext()
+                .setConfig(Map.of("api_key", "secret-value"));
+
+        Object result = engine.execute(
+                new ScriptDefinition().setSource("return [apiKey: config['api_key']]"),
+                Map.of(),
+                context
+        );
+
+        assertThat(result).isEqualTo(Map.of("apiKey", "secret-value"));
+    }
+
+    @Test
     void executeCompilesSameSourceOnlyOnceUnderConcurrentFirstHit() throws Exception {
         BlockingGroovyScriptEngine countingEngine = new BlockingGroovyScriptEngine(groovyProperties(), new MutableClock());
         ScriptDefinition definition = new ScriptDefinition().setSource("return [message: 'Hello, ' + input.name]");

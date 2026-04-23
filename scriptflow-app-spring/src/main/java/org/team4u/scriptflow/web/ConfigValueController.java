@@ -1,0 +1,69 @@
+package org.team4u.scriptflow.web;
+
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.team4u.scriptflow.application.ConfigValueApplicationService;
+import org.team4u.scriptflow.domain.model.ConfigValue;
+
+import java.util.List;
+
+/**
+ * 全局配置值 REST 控制器。
+ *
+ * @author jay.wu
+ */
+@RestController
+@RequestMapping("/api/config-values")
+public class ConfigValueController {
+    private final ConfigValueApplicationService configValueApplicationService;
+
+    public ConfigValueController(ConfigValueApplicationService configValueApplicationService) {
+        this.configValueApplicationService = configValueApplicationService;
+    }
+
+    @GetMapping
+    public ApiResponse<List<ConfigValue>> list() {
+        return ApiResponse.success(configValueApplicationService.list());
+    }
+
+    @GetMapping("/{key}")
+    public ApiResponse<ConfigValue> detail(@PathVariable String key) {
+        return ApiResponse.success(configValueApplicationService.get(key));
+    }
+
+    @PostMapping
+    public ApiResponse<ConfigValue> create(@RequestBody ConfigValueRequest request) {
+        return ApiResponse.success(
+                configValueApplicationService.create(toDomain(request)),
+                "配置值已创建"
+        );
+    }
+
+    @PutMapping("/{key}")
+    public ApiResponse<ConfigValue> update(@PathVariable String key, @RequestBody ConfigValueRequest request) {
+        return ApiResponse.success(
+                configValueApplicationService.update(key, toDomain(request)),
+                "配置值已更新"
+        );
+    }
+
+    @DeleteMapping("/{key}")
+    public ApiResponse<Void> delete(@PathVariable String key) {
+        configValueApplicationService.delete(key);
+        return ApiResponse.success(null, "配置值已删除");
+    }
+
+    private ConfigValue toDomain(ConfigValueRequest request) {
+        ConfigValueRequest value = request == null ? new ConfigValueRequest() : request;
+        return new ConfigValue()
+                .setKey(value.getKey())
+                .setValue(value.getValue())
+                .setDescription(value.getDescription());
+    }
+}

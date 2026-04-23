@@ -1,6 +1,7 @@
 import {
   Card,
   Space,
+  Tabs,
   Tag,
   Typography
 } from "antd";
@@ -139,40 +140,48 @@ export function ExecutionResultCard({
           detail={execution.errorDetail}
         />
 
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <div>
-            <Text strong>输入值</Text>
-            <div style={{ marginTop: 8 }}>
-              <SchemaObjectResultView
-                schema={inputSchema}
-                value={inputValue}
-                schemaName="inputSchema"
-                valueName="输入"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Text strong>输出值</Text>
-            <div style={{ marginTop: 8 }}>
-              <SchemaObjectResultView
-                schema={outputSchema}
-                value={execution.output}
-              />
-            </div>
-          </div>
-
-          {rawOutput ? (
-            <div>
-              <Text strong>原始输出</Text>
-              <pre className="json-preview" style={{ marginTop: 8 }}>
-                {prettyJson(rawOutput)}
-              </pre>
-            </div>
-          ) : null}
-
-          <ExecutionLogPanel logs={execution.logs} />
-        </Space>
+        <Tabs
+          defaultActiveKey="output"
+          items={[
+            {
+              key: "output",
+              label: "输出值",
+              children: (
+                <>
+                  <SchemaObjectResultView
+                    schema={outputSchema}
+                    value={execution.output}
+                  />
+                  {rawOutput ? (
+                    <div style={{ marginTop: 12 }}>
+                      <Text strong>原始输出</Text>
+                      <pre className="json-preview" style={{ marginTop: 8 }}>
+                        {prettyJson(rawOutput)}
+                      </pre>
+                    </div>
+                  ) : null}
+                </>
+              ),
+            },
+            {
+              key: "logs",
+              label: "日志",
+              children: <ExecutionLogPanel logs={execution.logs} />,
+            },
+            {
+              key: "input",
+              label: "输入值",
+              children: (
+                <SchemaObjectResultView
+                  schema={inputSchema}
+                  value={inputValue}
+                  schemaName="inputSchema"
+                  valueName="输入"
+                />
+              ),
+            },
+          ]}
+        />
       </Space>
     </Card>
   );

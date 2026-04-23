@@ -2,6 +2,7 @@ package org.team4u.scriptflow.application;
 
 import org.junit.jupiter.api.Test;
 import org.team4u.scriptflow.domain.model.ErrorDetail;
+import org.team4u.scriptflow.domain.model.ConfigValue;
 import org.team4u.scriptflow.domain.model.ExecutionLogEntry;
 import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ExecutionRecord;
@@ -13,6 +14,7 @@ import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.model.SubmitMode;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
+import org.team4u.scriptflow.domain.port.ConfigValueRepository;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 
@@ -116,6 +118,41 @@ class ExecutionApplicationServiceTest {
 
         assertThat(record.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(record.getInput()).containsEntry("free", "form");
+    }
+
+    @Test
+    void executeResolvesConfigReferencesAndInjectsConfigSnapshot() {
+        scriptRepository.save(new ScriptDefinition()
+                .setId("script-1")
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "url", Map.of("type", "string")
+                        )
+                )));
+        InMemoryConfigValueRepository configRepository = new InMemoryConfigValueRepository();
+        ConfigValueApplicationService configService = new ConfigValueApplicationService(configRepository);
+        configService.create(new ConfigValue().setKey("host").setValue("api.example.com"));
+        configService.create(new ConfigValue().setKey("base_url").setValue("https://${config.host}/v1"));
+        when(scriptEngine.execute(any(), any(), any())).thenAnswer(invocation -> {
+            Map<String, Object> input = invocation.getArgument(1);
+            ScriptExecutionContext context = invocation.getArgument(2);
+            assertThat(input).containsEntry("url", "https://api.example.com/v1");
+            assertThat(context.getConfig()).containsEntry("base_url", "https://api.example.com/v1");
+            return Map.of("ok", true);
+        });
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run,
+                configService
+        );
+
+        ExecutionRecord record = service.execute("script-1", Map.of("url", "${config.base_url}"), SubmitMode.SYNC);
+
+        assertThat(record.getInput()).containsEntry("url", "https://api.example.com/v1");
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
     }
 
     @Test
@@ -412,6 +449,37 @@ class ExecutionApplicationServiceTest {
         @Override
         public void deleteById(String id) {
             store.remove(id);
+        }
+    }
+
+    private static final class InMemoryConfigValueRepository implements ConfigValueRepository {
+        private final Map<String, ConfigValue> store = new LinkedHashMap<>();
+
+        @Override
+        public ConfigValue save(ConfigValue configValue) {
+            ConfigValue copy = new ConfigValue()
+                    .setKey(configValue.getKey())
+                    .setValue(configValue.getValue())
+                    .setDescription(configValue.getDescription())
+                    .setCreatedAt(configValue.getCreatedAt())
+                    .setUpdatedAt(configValue.getUpdatedAt());
+            store.put(copy.getKey(), copy);
+            return copy;
+        }
+
+        @Override
+        public Optional<ConfigValue> findByKey(String key) {
+            return Optional.ofNullable(store.get(key));
+        }
+
+        @Override
+        public List<ConfigValue> findAll() {
+            return new ArrayList<>(store.values());
+        }
+
+        @Override
+        public void deleteByKey(String key) {
+            store.remove(key);
         }
     }
 

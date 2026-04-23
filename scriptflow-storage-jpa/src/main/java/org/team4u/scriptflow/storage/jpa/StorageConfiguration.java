@@ -3,16 +3,19 @@ package org.team4u.scriptflow.storage.jpa;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.team4u.scriptflow.domain.port.ConfigValueRepository;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 import org.team4u.scriptflow.domain.port.ScriptScheduleRepository;
+import org.team4u.scriptflow.storage.jpa.adapter.JpaConfigValueRepositoryAdapter;
 import org.team4u.scriptflow.storage.jpa.adapter.JpaExecutionRepositoryAdapter;
 import org.team4u.scriptflow.storage.jpa.adapter.JpaPluginRegistryRepositoryAdapter;
 import org.team4u.scriptflow.storage.jpa.adapter.JpaScriptRepositoryAdapter;
 import org.team4u.scriptflow.storage.jpa.adapter.JpaScriptScheduleRepositoryAdapter;
 import org.team4u.scriptflow.storage.jpa.json.JacksonJsonCodec;
+import org.team4u.scriptflow.storage.jpa.repo.SpringDataConfigValueRepository;
 import org.team4u.scriptflow.storage.jpa.repo.SpringDataExecutionEntityRepository;
 import org.team4u.scriptflow.storage.jpa.repo.SpringDataPluginRegistrationRepository;
 import org.team4u.scriptflow.storage.jpa.repo.SpringDataScriptEntityRepository;
@@ -28,6 +31,11 @@ public class StorageConfiguration {
     @Bean
     public JsonCodec jsonCodec(ObjectMapper objectMapper) {
         return new JacksonJsonCodec(objectMapper);
+    }
+
+    @Bean
+    public ConfigValueRepository configValueRepository(SpringDataConfigValueRepository repository) {
+        return new JpaConfigValueRepositoryAdapter(repository);
     }
 
     @Bean
