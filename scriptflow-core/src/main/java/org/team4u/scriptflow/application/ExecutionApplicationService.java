@@ -15,6 +15,7 @@ import org.team4u.scriptflow.domain.port.ScriptRepository;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -130,6 +131,7 @@ public class ExecutionApplicationService {
                             .setExecutionId(record.getId())
                             .setSubmitMode(record.getSubmitMode())
                             .setConfig(configValueApplicationService.snapshot())
+                            .setScriptStack(List.of(definition.getId()))
                             .setLogger(logCollector::append)
             );
             return logCollector.completeSuccess(toMap(result));

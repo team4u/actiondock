@@ -1,0 +1,149 @@
+package org.team4u.scriptflow.application;
+
+import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
+import org.team4u.scriptflow.domain.model.ScriptDefinition;
+import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
+import org.team4u.scriptflow.domain.model.ScriptType;
+import org.team4u.scriptflow.domain.port.ScriptEngine;
+import org.team4u.scriptflow.domain.port.ScriptRepository;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class ScriptInvocationServiceTest {
+    @Test
+    void invokePublishedUsesPublishedSnapshotAndNormalizesScalarResult() {
+        RecordingScriptEngine scriptEngine = new RecordingScriptEngine();
+        ScriptInvocationService service = new ScriptInvocationService(repositoryWith(publishedScript("child")), () -> scriptEngine);
+
+        Object result = service.invokePublished(
+                "child",
+                new ScriptDefinition().setId("parent"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent")),
+                Map.of("name", "Alice")
+        );
+
+        assertThat(result).isEqualTo(Map.of("result", 42));
+        assertThat(scriptEngine.lastDefinition.getSource()).isEqualTo("published-source");
+        assertThat(scriptEngine.lastInput).containsEntry("name", "Alice");
+        assertThat(scriptEngine.lastContext.getScriptStack()).containsExactly("parent", "child");
+    }
+
+    @Test
+    void invokePublishedDetectsRecursiveCalls() {
+        ScriptInvocationService service = new ScriptInvocationService(repositoryWith(publishedScript("child")), RecordingScriptEngine::new);
+
+        assertThatThrownBy(() -> service.invokePublished(
+                "child",
+                new ScriptDefinition().setId("parent"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent", "child")),
+                Map.of()
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("检测到脚本循环调用: parent -> child -> child");
+    }
+
+    @Test
+    void invokePublishedPrefixesLogsForCallee() {
+        RecordingScriptEngine scriptEngine = new RecordingScriptEngine() {
+            @Override
+            public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
+                executionContext.log(ExecutionLogLevel.INFO, "nested");
+                return Map.of("ok", true);
+            }
+        };
+        ScriptInvocationService service = new ScriptInvocationService(repositoryWith(publishedScript("child")), () -> scriptEngine);
+        List<String> logs = new ArrayList<>();
+
+        Object result = service.invokePublished(
+                "child",
+                new ScriptDefinition().setId("parent"),
+                new ScriptExecutionContext()
+                        .setScriptStack(List.of("parent"))
+                        .setLogger((level, message) -> logs.add(level + ":" + message)),
+                Map.of()
+        );
+
+        assertThat(result).isEqualTo(Map.of("ok", true));
+        assertThat(logs).containsExactly("INFO:[script:child] nested");
+    }
+
+    @Test
+    void invokePublishedRejectsUnpublishedScript() {
+        ScriptDefinition draftOnly = new ScriptDefinition()
+                .setId("draft-only")
+                .setName("Draft")
+                .setType(ScriptType.GROOVY)
+                .setSource("draft");
+        ScriptInvocationService service = new ScriptInvocationService(repositoryWith(draftOnly), RecordingScriptEngine::new);
+
+        assertThatThrownBy(() -> service.invokePublished("draft-only", null, null, Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("脚本未发布: draft-only");
+    }
+
+    private ScriptRepository repositoryWith(ScriptDefinition definition) {
+        return new ScriptRepository() {
+            @Override
+            public ScriptDefinition save(ScriptDefinition ignored) {
+                throw new UnsupportedOperationException("Not needed");
+            }
+
+            @Override
+            public Optional<ScriptDefinition> findById(String id) {
+                return definition.getId().equals(id) ? Optional.of(definition) : Optional.empty();
+            }
+
+            @Override
+            public List<ScriptDefinition> findAll() {
+                return List.of(definition);
+            }
+
+            @Override
+            public void deleteById(String id) {
+                throw new UnsupportedOperationException("Not needed");
+            }
+        };
+    }
+
+    private ScriptDefinition publishedScript(String id) {
+        return new ScriptDefinition()
+                .setId(id)
+                .setName("Draft Name")
+                .setType(ScriptType.PYTHON)
+                .setSource("draft-source")
+                .setInputSchema(Map.of("type", "object"))
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Published Name")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("published-source")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")));
+    }
+
+    private static class RecordingScriptEngine implements ScriptEngine {
+        private ScriptDefinition lastDefinition;
+        private Map<String, Object> lastInput;
+        private ScriptExecutionContext lastContext;
+
+        @Override
+        public void validate(ScriptDefinition definition) {
+        }
+
+        @Override
+        public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
+            this.lastDefinition = definition;
+            this.lastInput = input == null ? Map.of() : new LinkedHashMap<>(input);
+            this.lastContext = executionContext;
+            return 42;
+        }
+    }
+}

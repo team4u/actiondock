@@ -1,5 +1,7 @@
 package org.team4u.scriptflow.script;
 
+import org.team4u.scriptflow.application.ErrorDetailSupport;
+import org.team4u.scriptflow.application.ScriptInvocationService;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
@@ -16,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,12 +30,13 @@ import java.util.function.Consumer;
  * Python 脚本引擎，通过子进程方式执行 Python 脚本。
  * <p>
  * 将用户脚本包装为标准化的 Python 入口函数，通过 stdin/stdout 传递 JSON 数据，
- * 并支持通过 stderr 的特殊前缀协议收集脚本日志。
+ * 并支持通过 stderr 的特殊前缀协议收集脚本日志与脚本互调请求。
  *
  * @author jay.wu
  */
 public class PythonScriptEngine implements ScriptEngine {
     private static final String LOG_PREFIX = "__SCRIPTFLOW_LOG__";
+    private static final String INVOKE_PREFIX = "__SCRIPTFLOW_INVOKE__";
     private static final String VALIDATION_RUNNER = """
             import py_compile
             import sys
@@ -42,10 +46,20 @@ public class PythonScriptEngine implements ScriptEngine {
 
     private final JsonCodec jsonCodec;
     private final AppProperties.Python properties;
+    private final ScriptInvocationService scriptInvocationService;
 
     public PythonScriptEngine(JsonCodec jsonCodec, AppProperties.Python properties) {
+        this(jsonCodec, properties, ScriptInvocationService.disabled());
+    }
+
+    public PythonScriptEngine(JsonCodec jsonCodec,
+                              AppProperties.Python properties,
+                              ScriptInvocationService scriptInvocationService) {
         this.jsonCodec = Objects.requireNonNull(jsonCodec);
         this.properties = Objects.requireNonNull(properties);
+        this.scriptInvocationService = scriptInvocationService == null
+                ? ScriptInvocationService.disabled()
+                : scriptInvocationService;
     }
 
     @Override
@@ -53,12 +67,13 @@ public class PythonScriptEngine implements ScriptEngine {
         Path scriptPath = null;
         try {
             scriptPath = writeScriptFile(definition.getSource(), false);
-            ProcessResult result = runCommand(List.of(
-                    resolveExecutable(),
-                    "-c",
-                    VALIDATION_RUNNER,
-                    scriptPath.toAbsolutePath().toString()
-            ), null, "{}", null);
+            ProcessResult result = runCommand(
+                    List.of(resolveExecutable(), "-c", VALIDATION_RUNNER, scriptPath.toAbsolutePath().toString()),
+                    null,
+                    "{}",
+                    null,
+                    null
+            );
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本校验超时");
             }
@@ -82,13 +97,14 @@ public class PythonScriptEngine implements ScriptEngine {
             scriptPath = writeScriptFile(definition.getSource(), true);
             ProcessResult result = runCommand(
                     List.of(resolveExecutable(), scriptPath.toAbsolutePath().toString()),
-                    jsonCodec.write(input == null ? Map.of() : input),
+                    jsonCodec.write(input == null ? Map.of() : input) + "\n",
                     jsonCodec.write(executionContext == null ? Map.of() : executionContext.getConfig()),
                     event -> {
                         if (executionContext != null) {
                             executionContext.log(event.level(), event.message());
                         }
-                    }
+                    },
+                    new PythonInvocationBridge(definition, executionContext)
             );
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本执行超时");
@@ -110,7 +126,8 @@ public class PythonScriptEngine implements ScriptEngine {
     private ProcessResult runCommand(List<String> command,
                                      String stdin,
                                      String configJson,
-                                     Consumer<LogEvent> logConsumer)
+                                     Consumer<LogEvent> logConsumer,
+                                     PythonInvocationBridge invocationBridge)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command);
@@ -118,26 +135,32 @@ public class PythonScriptEngine implements ScriptEngine {
         Process process = processBuilder.start();
         CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()));
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
-                readErrorStream(process.getErrorStream(), logConsumer == null ? event -> { } : logConsumer));
+                readErrorStream(
+                        process.getErrorStream(),
+                        logConsumer == null ? event -> { } : logConsumer,
+                        process.getOutputStream(),
+                        invocationBridge
+                ));
 
         try (OutputStream stdinStream = process.getOutputStream()) {
             if (stdin != null) {
                 stdinStream.write(stdin.getBytes(StandardCharsets.UTF_8));
+                stdinStream.flush();
             }
-        }
 
-        boolean finished = process.waitFor(properties.getTimeoutSeconds(), TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            process.waitFor();
-        }
+            boolean finished = process.waitFor(properties.getTimeoutSeconds(), TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                process.waitFor();
+            }
 
-        return new ProcessResult(
-                finished ? process.exitValue() : -1,
-                stdoutFuture.join(),
-                stderrFuture.join(),
-                !finished
-        );
+            return new ProcessResult(
+                    finished ? process.exitValue() : -1,
+                    stdoutFuture.join(),
+                    stderrFuture.join(),
+                    !finished
+            );
+        }
     }
 
     private String resolveExecutable() {
@@ -158,7 +181,7 @@ public class PythonScriptEngine implements ScriptEngine {
         return buildWrappedSource(source) + """
 
                 if __name__ == "__main__":
-                    payload_text = sys.stdin.read()
+                    payload_text = sys.stdin.readline()
                     input = {} if not payload_text.strip() else json.loads(payload_text)
                     config_text = os.environ.get("SCRIPTFLOW_CONFIG_JSON", "")
                     config = {} if not config_text.strip() else json.loads(config_text)
@@ -197,6 +220,21 @@ public class PythonScriptEngine implements ScriptEngine {
         lines.add("");
         lines.add("log = __ScriptFlowLog()");
         lines.add("");
+        lines.add("class __ScriptFlowScripts:");
+        lines.add("    def invoke(self, script_id, args=None):");
+        lines.add("        payload = json.dumps({\"scriptId\": script_id, \"args\": {} if args is None else args}, ensure_ascii=False)");
+        lines.add("        sys.stderr.write(\"" + INVOKE_PREFIX + "\" + payload + \"\\n\")");
+        lines.add("        sys.stderr.flush()");
+        lines.add("        response_text = sys.stdin.readline()");
+        lines.add("        if not response_text:");
+        lines.add("            raise RuntimeError(\"Script invocation bridge closed\")");
+        lines.add("        response = json.loads(response_text)");
+        lines.add("        if response.get(\"ok\"):");
+        lines.add("            return response.get(\"result\")");
+        lines.add("        raise RuntimeError(response.get(\"error\") or \"Script invocation failed\")");
+        lines.add("");
+        lines.add("scripts = __ScriptFlowScripts()");
+        lines.add("");
         lines.add("def __scriptflow_main(input):");
         lines.addAll(indent(normalizedSource));
         return String.join("\n", lines) + "\n";
@@ -219,7 +257,10 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
-    private String readErrorStream(InputStream stream, Consumer<LogEvent> logConsumer) {
+    private String readErrorStream(InputStream stream,
+                                   Consumer<LogEvent> logConsumer,
+                                   OutputStream stdinStream,
+                                   PythonInvocationBridge invocationBridge) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             StringBuilder output = new StringBuilder();
             String line;
@@ -227,6 +268,10 @@ public class PythonScriptEngine implements ScriptEngine {
                 LogEvent event = parseLogEvent(line);
                 if (event != null) {
                     logConsumer.accept(event);
+                    continue;
+                }
+                if (line.startsWith(INVOKE_PREFIX)) {
+                    handleInvocation(line.substring(INVOKE_PREFIX.length()), stdinStream, invocationBridge);
                     continue;
                 }
                 if (output.length() > 0) {
@@ -238,6 +283,38 @@ public class PythonScriptEngine implements ScriptEngine {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read Python process output", e);
         }
+    }
+
+    private void handleInvocation(String payload,
+                                  OutputStream stdinStream,
+                                  PythonInvocationBridge invocationBridge) {
+        if (invocationBridge == null) {
+            throw new IllegalStateException("Python 脚本互调桥接未初始化");
+        }
+        PythonInvocationRequest request = parseInvocationRequest(payload);
+        String response = invocationBridge.respond(request);
+        try {
+            stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
+            stdinStream.flush();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to write Python invocation response", e);
+        }
+    }
+
+    private PythonInvocationRequest parseInvocationRequest(String payload) {
+        Map<String, Object> value = jsonCodec.readMap(payload);
+        Object scriptId = value.get("scriptId");
+        Object args = value.get("args");
+        return new PythonInvocationRequest(
+                scriptId == null ? null : String.valueOf(scriptId),
+                args instanceof Map<?, ?> map ? normalizeMap(map) : Map.of()
+        );
+    }
+
+    private Map<String, Object> normalizeMap(Map<?, ?> value) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        value.forEach((key, item) -> normalized.put(String.valueOf(key), item));
+        return normalized;
     }
 
     private LogEvent parseLogEvent(String line) {
@@ -291,5 +368,38 @@ public class PythonScriptEngine implements ScriptEngine {
     }
 
     record LogEvent(ExecutionLogLevel level, String message) {
+    }
+
+    record PythonInvocationRequest(String scriptId, Map<String, Object> args) {
+    }
+
+    private final class PythonInvocationBridge {
+        private final ScriptDefinition definition;
+        private final ScriptExecutionContext executionContext;
+
+        private PythonInvocationBridge(ScriptDefinition definition, ScriptExecutionContext executionContext) {
+            this.definition = definition;
+            this.executionContext = executionContext;
+        }
+
+        private String respond(PythonInvocationRequest request) {
+            try {
+                Object result = scriptInvocationService.invokePublished(
+                        request.scriptId(),
+                        definition,
+                        executionContext,
+                        request.args()
+                );
+                return jsonCodec.write(Map.of(
+                        "ok", true,
+                        "result", result
+                ));
+            } catch (Exception exception) {
+                return jsonCodec.write(Map.of(
+                        "ok", false,
+                        "error", ErrorDetailSupport.summarize(exception)
+                ));
+            }
+        }
     }
 }

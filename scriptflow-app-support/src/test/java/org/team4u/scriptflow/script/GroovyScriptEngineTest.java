@@ -2,10 +2,15 @@ package org.team4u.scriptflow.script;
 
 import groovy.lang.Script;
 import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.application.ScriptInvocationService;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
+import org.team4u.scriptflow.domain.model.ScriptType;
+import org.team4u.scriptflow.domain.port.ScriptEngine;
+import org.team4u.scriptflow.domain.port.ScriptRepository;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
 
 import java.time.Clock;
@@ -15,6 +20,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -47,6 +53,15 @@ class GroovyScriptEngineTest {
                 def pluginId = input.pluginId
                 def action = input.action
                 return plugins.invoke(pluginId, action, [message: "hi"])
+                """)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateAllowsDynamicScriptInvokeArguments() {
+        assertThatCode(() -> engine.validate(new ScriptDefinition().setSource("""
+                def scriptId = input.scriptId
+                return scripts.invoke(scriptId, [message: "hi"])
                 """)))
                 .doesNotThrowAnyException();
     }
@@ -194,6 +209,25 @@ class GroovyScriptEngineTest {
     }
 
     @Test
+    void executeExposesScriptsBinding() {
+        GroovyScriptEngine invocationEngine = new GroovyScriptEngine(
+                groovyProperties(),
+                PluginRuntimeService.disabled(),
+                invocationService()
+        );
+
+        Object result = invocationEngine.execute(
+                new ScriptDefinition()
+                        .setId("parent")
+                        .setSource("return scripts.invoke('child', [name: input.name])"),
+                Map.of("name", "Alice"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent"))
+        );
+
+        assertThat(result).isEqualTo(Map.of("message", "Hello, Alice"));
+    }
+
+    @Test
     void executeCompilesSameSourceOnlyOnceUnderConcurrentFirstHit() throws Exception {
         BlockingGroovyScriptEngine countingEngine = new BlockingGroovyScriptEngine(groovyProperties(), new MutableClock());
         ScriptDefinition definition = new ScriptDefinition().setSource("return [message: 'Hello, ' + input.name]");
@@ -223,7 +257,7 @@ class GroovyScriptEngineTest {
         private final AtomicInteger compileCount = new AtomicInteger();
 
         private CountingGroovyScriptEngine(AppProperties.Groovy properties, Clock clock) {
-            super(properties, clock, PluginRuntimeService.disabled());
+            super(properties, clock, PluginRuntimeService.disabled(), ScriptInvocationService.disabled());
         }
 
         @Override
@@ -289,5 +323,48 @@ class GroovyScriptEngineTest {
         private void advance(Duration duration) {
             current = current.plus(duration);
         }
+    }
+
+    private static ScriptInvocationService invocationService() {
+        ScriptDefinition child = new ScriptDefinition()
+                .setId("child")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Child")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return [message: 'Hello, ' + input.name]")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")));
+        ScriptRepository repository = new ScriptRepository() {
+            @Override
+            public ScriptDefinition save(ScriptDefinition definition) {
+                throw new UnsupportedOperationException("Not needed");
+            }
+
+            @Override
+            public Optional<ScriptDefinition> findById(String id) {
+                return "child".equals(id) ? Optional.of(child) : Optional.empty();
+            }
+
+            @Override
+            public List<ScriptDefinition> findAll() {
+                return List.of(child);
+            }
+
+            @Override
+            public void deleteById(String id) {
+                throw new UnsupportedOperationException("Not needed");
+            }
+        };
+        ScriptEngine nestedEngine = new ScriptEngine() {
+            @Override
+            public void validate(ScriptDefinition definition) {
+            }
+
+            @Override
+            public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
+                return Map.of("message", "Hello, " + input.get("name"));
+            }
+        };
+        return new ScriptInvocationService(repository, () -> nestedEngine);
     }
 }

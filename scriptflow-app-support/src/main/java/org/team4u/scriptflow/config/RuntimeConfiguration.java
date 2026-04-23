@@ -1,13 +1,15 @@
 package org.team4u.scriptflow.config;
 
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.team4u.scriptflow.application.ConfigValueApplicationService;
 import org.team4u.scriptflow.application.ExecutionApplicationService;
 import org.team4u.scriptflow.application.ScheduleApplicationService;
 import org.team4u.scriptflow.application.ScriptApplicationService;
+import org.team4u.scriptflow.application.ScriptInvocationService;
 import org.team4u.scriptflow.domain.port.ConfigValueRepository;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
@@ -51,10 +53,19 @@ public class RuntimeConfiguration {
     }
 
     @Bean
-    public ScriptEngine scriptEngine(JsonCodec jsonCodec, AppProperties properties, PluginRuntimeService pluginRuntimeService) {
+    public ScriptInvocationService scriptInvocationService(ScriptRepository scriptRepository,
+                                                           ObjectProvider<ScriptEngine> scriptEngineProvider) {
+        return new ScriptInvocationService(scriptRepository, scriptEngineProvider::getObject);
+    }
+
+    @Bean
+    public ScriptEngine scriptEngine(JsonCodec jsonCodec,
+                                     AppProperties properties,
+                                     PluginRuntimeService pluginRuntimeService,
+                                     ScriptInvocationService scriptInvocationService) {
         return new RoutingScriptEngine(
-                new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService),
-                new PythonScriptEngine(jsonCodec, properties.getExecution().getPython())
+                new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService, scriptInvocationService),
+                new PythonScriptEngine(jsonCodec, properties.getExecution().getPython(), scriptInvocationService)
         );
     }
 

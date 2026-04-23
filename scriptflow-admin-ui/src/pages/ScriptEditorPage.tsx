@@ -49,6 +49,7 @@ import {
   executeScript,
   getExecution,
   listPlugins,
+  listScripts,
   getScript,
   listExecutions,
   publishScript,
@@ -90,6 +91,7 @@ import {
 } from "../schemaObjectEditorSupport";
 import { parseGeneratedScriptText } from "../generatedScript";
 import { buildSchemaFieldInitialState, isValidationErrorData } from "../schemaExecution";
+import { buildPluginInvokeSnippet, buildScriptInvokeSnippet } from "../scriptInvocationSnippets";
 import type {
   ExecutionRecord,
   ExecutionStatus,
@@ -213,6 +215,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [sourceText, setSourceText] = useState(getDefaultSource("GROOVY"));
   const [availablePlugins, setAvailablePlugins] = useState<PluginView[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(false);
+  const [availableScripts, setAvailableScripts] = useState<ScriptDefinition[]>([]);
+  const [scriptsLoading, setScriptsLoading] = useState(false);
   const [inputSchemaState, setInputSchemaState] = useState<SchemaEditorState>(
     createEmptySchemaEditorState()
   );
@@ -235,12 +239,20 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [pluginReferenceQuery, setPluginReferenceQuery] = useState("");
   const [pluginReferencePage, setPluginReferencePage] = useState(1);
   const [pluginReferencePageSize, setPluginReferencePageSize] = useState(10);
+  const [referenceScriptId, setReferenceScriptId] = useState<string | null>(null);
+  const [scriptReferenceQuery, setScriptReferenceQuery] = useState("");
+  const [scriptReferencePage, setScriptReferencePage] = useState(1);
+  const [scriptReferencePageSize, setScriptReferencePageSize] = useState(10);
   const [messageApi, contextHolder] = message.useMessage();
   const pollingTimerRef = useRef<number | null>(null);
   const selectedScriptType = (Form.useWatch("type", form) as ScriptType | undefined) ?? "GROOVY";
   const canImportGeneratedScript = selectedScriptType === "GROOVY";
   const pluginReferences = availablePlugins.filter((plugin) => plugin.started);
+  const scriptReferences = availableScripts.filter(
+    (script) => Boolean(script.publishedSnapshot) && script.id !== currentScript?.id
+  );
   const deferredPluginReferenceQuery = useDeferredValue(pluginReferenceQuery);
+  const deferredScriptReferenceQuery = useDeferredValue(scriptReferenceQuery);
   const filteredPluginReferences = pluginReferences.filter((plugin) => {
     const normalizedQuery = deferredPluginReferenceQuery.trim().toLowerCase();
     if (!normalizedQuery) {
@@ -249,7 +261,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     const haystack = `${plugin.name || ""} ${plugin.pluginId}`.toLowerCase();
     return normalizedQuery.split(/\s+/).every((keyword) => haystack.includes(keyword));
   });
+  const filteredScriptReferences = scriptReferences.filter((script) => {
+    const normalizedQuery = deferredScriptReferenceQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return true;
+    }
+    const snapshot = script.publishedSnapshot;
+    const haystack = `${script.name || ""} ${script.id} ${snapshot?.name || ""}`.toLowerCase();
+    return normalizedQuery.split(/\s+/).every((keyword) => haystack.includes(keyword));
+  });
   const referencePlugin = pluginReferences.find((plugin) => plugin.pluginId === referencePluginId) ?? null;
+  const referenceScript = scriptReferences.find((script) => script.id === referenceScriptId) ?? null;
 
   const requestedTab = searchParams.get("tab");
   const activeTab =
@@ -502,6 +524,22 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   useEffect(() => () => clearPolling(), []);
 
+  const loadScriptReferences = async () => {
+    setScriptsLoading(true);
+    try {
+      setAvailableScripts(await listScripts());
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "加载脚本参考失败";
+      messageApi.error(detail);
+    } finally {
+      setScriptsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadScriptReferences();
+  }, [messageApi]);
+
   useEffect(() => {
     if (selectedScriptType !== "GROOVY") {
       setAvailablePlugins([]);
@@ -541,8 +579,18 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   }, [pluginReferences, referencePluginId]);
 
   useEffect(() => {
+    if (referenceScriptId && !scriptReferences.some((script) => script.id === referenceScriptId)) {
+      setReferenceScriptId(null);
+    }
+  }, [referenceScriptId, scriptReferences]);
+
+  useEffect(() => {
     setPluginReferencePage(1);
   }, [deferredPluginReferenceQuery]);
+
+  useEffect(() => {
+    setScriptReferencePage(1);
+  }, [deferredScriptReferenceQuery]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filteredPluginReferences.length / pluginReferencePageSize));
@@ -550,6 +598,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       setPluginReferencePage(maxPage);
     }
   }, [filteredPluginReferences.length, pluginReferencePage, pluginReferencePageSize]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredScriptReferences.length / scriptReferencePageSize));
+    if (scriptReferencePage > maxPage) {
+      setScriptReferencePage(maxPage);
+    }
+  }, [filteredScriptReferences.length, scriptReferencePage, scriptReferencePageSize]);
 
   const buildPayload = async (): Promise<ScriptDefinition> => {
     const values = await form.validateFields();
@@ -582,6 +637,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     setSaving(true);
     try {
       const saved = await persistCurrentScript();
+      await loadScriptReferences();
       messageApi.success("保存成功");
       if (mode === "create") {
         navigate(`/scripts/${saved.id}`, { replace: true });
@@ -646,6 +702,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       stage = "publish";
       const published = await publishScript(savedScript.id);
       applyScriptToEditor(published);
+      await loadScriptReferences();
       messageApi.success("保存、校验并发布成功");
 
       if (mode === "create") {
@@ -686,6 +743,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     try {
       const discarded = await discardDraft(currentScript.id);
       applyScriptToEditor(discarded);
+      await loadScriptReferences();
       messageApi.success("草稿已丢弃");
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "丢弃草稿失败";
@@ -797,8 +855,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     }
   };
 
-  const buildPluginInvokeSnippet = (pluginId: string, action: string, exampleArgs: Record<string, unknown>) =>
-    `plugins.invoke("${pluginId}", "${action}", ${JSON.stringify(exampleArgs, null, 2)})`;
+  const buildReferenceScriptArgs = (script: ScriptDefinition) =>
+    buildSchemaFieldInitialState(resolveSchemaFields(script.publishedSnapshot?.inputSchema).supportedFields).formValues;
 
   const handleImportGeneratedScript = () => {
     try {
@@ -998,6 +1056,89 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         </Space>
       </Modal>
       <Modal
+        title={referenceScript ? referenceScript.name || referenceScript.id : "脚本参考"}
+        open={Boolean(referenceScript)}
+        onCancel={() => setReferenceScriptId(null)}
+        footer={null}
+        width={860}
+        destroyOnHidden
+      >
+        {referenceScript?.publishedSnapshot ? (
+          <Space direction="vertical" size={14} style={{ width: "100%" }}>
+            <Space wrap size={[8, 8]}>
+              <Text type="secondary">{referenceScript.id}</Text>
+              <Tag>{referenceScript.publishedSnapshot.type}</Tag>
+              <Tag color="green">已发布</Tag>
+              <Text type="secondary">v{referenceScript.version}</Text>
+              {referenceScript.hasUnpublishedChanges ? (
+                <Text type="warning">存在未发布改动，以下为已发布契约</Text>
+              ) : null}
+            </Space>
+            <Descriptions
+              size="small"
+              column={1}
+              bordered
+              items={[
+                {
+                  key: "published-name",
+                  label: "已发布名称",
+                  children:
+                    referenceScript.publishedSnapshot.name || referenceScript.name || referenceScript.id
+                },
+                {
+                  key: "published-type",
+                  label: "调用方式",
+                  children: <Text code>{`scripts.invoke("${referenceScript.id}", ...)`}</Text>
+                }
+              ]}
+            />
+            <Row gutter={[12, 12]}>
+              <Col xs={24} md={12}>
+                <SchemaFieldList
+                  schema={referenceScript.publishedSnapshot.inputSchema}
+                  title="输入字段"
+                  emptyDescription="无输入字段"
+                />
+              </Col>
+              <Col xs={24} md={12}>
+                <SchemaFieldList
+                  schema={referenceScript.publishedSnapshot.outputSchema}
+                  title="输出字段"
+                  emptyDescription="无输出字段"
+                />
+              </Col>
+            </Row>
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
+                <Text strong>调用示例</Text>
+                <Button
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={() =>
+                    void handleCopyCommand(
+                      buildScriptInvokeSnippet(
+                        selectedScriptType,
+                        referenceScript.id,
+                        buildReferenceScriptArgs(referenceScript)
+                      )
+                    )
+                  }
+                >
+                  复制调用
+                </Button>
+              </Space>
+              <pre className="json-preview">
+                {buildScriptInvokeSnippet(
+                  selectedScriptType,
+                  referenceScript.id,
+                  buildReferenceScriptArgs(referenceScript)
+                )}
+              </pre>
+            </Space>
+          </Space>
+        ) : null}
+      </Modal>
+      <Modal
         title={referencePlugin ? referencePlugin.name || referencePlugin.pluginId : "插件参考"}
         open={Boolean(referencePlugin)}
         onCancel={() => setReferencePluginId(null)}
@@ -1017,6 +1158,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               className="plugin-reference-collapse plugin-reference-collapse--nested"
               items={referencePlugin.actions.map((action) => {
                 const snippet = buildPluginInvokeSnippet(
+                  selectedScriptType,
                   referencePlugin.pluginId,
                   action.action,
                   action.exampleArgs
@@ -1309,6 +1451,63 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                             {getEditorFooterHint(selectedScriptType)}
                           </Text>
                         </Space>
+                        <Card
+                          type="inner"
+                          title="脚本参考"
+                          style={{ marginTop: 16 }}
+                          extra={<Text type="secondary">仅展示已发布脚本，支持名称 / ID 查询</Text>}
+                          loading={scriptsLoading}
+                        >
+                          {scriptReferences.length === 0 ? (
+                            <Empty
+                              image={Empty.PRESENTED_IMAGE_SIMPLE}
+                              description="当前没有可调用的已发布脚本。"
+                            />
+                          ) : (
+                            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                              <Input.Search
+                                allowClear
+                                value={scriptReferenceQuery}
+                                onChange={(event) => setScriptReferenceQuery(event.target.value)}
+                                placeholder="搜索脚本名称或 scriptId"
+                              />
+                              <Table<ScriptDefinition>
+                                size="small"
+                                rowKey="id"
+                                showHeader={false}
+                                columns={[
+                                  {
+                                    key: "name",
+                                    dataIndex: "name",
+                                    render: (_value: string, script) => (
+                                      <Space wrap size={[8, 8]}>
+                                        <Text>{script.name || script.id}</Text>
+                                        {script.publishedSnapshot ? <Tag>{script.publishedSnapshot.type}</Tag> : null}
+                                        {script.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
+                                      </Space>
+                                    )
+                                  }
+                                ]}
+                                dataSource={filteredScriptReferences}
+                                pagination={{
+                                  current: scriptReferencePage,
+                                  pageSize: scriptReferencePageSize,
+                                  showSizeChanger: true,
+                                  pageSizeOptions: [10, 20, 50],
+                                  showTotal: (total) => `共 ${total} 个脚本`,
+                                  onChange: (page, pageSize) => {
+                                    setScriptReferencePage(page);
+                                    setScriptReferencePageSize(pageSize);
+                                  }
+                                }}
+                                locale={{ emptyText: "没有匹配的脚本" }}
+                                onRow={(script) => ({
+                                  onClick: () => setReferenceScriptId(script.id)
+                                })}
+                              />
+                            </Space>
+                          )}
+                        </Card>
                         {selectedScriptType === "GROOVY" ? (
                           <Card
                             type="inner"

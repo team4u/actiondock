@@ -4,6 +4,7 @@ import groovy.lang.Binding;
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
 import org.codehaus.groovy.runtime.InvokerHelper;
+import org.team4u.scriptflow.application.ScriptInvocationService;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
@@ -18,25 +19,38 @@ import java.util.Map;
 /**
  * Groovy 脚本引擎，基于 GroovyShell 提供脚本编译和执行能力。
  * <p>
- * 通过编译缓存优化重复执行的脚本，并为脚本提供 input、log、plugins 等绑定变量。
+ * 通过编译缓存优化重复执行的脚本，并为脚本提供 input、log、plugins、scripts 等绑定变量。
  *
  * @author jay.wu
  */
 public class GroovyScriptEngine implements ScriptEngine {
     private final CompiledGroovyScriptCache compiledScriptCache;
     private final PluginRuntimeService pluginRuntimeService;
+    private final ScriptInvocationService scriptInvocationService;
 
     public GroovyScriptEngine() {
-        this(new AppProperties.Groovy(), PluginRuntimeService.disabled());
+        this(new AppProperties.Groovy(), PluginRuntimeService.disabled(), ScriptInvocationService.disabled());
     }
 
     public GroovyScriptEngine(AppProperties.Groovy properties, PluginRuntimeService pluginRuntimeService) {
-        this(properties, Clock.systemUTC(), pluginRuntimeService);
+        this(properties, pluginRuntimeService, ScriptInvocationService.disabled());
     }
 
-    GroovyScriptEngine(AppProperties.Groovy properties, Clock clock, PluginRuntimeService pluginRuntimeService) {
+    public GroovyScriptEngine(AppProperties.Groovy properties,
+                              PluginRuntimeService pluginRuntimeService,
+                              ScriptInvocationService scriptInvocationService) {
+        this(properties, Clock.systemUTC(), pluginRuntimeService, scriptInvocationService);
+    }
+
+    GroovyScriptEngine(AppProperties.Groovy properties,
+                       Clock clock,
+                       PluginRuntimeService pluginRuntimeService,
+                       ScriptInvocationService scriptInvocationService) {
         this.compiledScriptCache = new CompiledGroovyScriptCache(properties, clock, this::compileScriptClass);
         this.pluginRuntimeService = pluginRuntimeService == null ? PluginRuntimeService.disabled() : pluginRuntimeService;
+        this.scriptInvocationService = scriptInvocationService == null
+                ? ScriptInvocationService.disabled()
+                : scriptInvocationService;
     }
 
     @Override
@@ -62,6 +76,7 @@ public class GroovyScriptEngine implements ScriptEngine {
         binding.setVariable("config", executionContext == null ? Map.of() : executionContext.getConfig());
         binding.setVariable("log", new ScriptLogger(executionContext));
         binding.setVariable("plugins", new GroovyPlugins(pluginRuntimeService, definition, input, executionContext));
+        binding.setVariable("scripts", new GroovyScripts(scriptInvocationService, definition, executionContext));
         return binding;
     }
 

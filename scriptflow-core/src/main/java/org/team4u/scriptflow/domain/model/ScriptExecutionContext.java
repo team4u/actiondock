@@ -1,6 +1,7 @@
 package org.team4u.scriptflow.domain.model;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -16,6 +17,8 @@ public class ScriptExecutionContext {
     private SubmitMode submitMode;
     private ScriptExecutionLogger logger = ScriptExecutionLogger.noop();
     private Map<String, String> config = Map.of();
+    private List<String> scriptStack = List.of();
+    private String logPrefix = "";
 
     public String getExecutionId() {
         return executionId;
@@ -53,8 +56,26 @@ public class ScriptExecutionContext {
         return this;
     }
 
+    public List<String> getScriptStack() {
+        return scriptStack;
+    }
+
+    public ScriptExecutionContext setScriptStack(List<String> scriptStack) {
+        this.scriptStack = scriptStack == null ? List.of() : List.copyOf(scriptStack);
+        return this;
+    }
+
+    public String getLogPrefix() {
+        return logPrefix;
+    }
+
+    public ScriptExecutionContext setLogPrefix(String logPrefix) {
+        this.logPrefix = logPrefix == null ? "" : logPrefix;
+        return this;
+    }
+
     public void log(ExecutionLogLevel level, String message) {
-        logger.log(level, message);
+        logger.log(level, (logPrefix == null ? "" : logPrefix) + message);
     }
 
     @FunctionalInterface

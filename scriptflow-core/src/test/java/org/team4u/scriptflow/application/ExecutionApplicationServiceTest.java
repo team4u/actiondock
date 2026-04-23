@@ -139,6 +139,7 @@ class ExecutionApplicationServiceTest {
             ScriptExecutionContext context = invocation.getArgument(2);
             assertThat(input).containsEntry("url", "https://api.example.com/v1");
             assertThat(context.getConfig()).containsEntry("base_url", "https://api.example.com/v1");
+            assertThat(context.getScriptStack()).containsExactly("script-1");
             return Map.of("ok", true);
         });
         ExecutionApplicationService service = new ExecutionApplicationService(

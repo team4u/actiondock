@@ -2,15 +2,21 @@ package org.team4u.scriptflow.script;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.team4u.scriptflow.application.ScriptInvocationService;
 import org.team4u.scriptflow.config.AppProperties;
 import org.team4u.scriptflow.domain.model.ExecutionLogLevel;
+import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.ScriptExecutionContext;
+import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.port.JsonCodec;
+import org.team4u.scriptflow.domain.port.ScriptEngine;
+import org.team4u.scriptflow.domain.port.ScriptRepository;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -116,11 +122,73 @@ class PythonScriptEngineTest {
         assertThat(result).isEqualTo(Map.of("apiKey", "secret-value"));
     }
 
+    @Test
+    void executeExposesScriptsBinding() {
+        PythonScriptEngine invocationEngine = new PythonScriptEngine(
+                jsonCodec,
+                pythonProperties(30),
+                invocationService()
+        );
+
+        Object result = invocationEngine.execute(
+                new ScriptDefinition()
+                        .setId("parent")
+                        .setSource("return scripts.invoke(\"child\", {\"name\": input.get(\"name\")})"),
+                Map.of("name", "Alice"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent"))
+        );
+
+        assertThat(result).isEqualTo(Map.of("message", "Hello, Alice"));
+    }
+
     private static AppProperties.Python pythonProperties(int timeoutSeconds) {
         AppProperties.Python properties = new AppProperties.Python();
         properties.setExecutable("python3");
         properties.setTimeoutSeconds(timeoutSeconds);
         return properties;
+    }
+
+    private static ScriptInvocationService invocationService() {
+        ScriptDefinition child = new ScriptDefinition()
+                .setId("child")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Child")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return {:}")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")));
+        ScriptRepository repository = new ScriptRepository() {
+            @Override
+            public ScriptDefinition save(ScriptDefinition definition) {
+                throw new UnsupportedOperationException("Not needed");
+            }
+
+            @Override
+            public Optional<ScriptDefinition> findById(String id) {
+                return "child".equals(id) ? Optional.of(child) : Optional.empty();
+            }
+
+            @Override
+            public List<ScriptDefinition> findAll() {
+                return List.of(child);
+            }
+
+            @Override
+            public void deleteById(String id) {
+                throw new UnsupportedOperationException("Not needed");
+            }
+        };
+        ScriptEngine nestedEngine = new ScriptEngine() {
+            @Override
+            public void validate(ScriptDefinition definition) {
+            }
+
+            @Override
+            public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
+                return Map.of("message", "Hello, " + input.get("name"));
+            }
+        };
+        return new ScriptInvocationService(repository, () -> nestedEngine);
     }
 
     private static final class TestJsonCodec implements JsonCodec {
