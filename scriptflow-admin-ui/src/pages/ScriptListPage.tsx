@@ -1,4 +1,4 @@
-import { DownloadOutlined, ExportOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { CopyOutlined, DownloadOutlined, ExportOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 import { Button, Card, Modal, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
@@ -221,20 +221,30 @@ export function ScriptListPage() {
     {
       title: "操作",
       key: "actions",
-      width: 140,
+      width: 200,
       render: (_: unknown, record) => {
         const isPublished = record.status === "PUBLISHED";
 
         return (
-          <Button
-            type="link"
-            size="small"
-            icon={<ExportOutlined />}
-            disabled={!isPublished}
-            onClick={() => navigate(`/run/${record.id}`)}
-          >
-            正式使用
-          </Button>
+          <Space size={4}>
+            <Button
+              type="link"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(record.id)}`)}
+            >
+              复制
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              icon={<ExportOutlined />}
+              disabled={!isPublished}
+              onClick={() => navigate(`/run/${record.id}`)}
+            >
+              正式使用
+            </Button>
+          </Space>
         );
       }
     }

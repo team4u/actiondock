@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
+  buildExecutePowerShellCommand,
   buildPluginInvokeCliCommand,
   buildPluginInvokeCmdCliCommand,
+  buildPluginInvokePowerShellCommand,
   buildScriptDetailCliCommand,
   buildScriptDetailCmdCliCommand,
+  buildScriptDetailPowerShellCommand,
   buildToolDetailCliCommand,
-  buildToolDetailCmdCliCommand
+  buildToolDetailCmdCliCommand,
+  buildToolDetailPowerShellCommand
 } from "./commands";
 
 describe("CLI command builders", () => {
@@ -114,5 +118,101 @@ describe("CLI command builders", () => {
     ).toBe(
       'java -jar scriptflow-cli.jar --base-url "http://localhost:8080" plugins invoke "plugin-a" "summarize" --args "{\\"topic\\":\\"ops \\\\\\"night\\\\\\"\\"}" --script-input "{\\"locale\\":\\"zh-CN\\"}" --response-view RESULT'
     );
+  });
+});
+
+describe("PowerShell HTTP command builders", () => {
+  it("builds script detail and schema commands with authorization headers", () => {
+    expect(
+      buildScriptDetailPowerShellCommand({
+        apiKey: "local-dev-key",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(`$headers = @{
+  Authorization = 'Bearer local-dev-key'
+}
+
+Invoke-RestMethod \`
+  -Uri 'http://localhost:8080/api/scripts/hello-groovy' \`
+  -Method Get \`
+  -Headers $headers`);
+
+    expect(
+      buildToolDetailPowerShellCommand({
+        apiKey: "local-dev-key",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(`$headers = @{
+  Authorization = 'Bearer local-dev-key'
+}
+
+Invoke-RestMethod \`
+  -Uri 'http://localhost:8080/api/schema/hello-groovy' \`
+  -Method Get \`
+  -Headers $headers`);
+  });
+
+  it("builds execution command without authorization headers when no token is set", () => {
+    expect(
+      buildExecutePowerShellCommand({
+        input: { name: 'Alice "Ops"', team: "O'Brien" },
+        mode: "ASYNC",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(`$body = @'
+{
+  "scriptId": "hello-groovy",
+  "input": {
+    "name": "Alice \\"Ops\\"",
+    "team": "O'Brien"
+  },
+  "mode": "ASYNC"
+}
+'@
+
+Invoke-RestMethod \`
+  -Uri 'http://localhost:8080/api/executions' \`
+  -Method Post \`
+  -ContentType 'application/json' \`
+  -Body $body`);
+  });
+
+  it("builds plugin invoke command with token-safe PowerShell quoting", () => {
+    expect(
+      buildPluginInvokePowerShellCommand({
+        action: "summarize",
+        apiKey: "secret'token",
+        args: { topic: 'ops "night"', owner: "O'Brien" },
+        origin: "http://localhost:8080",
+        pluginId: "plugin-a",
+        responseView: "RESULT",
+        scriptInput: { locale: "zh-CN" }
+      })
+    ).toBe(`$headers = @{
+  Authorization = 'Bearer secret''token'
+}
+
+$body = @'
+{
+  "args": {
+    "topic": "ops \\"night\\"",
+    "owner": "O'Brien"
+  },
+  "scriptInput": {
+    "locale": "zh-CN"
+  },
+  "responseView": "RESULT"
+}
+'@
+
+Invoke-RestMethod \`
+  -Uri 'http://localhost:8080/api/plugins/plugin-a/actions/summarize/invoke' \`
+  -Method Post \`
+  -ContentType 'application/json' \`
+  -Headers $headers \`
+  -Body $body`);
   });
 });

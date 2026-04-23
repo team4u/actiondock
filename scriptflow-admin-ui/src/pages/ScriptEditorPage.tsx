@@ -68,13 +68,16 @@ import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
   buildExecuteCurlCommand,
+  buildExecutePowerShellCommand,
   buildExecutionInputFromValues,
   buildScriptDetailCliCommand,
   buildScriptDetailCmdCliCommand,
   buildScriptDetailCurlCommand,
+  buildScriptDetailPowerShellCommand,
   buildToolDetailCliCommand,
   buildToolDetailCmdCliCommand,
   buildToolDetailCurlCommand,
+  buildToolDetailPowerShellCommand,
   resolveExecutionCommandInput
 } from "../commands";
 import { SchemaBuilder } from "../components/SchemaBuilder";
@@ -91,6 +94,7 @@ import {
 } from "../schemaObjectEditorSupport";
 import { parseGeneratedScriptText } from "../generatedScript";
 import { buildSchemaFieldInitialState, isValidationErrorData } from "../schemaExecution";
+import { buildDuplicatedScriptDefinition } from "../scriptDuplication";
 import { buildPluginInvokeSnippet, buildScriptInvokeSnippet } from "../scriptInvocationSnippets";
 import type {
   ExecutionRecord,
@@ -235,6 +239,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
   const [generatedScriptModalOpen, setGeneratedScriptModalOpen] = useState(false);
   const [generatedScriptText, setGeneratedScriptText] = useState("");
+  const [copiedFromScript, setCopiedFromScript] = useState<{ id: string; name: string } | null>(null);
   const [referencePluginId, setReferencePluginId] = useState<string | null>(null);
   const [pluginReferenceQuery, setPluginReferenceQuery] = useState("");
   const [pluginReferencePage, setPluginReferencePage] = useState(1);
@@ -245,7 +250,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [scriptReferencePageSize, setScriptReferencePageSize] = useState(10);
   const [messageApi, contextHolder] = message.useMessage();
   const pollingTimerRef = useRef<number | null>(null);
+  const initializedCopySourceRef = useRef<string | null>(null);
   const selectedScriptType = (Form.useWatch("type", form) as ScriptType | undefined) ?? "GROOVY";
+  const copyFromScriptId = mode === "create" ? searchParams.get("copyFrom")?.trim() || null : null;
   const canImportGeneratedScript = selectedScriptType === "GROOVY";
   const pluginReferences = availablePlugins.filter((plugin) => plugin.started);
   const scriptReferences = availableScripts.filter(
@@ -330,6 +337,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         scriptId: currentScript.id
       })
     : "";
+  const detailPowerShellCommand = currentScript
+    ? buildScriptDetailPowerShellCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
   const toolDetailCurlCommand = currentScript
     ? buildToolDetailCurlCommand({
         apiKey,
@@ -346,6 +360,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     : "";
   const toolDetailCmdCliCommand = currentScript
     ? buildToolDetailCmdCliCommand({
+        apiKey,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const toolDetailPowerShellCommand = currentScript
+    ? buildToolDetailPowerShellCommand({
         apiKey,
         origin,
         scriptId: currentScript.id
@@ -371,6 +392,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     : "";
   const executeCmdCliCommand = currentScript
     ? buildExecuteCmdCliCommand({
+        apiKey,
+        input: commandInput.value,
+        mode: executionMode,
+        origin,
+        scriptId: currentScript.id
+      })
+    : "";
+  const executePowerShellCommand = currentScript
+    ? buildExecutePowerShellCommand({
         apiKey,
         input: commandInput.value,
         mode: executionMode,
@@ -470,6 +500,34 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     setOutputSchemaState(deserializeSchema(script.outputSchema));
   };
 
+  const applyCreateDraftToEditor = (draft: ScriptDefinition) => {
+    setCurrentScript(null);
+    setExecutionValidationError(null);
+    form.setFieldsValue({
+      id: draft.id,
+      name: draft.name,
+      type: draft.type
+    });
+    form.setFields([{ name: "id", errors: [] }]);
+    setSourceText(draft.source);
+    setInputSchemaState(deserializeSchema(draft.inputSchema));
+    setOutputSchemaState(deserializeSchema(draft.outputSchema));
+  };
+
+  const resetCreateEditor = () => {
+    setCopiedFromScript(null);
+    applyCreateDraftToEditor({
+      id: "",
+      name: "",
+      type: "GROOVY",
+      source: getDefaultSource("GROOVY"),
+      inputSchema: {},
+      outputSchema: {},
+      status: "DRAFT",
+      version: 1
+    });
+  };
+
   const loadScript = async (scriptId: string) => {
     setLoading(true);
     try {
@@ -485,23 +543,70 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   useEffect(() => {
     if (mode === "create") {
-      form.setFieldsValue({
-        id: "",
-        name: "",
-        type: "GROOVY"
-      });
-      setCurrentScript(null);
-      setExecutionValidationError(null);
-      setSourceText(getDefaultSource("GROOVY"));
-      setInputSchemaState(createEmptySchemaEditorState());
-      setOutputSchemaState(createEmptySchemaEditorState());
-      setLoading(false);
+      if (!copyFromScriptId) {
+        initializedCopySourceRef.current = null;
+        resetCreateEditor();
+        setLoading(false);
+        return;
+      }
+      if (initializedCopySourceRef.current === copyFromScriptId) {
+        return;
+      }
+
+      let cancelled = false;
+      initializedCopySourceRef.current = copyFromScriptId;
+      setLoading(true);
+
+      void Promise.all([getScript(copyFromScriptId), listScripts()])
+        .then(([script, scripts]) => {
+          if (cancelled) {
+            return;
+          }
+
+          setAvailableScripts(scripts);
+          setCopiedFromScript({
+            id: script.id,
+            name: script.name
+          });
+          applyCreateDraftToEditor(
+            buildDuplicatedScriptDefinition(
+              script,
+              scripts.map((item) => item.id)
+            )
+          );
+        })
+        .catch((error) => {
+          if (cancelled) {
+            return;
+          }
+
+          initializedCopySourceRef.current = null;
+          resetCreateEditor();
+          const detail = error instanceof ApiError ? error.message : "复制脚本失败";
+          messageApi.error(detail);
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLoading(false);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setCopiedFromScript(null);
+    initializedCopySourceRef.current = null;
+  }, [copyFromScriptId, form, id, messageApi, mode]);
+
+  useEffect(() => {
+    if (mode === "create" || !id) {
       return;
     }
-    if (id) {
-      void loadScript(id);
-    }
-  }, [form, id, mode]);
+
+    void loadScript(id);
+  }, [id, mode]);
 
   useEffect(() => {
     clearPolling();
@@ -626,8 +731,24 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     };
   };
 
+  const ensureCreateScriptIdAvailable = async (scriptId: string) => {
+    if (mode !== "create") {
+      return;
+    }
+
+    const scripts = await listScripts();
+    setAvailableScripts(scripts);
+
+    if (scripts.some((script) => script.id === scriptId)) {
+      const errorMessage = "脚本 ID 已存在，请更换后再保存";
+      form.setFields([{ name: "id", errors: [errorMessage] }]);
+      throw new Error(errorMessage);
+    }
+  };
+
   const persistCurrentScript = async (): Promise<ScriptDefinition> => {
     const payload = await buildPayload();
+    await ensureCreateScriptIdAvailable(payload.id);
     const saved = mode === "create" ? await createScript(payload) : await updateScript(payload.id, payload);
     applyScriptToEditor(saved);
     return saved;
@@ -1240,6 +1361,14 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   </Button>
                 ) : null}
                 {mode === "edit" && currentScript ? (
+                  <Button
+                    icon={<CopyOutlined />}
+                    onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(currentScript.id)}`)}
+                  >
+                    复制脚本
+                  </Button>
+                ) : null}
+                {mode === "edit" && currentScript ? (
                   <Popconfirm
                     title="确认删除这个脚本？"
                     description="删除后不可恢复。"
@@ -1298,6 +1427,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             </Col>
           </Row>
         </Card>
+
+        {mode === "create" && copiedFromScript ? (
+          <Alert
+            type="info"
+            showIcon
+            message={`已从 ${copiedFromScript.name || copiedFromScript.id} 复制当前内容`}
+            description="已自动生成新的脚本 ID，并预填源码、类型和输入输出结构。保存前请确认脚本 ID 未与现有脚本冲突。"
+          />
+        ) : null}
 
         {currentScript && (
           <Card>
@@ -1363,6 +1501,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   {
                                     pattern: /^[A-Za-z0-9_-]+$/,
                                     message: "仅支持字母、数字、下划线和中横线"
+                                  },
+                                  {
+                                    validator: async (_, value: string | undefined) => {
+                                      if (mode !== "create" || !value?.trim()) {
+                                        return;
+                                      }
+
+                                      if (availableScripts.some((script) => script.id === value.trim())) {
+                                        throw new Error("脚本 ID 已存在");
+                                      }
+                                    }
                                   }
                                 ]}
                               >
@@ -1577,8 +1726,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                             label="可直接执行的 REST API / CLI 命令"
                             content={
                               apiKey
-                                ? `命令已使用当前页面 origin ${origin}；cURL 会附带 Authorization 头，CLI 会附带 --token。`
-                                : `命令已使用当前页面 origin ${origin}；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
+                                ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-RestMethod，并会附带 Authorization 头；CLI 会附带 --token。`
+                                : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-RestMethod；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
                             }
                           />
 
@@ -1594,9 +1743,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       items={[
                                         {
                                           key: "detail-curl-linux",
-                                          label: "cURL",
+                                          label: "HTTP",
                                           title: "详情查询命令",
-                                          command: detailCurlCommand
+                                          command: detailCurlCommand,
+                                          variants: [
+                                            { key: "detail-http-bash", label: "bash/zsh", command: detailCurlCommand },
+                                            {
+                                              key: "detail-http-powershell",
+                                              label: "PowerShell",
+                                              command: detailPowerShellCommand
+                                            }
+                                          ]
                                         },
                                         {
                                           key: "detail-cli",
@@ -1639,9 +1796,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                       items={[
                                         {
                                           key: "execute-curl-linux",
-                                          label: "cURL",
+                                          label: "HTTP",
                                           title: "执行脚本命令",
-                                          command: executeCurlCommand
+                                          command: executeCurlCommand,
+                                          variants: [
+                                            { key: "execute-http-bash", label: "bash/zsh", command: executeCurlCommand },
+                                            {
+                                              key: "execute-http-powershell",
+                                              label: "PowerShell",
+                                              command: executePowerShellCommand
+                                            }
+                                          ]
                                         },
                                         {
                                           key: "execute-cli",
@@ -1671,9 +1836,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                             items={[
                                               {
                                                 key: "schema-curl-linux",
-                                                label: "cURL",
+                                                label: "HTTP",
                                                 title: "获取 Schema 命令",
-                                                command: toolDetailCurlCommand
+                                                command: toolDetailCurlCommand,
+                                                variants: [
+                                                  { key: "schema-http-bash", label: "bash/zsh", command: toolDetailCurlCommand },
+                                                  {
+                                                    key: "schema-http-powershell",
+                                                    label: "PowerShell",
+                                                    command: toolDetailPowerShellCommand
+                                                  }
+                                                ]
                                               },
                                               {
                                                 key: "schema-cli",

@@ -27,12 +27,77 @@ function cmdQuote(value: string): string {
   return `"${escaped}"`;
 }
 
+function powerShellQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 function joinCommandLines(lines: string[]): string {
   return lines.join(" \\\n");
 }
 
 function joinSingleLineCommand(parts: string[]): string {
   return parts.join(" ");
+}
+
+function joinPowerShellScript(sections: string[]): string {
+  return sections.filter((section) => section.trim().length > 0).join("\n\n");
+}
+
+function formatPowerShellCommand(command: string, args: string[]): string {
+  const lines = [command + " `"];
+  args.forEach((arg, index) => {
+    lines.push(`  ${arg}${index < args.length - 1 ? " `" : ""}`);
+  });
+  return lines.join("\n");
+}
+
+function buildPowerShellHeadersSection(apiKey?: string): string {
+  if (!apiKey) {
+    return "";
+  }
+  return [
+    "$headers = @{",
+    `  Authorization = ${powerShellQuote(`Bearer ${apiKey}`)}`,
+    "}"
+  ].join("\n");
+}
+
+function buildPowerShellBodySection(payload: Record<string, unknown>): string {
+  return `$body = @'\n${JSON.stringify(payload, null, 2)}\n'@`;
+}
+
+function buildPowerShellInvokeRestMethodCommand({
+  apiKey,
+  body,
+  method,
+  url
+}: {
+  apiKey?: string;
+  body?: Record<string, unknown>;
+  method: "Get" | "Post";
+  url: string;
+}): string {
+  const sections: string[] = [];
+  const headersSection = buildPowerShellHeadersSection(apiKey);
+  if (headersSection) {
+    sections.push(headersSection);
+  }
+  if (body) {
+    sections.push(buildPowerShellBodySection(body));
+  }
+
+  const args = [`-Uri ${powerShellQuote(url)}`, `-Method ${method}`];
+  if (body) {
+    args.push(`-ContentType ${powerShellQuote("application/json")}`);
+  }
+  if (apiKey) {
+    args.push("-Headers $headers");
+  }
+  if (body) {
+    args.push("-Body $body");
+  }
+  sections.push(formatPowerShellCommand("Invoke-RestMethod", args));
+  return joinPowerShellScript(sections);
 }
 
 function buildCliCommandPrefix({
@@ -256,6 +321,22 @@ export function buildScriptDetailCurlCommand({
   return joinCommandLines(lines);
 }
 
+export function buildScriptDetailPowerShellCommand({
+  apiKey,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  origin: string;
+  scriptId: string;
+}): string {
+  return buildPowerShellInvokeRestMethodCommand({
+    apiKey,
+    method: "Get",
+    url: `${origin}/api/scripts/${scriptId}`
+  });
+}
+
 export function buildScriptDetailCliCommand({
   apiKey,
   origin,
@@ -299,6 +380,22 @@ export function buildToolDetailCurlCommand({
   }
   lines.push(`  ${shellQuote(`${origin}/api/schema/${scriptId}`)}`);
   return joinCommandLines(lines);
+}
+
+export function buildToolDetailPowerShellCommand({
+  apiKey,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  origin: string;
+  scriptId: string;
+}): string {
+  return buildPowerShellInvokeRestMethodCommand({
+    apiKey,
+    method: "Get",
+    url: `${origin}/api/schema/${scriptId}`
+  });
 }
 
 export function buildToolDetailCliCommand({
@@ -360,6 +457,31 @@ export function buildExecuteCurlCommand({
   );
   lines.push(`  ${shellQuote(`${origin}/api/executions`)}`);
   return joinCommandLines(lines);
+}
+
+export function buildExecutePowerShellCommand({
+  apiKey,
+  input,
+  mode,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  input: Record<string, unknown>;
+  mode: SubmitMode;
+  origin: string;
+  scriptId: string;
+}): string {
+  return buildPowerShellInvokeRestMethodCommand({
+    apiKey,
+    body: {
+      scriptId,
+      input,
+      mode
+    },
+    method: "Post",
+    url: `${origin}/api/executions`
+  });
 }
 
 export function buildExecuteCliCommand({
@@ -445,6 +567,35 @@ export function buildPluginInvokeCurlCommand({
   );
   lines.push(`  ${shellQuote(`${origin}/api/plugins/${pluginId}/actions/${action}/invoke`)}`);
   return joinCommandLines(lines);
+}
+
+export function buildPluginInvokePowerShellCommand({
+  action,
+  apiKey,
+  args,
+  origin,
+  pluginId,
+  responseView,
+  scriptInput
+}: {
+  action: string;
+  apiKey?: string;
+  args: Record<string, unknown>;
+  origin: string;
+  pluginId: string;
+  responseView?: ExecutionResponseView;
+  scriptInput: Record<string, unknown>;
+}): string {
+  return buildPowerShellInvokeRestMethodCommand({
+    apiKey,
+    body: {
+      args,
+      scriptInput,
+      responseView: responseView ?? "RESULT"
+    },
+    method: "Post",
+    url: `${origin}/api/plugins/${pluginId}/actions/${action}/invoke`
+  });
 }
 
 export function buildPluginInvokeCliCommand({
