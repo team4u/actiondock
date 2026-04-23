@@ -1,23 +1,36 @@
 import {
+  DownloadOutlined,
   DeleteOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  UploadOutlined
 } from "@ant-design/icons";
-import { Button, Card, Empty, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, Modal, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useState } from "react";
+import type { TableRowSelection } from "antd/es/table/interface";
+import type { ChangeEvent, Key } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ApiError,
+  createSchedule,
   deleteSchedule,
   disableSchedule,
   enableSchedule,
-  listSchedules
+  listSchedules,
+  updateSchedule
 } from "../api";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
+import {
+  analyzeScheduleImport,
+  buildScheduleExportBundle,
+  downloadJsonFile,
+  formatScheduleExportFileName,
+  parseScheduleImportBundle
+} from "../scriptTransfer";
 import type { ScriptSchedule } from "../types";
 import { formatDateTime, getExecutionStatusColor, getErrorMessage } from "../utils";
 
@@ -27,16 +40,20 @@ export function ScheduleManagementPage() {
   const navigate = useNavigate();
   const [schedules, setSchedules] = useState<ScriptSchedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [selectedScheduleIds, setSelectedScheduleIds] = useState<Key[]>([]);
   const { actionId, withAction } = useActionWithLoading();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
+  const [modal, modalContextHolder] = Modal.useModal();
 
   const loadData = async () => {
     setLoading(true);
     try {
       const scheduleData = await listSchedules();
-      setSchedules(
-        [...scheduleData].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""))
-      );
+      const sorted = [...scheduleData].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
+      setSchedules(sorted);
+      setSelectedScheduleIds((previous) => previous.filter((id) => sorted.some((schedule) => schedule.id === id)));
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载定时任务失败"));
     } finally {
@@ -56,6 +73,134 @@ export function ScheduleManagementPage() {
         : [nextSchedule, ...previous];
       return [...next].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
     });
+  };
+
+  const exportSchedules = (targetSchedules: ScriptSchedule[], successMessage: string) => {
+    try {
+      const bundle = buildScheduleExportBundle(targetSchedules);
+      downloadJsonFile(formatScheduleExportFileName(), bundle);
+      messageApi.success(successMessage);
+    } catch {
+      messageApi.error("导出定时任务失败");
+    }
+  };
+
+  const handleExportAll = () => {
+    exportSchedules(schedules, `已导出 ${schedules.length} 个定时任务`);
+  };
+
+  const handleExportSelected = () => {
+    const selectedSchedules = schedules.filter((schedule) => selectedScheduleIds.includes(schedule.id));
+    exportSchedules(selectedSchedules, `已导出 ${selectedSchedules.length} 个选中定时任务`);
+  };
+
+  const runImport = async (importedSchedules: ScriptSchedule[]) => {
+    setImporting(true);
+    const currentIds = new Set(schedules.map((schedule) => schedule.id));
+    const successes: string[] = [];
+    const failures: Array<{ id: string; reason: string }> = [];
+
+    try {
+      for (const schedule of importedSchedules) {
+        const payload = {
+          scriptId: schedule.scriptId,
+          name: schedule.name,
+          cronExpression: schedule.cronExpression,
+          input: schedule.input,
+          enabled: schedule.enabled
+        };
+        try {
+          if (currentIds.has(schedule.id)) {
+            await updateSchedule(schedule.id, payload);
+          } else {
+            await createSchedule(payload);
+          }
+          successes.push(schedule.id);
+        } catch (error) {
+          const detail = error instanceof ApiError ? error.message : "导入失败";
+          failures.push({ id: schedule.id, reason: detail });
+        }
+      }
+
+      if (successes.length > 0) {
+        await loadData();
+      }
+
+      if (failures.length === 0) {
+        messageApi.success(`导入完成，成功处理 ${successes.length} 个定时任务`);
+        return;
+      }
+
+      modal.warning({
+        title: "导入已完成，部分定时任务处理失败",
+        width: 640,
+        content: (
+          <div className="script-import-result">
+            <Text>成功 {successes.length} 条，失败 {failures.length} 条。</Text>
+            <pre className="script-import-result__code">
+              {failures.slice(0, 10).map((item) => `${item.id}: ${item.reason}`).join("\n")}
+            </pre>
+            {failures.length > 10 ? <Text type="secondary">仅展示前 10 条失败明细。</Text> : null}
+          </div>
+        )
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const importedSchedules = parseScheduleImportBundle(await file.text());
+      const analysis = analyzeScheduleImport(importedSchedules, schedules);
+      const overwritePreview = analysis.overwriteIds.slice(0, 10);
+
+      await modal.confirm({
+        title: "确认导入定时任务",
+        okText: "开始导入",
+        cancelText: "取消",
+        width: 680,
+        content: (
+          <div className="script-import-summary">
+            <Text>共解析到 {analysis.schedules.length} 个定时任务。</Text>
+            <Text>新增 {analysis.createIds.length} 个，覆盖 {analysis.overwriteIds.length} 个。</Text>
+            {analysis.createIds.length > 0 ? (
+              <Text type="secondary">不存在的任务会按导入内容新建，系统会重新分配实际 ID。</Text>
+            ) : null}
+            {analysis.overwriteIds.length > 0 ? (
+              <>
+                <Text strong>将被覆盖的定时任务 ID</Text>
+                <pre className="script-import-result__code">{overwritePreview.join("\n")}</pre>
+                {analysis.overwriteIds.length > overwritePreview.length ? (
+                  <Text type="secondary">
+                    仅展示前 {overwritePreview.length} 个，剩余 {analysis.overwriteIds.length - overwritePreview.length} 个将在导入时一并覆盖。
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        ),
+        onOk: () => runImport(analysis.schedules)
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "导入定时任务失败";
+      messageApi.error(detail);
+    }
+  };
+
+  const handleImportChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      messageApi.error("仅支持导入 .json 文件");
+      return;
+    }
+
+    await handleImportFile(file);
   };
 
   const columns: ColumnsType<ScriptSchedule> = [
@@ -166,18 +311,48 @@ export function ScheduleManagementPage() {
     }
   ];
 
+  const rowSelection: TableRowSelection<ScriptSchedule> = {
+    selectedRowKeys: selectedScheduleIds,
+    onChange: (nextSelectedRowKeys) => setSelectedScheduleIds(nextSelectedRowKeys),
+    preserveSelectedRowKeys: true
+  };
+
   return (
     <>
       {contextHolder}
+      {modalContextHolder}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={(event) => void handleImportChange(event)}
+      />
       <Card title="定时任务列表">
         <div className="script-list-toolbar">
           <Space direction="vertical" size={2} className="script-list-toolbar__meta">
             <Text type="secondary">共 {schedules.length} 个定时任务</Text>
             <Text type="secondary">启用中 {schedules.filter((schedule) => schedule.enabled).length} 个</Text>
+            <Text type="secondary">已选 {selectedScheduleIds.length} 个定时任务</Text>
           </Space>
           <Space wrap className="script-list-toolbar__actions">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
               新建定时任务
+            </Button>
+            <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
+              导入定时任务
+            </Button>
+            <Button icon={<DownloadOutlined />} disabled={loading || importing || schedules.length === 0} onClick={handleExportAll}>
+              导出全部
+            </Button>
+            <Button
+              icon={<DownloadOutlined />}
+              type="primary"
+              ghost
+              disabled={loading || importing || selectedScheduleIds.length === 0}
+              onClick={handleExportSelected}
+            >
+              导出选中
             </Button>
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
               刷新
@@ -190,7 +365,8 @@ export function ScheduleManagementPage() {
         ) : (
           <Table
             rowKey="id"
-            loading={loading}
+            loading={loading || importing}
+            rowSelection={rowSelection}
             columns={columns}
             dataSource={schedules}
             pagination={{ pageSize: 10, responsive: true }}

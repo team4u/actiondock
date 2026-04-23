@@ -1,5 +1,7 @@
 import type {
+  ConfigValue,
   PublishedScriptSnapshot,
+  ScriptSchedule,
   ScriptDefinition,
   ScriptStatus,
   ScriptType
@@ -15,6 +17,30 @@ export interface ScriptImportAnalysis {
   scripts: ScriptDefinition[];
   createIds: string[];
   overwriteIds: string[];
+}
+
+export interface ScheduleExportBundleV1 {
+  version: 1;
+  exportedAt: string;
+  schedules: ScriptSchedule[];
+}
+
+export interface ScheduleImportAnalysis {
+  schedules: ScriptSchedule[];
+  createIds: string[];
+  overwriteIds: string[];
+}
+
+export interface ConfigValueExportBundleV1 {
+  version: 1;
+  exportedAt: string;
+  configValues: ConfigValue[];
+}
+
+export interface ConfigValueImportAnalysis {
+  configValues: ConfigValue[];
+  createKeys: string[];
+  overwriteKeys: string[];
 }
 
 const SUPPORTED_SCRIPT_TYPES: ScriptType[] = ["GROOVY", "PYTHON"];
@@ -34,6 +60,13 @@ function assertOptionalString(value: unknown, fieldName: string): string | undef
   }
   if (typeof value !== "string") {
     throw new Error(`${fieldName} 必须是字符串`);
+  }
+  return value;
+}
+
+function assertBoolean(value: unknown, fieldName: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${fieldName} 必须是布尔值`);
   }
   return value;
 }
@@ -122,6 +155,68 @@ function parseScriptDefinition(value: unknown, index: number): ScriptDefinition 
   };
 }
 
+function parseScriptSchedule(value: unknown, index: number): ScriptSchedule {
+  if (!isRecord(value)) {
+    throw new Error(`第 ${index + 1} 条定时任务不是对象`);
+  }
+
+  const id = value.id;
+  const scriptId = value.scriptId;
+  const name = value.name;
+  const cronExpression = value.cronExpression;
+
+  if (!isNonEmptyString(id)) {
+    throw new Error(`第 ${index + 1} 条定时任务缺少合法 id`);
+  }
+  if (!isNonEmptyString(scriptId)) {
+    throw new Error(`第 ${index + 1} 条定时任务 ${id} 缺少合法 scriptId`);
+  }
+  if (!isNonEmptyString(name)) {
+    throw new Error(`第 ${index + 1} 条定时任务 ${id} 缺少合法 name`);
+  }
+  if (!isNonEmptyString(cronExpression)) {
+    throw new Error(`第 ${index + 1} 条定时任务 ${id} 缺少合法 cronExpression`);
+  }
+
+  return {
+    id: id.trim(),
+    scriptId: scriptId.trim(),
+    name: name.trim(),
+    cronExpression: cronExpression.trim(),
+    input: assertSchemaObject(value.input, `第 ${index + 1} 条定时任务 ${id} 的 input`),
+    enabled: assertBoolean(value.enabled, `第 ${index + 1} 条定时任务 ${id} 的 enabled`),
+    nextRunAt: assertOptionalString(value.nextRunAt, `第 ${index + 1} 条定时任务 ${id} 的 nextRunAt`),
+    lastTriggeredAt: assertOptionalString(value.lastTriggeredAt, `第 ${index + 1} 条定时任务 ${id} 的 lastTriggeredAt`),
+    lastExecutionId: assertOptionalString(value.lastExecutionId, `第 ${index + 1} 条定时任务 ${id} 的 lastExecutionId`),
+    lastExecutionStatus: value.lastExecutionStatus == null ? undefined : String(value.lastExecutionStatus) as ScriptSchedule["lastExecutionStatus"],
+    createdAt: assertOptionalString(value.createdAt, `第 ${index + 1} 条定时任务 ${id} 的 createdAt`),
+    updatedAt: assertOptionalString(value.updatedAt, `第 ${index + 1} 条定时任务 ${id} 的 updatedAt`)
+  };
+}
+
+function parseConfigValue(value: unknown, index: number): ConfigValue {
+  if (!isRecord(value)) {
+    throw new Error(`第 ${index + 1} 条配置值不是对象`);
+  }
+
+  const key = value.key;
+  const rawValue = value.value;
+  if (!isNonEmptyString(key)) {
+    throw new Error(`第 ${index + 1} 条配置值缺少合法 key`);
+  }
+  if (typeof rawValue !== "string") {
+    throw new Error(`第 ${index + 1} 条配置值 ${key} 的 value 必须是字符串`);
+  }
+
+  return {
+    key: key.trim(),
+    value: rawValue,
+    description: assertOptionalString(value.description, `第 ${index + 1} 条配置值 ${key} 的 description`),
+    createdAt: assertOptionalString(value.createdAt, `第 ${index + 1} 条配置值 ${key} 的 createdAt`),
+    updatedAt: assertOptionalString(value.updatedAt, `第 ${index + 1} 条配置值 ${key} 的 updatedAt`)
+  };
+}
+
 export function buildScriptExportBundle(scripts: ScriptDefinition[]): ScriptExportBundleV1 {
   return {
     version: 1,
@@ -131,6 +226,21 @@ export function buildScriptExportBundle(scripts: ScriptDefinition[]): ScriptExpo
 }
 
 export function formatScriptExportFileName(now = new Date()): string {
+  const stamp = formatExportStamp(now);
+  return `scriptflow-scripts-${stamp}.json`;
+}
+
+export function formatScheduleExportFileName(now = new Date()): string {
+  const stamp = formatExportStamp(now);
+  return `scriptflow-schedules-${stamp}.json`;
+}
+
+export function formatConfigValueExportFileName(now = new Date()): string {
+  const stamp = formatExportStamp(now);
+  return `scriptflow-config-values-${stamp}.json`;
+}
+
+function formatExportStamp(now: Date): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
@@ -138,7 +248,7 @@ export function formatScriptExportFileName(now = new Date()): string {
   const minute = String(now.getMinutes()).padStart(2, "0");
   const second = String(now.getSeconds()).padStart(2, "0");
 
-  return `scriptflow-scripts-${year}${month}${day}-${hour}${minute}${second}.json`;
+  return `${year}${month}${day}-${hour}${minute}${second}`;
 }
 
 export function downloadJsonFile(fileName: string, payload: unknown): void {
@@ -213,5 +323,143 @@ export function analyzeScriptImport(
     scripts: importedScripts,
     createIds,
     overwriteIds
+  };
+}
+
+export function buildScheduleExportBundle(schedules: ScriptSchedule[]): ScheduleExportBundleV1 {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    schedules: [...schedules].sort((left, right) => left.id.localeCompare(right.id))
+  };
+}
+
+export function parseScheduleImportBundle(text: string): ScriptSchedule[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "格式错误";
+    throw new Error(`导入文件不是合法 JSON: ${detail}`);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("导入文件顶层必须是对象");
+  }
+  if (parsed.version !== 1) {
+    throw new Error("仅支持 ScheduleExportBundleV1 格式");
+  }
+  if (!isNonEmptyString(parsed.exportedAt)) {
+    throw new Error("导入文件缺少 exportedAt");
+  }
+  if (!Array.isArray(parsed.schedules)) {
+    throw new Error("导入文件缺少 schedules 数组");
+  }
+
+  const schedules = parsed.schedules.map((schedule, index) => parseScriptSchedule(schedule, index));
+  if (schedules.length === 0) {
+    throw new Error("导入文件中没有定时任务");
+  }
+
+  const seenIds = new Set<string>();
+  for (const schedule of schedules) {
+    if (seenIds.has(schedule.id)) {
+      throw new Error(`导入文件中存在重复定时任务 ID: ${schedule.id}`);
+    }
+    seenIds.add(schedule.id);
+  }
+
+  return schedules;
+}
+
+export function analyzeScheduleImport(
+  importedSchedules: ScriptSchedule[],
+  currentSchedules: ScriptSchedule[]
+): ScheduleImportAnalysis {
+  const currentIds = new Set(currentSchedules.map((schedule) => schedule.id));
+  const createIds: string[] = [];
+  const overwriteIds: string[] = [];
+
+  for (const schedule of importedSchedules) {
+    if (currentIds.has(schedule.id)) {
+      overwriteIds.push(schedule.id);
+    } else {
+      createIds.push(schedule.id);
+    }
+  }
+
+  return {
+    schedules: importedSchedules,
+    createIds,
+    overwriteIds
+  };
+}
+
+export function buildConfigValueExportBundle(configValues: ConfigValue[]): ConfigValueExportBundleV1 {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    configValues: [...configValues].sort((left, right) => left.key.localeCompare(right.key))
+  };
+}
+
+export function parseConfigValueImportBundle(text: string): ConfigValue[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "格式错误";
+    throw new Error(`导入文件不是合法 JSON: ${detail}`);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("导入文件顶层必须是对象");
+  }
+  if (parsed.version !== 1) {
+    throw new Error("仅支持 ConfigValueExportBundleV1 格式");
+  }
+  if (!isNonEmptyString(parsed.exportedAt)) {
+    throw new Error("导入文件缺少 exportedAt");
+  }
+  if (!Array.isArray(parsed.configValues)) {
+    throw new Error("导入文件缺少 configValues 数组");
+  }
+
+  const configValues = parsed.configValues.map((item, index) => parseConfigValue(item, index));
+  if (configValues.length === 0) {
+    throw new Error("导入文件中没有配置值");
+  }
+
+  const seenKeys = new Set<string>();
+  for (const item of configValues) {
+    if (seenKeys.has(item.key)) {
+      throw new Error(`导入文件中存在重复配置值 key: ${item.key}`);
+    }
+    seenKeys.add(item.key);
+  }
+
+  return configValues;
+}
+
+export function analyzeConfigValueImport(
+  importedConfigValues: ConfigValue[],
+  currentConfigValues: ConfigValue[]
+): ConfigValueImportAnalysis {
+  const currentKeys = new Set(currentConfigValues.map((item) => item.key));
+  const createKeys: string[] = [];
+  const overwriteKeys: string[] = [];
+
+  for (const item of importedConfigValues) {
+    if (currentKeys.has(item.key)) {
+      overwriteKeys.push(item.key);
+    } else {
+      createKeys.push(item.key);
+    }
+  }
+
+  return {
+    configValues: importedConfigValues,
+    createKeys,
+    overwriteKeys
   };
 }

@@ -1,10 +1,12 @@
 import {
   CopyOutlined,
+  DownloadOutlined,
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
   ReloadOutlined,
-  SaveOutlined
+  SaveOutlined,
+  UploadOutlined
 } from "@ant-design/icons";
 import {
   Button,
@@ -14,6 +16,7 @@ import {
   Form,
   Input,
   List,
+  Modal,
   Popconfirm,
   Space,
   Table,
@@ -22,7 +25,9 @@ import {
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
+import type { TableRowSelection } from "antd/es/table/interface";
+import type { ChangeEvent, Key } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createConfigValue,
@@ -30,6 +35,13 @@ import {
   listConfigValues,
   updateConfigValue
 } from "../api";
+import {
+  analyzeConfigValueImport,
+  buildConfigValueExportBundle,
+  downloadJsonFile,
+  formatConfigValueExportFileName,
+  parseConfigValueImportBundle
+} from "../scriptTransfer";
 import type { ConfigValue, ConfigValueRequest } from "../types";
 import { copyText, formatDateTime, getErrorMessage } from "../utils";
 
@@ -47,16 +59,22 @@ export function ConfigValueManagementPage() {
   const watchedKey = Form.useWatch("key", form);
   const [items, setItems] = useState<ConfigValue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
+  const [modal, modalContextHolder] = Modal.useModal();
 
   const loadData = async () => {
     setLoading(true);
     try {
-      setItems(await listConfigValues());
+      const data = await listConfigValues();
+      setItems(data);
+      setSelectedKeys((previous) => previous.filter((key) => data.some((item) => item.key === key)));
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载配置值失败"));
     } finally {
@@ -245,13 +263,152 @@ export function ConfigValueManagementPage() {
     }
   };
 
+  const exportConfigValues = (targetItems: ConfigValue[], successMessage: string) => {
+    try {
+      const bundle = buildConfigValueExportBundle(targetItems);
+      downloadJsonFile(formatConfigValueExportFileName(), bundle);
+      messageApi.success(successMessage);
+    } catch {
+      messageApi.error("导出配置值失败");
+    }
+  };
+
+  const handleExportAll = () => {
+    exportConfigValues(items, `已导出 ${items.length} 个配置值`);
+  };
+
+  const handleExportSelected = () => {
+    const selectedItems = items.filter((item) => selectedKeys.includes(item.key));
+    exportConfigValues(selectedItems, `已导出 ${selectedItems.length} 个选中配置值`);
+  };
+
+  const runImport = async (importedItems: ConfigValue[]) => {
+    setImporting(true);
+    const currentKeys = new Set(items.map((item) => item.key));
+    const successes: string[] = [];
+    const failures: Array<{ key: string; reason: string }> = [];
+
+    try {
+      for (const item of importedItems) {
+        const payload: ConfigValueRequest = {
+          key: item.key,
+          value: item.value,
+          description: item.description
+        };
+        try {
+          if (currentKeys.has(item.key)) {
+            await updateConfigValue(item.key, payload);
+          } else {
+            await createConfigValue(payload);
+            currentKeys.add(item.key);
+          }
+          successes.push(item.key);
+        } catch (error) {
+          const detail = error instanceof ApiError ? error.message : "导入失败";
+          failures.push({ key: item.key, reason: detail });
+        }
+      }
+
+      if (successes.length > 0) {
+        await loadData();
+      }
+
+      if (failures.length === 0) {
+        messageApi.success(`导入完成，成功处理 ${successes.length} 个配置值`);
+        return;
+      }
+
+      modal.warning({
+        title: "导入已完成，部分配置值处理失败",
+        width: 640,
+        content: (
+          <div className="script-import-result">
+            <Text>成功 {successes.length} 条，失败 {failures.length} 条。</Text>
+            <pre className="script-import-result__code">
+              {failures.slice(0, 10).map((item) => `${item.key}: ${item.reason}`).join("\n")}
+            </pre>
+            {failures.length > 10 ? <Text type="secondary">仅展示前 10 条失败明细。</Text> : null}
+          </div>
+        )
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const importedItems = parseConfigValueImportBundle(await file.text());
+      const analysis = analyzeConfigValueImport(importedItems, items);
+      const overwritePreview = analysis.overwriteKeys.slice(0, 10);
+
+      await modal.confirm({
+        title: "确认导入配置值",
+        okText: "开始导入",
+        cancelText: "取消",
+        width: 680,
+        content: (
+          <div className="script-import-summary">
+            <Text>共解析到 {analysis.configValues.length} 个配置值。</Text>
+            <Text>新增 {analysis.createKeys.length} 个，覆盖 {analysis.overwriteKeys.length} 个。</Text>
+            {analysis.overwriteKeys.length > 0 ? (
+              <>
+                <Text strong>将被覆盖的配置值 key</Text>
+                <pre className="script-import-result__code">{overwritePreview.join("\n")}</pre>
+                {analysis.overwriteKeys.length > overwritePreview.length ? (
+                  <Text type="secondary">
+                    仅展示前 {overwritePreview.length} 个，剩余 {analysis.overwriteKeys.length - overwritePreview.length} 个将在导入时一并覆盖。
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        ),
+        onOk: () => runImport(analysis.configValues)
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "导入配置值失败";
+      messageApi.error(detail);
+    }
+  };
+
+  const handleImportChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      messageApi.error("仅支持导入 .json 文件");
+      return;
+    }
+
+    await handleImportFile(file);
+  };
+
+  const rowSelection: TableRowSelection<ConfigValue> = {
+    selectedRowKeys: selectedKeys,
+    onChange: (nextSelectedRowKeys) => setSelectedKeys(nextSelectedRowKeys),
+    preserveSelectedRowKeys: true
+  };
+
   return (
     <>
       {contextHolder}
+      {modalContextHolder}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={(event) => void handleImportChange(event)}
+      />
       <Card title="配置值管理">
         <div className="script-list-toolbar">
           <Space direction="vertical" size={2} className="script-list-toolbar__meta">
             <Text type="secondary">共 {items.length} 个配置值</Text>
+            <Text type="secondary">已选 {selectedKeys.length} 个配置值</Text>
             <Space size={8} wrap>
               <Tag color="blue">字符串值</Tag>
               <Tag>${"{config.some_key}"}</Tag>
@@ -265,6 +422,21 @@ export function ConfigValueManagementPage() {
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
             />
+            <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
+              导入配置值
+            </Button>
+            <Button icon={<DownloadOutlined />} disabled={loading || importing || items.length === 0} onClick={handleExportAll}>
+              导出全部
+            </Button>
+            <Button
+              icon={<DownloadOutlined />}
+              type="primary"
+              ghost
+              disabled={loading || importing || selectedKeys.length === 0}
+              onClick={handleExportSelected}
+            >
+              导出选中
+            </Button>
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
               刷新
             </Button>
@@ -285,7 +457,8 @@ export function ConfigValueManagementPage() {
         ) : (
           <Table
             rowKey="key"
-            loading={loading}
+            loading={loading || importing}
+            rowSelection={rowSelection}
             columns={columns}
             dataSource={filteredItems}
             pagination={{ pageSize: 10, responsive: true }}
