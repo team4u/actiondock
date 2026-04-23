@@ -66,16 +66,7 @@ function buildPowerShellBodySection(payload: Record<string, unknown>): string {
   return `$body = @'\n${JSON.stringify(payload, null, 2)}\n'@`;
 }
 
-function buildPowerShellUtf8Section(): string {
-  return [
-    "$utf8 = [System.Text.UTF8Encoding]::new($false)",
-    "$OutputEncoding = $utf8",
-    "[Console]::InputEncoding = $utf8",
-    "[Console]::OutputEncoding = $utf8"
-  ].join("\n");
-}
-
-function buildPowerShellInvokeRestMethodCommand({
+function buildPowerShellJsonRequestSection({
   apiKey,
   body,
   method,
@@ -86,7 +77,7 @@ function buildPowerShellInvokeRestMethodCommand({
   method: "Get" | "Post";
   url: string;
 }): string {
-  const sections: string[] = [buildPowerShellUtf8Section()];
+  const sections: string[] = [];
   const headersSection = buildPowerShellHeadersSection(apiKey);
   if (headersSection) {
     sections.push(headersSection);
@@ -96,6 +87,7 @@ function buildPowerShellInvokeRestMethodCommand({
   }
 
   const args = [`-Uri ${powerShellQuote(url)}`, `-Method ${method}`];
+  args.push("-UseBasicParsing");
   if (body) {
     args.push(`-ContentType ${powerShellQuote("application/json; charset=utf-8")}`);
   }
@@ -105,7 +97,20 @@ function buildPowerShellInvokeRestMethodCommand({
   if (body) {
     args.push("-Body $body");
   }
-  sections.push(formatPowerShellCommand("Invoke-RestMethod", args));
+  sections.push(`$response = ${formatPowerShellCommand("Invoke-WebRequest", args)}`);
+  sections.push([
+    "$stream = $response.RawContentStream",
+    "if ($stream.CanSeek) {",
+    "  $stream.Position = 0",
+    "}",
+    "$reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)",
+    "try {",
+    "  $json = $reader.ReadToEnd()",
+    "} finally {",
+    "  $reader.Dispose()",
+    "}",
+    "$json | ConvertFrom-Json | ConvertTo-Json -Depth 100"
+  ].join("\n"));
   return joinPowerShellScript(sections);
 }
 
@@ -339,7 +344,7 @@ export function buildScriptDetailPowerShellCommand({
   origin: string;
   scriptId: string;
 }): string {
-  return buildPowerShellInvokeRestMethodCommand({
+  return buildPowerShellJsonRequestSection({
     apiKey,
     method: "Get",
     url: `${origin}/api/scripts/${scriptId}`
@@ -400,7 +405,7 @@ export function buildToolDetailPowerShellCommand({
   origin: string;
   scriptId: string;
 }): string {
-  return buildPowerShellInvokeRestMethodCommand({
+  return buildPowerShellJsonRequestSection({
     apiKey,
     method: "Get",
     url: `${origin}/api/schema/${scriptId}`
@@ -481,7 +486,7 @@ export function buildExecutePowerShellCommand({
   origin: string;
   scriptId: string;
 }): string {
-  return buildPowerShellInvokeRestMethodCommand({
+  return buildPowerShellJsonRequestSection({
     apiKey,
     body: {
       scriptId,
@@ -595,7 +600,7 @@ export function buildPluginInvokePowerShellCommand({
   responseView?: ExecutionResponseView;
   scriptInput: Record<string, unknown>;
 }): string {
-  return buildPowerShellInvokeRestMethodCommand({
+  return buildPowerShellJsonRequestSection({
     apiKey,
     body: {
       args,

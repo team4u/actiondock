@@ -129,19 +129,27 @@ describe("PowerShell HTTP command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = $utf8
-[Console]::InputEncoding = $utf8
-[Console]::OutputEncoding = $utf8
-
-$headers = @{
+    ).toBe(`$headers = @{
   Authorization = 'Bearer local-dev-key'
 }
 
-Invoke-RestMethod \`
+$response = Invoke-WebRequest \`
   -Uri 'http://localhost:8080/api/scripts/hello-groovy' \`
   -Method Get \`
-  -Headers $headers`);
+  -UseBasicParsing \`
+  -Headers $headers
+
+$stream = $response.RawContentStream
+if ($stream.CanSeek) {
+  $stream.Position = 0
+}
+$reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+try {
+  $json = $reader.ReadToEnd()
+} finally {
+  $reader.Dispose()
+}
+$json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
 
     expect(
       buildToolDetailPowerShellCommand({
@@ -149,19 +157,27 @@ Invoke-RestMethod \`
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = $utf8
-[Console]::InputEncoding = $utf8
-[Console]::OutputEncoding = $utf8
-
-$headers = @{
+    ).toBe(`$headers = @{
   Authorization = 'Bearer local-dev-key'
 }
 
-Invoke-RestMethod \`
+$response = Invoke-WebRequest \`
   -Uri 'http://localhost:8080/api/schema/hello-groovy' \`
   -Method Get \`
-  -Headers $headers`);
+  -UseBasicParsing \`
+  -Headers $headers
+
+$stream = $response.RawContentStream
+if ($stream.CanSeek) {
+  $stream.Position = 0
+}
+$reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+try {
+  $json = $reader.ReadToEnd()
+} finally {
+  $reader.Dispose()
+}
+$json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
   });
 
   it("builds execution command without authorization headers when no token is set", () => {
@@ -172,12 +188,7 @@ Invoke-RestMethod \`
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = $utf8
-[Console]::InputEncoding = $utf8
-[Console]::OutputEncoding = $utf8
-
-$body = @'
+    ).toBe(`$body = @'
 {
   "scriptId": "hello-groovy",
   "input": {
@@ -188,11 +199,24 @@ $body = @'
 }
 '@
 
-Invoke-RestMethod \`
+$response = Invoke-WebRequest \`
   -Uri 'http://localhost:8080/api/executions' \`
   -Method Post \`
+  -UseBasicParsing \`
   -ContentType 'application/json; charset=utf-8' \`
-  -Body $body`);
+  -Body $body
+
+$stream = $response.RawContentStream
+if ($stream.CanSeek) {
+  $stream.Position = 0
+}
+$reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+try {
+  $json = $reader.ReadToEnd()
+} finally {
+  $reader.Dispose()
+}
+$json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
   });
 
   it("builds plugin invoke command with token-safe PowerShell quoting", () => {
@@ -206,12 +230,7 @@ Invoke-RestMethod \`
         responseView: "RESULT",
         scriptInput: { locale: "zh-CN" }
       })
-    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
-$OutputEncoding = $utf8
-[Console]::InputEncoding = $utf8
-[Console]::OutputEncoding = $utf8
-
-$headers = @{
+    ).toBe(`$headers = @{
   Authorization = 'Bearer secret''token'
 }
 
@@ -228,11 +247,24 @@ $body = @'
 }
 '@
 
-Invoke-RestMethod \`
+$response = Invoke-WebRequest \`
   -Uri 'http://localhost:8080/api/plugins/plugin-a/actions/summarize/invoke' \`
   -Method Post \`
+  -UseBasicParsing \`
   -ContentType 'application/json; charset=utf-8' \`
   -Headers $headers \`
-  -Body $body`);
+  -Body $body
+
+$stream = $response.RawContentStream
+if ($stream.CanSeek) {
+  $stream.Position = 0
+}
+$reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+try {
+  $json = $reader.ReadToEnd()
+} finally {
+  $reader.Dispose()
+}
+$json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
   });
 });
