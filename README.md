@@ -6,6 +6,7 @@
 
 - **脚本管理**：支持脚本的创建、编辑、发布和版本管理
 - **多脚本类型**：当前支持 `GROOVY` 与 `PYTHON`
+- **脚本互调**：脚本之间可以通过统一门面相互调用，便于组合复用
 - **插件扩展机制**：基于 PF4J 动态加载插件，支持安装、启动、停止、卸载和配置管理
 - **Schema 驱动**：通过 JSON Schema 定义输入/输出结构，自动校验和投影
 - **自动生成正式页**：已发布脚本自动生成专属执行页面，Schema 直接渲染为表单和结果展示，无需额外开发
@@ -641,7 +642,59 @@ return [result: value]
 - 点击插件名称弹出参考详情
 - 按动作查看输入字段、输出字段和复制调用片段
 
-### 7. 直接调试插件动作
+### 7. 脚本之间相互调用
+
+脚本运行时通过统一门面调用其他脚本：
+
+Groovy 示例：
+
+```groovy
+def result = scripts.invoke("child-script", [
+  name: input.name
+])
+
+return [
+  childMessage: result.message
+]
+```
+
+Python 示例：
+
+```python
+result = scripts.invoke("child-script", {
+    "name": input.get("name")
+})
+
+return {
+    "childMessage": result.get("message")
+}
+```
+
+无参调用：
+
+```groovy
+def value = scripts.invoke("health-check")
+return [result: value]
+```
+
+调用约定：
+
+- 统一入口是 `scripts.invoke("scriptId")` 或 `scripts.invoke("scriptId", {...})`
+- 当前支持 `GROOVY` 和 `PYTHON` 作为调用方
+- 被调用脚本固定执行“已发布版本”，不会读取未发布草稿
+- 被调用脚本仍按自己的 `inputSchema` 校验参数
+- 脚本互调属于同一次执行链路，不会额外生成新的执行记录
+- 运行时会检测循环调用，例如 `a -> b -> a`，命中后直接报错
+- 被调用脚本返回非对象时，平台会包装成 `{ "result": ... }`
+
+脚本编辑页里的“脚本参考”面板只展示已发布脚本，支持：
+
+- 名称 / `scriptId` 模糊查询
+- 分页查看
+- 点击脚本名称弹出参考详情
+- 查看已发布输入字段、输出字段和复制调用片段
+
+### 8. 直接调试插件动作
 
 REST 调试接口：
 
@@ -665,7 +718,7 @@ curl -X POST \
 - `debug.args`
 - `debug.scriptInput`
 
-### 8. 手工执行与定时任务中使用配置值
+### 9. 手工执行与定时任务中使用配置值
 
 脚本执行接口和定时任务固定输入都支持使用配置值占位符。
 
@@ -705,7 +758,7 @@ curl -X POST http://localhost:8080/api/executions \
 - 定时任务真正触发执行时，会再次按最新配置值解析
 - 正式使用页和管理台里的“执行 / 调试”入口也遵循相同规则
 
-### 9. 常见问题
+### 10. 常见问题
 
 **1. 为什么脚本保存能通过，但运行时报“插件未启动”或“插件动作不存在”？**
 
@@ -719,15 +772,23 @@ curl -X POST http://localhost:8080/api/executions \
 
 当前版本不支持。插件门面只注入到 `GROOVY` 脚本运行时。
 
-**4. 插件类能否直接在 Groovy 中 `import`？**
+**4. Python 脚本能否调用其他脚本？**
+
+支持。`scripts.invoke(...)` 同时注入到 `GROOVY` 和 `PYTHON` 运行时。
+
+**5. 为什么脚本参考里有的脚本看不到？**
+
+因为“脚本参考”只展示已发布脚本。未发布脚本不能被 `scripts.invoke(...)` 调用。
+
+**6. 插件类能否直接在 Groovy 中 `import`？**
 
 不建议，也没有作为平台约定支持。当前稳定方式是通过宿主注入的 `plugins.invoke(...)` 门面进行跨类加载器调用。
 
-**5. 反复上传同一个插件 jar 会自动覆盖吗？**
+**7. 反复上传同一个插件 jar 会自动覆盖吗？**
 
 不会。顶部“上传安装”只处理新增插件；如果数据库里已经有相同 `pluginId`，安装会失败。需要在对应插件行点击“升级”。
 
-**6. 升级插件后会丢失配置吗？**
+**8. 升级插件后会丢失配置吗？**
 
 不会。升级会保留 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json` 中的现有配置，并保留原先启用/停用状态。
 
