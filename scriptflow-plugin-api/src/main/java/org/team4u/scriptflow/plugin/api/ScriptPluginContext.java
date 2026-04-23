@@ -60,6 +60,10 @@ public class ScriptPluginContext {
         return pluginConfig;
     }
 
+    /**
+     * Returns the effective plugin config converted to the requested Java type.
+     * Default values are expected to come from the platform's merged config, not from this conversion step.
+     */
     public <T> T getPluginConfig(Class<T> type) {
         return PluginConfigBinder.bind(pluginConfig, type);
     }

@@ -16,6 +16,10 @@ public final class PluginConfigBinder {
     private PluginConfigBinder() {
     }
 
+    /**
+     * Binds a plugin config map to a Java type using Jackson deserialization only.
+     * Platform-level defaults must already be applied by the caller before invoking this method.
+     */
     public static <T> T bind(Map<String, Object> source, Class<T> type) {
         if (type == null) {
             throw new IllegalArgumentException("type must not be null");

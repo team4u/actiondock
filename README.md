@@ -506,6 +506,7 @@ DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
 - 只做 `Map<String, Object>` 到目标 Java 类型的 JSON 反序列化，不负责补默认值或做二次合并
 - 未声明的额外字段会忽略
 - 类型不匹配会抛出 `IllegalArgumentException`
+- 如果配置类自己声明了字段初始值，这属于 Java/Jackson 的对象构造细节，不属于平台承诺的默认值机制；插件不要依赖它
 
 模板插件的默认配置示例：
 

@@ -267,6 +267,8 @@ MyConfig config = PluginConfigBinder.bind(configMap, MyConfig.class);
 
 `PluginConfigBinder` 只做 JSON 反序列化，不负责补默认值。默认值应统一维护在 manifest 的 `defaultConfig`，绑定前的配置如果需要合并，应由主应用先完成。
 
+如果配置类自己写了字段初始值，那只是 Java/Jackson 反序列化过程中的对象状态，不是 ScriptFlow 平台承诺的默认值语义，插件不要依赖这种写法。
+
 配置类只需包含标准的 getter/setter：
 
 ```java

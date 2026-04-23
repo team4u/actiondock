@@ -215,6 +215,31 @@ class PluginRuntimeServiceTest {
                 .isEqualTo("{}");
     }
 
+    @Test
+    void invokeTypedConfigUsesEffectiveConfigFromManifestDefaults() throws IOException {
+        Path pluginJar = buildPluginJar(
+                tempDir.resolve("demo-plugin.jar"),
+                demoPluginManifestJson("0.2.0", "ScriptFlow Demo Plugin")
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+
+        Map<String, Object> result = (Map<String, Object>) service.invoke(
+                "scriptflow-demo-plugin",
+                "echo",
+                null,
+                null,
+                null,
+                Map.of("message", "hello")
+        );
+
+        assertThat(result).containsEntry("message", "demo:hello");
+    }
+
     private Path buildPluginJar(Path destination, String manifestJson) throws IOException {
         return buildPluginJar(
                 destination,

@@ -7,6 +7,9 @@ import java.util.Map;
 public interface ScriptFlowPlugin extends ExtensionPoint {
     String id();
 
+    /**
+     * Validates the effective plugin config after platform defaults have been merged.
+     */
     default void validateConfig(Map<String, Object> config) {
     }
 
