@@ -265,6 +265,8 @@ MyConfig config = context.getPluginConfig(MyConfig.class);
 MyConfig config = PluginConfigBinder.bind(configMap, MyConfig.class);
 ```
 
+`PluginConfigBinder` 只做 JSON 反序列化，不负责补默认值。默认值应统一维护在 manifest 的 `defaultConfig`，绑定前的配置如果需要合并，应由主应用先完成。
+
 配置类只需包含标准的 getter/setter：
 
 ```java
@@ -346,8 +348,8 @@ public class MyConfig {
 ```java
 public class HttpPluginConfig {
     private String apiUrl;
-    private int timeout = 5000;
-    private boolean enabled = true;
+    private int timeout;
+    private boolean enabled;
 
     // getter / setter
 }
@@ -356,6 +358,8 @@ public class HttpPluginConfig {
 HttpPluginConfig config = context.getPluginConfig(HttpPluginConfig.class);
 String url = config.getApiUrl();
 ```
+
+`context.getPluginConfig(...)` 读取到的是主应用已经合并完成的最终生效配置；这里的绑定步骤只负责把它转换成 `HttpPluginConfig`。
 
 `validateConfig` 中进行配置校验：
 
@@ -368,6 +372,8 @@ public void validateConfig(Map<String, Object> config) {
     }
 }
 ```
+
+同样，`validateConfig(...)` 收到的也是最终生效配置，不需要在插件里再次与 `defaultConfig` 合并。
 
 ---
 

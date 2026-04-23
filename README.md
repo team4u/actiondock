@@ -374,6 +374,8 @@ DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
 String prefix = config.getPrefix();
 ```
 
+这里的 `pluginConfig` 已经是主应用合并后的最终生效配置；`getPluginConfig(Class<T>)` 只负责把这份配置转换成目标 Java 类型。
+
 也可以在 `validateConfig(...)` 中复用同一套绑定逻辑：
 
 ```java
@@ -501,9 +503,9 @@ DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
 
 `PluginConfigBinder` 的默认行为：
 
+- 只做 `Map<String, Object>` 到目标 Java 类型的 JSON 反序列化，不负责补默认值或做二次合并
 - 未声明的额外字段会忽略
 - 类型不匹配会抛出 `IllegalArgumentException`
-- 如果配置类自身有字段初始化默认值，绑定时会保留这些值；模板插件当前不依赖这一点，而是以 manifest `defaultConfig` 为准
 
 模板插件的默认配置示例：
 

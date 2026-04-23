@@ -9,14 +9,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PluginConfigBinderTest {
     @Test
-    void bindsMapToConfigTypeAndKeepsDefaultValues() {
+    void bindsMapToConfigType() {
         SamplePluginConfig config = PluginConfigBinder.bind(
-                Map.of("enabled", true),
+                Map.of("prefix", "demo", "enabled", true),
                 SamplePluginConfig.class
         );
 
         assertThat(config.getPrefix()).isEqualTo("demo");
         assertThat(config.isEnabled()).isTrue();
+    }
+
+    @Test
+    void doesNotApplyDefaultsForEmptySource() {
+        SamplePluginConfig config = PluginConfigBinder.bind(Map.of(), SamplePluginConfig.class);
+
+        assertThat(config.getPrefix()).isNull();
+        assertThat(config.isEnabled()).isFalse();
     }
 
     @Test
@@ -51,7 +59,7 @@ class PluginConfigBinderTest {
     }
 
     public static class SamplePluginConfig {
-        private String prefix = "demo";
+        private String prefix;
         private boolean enabled;
 
         public String getPrefix() {
@@ -72,7 +80,7 @@ class PluginConfigBinderTest {
     }
 
     public static class NestedPluginConfig {
-        private RetryConfig nested = new RetryConfig();
+        private RetryConfig nested;
 
         public RetryConfig getNested() {
             return nested;
@@ -84,7 +92,7 @@ class PluginConfigBinderTest {
     }
 
     public static class RetryConfig {
-        private int retries = 3;
+        private int retries;
 
         public int getRetries() {
             return retries;

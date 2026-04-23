@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.lang.reflect.Constructor;
+import java.util.Collections;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -21,26 +21,13 @@ public final class PluginConfigBinder {
             throw new IllegalArgumentException("type must not be null");
         }
 
-        T target = instantiate(type);
-        if (source == null || source.isEmpty()) {
-            return target;
-        }
-
         try {
-            return OBJECT_MAPPER.readerForUpdating(target)
-                    .readValue(OBJECT_MAPPER.writeValueAsString(source));
+            return OBJECT_MAPPER.readValue(
+                    OBJECT_MAPPER.writeValueAsString(source == null ? Collections.emptyMap() : source),
+                    type
+            );
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException(buildBindingErrorMessage(type, exception), exception);
-        }
-    }
-
-    private static <T> T instantiate(Class<T> type) {
-        try {
-            Constructor<T> constructor = type.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            return constructor.newInstance();
-        } catch (ReflectiveOperationException exception) {
-            throw new IllegalArgumentException("Cannot instantiate config type: " + type.getName(), exception);
         }
     }
 
