@@ -7,6 +7,10 @@ const { Text } = Typography;
 
 type SchemaObjectResultMode = "SCHEMA" | "JSON";
 
+function getDefaultResultMode(supportedFieldCount: number, unsupportedFieldCount: number): SchemaObjectResultMode {
+  return supportedFieldCount > 0 && unsupportedFieldCount === 0 ? "SCHEMA" : "JSON";
+}
+
 function renderReadonlyField(field: SchemaFieldDefinition, value: unknown) {
   if (field.kind === "enum") {
     return (
@@ -57,11 +61,13 @@ export function SchemaObjectResultView({
   valueName?: string;
 }) {
   const { supportedFields, unsupportedFields } = resolveSchemaFields(schema);
-  const [mode, setMode] = useState<SchemaObjectResultMode>(supportedFields.length > 0 ? "SCHEMA" : "JSON");
+  const [mode, setMode] = useState<SchemaObjectResultMode>(
+    getDefaultResultMode(supportedFields.length, unsupportedFields.length)
+  );
 
   useEffect(() => {
-    setMode(supportedFields.length > 0 ? "SCHEMA" : "JSON");
-  }, [supportedFields.length]);
+    setMode(getDefaultResultMode(supportedFields.length, unsupportedFields.length));
+  }, [supportedFields.length, unsupportedFields.length]);
 
   const resultValue = value ?? {};
 
