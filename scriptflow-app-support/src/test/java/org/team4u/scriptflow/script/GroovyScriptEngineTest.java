@@ -42,6 +42,16 @@ class GroovyScriptEngineTest {
     }
 
     @Test
+    void validateAllowsDynamicPluginInvokeArguments() {
+        assertThatCode(() -> engine.validate(new ScriptDefinition().setSource("""
+                def pluginId = input.pluginId
+                def action = input.action
+                return plugins.invoke(pluginId, action, [message: "hi"])
+                """)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void executeEvaluatesScriptAgainstInputMap() {
         Object result = engine.execute(new ScriptDefinition().setSource("return [message: 'Hello, ' + input.name]"), Map.of("name", "Alice"), null);
 

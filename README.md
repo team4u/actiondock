@@ -189,9 +189,8 @@ return [
 插件调用约定：
 
 - 统一入口为 `plugins.invoke("pluginId", "action")` 或 `plugins.invoke("pluginId", "action", [key: value])`
-- `pluginId` 与 `action` 必须写成字符串字面量，不能从变量动态拼接
 - 第三个参数必须是 `Map<String, Object>` 风格的 Groovy Map；省略时按空 Map 处理
-- 保存/校验 Groovy 脚本时，会检查引用的插件和动作是否存在且已启动
+- 保存/校验 Groovy 脚本时，只做 Groovy 语法与编译校验，不检查引用的插件和动作
 - 插件调用异常会直接中断脚本；如果要降级处理，请在脚本里自行 `try/catch`
 
 ### Python
@@ -538,9 +537,9 @@ return [result: value]
 调用约定：
 
 - 统一入口是 `plugins.invoke("pluginId", "action")` 或 `plugins.invoke("pluginId", "action", [:])`
-- `pluginId` 与 `action` 必须是字符串字面量
 - 第三个参数按 `Map<String, Object>` 处理；省略时默认空对象
-- 只有“已启用且已加载”的插件才能通过脚本校验并在运行时调用
+- Groovy 脚本保存/校验阶段只检查语法和编译是否通过
+- 运行时仍然要求目标插件已启用且已加载，且动作存在
 - 插件动作返回非对象时，平台会包装成 `{ "result": ... }`
 
 脚本编辑页里的“插件参考”面板只展示已启动插件，支持：
@@ -574,13 +573,13 @@ curl -X POST \
 
 ### 8. 常见问题
 
-**1. 为什么脚本校验时报“插件未启动”？**
+**1. 为什么脚本保存能通过，但运行时报“插件未启动”或“插件动作不存在”？**
 
-因为 Groovy 校验会检查 `plugins.invoke("pluginId", "action", ...)` 中引用的插件和动作是否可用。已停止插件会导致校验失败。
+因为 Groovy 校验阶段不再检查 `plugins.invoke(...)` 中引用的插件和动作。相关问题会在脚本实际执行到该调用时才报错。
 
 **2. 为什么不支持 `plugins.invoke(pluginIdVar, actionVar, args)`？**
 
-当前实现要求前两个参数必须是字符串字面量，这样平台才能在校验阶段静态检查插件和动作是否存在。
+支持。`pluginId` 和 `action` 可以来自变量、函数返回值或其他表达式，只要运行时最终能解析成字符串即可。
 
 **3. Python 脚本能否调用插件？**
 
