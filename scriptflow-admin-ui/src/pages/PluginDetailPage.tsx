@@ -38,7 +38,7 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
-import { buildCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
+import { buildStandardCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
 import { SchemaFieldList } from "../components/SchemaFieldList";
@@ -144,25 +144,31 @@ export function PluginDetailPage() {
   const {
     supportedFields: configSupportedFields,
     unsupportedFields: configUnsupportedFields
-  } = resolveSchemaFields(currentConfig?.configSchema);
+  } = useMemo(() => resolveSchemaFields(currentConfig?.configSchema), [currentConfig?.configSchema]);
   const {
     supportedFields: actionSupportedFields,
     unsupportedFields: actionUnsupportedFields
-  } = resolveSchemaFields(currentAction?.inputSchema);
-  const commandArgsInput = currentAction
-    ? resolveCommandObjectInput({
-        fields: actionSupportedFields,
-        formValues: watchedArgsValues,
-        inputMode: actionArgsInputMode,
-        jsonInput: actionArgsText,
-        fallbackValue: currentAction.exampleArgs,
-        emptyFallbackNote: "未填写参数，已使用示例参数。",
-        emptyNoFallbackNote: "无示例参数，已使用空对象。",
-        invalidFallbackNote: "参数 JSON 非法，已使用示例参数。",
-        invalidNoFallbackNote: "参数 JSON 非法且无示例参数，已使用空对象。"
-      })
-    : { source: "empty" as const, value: {} };
-  const commandScriptInput = resolvePluginScriptInputCommandInput(scriptInputText);
+  } = useMemo(() => resolveSchemaFields(currentAction?.inputSchema), [currentAction?.inputSchema]);
+  const commandArgsInput = useMemo(
+    () => currentAction
+      ? resolveCommandObjectInput({
+          fields: actionSupportedFields,
+          formValues: watchedArgsValues,
+          inputMode: actionArgsInputMode,
+          jsonInput: actionArgsText,
+          fallbackValue: currentAction.exampleArgs,
+          emptyFallbackNote: "未填写参数，已使用示例参数。",
+          emptyNoFallbackNote: "无示例参数，已使用空对象。",
+          invalidFallbackNote: "参数 JSON 非法，已使用示例参数。",
+          invalidNoFallbackNote: "参数 JSON 非法且无示例参数，已使用空对象。"
+        })
+      : { source: "empty" as const, value: {} },
+    [currentAction, actionSupportedFields, watchedArgsValues, actionArgsInputMode, actionArgsText]
+  );
+  const commandScriptInput = useMemo(
+    () => resolvePluginScriptInputCommandInput(scriptInputText),
+    [scriptInputText]
+  );
   const apiKey = getApiKey() ?? undefined;
   const origin = window.location.origin;
 
@@ -381,73 +387,17 @@ export function PluginDetailPage() {
     label: getActionLabel(action)
   }));
 
-  const invokeCurlCommand =
-    plugin && currentAction
-      ? buildPluginInvokeCurlCommand({
-          apiKey,
-          origin,
-          pluginId: plugin.pluginId,
-          action: currentAction.action,
-          args: commandArgsInput.value,
-          scriptInput: commandScriptInput.value,
-          responseView: "RESULT"
-        })
-      : "";
-  const invokeCliCommand =
-    plugin && currentAction
-      ? buildPluginInvokeCliCommand({
-          apiKey,
-          origin,
-          pluginId: plugin.pluginId,
-          action: currentAction.action,
-          args: commandArgsInput.value,
-          scriptInput: commandScriptInput.value,
-          responseView: "RESULT"
-        })
-      : "";
-  const invokeCmdCliCommand =
-    plugin && currentAction
-      ? buildPluginInvokeCmdCliCommand({
-          apiKey,
-          origin,
-          pluginId: plugin.pluginId,
-          action: currentAction.action,
-          args: commandArgsInput.value,
-          scriptInput: commandScriptInput.value,
-          responseView: "RESULT"
-        })
-      : "";
-  const invokePowerShellCliCommand =
-    plugin && currentAction
-      ? buildPluginInvokePowerShellCliCommand({
-          apiKey,
-          origin,
-          pluginId: plugin.pluginId,
-          action: currentAction.action,
-          args: commandArgsInput.value,
-          scriptInput: commandScriptInput.value,
-          responseView: "RESULT"
-        })
-      : "";
-  const invokePowerShellCommand =
-    plugin && currentAction
-      ? buildPluginInvokePowerShellCommand({
-          apiKey,
-          origin,
-          pluginId: plugin.pluginId,
-          action: currentAction.action,
-          args: commandArgsInput.value,
-          scriptInput: commandScriptInput.value,
-          responseView: "RESULT"
-        })
-      : "";
-  const invokeCommandPresets = buildCommandPresets([
-    { key: "invoke-http-bash", family: "HTTP", environment: "bash/zsh", command: invokeCurlCommand },
-    { key: "invoke-http-powershell", family: "HTTP", environment: "PowerShell", command: invokePowerShellCommand },
-    { key: "invoke-cli-bash", family: "CLI", environment: "bash/zsh", command: invokeCliCommand },
-    { key: "invoke-cli-powershell", family: "CLI", environment: "PowerShell", command: invokePowerShellCliCommand },
-    { key: "invoke-cli-cmd", family: "CLI", environment: "cmd", command: invokeCmdCliCommand }
-  ]);
+  const invokeCommandPresets = useMemo(() => {
+    if (!plugin || !currentAction) return [];
+    return buildStandardCommandPresets({
+      keyPrefix: "invoke",
+      httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliBash: buildPluginInvokeCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliPowerShell: buildPluginInvokePowerShellCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliCmd: buildPluginInvokeCmdCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
+    });
+  }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);
   if (loading && !plugin) {
     return (
       <div className="page-loading">

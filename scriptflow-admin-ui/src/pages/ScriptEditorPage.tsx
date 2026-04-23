@@ -58,7 +58,7 @@ import {
 } from "../api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
-import { buildCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
+import { buildStandardCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { InfoHint } from "../components/InfoHint";
 import { JsonPreview } from "../components/JsonPreview";
@@ -81,6 +81,7 @@ import {
   buildToolDetailPowerShellCliCommand,
   buildToolDetailCurlCommand,
   buildToolDetailPowerShellCommand,
+  getCommandInputSourceLabel,
   resolveExecutionCommandInput
 } from "../commands";
 import { SchemaBuilder } from "../components/SchemaBuilder";
@@ -114,7 +115,7 @@ import type {
   ValidationErrorData
 } from "../types";
 import type { SchemaEditorState } from "../schema";
-import { copyText, formatDateTime, parseJsonText, prettyJson } from "../utils";
+import { copyText, formatDateTime, getExecutionStatusColor, isExecutionActive, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -171,38 +172,8 @@ function sortExecutions(records: ExecutionRecord[]): ExecutionRecord[] {
   );
 }
 
-function getExecutionStatusColor(status: ExecutionStatus): string {
-  switch (status) {
-    case "SUCCESS":
-      return "green";
-    case "FAILED":
-      return "red";
-    case "RUNNING":
-      return "processing";
-    default:
-      return "gold";
-  }
-}
-
-function isExecutionActive(status: ExecutionStatus): boolean {
-  return status === "PENDING" || status === "RUNNING";
-}
-
 function getTriggerSourceLabel(source: ExecutionTriggerSource): string {
   return source === "SCHEDULED" ? "定时任务" : "手动触发";
-}
-
-function getCommandInputSourceLabel(source: "current-json" | "current-form" | "sample" | "empty"): string {
-  switch (source) {
-    case "current-json":
-      return "当前 JSON 输入";
-    case "current-form":
-      return "当前表单输入";
-    case "sample":
-      return "示例请求体";
-    default:
-      return "空对象";
-  }
 }
 
 export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
@@ -317,148 +288,48 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
   const apiKey = getApiKey();
   const origin = window.location.origin;
-  const commandInput = resolveExecutionCommandInput({
-    fields: supportedFields,
-    formValues: watchedExecutionValues,
-    inputMode: executionInputMode,
-    jsonInput: executionJsonInput
-  });
-  const detailCurlCommand = currentScript
-    ? buildScriptDetailCurlCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const detailCliCommand = currentScript
-    ? buildScriptDetailCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const detailCmdCliCommand = currentScript
-    ? buildScriptDetailCmdCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const detailPowerShellCliCommand = currentScript
-    ? buildScriptDetailPowerShellCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const detailPowerShellCommand = currentScript
-    ? buildScriptDetailPowerShellCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const toolDetailCurlCommand = currentScript
-    ? buildToolDetailCurlCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const toolDetailCliCommand = currentScript
-    ? buildToolDetailCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const toolDetailCmdCliCommand = currentScript
-    ? buildToolDetailCmdCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const toolDetailPowerShellCliCommand = currentScript
-    ? buildToolDetailPowerShellCliCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const toolDetailPowerShellCommand = currentScript
-    ? buildToolDetailPowerShellCommand({
-        apiKey,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const executeCurlCommand = currentScript
-    ? buildExecuteCurlCommand({
-        apiKey,
-        input: commandInput.value,
-        mode: executionMode,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const executeCliCommand = currentScript
-    ? buildExecuteCliCommand({
-        apiKey,
-        input: commandInput.value,
-        mode: executionMode,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const executeCmdCliCommand = currentScript
-    ? buildExecuteCmdCliCommand({
-        apiKey,
-        input: commandInput.value,
-        mode: executionMode,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const executePowerShellCliCommand = currentScript
-    ? buildExecutePowerShellCliCommand({
-        apiKey,
-        input: commandInput.value,
-        mode: executionMode,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const executePowerShellCommand = currentScript
-    ? buildExecutePowerShellCommand({
-        apiKey,
-        input: commandInput.value,
-        mode: executionMode,
-        origin,
-        scriptId: currentScript.id
-      })
-    : "";
-  const detailCommandPresets = buildCommandPresets([
-    { key: "detail-http-bash", family: "HTTP", environment: "bash/zsh", command: detailCurlCommand },
-    { key: "detail-http-powershell", family: "HTTP", environment: "PowerShell", command: detailPowerShellCommand },
-    { key: "detail-cli-bash", family: "CLI", environment: "bash/zsh", command: detailCliCommand },
-    { key: "detail-cli-powershell", family: "CLI", environment: "PowerShell", command: detailPowerShellCliCommand },
-    { key: "detail-cli-cmd", family: "CLI", environment: "cmd", command: detailCmdCliCommand }
-  ]);
-  const executeCommandPresets = buildCommandPresets([
-    { key: "execute-http-bash", family: "HTTP", environment: "bash/zsh", command: executeCurlCommand },
-    { key: "execute-http-powershell", family: "HTTP", environment: "PowerShell", command: executePowerShellCommand },
-    { key: "execute-cli-bash", family: "CLI", environment: "bash/zsh", command: executeCliCommand },
-    { key: "execute-cli-powershell", family: "CLI", environment: "PowerShell", command: executePowerShellCliCommand },
-    { key: "execute-cli-cmd", family: "CLI", environment: "cmd", command: executeCmdCliCommand }
-  ]);
-  const schemaCommandPresets = buildCommandPresets([
-    { key: "schema-http-bash", family: "HTTP", environment: "bash/zsh", command: toolDetailCurlCommand },
-    { key: "schema-http-powershell", family: "HTTP", environment: "PowerShell", command: toolDetailPowerShellCommand },
-    { key: "schema-cli-bash", family: "CLI", environment: "bash/zsh", command: toolDetailCliCommand },
-    { key: "schema-cli-powershell", family: "CLI", environment: "PowerShell", command: toolDetailPowerShellCliCommand },
-    { key: "schema-cli-cmd", family: "CLI", environment: "cmd", command: toolDetailCmdCliCommand }
-  ]);
+  const commandInput = useMemo(
+    () => resolveExecutionCommandInput({
+      fields: supportedFields,
+      formValues: watchedExecutionValues,
+      inputMode: executionInputMode,
+      jsonInput: executionJsonInput
+    }),
+    [supportedFields, watchedExecutionValues, executionInputMode, executionJsonInput]
+  );
+  const detailCommandPresets = useMemo(() => {
+    if (!currentScript) return [];
+    return buildStandardCommandPresets({
+      keyPrefix: "detail",
+      httpBash: buildScriptDetailCurlCommand({ apiKey, origin, scriptId: currentScript.id }),
+      httpPowerShell: buildScriptDetailPowerShellCommand({ apiKey, origin, scriptId: currentScript.id }),
+      cliBash: buildScriptDetailCliCommand({ apiKey, origin, scriptId: currentScript.id }),
+      cliPowerShell: buildScriptDetailPowerShellCliCommand({ apiKey, origin, scriptId: currentScript.id }),
+      cliCmd: buildScriptDetailCmdCliCommand({ apiKey, origin, scriptId: currentScript.id })
+    });
+  }, [currentScript, apiKey, origin]);
+  const executeCommandPresets = useMemo(() => {
+    if (!currentScript) return [];
+    return buildStandardCommandPresets({
+      keyPrefix: "execute",
+      httpBash: buildExecuteCurlCommand({ apiKey, input: commandInput.value, mode: executionMode, origin, scriptId: currentScript.id }),
+      httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: executionMode, origin, scriptId: currentScript.id }),
+      cliBash: buildExecuteCliCommand({ apiKey, input: commandInput.value, mode: executionMode, origin, scriptId: currentScript.id }),
+      cliPowerShell: buildExecutePowerShellCliCommand({ apiKey, input: commandInput.value, mode: executionMode, origin, scriptId: currentScript.id }),
+      cliCmd: buildExecuteCmdCliCommand({ apiKey, input: commandInput.value, mode: executionMode, origin, scriptId: currentScript.id })
+    });
+  }, [currentScript, apiKey, origin, commandInput, executionMode]);
+  const schemaCommandPresets = useMemo(() => {
+    if (!currentScript) return [];
+    return buildStandardCommandPresets({
+      keyPrefix: "schema",
+      httpBash: buildToolDetailCurlCommand({ apiKey, origin, scriptId: currentScript.id }),
+      httpPowerShell: buildToolDetailPowerShellCommand({ apiKey, origin, scriptId: currentScript.id }),
+      cliBash: buildToolDetailCliCommand({ apiKey, origin, scriptId: currentScript.id }),
+      cliPowerShell: buildToolDetailPowerShellCliCommand({ apiKey, origin, scriptId: currentScript.id }),
+      cliCmd: buildToolDetailCmdCliCommand({ apiKey, origin, scriptId: currentScript.id })
+    });
+  }, [currentScript, apiKey, origin]);
   const toolContractResponseExample = currentScript
     ? {
         status: 0,

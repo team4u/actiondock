@@ -90,11 +90,9 @@ export function CommandPanel({
         </div>
       ) : null}
       {presets.length > 0 ? (
-        <>
-          <pre className="command-preview">
-            <code>{resolvedCommand}</code>
-          </pre>
-        </>
+        <pre className="command-preview">
+          <code>{resolvedCommand}</code>
+        </pre>
       ) : null}
     </div>
   );
