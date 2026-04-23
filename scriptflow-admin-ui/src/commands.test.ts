@@ -129,7 +129,12 @@ describe("PowerShell HTTP command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$headers = @{
+    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = $utf8
+[Console]::InputEncoding = $utf8
+[Console]::OutputEncoding = $utf8
+
+$headers = @{
   Authorization = 'Bearer local-dev-key'
 }
 
@@ -144,7 +149,12 @@ Invoke-RestMethod \`
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$headers = @{
+    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = $utf8
+[Console]::InputEncoding = $utf8
+[Console]::OutputEncoding = $utf8
+
+$headers = @{
   Authorization = 'Bearer local-dev-key'
 }
 
@@ -162,7 +172,12 @@ Invoke-RestMethod \`
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$body = @'
+    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = $utf8
+[Console]::InputEncoding = $utf8
+[Console]::OutputEncoding = $utf8
+
+$body = @'
 {
   "scriptId": "hello-groovy",
   "input": {
@@ -176,7 +191,7 @@ Invoke-RestMethod \`
 Invoke-RestMethod \`
   -Uri 'http://localhost:8080/api/executions' \`
   -Method Post \`
-  -ContentType 'application/json' \`
+  -ContentType 'application/json; charset=utf-8' \`
   -Body $body`);
   });
 
@@ -191,7 +206,12 @@ Invoke-RestMethod \`
         responseView: "RESULT",
         scriptInput: { locale: "zh-CN" }
       })
-    ).toBe(`$headers = @{
+    ).toBe(`$utf8 = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = $utf8
+[Console]::InputEncoding = $utf8
+[Console]::OutputEncoding = $utf8
+
+$headers = @{
   Authorization = 'Bearer secret''token'
 }
 
@@ -211,7 +231,7 @@ $body = @'
 Invoke-RestMethod \`
   -Uri 'http://localhost:8080/api/plugins/plugin-a/actions/summarize/invoke' \`
   -Method Post \`
-  -ContentType 'application/json' \`
+  -ContentType 'application/json; charset=utf-8' \`
   -Headers $headers \`
   -Body $body`);
   });

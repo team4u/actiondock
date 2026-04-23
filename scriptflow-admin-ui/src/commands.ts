@@ -66,6 +66,15 @@ function buildPowerShellBodySection(payload: Record<string, unknown>): string {
   return `$body = @'\n${JSON.stringify(payload, null, 2)}\n'@`;
 }
 
+function buildPowerShellUtf8Section(): string {
+  return [
+    "$utf8 = [System.Text.UTF8Encoding]::new($false)",
+    "$OutputEncoding = $utf8",
+    "[Console]::InputEncoding = $utf8",
+    "[Console]::OutputEncoding = $utf8"
+  ].join("\n");
+}
+
 function buildPowerShellInvokeRestMethodCommand({
   apiKey,
   body,
@@ -77,7 +86,7 @@ function buildPowerShellInvokeRestMethodCommand({
   method: "Get" | "Post";
   url: string;
 }): string {
-  const sections: string[] = [];
+  const sections: string[] = [buildPowerShellUtf8Section()];
   const headersSection = buildPowerShellHeadersSection(apiKey);
   if (headersSection) {
     sections.push(headersSection);
@@ -88,7 +97,7 @@ function buildPowerShellInvokeRestMethodCommand({
 
   const args = [`-Uri ${powerShellQuote(url)}`, `-Method ${method}`];
   if (body) {
-    args.push(`-ContentType ${powerShellQuote("application/json")}`);
+    args.push(`-ContentType ${powerShellQuote("application/json; charset=utf-8")}`);
   }
   if (apiKey) {
     args.push("-Headers $headers");
