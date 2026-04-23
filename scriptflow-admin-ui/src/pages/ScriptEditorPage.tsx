@@ -96,7 +96,11 @@ import {
   parseSchemaObjectEditorJsonText
 } from "../schemaObjectEditorSupport";
 import { parseGeneratedScriptText } from "../generatedScript";
-import { buildSchemaFieldInitialState, isValidationErrorData } from "../schemaExecution";
+import {
+  buildSchemaFieldExampleValues,
+  buildSchemaFieldInitialState,
+  isValidationErrorData
+} from "../schemaExecution";
 import { buildDuplicatedScriptDefinition } from "../scriptDuplication";
 import { buildPluginInvokeSnippet, buildScriptInvokeSnippet } from "../scriptInvocationSnippets";
 import type {
@@ -1024,7 +1028,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   };
 
   const buildReferenceScriptArgs = (script: ScriptDefinition) =>
-    buildSchemaFieldInitialState(resolveSchemaFields(script.publishedSnapshot?.inputSchema).supportedFields).formValues;
+    buildSchemaFieldExampleValues(resolveSchemaFields(script.publishedSnapshot?.inputSchema).supportedFields);
 
   const handleImportGeneratedScript = () => {
     try {

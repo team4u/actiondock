@@ -8,6 +8,8 @@ import {
   buildPluginInvokeCmdCliCommand,
   buildPluginInvokePowerShellCliCommand,
   buildPluginInvokePowerShellCommand,
+  buildExecutionInputExample,
+  resolveExecutionCommandInput,
   buildScriptDetailCliCommand,
   buildScriptDetailCmdCliCommand,
   buildScriptDetailPowerShellCliCommand,
@@ -17,6 +19,7 @@ import {
   buildToolDetailPowerShellCliCommand,
   buildToolDetailPowerShellCommand
 } from "./commands";
+import type { SchemaFieldDefinition } from "./schema";
 
 describe("CLI command builders", () => {
   it("builds script detail and schema commands with connection flags", () => {
@@ -339,5 +342,84 @@ try {
   $reader.Dispose()
 }
 $json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
+  });
+});
+
+describe("execution input examples", () => {
+  it("prefers schema examples and defaults over placeholders", () => {
+    const fields: SchemaFieldDefinition[] = [
+      {
+        name: "message",
+        label: "Message",
+        kind: "string",
+        required: true,
+        examples: ["from-example"],
+        defaultValue: "from-default"
+      },
+      {
+        name: "enabled",
+        label: "Enabled",
+        kind: "boolean",
+        required: false,
+        defaultValue: false
+      },
+      {
+        name: "count",
+        label: "Count",
+        kind: "integer",
+        required: false
+      }
+    ];
+
+    expect(buildExecutionInputExample(fields)).toEqual({
+      message: "from-example",
+      enabled: false,
+      count: 1
+    });
+  });
+
+  it("uses the shared example generator for command fallback input", () => {
+    const fields: SchemaFieldDefinition[] = [
+      {
+        name: "message",
+        label: "Message",
+        kind: "string",
+        required: true,
+        examples: ["hello"]
+      },
+      {
+        name: "status",
+        label: "Status",
+        kind: "enum",
+        required: false,
+        enumValues: ["ready", "draft"],
+        examples: ["ready"],
+        defaultValue: "draft"
+      },
+      {
+        name: "count",
+        label: "Count",
+        kind: "integer",
+        required: false,
+        defaultValue: 2
+      }
+    ];
+
+    expect(
+      resolveExecutionCommandInput({
+        fields,
+        formValues: undefined,
+        inputMode: "JSON",
+        jsonInput: "{}"
+      })
+    ).toEqual({
+      note: "当前未填写执行入参，已回退到示例请求体。",
+      source: "sample",
+      value: {
+        message: "hello",
+        status: "ready",
+        count: 2
+      }
+    });
   });
 });

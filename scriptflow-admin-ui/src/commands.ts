@@ -1,5 +1,5 @@
 import type { SchemaFieldDefinition } from "./schema";
-import { buildSchemaExecutionInput } from "./schemaExecution";
+import { buildSchemaExecutionInput, buildSchemaFieldExampleValues } from "./schemaExecution";
 import type { ExecutionResponseView, SubmitMode } from "./types";
 
 export type ObjectInputMode = "SCHEMA" | "JSON";
@@ -191,22 +191,7 @@ export function buildExecutionInputFromValues(
 export function buildExecutionInputExample(
   fields: SchemaFieldDefinition[]
 ): Record<string, unknown> {
-  return fields.reduce<Record<string, unknown>>((result, field) => {
-    if (field.kind === "enum") {
-      result[field.name] = field.enumValues?.[0] ?? "";
-      return result;
-    }
-    if (field.kind === "boolean") {
-      result[field.name] = true;
-      return result;
-    }
-    if (field.kind === "integer" || field.kind === "number") {
-      result[field.name] = 1;
-      return result;
-    }
-    result[field.name] = `${field.name}-example`;
-    return result;
-  }, {});
+  return buildSchemaFieldExampleValues(fields);
 }
 
 function parseCommandJson(value: string): Record<string, unknown> {

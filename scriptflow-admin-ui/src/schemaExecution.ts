@@ -2,22 +2,34 @@ import type { SchemaFieldDefinition } from "./schema";
 import type { ValidationErrorData } from "./types";
 import { prettyJson } from "./utils";
 
-function readSchemaFieldDefaultValue(field: SchemaFieldDefinition): unknown {
-  const value = field.defaultValue;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
+function isInteger(value: unknown): value is number {
+  return isFiniteNumber(value) && Number.isInteger(value);
+}
+
+function isMatchingSchemaFieldValue(field: SchemaFieldDefinition, value: unknown): boolean {
   switch (field.kind) {
     case "boolean":
-      return typeof value === "boolean" ? value : undefined;
+      return typeof value === "boolean";
     case "number":
+      return isFiniteNumber(value);
     case "integer":
-      return typeof value === "number" ? value : undefined;
+      return isInteger(value);
     case "enum":
-      return typeof value === "string" && field.enumValues?.includes(value) ? value : undefined;
+      return typeof value === "string" && Boolean(field.enumValues?.includes(value));
     case "string":
-      return typeof value === "string" ? value : undefined;
+      return typeof value === "string";
     default:
-      return undefined;
+      return false;
   }
+}
+
+function readSchemaFieldDefaultValue(field: SchemaFieldDefinition): unknown {
+  const value = field.defaultValue;
+  return isMatchingSchemaFieldValue(field, value) ? value : undefined;
 }
 
 export function buildSchemaFieldInitialValues(
@@ -41,6 +53,42 @@ export function buildSchemaFieldInitialState(fields: SchemaFieldDefinition[]): {
     formValues,
     jsonText: prettyJson(formValues)
   };
+}
+
+function buildSchemaFieldPlaceholderValue(field: SchemaFieldDefinition): unknown {
+  switch (field.kind) {
+    case "enum":
+      return field.enumValues?.[0] ?? "";
+    case "boolean":
+      return true;
+    case "integer":
+    case "number":
+      return 1;
+    case "string":
+    default:
+      return `${field.name}-example`;
+  }
+}
+
+export function buildSchemaFieldExampleValues(
+  fields: SchemaFieldDefinition[]
+): Record<string, unknown> {
+  return fields.reduce<Record<string, unknown>>((result, field) => {
+    const exampleValue = field.examples?.find((item) => isMatchingSchemaFieldValue(field, item));
+    if (exampleValue !== undefined) {
+      result[field.name] = exampleValue;
+      return result;
+    }
+
+    const defaultValue = readSchemaFieldDefaultValue(field);
+    if (defaultValue !== undefined) {
+      result[field.name] = defaultValue;
+      return result;
+    }
+
+    result[field.name] = buildSchemaFieldPlaceholderValue(field);
+    return result;
+  }, {});
 }
 
 export function buildSchemaExecutionInput(
