@@ -11,8 +11,11 @@ import {
   Button,
   Card,
   Col,
+  Dropdown,
   Empty,
   Form,
+  Input,
+  Modal,
   Popconfirm,
   Row,
   Select,
@@ -23,6 +26,7 @@ import {
   message
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MenuProps } from "antd";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useColorMode } from "../contexts/ColorModeContext";
 import {
@@ -30,6 +34,8 @@ import {
   getPlugin,
   getPluginConfig,
   invokePluginAction,
+  listRepositories,
+  publishRepositoryPlugin,
   startPlugin,
   stopPlugin,
   uninstallPlugin,
@@ -58,9 +64,9 @@ import {
   parseSchemaObjectEditorJsonText
 } from "../schemaObjectEditorSupport";
 import { resolveSchemaFields } from "../schema";
-import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView } from "../types";
+import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
-import { copyText, parseJsonText, prettyJson } from "../utils";
+import { copyText, getErrorMessage, parseJsonText, prettyJson } from "../utils";
 
 const { Text, Title } = Typography;
 
@@ -69,6 +75,16 @@ type PluginDetailTab = "overview" | "config" | "debug" | "commands";
 interface PluginDebugErrorState {
   message: string;
   detail?: ErrorDetail;
+}
+
+interface PublishPluginFormValues {
+  repositoryId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  description?: string;
+  tags?: string[];
+  riskLevel?: string;
 }
 
 function getActionLabel(action: PluginAction): string {
@@ -109,6 +125,7 @@ export function PluginDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [configForm] = Form.useForm<Record<string, any>>();
   const [argsForm] = Form.useForm<Record<string, any>>();
+  const [publishForm] = Form.useForm<PublishPluginFormValues>();
   const watchedArgsValues = Form.useWatch([], argsForm) as Record<string, unknown> | undefined;
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [plugin, setPlugin] = useState<PluginView | null>(null);
@@ -126,6 +143,9 @@ export function PluginDetailPage() {
   const [debugExecuting, setDebugExecuting] = useState(false);
   const [debugResult, setDebugResult] = useState<PluginInvokeResponse | null>(null);
   const [debugError, setDebugError] = useState<PluginDebugErrorState | null>(null);
+  const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [publishingPlugin, setPublishingPlugin] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -379,6 +399,66 @@ export function PluginDetailPage() {
     }
   };
 
+  const openPublishPluginModal = async () => {
+    if (!plugin) {
+      return;
+    }
+    setPublishingPlugin(true);
+    try {
+      const repositories = (await listRepositories())
+        .filter((item) => item.enabled && item.type !== "HTTP")
+        .sort((left, right) => left.id.localeCompare(right.id));
+      if (repositories.length === 0) {
+        messageApi.warning("当前没有可发布的仓库，请先添加一个 Git 或本地目录仓库");
+        return;
+      }
+      setPublishRepositories(repositories);
+      publishForm.setFieldsValue({
+        repositoryId: repositories[0]?.id,
+        displayName: plugin.name || plugin.pluginId,
+        version: plugin.version,
+        owner: "",
+        description: plugin.description || "",
+        tags: [],
+        riskLevel: "LOW"
+      });
+      setPublishModalOpen(true);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载发布仓库失败"));
+    } finally {
+      setPublishingPlugin(false);
+    }
+  };
+
+  const handlePublishPlugin = async () => {
+    if (!plugin) {
+      return;
+    }
+    try {
+      const values = await publishForm.validateFields();
+      setPublishingPlugin(true);
+      await publishRepositoryPlugin(values.repositoryId, {
+        pluginId: plugin.pluginId,
+        displayName: values.displayName.trim(),
+        version: values.version.trim(),
+        owner: values.owner?.trim() || undefined,
+        description: values.description?.trim() || undefined,
+        tags: values.tags ?? [],
+        riskLevel: values.riskLevel || undefined
+      });
+      setPublishModalOpen(false);
+      messageApi.success("插件已发布到仓库");
+      await loadPlugin();
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "errorFields" in error) {
+        return;
+      }
+      messageApi.error(getErrorMessage(error, "发布插件失败"));
+    } finally {
+      setPublishingPlugin(false);
+    }
+  };
+
   const handleDebugExecute = async () => {
     if (!plugin || !currentAction) {
       return;
@@ -412,6 +492,13 @@ export function PluginDetailPage() {
     value: action.action,
     label: getActionLabel(action)
   }));
+  const publishMenuItems: MenuProps["items"] = [
+    {
+      key: "publish-to-repository",
+      label: "发布到仓库",
+      onClick: () => void openPublishPluginModal()
+    }
+  ];
 
   const invokeCommandPresets = useMemo(() => {
     if (!plugin || !currentAction) return [];
@@ -481,6 +568,14 @@ export function PluginDetailPage() {
                 >
                   刷新
                 </Button>
+                <Dropdown.Button
+                  menu={{ items: publishMenuItems }}
+                  loading={publishingPlugin}
+                  disabled={!plugin}
+                  onClick={() => void openPublishPluginModal()}
+                >
+                  发布
+                </Dropdown.Button>
                 <Button
                   icon={<UploadOutlined />}
                   loading={actionLoading === "upgrade"}
@@ -757,6 +852,74 @@ export function PluginDetailPage() {
           />
         </Card>
       </Space>
+      <Modal
+        title={plugin ? `发布插件：${plugin.pluginId}` : "发布插件"}
+        open={publishModalOpen}
+        onCancel={() => setPublishModalOpen(false)}
+        onOk={() => void handlePublishPlugin()}
+        okText="发布"
+        cancelText="取消"
+        confirmLoading={publishingPlugin}
+        destroyOnHidden
+      >
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <Text type="secondary">
+            发布会把当前已安装插件的 JAR 写入目标仓库，并更新仓库索引。HTTP 仓库不支持发布。
+          </Text>
+          <Form form={publishForm} layout="vertical">
+            <Form.Item
+              label="目标仓库"
+              name="repositoryId"
+              rules={[{ required: true, message: "请选择目标仓库" }]}
+            >
+              <Select
+                options={publishRepositories.map((item) => ({
+                  value: item.id,
+                  label: item.name
+                }))}
+              />
+            </Form.Item>
+            <Space size={12} style={{ width: "100%" }} wrap>
+              <Form.Item
+                label="显示名称"
+                name="displayName"
+                rules={[{ required: true, message: "请输入显示名称" }]}
+                style={{ flex: "1 1 240px", minWidth: 220 }}
+              >
+                <Input />
+              </Form.Item>
+              <Form.Item
+                label="版本"
+                name="version"
+                rules={[{ required: true, message: "请输入版本号" }]}
+                style={{ flex: "1 1 150px", minWidth: 150 }}
+              >
+                <Input />
+              </Form.Item>
+            </Space>
+            <Space size={12} style={{ width: "100%" }} wrap>
+              <Form.Item label="维护人" name="owner" style={{ flex: "1 1 220px", minWidth: 220 }}>
+                <Input placeholder="例如 platform-team" />
+              </Form.Item>
+              <Form.Item label="风险等级" name="riskLevel" style={{ flex: "1 1 180px", minWidth: 180 }}>
+                <Select
+                  options={[
+                    { value: "LOW", label: "LOW" },
+                    { value: "MEDIUM", label: "MEDIUM" },
+                    { value: "HIGH", label: "HIGH" }
+                  ]}
+                />
+              </Form.Item>
+            </Space>
+            <Form.Item label="标签" name="tags">
+              <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" />
+            </Form.Item>
+            <Form.Item label="说明" name="description">
+              <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} />
+            </Form.Item>
+          </Form>
+        </Space>
+      </Modal>
     </>
   );
 }
