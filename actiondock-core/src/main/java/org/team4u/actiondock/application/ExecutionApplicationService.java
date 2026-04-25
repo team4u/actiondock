@@ -1,0 +1,320 @@
+package org.team4u.actiondock.application;
+
+import org.team4u.actiondock.domain.model.ExecutionRecord;
+import org.team4u.actiondock.domain.model.ExecutionLogEntry;
+import org.team4u.actiondock.domain.model.ExecutionLogLevel;
+import org.team4u.actiondock.domain.model.ExecutionStatus;
+import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptExecutionContext;
+import org.team4u.actiondock.domain.model.SubmitMode;
+import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
+import org.team4u.actiondock.domain.port.ExecutionRepository;
+import org.team4u.actiondock.domain.port.ScriptEngine;
+import org.team4u.actiondock.domain.port.ScriptRepository;
+
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executor;
+
+/**
+ * 执行应用服务，提供脚本执行的提交、查询和管理能力。
+ * <p>
+ * 支持同步和异步两种提交模式，自动进行输入参数校验，
+ * 并通过日志收集器在执行过程中持续记录执行日志。
+ *
+ * @author jay.wu
+ */
+public class ExecutionApplicationService {
+    private final ScriptRepository scriptRepository;
+    private final ExecutionRepository executionRepository;
+    private final ScriptEngine scriptEngine;
+    private final Executor executor;
+    private final ScriptSchemaSupport scriptSchemaSupport;
+    private final ConfigValueApplicationService configValueApplicationService;
+
+    public ExecutionApplicationService(ScriptRepository scriptRepository,
+                                       ExecutionRepository executionRepository,
+                                       ScriptEngine scriptEngine,
+                                       Executor executor) {
+        this(scriptRepository, executionRepository, scriptEngine, executor, ConfigValueApplicationService.disabled());
+    }
+
+    public ExecutionApplicationService(ScriptRepository scriptRepository,
+                                       ExecutionRepository executionRepository,
+                                       ScriptEngine scriptEngine,
+                                       Executor executor,
+                                       ConfigValueApplicationService configValueApplicationService) {
+        this.scriptRepository = scriptRepository;
+        this.executionRepository = executionRepository;
+        this.scriptEngine = scriptEngine;
+        this.executor = executor;
+        this.scriptSchemaSupport = new ScriptSchemaSupport();
+        this.configValueApplicationService = configValueApplicationService == null
+                ? ConfigValueApplicationService.disabled()
+                : configValueApplicationService;
+    }
+
+    /**
+     * 执行指定脚本（使用当前版本）。
+     * <p>
+     * 触发来源默认为手动执行（MANUAL），不关联调度。
+     *
+     * @param scriptId   脚本 ID
+     * @param input      输入参数
+     * @param submitMode 提交模式（SYNC 或 ASYNC）
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果脚本不存在或输入参数校验失败
+     */
+    public ExecutionRecord execute(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
+        ScriptDefinition scriptDefinition = getScript(scriptId);
+        return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
+    }
+
+    /**
+     * 执行指定脚本的已发布版本。
+     * <p>
+     * 仅使用脚本的发布快照进行执行，触发来源默认为手动执行。
+     *
+     * @param scriptId   脚本 ID
+     * @param input      输入参数
+     * @param submitMode 提交模式（SYNC 或 ASYNC）
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果脚本不存在、未发布或输入参数校验失败
+     */
+    public ExecutionRecord executePublished(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
+        ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
+        return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
+    }
+
+    /**
+     * 执行指定脚本的已发布版本，并指定触发来源和关联调度。
+     * <p>
+     * 用于定时调度等自动化触发场景，可记录触发来源和关联的调度 ID。
+     *
+     * @param scriptId      脚本 ID
+     * @param input         输入参数
+     * @param submitMode    提交模式（SYNC 或 ASYNC）
+     * @param triggerSource 触发来源（如 MANUAL、SCHEDULE）
+     * @param scheduleId    关联的调度 ID，可为 null
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果脚本不存在、未发布或输入参数校验失败
+     */
+    public ExecutionRecord executePublished(String scriptId,
+                                            Map<String, Object> input,
+                                            SubmitMode submitMode,
+                                            ExecutionTriggerSource triggerSource,
+                                            String scheduleId) {
+        ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
+        return execute(scriptDefinition, input, submitMode, triggerSource, scheduleId);
+    }
+
+    private ExecutionRecord execute(ScriptDefinition scriptDefinition,
+                                    Map<String, Object> input,
+                                    SubmitMode submitMode,
+                                    ExecutionTriggerSource triggerSource,
+                                    String scheduleId) {
+        Map<String, Object> payload = configValueApplicationService.resolveMap(input);
+        scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
+
+        ExecutionRecord record = new ExecutionRecord()
+                .setId(UUID.randomUUID().toString())
+                .setScriptId(scriptDefinition.getId())
+                .setSubmitMode(submitMode == null ? SubmitMode.SYNC : submitMode)
+                .setTriggerSource(triggerSource)
+                .setScheduleId(scheduleId)
+                .setInput(payload)
+                .setCreatedAt(LocalDateTime.now());
+
+        if (record.getSubmitMode() == SubmitMode.ASYNC) {
+            record.setStatus(ExecutionStatus.PENDING);
+            executionRepository.save(record);
+            executor.execute(() -> run(scriptDefinition, record));
+            return record;
+        }
+
+        return run(scriptDefinition, record);
+    }
+
+    private ScriptDefinition getScript(String scriptId) {
+        return scriptRepository.findById(scriptId)
+                .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + scriptId));
+    }
+
+    private ScriptDefinition getPublishedScript(String scriptId) {
+        ScriptDefinition definition = getScript(scriptId);
+        if (definition.getPublishedSnapshot() == null) {
+            throw new IllegalArgumentException("脚本未发布: " + scriptId);
+        }
+        return definition.toPublishedDefinition();
+    }
+
+    private ExecutionRecord run(ScriptDefinition definition, ExecutionRecord record) {
+        ExecutionLogCollector logCollector = new ExecutionLogCollector(record);
+        try {
+            record.setStatus(ExecutionStatus.RUNNING);
+            record.setStartedAt(LocalDateTime.now());
+            executionRepository.save(record);
+
+            Object result = scriptEngine.execute(
+                    definition,
+                    record.getInput(),
+                    new ScriptExecutionContext()
+                            .setExecutionId(record.getId())
+                            .setSubmitMode(record.getSubmitMode())
+                            .setConfig(configValueApplicationService.snapshot())
+                            .setScriptStack(List.of(definition.getId()))
+                            .setLogger(logCollector::append)
+            );
+            return logCollector.completeSuccess(toMap(result));
+        } catch (Exception ex) {
+            return logCollector.completeFailure(ex);
+        } catch (Throwable t) {
+            // 兜底：确保不会因 Error（如 OOM）导致记录永久卡在 RUNNING
+            try {
+                record.setStatus(ExecutionStatus.FAILED);
+                record.setErrorMessage("Fatal error: " + t.getClass().getName());
+                record.setFinishedAt(LocalDateTime.now());
+                executionRepository.save(record);
+            } catch (Exception ignored) {
+                // 持久化也失败时已无能为力
+            }
+            throw t;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toMap(Object result) {
+        if (result == null) {
+            return new LinkedHashMap<>();
+        }
+        if (result instanceof Map<?, ?> map) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            map.forEach((k, v) -> values.put(String.valueOf(k), v));
+            return values;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("result", result);
+        return values;
+    }
+
+    /**
+     * 根据 ID 查询执行记录。
+     *
+     * @param id 执行记录 ID
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果执行记录不存在
+     */
+    public ExecutionRecord get(String id) {
+        return executionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + id));
+    }
+
+    /**
+     * 查询指定脚本的所有执行记录。
+     *
+     * @param scriptId 脚本 ID
+     * @return 执行记录列表
+     * @throws IllegalArgumentException 如果 scriptId 为空
+     */
+    public List<ExecutionRecord> list(String scriptId) {
+        if (scriptId == null || scriptId.isBlank()) {
+            throw new IllegalArgumentException("scriptId 不能为空");
+        }
+        return executionRepository.findByScriptId(scriptId);
+    }
+
+    /**
+     * 删除执行记录。
+     * <p>
+     * 仅允许删除已完成（SUCCESS 或 FAILED）的执行记录，进行中的记录无法删除。
+     *
+     * @param id 执行记录 ID
+     * @throws IllegalArgumentException 如果记录不存在或仍在执行中
+     */
+    public void delete(String id) {
+        ExecutionRecord record = executionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + id));
+        ensureExecutionDeletable(record);
+        executionRepository.deleteById(id);
+    }
+
+    /**
+     * 清除指定脚本的所有执行记录。
+     * <p>
+     * 仅删除已完成（SUCCESS 或 FAILED）的记录。如果存在进行中的记录，将抛出异常。
+     *
+     * @param scriptId 脚本 ID
+     * @throws IllegalArgumentException 如果 scriptId 为空或存在仍在执行中的记录
+     */
+    public void clear(String scriptId) {
+        if (scriptId == null || scriptId.isBlank()) {
+            throw new IllegalArgumentException("scriptId 不能为空");
+        }
+
+        List<ExecutionRecord> records = executionRepository.findByScriptId(scriptId);
+        records.forEach(this::ensureExecutionDeletable);
+        executionRepository.deleteByScriptId(scriptId);
+    }
+
+    private void ensureExecutionDeletable(ExecutionRecord record) {
+        if (record.getStatus() == ExecutionStatus.PENDING || record.getStatus() == ExecutionStatus.RUNNING) {
+            throw new IllegalArgumentException("执行进行中，无法删除");
+        }
+    }
+
+    private final class ExecutionLogCollector {
+        private final ExecutionRecord record;
+        private final Object monitor = new Object();
+
+        private ExecutionLogCollector(ExecutionRecord record) {
+            this.record = record;
+        }
+
+        private void append(ExecutionLogLevel level, String message) {
+            synchronized (monitor) {
+                record.getLogs().add(new ExecutionLogEntry()
+                        .setLevel(level)
+                        .setMessage(message)
+                        .setCreatedAt(LocalDateTime.now()));
+                try {
+                    executionRepository.save(record);
+                } catch (Exception ignored) {
+                    // 日志持久化失败不应中断脚本执行
+                }
+            }
+        }
+
+        private ExecutionRecord completeSuccess(Map<String, Object> output) {
+            synchronized (monitor) {
+                record.setOutput(output);
+                record.setErrorMessage(null);
+                record.setErrorDetail(null);
+                record.setStatus(ExecutionStatus.SUCCESS);
+                record.setFinishedAt(LocalDateTime.now());
+                return safeSave(record);
+            }
+        }
+
+        private ExecutionRecord completeFailure(Exception exception) {
+            synchronized (monitor) {
+                record.setStatus(ExecutionStatus.FAILED);
+                record.setErrorMessage(ErrorDetailSupport.summarize(exception));
+                record.setErrorDetail(ErrorDetailSupport.describe(exception));
+                record.setFinishedAt(LocalDateTime.now());
+                return safeSave(record);
+            }
+        }
+
+        private ExecutionRecord safeSave(ExecutionRecord record) {
+            try {
+                return executionRepository.save(record);
+            } catch (Exception ex) {
+                // 持久化失败时返回内存中的记录，确保调用方拿到正确的最终状态
+                return record;
+            }
+        }
+    }
+}

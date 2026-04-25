@@ -29,8 +29,8 @@ bin
 /.nb-gradle/
 build/
 node_modules/
-scriptflow-admin-ui/dist/
-scriptflow-admin-ui/.vite/
+actiondock-admin-ui/dist/
+actiondock-admin-ui/.vite/
 *.tsbuildinfo
 
 ### VS Code ###

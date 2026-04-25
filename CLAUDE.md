@@ -1,17 +1,17 @@
-# ScriptFlow 代码注释规范化项目
+# ActionDock 代码注释规范化项目
 
-本项目为 ScriptFlow 代码库添加专业的 JavaDoc 注释。
+本项目为 ActionDock 代码库添加专业的 JavaDoc 注释。
 
 ## 项目结构
 
 ```
-scriptflow-core/          # 核心模块
+actiondock-core/          # 核心模块
   domain/model/          # 域模型实体
   domain/port/          # 端口接口
   application/           # 应用服务
-scriptflow-plugin-api/   # 插件 API
-scriptflow-app-spring/    # Spring Boot Web 层
-scriptflow-storage-jpa/  # JPA 持久化层
+actiondock-plugin-api/   # 插件 API
+actiondock-app-spring/    # Spring Boot Web 层
+actiondock-storage-jpa/  # JPA 持久化层
 ```
 
 ## 注释规范
@@ -32,4 +32,4 @@ scriptflow-storage-jpa/  # JPA 持久化层
 
 ## 参考文件
 
-- 注释风格参考: `scriptflow-core/src/main/java/org/team4u/scriptflow/domain/model/ScriptDefinition.java`
+- 注释风格参考: `actiondock-core/src/main/java/org/team4u/actiondock/domain/model/ScriptDefinition.java`

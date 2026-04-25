@@ -1,9 +1,9 @@
 ---
 name: generate-script
-description: 根据业务需求生成 ScriptFlow 的 Groovy 脚本及输入输出 Schema
+description: 根据业务需求生成 ActionDock 的 Groovy 脚本及输入输出 Schema
 ---
 
-# Generate Script for ScriptFlow
+# Generate Script for ActionDock
 
 根据用户描述的业务需求，生成：
 1. **脚本 ID**
@@ -14,7 +14,7 @@ description: 根据业务需求生成 ScriptFlow 的 Groovy 脚本及输入输�
 
 ## 项目上下文
 
-ScriptFlow 是一个 Groovy 脚本执行平台，脚本通过 `input` 对象访问输入参数，返回值作为 `output`。
+ActionDock 是一个 Groovy 脚本执行平台，脚本通过 `input` 对象访问输入参数，返回值作为 `output`。
 
 ### 脚本规范
 

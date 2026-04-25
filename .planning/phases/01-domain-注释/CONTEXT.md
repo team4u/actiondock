@@ -6,7 +6,7 @@
 
 ## Phase Boundary
 
-为 scriptflow-core 模块的域模型层添加符合 Java 规范的专业 Javadoc 注释。
+为 actiondock-core 模块的域模型层添加符合 Java 规范的专业 Javadoc 注释。
 
 包含：
 - Domain Model: 实体类和值对象
@@ -35,7 +35,7 @@
 
 ### Domain Model 文件列表
 ```
-scriptflow-core/src/main/java/org/team4u/scriptflow/domain/model/
+actiondock-core/src/main/java/org/team4u/actiondock/domain/model/
 ├── ScriptDefinition.java     (已有注释)
 ├── ExecutionRecord.java
 ├── ScriptExecutionContext.java
@@ -51,7 +51,7 @@ scriptflow-core/src/main/java/org/team4u/scriptflow/domain/model/
 
 ### Application Service 文件列表
 ```
-scriptflow-core/src/main/java/org/team4u/scriptflow/application/
+actiondock-core/src/main/java/org/team4u/actiondock/application/
 ├── ScriptApplicationService.java
 ├── ExecutionApplicationService.java
 ├── ExecutionOutputProjector.java
@@ -63,7 +63,7 @@ scriptflow-core/src/main/java/org/team4u/scriptflow/application/
 
 ### Port Interface 文件列表
 ```
-scriptflow-core/src/main/java/org/team4u/scriptflow/domain/port/
+actiondock-core/src/main/java/org/team4u/actiondock/domain/port/
 ├── ScriptRepository.java
 ├── ScriptEngine.java
 ├── ExecutionRepository.java
@@ -78,4 +78,4 @@ scriptflow-core/src/main/java/org/team4u/scriptflow/domain/port/
 ## Canonical References
 
 ### 注释风格参考
-- `scriptflow-core/src/main/java/org/team4u/scriptflow/domain/model/ScriptDefinition.java` — 现有注释风格标准
+- `actiondock-core/src/main/java/org/team4u/actiondock/domain/model/ScriptDefinition.java` — 现有注释风格标准

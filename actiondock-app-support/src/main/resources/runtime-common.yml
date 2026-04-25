@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:${app.home-dir}/data/dsl-runtime;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+app:
+  home-dir: ${user.home}/.actiondock
+  plugins:
+    dir: ${app.home-dir}/plugins
+  execution:
+    async-pool-size: 4
+    groovy:
+      enabled: true
+      cache-max-size: 128
+      cache-expire-after-access-minutes: 30
+  schedules:
+    pool-size: 2

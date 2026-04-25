@@ -11,20 +11,20 @@
     </parent>
 
     <groupId>org.team4u</groupId>
-    <artifactId>scriptflow</artifactId>
+    <artifactId>actiondock</artifactId>
     <version>0.2.0</version>
     <packaging>pom</packaging>
-    <name>scriptflow</name>
-    <description>Multi-module Spring Scriptflow runtime with H2 and script execution</description>
+    <name>actiondock</name>
+    <description>Multi-module Spring ActionDock runtime with H2 and script execution</description>
 
     <modules>
-        <module>scriptflow-core</module>
-        <module>scriptflow-plugin-api</module>
-        <module>scriptflow-storage-jpa</module>
-        <module>scriptflow-app-support</module>
-        <module>scriptflow-cli</module>
-        <module>scriptflow-app-spring</module>
-        <module>scriptflow-plugin-template</module>
+        <module>actiondock-core</module>
+        <module>actiondock-plugin-api</module>
+        <module>actiondock-storage-jpa</module>
+        <module>actiondock-app-support</module>
+        <module>actiondock-cli</module>
+        <module>actiondock-app-spring</module>
+        <module>actiondock-plugin-template</module>
     </modules>
 
     <properties>

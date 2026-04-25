@@ -1,4 +1,4 @@
-# Requirements: ScriptFlow 代码注释规范化
+# Requirements: ActionDock 代码注释规范化
 
 **Last updated:** 2026-04-22 after initialization
 
@@ -19,27 +19,27 @@
 ### Code Documentation (注释规范)
 
 - [ ] **COMMENT-01**: Domain 层实体类 Javadoc 注释
-  - 为 `scriptflow-core/domain/model/` 下所有实体类添加 Javadoc
+  - 为 `actiondock-core/domain/model/` 下所有实体类添加 Javadoc
   - 包含类用途、作者信息 (@author)、关键业务规则说明
   - 重点类：ScriptDefinition, ExecutionRecord, ScriptExecutionContext, PublishedScriptSnapshot
 
 - [ ] **COMMENT-02**: Application 层服务类注释
-  - 为 `scriptflow-core/application/` 下所有服务类添加注释
+  - 为 `actiondock-core/application/` 下所有服务类添加注释
   - 方法级注释说明业务逻辑、入参、返回值
   - 重点类：ScriptApplicationService, ExecutionApplicationService
 
 - [ ] **COMMENT-03**: Port 层接口注释
-  - 为 `scriptflow-core/domain/port/` 下所有接口添加 Javadoc
+  - 为 `actiondock-core/domain/port/` 下所有接口添加 Javadoc
   - 说明接口用途、设计意图
   - 重点接口：ScriptRepository, ScriptEngine, ExecutionRepository
 
 - [ ] **COMMENT-04**: Web 层控制器注释
-  - 为 `scriptflow-app-spring/` 下所有 Controller 添加 Javadoc
+  - 为 `actiondock-app-spring/` 下所有 Controller 添加 Javadoc
   - API 端点说明 (@GetMapping, @PostMapping 等)
   - 重点类：ScriptController, ExecutionController, SchemaController
 
 - [ ] **COMMENT-05**: Storage 层实体注释
-  - 为 `scriptflow-storage-jpa/` 下所有实体和适配器添加注释
+  - 为 `actiondock-storage-jpa/` 下所有实体和适配器添加注释
   - 数据库映射说明 (@Table, @Column 等)
   - 重点类：ScriptEntity, ExecutionEntity, JpaScriptRepositoryAdapter
 

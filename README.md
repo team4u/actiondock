@@ -1,10 +1,10 @@
-# ScriptFlow
+# ActionDock
 
-**ScriptFlow** 是一个面向团队协作和大模型接入的脚本管理平台。
+**ActionDock** 是一个面向团队协作和大模型接入的脚本管理平台。
 
 它的目标不是单纯“把脚本跑起来”，而是把原本分散、不可控、难复用的脚本，收敛成一套可管理、可发布、可审计、可稳定调用的运行体系。你可以继续使用熟悉的 Groovy 或 Python 编写脚本，但脚本在平台里会被统一纳管，并通过一致的输入输出协议对外暴露。
 
-对团队来说，ScriptFlow 解决的是脚本资产沉淀和调用规范问题；对大模型来说，ScriptFlow 提供的是一层稳定的工具接入面，让模型不必关心脚本内部用什么语言实现，只需要按统一的 API 或 CLI 协议完成发现、传参和执行。
+对团队来说，ActionDock 解决的是脚本资产沉淀和调用规范问题；对大模型来说，ActionDock 提供的是一层稳定的工具接入面，让模型不必关心脚本内部用什么语言实现，只需要按统一的 API 或 CLI 协议完成发现、传参和执行。
 
 ## 项目优势
 
@@ -52,10 +52,10 @@
 mvn clean package -DskipTests
 
 # 启动 Web 应用
-mvn -pl scriptflow-app-spring -am spring-boot:run
+mvn -pl actiondock-app-spring -am spring-boot:run
 
 # 构建 CLI
-mvn -pl scriptflow-cli -am package
+mvn -pl actiondock-cli -am package
 
 ```
 
@@ -64,7 +64,7 @@ mvn -pl scriptflow-cli -am package
 ### 前端（开发模式）
 
 ```bash
-cd scriptflow-admin-ui
+cd actiondock-admin-ui
 npm install
 npm run dev
 ```
@@ -75,8 +75,8 @@ npm run dev
 
 ```bash
 # 打包（包含前端静态资源）
-mvn -pl scriptflow-app-spring -am package
-java -jar scriptflow-app-spring/target/scriptflow-app-spring.jar
+mvn -pl actiondock-app-spring -am package
+java -jar actiondock-app-spring/target/actiondock-app-spring.jar
 ```
 
 管理控制台访问地址：`http://localhost:8080/admin/scripts`
@@ -87,40 +87,40 @@ CLI 不直接嵌入运行时，只负责调用现有 Web API。
 
 ```bash
 # 查看当前生效配置
-java -jar scriptflow-cli/target/scriptflow-cli.jar config current
+java -jar actiondock-cli/target/actiondock-cli.jar config current
 
 # 直接通过 flag 调用
-java -jar scriptflow-cli/target/scriptflow-cli.jar \
+java -jar actiondock-cli/target/actiondock-cli.jar \
   --base-url http://localhost:8080 \
   --token local-dev-key \
   scripts list
 
 # 通过 profile 保存连接信息
-java -jar scriptflow-cli/target/scriptflow-cli.jar config profile set local \
+java -jar actiondock-cli/target/actiondock-cli.jar config profile set local \
   --base-url http://localhost:8080 \
   --token local-dev-key
-java -jar scriptflow-cli/target/scriptflow-cli.jar scripts list
+java -jar actiondock-cli/target/actiondock-cli.jar scripts list
 ```
 
 CLI 配置优先级：
 
 - 命令行 flag
-- 环境变量 `SCRIPTFLOW_BASE_URL` / `SCRIPTFLOW_TOKEN` / `SCRIPTFLOW_PROFILE`
-- `~/.scriptflow/config.json`
+- 环境变量 `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` / `ACTIONDOCK_PROFILE`
+- `~/.actiondock/config.json`
 - 默认 `http://localhost:8080`
 
 ## 项目结构
 
 ```
-scriptflow
-├── scriptflow-core              # 核心领域模型与应用服务
-├── scriptflow-plugin-api        # PF4J 插件扩展点与宿主交互协议
-├── scriptflow-plugin-template   # 可编译的示例插件模板
-├── scriptflow-storage-jpa       # H2/JPA 持久化适配
-├── scriptflow-app-support       # 运行时共用配置
-├── scriptflow-cli               # 官方 REST CLI 客户端
-├── scriptflow-app-spring        # Spring Boot Web 入口
-├── scriptflow-admin-ui          # React 管理界面
+actiondock
+├── actiondock-core              # 核心领域模型与应用服务
+├── actiondock-plugin-api        # PF4J 插件扩展点与宿主交互协议
+├── actiondock-plugin-template   # 可编译的示例插件模板
+├── actiondock-storage-jpa       # H2/JPA 持久化适配
+├── actiondock-app-support       # 运行时共用配置
+├── actiondock-cli               # 官方 REST CLI 客户端
+├── actiondock-app-spring        # Spring Boot Web 入口
+├── actiondock-admin-ui          # React 管理界面
 ```
 
 ## 接口说明
@@ -205,7 +205,7 @@ scriptflow
 
 ## 仓库发布管理
 
-ScriptFlow 支持将脚本发布到本地仓库或 Git 仓库，实现团队内的脚本共享和版本管理。
+ActionDock 支持将脚本发布到本地仓库或 Git 仓库，实现团队内的脚本共享和版本管理。
 
 ### 脚本范围
 
@@ -239,7 +239,7 @@ ScriptFlow 支持将脚本发布到本地仓库或 Git 仓库，实现团队内�
 
 ```
 repository-root/
-├── scriptflow.repository.json    # 仓库索引文件
+├── actiondock.repository.json    # 仓库索引文件
 └── tools/
     └── {toolId}/
         ├── tool.json             # 工具元数据
@@ -293,12 +293,12 @@ repository-root/
 ### 目录结构约定
 
 ```
-~/.scriptflow/
+~/.actiondock/
 ├── config.json              # CLI 配置文件
 ├── data/
 │   └── dsl-runtime.mv.db    # H2 数据库文件
 ├── plugins/                 # 插件目录
-│   └── .scriptflow-config/  # 插件配置文件
+│   └── .actiondock-config/  # 插件配置文件
 └── repositories/            # 本地仓库根目录
     └── {repository-alias}/  # 各仓库工作目录
         ├── .git/            # Git 仓库（可选）
@@ -325,7 +325,7 @@ return [message: result, timestamp: System.currentTimeMillis()]
 如果已经加载并启动插件，Groovy 脚本还可以通过统一门面调用插件动作：
 
 ```groovy
-def result = plugins.invoke("scriptflow-demo-plugin", "echo", [
+def result = plugins.invoke("actiondock-demo-plugin", "echo", [
   message: "hello"
 ])
 
@@ -501,7 +501,7 @@ curl -X POST http://localhost:8080/api/config-values \
 |--------|--------|------|
 | `server.port` | 8080 | Web 服务端口 |
 | `spring.datasource.url` | `jdbc:h2:file:${app.home-dir}/data/dsl-runtime;AUTO_SERVER=TRUE` | 默认 H2 文件库 |
-| `app.home-dir` | `${user.home}/.scriptflow` | 本机运行时根目录 |
+| `app.home-dir` | `${user.home}/.actiondock` | 本机运行时根目录 |
 | `app.auth.api-keys` | `[]` | 可选 API Key 列表，非空时可由鉴权组件使用 |
 | `app.execution.async-pool-size` | `4` | 异步执行线程池大小 |
 | `app.execution.groovy.enabled` | `true` | 是否启用 `GROOVY` 脚本编译缓存 |
@@ -515,7 +515,7 @@ curl -X POST http://localhost:8080/api/config-values \
 
 ```yaml
 app:
-  home-dir: ${user.home}/.scriptflow
+  home-dir: ${user.home}/.actiondock
   plugins:
     dir: ${app.home-dir}/plugins
   auth:
@@ -543,26 +543,26 @@ app:
 - 平台启动时只会根据 `plugin_registration.enabled=true` 的记录加载对应插件文件
 - 目录里额外存在的 jar 不会自动进 JVM
 - 停止插件会把数据库记录改为停用，并将插件从 JVM 卸载
-- 卸载插件会同时删除数据库记录、插件文件与 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json`
+- 卸载插件会同时删除数据库记录、插件文件与 `${app.plugins.dir}/.actiondock-config/{pluginId}.json`
 
 ### 2. 开发插件
 
-项目内置了一个可直接编译的模板模块 `scriptflow-plugin-template`：
+项目内置了一个可直接编译的模板模块 `actiondock-plugin-template`：
 
 ```bash
-mvn -pl scriptflow-plugin-template package
+mvn -pl actiondock-plugin-template package
 ```
 
 产物默认位于：
 
 ```bash
-scriptflow-plugin-template/target/scriptflow-plugin-template-0.2.0.jar
+actiondock-plugin-template/target/actiondock-plugin-template-0.2.0.jar
 ```
 
-插件需要实现 `ScriptFlowPlugin`，并通过 `id()` 返回唯一插件标识。宿主会按约定从 jar 内加载 manifest：
+插件需要实现 `ActionDockPlugin`，并通过 `id()` 返回唯一插件标识。宿主会按约定从 jar 内加载 manifest：
 
 ```text
-META-INF/scriptflow/plugins/{pluginId}.json
+META-INF/actiondock/plugins/{pluginId}.json
 ```
 
 模板插件当前把整份 manifest 放在资源文件中维护，包括：
@@ -587,12 +587,12 @@ META-INF/scriptflow/plugins/{pluginId}.json
 模板示例 manifest 位于：
 
 ```text
-scriptflow-plugin-template/src/main/resources/META-INF/scriptflow/plugins/scriptflow-demo-plugin.json
+actiondock-plugin-template/src/main/resources/META-INF/actiondock/plugins/actiondock-demo-plugin.json
 ```
 
 模板示例当前暴露：
 
-- `pluginId`: `scriptflow-demo-plugin`
+- `pluginId`: `actiondock-demo-plugin`
 - `action`: `echo`
 
 模板插件推荐直接定义强类型配置类，并通过 `ScriptPluginContext#getPluginConfig(Class<T>)` 读取：
@@ -638,7 +638,7 @@ public class DemoPluginConfig {
 如果你要基于模板开发自定义插件，至少需要同时修改两处：
 
 1. Java 实现类中的 `id()`
-2. `META-INF/scriptflow/plugins/{pluginId}.json`
+2. `META-INF/actiondock/plugins/{pluginId}.json`
 
 ### 3. 安装、升级、启停、删除
 
@@ -710,7 +710,7 @@ public class DemoPluginConfig {
 - 如果 schema 含有暂不支持的字段，仍可切到 JSON 模式完整编辑
 - 字符串字段支持填写 `${config.some.key}` 引用平台全局配置值
 - 保存时会先做 JSON 解析，再按 `defaultConfig + 用户配置` 合并为最终生效配置，解析配置值引用后，再调用插件自身 `validateConfig(...)`
-- 配置文件默认保存到 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json`
+- 配置文件默认保存到 `${app.plugins.dir}/.actiondock-config/{pluginId}.json`
 - 运行时 `context.getPluginConfig()` 与保存时 `validateConfig(...)` 看到的是同一份最终生效配置
 
 最终生效配置的优先级：
@@ -750,7 +750,7 @@ DemoPluginConfig config = context.getPluginConfig(DemoPluginConfig.class);
 Groovy 运行时通过统一门面调用插件动作：
 
 ```groovy
-def result = plugins.invoke("scriptflow-demo-plugin", "echo", [
+def result = plugins.invoke("actiondock-demo-plugin", "echo", [
   message: input.name ?: "World"
 ])
 
@@ -841,7 +841,7 @@ REST 调试接口：
 curl -X POST \
   -H 'Content-Type: application/json' \
   -d '{"args":{"message":"hello"},"scriptInput":{"name":"Alice"},"responseView":"DEBUG"}' \
-  'http://localhost:8080/api/plugins/scriptflow-demo-plugin/actions/echo/invoke'
+  'http://localhost:8080/api/plugins/actiondock-demo-plugin/actions/echo/invoke'
 ```
 
 请求体字段：
@@ -929,7 +929,7 @@ curl -X POST http://localhost:8080/api/executions \
 
 **8. 升级插件后会丢失配置吗？**
 
-不会。升级会保留 `${app.plugins.dir}/.scriptflow-config/{pluginId}.json` 中的现有配置，并保留原先启用/停用状态。
+不会。升级会保留 `${app.plugins.dir}/.actiondock-config/{pluginId}.json` 中的现有配置，并保留原先启用/停用状态。
 
 ### H2 控制台
 

@@ -5,12 +5,12 @@ type: execute
 wave: 1
 depends_on: []
 files_modified:
-  - scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptApplicationService.java
-  - scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionApplicationService.java
-  - scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionOutputProjector.java
-  - scriptflow-core/src/main/java/org/team4u/scriptflow/application/InvalidExecutionInputException.java
-  - scriptflow-core/src/main/java/org/team4u/scriptflow/application/SchemaFieldError.java
-  - scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptSchemaSupport.java
+  - actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptApplicationService.java
+  - actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionApplicationService.java
+  - actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionOutputProjector.java
+  - actiondock-core/src/main/java/org/team4u/actiondock/application/InvalidExecutionInputException.java
+  - actiondock-core/src/main/java/org/team4u/actiondock/application/SchemaFieldError.java
+  - actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptSchemaSupport.java
 autonomous: true
 requirements:
   - COMMENT-02
@@ -20,22 +20,22 @@ must_haves:
     - "Public methods have Javadoc with @param, @return, @throws tags"
     - "Exception classes have Javadoc explaining error conditions"
   artifacts:
-    - path: "scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptApplicationService.java"
+    - path: "actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptApplicationService.java"
       provides: "Script management operations"
       min_lines: 10
-    - path: "scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionApplicationService.java"
+    - path: "actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionApplicationService.java"
       provides: "Script execution operations"
       min_lines: 10
-    - path: "scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionOutputProjector.java"
+    - path: "actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionOutputProjector.java"
       provides: "Output projection logic"
       min_lines: 5
-    - path: "scriptflow-core/src/main/java/org/team4u/scriptflow/application/InvalidExecutionInputException.java"
+    - path: "actiondock-core/src/main/java/org/team4u/actiondock/application/InvalidExecutionInputException.java"
       provides: "Input validation exception"
       min_lines: 5
-    - path: "scriptflow-core/src/main/java/org/team4u/scriptflow/application/SchemaFieldError.java"
+    - path: "actiondock-core/src/main/java/org/team4u/actiondock/application/SchemaFieldError.java"
       provides: "Schema validation error details"
       min_lines: 5
-    - path: "scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptSchemaSupport.java"
+    - path: "actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptSchemaSupport.java"
       provides: "Schema validation support"
       min_lines: 5
   key_links:
@@ -48,7 +48,7 @@ must_haves:
 ---
 
 <objective>
-为 scriptflow-core 模块的 Application 层添加符合 Java 规范的专业 Javadoc 注释。
+为 actiondock-core 模块的 Application 层添加符合 Java 规范的专业 Javadoc 注释。
 
 包含 6 个类/记录：ScriptApplicationService, ExecutionApplicationService, ExecutionOutputProjector, InvalidExecutionInputException, SchemaFieldError, ScriptSchemaSupport。
 </objective>
@@ -59,16 +59,16 @@ must_haves:
 </execution_context>
 
 <context>
-@scriptflow-core/src/main/java/org/team4u/scriptflow/domain/model/ScriptDefinition.java
-@scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptApplicationService.java
-@scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionApplicationService.java
+@actiondock-core/src/main/java/org/team4u/actiondock/domain/model/ScriptDefinition.java
+@actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptApplicationService.java
+@actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionApplicationService.java
 </context>
 
 <tasks>
 
 <task type="auto">
   <name>Task 1: Add Javadoc to ScriptApplicationService</name>
-  <files>scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptApplicationService.java</files>
+  <files>actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptApplicationService.java</files>
   <action>
 使用 Edit 工具添加 Javadoc 注释，参考 ScriptDefinition.java 的注释风格。
 
@@ -96,14 +96,14 @@ must_haves:
 - `normalizePublicationState(ScriptDefinition definition)` - 添加 `@param definition 脚本定义`，注意这是 private 方法，只需简单说明即可
 </action>
   <verify>
-grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptApplicationService.java
+grep -c "^ \* " actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptApplicationService.java
 </verify>
   <done>ScriptApplicationService 类有完整的类级别和方法级别 Javadoc</done>
 </task>
 
 <task type="auto">
   <name>Task 2: Add Javadoc to ExecutionApplicationService</name>
-  <files>scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionApplicationService.java</files>
+  <files>actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionApplicationService.java</files>
   <action>
 使用 Edit 工具添加 Javadoc 注释。
 
@@ -130,7 +130,7 @@ grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/
 - `clear(String scriptId)` - 添加 `@param scriptId 脚本ID`
 </action>
   <verify>
-grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionApplicationService.java
+grep -c "^ \* " actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionApplicationService.java
 </verify>
   <done>ExecutionApplicationService 类有完整的类级别和方法级别 Javadoc</done>
 </task>
@@ -138,10 +138,10 @@ grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/
 <task type="auto">
   <name>Task 3: Add Javadoc to remaining Application classes</name>
   <files>
-    scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionOutputProjector.java
-    scriptflow-core/src/main/java/org/team4u/scriptflow/application/InvalidExecutionInputException.java
-    scriptflow-core/src/main/java/org/team4u/scriptflow/application/SchemaFieldError.java
-    scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptSchemaSupport.java
+    actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionOutputProjector.java
+    actiondock-core/src/main/java/org/team4u/actiondock/application/InvalidExecutionInputException.java
+    actiondock-core/src/main/java/org/team4u/actiondock/application/SchemaFieldError.java
+    actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptSchemaSupport.java
   </files>
   <action>
 使用 Edit 工具分别为以下 4 个文件添加 Javadoc：
@@ -201,7 +201,7 @@ grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/
 - `validateInput(String scriptId, Map<String, Object> input, Map<String, Object> schema)` - 添加 `@param scriptId 脚本ID` `@param input 输入参数` `@param schema 模式定义` `@throws InvalidExecutionInputException 当校验失败时`
 </action>
   <verify>
-grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/ExecutionOutputProjector.java && grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/InvalidExecutionInputException.java && grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/SchemaFieldError.java && grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/ScriptSchemaSupport.java
+grep -c "^ \* " actiondock-core/src/main/java/org/team4u/actiondock/application/ExecutionOutputProjector.java && grep -c "^ \* " actiondock-core/src/main/java/org/team4u/actiondock/application/InvalidExecutionInputException.java && grep -c "^ \* " actiondock-core/src/main/java/org/team4u/actiondock/application/SchemaFieldError.java && grep -c "^ \* " actiondock-core/src/main/java/org/team4u/actiondock/application/ScriptSchemaSupport.java
 </verify>
   <done>所有 Application 层类都有 Javadoc 注释</done>
 </task>
@@ -209,8 +209,8 @@ grep -c "^ \* " scriptflow-core/src/main/java/org/team4u/scriptflow/application/
 </tasks>
 
 <verification>
-- grep -c "^/\\*\\*" scriptflow-core/src/main/java/org/team4u/scriptflow/application/*.java 应返回 6 (6 个文件都有 Javadoc 块)
-- grep "@author jay.wu" scriptflow-core/src/main/java/org/team4u/scriptflow/application/*.java 应返回 6
+- grep -c "^/\\*\\*" actiondock-core/src/main/java/org/team4u/actiondock/application/*.java 应返回 6 (6 个文件都有 Javadoc 块)
+- grep "@author jay.wu" actiondock-core/src/main/java/org/team4u/actiondock/application/*.java 应返回 6
 </verification>
 
 <success_criteria>
