@@ -116,9 +116,8 @@ function AdminShell() {
   const navigationMenu = (
     <div className="app-navigation">
       <div className="brand-block">
-        <Text className="brand-kicker">Local Runner</Text>
         <Title level={4}>ActionDock</Title>
-        <Text type="secondary">工具仓库浏览、安装与本机运行</Text>
+        <Text type="secondary">脚本即工具，协议即接入</Text>
       </div>
       <Menu
         mode="inline"
