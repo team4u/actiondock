@@ -11,7 +11,6 @@ import {
   Button,
   Card,
   Col,
-  Dropdown,
   Empty,
   Form,
   Input,
@@ -26,7 +25,6 @@ import {
   message
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { MenuProps } from "antd";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useColorMode } from "../contexts/ColorModeContext";
 import {
@@ -492,13 +490,6 @@ export function PluginDetailPage() {
     value: action.action,
     label: getActionLabel(action)
   }));
-  const publishMenuItems: MenuProps["items"] = [
-    {
-      key: "publish-to-repository",
-      label: "发布到仓库",
-      onClick: () => void openPublishPluginModal()
-    }
-  ];
 
   const invokeCommandPresets = useMemo(() => {
     if (!plugin || !currentAction) return [];
@@ -568,14 +559,14 @@ export function PluginDetailPage() {
                 >
                   刷新
                 </Button>
-                <Dropdown.Button
-                  menu={{ items: publishMenuItems }}
+                <Button
+                  type="primary"
                   loading={publishingPlugin}
                   disabled={!plugin}
                   onClick={() => void openPublishPluginModal()}
                 >
-                  发布
-                </Dropdown.Button>
+                  发布到仓库
+                </Button>
                 <Button
                   icon={<UploadOutlined />}
                   loading={actionLoading === "upgrade"}
