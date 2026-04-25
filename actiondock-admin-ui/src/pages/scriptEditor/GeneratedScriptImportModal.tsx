@@ -1,0 +1,45 @@
+import { Alert, Input, Modal, Space } from "antd";
+
+interface GeneratedScriptImportModalProps {
+  open: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onImport: () => void;
+  onCancel: () => void;
+}
+
+export function GeneratedScriptImportModal({
+  open,
+  value,
+  onChange,
+  onImport,
+  onCancel
+}: GeneratedScriptImportModalProps) {
+  return (
+    <Modal
+      title="粘贴 generate-script 输出"
+      open={open}
+      okText="导入"
+      cancelText="取消"
+      onOk={onImport}
+      onCancel={onCancel}
+      width={760}
+    >
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+        <Alert
+          type="info"
+          showIcon
+          message="支持固定格式，也支持从 Groovy 源码智能提取"
+          description="带有显式 Input/Output Schema 时优先使用原始 Schema；仅粘贴源码时会自动提取输入输出结构，但不会自动填写 ID 和名称。"
+        />
+        <Input.TextArea
+          className="generated-script-textarea"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={`支持两种粘贴方式，例如：\n\n1. 固定格式\n### 脚本 ID\nhello-groovy\n\n### 脚本名称\nHello Groovy\n\n### Groovy 脚本\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\`\n\n### Input Schema（输入参数）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n### Output Schema（输出结果）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n2. 直接粘贴源码\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\``}
+          autoSize={{ minRows: 14, maxRows: 22 }}
+        />
+      </Space>
+    </Modal>
+  );
+}

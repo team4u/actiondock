@@ -1,0 +1,125 @@
+import { Alert, Collapse, Descriptions, Space, Typography } from "antd";
+import { Grid } from "antd";
+import { CommandTabsPanel, type CommandPreset } from "../../components/CommandTabsPanel";
+import { InfoHint } from "../../components/InfoHint";
+import { JsonPreview } from "../../components/JsonPreview";
+import { getCommandInputSourceLabel, type ResolvedCommandInput } from "../../commands";
+
+const { Text } = Typography;
+const { useBreakpoint } = Grid;
+
+interface ScriptCommandsTabProps {
+  currentScriptId: string;
+  origin: string;
+  apiKey: string | undefined;
+  executionMode: string;
+  commandInput: ResolvedCommandInput;
+  detailCommandPresets: CommandPreset[];
+  executeCommandPresets: CommandPreset[];
+  schemaCommandPresets: CommandPreset[];
+  hasInputSchema: boolean;
+  hasOutputSchema: boolean;
+  toolContractResponseExample: Record<string, unknown> | undefined;
+  onCopy: (command: string) => void;
+}
+
+export function ScriptCommandsTab({
+  origin,
+  apiKey,
+  executionMode,
+  commandInput,
+  detailCommandPresets,
+  executeCommandPresets,
+  schemaCommandPresets,
+  hasInputSchema,
+  hasOutputSchema,
+  toolContractResponseExample,
+  onCopy
+}: ScriptCommandsTabProps) {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <InfoHint
+        label="可直接执行的 REST API / CLI 命令"
+        content={
+          apiKey
+            ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
+            : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
+        }
+      />
+
+      <Collapse
+        accordion
+        defaultActiveKey={["command-execute"]}
+        items={[
+          {
+            key: "command-execute",
+            label: "执行脚本",
+            children: (
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                <Text type="secondary">跟随当前调试配置生成</Text>
+                {commandInput.note ? (
+                  <Alert
+                    type={commandInput.source === "sample" || commandInput.source === "empty" ? "warning" : "info"}
+                    showIcon
+                    message={commandInput.note}
+                  />
+                ) : null}
+                <Descriptions size="small" column={isMobile ? 1 : 2}>
+                  <Descriptions.Item label="执行模式">{executionMode}</Descriptions.Item>
+                  <Descriptions.Item label="入参来源">
+                    {getCommandInputSourceLabel(commandInput.source)}
+                  </Descriptions.Item>
+                </Descriptions>
+                <CommandTabsPanel
+                  title="执行脚本命令"
+                  presets={executeCommandPresets}
+                  onCopy={onCopy}
+                />
+              </Space>
+            )
+          },
+          {
+            key: "command-detail",
+            label: "查看详情",
+            children: (
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                <Text type="secondary">使用当前脚本 ID 生成，可用于查询脚本定义详情。</Text>
+                <CommandTabsPanel
+                  title="详情查询命令"
+                  presets={detailCommandPresets}
+                  onCopy={onCopy}
+                />
+              </Space>
+            )
+          },
+          ...(hasInputSchema || hasOutputSchema
+            ? [
+                {
+                  key: "command-contract",
+                  label: "Schema",
+                  children: (
+                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                      <Text type="secondary">供模型与调用方查看输入输出定义。</Text>
+                      <CommandTabsPanel
+                        title="获取 Schema 命令"
+                        presets={schemaCommandPresets}
+                        onCopy={onCopy}
+                      />
+                      <JsonPreview
+                        title="Schema 响应示例"
+                        value={toolContractResponseExample}
+                        emptyDescription="当前没有可展示的 Schema 示例"
+                      />
+                    </Space>
+                  )
+                }
+              ]
+            : [])
+        ]}
+      />
+    </Space>
+  );
+}
