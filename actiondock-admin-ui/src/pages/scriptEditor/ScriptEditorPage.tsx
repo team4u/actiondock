@@ -103,7 +103,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     currentScript: editor.currentScript,
     isReadOnlyScript: editor.isReadOnlyScript,
     ensureCurrentScriptPublished: editor.ensureCurrentScriptPublished,
-    detectedPluginDependencies: editor.detectedPluginDependencies,
     messageApi
   });
 
@@ -284,11 +283,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         confirmLoading={publishToRepo.publishingToRepository}
         metadataLoading={publishToRepo.publishMetadataLoading}
         form={publishToRepo.publishForm}
+        versionSuggestion={publishToRepo.publishVersionSuggestion}
         repositories={publishToRepo.publishRepositories}
         schedules={publishToRepo.publishSchedules}
         configValues={publishToRepo.publishConfigValues}
         configModes={publishToRepo.publishConfigModes}
         onConfigModesChange={publishToRepo.setPublishConfigModes}
+        onValuesChange={publishToRepo.handlePublishFormValuesChange}
         pluginDependencies={editor.detectedPluginDependencies}
       />
 

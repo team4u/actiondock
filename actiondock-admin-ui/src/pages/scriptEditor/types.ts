@@ -3,6 +3,7 @@ import type { MenuProps } from "antd";
 import type {
   PluginDependency,
   PluginView,
+  RepositoryToolDescriptor,
   ScriptDefinition,
   ScriptType
 } from "../../types";
@@ -88,6 +89,42 @@ export function suggestNextRepositoryVersion(value?: string): string {
   const next = [...parts];
   next[next.length - 1] = String(last + 1);
   return next.join(".");
+}
+
+export type RepositoryPublishVersionResolution =
+  | { status: "NOT_FOUND" }
+  | { status: "READY"; currentVersion: string; suggestedVersion: string }
+  | { status: "MANUAL"; currentVersion: string };
+
+export type RepositoryPublishVersionSuggestion =
+  | { status: "IDLE" }
+  | { status: "LOADING" }
+  | { status: "NOT_FOUND" }
+  | { status: "READY"; currentVersion: string; suggestedVersion: string; autoFilled: boolean }
+  | { status: "MANUAL"; currentVersion: string }
+  | { status: "ERROR"; message: string };
+
+export function resolveRepositoryPublishVersion(
+  tools: Pick<RepositoryToolDescriptor, "toolId" | "version">[],
+  toolId: string
+): RepositoryPublishVersionResolution {
+  const normalizedToolId = toolId.trim();
+  if (!normalizedToolId) {
+    return { status: "NOT_FOUND" };
+  }
+  const current = tools.find((item) => item.toolId === normalizedToolId);
+  if (!current?.version) {
+    return { status: "NOT_FOUND" };
+  }
+  const suggestedVersion = suggestNextRepositoryVersion(current.version);
+  if (suggestedVersion === current.version) {
+    return { status: "MANUAL", currentVersion: current.version };
+  }
+  return {
+    status: "READY",
+    currentVersion: current.version,
+    suggestedVersion
+  };
 }
 
 export interface ScriptEditorContext {

@@ -1,30 +1,34 @@
 import { Form } from "antd";
 import type { FormInstance } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   listConfigValues,
-  listPlugins,
   listRepositories,
   listSchedules,
-  publishRepositoryTool
+  listToolsByRepository,
+  publishRepositoryTool,
+  syncRepository
 } from "../../api";
 import type {
   ConfigValue,
-  PluginDependency,
   RepositoryDefinition,
   ScriptDefinition,
   ScriptSchedule
 } from "../../types";
 import { getErrorMessage } from "../../utils";
 import type { PublishToRepositoryFormValues } from "./types";
-import { suggestNextRepositoryVersion, toTagOptions } from "./types";
+import {
+  resolveRepositoryPublishVersion,
+  suggestNextRepositoryVersion,
+  toTagOptions
+} from "./types";
+import type { RepositoryPublishVersionSuggestion } from "./types";
 
 export interface UseScriptPublishToRepoParams {
   currentScript: ScriptDefinition | null;
   isReadOnlyScript: boolean;
   ensureCurrentScriptPublished: (successMessage?: string) => Promise<ScriptDefinition>;
-  detectedPluginDependencies: PluginDependency[];
   messageApi: MessageInstance;
 }
 
@@ -37,8 +41,10 @@ export interface ScriptPublishToRepoContext {
   publishSchedules: ScriptSchedule[];
   publishConfigValues: ConfigValue[];
   publishMetadataLoading: boolean;
+  publishVersionSuggestion: RepositoryPublishVersionSuggestion;
   publishConfigModes: Record<string, "INLINE" | "PLACEHOLDER">;
   setPublishConfigModes: React.Dispatch<React.SetStateAction<Record<string, "INLINE" | "PLACEHOLDER">>>;
+  handlePublishFormValuesChange: (changedValues: Partial<PublishToRepositoryFormValues>) => void;
   openPublishToRepositoryModal: () => Promise<void>;
   handlePublishToRepository: () => Promise<void>;
 }
@@ -47,7 +53,6 @@ export function useScriptPublishToRepo({
   currentScript,
   isReadOnlyScript,
   ensureCurrentScriptPublished,
-  detectedPluginDependencies,
   messageApi
 }: UseScriptPublishToRepoParams): ScriptPublishToRepoContext {
   const [publishForm] = Form.useForm<PublishToRepositoryFormValues>();
@@ -57,7 +62,13 @@ export function useScriptPublishToRepo({
   const [publishSchedules, setPublishSchedules] = useState<ScriptSchedule[]>([]);
   const [publishConfigValues, setPublishConfigValues] = useState<ConfigValue[]>([]);
   const [publishMetadataLoading, setPublishMetadataLoading] = useState(false);
+  const [publishVersionSuggestion, setPublishVersionSuggestion] = useState<RepositoryPublishVersionSuggestion>({ status: "IDLE" });
   const [publishConfigModes, setPublishConfigModes] = useState<Record<string, "INLINE" | "PLACEHOLDER">>({});
+  const syncedRepositoryIdsRef = useRef<Set<string>>(new Set());
+  const versionSuggestionRequestRef = useRef(0);
+  const versionManuallyEditedRef = useRef(false);
+  const selectedRepositoryId = Form.useWatch("repositoryId", publishForm);
+  const selectedToolId = Form.useWatch("toolId", publishForm);
 
   const loadPublishMetadata = async (script: ScriptDefinition): Promise<RepositoryDefinition[]> => {
     setPublishMetadataLoading(true);
@@ -79,6 +90,9 @@ export function useScriptPublishToRepo({
       setPublishSchedules(relatedSchedules);
       setPublishConfigValues(sortedConfigValues);
       setPublishConfigModes({});
+      setPublishVersionSuggestion({ status: "IDLE" });
+      syncedRepositoryIdsRef.current = new Set();
+      versionManuallyEditedRef.current = false;
       publishForm.setFieldsValue({
         repositoryId: publishableRepositories[0]?.id,
         toolId: script.repositoryToolId || script.id,
@@ -95,6 +109,72 @@ export function useScriptPublishToRepo({
       throw error;
     } finally {
       setPublishMetadataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!publishToRepositoryOpen || !selectedRepositoryId || !selectedToolId?.trim()) {
+      versionSuggestionRequestRef.current += 1;
+      setPublishVersionSuggestion({ status: "IDLE" });
+      return;
+    }
+    const requestId = versionSuggestionRequestRef.current + 1;
+    versionSuggestionRequestRef.current = requestId;
+    setPublishVersionSuggestion({ status: "LOADING" });
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          if (!syncedRepositoryIdsRef.current.has(selectedRepositoryId)) {
+            await syncRepository(selectedRepositoryId);
+            syncedRepositoryIdsRef.current.add(selectedRepositoryId);
+          }
+          const tools = await listToolsByRepository(selectedRepositoryId);
+          if (versionSuggestionRequestRef.current !== requestId) {
+            return;
+          }
+          const resolution = resolveRepositoryPublishVersion(tools, selectedToolId);
+          if (resolution.status === "READY") {
+            const autoFilled = !versionManuallyEditedRef.current;
+            if (autoFilled) {
+              publishForm.setFieldsValue({ version: resolution.suggestedVersion });
+            }
+            setPublishVersionSuggestion({
+              status: "READY",
+              currentVersion: resolution.currentVersion,
+              suggestedVersion: resolution.suggestedVersion,
+              autoFilled
+            });
+            return;
+          }
+          if (resolution.status === "MANUAL") {
+            setPublishVersionSuggestion({
+              status: "MANUAL",
+              currentVersion: resolution.currentVersion
+            });
+            return;
+          }
+          setPublishVersionSuggestion({ status: "NOT_FOUND" });
+        } catch (error) {
+          if (versionSuggestionRequestRef.current !== requestId) {
+            return;
+          }
+          setPublishVersionSuggestion({
+            status: "ERROR",
+            message: getErrorMessage(error, "拉取仓库版本失败")
+          });
+        }
+      })();
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [publishForm, publishToRepositoryOpen, selectedRepositoryId, selectedToolId]);
+
+  const handlePublishFormValuesChange = (changedValues: Partial<PublishToRepositoryFormValues>) => {
+    if (Object.prototype.hasOwnProperty.call(changedValues, "version")) {
+      versionManuallyEditedRef.current = true;
     }
   };
 
@@ -164,8 +244,10 @@ export function useScriptPublishToRepo({
     publishSchedules,
     publishConfigValues,
     publishMetadataLoading,
+    publishVersionSuggestion,
     publishConfigModes,
     setPublishConfigModes,
+    handlePublishFormValuesChange,
     openPublishToRepositoryModal,
     handlePublishToRepository
   };

@@ -12,7 +12,9 @@ import {
   Tag,
   Typography
 } from "antd";
+import type { FormInstance } from "antd";
 import type { ConfigValue, PluginDependency, RepositoryDefinition, ScriptSchedule } from "../../types";
+import type { PublishToRepositoryFormValues, RepositoryPublishVersionSuggestion } from "./types";
 
 const { Text } = Typography;
 
@@ -50,16 +52,45 @@ interface PublishToRepositoryModalProps {
   onOk: () => void;
   confirmLoading: boolean;
   metadataLoading: boolean;
-  form: FormInstance;
+  form: FormInstance<PublishToRepositoryFormValues>;
+  versionSuggestion: RepositoryPublishVersionSuggestion;
   repositories: RepositoryDefinition[];
   schedules: ScriptSchedule[];
   configValues: ConfigValue[];
   configModes: Record<string, "INLINE" | "PLACEHOLDER">;
   onConfigModesChange: React.Dispatch<React.SetStateAction<Record<string, "INLINE" | "PLACEHOLDER">>>;
+  onValuesChange: (changedValues: Partial<PublishToRepositoryFormValues>) => void;
   pluginDependencies: PluginDependency[];
 }
 
-import type { FormInstance } from "antd";
+function renderVersionSuggestion(suggestion: RepositoryPublishVersionSuggestion) {
+  if (suggestion.status === "LOADING") {
+    return (
+      <Space size={6}>
+        <Spin size="small" />
+        <Text type="secondary">正在同步目标仓库并拉取当前版本</Text>
+      </Space>
+    );
+  }
+  if (suggestion.status === "READY") {
+    return (
+      <Text type="secondary">
+        仓库当前版本 {suggestion.currentVersion}，建议发布 {suggestion.suggestedVersion}
+        {suggestion.autoFilled ? "，已自动填入。" : "；你已手动修改，未覆盖。"}
+      </Text>
+    );
+  }
+  if (suggestion.status === "MANUAL") {
+    return <Text type="warning">仓库当前版本 {suggestion.currentVersion} 无法自动递增，请手动填写新版本。</Text>;
+  }
+  if (suggestion.status === "NOT_FOUND") {
+    return <Text type="secondary">目标仓库暂无该工具版本。</Text>;
+  }
+  if (suggestion.status === "ERROR") {
+    return <Text type="danger">{suggestion.message}</Text>;
+  }
+  return null;
+}
 
 export function PublishToRepositoryModal({
   open,
@@ -68,11 +99,13 @@ export function PublishToRepositoryModal({
   confirmLoading,
   metadataLoading,
   form,
+  versionSuggestion,
   repositories,
   schedules,
   configValues,
   configModes,
   onConfigModesChange,
+  onValuesChange,
   pluginDependencies
 }: PublishToRepositoryModalProps) {
   return (
@@ -97,7 +130,7 @@ export function PublishToRepositoryModal({
             message="发布前会先执行本地保存、校验与发布"
             description="工具说明来自脚本自己的说明字段；这里填写的是本次版本发布日志。配置项只会按你选择的模式导出为模板。"
           />
-          <Form form={form} layout="vertical">
+          <Form form={form} layout="vertical" onValuesChange={onValuesChange}>
             <Form.Item
               label="目标仓库"
               name="repositoryId"
@@ -123,6 +156,7 @@ export function PublishToRepositoryModal({
                 label="版本"
                 name="version"
                 rules={[{ required: true, message: "请输入版本号" }]}
+                extra={renderVersionSuggestion(versionSuggestion)}
                 style={{ flex: "1 1 160px", minWidth: 160 }}
               >
                 <Input placeholder="例如 1.0.0" />
