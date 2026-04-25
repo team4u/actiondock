@@ -21,6 +21,10 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.repository.HttpPluginArtifactResolver;
+import org.team4u.actiondock.repository.LocalPluginArtifactResolver;
+import org.team4u.actiondock.repository.PluginArtifactResolver;
+import org.team4u.actiondock.repository.PluginArtifactResolverRegistry;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.script.GroovyScriptEngine;
 import org.team4u.actiondock.script.PythonScriptEngine;
@@ -28,6 +32,7 @@ import org.team4u.actiondock.script.RoutingScriptEngine;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.List;
 
 /**
  * 运行时配置，注册应用服务、脚本引擎和插件运行时等核心 Bean。
@@ -104,6 +109,21 @@ public class RuntimeConfiguration {
     }
 
     @Bean
+    public PluginArtifactResolver localPluginArtifactResolver() {
+        return new LocalPluginArtifactResolver();
+    }
+
+    @Bean
+    public PluginArtifactResolver httpPluginArtifactResolver() {
+        return new HttpPluginArtifactResolver();
+    }
+
+    @Bean
+    public PluginArtifactResolverRegistry pluginArtifactResolverRegistry(List<PluginArtifactResolver> resolvers) {
+        return new PluginArtifactResolverRegistry(resolvers);
+    }
+
+    @Bean
     public RepositoryCatalogService repositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                                              RepositoryToolInstallationRepository repositoryToolInstallationRepository,
                                                              ScriptRepository scriptRepository,
@@ -113,7 +133,8 @@ public class RuntimeConfiguration {
                                                              ConfigValueApplicationService configValueApplicationService,
                                                              PluginRuntimeService pluginRuntimeService,
                                                              JsonCodec jsonCodec,
-                                                             AppProperties properties) {
+                                                             AppProperties properties,
+                                                             PluginArtifactResolverRegistry pluginArtifactResolverRegistry) {
         return new RepositoryCatalogService(
                 repositoryDefinitionRepository,
                 repositoryToolInstallationRepository,
@@ -124,7 +145,8 @@ public class RuntimeConfiguration {
                 configValueApplicationService,
                 pluginRuntimeService,
                 jsonCodec,
-                properties
+                properties,
+                pluginArtifactResolverRegistry
         );
     }
 }

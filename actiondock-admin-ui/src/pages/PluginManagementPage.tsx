@@ -550,9 +550,14 @@ export function PluginManagementPage() {
               <Descriptions.Item label="标签">
                 {drawerDescriptor.tags.length > 0 ? drawerDescriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : "—"}
               </Descriptions.Item>
-              {drawerDescriptor.sha256 ? (
+              {drawerDescriptor.artifact?.uri ? (
+                <Descriptions.Item label="插件包 URI">
+                  <Text code style={{ wordBreak: "break-all", fontSize: 12 }}>{drawerDescriptor.artifact.uri}</Text>
+                </Descriptions.Item>
+              ) : null}
+              {drawerDescriptor.artifact?.sha256 ? (
                 <Descriptions.Item label="SHA-256">
-                  <Text code style={{ wordBreak: "break-all", fontSize: 12 }}>{drawerDescriptor.sha256}</Text>
+                  <Text code style={{ wordBreak: "break-all", fontSize: 12 }}>{drawerDescriptor.artifact.sha256}</Text>
                 </Descriptions.Item>
               ) : null}
             </Descriptions>

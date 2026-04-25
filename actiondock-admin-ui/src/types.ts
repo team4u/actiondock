@@ -325,9 +325,7 @@ export interface RepositoryPluginDescriptor {
   releaseNotes?: string;
   owner?: string;
   tags: string[];
-  artifactPath: string;
-  resolvedArtifactPath: string;
-  sha256?: string;
+  artifact: PluginArtifactRef;
   riskLevel?: string;
   installed: boolean;
   installedVersion?: string;
@@ -356,14 +354,23 @@ export interface RepositoryPluginInstallRequest {
   force: boolean;
 }
 
+export interface PluginArtifactRef {
+  uri: string;
+  sha256?: string;
+  fileName?: string;
+  size?: number;
+}
+
 export interface RepositoryPluginPublishRequest {
   pluginId: string;
   displayName: string;
   version: string;
   owner?: string;
+  description?: string;
   releaseNotes?: string;
   tags?: string[];
   riskLevel?: string;
+  artifact: PluginArtifactRef;
 }
 
 export interface RepositoryPublishConfigItem {

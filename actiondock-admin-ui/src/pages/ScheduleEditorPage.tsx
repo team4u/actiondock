@@ -52,7 +52,7 @@ import type {
   SubmitMode,
   ValidationErrorData
 } from "../types";
-import { formatDateTime, getExecutionStatusColor, parseJsonText, prettyJson } from "../utils";
+import { formatDateTime, getExecutionStatusColor, isExecutionActive, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
 

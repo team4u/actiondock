@@ -71,6 +71,7 @@ public class RepositoryCatalogService {
     private final PluginRuntimeService pluginRuntimeService;
     private final JsonCodec jsonCodec;
     private final HttpClient httpClient;
+    private final PluginArtifactResolverRegistry pluginArtifactResolverRegistry;
     private final Path repositoriesRoot;
 
     public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
@@ -83,6 +84,30 @@ public class RepositoryCatalogService {
                                     PluginRuntimeService pluginRuntimeService,
                                     JsonCodec jsonCodec,
                                     AppProperties properties) {
+        this(repositoryDefinitionRepository,
+                repositoryToolInstallationRepository,
+                scriptRepository,
+                scriptScheduleRepository,
+                configValueRepository,
+                scriptApplicationService,
+                configValueApplicationService,
+                pluginRuntimeService,
+                jsonCodec,
+                properties,
+                new PluginArtifactResolverRegistry(List.of(new LocalPluginArtifactResolver(), new HttpPluginArtifactResolver())));
+    }
+
+    public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
+                                    RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+                                    ScriptRepository scriptRepository,
+                                    ScriptScheduleRepository scriptScheduleRepository,
+                                    ConfigValueRepository configValueRepository,
+                                    ScriptApplicationService scriptApplicationService,
+                                    ConfigValueApplicationService configValueApplicationService,
+                                    PluginRuntimeService pluginRuntimeService,
+                                    JsonCodec jsonCodec,
+                                    AppProperties properties,
+                                    PluginArtifactResolverRegistry pluginArtifactResolverRegistry) {
         this.repositoryDefinitionRepository = repositoryDefinitionRepository;
         this.repositoryToolInstallationRepository = repositoryToolInstallationRepository;
         this.scriptRepository = scriptRepository;
@@ -93,6 +118,9 @@ public class RepositoryCatalogService {
         this.pluginRuntimeService = pluginRuntimeService == null ? PluginRuntimeService.disabled() : pluginRuntimeService;
         this.jsonCodec = jsonCodec;
         this.httpClient = HttpClient.newHttpClient();
+        this.pluginArtifactResolverRegistry = pluginArtifactResolverRegistry == null
+                ? new PluginArtifactResolverRegistry(List.of(new LocalPluginArtifactResolver(), new HttpPluginArtifactResolver()))
+                : pluginArtifactResolverRegistry;
         this.repositoriesRoot = Path.of(properties == null || properties.getHomeDir() == null || properties.getHomeDir().isBlank()
                 ? AppProperties.defaultHomeDir()
                 : properties.getHomeDir()).resolve("repositories").toAbsolutePath().normalize();
@@ -527,16 +555,15 @@ public class RepositoryCatalogService {
         }
 
         String pluginId = normalize(request.pluginId(), "pluginId 不能为空");
-        PluginRegistration registration = pluginRuntimeService.getRegistration(pluginId);
-        byte[] content = pluginRuntimeService.readPluginFile(pluginId);
-        String version = normalizeOrDefault(request.version(), registration.getVersion());
+        String displayName = normalize(request.displayName(), "displayName 不能为空");
+        String version = normalize(request.version(), "version 不能为空");
         Path root = resolveRepositoryRoot(repository);
+        PluginArtifactRef artifact = completePluginArtifactRef(pluginId, request.artifact(), repository, root);
         RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
         assertPluginVersionAvailable(repositoryId, current, pluginId, version);
         Path pluginDir = root.resolve("plugins").resolve(pluginId);
-        String jarFileName = pluginId + "-" + version + ".jar";
-        writePluginFiles(pluginDir, jarFileName, content, registration, request, version);
-        updateRepositoryPluginIndex(root, repository, pluginId, registration, request, version);
+        writePluginFiles(pluginDir, pluginId, displayName, artifact, request, version);
+        updateRepositoryPluginIndex(root, repository, pluginId, displayName, request, version);
 
         if ("GIT".equals(repository.getType())) {
             commitAndPush(repository, pluginId, version, request.releaseNotes());
@@ -670,20 +697,26 @@ public class RepositoryCatalogService {
             throw new RepositoryPluginConflictException(pluginId, conflicts);
         }
 
-        byte[] content = readRepositoryBytes(getRepository(repositoryId), Path.of(descriptor.resolvedArtifactPath()));
-        verifySha256(pluginId, content, detail.plugin().sha256());
+        RepositoryDefinition repository = getRepository(repositoryId);
+        PluginArtifactRef artifactRef = validatePluginArtifactRef(detail.plugin().artifact(), true);
+        PluginArtifact artifact = pluginArtifactResolverRegistry.resolve(
+                artifactRef,
+                new PluginArtifactContext(repository, detail, resolveRepositoryRoot(repository))
+        );
+        verifySha256(pluginId, artifact.content(), artifactRef.sha256());
+        verifySize(pluginId, artifact.content(), artifactRef.size());
         PluginView plugin = existing == null
                 ? pluginRuntimeService.installFromRepository(
-                artifactFileName(detail.plugin().artifactPath(), pluginId, descriptor.version()),
-                content,
+                artifact.fileName(),
+                artifact.content(),
                 repositoryId,
                 pluginId,
                 descriptor.version()
         )
                 : pluginRuntimeService.upgradeFromRepository(
                 pluginId,
-                artifactFileName(detail.plugin().artifactPath(), pluginId, descriptor.version()),
-                content,
+                artifact.fileName(),
+                artifact.content(),
                 repositoryId,
                 pluginId,
                 descriptor.version()
@@ -806,12 +839,22 @@ public class RepositoryCatalogService {
     }
 
     private void verifySha256(String pluginId, byte[] content, String expected) {
-        if (expected == null || expected.isBlank()) {
-            return;
-        }
+        normalize(expected, "插件 artifact.sha256 不能为空");
         String actual = sha256(content);
         if (!actual.equalsIgnoreCase(expected.trim())) {
             throw new IllegalArgumentException("插件校验失败: " + pluginId);
+        }
+    }
+
+    private void verifySize(String pluginId, byte[] content, Long expected) {
+        if (expected == null) {
+            return;
+        }
+        if (expected < 0) {
+            throw new IllegalArgumentException("插件 artifact.size 不能为负数: " + pluginId);
+        }
+        if (content.length != expected) {
+            throw new IllegalArgumentException("插件大小校验失败: " + pluginId);
         }
     }
 
@@ -821,13 +864,6 @@ public class RepositoryCatalogService {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("当前 JRE 不支持 SHA-256", exception);
         }
-    }
-
-    private String artifactFileName(String artifactPath, String pluginId, String version) {
-        if (artifactPath != null && !artifactPath.isBlank()) {
-            return Path.of(artifactPath).getFileName().toString();
-        }
-        return pluginId + "-" + version + ".jar";
     }
 
     private void syncConfigTemplates(String repositoryId, String toolId, List<ConfigTemplateItem> templates) {
@@ -917,25 +953,23 @@ public class RepositoryCatalogService {
     }
 
     private void writePluginFiles(Path pluginDir,
-                                  String jarFileName,
-                                  byte[] content,
-                                  PluginRegistration registration,
+                                  String pluginId,
+                                  String displayName,
+                                  PluginArtifactRef artifact,
                                   RepositoryPluginPublishRequest request,
                                   String version) {
         try {
             Files.createDirectories(pluginDir);
-            Files.write(pluginDir.resolve(jarFileName), content);
             writeJson(pluginDir.resolve("plugin.json"), new PluginFile(
                     1,
-                    registration.getPluginId(),
-                    normalizeOrDefault(request.displayName(), registration.getName()),
+                    pluginId,
+                    displayName,
                     version,
-                    normalizeNullable(registration.getDescription()),
+                    normalizeNullable(request.description()),
                     normalizeNullable(request.releaseNotes()),
                     normalizeNullable(request.owner()),
                     request.tags() == null ? List.of() : request.tags(),
-                    jarFileName,
-                    sha256(content),
+                    artifact,
                     normalizeNullable(request.riskLevel())
             ));
         } catch (IOException exception) {
@@ -1044,6 +1078,93 @@ public class RepositoryCatalogService {
         return templates;
     }
 
+    private PluginArtifactRef completePluginArtifactRef(String pluginId,
+                                                        PluginArtifactRef artifact,
+                                                        RepositoryDefinition repository,
+                                                        Path repositoryRoot) {
+        PluginArtifactRef requested = validatePluginArtifactRef(artifact, false);
+        ensureLocalPublishArtifactPresent(pluginId, requested, repository, repositoryRoot);
+        PluginArtifact resolved = pluginArtifactResolverRegistry.resolve(
+                requested,
+                new PluginArtifactContext(repository, null, repositoryRoot)
+        );
+        if (requested.sha256() != null) {
+            verifySha256(pluginId, resolved.content(), requested.sha256());
+        }
+        verifySize(pluginId, resolved.content(), requested.size());
+        return new PluginArtifactRef(
+                requested.uri(),
+                requested.sha256() == null ? sha256(resolved.content()) : requested.sha256(),
+                requested.fileName() == null ? resolved.fileName() : requested.fileName(),
+                requested.size() == null ? (long) resolved.content().length : requested.size()
+        );
+    }
+
+    private void ensureLocalPublishArtifactPresent(String pluginId,
+                                                   PluginArtifactRef artifact,
+                                                   RepositoryDefinition repository,
+                                                   Path repositoryRoot) {
+        URI uri = URI.create(artifact.uri());
+        if (!"local".equalsIgnoreCase(uri.getScheme()) || "HTTP".equals(repository.getType())) {
+            return;
+        }
+        Path target = resolveLocalArtifactPath(repositoryRoot, uri);
+        if (Files.exists(target)) {
+            return;
+        }
+        try {
+            Files.createDirectories(target.getParent());
+            Files.write(target, pluginRuntimeService.readPluginFile(pluginId));
+        } catch (IOException exception) {
+            throw new IllegalStateException("写入本地插件 JAR 失败: " + artifact.uri(), exception);
+        }
+    }
+
+    private Path resolveLocalArtifactPath(Path repositoryRoot, URI uri) {
+        String relativePath = uri.getSchemeSpecificPart();
+        if (relativePath != null && relativePath.startsWith("//")) {
+            relativePath = relativePath.substring(2);
+        }
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("local artifact 路径不能为空");
+        }
+        if (relativePath.contains("..")) {
+            throw new IllegalArgumentException("local artifact 不允许包含 ..");
+        }
+        if (relativePath.matches("^[A-Za-z]:[\\\\/].*")) {
+            throw new IllegalArgumentException("local artifact 不允许使用绝对路径");
+        }
+        Path parsed = Path.of(relativePath);
+        if (parsed.isAbsolute()) {
+            throw new IllegalArgumentException("local artifact 不允许使用绝对路径");
+        }
+        Path normalizedRoot = repositoryRoot.toAbsolutePath().normalize();
+        Path target = normalizedRoot.resolve(parsed).normalize();
+        if (!target.startsWith(normalizedRoot)) {
+            throw new IllegalArgumentException("local artifact 越界访问被拒绝");
+        }
+        return target;
+    }
+
+    private PluginArtifactRef validatePluginArtifactRef(PluginArtifactRef artifact, boolean requireSha256) {
+        if (artifact == null) {
+            throw new IllegalArgumentException("插件 artifact 不能为空");
+        }
+        String uri = normalize(artifact.uri(), "插件 artifact.uri 不能为空");
+        String sha256 = requireSha256
+                ? normalize(artifact.sha256(), "插件 artifact.sha256 不能为空")
+                : normalizeNullable(artifact.sha256());
+        if (artifact.size() != null && artifact.size() < 0) {
+            throw new IllegalArgumentException("插件 artifact.size 不能为负数");
+        }
+        return new PluginArtifactRef(
+                uri,
+                sha256,
+                normalizeNullable(artifact.fileName()),
+                artifact.size()
+        );
+    }
+
     private List<ScheduleTemplateItem> buildScheduleTemplate(RepositoryPublishRequest request) {
         List<ScheduleTemplateItem> templates = new ArrayList<>();
         List<String> targetIds = request.scheduleIds() == null ? List.of() : request.scheduleIds();
@@ -1088,7 +1209,7 @@ public class RepositoryCatalogService {
     private void updateRepositoryPluginIndex(Path root,
                                              RepositoryDefinition repository,
                                              String pluginId,
-                                             PluginRegistration registration,
+                                             String displayName,
                                              RepositoryPluginPublishRequest request,
                                              String version) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
@@ -1097,9 +1218,9 @@ public class RepositoryCatalogService {
         List<RepositoryPluginIndexEntry> entries = new ArrayList<>(safePlugins(current));
         RepositoryPluginIndexEntry next = new RepositoryPluginIndexEntry(
                 pluginId,
-                normalizeOrDefault(request.displayName(), registration.getName()),
+                displayName,
                 version,
-                normalizeNullable(registration.getDescription()),
+                normalizeNullable(request.description()),
                 normalizeNullable(request.releaseNotes()),
                 "plugins/" + pluginId + "/plugin.json"
         );
@@ -1238,9 +1359,7 @@ public class RepositoryCatalogService {
                 plugin.releaseNotes(),
                 plugin.owner(),
                 plugin.tags() == null ? List.of() : plugin.tags(),
-                plugin.artifactPath(),
-                resolveRelative(pluginPath, plugin.artifactPath()),
-                plugin.sha256(),
+                plugin.artifact(),
                 plugin.riskLevel(),
                 registration != null,
                 registration == null ? null : registration.getVersion(),
@@ -1618,9 +1737,7 @@ public class RepositoryCatalogService {
             String releaseNotes,
             String owner,
             List<String> tags,
-            String artifactPath,
-            String resolvedArtifactPath,
-            String sha256,
+            PluginArtifactRef artifact,
             String riskLevel,
             boolean installed,
             String installedVersion,
@@ -1641,9 +1758,11 @@ public class RepositoryCatalogService {
             String displayName,
             String version,
             String owner,
+            String description,
             String releaseNotes,
             List<String> tags,
-            String riskLevel
+            String riskLevel,
+            PluginArtifactRef artifact
     ) {
     }
 
@@ -1714,8 +1833,7 @@ public class RepositoryCatalogService {
                              String releaseNotes,
                              String owner,
                              List<String> tags,
-                             String artifactPath,
-                             String sha256,
+                             PluginArtifactRef artifact,
                              String riskLevel) {
     }
 

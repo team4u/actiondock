@@ -1,0 +1,38 @@
+package org.team4u.actiondock.repository;
+
+import java.net.URI;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+public class PluginArtifactResolverRegistry {
+    private final Map<String, PluginArtifactResolver> resolversByScheme;
+
+    public PluginArtifactResolverRegistry(List<PluginArtifactResolver> resolvers) {
+        this.resolversByScheme = new HashMap<>();
+        for (PluginArtifactResolver resolver : resolvers == null ? List.<PluginArtifactResolver>of() : resolvers) {
+            for (String scheme : resolver.supportedSchemes()) {
+                if (scheme != null && !scheme.isBlank()) {
+                    resolversByScheme.put(scheme.toLowerCase(Locale.ROOT), resolver);
+                }
+            }
+        }
+    }
+
+    public PluginArtifact resolve(PluginArtifactRef artifact, PluginArtifactContext context) {
+        if (artifact == null || artifact.uri() == null || artifact.uri().isBlank()) {
+            throw new IllegalArgumentException("插件 artifact.uri 不能为空");
+        }
+        URI uri = URI.create(artifact.uri());
+        String scheme = uri.getScheme();
+        if (scheme == null || scheme.isBlank()) {
+            throw new IllegalArgumentException("插件 artifact.uri 缺少协议: " + artifact.uri());
+        }
+        PluginArtifactResolver resolver = resolversByScheme.get(scheme.toLowerCase(Locale.ROOT));
+        if (resolver == null) {
+            throw new IllegalArgumentException("不支持的插件 artifact 协议: " + scheme);
+        }
+        return resolver.resolve(artifact, context);
+    }
+}

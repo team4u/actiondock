@@ -11,10 +11,11 @@ import {
   Button,
   Card,
   Col,
+  Drawer,
   Empty,
   Form,
   Input,
-  Modal,
+  InputNumber,
   Popconfirm,
   Row,
   Select,
@@ -80,9 +81,14 @@ interface PublishPluginFormValues {
   displayName: string;
   version: string;
   owner?: string;
+  description?: string;
   releaseNotes?: string;
   tags?: string[];
   riskLevel?: string;
+  artifactUri: string;
+  artifactSha256: string;
+  artifactFileName?: string;
+  artifactSize?: number | string;
 }
 
 function getActionLabel(action: PluginAction): string {
@@ -416,9 +422,14 @@ export function PluginDetailPage() {
         displayName: plugin.name || plugin.pluginId,
         version: plugin.version,
         owner: "",
+        description: plugin.description || "",
         releaseNotes: "",
         tags: [],
-        riskLevel: "LOW"
+        riskLevel: "LOW",
+        artifactUri: `local://plugins/${plugin.pluginId}/${plugin.pluginId}-${plugin.version}.jar`,
+        artifactSha256: "",
+        artifactFileName: `${plugin.pluginId}-${plugin.version}.jar`,
+        artifactSize: undefined
       });
       setPublishModalOpen(true);
     } catch (error) {
@@ -440,9 +451,18 @@ export function PluginDetailPage() {
         displayName: values.displayName.trim(),
         version: values.version.trim(),
         owner: values.owner?.trim() || undefined,
+        description: values.description?.trim() || undefined,
         releaseNotes: values.releaseNotes?.trim() || undefined,
         tags: values.tags ?? [],
-        riskLevel: values.riskLevel || undefined
+        riskLevel: values.riskLevel || undefined,
+        artifact: {
+          uri: values.artifactUri.trim(),
+          sha256: values.artifactSha256?.trim() || undefined,
+          fileName: values.artifactFileName?.trim() || undefined,
+          size: values.artifactSize === undefined || values.artifactSize === null || values.artifactSize === ""
+            ? undefined
+            : Number(values.artifactSize)
+        }
       });
       setPublishModalOpen(false);
       messageApi.success("插件已发布到仓库");
@@ -808,19 +828,24 @@ export function PluginDetailPage() {
           />
         </Card>
       </Space>
-      <Modal
+      <Drawer
         title={plugin ? `发布插件：${plugin.pluginId}` : "发布插件"}
         open={publishModalOpen}
-        onCancel={() => setPublishModalOpen(false)}
-        onOk={() => void handlePublishPlugin()}
-        okText="发布"
-        cancelText="取消"
-        confirmLoading={publishingPlugin}
+        onClose={() => setPublishModalOpen(false)}
+        width={600}
         destroyOnHidden
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button onClick={() => setPublishModalOpen(false)}>取消</Button>
+            <Button type="primary" loading={publishingPlugin} onClick={() => void handlePublishPlugin()}>
+              发布
+            </Button>
+          </div>
+        }
       >
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
           <Text type="secondary">
-            发布会把当前已安装插件的 JAR 写入目标仓库，并更新仓库索引。插件说明来自插件 manifest；这里填写的是本次版本发布日志。
+            发布会写入插件元数据和制品引用，并更新仓库索引。local:// 指向仓库内 JAR；目标文件不存在时会从当前已安装插件复制。SHA-256 留空时会自动计算。
           </Text>
           <Form form={publishForm} layout="vertical">
             <Form.Item
@@ -867,6 +892,55 @@ export function PluginDetailPage() {
                 />
               </Form.Item>
             </Space>
+            <Form.Item label="插件说明" name="description">
+              <Input.TextArea
+                autoSize={{ minRows: 3, maxRows: 8 }}
+                placeholder="插件自身说明，支持 Markdown 语法"
+              />
+            </Form.Item>
+            <Form.Item
+              label="插件包 URI"
+              name="artifactUri"
+              extra="用于定位插件 JAR。local:// 表示当前仓库内的 JAR 文件；http/https 表示安装时远程下载。"
+              rules={[
+                { required: true, message: "请输入插件包 URI" },
+                {
+                  validator: (_, value: string) => {
+                    const text = value?.trim() ?? "";
+                    return /^(local|https?):\/\/.+/.test(text)
+                      ? Promise.resolve()
+                      : Promise.reject(new Error("仅支持 local://、http://、https://"));
+                  }
+                }
+              ]}
+            >
+              <Input placeholder="local://plugins/demo-plugin/demo-plugin-1.0.0.jar" />
+            </Form.Item>
+            <Form.Item
+              label="SHA-256"
+              name="artifactSha256"
+              extra="可留空，发布时会根据插件包 URI 自动计算。填写后会按该值校验插件包。"
+              rules={[
+                {
+                  validator: (_, value: string) => {
+                    const text = value?.trim() ?? "";
+                    return text === "" || /^[a-fA-F0-9]{64}$/.test(text)
+                      ? Promise.resolve()
+                      : Promise.reject(new Error("SHA-256 必须是 64 位十六进制字符串"));
+                  }
+                }
+              ]}
+            >
+              <Input placeholder="留空自动计算" />
+            </Form.Item>
+            <Space size={12} style={{ width: "100%" }} wrap>
+              <Form.Item label="文件名" name="artifactFileName" style={{ flex: "1 1 260px", minWidth: 220 }}>
+                <Input placeholder="demo-plugin-1.0.0.jar" />
+              </Form.Item>
+              <Form.Item label="大小（字节）" name="artifactSize" style={{ flex: "1 1 180px", minWidth: 180 }}>
+                <InputNumber min={0} precision={0} style={{ width: "100%" }} />
+              </Form.Item>
+            </Space>
             <Form.Item label="标签" name="tags">
               <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" />
             </Form.Item>
@@ -878,7 +952,7 @@ export function PluginDetailPage() {
             </Form.Item>
           </Form>
         </Space>
-      </Modal>
+      </Drawer>
     </>
   );
 }

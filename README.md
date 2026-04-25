@@ -328,13 +328,23 @@ repository-root/
   "version": "0.2.0",
   "owner": "team4u",
   "tags": ["example"],
-  "artifactPath": "actiondock-demo-plugin-0.2.0.jar",
-  "sha256": "可选的 JAR SHA-256",
+  "artifact": {
+    "uri": "local://plugins/actiondock-demo-plugin/actiondock-demo-plugin-0.2.0.jar",
+    "sha256": "发布时可自动计算的 JAR SHA-256",
+    "fileName": "actiondock-demo-plugin-0.2.0.jar",
+    "size": 18374231
+  },
   "riskLevel": "LOW"
 }
 ```
 
-仓库插件的 `description` 来自插件 manifest，是插件自身说明；`releaseNotes` 是发布插件时填写的当前版本发布日志。两者都支持 Markdown/GFM；列表中保持紧凑摘要，详情和参考视图展示格式化内容。
+仓库插件的 `description` 是插件自身说明；`releaseNotes` 是发布插件时填写的当前版本发布日志。两者都支持 Markdown/GFM；列表中保持紧凑摘要，详情和参考视图展示格式化内容。
+
+`artifact.uri` 用于统一定位插件 JAR。当前支持：
+- `local://`：当前仓库目录下的相对文件，例如 `local://plugins/demo-plugin/demo-plugin-1.0.0.jar`
+- `http://` / `https://`：安装时远程下载，例如 `https://artifacts.company.com/actiondock/demo-plugin-1.0.0.jar`
+
+`local://` 不支持任意系统绝对路径，只能指向仓库内文件；`local:///tmp/demo.jar`、`local://C:/demo.jar`、`file:///tmp/demo.jar`、`/opt/demo.jar` 都会被拒绝。发布时如果 `local://` 目标文件不存在，服务端会从当前已安装插件复制 JAR 到该仓库路径；如果未提供 `sha256`，服务端会根据 `artifact.uri` 解析插件包并自动计算，同时补齐缺失的 `fileName` 和 `size`。安装前会强制校验 `sha256`，提供 `size` 时也会校验字节数。
 
 仓库插件按 `pluginId` 全局安装一次，多个仓库工具共享同一个插件实例。工具通过 `pluginDependencies` 显式声明依赖；安装工具时可以同时安装或更新缺失的插件依赖。平台默认阻止会破坏其他已安装工具版本约束的插件升级，管理员可在管理台或 CLI 中使用强制覆盖。
 
@@ -351,7 +361,7 @@ repository-root/
 
 ### 发布插件到仓库
 
-插件管理页可以将本机已安装插件发布到 `LOCAL_DIR` 或 `GIT` 仓库。发布会复制当前插件 JAR 到 `plugins/{pluginId}/`，生成 `plugin.json`，并更新仓库索引；Git 仓库会自动提交并推送。
+插件管理页可以将插件制品引用发布到 `LOCAL_DIR` 或 `GIT` 仓库。发布会写入 `plugins/{pluginId}/plugin.json` 并更新仓库索引；Git 仓库会自动提交并推送。是否把 JAR 放进仓库由 `artifact.uri` 决定：`local://` 指向仓库内 JAR，目标文件不存在时会从当前已安装插件复制；`http://` / `https://` 则在安装时远程下载。
 
 同一仓库内，`pluginId + version` 必须唯一。相同插件版本已经存在时会拒绝发布；如需发布新的插件内容，请先升级插件包版本。
 

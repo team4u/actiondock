@@ -1,8 +1,14 @@
 package org.team4u.actiondock.repository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.team4u.actiondock.domain.model.RepositoryDefinition;
 
+import java.net.InetSocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -12,6 +18,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RepositoryCatalogServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void extractsLiteralPluginDependenciesFromGroovySource() {
@@ -69,8 +78,7 @@ class RepositoryCatalogServiceTest {
                 "Initial release",
                 "team",
                 List.of("demo"),
-                "demo-plugin.jar",
-                "sha",
+                new PluginArtifactRef("local://plugins/demo-plugin/demo-plugin.jar", "sha", "demo-plugin.jar", 123L),
                 "LOW"
         );
 
@@ -78,6 +86,8 @@ class RepositoryCatalogServiceTest {
 
         assertThat(pluginJson).contains("\"description\":\"Plugin docs\"");
         assertThat(pluginJson).contains("\"releaseNotes\":\"Initial release\"");
+        assertThat(pluginJson).contains("\"artifact\"");
+        assertThat(pluginJson).contains("\"uri\":\"local://plugins/demo-plugin/demo-plugin.jar\"");
     }
 
     @Test
@@ -206,5 +216,113 @@ class RepositoryCatalogServiceTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> RepositoryCatalogService.assertPluginVersionAvailable("repo-1", index, "other-plugin", "1.0.0"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void localArtifactResolverReadsRepositoryRelativeJar() throws Exception {
+        Path jar = tempDir.resolve("plugins/demo-plugin/demo-plugin-1.0.0.jar");
+        Files.createDirectories(jar.getParent());
+        Files.write(jar, new byte[]{1, 2, 3});
+
+        PluginArtifact artifact = new LocalPluginArtifactResolver().resolve(
+                new PluginArtifactRef("local://plugins/demo-plugin/demo-plugin-1.0.0.jar", "sha", null, null),
+                new PluginArtifactContext(localRepository(), null, tempDir)
+        );
+
+        assertThat(artifact.fileName()).isEqualTo("demo-plugin-1.0.0.jar");
+        assertThat(artifact.content()).containsExactly(1, 2, 3);
+    }
+
+    @Test
+    void localArtifactResolverRejectsUnsafePaths() {
+        LocalPluginArtifactResolver resolver = new LocalPluginArtifactResolver();
+        PluginArtifactContext context = new PluginArtifactContext(localRepository(), null, tempDir);
+
+        assertThatThrownBy(() -> resolver.resolve(new PluginArtifactRef("local:///tmp/demo.jar", "sha", null, null), context))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("绝对路径");
+        assertThatThrownBy(() -> resolver.resolve(new PluginArtifactRef("local://plugins/../demo.jar", "sha", null, null), context))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("..");
+        assertThatThrownBy(() -> resolver.resolve(new PluginArtifactRef("local://C:/demo.jar", "sha", null, null), context))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("绝对路径");
+    }
+
+    @Test
+    void localArtifactResolverRejectsSymlinkEscapes() throws Exception {
+        Path outside = Files.createTempFile("actiondock-outside", ".jar");
+        Path link = tempDir.resolve("plugins/demo-plugin/outside.jar");
+        Files.createDirectories(link.getParent());
+        Files.createSymbolicLink(link, outside);
+
+        assertThatThrownBy(() -> new LocalPluginArtifactResolver().resolve(
+                new PluginArtifactRef("local://plugins/demo-plugin/outside.jar", "sha", null, null),
+                new PluginArtifactContext(localRepository(), null, tempDir)
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("越界");
+    }
+
+    @Test
+    void localArtifactResolverRejectsHttpRepository() {
+        RepositoryDefinition repository = new RepositoryDefinition().setId("http-repo").setType("HTTP").setUrl("https://example.com/repo");
+
+        assertThatThrownBy(() -> new LocalPluginArtifactResolver().resolve(
+                new PluginArtifactRef("local://plugins/demo.jar", "sha", null, null),
+                new PluginArtifactContext(repository, null, tempDir)
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("HTTP 仓库不支持");
+    }
+
+    @Test
+    void httpArtifactResolverDownloadsBytesAndDerivesFileName() throws Exception {
+        HttpServer server = startHttpServer(200, new byte[]{4, 5, 6});
+        try {
+            String uri = "http://127.0.0.1:" + server.getAddress().getPort() + "/artifacts/demo.jar";
+
+            PluginArtifact artifact = new HttpPluginArtifactResolver().resolve(
+                    new PluginArtifactRef(uri, "sha", null, null),
+                    new PluginArtifactContext(localRepository(), null, tempDir)
+            );
+
+            assertThat(artifact.fileName()).isEqualTo("demo.jar");
+            assertThat(artifact.content()).containsExactly(4, 5, 6);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void httpArtifactResolverRejectsFailedDownloads() throws Exception {
+        HttpServer server = startHttpServer(404, new byte[]{});
+        try {
+            String uri = "http://127.0.0.1:" + server.getAddress().getPort() + "/missing.jar";
+
+            assertThatThrownBy(() -> new HttpPluginArtifactResolver().resolve(
+                    new PluginArtifactRef(uri, "sha", null, null),
+                    new PluginArtifactContext(localRepository(), null, tempDir)
+            ))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("HTTP 状态码: 404");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private RepositoryDefinition localRepository() {
+        return new RepositoryDefinition().setId("repo-1").setType("LOCAL_DIR").setUrl(tempDir.toString());
+    }
+
+    private HttpServer startHttpServer(int status, byte[] body) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(status, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        return server;
     }
 }
