@@ -1,7 +1,6 @@
 export const ROUTES = {
   DISCOVER: "/discover",
-  INSTALLED: "/installed",
-  MY_TOOLS: "/my-tools",
+  TOOLS: "/tools",
   REPOSITORIES: "/repositories",
   SCRIPTS: "/scripts",
   SCRIPT_NEW: "/scripts/new",

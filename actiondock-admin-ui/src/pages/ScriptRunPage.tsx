@@ -112,7 +112,7 @@ export function ScriptRunPage() {
   );
   const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
   const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
-  const backPath = script?.scope === "REPOSITORY" ? "/installed" : "/my-tools";
+  const backPath = "/tools";
 
   useEffect(() => {
     if (!id) {

@@ -22,11 +22,8 @@ const { useBreakpoint } = Grid;
 const RepositoryDiscoveryPage = lazy(() =>
   import("./pages/RepositoryDiscoveryPage").then((module) => ({ default: module.RepositoryDiscoveryPage }))
 );
-const InstalledToolsPage = lazy(() =>
-  import("./pages/InstalledToolsPage").then((module) => ({ default: module.InstalledToolsPage }))
-);
-const MyToolsPage = lazy(() =>
-  import("./pages/MyToolsPage").then((module) => ({ default: module.MyToolsPage }))
+const ToolLibraryPage = lazy(() =>
+  import("./pages/ToolLibraryPage").then((module) => ({ default: module.ToolLibraryPage }))
 );
 const RepositoryManagementPage = lazy(() =>
   import("./pages/RepositoryManagementPage").then((module) => ({ default: module.RepositoryManagementPage }))
@@ -94,18 +91,16 @@ function AdminShell() {
         ? "config-values"
         : location.pathname.startsWith("/repositories")
           ? "repositories"
-          : location.pathname.startsWith("/installed")
-            ? "installed"
-            : location.pathname.startsWith("/discover")
-              ? "discover"
-              : location.pathname.startsWith("/my-tools") || location.pathname.startsWith("/scripts")
-                ? "my-tools"
-                : "";
+          : location.pathname.startsWith("/discover")
+            ? "discover"
+            : location.pathname.startsWith("/tools") || location.pathname.startsWith("/scripts")
+              ? "tools"
+              : "";
   const title =
     selectedNavKey === "discover"
       ? "发现工具"
-      : selectedNavKey === "installed"
-        ? "已安装工具"
+      : selectedNavKey === "tools"
+        ? "工具库"
         : selectedNavKey === "repositories"
           ? "工具仓库"
           : selectedNavKey === "plugins"
@@ -114,7 +109,7 @@ function AdminShell() {
         ? "定时任务"
         : selectedNavKey === "config-values"
           ? "本机配置"
-          : "我的工具";
+          : "工具库";
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
 
@@ -136,14 +131,9 @@ function AdminShell() {
             onClick: () => navigate("/discover")
           },
           {
-            key: "installed",
-            label: "已安装",
-            onClick: () => navigate("/installed")
-          },
-          {
-            key: "my-tools",
-            label: "我的工具",
-            onClick: () => navigate("/my-tools")
+            key: "tools",
+            label: "工具库",
+            onClick: () => navigate("/tools")
           },
           {
             key: "repositories",
@@ -205,10 +195,9 @@ function AdminShell() {
             <Routes>
               <Route path="/" element={<Navigate to="/discover" replace />} />
               <Route path="/discover" element={<RepositoryDiscoveryPage />} />
-              <Route path="/installed" element={<InstalledToolsPage />} />
-              <Route path="/my-tools" element={<MyToolsPage />} />
+              <Route path="/tools" element={<ToolLibraryPage />} />
               <Route path="/repositories" element={<RepositoryManagementPage />} />
-              <Route path="/scripts" element={<Navigate to="/my-tools" replace />} />
+              <Route path="/scripts" element={<Navigate to="/tools" replace />} />
               <Route path="/schedules" element={<ScheduleManagementPage />} />
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />

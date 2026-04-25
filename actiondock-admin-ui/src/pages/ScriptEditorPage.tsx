@@ -909,7 +909,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       clearPolling();
       await deleteScript(currentScript.id);
       messageApi.success("删除成功");
-      navigate("/my-tools", { replace: true });
+      navigate("/tools", { replace: true });
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "删除脚本失败";
       messageApi.error(detail);
@@ -1575,7 +1575,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         )}
       </Modal>
       <Modal
-        title="Fork 到我的工具"
+        title="创建可编辑 Fork"
         open={forkModalOpen}
         onCancel={() => setForkModalOpen(false)}
         onOk={() => void handleForkRepositoryScript()}
@@ -1771,7 +1771,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   type="link"
                   icon={<ArrowLeftOutlined />}
                   style={{ paddingInline: 0 }}
-                  onClick={() => navigate(currentScript?.scope === "REPOSITORY" ? "/installed" : "/my-tools")}
+                  onClick={() => navigate("/tools")}
                 >
                   返回工具列表
                 </Button>
@@ -1790,7 +1790,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               <Space className="page-card-actions script-editor-page__header-actions" wrap>
                 {headerActionModel.showForkOnly && currentScript?.scope === "REPOSITORY" ? (
                   <Button icon={<ForkOutlined />} type="primary" onClick={openForkModal} loading={forkingRepositoryTool}>
-                    Fork 到我的工具
+                    创建 Fork
                   </Button>
                 ) : (
                   <>
@@ -1849,7 +1849,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             type="warning"
             showIcon
             message="当前是仓库安装的只读工具"
-            description="你可以直接运行和查看契约，但不能原地修改。需要调整实现时，请先 Fork 到“我的工具”，或重新发布到某个仓库。"
+            description="你可以直接运行和查看契约，但不能原地修改。需要调整实现时，请先创建 Fork，或重新发布到某个仓库。"
           />
         ) : null}
 
@@ -1882,7 +1882,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               <Descriptions.Item label="来源">
                 <Space size={8} wrap>
                   <Tag color={currentScript.scope === "REPOSITORY" ? "blue" : currentScript.scope === "FORK" ? "cyan" : "green"}>
-                    {currentScript.scope === "REPOSITORY" ? "仓库工具" : currentScript.scope === "FORK" ? "Fork 工具" : "我的工具"}
+                    {currentScript.scope === "REPOSITORY" ? "仓库工具" : currentScript.scope === "FORK" ? "Fork 工具" : "本机工具"}
                   </Tag>
                   {isReadOnlyScript ? <Tag color="gold">只读</Tag> : <Tag color="green">可编辑</Tag>}
                 </Space>
