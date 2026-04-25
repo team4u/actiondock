@@ -18,6 +18,7 @@ import {
   upgradePlugin,
   uninstallPlugin
 } from "../api";
+import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
 import type { PluginView } from "../types";
@@ -225,38 +226,38 @@ export function PluginManagementPage() {
           void handlePluginUpload(file);
         }}
       />
-      <Card title="插件管理">
-        <div className="script-list-toolbar">
-          <Space direction="vertical" size={2} className="script-list-toolbar__meta">
-            <Text type="secondary">共 {plugins.length} 个插件</Text>
-            <Text type="secondary">已启动 {plugins.filter((item) => item.started).length} 个</Text>
-          </Space>
-          <Space wrap className="script-list-toolbar__actions">
-            <Button icon={<ReloadOutlined />} onClick={() => void loadPlugins()} loading={loading}>
-              刷新
-            </Button>
-            <Button
-              type="primary"
-              icon={<UploadOutlined />}
-              onClick={() => {
-                setPendingUploadPluginId(null);
-                fileInputRef.current?.click();
-              }}
-              loading={uploading}
-            >
-              上传安装
-            </Button>
-          </Space>
-        </div>
-        <Table
-          rowKey="pluginId"
-          loading={loading || uploading}
-          columns={columns}
-          dataSource={plugins}
-          pagination={{ pageSize: 10, responsive: true }}
-          scroll={{ x: 980 }}
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <PageHeader
+          actions={
+            <>
+              <Button icon={<ReloadOutlined />} onClick={() => void loadPlugins()} loading={loading}>
+                刷新
+              </Button>
+              <Button
+                type="primary"
+                icon={<UploadOutlined />}
+                onClick={() => {
+                  setPendingUploadPluginId(null);
+                  fileInputRef.current?.click();
+                }}
+                loading={uploading}
+              >
+                上传安装
+              </Button>
+            </>
+          }
         />
-      </Card>
+        <Card>
+          <Table
+            rowKey="pluginId"
+            loading={loading || uploading}
+            columns={columns}
+            dataSource={plugins}
+            pagination={{ pageSize: 10, responsive: true }}
+            scroll={{ x: 980 }}
+          />
+        </Card>
+      </Space>
     </>
   );
 }

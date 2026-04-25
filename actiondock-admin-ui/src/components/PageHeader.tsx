@@ -1,8 +1,6 @@
 import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Typography } from "antd";
+import { Button, Col, Row, Space } from "antd";
 import type { ReactNode } from "react";
-
-const { Title } = Typography;
 
 export interface PageHeaderProps {
   title: string;
@@ -12,36 +10,28 @@ export interface PageHeaderProps {
   actions?: ReactNode;
 }
 
-export function PageHeader({ title, onBack, backLabel = "返回列表", meta, actions }: PageHeaderProps) {
+export function PageHeader({ onBack, backLabel = "返回列表", actions }: PageHeaderProps) {
   return (
-    <Card>
-      <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
+    <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
+      <Col>
+        {onBack ? (
+          <Button
+            type="link"
+            icon={<ArrowLeftOutlined />}
+            style={{ paddingInline: 0 }}
+            onClick={onBack}
+          >
+            {backLabel}
+          </Button>
+        ) : null}
+      </Col>
+      {actions ? (
         <Col>
-          <Space direction="vertical" size={2}>
-            {onBack ? (
-              <Button
-                type="link"
-                icon={<ArrowLeftOutlined />}
-                style={{ paddingInline: 0 }}
-                onClick={onBack}
-              >
-                {backLabel}
-              </Button>
-            ) : null}
-            <Title level={4} style={{ margin: 0 }}>
-              {title}
-            </Title>
-            {meta}
+          <Space className="page-card-actions" wrap>
+            {actions}
           </Space>
         </Col>
-        {actions ? (
-          <Col>
-            <Space className="page-card-actions" wrap>
-              {actions}
-            </Space>
-          </Col>
-        ) : null}
-      </Row>
-    </Card>
+      ) : null}
+    </Row>
   );
 }

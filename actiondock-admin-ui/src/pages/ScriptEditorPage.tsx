@@ -74,6 +74,7 @@ import { InfoHint } from "../components/InfoHint";
 import { JsonPreview } from "../components/JsonPreview";
 import { SchemaFieldList } from "../components/SchemaFieldList";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
+import { ScopeTag } from "../components/ScopeTag";
 import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
@@ -1763,31 +1764,19 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         ) : null}
       </Modal>
       <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
-        <Card>
-          <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
-            <Col>
-              <Space direction="vertical" size={2}>
-                <Button
-                  type="link"
-                  icon={<ArrowLeftOutlined />}
-                  style={{ paddingInline: 0 }}
-                  onClick={() => navigate("/tools")}
-                >
-                  返回工具列表
-                </Button>
-                <Typography.Title level={4} style={{ margin: 0 }}>
-                  {mode === "create" ? "新建工具" : currentScript?.name || "工具详情"}
-                </Typography.Title>
-                {currentScript?.description ? <Text type="secondary">{currentScript.description}</Text> : null}
-                {!isReadOnlyScript ? (
-                  <Text type="secondary" className="script-editor-page__header-hint">
-                    发布会自动保存并校验；发布到仓库会在发布后同步导出仓库版本。
-                  </Text>
-                ) : null}
-              </Space>
-            </Col>
-            <Col>
-              <Space className="page-card-actions script-editor-page__header-actions" wrap>
+        <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
+          <Col>
+            <Button
+              type="link"
+              icon={<ArrowLeftOutlined />}
+              style={{ paddingInline: 0 }}
+              onClick={() => navigate("/tools")}
+            >
+              返回工具列表
+            </Button>
+          </Col>
+          <Col>
+            <Space className="page-card-actions script-editor-page__header-actions" wrap>
                 {headerActionModel.showForkOnly && currentScript?.scope === "REPOSITORY" ? (
                   <Button icon={<ForkOutlined />} type="primary" onClick={openForkModal} loading={forkingRepositoryTool}>
                     创建 Fork
@@ -1833,7 +1822,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               </Space>
             </Col>
           </Row>
-        </Card>
 
         {mode === "create" && copiedFromScript ? (
           <Alert
@@ -1841,15 +1829,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             showIcon
             message={`已从 ${copiedFromScript.name || copiedFromScript.id} 复制当前内容`}
             description="已自动生成新的脚本 ID，并预填源码、类型和输入输出结构。保存前请确认脚本 ID 未与现有脚本冲突。"
-          />
-        ) : null}
-
-        {isReadOnlyScript ? (
-          <Alert
-            type="warning"
-            showIcon
-            message="当前是仓库安装的只读工具"
-            description="你可以直接运行和查看契约，但不能原地修改。需要调整实现时，请先创建 Fork，或重新发布到某个仓库。"
           />
         ) : null}
 
@@ -1881,10 +1860,14 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               </Descriptions.Item>
               <Descriptions.Item label="来源">
                 <Space size={8} wrap>
-                  <Tag color={currentScript.scope === "REPOSITORY" ? "blue" : currentScript.scope === "FORK" ? "cyan" : "green"}>
-                    {currentScript.scope === "REPOSITORY" ? "仓库工具" : currentScript.scope === "FORK" ? "Fork 工具" : "本机工具"}
-                  </Tag>
-                  {isReadOnlyScript ? <Tag color="gold">只读</Tag> : <Tag color="green">可编辑</Tag>}
+                  <ScopeTag scope={currentScript.scope} />
+                  {isReadOnlyScript ? (
+                    <Tooltip title="当前是仓库安装的只读工具。你可以直接运行和查看契约，但不能原地修改。需要调整实现时，请先创建 Fork，或重新发布到某个仓库。">
+                      <Tag color="gold">只读</Tag>
+                    </Tooltip>
+                  ) : (
+                    <Tag color="green">可编辑</Tag>
+                  )}
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label="类型">{currentScript.type}</Descriptions.Item>

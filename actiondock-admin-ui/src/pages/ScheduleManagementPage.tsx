@@ -22,6 +22,7 @@ import {
   listSchedules,
   updateSchedule
 } from "../api";
+import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
 import {
@@ -328,53 +329,52 @@ export function ScheduleManagementPage() {
         hidden
         onChange={(event) => void handleImportChange(event)}
       />
-      <Card title="定时任务列表">
-        <div className="script-list-toolbar">
-          <Space direction="vertical" size={2} className="script-list-toolbar__meta">
-            <Text type="secondary">共 {schedules.length} 个定时任务</Text>
-            <Text type="secondary">启用中 {schedules.filter((schedule) => schedule.enabled).length} 个</Text>
-            <Text type="secondary">已选 {selectedScheduleIds.length} 个定时任务</Text>
-          </Space>
-          <Space wrap className="script-list-toolbar__actions">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
-              新建任务
-            </Button>
-            <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
-              导入任务
-            </Button>
-            <Button icon={<DownloadOutlined />} disabled={loading || importing || schedules.length === 0} onClick={handleExportAll}>
-              导出全部
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              type="primary"
-              ghost
-              disabled={loading || importing || selectedScheduleIds.length === 0}
-              onClick={handleExportSelected}
-            >
-              导出选中
-            </Button>
-            <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
-              刷新
-            </Button>
-          </Space>
-        </div>
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <PageHeader
+          actions={
+            <>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
+                新建任务
+              </Button>
+              <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
+                导入任务
+              </Button>
+              <Button icon={<DownloadOutlined />} disabled={loading || importing || schedules.length === 0} onClick={handleExportAll}>
+                导出全部
+              </Button>
+              <Button
+                icon={<DownloadOutlined />}
+                type="primary"
+                ghost
+                disabled={loading || importing || selectedScheduleIds.length === 0}
+                onClick={handleExportSelected}
+              >
+                导出选中
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
+                刷新
+              </Button>
+            </>
+          }
+        />
+        <Card>
 
-        {schedules.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有定时任务" />
-        ) : (
-          <Table
-            rowKey="id"
-            loading={loading || importing}
-            rowSelection={rowSelection}
-            columns={columns}
-            dataSource={schedules}
-            pagination={{ pageSize: 10, responsive: true }}
-            scroll={{ x: 1140 }}
-          />
-        )}
+          {schedules.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有定时任务" />
+          ) : (
+            <Table
+              rowKey="id"
+              loading={loading || importing}
+              rowSelection={rowSelection}
+              columns={columns}
+              dataSource={schedules}
+              pagination={{ pageSize: 10, responsive: true }}
+              scroll={{ x: 1140 }}
+            />
+          )}
 
-      </Card>
+        </Card>
+      </Space>
     </>
   );
 }

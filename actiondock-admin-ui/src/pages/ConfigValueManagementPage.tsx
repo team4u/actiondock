@@ -42,6 +42,7 @@ import {
   formatConfigValueExportFileName,
   parseConfigValueImportBundle
 } from "../scriptTransfer";
+import { PageHeader } from "../components/PageHeader";
 import type { ConfigValue, ConfigValueRequest } from "../types";
 import { copyText, formatDateTime, getErrorMessage } from "../utils";
 
@@ -404,68 +405,58 @@ export function ConfigValueManagementPage() {
         hidden
         onChange={(event) => void handleImportChange(event)}
       />
-      <Card title="配置值管理">
-        <div className="script-list-toolbar">
-          <Space direction="vertical" size={2} className="script-list-toolbar__meta">
-            <Text type="secondary">共 {items.length} 个配置值</Text>
-            <Text type="secondary">已选 {selectedKeys.length} 个配置值</Text>
-            <Space size={8} wrap>
-              <Tag color="blue">字符串值</Tag>
-              <Tag>${"{config.some_key}"}</Tag>
-            </Space>
-          </Space>
-          <Space wrap className="script-list-toolbar__actions">
-            <Input.Search
-              allowClear
-              placeholder="按 key / 说明 / 值搜索"
-              style={{ width: 280 }}
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <PageHeader
+          actions={
+            <>
+              <Input.Search
+                allowClear
+                placeholder="按 key / 说明 / 值搜索"
+                style={{ width: 280 }}
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+              />
+              <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
+                导入配置值
+              </Button>
+              <Button icon={<DownloadOutlined />} disabled={loading || importing || items.length === 0} onClick={handleExportAll}>
+                导出全部
+              </Button>
+              <Button
+                icon={<DownloadOutlined />}
+                type="primary"
+                ghost
+                disabled={loading || importing || selectedKeys.length === 0}
+                onClick={handleExportSelected}
+              >
+                导出选中
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
+                刷新
+              </Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                新建配置值
+              </Button>
+            </>
+          }
+        />
+        <Card>
+
+          {filteredItems.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={items.length === 0 ? "当前没有配置值" : "没有匹配结果"} />
+          ) : (
+            <Table
+              rowKey="key"
+              loading={loading || importing}
+              rowSelection={rowSelection}
+              columns={columns}
+              dataSource={filteredItems}
+              pagination={{ pageSize: 10, responsive: true }}
+              scroll={{ x: 1100 }}
             />
-            <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
-              导入配置值
-            </Button>
-            <Button icon={<DownloadOutlined />} disabled={loading || importing || items.length === 0} onClick={handleExportAll}>
-              导出全部
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              type="primary"
-              ghost
-              disabled={loading || importing || selectedKeys.length === 0}
-              onClick={handleExportSelected}
-            >
-              导出选中
-            </Button>
-            <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
-              刷新
-            </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              新建配置值
-            </Button>
-          </Space>
-        </div>
-
-        <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-          在插件配置、插件调试参数、脚本执行输入和定时任务输入里，可使用
-          <Text code>${"{config.xxx}"}</Text> 引用这里维护的值。脚本运行时也会注入只读
-          <Text code>config</Text> 变量。
-        </Paragraph>
-
-        {filteredItems.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={items.length === 0 ? "当前没有配置值" : "没有匹配结果"} />
-        ) : (
-          <Table
-            rowKey="key"
-            loading={loading || importing}
-            rowSelection={rowSelection}
-            columns={columns}
-            dataSource={filteredItems}
-            pagination={{ pageSize: 10, responsive: true }}
-            scroll={{ x: 1100 }}
-          />
-        )}
-      </Card>
+          )}
+        </Card>
+      </Space>
 
       <Drawer
         title={editorState?.mode === "edit" ? "编辑配置值" : "新建配置值"}

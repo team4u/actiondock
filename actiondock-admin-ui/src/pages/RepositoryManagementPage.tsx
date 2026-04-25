@@ -219,14 +219,6 @@ export function RepositoryManagementPage() {
       render: (value: RepositoryDefinition["trustLevel"]) => getTrustTag(value)
     },
     {
-      title: "分支 / 路径",
-      key: "branch",
-      width: 220,
-      render: (_value: unknown, record) => (
-        <Text type="secondary">{record.type === "GIT" ? record.branch || "main" : record.url}</Text>
-      )
-    },
-    {
       title: "最近同步",
       dataIndex: "lastSyncedAt",
       key: "lastSyncedAt",

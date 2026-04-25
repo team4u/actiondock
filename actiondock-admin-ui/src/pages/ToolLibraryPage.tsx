@@ -38,13 +38,17 @@ import {
   createScript,
   forkRepositoryTool,
   getRepositoryTool,
+  listRepositories,
   listRepositoryTools,
   listScripts,
+  listToolsByRepository,
+  syncRepository,
   uninstallInstalledTool,
   updateRepositoryTool,
   updateScript
 } from "../api";
 import { PageHeader } from "../components/PageHeader";
+import { ScopeTag, getScopeLabel } from "../components/ScopeTag";
 import { TableLinkCell } from "../components/TableLinkCell";
 import {
   analyzeScriptImport,
@@ -67,31 +71,6 @@ interface ForkFormValues {
   name: string;
 }
 
-function getSourceLabel(scope?: ScriptScope): string {
-  switch (scope) {
-    case "REPOSITORY":
-      return "仓库安装";
-    case "FORK":
-      return "Fork";
-    case "SAMPLE":
-      return "示例";
-    default:
-      return "本机";
-  }
-}
-
-function getSourceTag(script: ScriptDefinition) {
-  switch (script.scope) {
-    case "REPOSITORY":
-      return <Tag color="blue">仓库安装</Tag>;
-    case "FORK":
-      return <Tag color="cyan">Fork</Tag>;
-    case "SAMPLE":
-      return <Tag color="purple">示例</Tag>;
-    default:
-      return <Tag color="green">本机</Tag>;
-  }
-}
 
 function isEditableAsset(script: ScriptDefinition): boolean {
   return script.scope !== "REPOSITORY";
@@ -105,6 +84,7 @@ export function ToolLibraryPage() {
   const navigate = useNavigate();
   const [forkForm] = Form.useForm<ForkFormValues>();
   const [loading, setLoading] = useState(true);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
@@ -344,6 +324,9 @@ export function ToolLibraryPage() {
   };
 
   const handleUpdate = async (tool: ScriptDefinition) => {
+    if (bulkUpdating) {
+      return;
+    }
     const descriptor = descriptorMap.get(tool.id);
     if (!descriptor || !tool.repositoryId || !tool.repositoryToolId) {
       messageApi.warning("缺少仓库来源信息，无法更新");
@@ -396,6 +379,71 @@ export function ToolLibraryPage() {
     }
   };
 
+  const handleUpdateAll = async () => {
+    setBulkUpdating(true);
+    setActionKey("update-all");
+    const repositoryFailures: string[] = [];
+    const toolFailures: string[] = [];
+    let updatedCount = 0;
+
+    try {
+      const repositories = await listRepositories();
+      const enabledRepositories = repositories.filter((repository) => repository.enabled);
+      const syncedRepositoryIds: string[] = [];
+
+      for (const repository of enabledRepositories) {
+        try {
+          await syncRepository(repository.id);
+          syncedRepositoryIds.push(repository.id);
+        } catch (error) {
+          repositoryFailures.push(`${repository.alias || repository.id}: ${getErrorMessage(error, "同步失败")}`);
+        }
+      }
+
+      const updateTargets: RepositoryToolDescriptor[] = [];
+      for (const repositoryId of syncedRepositoryIds) {
+        try {
+          const repositoryTools = await listToolsByRepository(repositoryId);
+          updateTargets.push(
+            ...repositoryTools.filter((tool) => tool.installed && tool.updateAvailable)
+          );
+        } catch (error) {
+          repositoryFailures.push(`${repositoryId}: ${getErrorMessage(error, "读取工具失败")}`);
+        }
+      }
+
+      for (const tool of updateTargets) {
+        try {
+          await updateRepositoryTool(tool.repositoryId, tool.toolId, { installSchedules: true });
+          updatedCount += 1;
+        } catch (error) {
+          toolFailures.push(`${tool.installedScriptId}: ${getErrorMessage(error, "更新失败")}`);
+        }
+      }
+
+      await loadData();
+
+      if (updateTargets.length === 0 && repositoryFailures.length === 0) {
+        messageApi.success("已是最新");
+        return;
+      }
+
+      if (repositoryFailures.length > 0 || toolFailures.length > 0) {
+        messageApi.warning(
+          `更新完成，成功 ${updatedCount} 个，失败 ${repositoryFailures.length + toolFailures.length} 项`
+        );
+        return;
+      }
+
+      messageApi.success(`已更新 ${updatedCount} 个工具`);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "一键更新失败"));
+    } finally {
+      setBulkUpdating(false);
+      setActionKey(null);
+    }
+  };
+
   const columns: ColumnsType<ScriptDefinition> = [
     {
       title: "工具",
@@ -409,7 +457,7 @@ export function ToolLibraryPage() {
       title: "来源",
       key: "source",
       width: 120,
-      render: (_value: unknown, record) => getSourceTag(record)
+      render: (_value: unknown, record) => <ScopeTag scope={record.scope} />
     },
     {
       title: "状态",
@@ -418,15 +466,15 @@ export function ToolLibraryPage() {
       render: (_value: unknown, record) => {
         const descriptor = descriptorMap.get(record.id);
         return (
-          <Space direction="vertical" size={2}>
-            <Space wrap size={[4, 4]}>
+          <Space wrap size={[4, 4]}>
+            {record.scope !== "REPOSITORY" && (
               <Tag color={record.status === "PUBLISHED" ? "green" : "gold"}>
                 {record.status === "PUBLISHED" ? "已发布" : "草稿"}
               </Tag>
-              {record.scope === "REPOSITORY" ? <Tag>只读</Tag> : null}
-              {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
-            </Space>
+            )}
+            {record.scope === "REPOSITORY" ? <Tag>只读</Tag> : null}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
+            {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
       }
@@ -479,6 +527,7 @@ export function ToolLibraryPage() {
                   ghost
                   icon={<SyncOutlined />}
                   loading={actionKey === `update:${record.id}`}
+                  disabled={bulkUpdating}
                   onClick={() => void handleUpdate(record)}
                 >
                   更新
@@ -598,6 +647,14 @@ export function ToolLibraryPage() {
               <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
                 刷新
               </Button>
+              <Button
+                icon={<SyncOutlined />}
+                loading={bulkUpdating}
+                disabled={loading || importing}
+                onClick={() => void handleUpdateAll()}
+              >
+                一键更新
+              </Button>
               <Button icon={<DownloadOutlined />} onClick={handleExportVisible} disabled={filteredScripts.every((item) => !isEditableAsset(item))}>
                 导出可编辑
               </Button>
@@ -628,7 +685,7 @@ export function ToolLibraryPage() {
                 { value: "ALL", label: "全部来源" },
                 { value: "PERSONAL", label: "本机" },
                 { value: "FORK", label: "Fork" },
-                { value: "REPOSITORY", label: "仓库安装" },
+                { value: "REPOSITORY", label: "仓库" },
                 { value: "SAMPLE", label: "示例" }
               ]}
             />
