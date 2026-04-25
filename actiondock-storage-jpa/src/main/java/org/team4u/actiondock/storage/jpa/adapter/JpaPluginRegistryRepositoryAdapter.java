@@ -64,6 +64,9 @@ public class JpaPluginRegistryRepositoryAdapter implements PluginRegistryReposit
         entity.setDescription(registration.getDescription());
         entity.setVersion(registration.getVersion());
         entity.setFileName(registration.getFileName());
+        entity.setRepositoryId(registration.getRepositoryId());
+        entity.setRepositoryPluginId(registration.getRepositoryPluginId());
+        entity.setRepositoryVersion(registration.getRepositoryVersion());
         entity.setConfigSchemaJson(jsonCodec.write(registration.getConfigSchema()));
         entity.setDefaultConfigJson(jsonCodec.write(registration.getDefaultConfig()));
         entity.setActionsJson(jsonCodec.write(registration.getActions()));
@@ -88,6 +91,9 @@ public class JpaPluginRegistryRepositoryAdapter implements PluginRegistryReposit
                 .setDescription(entity.getDescription())
                 .setVersion(entity.getVersion())
                 .setFileName(entity.getFileName())
+                .setRepositoryId(entity.getRepositoryId())
+                .setRepositoryPluginId(entity.getRepositoryPluginId())
+                .setRepositoryVersion(entity.getRepositoryVersion())
                 .setConfigSchema(jsonCodec.readMap(entity.getConfigSchemaJson()))
                 .setDefaultConfig(jsonCodec.readMap(entity.getDefaultConfigJson()))
                 .setActions(jsonCodec.readList(entity.getActionsJson(), PluginActionMetadata.class))

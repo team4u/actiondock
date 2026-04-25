@@ -3,9 +3,12 @@ package org.team4u.actiondock.web;
 import org.team4u.actiondock.application.InvalidExecutionInputException;
 import org.team4u.actiondock.application.ErrorDetailSupport;
 import org.team4u.actiondock.domain.model.ErrorDetail;
+import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
 
 /**
  * 全局异常处理器，将异常转换为统一的 API 响应格式。
@@ -42,6 +45,19 @@ public class GlobalExceptionHandler {
                 ErrorDetailSupport.summarize(exception),
                 400,
                 ErrorDetailSupport.describe(exception)
+        ));
+    }
+
+    @ExceptionHandler(RepositoryCatalogService.RepositoryPluginConflictException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handlePluginConflict(RepositoryCatalogService.RepositoryPluginConflictException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+                exception.getMessage(),
+                400,
+                Map.of(
+                        "code", "PLUGIN_VERSION_CONFLICT",
+                        "pluginId", exception.getPluginId(),
+                        "conflicts", exception.getConflicts()
+                )
         ));
     }
 

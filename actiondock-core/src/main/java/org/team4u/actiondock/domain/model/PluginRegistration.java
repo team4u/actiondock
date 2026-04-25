@@ -20,6 +20,9 @@ public class PluginRegistration {
     private String description;
     private String version;
     private String fileName;
+    private String repositoryId;
+    private String repositoryPluginId;
+    private String repositoryVersion;
     private Map<String, Object> configSchema = new LinkedHashMap<>();
     private Map<String, Object> defaultConfig = new LinkedHashMap<>();
     private List<PluginActionMetadata> actions = new ArrayList<>();
@@ -69,6 +72,33 @@ public class PluginRegistration {
 
     public PluginRegistration setFileName(String fileName) {
         this.fileName = fileName;
+        return this;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public PluginRegistration setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+        return this;
+    }
+
+    public String getRepositoryPluginId() {
+        return repositoryPluginId;
+    }
+
+    public PluginRegistration setRepositoryPluginId(String repositoryPluginId) {
+        this.repositoryPluginId = repositoryPluginId;
+        return this;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public PluginRegistration setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
         return this;
     }
 

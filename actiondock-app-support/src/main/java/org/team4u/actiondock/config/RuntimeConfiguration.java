@@ -111,6 +111,7 @@ public class RuntimeConfiguration {
                                                              ConfigValueRepository configValueRepository,
                                                              ScriptApplicationService scriptApplicationService,
                                                              ConfigValueApplicationService configValueApplicationService,
+                                                             PluginRuntimeService pluginRuntimeService,
                                                              JsonCodec jsonCodec,
                                                              AppProperties properties) {
         return new RepositoryCatalogService(
@@ -121,6 +122,7 @@ public class RuntimeConfiguration {
                 configValueRepository,
                 scriptApplicationService,
                 configValueApplicationService,
+                pluginRuntimeService,
                 jsonCodec,
                 properties
         );

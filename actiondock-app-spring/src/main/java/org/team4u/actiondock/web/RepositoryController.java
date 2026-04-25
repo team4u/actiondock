@@ -106,6 +106,38 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
     }
 
+    @GetMapping("/plugins")
+    public ApiResponse<List<RepositoryCatalogService.RepositoryPluginDescriptor>> listAllPlugins() {
+        return ApiResponse.success(repositoryCatalogService.listAllRepositoryPlugins());
+    }
+
+    @GetMapping("/{id}/plugins")
+    public ApiResponse<List<RepositoryCatalogService.RepositoryPluginDescriptor>> listRepositoryPlugins(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listRepositoryPlugins(id));
+    }
+
+    @GetMapping("/{id}/plugins/{pluginId}")
+    public ApiResponse<RepositoryCatalogService.RepositoryPluginDetail> pluginDetail(@PathVariable String id,
+                                                                                     @PathVariable String pluginId) {
+        return ApiResponse.success(repositoryCatalogService.getRepositoryPlugin(id, pluginId));
+    }
+
+    @PostMapping("/{id}/plugins/{pluginId}/install")
+    public ApiResponse<RepositoryCatalogService.RepositoryPluginInstallResult> installPlugin(@PathVariable String id,
+                                                                                            @PathVariable String pluginId,
+                                                                                            @RequestBody(required = false) RepositoryPluginInstallRequest request) {
+        boolean force = request != null && request.isForce();
+        return ApiResponse.success(repositoryCatalogService.installPlugin(id, pluginId, force), "插件安装完成");
+    }
+
+    @PostMapping("/{id}/plugins/{pluginId}/update")
+    public ApiResponse<RepositoryCatalogService.RepositoryPluginInstallResult> updatePlugin(@PathVariable String id,
+                                                                                           @PathVariable String pluginId,
+                                                                                           @RequestBody(required = false) RepositoryPluginInstallRequest request) {
+        boolean force = request != null && request.isForce();
+        return ApiResponse.success(repositoryCatalogService.updatePlugin(id, pluginId, force), "插件更新完成");
+    }
+
     /**
      * 查询仓库中指定工具的详情。
      *
@@ -132,7 +164,15 @@ public class RepositoryController {
                                                      @PathVariable String toolId,
                                                      @RequestBody(required = false) RepositoryInstallRequest request) {
         boolean installSchedules = request != null && request.isInstallSchedules();
-        return ApiResponse.success(repositoryCatalogService.installTool(id, toolId, installSchedules), "安装完成");
+        boolean installPluginDependencies = request != null && request.isInstallPluginDependencies();
+        boolean forcePluginUpgrade = request != null && request.isForcePluginUpgrade();
+        return ApiResponse.success(repositoryCatalogService.installTool(
+                id,
+                toolId,
+                installSchedules,
+                installPluginDependencies,
+                forcePluginUpgrade
+        ), "安装完成");
     }
 
     /**
@@ -148,7 +188,15 @@ public class RepositoryController {
                                                     @PathVariable String toolId,
                                                     @RequestBody(required = false) RepositoryInstallRequest request) {
         boolean installSchedules = request != null && request.isInstallSchedules();
-        return ApiResponse.success(repositoryCatalogService.updateTool(id, toolId, installSchedules), "更新完成");
+        boolean installPluginDependencies = request != null && request.isInstallPluginDependencies();
+        boolean forcePluginUpgrade = request != null && request.isForcePluginUpgrade();
+        return ApiResponse.success(repositoryCatalogService.updateTool(
+                id,
+                toolId,
+                installSchedules,
+                installPluginDependencies,
+                forcePluginUpgrade
+        ), "更新完成");
     }
 
     /**
@@ -162,5 +210,11 @@ public class RepositoryController {
     public ApiResponse<RepositoryCatalogService.RepositoryToolDescriptor> publish(@PathVariable String id,
                                                                                   @RequestBody RepositoryCatalogService.RepositoryPublishRequest request) {
         return ApiResponse.success(repositoryCatalogService.publishTool(id, request), "发布完成");
+    }
+
+    @PostMapping("/{id}/publish-plugin")
+    public ApiResponse<RepositoryCatalogService.RepositoryPluginDescriptor> publishPlugin(@PathVariable String id,
+                                                                                         @RequestBody RepositoryCatalogService.RepositoryPluginPublishRequest request) {
+        return ApiResponse.success(repositoryCatalogService.publishPlugin(id, request), "插件发布完成");
     }
 }

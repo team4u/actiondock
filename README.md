@@ -189,7 +189,13 @@ actiondock
 | GET | `/api/repositories/{id}/tools/{toolId}` | 获取工具详情 |
 | POST | `/api/repositories/{id}/tools/{toolId}/install` | 安装工具到本地 |
 | POST | `/api/repositories/{id}/tools/{toolId}/update` | 更新已安装的工具 |
+| GET | `/api/repositories/plugins` | 获取所有仓库插件列表 |
+| GET | `/api/repositories/{id}/plugins` | 获取指定仓库的插件列表 |
+| GET | `/api/repositories/{id}/plugins/{pluginId}` | 获取仓库插件详情 |
+| POST | `/api/repositories/{id}/plugins/{pluginId}/install` | 从仓库安装插件 |
+| POST | `/api/repositories/{id}/plugins/{pluginId}/update` | 从仓库更新插件 |
 | POST | `/api/repositories/{id}/publish` | 发布脚本到仓库 |
+| POST | `/api/repositories/{id}/publish-plugin` | 发布已安装插件到仓库 |
 
 ### 已安装工具管理
 
@@ -240,6 +246,10 @@ ActionDock 支持将脚本发布到本地仓库或 Git 仓库，实现团队内�
 ```
 repository-root/
 ├── actiondock.repository.json    # 仓库索引文件
+├── plugins/
+│   └── {pluginId}/
+│       ├── plugin.json           # 插件元数据
+│       └── {pluginId}-{version}.jar
 └── tools/
     └── {toolId}/
         ├── tool.json             # 工具元数据
@@ -263,9 +273,35 @@ repository-root/
   "outputSchema": { ... },
   "configTemplatePath": "config-template.json",
   "scheduleTemplatePath": "schedule-template.json",
-  "sourcePath": "source.groovy"
+  "sourcePath": "source.groovy",
+  "pluginDependencies": [
+    {
+      "pluginId": "actiondock-demo-plugin",
+      "versionRange": ">=0.2.0 <1.0.0",
+      "requiredActions": ["echo"]
+    }
+  ]
 }
 ```
+
+### 插件元数据 (plugin.json)
+
+```json
+{
+  "pluginFileVersion": 1,
+  "pluginId": "actiondock-demo-plugin",
+  "name": "ActionDock Demo Plugin",
+  "description": "示例插件",
+  "version": "0.2.0",
+  "owner": "team4u",
+  "tags": ["example"],
+  "artifactPath": "actiondock-demo-plugin-0.2.0.jar",
+  "sha256": "可选的 JAR SHA-256",
+  "riskLevel": "LOW"
+}
+```
+
+仓库插件按 `pluginId` 全局安装一次，多个仓库工具共享同一个插件实例。工具通过 `pluginDependencies` 显式声明依赖；安装工具时可以同时安装或更新缺失的插件依赖。平台默认阻止会破坏其他已安装工具版本约束的插件升级，管理员可在管理台或 CLI 中使用强制覆盖。
 
 ### 发布脚本到仓库
 
@@ -275,6 +311,10 @@ repository-root/
 - 创建 `tools/{toolId}/tool.json` 元数据文件
 - 创建 `tools/{toolId}/source.{ext}` 源码文件
 - 对于 Git 仓库，自动提交并推送更改
+
+### 发布插件到仓库
+
+插件管理页可以将本机已安装插件发布到 `LOCAL_DIR` 或 `GIT` 仓库。发布会复制当前插件 JAR 到 `plugins/{pluginId}/`，生成 `plugin.json`，并更新仓库索引；Git 仓库会自动提交并推送。
 
 ### 从仓库安装工具
 

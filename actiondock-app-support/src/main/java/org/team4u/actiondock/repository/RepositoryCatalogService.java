@@ -5,6 +5,8 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ConfigPublishMode;
 import org.team4u.actiondock.domain.model.ConfigValue;
+import org.team4u.actiondock.domain.model.PluginDependency;
+import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -19,6 +21,8 @@ import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
+import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.plugin.PluginView;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,9 +33,12 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -54,6 +61,7 @@ public class RepositoryCatalogService {
     private final ConfigValueRepository configValueRepository;
     private final ScriptApplicationService scriptApplicationService;
     private final ConfigValueApplicationService configValueApplicationService;
+    private final PluginRuntimeService pluginRuntimeService;
     private final JsonCodec jsonCodec;
     private final HttpClient httpClient;
     private final Path repositoriesRoot;
@@ -65,6 +73,7 @@ public class RepositoryCatalogService {
                                     ConfigValueRepository configValueRepository,
                                     ScriptApplicationService scriptApplicationService,
                                     ConfigValueApplicationService configValueApplicationService,
+                                    PluginRuntimeService pluginRuntimeService,
                                     JsonCodec jsonCodec,
                                     AppProperties properties) {
         this.repositoryDefinitionRepository = repositoryDefinitionRepository;
@@ -74,6 +83,7 @@ public class RepositoryCatalogService {
         this.configValueRepository = configValueRepository;
         this.scriptApplicationService = scriptApplicationService;
         this.configValueApplicationService = configValueApplicationService;
+        this.pluginRuntimeService = pluginRuntimeService == null ? PluginRuntimeService.disabled() : pluginRuntimeService;
         this.jsonCodec = jsonCodec;
         this.httpClient = HttpClient.newHttpClient();
         this.repositoriesRoot = Path.of(properties == null || properties.getHomeDir() == null || properties.getHomeDir().isBlank()
@@ -162,7 +172,7 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryIndexFile index = readRepositoryIndex(repository);
         List<RepositoryToolDescriptor> tools = new ArrayList<>();
-        for (RepositoryIndexEntry entry : index.tools()) {
+        for (RepositoryIndexEntry entry : safeTools(index)) {
             ToolFile tool = readToolFile(repository, entry.toolPath());
             tools.add(toDescriptor(repository, tool, entry.toolPath()));
         }
@@ -171,10 +181,55 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
+    public List<RepositoryPluginDescriptor> listAllRepositoryPlugins() {
+        List<RepositoryPluginDescriptor> plugins = new ArrayList<>();
+        for (RepositoryDefinition repository : listRepositories()) {
+            if (!repository.isEnabled()) {
+                continue;
+            }
+            plugins.addAll(listRepositoryPlugins(repository.getId()));
+        }
+        return plugins.stream()
+                .sorted(Comparator.comparing(RepositoryPluginDescriptor::pluginId))
+                .toList();
+    }
+
+    public List<RepositoryPluginDescriptor> listRepositoryPlugins(String repositoryId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryIndexFile index = readRepositoryIndex(repository);
+        List<RepositoryPluginDescriptor> plugins = new ArrayList<>();
+        for (RepositoryPluginIndexEntry entry : safePlugins(index)) {
+            PluginFile plugin = readPluginFile(repository, entry.pluginPath());
+            plugins.add(toPluginDescriptor(repository, plugin, entry.pluginPath()));
+        }
+        return plugins.stream()
+                .sorted(Comparator.comparing(RepositoryPluginDescriptor::pluginId))
+                .toList();
+    }
+
+    public RepositoryPluginDetail getRepositoryPlugin(String repositoryId, String pluginId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryIndexFile index = readRepositoryIndex(repository);
+        RepositoryPluginIndexEntry entry = safePlugins(index).stream()
+                .filter(item -> pluginId.equals(item.id()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("仓库插件不存在: " + pluginId));
+        PluginFile plugin = readPluginFile(repository, entry.pluginPath());
+        return new RepositoryPluginDetail(toPluginDescriptor(repository, plugin, entry.pluginPath()), plugin);
+    }
+
+    public RepositoryPluginInstallResult installPlugin(String repositoryId, String pluginId, boolean force) {
+        return installOrUpdatePlugin(repositoryId, pluginId, false, force);
+    }
+
+    public RepositoryPluginInstallResult updatePlugin(String repositoryId, String pluginId, boolean force) {
+        return installOrUpdatePlugin(repositoryId, pluginId, true, force);
+    }
+
     public RepositoryToolDetail getRepositoryTool(String repositoryId, String toolId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryIndexFile index = readRepositoryIndex(repository);
-        RepositoryIndexEntry entry = index.tools().stream()
+        RepositoryIndexEntry entry = safeTools(index).stream()
                 .filter(item -> toolId.equals(item.id()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("仓库工具不存在: " + toolId));
@@ -194,11 +249,27 @@ public class RepositoryCatalogService {
     }
 
     public RepositoryToolInstallation installTool(String repositoryId, String toolId, boolean installSchedules) {
-        return installOrUpdateTool(repositoryId, toolId, installSchedules, false);
+        return installTool(repositoryId, toolId, installSchedules, false, false);
+    }
+
+    public RepositoryToolInstallation installTool(String repositoryId,
+                                                 String toolId,
+                                                 boolean installSchedules,
+                                                 boolean installPluginDependencies,
+                                                 boolean forcePluginUpgrade) {
+        return installOrUpdateTool(repositoryId, toolId, installSchedules, false, installPluginDependencies, forcePluginUpgrade);
     }
 
     public RepositoryToolInstallation updateTool(String repositoryId, String toolId, boolean installSchedules) {
-        return installOrUpdateTool(repositoryId, toolId, installSchedules, true);
+        return updateTool(repositoryId, toolId, installSchedules, false, false);
+    }
+
+    public RepositoryToolInstallation updateTool(String repositoryId,
+                                                String toolId,
+                                                boolean installSchedules,
+                                                boolean installPluginDependencies,
+                                                boolean forcePluginUpgrade) {
+        return installOrUpdateTool(repositoryId, toolId, installSchedules, true, installPluginDependencies, forcePluginUpgrade);
     }
 
     public void uninstallTool(String installedScriptId) {
@@ -244,16 +315,46 @@ public class RepositoryCatalogService {
         return getRepositoryTool(repositoryId, toolId).descriptor();
     }
 
+    public RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryPluginPublishRequest request) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        if ("HTTP".equals(repository.getType())) {
+            throw new IllegalArgumentException("HTTP 仓库暂不支持发布");
+        }
+        if ("GIT".equals(repository.getType())) {
+            syncRepository(repositoryId);
+        } else {
+            ensureLocalDirRepository(repository);
+        }
+
+        String pluginId = normalize(request.pluginId(), "pluginId 不能为空");
+        PluginRegistration registration = pluginRuntimeService.getRegistration(pluginId);
+        byte[] content = pluginRuntimeService.readPluginFile(pluginId);
+        String version = normalizeOrDefault(request.version(), registration.getVersion());
+        Path root = resolveRepositoryRoot(repository);
+        Path pluginDir = root.resolve("plugins").resolve(pluginId);
+        String jarFileName = pluginId + "-" + version + ".jar";
+        writePluginFiles(pluginDir, jarFileName, content, registration, request, version);
+        updateRepositoryPluginIndex(root, repository, pluginId, registration, request, version);
+
+        if ("GIT".equals(repository.getType())) {
+            commitAndPush(repository, pluginId, version);
+        }
+        return getRepositoryPlugin(repositoryId, pluginId).descriptor();
+    }
+
     private RepositoryToolInstallation installOrUpdateTool(String repositoryId,
-                                                     String toolId,
-                                                     boolean installSchedules,
-                                                     boolean updateOnly) {
+                                                           String toolId,
+                                                           boolean installSchedules,
+                                                           boolean updateOnly,
+                                                           boolean installPluginDependencies,
+                                                           boolean forcePluginUpgrade) {
         RepositoryToolDetail detail = getRepositoryTool(repositoryId, toolId);
         String installedScriptId = detail.descriptor().installedScriptId();
         ScriptDefinition existing = scriptRepository.findById(installedScriptId).orElse(null);
         if (updateOnly && existing == null) {
             throw new IllegalArgumentException("工具尚未安装: " + installedScriptId);
         }
+        resolvePluginDependencies(repositoryId, detail.descriptor().pluginDependencies(), installPluginDependencies, forcePluginUpgrade);
 
         LocalDateTime now = LocalDateTime.now();
         ScriptDefinition definition = new ScriptDefinition()
@@ -279,6 +380,7 @@ public class RepositoryCatalogService {
                 .setOwner(detail.descriptor().owner())
                 .setDescription(detail.descriptor().description())
                 .setTags(detail.descriptor().tags())
+                .setPluginDependencies(detail.descriptor().pluginDependencies())
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())
                 .setUpdatedAt(now);
         scriptRepository.save(definition);
@@ -300,6 +402,181 @@ public class RepositoryCatalogService {
                         .orElse(null)).orElse(now))
                 .setUpdatedAt(now);
         return repositoryToolInstallationRepository.save(installation);
+    }
+
+    private RepositoryPluginInstallResult installOrUpdatePlugin(String repositoryId,
+                                                               String pluginId,
+                                                               boolean updateOnly,
+                                                               boolean force) {
+        RepositoryPluginDetail detail = getRepositoryPlugin(repositoryId, pluginId);
+        RepositoryPluginDescriptor descriptor = detail.descriptor();
+        PluginRegistration existing = findPluginRegistration(pluginId).orElse(null);
+        if (updateOnly && existing == null) {
+            throw new IllegalArgumentException("插件尚未安装: " + pluginId);
+        }
+        List<RepositoryPluginConflict> conflicts = findPluginConflicts(pluginId, descriptor.version());
+        if (!conflicts.isEmpty() && !force) {
+            throw new RepositoryPluginConflictException(pluginId, conflicts);
+        }
+
+        byte[] content = readRepositoryBytes(getRepository(repositoryId), Path.of(descriptor.resolvedArtifactPath()));
+        verifySha256(pluginId, content, detail.plugin().sha256());
+        PluginView plugin = existing == null
+                ? pluginRuntimeService.installFromRepository(
+                artifactFileName(detail.plugin().artifactPath(), pluginId, descriptor.version()),
+                content,
+                repositoryId,
+                pluginId,
+                descriptor.version()
+        )
+                : pluginRuntimeService.upgradeFromRepository(
+                pluginId,
+                artifactFileName(detail.plugin().artifactPath(), pluginId, descriptor.version()),
+                content,
+                repositoryId,
+                pluginId,
+                descriptor.version()
+        );
+        return new RepositoryPluginInstallResult(plugin, conflicts);
+    }
+
+    private void resolvePluginDependencies(String repositoryId,
+                                           List<PluginDependency> dependencies,
+                                           boolean installPluginDependencies,
+                                           boolean forcePluginUpgrade) {
+        for (PluginDependency dependency : dependencies == null ? List.<PluginDependency>of() : dependencies) {
+            String pluginId = normalize(dependency.getPluginId(), "插件依赖 pluginId 不能为空");
+            PluginRegistration registration = findPluginRegistration(pluginId).orElse(null);
+            if (registration != null && versionSatisfies(registration.getVersion(), dependency.getVersionRange())) {
+                continue;
+            }
+            if (!installPluginDependencies) {
+                throw new IllegalArgumentException("缺少插件依赖或版本不满足: " + pluginId + " " + normalizeOrDefault(dependency.getVersionRange(), ""));
+            }
+
+            RepositoryPluginDescriptor descriptor = findRepositoryPlugin(repositoryId, pluginId)
+                    .orElseThrow(() -> new IllegalArgumentException("仓库中缺少插件依赖: " + pluginId));
+            if (!versionSatisfies(descriptor.version(), dependency.getVersionRange())) {
+                throw new IllegalArgumentException("仓库插件版本不满足工具依赖: " + pluginId + " " + dependency.getVersionRange());
+            }
+            if (registration == null) {
+                installPlugin(repositoryId, pluginId, forcePluginUpgrade);
+            } else {
+                updatePlugin(repositoryId, pluginId, forcePluginUpgrade);
+            }
+        }
+    }
+
+    private Optional<RepositoryPluginDescriptor> findRepositoryPlugin(String repositoryId, String pluginId) {
+        return listRepositoryPlugins(repositoryId).stream()
+                .filter(item -> pluginId.equals(item.pluginId()))
+                .findFirst();
+    }
+
+    private Optional<PluginRegistration> findPluginRegistration(String pluginId) {
+        return pluginRuntimeService.list().stream()
+                .filter(item -> pluginId.equals(item.getPluginId()))
+                .findFirst()
+                .map(item -> pluginRuntimeService.getRegistration(pluginId));
+    }
+
+    private List<RepositoryPluginConflict> findPluginConflicts(String pluginId, String targetVersion) {
+        List<RepositoryPluginConflict> conflicts = new ArrayList<>();
+        for (ScriptDefinition script : scriptRepository.findAll()) {
+            for (PluginDependency dependency : script.getPluginDependencies()) {
+                if (pluginId.equals(dependency.getPluginId()) && !versionSatisfies(targetVersion, dependency.getVersionRange())) {
+                    conflicts.add(new RepositoryPluginConflict(
+                            script.getId(),
+                            script.getName(),
+                            dependency.getVersionRange()
+                    ));
+                }
+            }
+        }
+        return conflicts;
+    }
+
+    private boolean versionSatisfies(String version, String range) {
+        if (range == null || range.isBlank()) {
+            return true;
+        }
+        if (version == null || version.isBlank()) {
+            return false;
+        }
+        for (String token : range.trim().split("\\s+")) {
+            if (token.isBlank()) {
+                continue;
+            }
+            String operator = token.startsWith(">=") || token.startsWith("<=")
+                    ? token.substring(0, 2)
+                    : token.substring(0, 1);
+            String expected = token.substring(operator.length());
+            int comparison = compareVersion(version, expected);
+            boolean matches = switch (operator) {
+                case ">" -> comparison > 0;
+                case ">=" -> comparison >= 0;
+                case "<" -> comparison < 0;
+                case "<=" -> comparison <= 0;
+                case "=" -> comparison == 0;
+                default -> compareVersion(version, token) == 0;
+            };
+            if (!matches) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private int compareVersion(String left, String right) {
+        String[] leftParts = normalizeVersion(left).split("\\.");
+        String[] rightParts = normalizeVersion(right).split("\\.");
+        int length = Math.max(leftParts.length, rightParts.length);
+        for (int index = 0; index < length; index++) {
+            int leftValue = index < leftParts.length ? parseVersionPart(leftParts[index]) : 0;
+            int rightValue = index < rightParts.length ? parseVersionPart(rightParts[index]) : 0;
+            if (leftValue != rightValue) {
+                return Integer.compare(leftValue, rightValue);
+            }
+        }
+        return 0;
+    }
+
+    private String normalizeVersion(String version) {
+        String normalized = version == null ? "" : version.trim();
+        return normalized.startsWith("v") || normalized.startsWith("V") ? normalized.substring(1) : normalized;
+    }
+
+    private int parseVersionPart(String value) {
+        String digits = value.replaceAll("[^0-9].*$", "");
+        if (digits.isBlank()) {
+            return 0;
+        }
+        return Integer.parseInt(digits);
+    }
+
+    private void verifySha256(String pluginId, byte[] content, String expected) {
+        if (expected == null || expected.isBlank()) {
+            return;
+        }
+        String actual = sha256(content);
+        if (!actual.equalsIgnoreCase(expected.trim())) {
+            throw new IllegalArgumentException("插件校验失败: " + pluginId);
+        }
+    }
+
+    private String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("当前 JRE 不支持 SHA-256", exception);
+        }
+    }
+
+    private String artifactFileName(String artifactPath, String pluginId, String version) {
+        if (artifactPath != null && !artifactPath.isBlank()) {
+            return Path.of(artifactPath).getFileName().toString();
+        }
+        return pluginId + "-" + version + ".jar";
     }
 
     private void syncConfigTemplates(String repositoryId, String toolId, List<ConfigTemplateItem> templates) {
@@ -388,6 +665,32 @@ public class RepositoryCatalogService {
         }
     }
 
+    private void writePluginFiles(Path pluginDir,
+                                  String jarFileName,
+                                  byte[] content,
+                                  PluginRegistration registration,
+                                  RepositoryPluginPublishRequest request,
+                                  String version) {
+        try {
+            Files.createDirectories(pluginDir);
+            Files.write(pluginDir.resolve(jarFileName), content);
+            writeJson(pluginDir.resolve("plugin.json"), new PluginFile(
+                    1,
+                    registration.getPluginId(),
+                    normalizeOrDefault(request.displayName(), registration.getName()),
+                    version,
+                    normalizeOrDefault(request.description(), registration.getDescription()),
+                    normalizeNullable(request.owner()),
+                    request.tags() == null ? List.of() : request.tags(),
+                    jarFileName,
+                    sha256(content),
+                    normalizeNullable(request.riskLevel())
+            ));
+        } catch (IOException exception) {
+            throw new IllegalStateException("写入仓库插件文件失败", exception);
+        }
+    }
+
     private ToolFile buildToolFile(ScriptDefinition script,
                                    RepositoryPublishRequest request,
                                    String sourceFileName) {
@@ -406,7 +709,8 @@ public class RepositoryCatalogService {
                 request.configItems() == null || request.configItems().isEmpty() ? null : "config.template.json",
                 request.scheduleIds() == null || request.scheduleIds().isEmpty() ? null : "schedules.template.json",
                 null,
-                null
+                null,
+                script.getPluginDependencies()
         );
     }
 
@@ -445,7 +749,7 @@ public class RepositoryCatalogService {
                                        RepositoryPublishRequest request) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
-                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>());
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>());
         List<RepositoryIndexEntry> entries = new ArrayList<>(current.tools() == null ? List.of() : current.tools());
         RepositoryIndexEntry next = new RepositoryIndexEntry(
                 toolId,
@@ -462,6 +766,36 @@ public class RepositoryCatalogService {
                 1,
                 repository.getName(),
                 normalizeNullable(repository.getDescription()),
+                entries,
+                new ArrayList<>(safePlugins(current))
+        ));
+    }
+
+    private void updateRepositoryPluginIndex(Path root,
+                                             RepositoryDefinition repository,
+                                             String pluginId,
+                                             PluginRegistration registration,
+                                             RepositoryPluginPublishRequest request,
+                                             String version) {
+        RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
+                ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>());
+        List<RepositoryPluginIndexEntry> entries = new ArrayList<>(safePlugins(current));
+        RepositoryPluginIndexEntry next = new RepositoryPluginIndexEntry(
+                pluginId,
+                normalizeOrDefault(request.displayName(), registration.getName()),
+                version,
+                normalizeNullable(request.description()),
+                "plugins/" + pluginId + "/plugin.json"
+        );
+        entries.removeIf(item -> pluginId.equals(item.id()));
+        entries.add(next);
+        entries.sort(Comparator.comparing(RepositoryPluginIndexEntry::id));
+        writeJson(root.resolve(REPOSITORY_INDEX_FILE), new RepositoryIndexFile(
+                1,
+                repository.getName(),
+                normalizeNullable(repository.getDescription()),
+                new ArrayList<>(safeTools(current)),
                 entries
         ));
     }
@@ -500,11 +834,46 @@ public class RepositoryCatalogService {
                 resolveRelative(toolPath, tool.scheduleTemplatePath()),
                 tool.digest(),
                 tool.riskLevel(),
+                tool.pluginDependencies() == null ? List.of() : tool.pluginDependencies(),
                 installation != null,
                 installation == null ? null : installation.getVersion(),
                 installation != null && !Objects.equals(installation.getVersion(), tool.version()),
                 "TRUSTED".equalsIgnoreCase(repository.getTrustLevel())
         );
+    }
+
+    private RepositoryPluginDescriptor toPluginDescriptor(RepositoryDefinition repository, PluginFile plugin, String pluginPath) {
+        PluginRegistration registration = findPluginRegistration(plugin.pluginId()).orElse(null);
+        return new RepositoryPluginDescriptor(
+                repository.getId(),
+                plugin.pluginId(),
+                plugin.name(),
+                plugin.version(),
+                plugin.description(),
+                plugin.owner(),
+                plugin.tags() == null ? List.of() : plugin.tags(),
+                plugin.artifactPath(),
+                resolveRelative(pluginPath, plugin.artifactPath()),
+                plugin.sha256(),
+                plugin.riskLevel(),
+                registration != null,
+                registration == null ? null : registration.getVersion(),
+                registration != null && !Objects.equals(registration.getVersion(), plugin.version()),
+                "TRUSTED".equalsIgnoreCase(repository.getTrustLevel()),
+                dependentToolCount(plugin.pluginId())
+        );
+    }
+
+    private int dependentToolCount(String pluginId) {
+        int count = 0;
+        for (ScriptDefinition script : scriptRepository.findAll()) {
+            boolean dependsOnPlugin = script.getPluginDependencies().stream()
+                    .anyMatch(dependency -> pluginId.equals(dependency.getPluginId()));
+            if (dependsOnPlugin) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void syncGitRepository(RepositoryDefinition repository) {
@@ -540,6 +909,7 @@ public class RepositoryCatalogService {
                     1,
                     normalizeOrDefault(repository.getName(), repository.getId()),
                     normalizeNullable(repository.getDescription()),
+                    new ArrayList<>(),
                     new ArrayList<>()
             ));
         }
@@ -566,12 +936,30 @@ public class RepositoryCatalogService {
         return readJson(resolveRepositoryRoot(repository).resolve(toolPath), ToolFile.class);
     }
 
+    private PluginFile readPluginFile(RepositoryDefinition repository, String pluginPath) {
+        if ("HTTP".equals(repository.getType())) {
+            return readHttpJson(joinHttpPath(repository.getUrl(), pluginPath), PluginFile.class);
+        }
+        return readJson(resolveRepositoryRoot(repository).resolve(pluginPath), PluginFile.class);
+    }
+
     private String readRepositoryFile(RepositoryDefinition repository, Path path) {
         if ("HTTP".equals(repository.getType())) {
             return readHttpText(joinHttpPath(repository.getUrl(), path.toString().replace('\\', '/')));
         }
         try {
             return Files.readString(resolveRepositoryRoot(repository).resolve(path), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new IllegalStateException("读取仓库文件失败: " + path, exception);
+        }
+    }
+
+    private byte[] readRepositoryBytes(RepositoryDefinition repository, Path path) {
+        if ("HTTP".equals(repository.getType())) {
+            return readHttpBytes(joinHttpPath(repository.getUrl(), path.toString().replace('\\', '/')));
+        }
+        try {
+            return Files.readAllBytes(resolveRepositoryRoot(repository).resolve(path));
         } catch (IOException exception) {
             throw new IllegalStateException("读取仓库文件失败: " + path, exception);
         }
@@ -609,6 +997,20 @@ public class RepositoryCatalogService {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() >= 400) {
+                throw new IllegalArgumentException("HTTP 仓库访问失败: " + response.statusCode());
+            }
+            return response.body();
+        } catch (IOException | InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("访问 HTTP 仓库失败: " + url, exception);
+        }
+    }
+
+    private byte[] readHttpBytes(String url) {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
+        try {
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() >= 400) {
                 throw new IllegalArgumentException("HTTP 仓库访问失败: " + response.statusCode());
             }
@@ -672,6 +1074,14 @@ public class RepositoryCatalogService {
         return Path.of(toolPath).getParent().resolve(nestedPath).toString().replace('\\', '/');
     }
 
+    private List<RepositoryIndexEntry> safeTools(RepositoryIndexFile index) {
+        return index == null || index.tools() == null ? List.of() : index.tools();
+    }
+
+    private List<RepositoryPluginIndexEntry> safePlugins(RepositoryIndexFile index) {
+        return index == null || index.plugins() == null ? List.of() : index.plugins();
+    }
+
     private RelativeRepositoryPath toolDirectoryPath(String toolPath) {
         return new RelativeRepositoryPath(Path.of(toolPath).getParent().toString().replace('\\', '/'));
     }
@@ -708,6 +1118,7 @@ public class RepositoryCatalogService {
             String scheduleTemplatePath,
             String digest,
             String riskLevel,
+            List<PluginDependency> pluginDependencies,
             boolean installed,
             String installedVersion,
             boolean updateAvailable,
@@ -736,13 +1147,64 @@ public class RepositoryCatalogService {
     ) {
     }
 
+    public record RepositoryPluginDescriptor(
+            String repositoryId,
+            String pluginId,
+            String displayName,
+            String version,
+            String description,
+            String owner,
+            List<String> tags,
+            String artifactPath,
+            String resolvedArtifactPath,
+            String sha256,
+            String riskLevel,
+            boolean installed,
+            String installedVersion,
+            boolean updateAvailable,
+            boolean trusted,
+            int dependentToolCount
+    ) {
+    }
+
+    public record RepositoryPluginDetail(
+            RepositoryPluginDescriptor descriptor,
+            PluginFile plugin
+    ) {
+    }
+
+    public record RepositoryPluginPublishRequest(
+            String pluginId,
+            String displayName,
+            String version,
+            String owner,
+            String description,
+            List<String> tags,
+            String riskLevel
+    ) {
+    }
+
+    public record RepositoryPluginInstallResult(
+            PluginView plugin,
+            List<RepositoryPluginConflict> conflicts
+    ) {
+    }
+
+    public record RepositoryPluginConflict(
+            String scriptId,
+            String scriptName,
+            String requiredVersionRange
+    ) {
+    }
+
     public record RepositoryPublishConfigItem(String key, String publishMode) {
     }
 
     public record RepositoryIndexFile(int repositoryVersion,
                                       String name,
                                       String description,
-                                      List<RepositoryIndexEntry> tools) {
+                                      List<RepositoryIndexEntry> tools,
+                                      List<RepositoryPluginIndexEntry> plugins) {
     }
 
     public record RepositoryIndexEntry(String id,
@@ -751,6 +1213,13 @@ public class RepositoryCatalogService {
                                        String type,
                                        String description,
                                        String toolPath) {
+    }
+
+    public record RepositoryPluginIndexEntry(String id,
+                                             String name,
+                                             String version,
+                                             String description,
+                                             String pluginPath) {
     }
 
     public record ToolFile(int toolVersion,
@@ -767,7 +1236,20 @@ public class RepositoryCatalogService {
                            String configTemplatePath,
                            String scheduleTemplatePath,
                            String digest,
-                           String riskLevel) {
+                           String riskLevel,
+                           List<PluginDependency> pluginDependencies) {
+    }
+
+    public record PluginFile(int pluginFileVersion,
+                             String pluginId,
+                             String name,
+                             String version,
+                             String description,
+                             String owner,
+                             List<String> tags,
+                             String artifactPath,
+                             String sha256,
+                             String riskLevel) {
     }
 
     public record ConfigTemplateItem(String key,
@@ -795,6 +1277,25 @@ public class RepositoryCatalogService {
                 return null;
             }
             return new RelativeRepositoryPath(Path.of(value).resolve(child).toString().replace('\\', '/'));
+        }
+    }
+
+    public static class RepositoryPluginConflictException extends IllegalArgumentException {
+        private final String pluginId;
+        private final List<RepositoryPluginConflict> conflicts;
+
+        public RepositoryPluginConflictException(String pluginId, List<RepositoryPluginConflict> conflicts) {
+            super("插件版本会影响已安装工具: " + pluginId);
+            this.pluginId = pluginId;
+            this.conflicts = conflicts == null ? List.of() : List.copyOf(conflicts);
+        }
+
+        public String getPluginId() {
+            return pluginId;
+        }
+
+        public List<RepositoryPluginConflict> getConflicts() {
+            return conflicts;
         }
     }
 }

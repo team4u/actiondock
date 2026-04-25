@@ -2,6 +2,7 @@ package org.team4u.actiondock.storage.jpa.adapter;
 
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
@@ -79,6 +80,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setOwner(definition.getOwner());
         entity.setDescription(definition.getDescription());
         entity.setTagsJson(jsonCodec.write(definition.getTags()));
+        entity.setPluginDependenciesJson(jsonCodec.write(definition.getPluginDependencies()));
         entity.setCreatedAt(definition.getCreatedAt());
         entity.setUpdatedAt(definition.getUpdatedAt());
         return entity;
@@ -111,6 +113,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setOwner(entity.getOwner())
                 .setDescription(entity.getDescription())
                 .setTags(jsonCodec.readList(entity.getTagsJson(), String.class))
+                .setPluginDependencies(jsonCodec.readList(entity.getPluginDependenciesJson(), PluginDependency.class))
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
     }

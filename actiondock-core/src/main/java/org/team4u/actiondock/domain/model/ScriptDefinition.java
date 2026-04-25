@@ -31,6 +31,7 @@ public class ScriptDefinition {
     private String owner;
     private String description;
     private List<String> tags = new ArrayList<>();
+    private List<PluginDependency> pluginDependencies = new ArrayList<>();
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -181,6 +182,25 @@ public class ScriptDefinition {
         return this;
     }
 
+    public List<PluginDependency> getPluginDependencies() {
+        return pluginDependencies.stream()
+                .map(dependency -> new PluginDependency()
+                        .setPluginId(dependency.getPluginId())
+                        .setVersionRange(dependency.getVersionRange())
+                        .setRequiredActions(dependency.getRequiredActions()))
+                .toList();
+    }
+
+    public ScriptDefinition setPluginDependencies(List<PluginDependency> pluginDependencies) {
+        this.pluginDependencies = pluginDependencies == null ? new ArrayList<>() : pluginDependencies.stream()
+                .map(dependency -> new PluginDependency()
+                        .setPluginId(dependency.getPluginId())
+                        .setVersionRange(dependency.getVersionRange())
+                        .setRequiredActions(dependency.getRequiredActions()))
+                .toList();
+        return this;
+    }
+
     /**
      * 获取已发布快照的副本。
      * <p>
@@ -270,6 +290,7 @@ public class ScriptDefinition {
                 .setOwner(owner)
                 .setDescription(description)
                 .setTags(tags)
+                .setPluginDependencies(pluginDependencies)
                 .setCreatedAt(createdAt)
                 .setUpdatedAt(updatedAt);
     }

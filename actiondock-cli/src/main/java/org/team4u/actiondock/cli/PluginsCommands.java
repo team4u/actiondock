@@ -14,7 +14,8 @@ import java.util.concurrent.Callable;
 
 @Command(name = "plugins", mixinStandardHelpOptions = true, description = "Commands for plugin installation, lifecycle operations, invocation, and config.", subcommands = {
         PluginsCommands.ListPlugins.class, PluginsCommands.GetPlugin.class, PluginsCommands.InstallPlugin.class, PluginsCommands.UpgradePlugin.class,
-        PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class
+        PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class,
+        PluginsCommands.RepositoryPluginCommands.class
 })
 /**
  * 插件管理命令组，提供插件的安装、启停、调用和配置等子命令。
@@ -30,6 +31,119 @@ class PluginsCommands implements Runnable {
 
     ActionDockCommand root() {
         return root;
+    }
+
+    @Command(name = "repository", mixinStandardHelpOptions = true, description = "Commands for repository-managed plugins.", subcommands = {
+            ListRepositoryPlugins.class, InstallRepositoryPlugin.class, UpdateRepositoryPlugin.class, PublishRepositoryPlugin.class
+    })
+    static class RepositoryPluginCommands implements Runnable {
+        @ParentCommand
+        PluginsCommands parent;
+
+        @Spec
+        CommandSpec spec;
+
+        ActionDockCommand root() {
+            return parent.root();
+        }
+
+        @Override
+        public void run() {
+            spec.commandLine().usage(root().services.stdout());
+        }
+    }
+
+    @Command(name = "list", mixinStandardHelpOptions = true, description = "List plugins declared by repositories.")
+    static class ListRepositoryPlugins implements Callable<Integer> {
+        @ParentCommand
+        RepositoryPluginCommands parent;
+
+        @Option(names = "--repository-id", description = "Optional repository ID. If omitted, all enabled repositories are scanned.")
+        String repositoryId;
+
+        @Override
+        public Integer call() {
+            String path = repositoryId == null || repositoryId.isBlank()
+                    ? "/api/repositories/plugins"
+                    : "/api/repositories/" + parent.root().encodePath(repositoryId) + "/plugins";
+            return parent.root().emit(parent.root().apiClient().get(path, Map.of()));
+        }
+    }
+
+    @Command(name = "install", mixinStandardHelpOptions = true, description = "Install a plugin from a repository.")
+    static class InstallRepositoryPlugin implements Callable<Integer> {
+        @ParentCommand
+        RepositoryPluginCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
+        String repositoryId;
+
+        @Parameters(index = "1", paramLabel = "<pluginId>", description = "Plugin ID.")
+        String pluginId;
+
+        @Option(names = "--force", description = "Force installation when the target plugin version conflicts with installed tool dependency ranges.")
+        boolean force;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            return root.emit(root.apiClient().postJson(
+                    "/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/install",
+                    Map.of(),
+                    root.jsonObject(Map.of("force", force))
+            ));
+        }
+    }
+
+    @Command(name = "update", mixinStandardHelpOptions = true, description = "Update an installed plugin from a repository.")
+    static class UpdateRepositoryPlugin implements Callable<Integer> {
+        @ParentCommand
+        RepositoryPluginCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
+        String repositoryId;
+
+        @Parameters(index = "1", paramLabel = "<pluginId>", description = "Plugin ID.")
+        String pluginId;
+
+        @Option(names = "--force", description = "Force update when the target plugin version conflicts with installed tool dependency ranges.")
+        boolean force;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            return root.emit(root.apiClient().postJson(
+                    "/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/update",
+                    Map.of(),
+                    root.jsonObject(Map.of("force", force))
+            ));
+        }
+    }
+
+    @Command(name = "publish", mixinStandardHelpOptions = true, description = {
+            "Publish an installed plugin into a repository.",
+            "--file is required and must provide a JSON object matching the /api/repositories/{repositoryId}/publish-plugin request body."
+    })
+    static class PublishRepositoryPlugin implements Callable<Integer> {
+        @ParentCommand
+        RepositoryPluginCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
+        String repositoryId;
+
+        @Option(names = "--file", required = true, description = "Path to the publish request JSON file. Use - to read from stdin.")
+        String filePath;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            String body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Repository plugin publish request body");
+            return root.emit(root.apiClient().postJson(
+                    "/api/repositories/" + root.encodePath(repositoryId) + "/publish-plugin",
+                    Map.of(),
+                    body
+            ));
+        }
     }
 
     @Override

@@ -406,6 +406,7 @@ export function ConfigValueManagementPage() {
       />
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
+          title="本机配置"
           actions={
             <>
               <Input.Search

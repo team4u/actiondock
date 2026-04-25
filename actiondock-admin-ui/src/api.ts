@@ -6,6 +6,10 @@ import type {
   RepositoryDefinition,
   RepositoryInstallRequest,
   RepositoryPublishRequest,
+  RepositoryPluginDescriptor,
+  RepositoryPluginInstallRequest,
+  RepositoryPluginInstallResult,
+  RepositoryPluginPublishRequest,
   RepositoryToolDescriptor,
   RepositoryToolDetail,
   ExecuteRequest,
@@ -344,8 +348,16 @@ export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
   return request<RepositoryToolDescriptor[]>("/api/repositories/tools");
 }
 
+export function listRepositoryPlugins(): Promise<RepositoryPluginDescriptor[]> {
+  return request<RepositoryPluginDescriptor[]>("/api/repositories/plugins");
+}
+
 export function listToolsByRepository(id: string): Promise<RepositoryToolDescriptor[]> {
   return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/tools`);
+}
+
+export function listPluginsByRepository(id: string): Promise<RepositoryPluginDescriptor[]> {
+  return request<RepositoryPluginDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/plugins`);
 }
 
 export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
@@ -368,6 +380,30 @@ export function updateRepositoryTool(repositoryId: string, toolId: string, paylo
   });
 }
 
+export function installRepositoryPlugin(
+  repositoryId: string,
+  pluginId: string,
+  payload: RepositoryPluginInstallRequest
+): Promise<RepositoryPluginInstallResult> {
+  return request<RepositoryPluginInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/plugins/${encodeURIComponent(pluginId)}/install`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateRepositoryPlugin(
+  repositoryId: string,
+  pluginId: string,
+  payload: RepositoryPluginInstallRequest
+): Promise<RepositoryPluginInstallResult> {
+  return request<RepositoryPluginInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/plugins/${encodeURIComponent(pluginId)}/update`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
 export function uninstallInstalledTool(scriptId: string): Promise<void> {
   return request<void>(`/api/installed-tools/${encodeURIComponent(scriptId)}`, {
     method: "DELETE"
@@ -384,6 +420,14 @@ export function forkRepositoryTool(scriptId: string, payload: { id: string; name
 
 export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryToolDescriptor> {
   return request<RepositoryToolDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function publishRepositoryPlugin(repositoryId: string, payload: RepositoryPluginPublishRequest): Promise<RepositoryPluginDescriptor> {
+  return request<RepositoryPluginDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-plugin`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)

@@ -151,6 +151,7 @@ export function RepositoryDiscoveryPage() {
 
   const confirmInstallAction = async (descriptor: RepositoryToolDescriptor, action: InstallAction) => {
     let installSchedules = false;
+    let installPluginDependencies = descriptor.pluginDependencies.length > 0;
     let detailForAction = detail?.descriptor.repositoryId === descriptor.repositoryId && detail?.descriptor.toolId === descriptor.toolId
       ? detail
       : null;
@@ -182,6 +183,13 @@ export function RepositoryDiscoveryPage() {
           ) : (
             <Text type="secondary">该工具没有定时任务模板。</Text>
           )}
+          {descriptor.pluginDependencies.length > 0 ? (
+            <Checkbox defaultChecked onChange={(event) => { installPluginDependencies = event.target.checked; }}>
+              同时安装或更新 {descriptor.pluginDependencies.length} 个插件依赖
+            </Checkbox>
+          ) : (
+            <Text type="secondary">该工具没有声明插件依赖。</Text>
+          )}
           {!descriptor.trusted ? (
             <Text type="warning">当前来源仓库未标记为可信，安装前请先检查源码与配置模板。</Text>
           ) : null}
@@ -192,9 +200,9 @@ export function RepositoryDiscoveryPage() {
     setActionKey(`${action}:${descriptor.installedScriptId}`);
     try {
       if (action === "install") {
-        await installRepositoryTool(descriptor.repositoryId, descriptor.toolId, { installSchedules });
+        await installRepositoryTool(descriptor.repositoryId, descriptor.toolId, { installSchedules, installPluginDependencies });
       } else {
-        await updateRepositoryTool(descriptor.repositoryId, descriptor.toolId, { installSchedules });
+        await updateRepositoryTool(descriptor.repositoryId, descriptor.toolId, { installSchedules, installPluginDependencies });
       }
       messageApi.success(action === "install" ? "工具已安装到本机" : "工具已更新");
       await loadData();

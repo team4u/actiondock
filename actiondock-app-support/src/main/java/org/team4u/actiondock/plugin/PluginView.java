@@ -13,6 +13,9 @@ public class PluginView {
     private String name;
     private String description;
     private String version;
+    private String repositoryId;
+    private String repositoryPluginId;
+    private String repositoryVersion;
     private String state;
     private boolean started;
     private boolean configurable;
@@ -51,6 +54,33 @@ public class PluginView {
 
     public PluginView setVersion(String version) {
         this.version = version;
+        return this;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public PluginView setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+        return this;
+    }
+
+    public String getRepositoryPluginId() {
+        return repositoryPluginId;
+    }
+
+    public PluginView setRepositoryPluginId(String repositoryPluginId) {
+        this.repositoryPluginId = repositoryPluginId;
+        return this;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public PluginView setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
         return this;
     }
 

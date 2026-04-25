@@ -333,6 +333,7 @@ export function ToolLibraryPage() {
     }
 
     let installSchedules = false;
+    let installPluginDependencies = Boolean(descriptor?.pluginDependencies.length);
     let scheduleCount = 0;
 
     try {
@@ -362,13 +363,25 @@ export function ToolLibraryPage() {
           ) : (
             <Text type="secondary">该工具没有额外定时模板可同步。</Text>
           )}
+          {descriptor?.pluginDependencies.length ? (
+            <Checkbox
+              defaultChecked
+              onChange={(event) => {
+                installPluginDependencies = event.target.checked;
+              }}
+            >
+              同时安装或更新 {descriptor.pluginDependencies.length} 个插件依赖
+            </Checkbox>
+          ) : (
+            <Text type="secondary">该工具没有声明插件依赖。</Text>
+          )}
         </Space>
       )
     });
 
     setActionKey(`update:${tool.id}`);
     try {
-      await updateRepositoryTool(tool.repositoryId, tool.repositoryToolId, { installSchedules });
+      await updateRepositoryTool(tool.repositoryId, tool.repositoryToolId, { installSchedules, installPluginDependencies });
       messageApi.success("工具已更新");
       await loadData();
     } catch (error) {
@@ -413,7 +426,10 @@ export function ToolLibraryPage() {
 
       for (const tool of updateTargets) {
         try {
-          await updateRepositoryTool(tool.repositoryId, tool.toolId, { installSchedules: true });
+          await updateRepositoryTool(tool.repositoryId, tool.toolId, {
+            installSchedules: true,
+            installPluginDependencies: true
+          });
           updatedCount += 1;
         } catch (error) {
           toolFailures.push(`${tool.installedScriptId}: ${getErrorMessage(error, "更新失败")}`);

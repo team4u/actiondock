@@ -187,6 +187,22 @@ public class PluginRuntimeService {
      * @throws PluginRuntimeException      如果插件加载、启动或注册失败
      */
     public synchronized PluginView install(String originalFilename, byte[] content) {
+        return install(originalFilename, content, null, null, null);
+    }
+
+    public synchronized PluginView installFromRepository(String originalFilename,
+                                                         byte[] content,
+                                                         String repositoryId,
+                                                         String repositoryPluginId,
+                                                         String repositoryVersion) {
+        return install(originalFilename, content, repositoryId, repositoryPluginId, repositoryVersion);
+    }
+
+    private synchronized PluginView install(String originalFilename,
+                                            byte[] content,
+                                            String repositoryId,
+                                            String repositoryPluginId,
+                                            String repositoryVersion) {
         ensureEnabled();
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("插件文件不能为空");
@@ -200,12 +216,16 @@ public class PluginRuntimeService {
             Files.write(destination, content);
             pluginId = loadPlugin(destination);
             PluginManifest manifest = cacheManifest(pluginId);
+            assertRepositoryVersion(repositoryVersion, manifest);
             if (pluginRegistryRepository.findByPluginId(pluginId).isPresent()) {
                 throw new IllegalArgumentException("插件已存在: " + pluginId);
             }
 
             PluginRegistration saved = pluginRegistryRepository.save(
                     toRegistration(manifest, destination.getFileName().toString(), true, null)
+                            .setRepositoryId(repositoryId)
+                            .setRepositoryPluginId(repositoryPluginId)
+                            .setRepositoryVersion(repositoryVersion)
             );
             return toPluginView(saved);
         } catch (Exception exception) {
@@ -234,6 +254,24 @@ public class PluginRuntimeService {
      * @throws PluginRuntimeException      如果升级过程失败
      */
     public synchronized PluginView upgrade(String pluginId, String originalFilename, byte[] content) {
+        return upgrade(pluginId, originalFilename, content, null, null, null);
+    }
+
+    public synchronized PluginView upgradeFromRepository(String pluginId,
+                                                         String originalFilename,
+                                                         byte[] content,
+                                                         String repositoryId,
+                                                         String repositoryPluginId,
+                                                         String repositoryVersion) {
+        return upgrade(pluginId, originalFilename, content, repositoryId, repositoryPluginId, repositoryVersion);
+    }
+
+    private synchronized PluginView upgrade(String pluginId,
+                                            String originalFilename,
+                                            byte[] content,
+                                            String repositoryId,
+                                            String repositoryPluginId,
+                                            String repositoryVersion) {
         ensureEnabled();
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("插件文件不能为空");
@@ -259,7 +297,11 @@ public class PluginRuntimeService {
             }
 
             PluginManifest manifest = cacheManifest(pluginId);
-            saved = pluginRegistryRepository.save(mergeRegistrationWithFileName(backup, manifest, destination.getFileName().toString()));
+            assertRepositoryVersion(repositoryVersion, manifest);
+            saved = pluginRegistryRepository.save(mergeRegistrationWithFileName(backup, manifest, destination.getFileName().toString())
+                    .setRepositoryId(repositoryId)
+                    .setRepositoryPluginId(repositoryPluginId)
+                    .setRepositoryVersion(repositoryVersion));
 
             if (!wasEnabled) {
                 unloadIfLoaded(pluginId);
@@ -287,6 +329,19 @@ public class PluginRuntimeService {
                 }
             }
             throw new PluginRuntimeException("升级插件失败: " + exception.getMessage(), exception);
+        }
+    }
+
+    public synchronized PluginRegistration getRegistration(String pluginId) {
+        return cloneRegistration(requireRegistration(pluginId));
+    }
+
+    public synchronized byte[] readPluginFile(String pluginId) {
+        PluginRegistration registration = requireRegistration(pluginId);
+        try {
+            return Files.readAllBytes(resolvePluginPath(registration));
+        } catch (IOException exception) {
+            throw new PluginRuntimeException("读取插件文件失败: " + pluginId, exception);
         }
     }
 
@@ -604,6 +659,12 @@ public class PluginRuntimeService {
                 .setUpdatedAt(now);
     }
 
+    private void assertRepositoryVersion(String expectedVersion, PluginManifest manifest) {
+        if (expectedVersion != null && !expectedVersion.isBlank() && !expectedVersion.equals(manifest.getVersion())) {
+            throw new IllegalArgumentException("插件版本与仓库描述不一致: " + manifest.getVersion());
+        }
+    }
+
     private PluginRegistration mergeRegistration(PluginRegistration existing, PluginManifest manifest, boolean enabled) {
         return toRegistration(manifest, existing.getFileName(), enabled, existing);
     }
@@ -621,6 +682,9 @@ public class PluginRuntimeService {
                 .setDescription(registration.getDescription())
                 .setVersion(registration.getVersion())
                 .setFileName(registration.getFileName())
+                .setRepositoryId(registration.getRepositoryId())
+                .setRepositoryPluginId(registration.getRepositoryPluginId())
+                .setRepositoryVersion(registration.getRepositoryVersion())
                 .setConfigSchema(registration.getConfigSchema())
                 .setDefaultConfig(registration.getDefaultConfig())
                 .setActions(registration.getActions())
@@ -639,6 +703,9 @@ public class PluginRuntimeService {
                 .setName(registration.getName())
                 .setDescription(registration.getDescription())
                 .setVersion(registration.getVersion())
+                .setRepositoryId(registration.getRepositoryId())
+                .setRepositoryPluginId(registration.getRepositoryPluginId())
+                .setRepositoryVersion(registration.getRepositoryVersion())
                 .setState(state)
                 .setStarted(wrapper != null && wrapper.getPluginState().isStarted())
                 .setConfigurable(!registration.getConfigSchema().isEmpty() || !registration.getDefaultConfig().isEmpty())

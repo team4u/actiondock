@@ -62,6 +62,8 @@ public class ScriptEntity {
     private String description;
     @Lob
     private String tagsJson;
+    @Lob
+    private String pluginDependenciesJson;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -107,6 +109,8 @@ public class ScriptEntity {
     public void setDescription(String description) { this.description = description; }
     public String getTagsJson() { return tagsJson; }
     public void setTagsJson(String tagsJson) { this.tagsJson = tagsJson; }
+    public String getPluginDependenciesJson() { return pluginDependenciesJson; }
+    public void setPluginDependenciesJson(String pluginDependenciesJson) { this.pluginDependenciesJson = pluginDependenciesJson; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

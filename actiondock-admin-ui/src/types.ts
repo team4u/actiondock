@@ -34,10 +34,17 @@ export interface ScriptDefinition {
   owner?: string;
   description?: string;
   tags?: string[];
+  pluginDependencies?: PluginDependency[];
   publishedSnapshot?: PublishedScriptSnapshot;
   hasUnpublishedChanges?: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface PluginDependency {
+  pluginId: string;
+  versionRange?: string;
+  requiredActions: string[];
 }
 
 export interface ExecutionRecord {
@@ -173,6 +180,9 @@ export interface PluginView {
   name: string;
   description: string;
   version: string;
+  repositoryId?: string;
+  repositoryPluginId?: string;
+  repositoryVersion?: string;
   state: string;
   started: boolean;
   configurable: boolean;
@@ -255,6 +265,7 @@ export interface RepositoryToolDescriptor {
   scheduleTemplatePath?: string;
   digest?: string;
   riskLevel?: string;
+  pluginDependencies: PluginDependency[];
   installed: boolean;
   installedVersion?: string;
   updateAvailable: boolean;
@@ -287,6 +298,57 @@ export interface RepositoryToolDetail {
 
 export interface RepositoryInstallRequest {
   installSchedules: boolean;
+  installPluginDependencies?: boolean;
+  forcePluginUpgrade?: boolean;
+}
+
+export interface RepositoryPluginDescriptor {
+  repositoryId: string;
+  pluginId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  owner?: string;
+  tags: string[];
+  artifactPath: string;
+  resolvedArtifactPath: string;
+  sha256?: string;
+  riskLevel?: string;
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
+  trusted: boolean;
+  dependentToolCount: number;
+}
+
+export interface RepositoryPluginDetail {
+  descriptor: RepositoryPluginDescriptor;
+  plugin: Record<string, unknown>;
+}
+
+export interface RepositoryPluginInstallResult {
+  plugin: PluginView;
+  conflicts: RepositoryPluginConflict[];
+}
+
+export interface RepositoryPluginConflict {
+  scriptId: string;
+  scriptName?: string;
+  requiredVersionRange?: string;
+}
+
+export interface RepositoryPluginInstallRequest {
+  force: boolean;
+}
+
+export interface RepositoryPluginPublishRequest {
+  pluginId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  description?: string;
+  tags?: string[];
+  riskLevel?: string;
 }
 
 export interface RepositoryPublishConfigItem {

@@ -29,6 +29,12 @@ public class PluginRegistrationEntity {
     @Column(nullable = false)
     private String fileName;
 
+    private String repositoryId;
+
+    private String repositoryPluginId;
+
+    private String repositoryVersion;
+
     @Lob
     private String configSchemaJson;
 
@@ -82,6 +88,30 @@ public class PluginRegistrationEntity {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public void setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+    }
+
+    public String getRepositoryPluginId() {
+        return repositoryPluginId;
+    }
+
+    public void setRepositoryPluginId(String repositoryPluginId) {
+        this.repositoryPluginId = repositoryPluginId;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public void setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
     }
 
     public String getConfigSchemaJson() {

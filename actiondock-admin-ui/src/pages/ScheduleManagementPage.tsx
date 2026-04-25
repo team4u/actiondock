@@ -331,6 +331,7 @@ export function ScheduleManagementPage() {
       />
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
+          title="定时任务"
           actions={
             <>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
