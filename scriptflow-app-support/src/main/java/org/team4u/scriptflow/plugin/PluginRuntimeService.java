@@ -75,7 +75,7 @@ public class PluginRuntimeService {
         this.jsonCodec = jsonCodec;
         this.pluginRegistryRepository = pluginRegistryRepository;
         this.pluginsRoot = Path.of(properties == null || properties.getDir() == null || properties.getDir().isBlank()
-                ? "./plugins"
+                ? AppProperties.defaultPluginsDir()
                 : properties.getDir()).toAbsolutePath().normalize();
         this.configRoot = this.pluginsRoot.resolve(".scriptflow-config");
         this.pluginManager = new DefaultPluginManager(this.pluginsRoot);
@@ -88,10 +88,25 @@ public class PluginRuntimeService {
         initialize();
     }
 
+    /**
+     * 获取禁用状态的插件运行时服务单例。
+     * <p>
+     * 当插件功能未启用时，所有操作将返回空结果或抛出异常。
+     *
+     * @return 禁用状态的插件运行时服务实例
+     */
     public static PluginRuntimeService disabled() {
         return DISABLED;
     }
 
+    /**
+     * 获取所有已注册插件的列表。
+     * <p>
+     * 按插件 ID 升序排列，返回每个插件的概要信息（ID、名称、版本、状态、动作列表等）。
+     * 若插件运行时未启用，返回空列表。
+     *
+     * @return 插件视图列表，不会返回 null
+     */
     public synchronized List<PluginView> list() {
         if (!enabled) {
             return List.of();
@@ -102,10 +117,26 @@ public class PluginRuntimeService {
                 .toList();
     }
 
+    /**
+     * 获取指定插件的概要信息。
+     *
+     * @param pluginId 插件唯一标识
+     * @return 插件视图，包含状态、版本、动作列表等信息
+     * @throws IllegalArgumentException 如果插件不存在
+     */
     public synchronized PluginView get(String pluginId) {
         return toPluginView(requireRegistration(pluginId));
     }
 
+    /**
+     * 获取指定插件的配置信息。
+     * <p>
+     * 返回配置模式（configSchema）、默认配置和当前生效配置的合并结果。
+     *
+     * @param pluginId 插件唯一标识
+     * @return 插件配置视图，包含模式定义、默认值和生效配置
+     * @throws IllegalArgumentException 如果插件不存在
+     */
     public synchronized PluginConfigView getConfig(String pluginId) {
         PluginRegistration registration = requireRegistration(pluginId);
         return new PluginConfigView()
@@ -115,6 +146,18 @@ public class PluginRuntimeService {
                 .setConfig(loadRawEffectiveConfig(registration));
     }
 
+    /**
+     * 保存指定插件的用户配置。
+     * <p>
+     * 将用户配置与默认配置合并后生成运行时生效配置，并调用已加载的插件实例进行配置校验。
+     * 校验通过后持久化到配置文件。
+     *
+     * @param pluginId 插件唯一标识
+     * @param config   用户提交的配置项，会覆盖同名的默认配置
+     * @return 更新后的插件配置视图
+     * @throws IllegalArgumentException    如果插件不存在
+     * @throws PluginRuntimeException      如果配置校验失败或写入文件失败
+     */
     public synchronized PluginConfigView saveConfig(String pluginId, Map<String, Object> config) {
         PluginRegistration registration = requireRegistration(pluginId);
         Map<String, Object> normalized = normalizeConfig(config);
@@ -131,6 +174,18 @@ public class PluginRuntimeService {
                 .setConfig(loadRawEffectiveConfig(registration));
     }
 
+    /**
+     * 安装插件。
+     * <p>
+     * 将上传的 JAR 插件文件写入插件目录，加载并启动插件，然后注册到仓库。
+     * 安装后插件处于启动状态，可被脚本调用。若安装失败会自动回滚（卸载插件、删除文件）。
+     *
+     * @param originalFilename 上传文件的原始文件名，必须以 .jar 结尾
+     * @param content          插件 JAR 文件的字节数据
+     * @return 安装后的插件视图
+     * @throws IllegalArgumentException    如果文件为空或插件已存在
+     * @throws PluginRuntimeException      如果插件加载、启动或注册失败
+     */
     public synchronized PluginView install(String originalFilename, byte[] content) {
         ensureEnabled();
         if (content == null || content.length == 0) {
@@ -165,6 +220,19 @@ public class PluginRuntimeService {
         }
     }
 
+    /**
+     * 升级插件到新版本。
+     * <p>
+     * 先卸载旧版本插件，写入新的 JAR 文件并加载启动，同时更新注册信息。
+     * 升级后保留原插件的启停状态。若升级失败会自动回滚到旧版本。
+     *
+     * @param pluginId         目标插件的唯一标识，新插件的 ID 必须与其一致
+     * @param originalFilename 新版本 JAR 文件的原始文件名
+     * @param content          新版本插件的字节数据
+     * @return 升级后的插件视图
+     * @throws IllegalArgumentException    如果文件为空或插件 ID 不一致
+     * @throws PluginRuntimeException      如果升级过程失败
+     */
     public synchronized PluginView upgrade(String pluginId, String originalFilename, byte[] content) {
         ensureEnabled();
         if (content == null || content.length == 0) {
@@ -222,6 +290,16 @@ public class PluginRuntimeService {
         }
     }
 
+    /**
+     * 启动插件。
+     * <p>
+     * 从文件系统加载插件 JAR 并启动，同时更新注册信息中的启用状态和插件元数据（如动作列表）。
+     *
+     * @param pluginId 插件唯一标识
+     * @return 启动后的插件视图
+     * @throws IllegalArgumentException 如果插件不存在或文件缺失
+     * @throws IllegalStateException    如果插件启动失败
+     */
     public synchronized PluginView start(String pluginId) {
         ensureEnabled();
         PluginRegistration registration = requireRegistration(pluginId);
@@ -232,6 +310,16 @@ public class PluginRuntimeService {
         return toPluginView(saved);
     }
 
+    /**
+     * 停止插件。
+     * <p>
+     * 停止并卸载 JVM 中的插件实例，同时将注册信息标记为禁用状态。
+     * 插件文件和注册记录保留，可再次调用 {@link #start(String)} 重新启动。
+     *
+     * @param pluginId 插件唯一标识
+     * @return 停止后的插件视图
+     * @throws IllegalArgumentException 如果插件不存在
+     */
     public synchronized PluginView stop(String pluginId) {
         ensureEnabled();
         PluginRegistration registration = requireRegistration(pluginId);
@@ -244,6 +332,16 @@ public class PluginRuntimeService {
         return toPluginView(saved);
     }
 
+    /**
+     * 卸载插件。
+     * <p>
+     * 完整移除插件：停止 JVM 中的插件实例、删除插件 JAR 文件、
+     * 删除注册记录、清除描述缓存和用户配置文件。
+     *
+     * @param pluginId 插件唯一标识
+     * @throws IllegalArgumentException    如果插件不存在
+     * @throws PluginRuntimeException      如果删除文件失败
+     */
     public synchronized void uninstall(String pluginId) {
         ensureEnabled();
         PluginRegistration registration = requireRegistration(pluginId);
@@ -254,6 +352,16 @@ public class PluginRuntimeService {
         deleteConfig(pluginId);
     }
 
+    /**
+     * 断言指定插件动作可用。
+     * <p>
+     * 检查插件是否已启动并在 JVM 中加载，以及指定动作是否存在于插件的动作列表中。
+     * 用于在调用插件前进行前置校验。
+     *
+     * @param pluginId 插件唯一标识
+     * @param action   动作名称
+     * @throws IllegalArgumentException 如果插件未启动或动作不存在
+     */
     public synchronized void assertActionAvailable(String pluginId, String action) {
         PluginRegistration registration = requireRegistration(pluginId);
         if (!registration.isEnabled() || !isLoadedAndStarted(pluginId)) {
@@ -267,6 +375,22 @@ public class PluginRuntimeService {
         }
     }
 
+    /**
+     * 调用指定插件的动作。
+     * <p>
+     * 在脚本执行上下文中调用已启动插件的指定动作，传入脚本输入和插件参数。
+     * 自动加载插件的运行时配置并注入到调用上下文中。
+     *
+     * @param pluginId         插件唯一标识
+     * @param action           要调用的动作名称
+     * @param definition       当前执行的脚本定义，可为 null
+     * @param executionContext 脚本执行上下文，包含执行 ID 和提交模式等信息
+     * @param input            脚本层的原始输入数据
+     * @param args             传递给插件动作的参数
+     * @return 插件动作的返回值
+     * @throws IllegalArgumentException 如果插件未启动或动作不存在
+     * @throws PluginRuntimeException   如果插件调用过程中发生异常
+     */
     public synchronized Object invoke(String pluginId,
                                       String action,
                                       ScriptDefinition definition,
@@ -295,6 +419,21 @@ public class PluginRuntimeService {
         }
     }
 
+    /**
+     * 以调试模式调用插件动作。
+     * <p>
+     * 用于管理后台的插件调试功能，以同步模式执行插件动作，
+     * 并根据输出模式对结果进行投影处理。可选择附带调试信息（实际传入的参数和脚本输入）。
+     *
+     * @param pluginId     插件唯一标识
+     * @param action       要调用的动作名称
+     * @param args         传递给插件动作的参数，支持配置变量解析
+     * @param scriptInput  模拟的脚本输入数据，支持配置变量解析
+     * @param includeDebug 是否在结果中包含调试信息
+     * @return 插件调用结果视图，包含投影后的输出和可选的调试信息
+     * @throws IllegalArgumentException    如果插件或动作不存在
+     * @throws PluginRuntimeException      如果插件调用失败
+     */
     public synchronized PluginInvokeView invokeForDebug(String pluginId,
                                                         String action,
                                                         Map<String, Object> args,

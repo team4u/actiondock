@@ -112,6 +112,7 @@ export function ScriptRunPage() {
   );
   const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
   const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
+  const backPath = script?.scope === "REPOSITORY" ? "/installed" : "/my-tools";
 
   useEffect(() => {
     if (!id) {
@@ -271,15 +272,15 @@ export function ScriptRunPage() {
         {contextHolder}
         <div className={`run-page run-page--${colorMode}`}>
           <div className="run-page__topbar">
-            <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate("/scripts")}>
-              返回脚本列表
+            <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate(backPath)}>
+              返回工具列表
             </Button>
           </div>
           <StatusCallout
             title={pageError.title}
             description={pageError.description}
             action={
-              <Button type="primary" onClick={() => navigate("/scripts")}>
+              <Button type="primary" onClick={() => navigate(backPath)}>
                 返回管理台
               </Button>
             }
@@ -294,8 +295,8 @@ export function ScriptRunPage() {
       {contextHolder}
       <div className={`run-page run-page--${colorMode}`}>
         <div className="run-page__topbar">
-          <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate("/scripts")}>
-            返回脚本列表
+          <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate(backPath)}>
+            返回工具列表
           </Button>
           <Button icon={<ReloadOutlined />} onClick={handleReset}>
             重置为默认值

@@ -35,6 +35,11 @@ public class ScheduleController {
         this.scriptScheduleViewMapper = new ScriptScheduleViewMapper(executionRepository);
     }
 
+    /**
+     * 查询所有定时调度列表。
+     *
+     * @return API 响应，包含调度视图列表
+     */
     @GetMapping
     public ApiResponse<List<ScriptScheduleView>> list() {
         return ApiResponse.success(scheduleApplicationService.listAll().stream()
@@ -42,11 +47,25 @@ public class ScheduleController {
                 .toList());
     }
 
+    /**
+     * 查询指定调度详情。
+     *
+     * @param scheduleId 调度 ID
+     * @return API 响应，包含调度视图
+     */
     @GetMapping("/{scheduleId}")
     public ApiResponse<ScriptScheduleView> detail(@PathVariable String scheduleId) {
         return ApiResponse.success(scriptScheduleViewMapper.toView(scheduleApplicationService.getById(scheduleId)));
     }
 
+    /**
+     * 创建定时调度。
+     * <p>
+     * 创建后自动刷新对应脚本的调度任务。
+     *
+     * @param request 调度创建请求
+     * @return API 响应，包含创建后的调度视图
+     */
     @PostMapping
     public ApiResponse<ScriptScheduleView> create(@RequestBody ScriptScheduleUpsertRequest request) {
         ScriptSchedule schedule = scheduleApplicationService.save(resolveScriptId(request), toDomain(request, null));
@@ -54,6 +73,15 @@ public class ScheduleController {
         return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已创建");
     }
 
+    /**
+     * 更新定时调度配置。
+     * <p>
+     * 不支持修改调度所属的脚本，更新后自动刷新调度任务。
+     *
+     * @param scheduleId 调度 ID
+     * @param request 调度更新请求
+     * @return API 响应，包含更新后的调度视图
+     */
     @PutMapping("/{scheduleId}")
     public ApiResponse<ScriptScheduleView> update(@PathVariable String scheduleId,
                                                   @RequestBody ScriptScheduleUpsertRequest request) {
@@ -67,6 +95,12 @@ public class ScheduleController {
         return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已更新");
     }
 
+    /**
+     * 启用指定调度。
+     *
+     * @param scheduleId 调度 ID
+     * @return API 响应，包含启用后的调度视图
+     */
     @PostMapping("/{scheduleId}/enable")
     public ApiResponse<ScriptScheduleView> enable(@PathVariable String scheduleId) {
         ScriptSchedule existing = scheduleApplicationService.getById(scheduleId);
@@ -75,6 +109,12 @@ public class ScheduleController {
         return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已启用");
     }
 
+    /**
+     * 停用指定调度。
+     *
+     * @param scheduleId 调度 ID
+     * @return API 响应，包含停用后的调度视图
+     */
     @PostMapping("/{scheduleId}/disable")
     public ApiResponse<ScriptScheduleView> disable(@PathVariable String scheduleId) {
         ScriptSchedule existing = scheduleApplicationService.getById(scheduleId);
@@ -83,6 +123,12 @@ public class ScheduleController {
         return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已停用");
     }
 
+    /**
+     * 删除指定调度。
+     *
+     * @param scheduleId 调度 ID
+     * @return API 响应，无数据
+     */
     @DeleteMapping("/{scheduleId}")
     public ApiResponse<Void> delete(@PathVariable String scheduleId) {
         ScriptSchedule existing = scheduleApplicationService.getById(scheduleId);

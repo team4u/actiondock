@@ -36,7 +36,6 @@ import {
   updatePluginConfig,
   upgradePlugin
 } from "../api";
-import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { buildStandardCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
@@ -169,7 +168,7 @@ export function PluginDetailPage() {
     () => resolvePluginScriptInputCommandInput(scriptInputText),
     [scriptInputText]
   );
-  const apiKey = getApiKey() ?? undefined;
+  const apiKey = undefined;
   const origin = window.location.origin;
 
   const loadPlugin = async () => {

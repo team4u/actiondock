@@ -58,6 +58,14 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         repository.deleteAllByScriptId(scriptId);
     }
 
+    /**
+     * 将执行记录领域对象转换为 JPA 实体。
+     * <p>
+     * 输入、输出、日志使用 JSON 序列化，错误详情拆分为类型和堆栈字段。
+     *
+     * @param record 执行记录领域对象
+     * @return JPA 实体
+     */
     private ExecutionEntity toEntity(ExecutionRecord record) {
         ExecutionEntity entity = new ExecutionEntity();
         entity.setId(record.getId());
@@ -78,6 +86,14 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         return entity;
     }
 
+    /**
+     * 将 JPA 实体转换为执行记录领域对象。
+     * <p>
+     * JSON 字段反序列化为输入输出 Map 和日志列表，错误字段重建为 ErrorDetail。
+     *
+     * @param entity JPA 实体
+     * @return 执行记录领域对象
+     */
     private ExecutionRecord toDomain(ExecutionEntity entity) {
         return new ExecutionRecord()
                 .setId(entity.getId())
@@ -98,6 +114,12 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
                 .setFinishedAt(entity.getFinishedAt());
     }
 
+    /**
+     * 从 JPA 实体的错误字段重建错误详情对象。
+     *
+     * @param entity JPA 实体
+     * @return 错误详情，错误类型和堆栈均为空时返回 null
+     */
     private ErrorDetail toErrorDetail(ExecutionEntity entity) {
         if (entity.getErrorType() == null && entity.getErrorStackTrace() == null) {
             return null;

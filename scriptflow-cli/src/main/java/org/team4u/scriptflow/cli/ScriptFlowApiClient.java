@@ -35,22 +35,67 @@ public final class ScriptFlowApiClient {
         this.restClient = createClient(config);
     }
 
+    /**
+     * 发送 GET 请求。
+     *
+     * @param path       API 路径，如 {@code /api/scripts}
+     * @param queryParams 查询参数，可以为空 Map
+     * @return 服务端返回的 JSON 响应
+     * @throws CliException 如果请求失败或服务端返回错误
+     */
     public JsonNode get(String path, Map<String, ?> queryParams) {
         return exchange(HttpMethod.GET, path, queryParams, null, null);
     }
 
+    /**
+     * 发送 DELETE 请求。
+     *
+     * @param path       API 路径
+     * @param queryParams 查询参数，可以为空 Map
+     * @return 服务端返回的 JSON 响应
+     * @throws CliException 如果请求失败或服务端返回错误
+     */
     public JsonNode delete(String path, Map<String, ?> queryParams) {
         return exchange(HttpMethod.DELETE, path, queryParams, null, null);
     }
 
+    /**
+     * 发送 JSON 格式的 POST 请求。
+     *
+     * @param path       API 路径
+     * @param queryParams 查询参数，可以为空 Map
+     * @param body       请求体的 JSON 字符串
+     * @return 服务端返回的 JSON 响应
+     * @throws CliException 如果请求失败或服务端返回错误
+     */
     public JsonNode postJson(String path, Map<String, ?> queryParams, String body) {
         return exchange(HttpMethod.POST, path, queryParams, body, null);
     }
 
+    /**
+     * 发送 JSON 格式的 PUT 请求。
+     *
+     * @param path       API 路径
+     * @param queryParams 查询参数，可以为空 Map
+     * @param body       请求体的 JSON 字符串
+     * @return 服务端返回的 JSON 响应
+     * @throws CliException 如果请求失败或服务端返回错误
+     */
     public JsonNode putJson(String path, Map<String, ?> queryParams, String body) {
         return exchange(HttpMethod.PUT, path, queryParams, body, null);
     }
 
+    /**
+     * 发送 multipart/form-data 格式的 POST 请求，用于文件上传。
+     *
+     * @param path        API 路径
+     * @param queryParams 查询参数，可以为空 Map
+     * @param fieldName   表单字段名称
+     * @param file        文件路径（用于获取文件名）
+     * @param content     文件内容字节数组
+     * @return 服务端返回的 JSON 响应
+     * @throws CliException 如果请求失败或服务端返回错误
+     */
     public JsonNode postMultipart(String path, Map<String, ?> queryParams, String fieldName, Path file, byte[] content) {
         LinkedMultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add(fieldName, new NamedByteArrayResource(file.getFileName().toString(), content));

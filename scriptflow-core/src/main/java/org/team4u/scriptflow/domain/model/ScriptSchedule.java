@@ -19,6 +19,10 @@ public class ScriptSchedule {
     private String cronExpression;
     private Map<String, Object> input = new LinkedHashMap<>();
     private boolean enabled = true;
+    private boolean editable = true;
+    private String repositoryId;
+    private String repositoryToolId;
+    private String repositoryVersion;
     private LocalDateTime lastTriggeredAt;
     private String lastExecutionId;
     private LocalDateTime createdAt;
@@ -75,6 +79,42 @@ public class ScriptSchedule {
 
     public ScriptSchedule setEnabled(boolean enabled) {
         this.enabled = enabled;
+        return this;
+    }
+
+    public boolean isEditable() {
+        return editable;
+    }
+
+    public ScriptSchedule setEditable(boolean editable) {
+        this.editable = editable;
+        return this;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public ScriptSchedule setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+        return this;
+    }
+
+    public String getRepositoryToolId() {
+        return repositoryToolId;
+    }
+
+    public ScriptSchedule setRepositoryToolId(String repositoryToolId) {
+        this.repositoryToolId = repositoryToolId;
+        return this;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public ScriptSchedule setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
         return this;
     }
 

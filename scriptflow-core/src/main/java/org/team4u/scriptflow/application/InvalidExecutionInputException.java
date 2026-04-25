@@ -12,6 +12,12 @@ public class InvalidExecutionInputException extends IllegalArgumentException {
     private final String scriptId;
     private final List<SchemaFieldError> fieldErrors;
 
+    /**
+     * 创建无效执行输入异常。
+     *
+     * @param scriptId    脚本 ID
+     * @param fieldErrors 字段校验错误列表
+     */
     public InvalidExecutionInputException(String scriptId, List<SchemaFieldError> fieldErrors) {
         super("输入参数校验失败");
         this.code = "INVALID_ARGUMENTS";

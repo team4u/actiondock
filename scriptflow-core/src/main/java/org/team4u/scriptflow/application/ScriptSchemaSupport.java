@@ -18,6 +18,15 @@ import java.util.Set;
  * @author jay.wu
  */
 public class ScriptSchemaSupport {
+    /**
+     * 根据输入模式提取字段摘要信息。
+     * <p>
+     * 解析 JSON Schema 的 properties、required、title 等字段，
+     * 生成结构化的字段摘要列表，用于前端表单渲染或文档展示。
+     *
+     * @param schema JSON Schema 格式的输入模式定义
+     * @return 包含所有字段信息的模式摘要
+     */
     public SchemaSummary summarize(Map<String, Object> schema) {
         ParsedSchema parsedSchema = parse(schema);
         List<SchemaField> fields = parsedSchema.fields().stream()
@@ -35,6 +44,17 @@ public class ScriptSchemaSupport {
         return new SchemaSummary(fields);
     }
 
+    /**
+     * 校验输入参数是否符合脚本的输入模式定义。
+     * <p>
+     * 逐字段检查必填性、类型匹配和枚举值约束，如果模式为空则跳过校验。
+     * 校验失败时抛出 {@link InvalidExecutionInputException}，包含所有字段的错误详情。
+     *
+     * @param scriptId 脚本 ID，用于构造异常信息
+     * @param input    待校验的输入参数
+     * @param schema   JSON Schema 格式的输入模式定义
+     * @throws InvalidExecutionInputException 如果输入参数不符合模式定义
+     */
     public void validateInput(String scriptId, Map<String, Object> input, Map<String, Object> schema) {
         ParsedSchema parsedSchema = parse(schema);
         if (parsedSchema.fields().isEmpty()) {

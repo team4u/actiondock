@@ -2,6 +2,7 @@ package org.team4u.scriptflow.storage.jpa.adapter;
 
 import org.team4u.scriptflow.domain.model.ScriptDefinition;
 import org.team4u.scriptflow.domain.model.PublishedScriptSnapshot;
+import org.team4u.scriptflow.domain.model.ScriptScope;
 import org.team4u.scriptflow.domain.model.ScriptStatus;
 import org.team4u.scriptflow.domain.model.ScriptType;
 import org.team4u.scriptflow.domain.port.JsonCodec;
@@ -46,6 +47,14 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         repository.deleteById(id);
     }
 
+    /**
+     * 将脚本定义领域对象转换为 JPA 实体。
+     * <p>
+     * 将已发布快照平铺到实体的 published 前缀字段，Schema 使用 JSON 序列化。
+     *
+     * @param definition 脚本定义领域对象
+     * @return JPA 实体
+     */
     private ScriptEntity toEntity(ScriptDefinition definition) {
         ScriptEntity entity = new ScriptEntity();
         PublishedScriptSnapshot publishedSnapshot = definition.getPublishedSnapshot();
@@ -62,11 +71,27 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setPublishedOutputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getOutputSchema()));
         entity.setStatus(definition.getStatus().name());
         entity.setVersionValue(definition.getVersion());
+        entity.setScope(definition.getScope().name());
+        entity.setRepositoryId(definition.getRepositoryId());
+        entity.setRepositoryToolId(definition.getRepositoryToolId());
+        entity.setRepositoryVersion(definition.getRepositoryVersion());
+        entity.setEditable(definition.isEditable());
+        entity.setOwner(definition.getOwner());
+        entity.setDescription(definition.getDescription());
+        entity.setTagsJson(jsonCodec.write(definition.getTags()));
         entity.setCreatedAt(definition.getCreatedAt());
         entity.setUpdatedAt(definition.getUpdatedAt());
         return entity;
     }
 
+    /**
+     * 将 JPA 实体转换为脚本定义领域对象。
+     * <p>
+     * 从 published 前缀字段重建已发布快照，Schema 使用 JSON 反序列化。
+     *
+     * @param entity JPA 实体
+     * @return 脚本定义领域对象
+     */
     private ScriptDefinition toDomain(ScriptEntity entity) {
         return new ScriptDefinition()
                 .setId(entity.getId())
@@ -78,10 +103,24 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setPublishedSnapshot(toSnapshot(entity))
                 .setStatus(ScriptStatus.valueOf(entity.getStatus()))
                 .setVersion(entity.getVersionValue())
+                .setScope(entity.getScope() == null ? ScriptScope.PERSONAL : ScriptScope.valueOf(entity.getScope()))
+                .setRepositoryId(entity.getRepositoryId())
+                .setRepositoryToolId(entity.getRepositoryToolId())
+                .setRepositoryVersion(entity.getRepositoryVersion())
+                .setEditable(entity.isEditable())
+                .setOwner(entity.getOwner())
+                .setDescription(entity.getDescription())
+                .setTags(jsonCodec.readList(entity.getTagsJson(), String.class))
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
     }
 
+    /**
+     * 从 JPA 实体的 published 字段重建已发布快照。
+     *
+     * @param entity JPA 实体
+     * @return 已发布快照，所有 published 字段为空时返回 null
+     */
     private PublishedScriptSnapshot toSnapshot(ScriptEntity entity) {
         if (entity.getPublishedType() == null && entity.getPublishedSource() == null && entity.getPublishedName() == null
                 && entity.getPublishedInputSchemaJson() == null && entity.getPublishedOutputSchemaJson() == null) {

@@ -39,6 +39,9 @@ class ConfigCommands implements Runnable {
         @ParentCommand
         ConfigCommands parent;
 
+        /**
+         * 显示当前生效的连接配置，包括各配置值的来源和令牌脱敏信息。
+         */
         @Override
         public Integer call() {
             return parent.root().emitLocalSuccess(parent.root().configService().toResolvedNode(parent.root().resolveConnectionConfig()));
@@ -68,6 +71,9 @@ class ConfigCommands implements Runnable {
         @ParentCommand
         ProfileCommands parent;
 
+        /**
+         * 列出所有本地 profile 并标识当前激活的 profile。
+         */
         @Override
         public Integer call() {
             CliConfigService.ConfigFile file = parent.root().loadConfigFile();
@@ -83,6 +89,9 @@ class ConfigCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<profileName>", description = "Profile name.")
         String profileName;
 
+        /**
+         * 查询单个本地 profile 的配置详情。
+         */
         @Override
         public Integer call() {
             CliConfigService.ConfigFile file = parent.root().loadConfigFile();
@@ -120,6 +129,9 @@ class ConfigCommands implements Runnable {
         @Option(names = "--read-timeout-ms", description = "HTTP read timeout in milliseconds.")
         Integer readTimeoutMs;
 
+        /**
+         * 创建或更新本地 profile 并设为当前 profile。
+         */
         @Override
         public Integer call() {
             CliConfigService.ConfigFile file = parent.root().loadConfigFile();
@@ -154,6 +166,9 @@ class ConfigCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<profileName>", description = "Profile name to delete.")
         String profileName;
 
+        /**
+         * 删除指定的本地 profile，若为当前 profile 则清除 currentProfile 设置。
+         */
         @Override
         public Integer call() {
             CliConfigService.ConfigFile file = parent.root().loadConfigFile();

@@ -11,6 +11,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  */
 @Configuration(proxyBeanMethods = false)
 public class WebCorsConfiguration implements WebMvcConfigurer {
+    /**
+     * 配置 API 路径的 CORS 跨域策略。
+     * <p>
+     * 允许所有来源的 GET、POST、PUT、DELETE、OPTIONS 请求。
+     *
+     * @param registry CORS 注册器
+     */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")

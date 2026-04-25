@@ -4,6 +4,8 @@ import {
   CodeOutlined,
   CopyOutlined,
   DeleteOutlined,
+  ExportOutlined,
+  ForkOutlined,
   ImportOutlined,
   PlayCircleOutlined,
   RollbackOutlined,
@@ -15,6 +17,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Col,
   Collapse,
   Descriptions,
@@ -47,16 +50,20 @@ import {
   deleteExecution,
   deleteScript,
   executeScript,
+  forkRepositoryTool,
   getExecution,
+  listConfigValues,
   listPlugins,
+  listRepositories,
+  listSchedules,
   listScripts,
   getScript,
   listExecutions,
+  publishRepositoryTool,
   publishScript,
   updateScript,
   validateScript
 } from "../api";
-import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { buildStandardCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
@@ -105,17 +112,20 @@ import {
 import { buildDuplicatedScriptDefinition } from "../scriptDuplication";
 import { buildPluginInvokeSnippet, buildScriptInvokeSnippet } from "../scriptInvocationSnippets";
 import type {
+  ConfigValue,
   ExecutionRecord,
   ExecutionStatus,
   ExecutionTriggerSource,
   PluginView,
+  RepositoryDefinition,
   ScriptDefinition,
+  ScriptSchedule,
   ScriptType,
   SubmitMode,
   ValidationErrorData
 } from "../types";
 import type { SchemaEditorState } from "../schema";
-import { copyText, formatDateTime, getExecutionStatusColor, isExecutionActive, parseJsonText, prettyJson } from "../utils";
+import { copyText, formatDateTime, getErrorMessage, getExecutionStatusColor, isExecutionActive, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -129,6 +139,22 @@ interface ScriptFormValues {
   id: string;
   name: string;
   type: ScriptType;
+}
+
+interface PublishToRepositoryFormValues {
+  repositoryId: string;
+  toolId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  description?: string;
+  tags?: string[];
+  scheduleIds?: string[];
+}
+
+interface ForkFormValues {
+  id: string;
+  name: string;
 }
 
 type ExecutionInputMode = "SCHEMA" | "JSON";
@@ -176,6 +202,24 @@ function getTriggerSourceLabel(source: ExecutionTriggerSource): string {
   return source === "SCHEDULED" ? "定时任务" : "手动触发";
 }
 
+function toTagOptions(tags: string[] | undefined): string[] {
+  return (tags ?? []).filter((item) => item.trim().length > 0);
+}
+
+function suggestNextRepositoryVersion(value?: string): string {
+  if (!value) {
+    return "0.1.0";
+  }
+  const parts = value.split(".");
+  const last = Number(parts[parts.length - 1]);
+  if (Number.isNaN(last)) {
+    return value;
+  }
+  const next = [...parts];
+  next[next.length - 1] = String(last + 1);
+  return next.join(".");
+}
+
 export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -185,6 +229,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<ScriptFormValues>();
   const [executionForm] = Form.useForm<Record<string, unknown>>();
+  const [publishForm] = Form.useForm<PublishToRepositoryFormValues>();
+  const [forkForm] = Form.useForm<ForkFormValues>();
   const watchedExecutionValues = Form.useWatch([], executionForm) as Record<string, unknown> | undefined;
   const [loading, setLoading] = useState(mode === "edit");
   const [saving, setSaving] = useState(false);
@@ -218,6 +264,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [generatedScriptModalOpen, setGeneratedScriptModalOpen] = useState(false);
   const [generatedScriptText, setGeneratedScriptText] = useState("");
   const [copiedFromScript, setCopiedFromScript] = useState<{ id: string; name: string } | null>(null);
+  const [publishToRepositoryOpen, setPublishToRepositoryOpen] = useState(false);
+  const [publishingToRepository, setPublishingToRepository] = useState(false);
+  const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
+  const [publishSchedules, setPublishSchedules] = useState<ScriptSchedule[]>([]);
+  const [publishConfigValues, setPublishConfigValues] = useState<ConfigValue[]>([]);
+  const [publishMetadataLoading, setPublishMetadataLoading] = useState(false);
+  const [publishConfigModes, setPublishConfigModes] = useState<Record<string, "INLINE" | "PLACEHOLDER">>({});
+  const [forkModalOpen, setForkModalOpen] = useState(false);
+  const [forkingRepositoryTool, setForkingRepositoryTool] = useState(false);
   const [referencePluginId, setReferencePluginId] = useState<string | null>(null);
   const [pluginReferenceQuery, setPluginReferenceQuery] = useState("");
   const [pluginReferencePage, setPluginReferencePage] = useState(1);
@@ -284,9 +339,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const hasUnpublishedChanges = Boolean(
     currentScript?.status === "PUBLISHED" && currentScript.hasUnpublishedChanges
   );
+  const isReadOnlyScript = Boolean(mode === "edit" && currentScript && currentScript.editable === false);
+  const canPublishToRepository = Boolean(currentScript && currentScript.scope !== "REPOSITORY");
   const supportsSchemaForm = supportedFields.length > 0;
   const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
-  const apiKey = getApiKey();
+  const apiKey = undefined;
   const origin = window.location.origin;
   const commandInput = useMemo(
     () => resolveExecutionCommandInput({
@@ -694,6 +751,94 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     return saved;
   };
 
+  const ensureCurrentScriptPublished = async (successMessage?: string): Promise<ScriptDefinition> => {
+    let stage: "save" | "validate" | "publish" = "save";
+    let savedScript: ScriptDefinition | null = null;
+
+    try {
+      savedScript = await persistCurrentScript();
+
+      stage = "validate";
+      await validateScript(savedScript.id);
+
+      stage = "publish";
+      const published = await publishScript(savedScript.id);
+      applyScriptToEditor(published);
+      await loadScriptReferences();
+
+      if (successMessage) {
+        messageApi.success(successMessage);
+      }
+      if (mode === "create") {
+        navigate(`/scripts/${published.id}`, { replace: true });
+      }
+      return published;
+    } catch (error) {
+      const detail =
+        error instanceof ApiError || error instanceof Error
+          ? error.message
+          : stage === "save"
+            ? "保存失败"
+            : stage === "validate"
+              ? "校验失败"
+              : "发布失败";
+
+      if (stage === "validate") {
+        messageApi.error(`校验失败，当前修改已保存但未发布：${detail}`);
+      } else if (stage === "publish") {
+        messageApi.error(`发布失败，当前修改已保存且已校验：${detail}`);
+      } else {
+        messageApi.error(detail);
+      }
+
+      if (mode === "create" && savedScript?.id) {
+        navigate(`/scripts/${savedScript.id}`, { replace: true });
+      }
+      const handledError = error instanceof Error ? error : new Error(detail);
+      Object.assign(handledError, { handled: true });
+      throw handledError;
+    }
+  };
+
+  const loadPublishMetadata = async (script: ScriptDefinition): Promise<RepositoryDefinition[]> => {
+    setPublishMetadataLoading(true);
+    try {
+      const [repositories, schedules, configValues] = await Promise.all([
+        listRepositories(),
+        listSchedules(),
+        listConfigValues()
+      ]);
+      const publishableRepositories = repositories
+        .filter((item) => item.enabled && item.type !== "HTTP")
+        .sort((left, right) => left.alias.localeCompare(right.alias));
+      const relatedSchedules = schedules
+        .filter((item) => item.scriptId === script.id)
+        .sort((left, right) => left.name.localeCompare(right.name));
+      const sortedConfigValues = [...configValues].sort((left, right) => left.key.localeCompare(right.key));
+
+      setPublishRepositories(publishableRepositories);
+      setPublishSchedules(relatedSchedules);
+      setPublishConfigValues(sortedConfigValues);
+      setPublishConfigModes({});
+      publishForm.setFieldsValue({
+        repositoryId: publishableRepositories[0]?.id,
+        toolId: script.repositoryToolId || script.id,
+        displayName: script.name,
+        version: suggestNextRepositoryVersion(script.repositoryVersion),
+        owner: script.owner ?? "",
+        description: script.description ?? "",
+        tags: toTagOptions(script.tags),
+        scheduleIds: []
+      });
+      return publishableRepositories;
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载发布信息失败"));
+      throw error;
+    } finally {
+      setPublishMetadataLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -740,7 +885,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       clearPolling();
       await deleteScript(currentScript.id);
       messageApi.success("删除成功");
-      navigate("/scripts", { replace: true });
+      navigate("/my-tools", { replace: true });
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "删除脚本失败";
       messageApi.error(detail);
@@ -751,47 +896,102 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   const handlePublish = async () => {
     setPublishing(true);
-    let stage: "save" | "validate" | "publish" = "save";
-    let savedScript: ScriptDefinition | null = null;
-
     try {
-      savedScript = await persistCurrentScript();
-
-      stage = "validate";
-      await validateScript(savedScript.id);
-
-      stage = "publish";
-      const published = await publishScript(savedScript.id);
-      applyScriptToEditor(published);
-      await loadScriptReferences();
-      messageApi.success("保存、校验并发布成功");
-
-      if (mode === "create") {
-        navigate(`/scripts/${published.id}`, { replace: true });
-      }
-    } catch (error) {
-      const detail =
-        error instanceof ApiError || error instanceof Error
-          ? error.message
-          : stage === "save"
-            ? "保存失败"
-            : stage === "validate"
-              ? "校验失败"
-              : "发布失败";
-
-      if (stage === "validate") {
-        messageApi.error(`校验失败，当前修改已保存但未发布：${detail}`);
-      } else if (stage === "publish") {
-        messageApi.error(`发布失败，当前修改已保存且已校验：${detail}`);
-      } else {
-        messageApi.error(detail);
-      }
-
-      if (mode === "create" && savedScript?.id) {
-        navigate(`/scripts/${savedScript.id}`, { replace: true });
-      }
+      await ensureCurrentScriptPublished("保存、校验并发布成功");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const openPublishToRepositoryModal = async () => {
+    if (isReadOnlyScript) {
+      messageApi.warning("仓库工具为只读版本，请先 Fork 再发布");
+      return;
+    }
+    if (!currentScript?.id) {
+      messageApi.warning("请先保存工具");
+      return;
+    }
+
+    try {
+      const repositories = await loadPublishMetadata(currentScript);
+      if (repositories.length === 0) {
+        messageApi.warning("当前没有可发布的仓库，请先添加一个 Git 或本地目录仓库");
+        return;
+      }
+      setPublishToRepositoryOpen(true);
+    } catch {
+      return;
+    }
+  };
+
+  const handlePublishToRepository = async () => {
+    try {
+      const values = await publishForm.validateFields();
+      setPublishingToRepository(true);
+      const publishedScript = await ensureCurrentScriptPublished();
+      const configItems = Object.entries(publishConfigModes).map(([key, publishMode]) => ({
+        key,
+        publishMode
+      }));
+      await publishRepositoryTool(values.repositoryId, {
+        scriptId: publishedScript.id,
+        toolId: values.toolId.trim(),
+        displayName: values.displayName.trim(),
+        version: values.version.trim(),
+        owner: values.owner?.trim() || undefined,
+        description: values.description?.trim() || undefined,
+        tags: toTagOptions(values.tags),
+        scheduleIds: values.scheduleIds ?? [],
+        configItems
+      });
+      setPublishToRepositoryOpen(false);
+      messageApi.success("已发布到目标仓库");
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "errorFields" in error) {
+        return;
+      }
+      if (typeof error === "object" && error !== null && "handled" in error) {
+        return;
+      }
+      messageApi.error(getErrorMessage(error, "发布到仓库失败"));
+    } finally {
+      setPublishingToRepository(false);
+    }
+  };
+
+  const openForkModal = () => {
+    if (!currentScript) {
+      return;
+    }
+    forkForm.setFieldsValue({
+      id: `${currentScript.repositoryToolId || currentScript.id}-fork`,
+      name: `${currentScript.name} Fork`
+    });
+    setForkModalOpen(true);
+  };
+
+  const handleForkRepositoryScript = async () => {
+    if (!currentScript) {
+      return;
+    }
+    try {
+      const values = await forkForm.validateFields();
+      setForkingRepositoryTool(true);
+      const created = await forkRepositoryTool(currentScript.id, {
+        id: values.id.trim(),
+        name: values.name.trim()
+      });
+      setForkModalOpen(false);
+      messageApi.success("Fork 已创建");
+      navigate(`/scripts/${created.id}`);
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "errorFields" in error) {
+        return;
+      }
+      messageApi.error(getErrorMessage(error, "创建 Fork 失败"));
+    } finally {
+      setForkingRepositoryTool(false);
     }
   };
 
@@ -1117,6 +1317,172 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         </Space>
       </Modal>
       <Modal
+        title="发布到仓库"
+        open={publishToRepositoryOpen}
+        onCancel={() => setPublishToRepositoryOpen(false)}
+        onOk={() => void handlePublishToRepository()}
+        okText="发布到仓库"
+        cancelText="取消"
+        confirmLoading={publishingToRepository}
+        width={760}
+        destroyOnHidden
+      >
+        {publishMetadataLoading ? (
+          <div className="page-loading">
+            <Spin size="large" />
+          </div>
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Alert
+              type="info"
+              showIcon
+              message="发布前会先执行本地保存、校验与发布"
+              description="配置项只会按你选择的模式导出为模板；密钥类内容请使用 PLACEHOLDER，避免把真实值写入仓库。"
+            />
+            <Form form={publishForm} layout="vertical">
+              <Form.Item
+                label="目标仓库"
+                name="repositoryId"
+                rules={[{ required: true, message: "请选择目标仓库" }]}
+              >
+                <Select
+                  options={publishRepositories.map((item) => ({
+                    value: item.id,
+                    label: `${item.alias} · ${item.name}`
+                  }))}
+                />
+              </Form.Item>
+              <Space size={12} style={{ width: "100%" }} wrap>
+                <Form.Item
+                  label="仓库工具 ID"
+                  name="toolId"
+                  rules={[{ required: true, message: "请输入 toolId" }]}
+                  style={{ flex: "1 1 220px", minWidth: 220 }}
+                >
+                  <Input placeholder="例如 clear-cache" />
+                </Form.Item>
+                <Form.Item
+                  label="版本"
+                  name="version"
+                  rules={[{ required: true, message: "请输入版本号" }]}
+                  style={{ flex: "1 1 160px", minWidth: 160 }}
+                >
+                  <Input placeholder="例如 1.0.0" />
+                </Form.Item>
+              </Space>
+              <Form.Item
+                label="显示名称"
+                name="displayName"
+                rules={[{ required: true, message: "请输入显示名称" }]}
+              >
+                <Input placeholder="例如 清理缓存" />
+              </Form.Item>
+              <Space size={12} style={{ width: "100%" }} wrap>
+                <Form.Item label="维护人" name="owner" style={{ flex: "1 1 220px", minWidth: 220 }}>
+                  <Input placeholder="例如 platform-team" />
+                </Form.Item>
+                <Form.Item label="标签" name="tags" style={{ flex: "1 1 320px", minWidth: 240 }}>
+                  <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" />
+                </Form.Item>
+              </Space>
+              <Form.Item label="说明" name="description">
+                <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="仓库中展示的工具说明" />
+              </Form.Item>
+              <Form.Item label={`定时任务模板 (${publishSchedules.length})`} name="scheduleIds">
+                <Select
+                  mode="multiple"
+                  placeholder={publishSchedules.length > 0 ? "选择要一起发布的定时任务模板" : "当前工具没有可发布的定时任务"}
+                  options={publishSchedules.map((item) => ({
+                    value: item.id,
+                    label: `${item.name} · ${item.cronExpression}`
+                  }))}
+                  disabled={publishSchedules.length === 0}
+                />
+              </Form.Item>
+            </Form>
+
+            <Card type="inner" title={`配置模板 (${publishConfigValues.length})`}>
+              {publishConfigValues.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可选配置值" />
+              ) : (
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  {publishConfigValues.map((item) => {
+                    const selectedMode = publishConfigModes[item.key];
+                    return (
+                      <div key={item.key} className="repository-config-publish-row">
+                        <Checkbox
+                          checked={Boolean(selectedMode)}
+                          onChange={(event) => {
+                            if (!event.target.checked) {
+                              setPublishConfigModes((previous) => {
+                                const next = { ...previous };
+                                delete next[item.key];
+                                return next;
+                              });
+                              return;
+                            }
+                            setPublishConfigModes((previous) => ({
+                              ...previous,
+                              [item.key]: previous[item.key] ?? "PLACEHOLDER"
+                            }));
+                          }}
+                        >
+                          <Space direction="vertical" size={2}>
+                            <Text code>{item.key}</Text>
+                            <Text type="secondary">{item.description || "未填写说明"}</Text>
+                          </Space>
+                        </Checkbox>
+                        <Select
+                          value={selectedMode}
+                          disabled={!selectedMode}
+                          style={{ width: 160 }}
+                          options={[
+                            { value: "PLACEHOLDER", label: "PLACEHOLDER" },
+                            { value: "INLINE", label: "INLINE" }
+                          ]}
+                          onChange={(nextValue) =>
+                            setPublishConfigModes((previous) => ({
+                              ...previous,
+                              [item.key]: nextValue
+                            }))
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </Space>
+              )}
+            </Card>
+          </Space>
+        )}
+      </Modal>
+      <Modal
+        title="Fork 到我的工具"
+        open={forkModalOpen}
+        onCancel={() => setForkModalOpen(false)}
+        onOk={() => void handleForkRepositoryScript()}
+        okText="创建 Fork"
+        cancelText="取消"
+        confirmLoading={forkingRepositoryTool}
+        destroyOnHidden
+      >
+        <Form form={forkForm} layout="vertical">
+          <Form.Item
+            label="新工具 ID"
+            name="id"
+            rules={[
+              { required: true, message: "请输入新的工具 ID" },
+              { pattern: /^[A-Za-z0-9._-]+$/, message: "仅支持字母、数字、点、中横线和下划线" }
+            ]}
+          >
+            <Input placeholder="例如 clear-cache-fork" />
+          </Form.Item>
+          <Form.Item label="名称" name="name" rules={[{ required: true, message: "请输入名称" }]}>
+            <Input placeholder="例如 清理缓存 Fork" />
+          </Form.Item>
+        </Form>
+      </Modal>
+      <Modal
         title={referenceScript ? referenceScript.name || referenceScript.id : "脚本参考"}
         open={Boolean(referenceScript)}
         onCancel={() => setReferenceScriptId(null)}
@@ -1284,33 +1650,39 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   type="link"
                   icon={<ArrowLeftOutlined />}
                   style={{ paddingInline: 0 }}
-                  onClick={() => navigate("/scripts")}
+                  onClick={() => navigate(currentScript?.scope === "REPOSITORY" ? "/installed" : "/my-tools")}
                 >
-                  返回列表
+                  返回工具列表
                 </Button>
                 <Typography.Title level={4} style={{ margin: 0 }}>
-                  {mode === "create" ? "新建脚本" : ""}
+                  {mode === "create" ? "新建工具" : currentScript?.name || "工具详情"}
                 </Typography.Title>
+                {currentScript?.description ? <Text type="secondary">{currentScript.description}</Text> : null}
               </Space>
             </Col>
             <Col>
               <Space className="page-card-actions" wrap>
-                {mode === "create" && canImportGeneratedScript ? (
+                {mode === "create" && canImportGeneratedScript && !isReadOnlyScript ? (
                   <Button icon={<ImportOutlined />} onClick={() => setGeneratedScriptModalOpen(true)}>
                     粘贴生成结果
                   </Button>
                 ) : null}
-                {mode === "edit" && currentScript ? (
+                {mode === "edit" && currentScript && !isReadOnlyScript ? (
                   <Button
                     icon={<CopyOutlined />}
                     onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(currentScript.id)}`)}
                   >
-                    复制脚本
+                    复制工具
                   </Button>
                 ) : null}
-                {mode === "edit" && currentScript ? (
+                {currentScript?.scope === "REPOSITORY" ? (
+                  <Button icon={<ForkOutlined />} type="primary" onClick={openForkModal} loading={forkingRepositoryTool}>
+                    Fork 到我的工具
+                  </Button>
+                ) : null}
+                {mode === "edit" && currentScript && !isReadOnlyScript ? (
                   <Popconfirm
-                    title="确认删除这个脚本？"
+                    title="确认删除这个工具？"
                     description="删除后不可恢复。"
                     okText="删除"
                     cancelText="取消"
@@ -1326,14 +1698,16 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                     </Button>
                   </Popconfirm>
                 ) : null}
-                <Button
-                  icon={<CheckCircleOutlined />}
-                  onClick={() => void handleValidate()}
-                  loading={validating}
-                >
-                  校验
-                </Button>
-                {hasUnpublishedChanges ? (
+                {!isReadOnlyScript ? (
+                  <Button
+                    icon={<CheckCircleOutlined />}
+                    onClick={() => void handleValidate()}
+                    loading={validating}
+                  >
+                    校验
+                  </Button>
+                ) : null}
+                {!isReadOnlyScript && hasUnpublishedChanges ? (
                   <Popconfirm
                     title="确认丢弃当前草稿？"
                     description="会恢复到最近一次发布的版本，未发布修改将被移除。"
@@ -1346,23 +1720,36 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                     </Button>
                   </Popconfirm>
                 ) : null}
-                <Button
-                  icon={<RocketOutlined />}
-                  type="primary"
-                  ghost
-                  onClick={() => void handlePublish()}
-                  loading={publishing}
-                >
-                  发布
-                </Button>
-                <Button
-                  icon={<SaveOutlined />}
-                  type="primary"
-                  onClick={() => void handleSave()}
-                  loading={saving}
-                >
-                  保存
-                </Button>
+                {!isReadOnlyScript ? (
+                  <Button
+                    icon={<RocketOutlined />}
+                    type="primary"
+                    ghost
+                    onClick={() => void handlePublish()}
+                    loading={publishing}
+                  >
+                    本地发布
+                  </Button>
+                ) : null}
+                {canPublishToRepository ? (
+                  <Button
+                    icon={<ExportOutlined />}
+                    onClick={() => void openPublishToRepositoryModal()}
+                    loading={publishingToRepository || publishMetadataLoading}
+                  >
+                    发布到仓库
+                  </Button>
+                ) : null}
+                {!isReadOnlyScript ? (
+                  <Button
+                    icon={<SaveOutlined />}
+                    type="primary"
+                    onClick={() => void handleSave()}
+                    loading={saving}
+                  >
+                    保存
+                  </Button>
+                ) : null}
               </Space>
             </Col>
           </Row>
@@ -1374,6 +1761,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             showIcon
             message={`已从 ${copiedFromScript.name || copiedFromScript.id} 复制当前内容`}
             description="已自动生成新的脚本 ID，并预填源码、类型和输入输出结构。保存前请确认脚本 ID 未与现有脚本冲突。"
+          />
+        ) : null}
+
+        {isReadOnlyScript ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="当前是仓库安装的只读工具"
+            description="你可以直接运行和查看契约，但不能原地修改。需要调整实现时，请先 Fork 到“我的工具”，或重新发布到某个仓库。"
           />
         ) : null}
 
@@ -1403,8 +1799,25 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   <Text type="secondary">{formatDateTime(currentScript.updatedAt)}</Text>
                 </Space>
               </Descriptions.Item>
+              <Descriptions.Item label="来源">
+                <Space size={8} wrap>
+                  <Tag color={currentScript.scope === "REPOSITORY" ? "blue" : currentScript.scope === "FORK" ? "cyan" : "green"}>
+                    {currentScript.scope === "REPOSITORY" ? "仓库工具" : currentScript.scope === "FORK" ? "Fork 工具" : "我的工具"}
+                  </Tag>
+                  {isReadOnlyScript ? <Tag color="gold">只读</Tag> : <Tag color="green">可编辑</Tag>}
+                </Space>
+              </Descriptions.Item>
               <Descriptions.Item label="类型">{currentScript.type}</Descriptions.Item>
               <Descriptions.Item label="版本">{currentScript.version}</Descriptions.Item>
+              <Descriptions.Item label="来源仓库">
+                {currentScript.repositoryId || "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="来源工具">
+                {currentScript.repositoryToolId || "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label="仓库版本">
+                {currentScript.repositoryVersion || "-"}
+              </Descriptions.Item>
               <Descriptions.Item label="创建时间">{formatDateTime(currentScript.createdAt)}</Descriptions.Item>
             </Descriptions>
           </Card>
@@ -1455,7 +1868,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   }
                                 ]}
                               >
-                                <Input disabled={mode === "edit"} placeholder="例如 hello-groovy" />
+                                <Input disabled={mode === "edit" || isReadOnlyScript} placeholder="例如 hello-groovy" />
                               </Form.Item>
                             </Col>
                             <Col xs={24} md={12} xl={16}>
@@ -1464,12 +1877,13 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                 name="name"
                                 rules={[{ required: true, message: "请输入脚本名称" }]}
                               >
-                                <Input placeholder="例如 Hello Groovy" />
+                                <Input placeholder="例如 Hello Groovy" disabled={isReadOnlyScript} />
                               </Form.Item>
                             </Col>
                             <Col xs={24} md={12} xl={8}>
                               <Form.Item label="类型" name="type">
                                 <Select
+                                  disabled={isReadOnlyScript}
                                   onChange={handleScriptTypeChange}
                                   options={[
                                     {
@@ -1505,6 +1919,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   value={sourceText}
                                   onChange={setSourceText}
                                   theme={editorTheme}
+                                  readOnly={isReadOnlyScript}
                                 />
                               )
                             },
@@ -1517,6 +1932,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   value={inputSchemaState}
                                   onChange={setInputSchemaState}
                                   theme={editorTheme}
+                                  disabled={isReadOnlyScript}
                                 />
                               )
                             },
@@ -1529,6 +1945,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   value={outputSchemaState}
                                   onChange={setOutputSchemaState}
                                   theme={editorTheme}
+                                  disabled={isReadOnlyScript}
                                 />
                               )
                             }

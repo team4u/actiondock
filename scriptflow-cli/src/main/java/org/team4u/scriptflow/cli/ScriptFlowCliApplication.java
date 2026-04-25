@@ -11,6 +11,14 @@ public final class ScriptFlowCliApplication {
     private ScriptFlowCliApplication() {
     }
 
+    /**
+     * CLI 应用入口方法。
+     * <p>
+     * 初始化 Picocli 命令行框架，注册全局异常处理器，
+     * 执行命令并根据退出码结束进程。
+     *
+     * @param args 命令行参数
+     */
     public static void main(String[] args) {
         ScriptFlowCommand root = new ScriptFlowCommand();
         CommandLine commandLine = new CommandLine(root);

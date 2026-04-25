@@ -42,6 +42,9 @@ class PluginsCommands implements Runnable {
         @ParentCommand
         PluginsCommands parent;
 
+        /**
+         * 列出所有已安装的插件。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().get("/api/plugins", Map.of()));
@@ -56,6 +59,9 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        /**
+         * 查询单个插件的详情信息。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().get("/api/plugins/" + parent.root().encodePath(pluginId), Map.of()));
@@ -70,6 +76,9 @@ class PluginsCommands implements Runnable {
         @Option(names = "--jar", required = true, description = "Path to the plugin JAR to install.")
         String jarPath;
 
+        /**
+         * 上传并安装插件 JAR 包。
+         */
         @Override
         public Integer call() {
             ScriptFlowCommand root = parent.root();
@@ -89,6 +98,9 @@ class PluginsCommands implements Runnable {
         @Option(names = "--jar", required = true, description = "Path to the plugin JAR used for the upgrade.")
         String jarPath;
 
+        /**
+         * 使用新的 JAR 包升级指定插件。
+         */
         @Override
         public Integer call() {
             ScriptFlowCommand root = parent.root();
@@ -111,6 +123,9 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        /**
+         * 启动指定插件。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().postJson("/api/plugins/" + parent.root().encodePath(pluginId) + "/start", Map.of(), "{}"));
@@ -125,6 +140,9 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        /**
+         * 停止指定插件。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().postJson("/api/plugins/" + parent.root().encodePath(pluginId) + "/stop", Map.of(), "{}"));
@@ -139,6 +157,9 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        /**
+         * 删除指定插件。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().delete("/api/plugins/" + parent.root().encodePath(pluginId), Map.of()));
@@ -176,6 +197,9 @@ class PluginsCommands implements Runnable {
         @Option(names = "--response-view", defaultValue = "RESULT", description = "Response view: ${COMPLETION-CANDIDATES}. RESULT returns the business result, DEBUG returns debug details. Default: ${DEFAULT-VALUE}.")
         ScriptFlowCommand.ResponseViewOption responseView;
 
+        /**
+         * 调用插件的指定动作，传入动作参数和脚本输入上下文。
+         */
         @Override
         public Integer call() {
             ScriptFlowCommand root = parent.root();
@@ -220,6 +244,9 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        /**
+         * 查询指定插件的配置信息。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().get("/api/plugins/" + parent.root().encodePath(pluginId) + "/config", Map.of()));
@@ -242,6 +269,9 @@ class PluginsCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the plugin config request body JSON file. Use - to read from stdin.")
         String filePath;
 
+        /**
+         * 更新指定插件的配置，从 JSON 文件读取请求体。
+         */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Plugin config request body");

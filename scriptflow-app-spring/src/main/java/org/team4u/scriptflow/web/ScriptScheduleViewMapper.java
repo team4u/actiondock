@@ -21,6 +21,14 @@ final class ScriptScheduleViewMapper {
         this.executionRepository = executionRepository;
     }
 
+    /**
+     * 将调度实体转换为视图对象。
+     * <p>
+     * 计算下次执行时间，并查询最近一次执行的执行状态。
+     *
+     * @param schedule 调度实体
+     * @return 调度视图
+     */
     ScriptScheduleView toView(ScriptSchedule schedule) {
         return new ScriptScheduleView(
                 schedule.getId(),

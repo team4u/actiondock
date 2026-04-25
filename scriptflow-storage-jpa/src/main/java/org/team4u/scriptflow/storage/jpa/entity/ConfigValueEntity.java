@@ -25,6 +25,12 @@ public class ConfigValueEntity {
     private String value;
 
     private String description;
+    private String repositoryId;
+    private String repositoryToolId;
+    private String repositoryVersion;
+    private String publishMode;
+    private boolean managed;
+    private boolean overridden;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -50,6 +56,54 @@ public class ConfigValueEntity {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public void setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+    }
+
+    public String getRepositoryToolId() {
+        return repositoryToolId;
+    }
+
+    public void setRepositoryToolId(String repositoryToolId) {
+        this.repositoryToolId = repositoryToolId;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public void setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
+    }
+
+    public String getPublishMode() {
+        return publishMode;
+    }
+
+    public void setPublishMode(String publishMode) {
+        this.publishMode = publishMode;
+    }
+
+    public boolean isManaged() {
+        return managed;
+    }
+
+    public void setManaged(boolean managed) {
+        this.managed = managed;
+    }
+
+    public boolean isOverridden() {
+        return overridden;
+    }
+
+    public void setOverridden(boolean overridden) {
+        this.overridden = overridden;
     }
 
     public LocalDateTime getCreatedAt() {

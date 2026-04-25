@@ -14,11 +14,14 @@ import org.team4u.scriptflow.domain.port.ConfigValueRepository;
 import org.team4u.scriptflow.domain.port.ExecutionRepository;
 import org.team4u.scriptflow.domain.port.JsonCodec;
 import org.team4u.scriptflow.domain.port.PluginRegistryRepository;
+import org.team4u.scriptflow.domain.port.RepositoryDefinitionRepository;
 import org.team4u.scriptflow.domain.port.ScheduleExpressionValidator;
 import org.team4u.scriptflow.domain.port.ScriptEngine;
 import org.team4u.scriptflow.domain.port.ScriptRepository;
 import org.team4u.scriptflow.domain.port.ScriptScheduleRepository;
+import org.team4u.scriptflow.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.scriptflow.plugin.PluginRuntimeService;
+import org.team4u.scriptflow.repository.RepositoryCatalogService;
 import org.team4u.scriptflow.script.GroovyScriptEngine;
 import org.team4u.scriptflow.script.PythonScriptEngine;
 import org.team4u.scriptflow.script.RoutingScriptEngine;
@@ -98,5 +101,28 @@ public class RuntimeConfiguration {
                                                                    Executor executor,
                                                                    ConfigValueApplicationService configValueApplicationService) {
         return new ExecutionApplicationService(scriptRepository, executionRepository, scriptEngine, executor, configValueApplicationService);
+    }
+
+    @Bean
+    public RepositoryCatalogService repositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
+                                                             RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+                                                             ScriptRepository scriptRepository,
+                                                             ScriptScheduleRepository scriptScheduleRepository,
+                                                             ConfigValueRepository configValueRepository,
+                                                             ScriptApplicationService scriptApplicationService,
+                                                             ConfigValueApplicationService configValueApplicationService,
+                                                             JsonCodec jsonCodec,
+                                                             AppProperties properties) {
+        return new RepositoryCatalogService(
+                repositoryDefinitionRepository,
+                repositoryToolInstallationRepository,
+                scriptRepository,
+                scriptScheduleRepository,
+                configValueRepository,
+                scriptApplicationService,
+                configValueApplicationService,
+                jsonCodec,
+                properties
+        );
     }
 }

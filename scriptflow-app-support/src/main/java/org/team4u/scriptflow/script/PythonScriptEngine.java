@@ -62,6 +62,16 @@ public class PythonScriptEngine implements ScriptEngine {
                 : scriptInvocationService;
     }
 
+    /**
+     * 校验 Python 脚本语法是否正确。
+     * <p>
+     * 将脚本源码写入临时文件，使用 Python 内置的 {@code py_compile} 模块进行语法校验。
+     * 校验完成后自动删除临时文件。
+     *
+     * @param definition 脚本定义，包含待校验的源码
+     * @throws IllegalArgumentException 如果脚本语法错误
+     * @throws IllegalStateException    如果校验超时或 IO 失败
+     */
     @Override
     public void validate(ScriptDefinition definition) {
         Path scriptPath = null;
@@ -90,6 +100,19 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
+    /**
+     * 执行 Python 脚本。
+     * <p>
+     * 将脚本源码包装为标准化的 Python 入口函数，写入临时文件后以子进程方式执行。
+     * 通过 stdin 传入脚本输入（JSON），通过环境变量传入脚本配置。
+     * stderr 中的特殊前缀协议用于收集脚本日志和脚本互调请求，stdout 输出作为执行结果。
+     *
+     * @param definition       脚本定义，包含源码和元信息
+     * @param input            脚本输入数据，通过 stdin 以 JSON 格式传入
+     * @param executionContext 脚本执行上下文，包含配置和日志收集器
+     * @return 脚本执行的返回值（从 stdout 解析的 JSON 结果）
+     * @throws IllegalStateException 如果执行超时、进程异常或 IO 失败
+     */
     @Override
     public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         Path scriptPath = null;

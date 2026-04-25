@@ -26,6 +26,14 @@ public class SchemaController {
         this.scriptSchemaSupport = new ScriptSchemaSupport();
     }
 
+    /**
+     * 查询脚本的输入输出模式摘要。
+     * <p>
+     * 返回脚本定义中输入和输出 Schema 的字段列表摘要信息。
+     *
+     * @param id 脚本 ID
+     * @return API 响应，包含模式摘要
+     */
     @GetMapping("/{id}")
     public ApiResponse<SchemaResponse> detail(@PathVariable String id) {
         return ApiResponse.success(toResponse(scriptApplicationService.get(id)));

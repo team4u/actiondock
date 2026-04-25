@@ -40,21 +40,45 @@ public class JpaConfigValueRepositoryAdapter implements ConfigValueRepository {
         repository.deleteById(key);
     }
 
+    /**
+     * 将配置值领域对象转换为 JPA 实体。
+     *
+     * @param configValue 配置值领域对象
+     * @return JPA 实体
+     */
     private ConfigValueEntity toEntity(ConfigValue configValue) {
         ConfigValueEntity entity = new ConfigValueEntity();
         entity.setKey(configValue.getKey());
         entity.setValue(configValue.getValue());
         entity.setDescription(configValue.getDescription());
+        entity.setRepositoryId(configValue.getRepositoryId());
+        entity.setRepositoryToolId(configValue.getRepositoryToolId());
+        entity.setRepositoryVersion(configValue.getRepositoryVersion());
+        entity.setPublishMode(configValue.getPublishMode());
+        entity.setManaged(configValue.isManaged());
+        entity.setOverridden(configValue.isOverridden());
         entity.setCreatedAt(configValue.getCreatedAt());
         entity.setUpdatedAt(configValue.getUpdatedAt());
         return entity;
     }
 
+    /**
+     * 将 JPA 实体转换为配置值领域对象。
+     *
+     * @param entity JPA 实体
+     * @return 配置值领域对象
+     */
     private ConfigValue toDomain(ConfigValueEntity entity) {
         return new ConfigValue()
                 .setKey(entity.getKey())
                 .setValue(entity.getValue())
                 .setDescription(entity.getDescription())
+                .setRepositoryId(entity.getRepositoryId())
+                .setRepositoryToolId(entity.getRepositoryToolId())
+                .setRepositoryVersion(entity.getRepositoryVersion())
+                .setPublishMode(entity.getPublishMode())
+                .setManaged(entity.isManaged())
+                .setOverridden(entity.isOverridden())
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
     }

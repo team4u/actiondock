@@ -52,6 +52,7 @@ java -jar ../scriptflow-cli/target/scriptflow-cli.jar \
 
 ```yaml
 app:
+  home-dir: ${user.home}/.scriptflow
   auth:
     api-keys:
       - local-dev-key
@@ -66,4 +67,4 @@ app:
       timeout-seconds: 30
 ```
 
-如果本地曾运行过包含 page 能力的旧版本，开发阶段请删除 `../data/dsl-runtime*` 后再重新启动，避免旧 H2 文件残留未使用的 page 表。
+如果本地曾运行过包含 page 能力的旧版本，开发阶段请删除 `~/.scriptflow/data/dsl-runtime*` 后再重新启动，避免旧 H2 文件残留未使用的 page 表。

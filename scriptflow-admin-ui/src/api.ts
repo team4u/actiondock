@@ -1,9 +1,13 @@
-import { emitAuthRequired, getApiKey } from "./auth";
 import type {
   ApiErrorPayload,
   ApiResponse,
   ConfigValue,
   ConfigValueRequest,
+  RepositoryDefinition,
+  RepositoryInstallRequest,
+  RepositoryPublishRequest,
+  RepositoryToolDescriptor,
+  RepositoryToolDetail,
   ExecuteRequest,
   ExecutionResponse,
   ExecutionRecord,
@@ -32,24 +36,15 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getApiKey();
   const headers = new Headers(init?.headers ?? {});
   if (!headers.has("Content-Type") && init?.body) {
     headers.set("Content-Type", JSON_HEADERS["Content-Type"]);
-  }
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
   }
 
   const response = await fetch(path, {
     ...init,
     headers
   });
-
-  if (response.status === 401) {
-    emitAuthRequired();
-    throw new ApiError("API Key 无效或缺失", 401);
-  }
 
   const isJson = response.headers.get("content-type")?.includes("application/json");
   const payload = isJson ? ((await response.json()) as ApiResponse<T> | ApiErrorPayload) : null;
@@ -210,25 +205,16 @@ export function getPlugin(pluginId: string): Promise<PluginView> {
 }
 
 async function uploadPluginFile(path: string, file: File, fallbackMessage: string): Promise<PluginView> {
-  const token = getApiKey();
   const formData = new FormData();
   formData.append("file", file);
 
   const headers = new Headers();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
 
   const response = await fetch(path, {
     method: "POST",
     headers,
     body: formData
   });
-
-  if (response.status === 401) {
-    emitAuthRequired();
-    throw new ApiError("API Key 无效或缺失", 401);
-  }
 
   const payload = (await response.json()) as ApiResponse<PluginView> | ApiErrorPayload;
   if (!response.ok) {
@@ -319,5 +305,87 @@ export function updateConfigValue(key: string, payload: ConfigValueRequest): Pro
 export function deleteConfigValue(key: string): Promise<void> {
   return request<void>(`/api/config-values/${encodeURIComponent(key)}`, {
     method: "DELETE"
+  });
+}
+
+export function listRepositories(): Promise<RepositoryDefinition[]> {
+  return request<RepositoryDefinition[]>("/api/repositories");
+}
+
+export function createRepository(payload: RepositoryDefinition): Promise<RepositoryDefinition> {
+  return request<RepositoryDefinition>("/api/repositories", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateRepository(id: string, payload: RepositoryDefinition): Promise<RepositoryDefinition> {
+  return request<RepositoryDefinition>(`/api/repositories/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteRepository(id: string): Promise<void> {
+  return request<void>(`/api/repositories/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
+export function syncRepository(id: string): Promise<RepositoryDefinition> {
+  return request<RepositoryDefinition>(`/api/repositories/${encodeURIComponent(id)}/sync`, {
+    method: "POST"
+  });
+}
+
+export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
+  return request<RepositoryToolDescriptor[]>("/api/repositories/tools");
+}
+
+export function listToolsByRepository(id: string): Promise<RepositoryToolDescriptor[]> {
+  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/tools`);
+}
+
+export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
+  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}`);
+}
+
+export function installRepositoryTool(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<void> {
+  return request<void>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}/install`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateRepositoryTool(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<void> {
+  return request<void>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}/update`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function uninstallInstalledTool(scriptId: string): Promise<void> {
+  return request<void>(`/api/installed-tools/${encodeURIComponent(scriptId)}`, {
+    method: "DELETE"
+  });
+}
+
+export function forkRepositoryTool(scriptId: string, payload: { id: string; name: string }): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${encodeURIComponent(scriptId)}/fork?includeUiSchema=true`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryToolDescriptor> {
+  return request<RepositoryToolDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
   });
 }

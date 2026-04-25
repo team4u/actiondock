@@ -46,6 +46,17 @@ final class CompiledGroovyScriptCache {
         this.compiler = Objects.requireNonNull(compiler, "compiler");
     }
 
+    /**
+     * 获取已编译的脚本类，若缓存未命中则编译并缓存。
+     * <p>
+     * 以源码的 SHA-256 哈希作为缓存键，支持并发编译去重：
+     * 当多个线程同时请求编译同一脚本时，只有一个线程执行编译，其余线程等待结果。
+     * 每次访问后会淘汰过期和溢出的缓存条目。
+     *
+     * @param source Groovy 脚本源码
+     * @return 编译后的脚本类
+     * @throws IllegalStateException 如果脚本编译失败
+     */
     Class<? extends Script> getOrCompile(String source) {
         if (!enabled) {
             return compiler.compile(source);

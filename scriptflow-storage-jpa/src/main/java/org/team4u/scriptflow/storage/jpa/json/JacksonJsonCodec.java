@@ -26,6 +26,13 @@ public class JacksonJsonCodec implements JsonCodec {
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
+    /**
+     * 将对象序列化为 JSON 字符串。
+     *
+     * @param value 待序列化对象，为 null 时返回 null
+     * @return JSON 字符串
+     * @throws IllegalStateException 序列化失败时抛出
+     */
     @Override
     public String write(Object value) {
         try {
@@ -35,6 +42,14 @@ public class JacksonJsonCodec implements JsonCodec {
         }
     }
 
+    /**
+     * 将 JSON 字符串反序列化为指定类型的对象。
+     *
+     * @param json JSON 字符串，为 null 或空白时返回 null
+     * @param type 目标类型
+     * @return 反序列化后的对象
+     * @throws IllegalStateException 反序列化失败时抛出
+     */
     @Override
     public <T> T read(String json, Class<T> type) {
         if (json == null || json.isBlank()) {
@@ -47,6 +62,13 @@ public class JacksonJsonCodec implements JsonCodec {
         }
     }
 
+    /**
+     * 将 JSON 字符串反序列化为无类型对象（Map/List/基本类型）。
+     *
+     * @param json JSON 字符串，为 null 或空白时返回 null
+     * @return 反序列化后的对象
+     * @throws IllegalStateException 反序列化失败时抛出
+     */
     @Override
     public Object readUntyped(String json) {
         if (json == null || json.isBlank()) {
@@ -59,6 +81,14 @@ public class JacksonJsonCodec implements JsonCodec {
         }
     }
 
+    /**
+     * 将 JSON 字符串反序列化为指定元素类型的列表。
+     *
+     * @param json JSON 字符串，为 null 或空白时返回空列表
+     * @param elementType 列表元素类型
+     * @return 反序列化后的列表
+     * @throws IllegalStateException 反序列化失败时抛出
+     */
     @Override
     public <T> List<T> readList(String json, Class<T> elementType) {
         if (json == null || json.isBlank()) {
@@ -72,6 +102,13 @@ public class JacksonJsonCodec implements JsonCodec {
         }
     }
 
+    /**
+     * 将 JSON 字符串反序列化为 Map。
+     *
+     * @param json JSON 字符串，为 null 或空白时返回空 Map
+     * @return 反序列化后的 Map
+     * @throws IllegalStateException 反序列化失败时抛出
+     */
     @SuppressWarnings("unchecked")
     @Override
     public Map<String, Object> readMap(String json) {

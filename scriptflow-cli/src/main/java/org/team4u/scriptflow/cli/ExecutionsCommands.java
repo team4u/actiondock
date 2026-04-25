@@ -69,6 +69,9 @@ class ExecutionsCommands implements Runnable {
         @Option(names = "--poll-interval-ms", defaultValue = "1000", description = "Polling interval for execution status, in milliseconds. Only applies with --wait. Default: ${DEFAULT-VALUE}.")
         long pollIntervalMs;
 
+        /**
+         * 提交脚本执行请求，可选择等待执行完成后返回结果。
+         */
         @Override
         public Integer call() {
             ScriptFlowCommand root = parent.root();
@@ -96,6 +99,9 @@ class ExecutionsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<executionId>", description = "Execution record ID.")
         String executionId;
 
+        /**
+         * 查询单条执行记录的详情。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().get("/api/executions/" + parent.root().encodePath(executionId), Map.of()));
@@ -110,6 +116,9 @@ class ExecutionsCommands implements Runnable {
         @Option(names = "--script-id", description = "Filter execution records by script ID.")
         String scriptId;
 
+        /**
+         * 列出执行记录，支持按脚本 ID 过滤。
+         */
         @Override
         public Integer call() {
             Map<String, Object> query = new LinkedHashMap<>();
@@ -128,6 +137,9 @@ class ExecutionsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<executionId>", description = "Execution record ID.")
         String executionId;
 
+        /**
+         * 删除单条执行记录。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().delete("/api/executions/" + parent.root().encodePath(executionId), Map.of()));
@@ -142,6 +154,9 @@ class ExecutionsCommands implements Runnable {
         @Option(names = "--script-id", description = "Script ID whose execution records should be cleared. Required by the server.")
         String scriptId;
 
+        /**
+         * 批量清理指定脚本的执行记录。
+         */
         @Override
         public Integer call() {
             Map<String, Object> query = new LinkedHashMap<>();

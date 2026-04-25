@@ -32,16 +32,34 @@ public class PluginController {
         this.pluginRuntimeService = pluginRuntimeService;
     }
 
+    /**
+     * 查询所有已安装插件列表。
+     *
+     * @return API 响应，包含插件视图列表
+     */
     @GetMapping
     public ApiResponse<List<PluginView>> list() {
         return ApiResponse.success(pluginRuntimeService.list());
     }
 
+    /**
+     * 查询单个插件详情。
+     *
+     * @param pluginId 插件 ID
+     * @return API 响应，包含插件视图
+     */
     @GetMapping("/{pluginId}")
     public ApiResponse<PluginView> get(@PathVariable String pluginId) {
         return ApiResponse.success(pluginRuntimeService.get(pluginId));
     }
 
+    /**
+     * 通过上传 JAR 文件安装插件。
+     *
+     * @param file 上传的插件 JAR 文件
+     * @return API 响应，包含安装后的插件视图
+     * @throws IOException 文件读取异常
+     */
     @PostMapping("/install")
     public ApiResponse<PluginView> install(@RequestParam("file") MultipartFile file) throws IOException {
         return ApiResponse.success(
@@ -50,6 +68,14 @@ public class PluginController {
         );
     }
 
+    /**
+     * 通过上传新版本 JAR 文件升级插件。
+     *
+     * @param pluginId 待升级的插件 ID
+     * @param file 上传的新版本 JAR 文件
+     * @return API 响应，包含升级后的插件视图
+     * @throws IOException 文件读取异常
+     */
     @PostMapping("/{pluginId}/upgrade")
     public ApiResponse<PluginView> upgrade(@PathVariable String pluginId, @RequestParam("file") MultipartFile file) throws IOException {
         return ApiResponse.success(
@@ -58,21 +84,46 @@ public class PluginController {
         );
     }
 
+    /**
+     * 启动指定插件。
+     *
+     * @param pluginId 插件 ID
+     * @return API 响应，包含启动后的插件视图
+     */
     @PostMapping("/{pluginId}/start")
     public ApiResponse<PluginView> start(@PathVariable String pluginId) {
         return ApiResponse.success(pluginRuntimeService.start(pluginId), "插件已启动");
     }
 
+    /**
+     * 停止指定插件。
+     *
+     * @param pluginId 插件 ID
+     * @return API 响应，包含停止后的插件视图
+     */
     @PostMapping("/{pluginId}/stop")
     public ApiResponse<PluginView> stop(@PathVariable String pluginId) {
         return ApiResponse.success(pluginRuntimeService.stop(pluginId), "插件已停止");
     }
 
+    /**
+     * 查询插件当前配置。
+     *
+     * @param pluginId 插件 ID
+     * @return API 响应，包含插件配置视图
+     */
     @GetMapping("/{pluginId}/config")
     public ApiResponse<PluginConfigView> getConfig(@PathVariable String pluginId) {
         return ApiResponse.success(pluginRuntimeService.getConfig(pluginId));
     }
 
+    /**
+     * 保存插件配置。
+     *
+     * @param pluginId 插件 ID
+     * @param request 插件配置更新请求，包含新的配置键值对
+     * @return API 响应，包含更新后的插件配置视图
+     */
     @PutMapping("/{pluginId}/config")
     public ApiResponse<PluginConfigView> saveConfig(@PathVariable String pluginId, @RequestBody PluginConfigRequest request) {
         return ApiResponse.success(
@@ -81,6 +132,16 @@ public class PluginController {
         );
     }
 
+    /**
+     * 调试调用插件指定动作。
+     * <p>
+     * 用于在管理界面测试插件动作的执行效果，支持传入模拟参数和脚本输入。
+     *
+     * @param pluginId 插件 ID
+     * @param action 动作名称
+     * @param request 调用请求，包含动作参数和模拟脚本输入
+     * @return API 响应，包含插件调用结果视图
+     */
     @PostMapping("/{pluginId}/actions/{action}/invoke")
     public ApiResponse<PluginInvokeView> invoke(@PathVariable String pluginId,
                                                 @PathVariable String action,
@@ -98,6 +159,12 @@ public class PluginController {
         );
     }
 
+    /**
+     * 卸载指定插件。
+     *
+     * @param pluginId 插件 ID
+     * @return API 响应，无数据
+     */
     @DeleteMapping("/{pluginId}")
     public ApiResponse<Void> uninstall(@PathVariable String pluginId) {
         pluginRuntimeService.uninstall(pluginId);

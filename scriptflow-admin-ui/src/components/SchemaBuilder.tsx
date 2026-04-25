@@ -41,6 +41,7 @@ interface SchemaBuilderProps {
   value: SchemaEditorState;
   onChange: (nextValue: SchemaEditorState) => void;
   theme: "vs-light" | "vs-dark";
+  disabled?: boolean;
 }
 
 function updateBuilderFields(
@@ -74,7 +75,7 @@ function BuilderUnavailable({
   );
 }
 
-export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderProps) {
+export function SchemaBuilder({ label, value, onChange, theme, disabled = false }: SchemaBuilderProps) {
   const [activeTab, setActiveTab] = useState<"builder" | "json">(value.mode === "json" ? "json" : "builder");
 
   useEffect(() => {
@@ -163,6 +164,9 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
       <Tabs
         activeKey={activeTab}
         onChange={(nextKey) => {
+          if (disabled) {
+            return;
+          }
           if (nextKey === "builder") {
             switchToBuilder();
             return;
@@ -183,7 +187,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                       <Text strong>{label}</Text>
                       <Text type="secondary">{value.fields.length} 个字段</Text>
                     </Space>
-                    <Button type="primary" ghost icon={<PlusOutlined />} onClick={addField}>
+                    <Button type="primary" ghost icon={<PlusOutlined />} onClick={addField} disabled={disabled}>
                       添加字段
                     </Button>
                   </div>
@@ -194,7 +198,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
                         description={`当前${label}为空，可添加字段生成 schema`}
                       />
-                      <Button type="primary" icon={<PlusOutlined />} onClick={addField}>
+                      <Button type="primary" icon={<PlusOutlined />} onClick={addField} disabled={disabled}>
                         新增第一个字段
                       </Button>
                     </div>
@@ -221,14 +225,14 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                 <Button
                                   icon={<ArrowUpOutlined />}
                                   onClick={() => moveField(field.id, -1)}
-                                  disabled={index === 0}
+                                  disabled={disabled || index === 0}
                                 />
                                 <Button
                                   icon={<ArrowDownOutlined />}
                                   onClick={() => moveField(field.id, 1)}
-                                  disabled={index === value.fields.length - 1}
+                                  disabled={disabled || index === value.fields.length - 1}
                                 />
-                                <Button danger icon={<DeleteOutlined />} onClick={() => removeField(field.id)} />
+                                <Button danger icon={<DeleteOutlined />} onClick={() => removeField(field.id)} disabled={disabled} />
                               </Space>
                             </div>
 
@@ -239,6 +243,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   value={field.name}
                                   status={fieldErrors.name ? "error" : ""}
                                   placeholder="例如 message"
+                                  disabled={disabled}
                                   onChange={(event) => setField(field.id, { name: event.target.value })}
                                 />
                                 {fieldErrors.name && <Text type="danger">{fieldErrors.name}</Text>}
@@ -249,6 +254,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                 <Input
                                   value={field.title}
                                   placeholder="例如 Message"
+                                  disabled={disabled}
                                   onChange={(event) => setField(field.id, { title: event.target.value })}
                                 />
                               </div>
@@ -257,6 +263,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                 <Text type="secondary">类型</Text>
                                 <Select
                                   value={field.type}
+                                  disabled={disabled}
                                   options={FIELD_TYPE_OPTIONS}
                                   onChange={(nextValue) =>
                                     setField(field.id, {
@@ -272,6 +279,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   checked={field.required}
                                   checkedChildren="是"
                                   unCheckedChildren="否"
+                                  disabled={disabled}
                                   onChange={(checked) => setField(field.id, { required: checked })}
                                 />
                               </div>
@@ -281,6 +289,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   <Text type="secondary">输入控件</Text>
                                   <Select
                                     value={field.widget}
+                                    disabled={disabled}
                                     options={[...STRING_WIDGET_OPTIONS]}
                                     onChange={(nextValue) =>
                                       setField(field.id, {
@@ -302,6 +311,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                     status={fieldErrors.rows ? "error" : ""}
                                     style={{ width: "100%" }}
                                     placeholder="6"
+                                    disabled={disabled}
                                     onChange={(nextValue) =>
                                       setField(field.id, {
                                         rows: typeof nextValue === "number" ? nextValue : 0
@@ -317,6 +327,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                   value={field.description}
                                   autoSize={{ minRows: 1, maxRows: 2 }}
                                   placeholder="字段说明"
+                                  disabled={disabled}
                                   onChange={(event) => setField(field.id, { description: event.target.value })}
                                 />
                               </div>
@@ -329,6 +340,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                     status={fieldErrors.defaultValue ? "error" : ""}
                                     placeholder="选择"
                                     allowClear
+                                    disabled={disabled}
                                     options={BOOLEAN_DEFAULT_OPTIONS}
                                     onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
                                   />
@@ -339,6 +351,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                     style={{ width: "100%" }}
                                     precision={field.type === "integer" ? 0 : undefined}
                                     placeholder={field.type === "integer" ? "例如 1" : "例如 1.5"}
+                                    disabled={disabled}
                                     onChange={(nextValue) =>
                                       setField(field.id, {
                                         defaultValue: typeof nextValue === "number" ? nextValue : undefined
@@ -351,6 +364,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                     status={fieldErrors.defaultValue ? "error" : ""}
                                     placeholder="选择"
                                     allowClear
+                                    disabled={disabled}
                                     options={field.enumText
                                       .split(",")
                                       .map((item) => item.trim())
@@ -367,6 +381,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                     status={fieldErrors.defaultValue ? "error" : ""}
                                     autoSize={{ minRows: 1, maxRows: 3 }}
                                     placeholder="默认值"
+                                    disabled={disabled}
                                     onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
                                   />
                                 ) : (
@@ -374,6 +389,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                     value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
                                     status={fieldErrors.defaultValue ? "error" : ""}
                                     placeholder="默认值"
+                                    disabled={disabled}
                                     onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
                                   />
                                 )}
@@ -386,6 +402,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                                     value={field.enumText}
                                     status={fieldErrors.enumText ? "error" : ""}
                                     placeholder="success, failed, pending"
+                                    disabled={disabled}
                                     onChange={(event) => setField(field.id, { enumText: event.target.value })}
                                   />
                                 </div>
@@ -408,7 +425,7 @@ export function SchemaBuilder({ label, value, onChange, theme }: SchemaBuilderPr
                   label={`${label}支持直接输入 JSON Schema`}
                   content="保存时校验 JSON 合法性。"
                 />
-                <CodeEditor value={jsonText} onChange={handleJsonChange} theme={theme} height="360px" />
+                <CodeEditor value={jsonText} onChange={handleJsonChange} theme={theme} height="360px" readOnly={disabled} />
                 {value.mode === "json" && jsonModeReason ? (
                   <Alert type="warning" showIcon message="当前 JSON 无法映射为 Builder" description={jsonModeReason} />
                 ) : null}

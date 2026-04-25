@@ -21,6 +21,14 @@ public record SchemaFieldView(
         Object defaultValue,
         List<Object> examples
 ) {
+    /**
+     * 从内部 Schema 字段模型转换为视图对象。
+     * <p>
+     * 当 required 为 false 时转为 null，配合 JsonInclude.NON_EMPTY 省略输出。
+     *
+     * @param field 内部 Schema 字段
+     * @return Schema 字段视图
+     */
     public static SchemaFieldView from(ScriptSchemaSupport.SchemaField field) {
         return new SchemaFieldView(
                 field.name(),

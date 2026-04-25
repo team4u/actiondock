@@ -1,10 +1,13 @@
 export type ScriptStatus = "DRAFT" | "PUBLISHED";
 export type ScriptType = "GROOVY" | "PYTHON";
+export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "SAMPLE";
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
 export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED";
 export type ExecutionLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
+export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
 
 export interface PublishedScriptSnapshot {
   name: string;
@@ -23,6 +26,14 @@ export interface ScriptDefinition {
   outputSchema: Record<string, unknown>;
   status: ScriptStatus;
   version: number;
+  scope?: ScriptScope;
+  repositoryId?: string;
+  repositoryToolId?: string;
+  repositoryVersion?: string;
+  editable?: boolean;
+  owner?: string;
+  description?: string;
+  tags?: string[];
   publishedSnapshot?: PublishedScriptSnapshot;
   hasUnpublishedChanges?: boolean;
   createdAt?: string;
@@ -93,6 +104,10 @@ export interface ScriptSchedule {
   cronExpression: string;
   input: Record<string, unknown>;
   enabled: boolean;
+  editable?: boolean;
+  repositoryId?: string;
+  repositoryToolId?: string;
+  repositoryVersion?: string;
   nextRunAt?: string;
   lastTriggeredAt?: string;
   lastExecutionId?: string;
@@ -193,6 +208,12 @@ export interface ConfigValue {
   key: string;
   value: string;
   description?: string;
+  repositoryId?: string;
+  repositoryToolId?: string;
+  repositoryVersion?: string;
+  publishMode?: string;
+  managed?: boolean;
+  overridden?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -201,4 +222,88 @@ export interface ConfigValueRequest {
   key: string;
   value: string;
   description?: string;
+}
+
+export interface RepositoryDefinition {
+  id: string;
+  name: string;
+  alias: string;
+  type: RepositoryType;
+  url: string;
+  branch?: string;
+  enabled: boolean;
+  trustLevel: RepositoryTrustLevel;
+  description?: string;
+  lastSyncedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RepositoryToolDescriptor {
+  repositoryId: string;
+  repositoryAlias: string;
+  toolId: string;
+  installedScriptId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  owner?: string;
+  tags: string[];
+  type: ScriptType;
+  sourcePath: string;
+  inputSchemaPath?: string;
+  outputSchemaPath?: string;
+  configTemplatePath?: string;
+  scheduleTemplatePath?: string;
+  digest?: string;
+  riskLevel?: string;
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
+  trusted: boolean;
+}
+
+export interface RepositoryConfigTemplateItem {
+  key: string;
+  label?: string;
+  type: string;
+  required: boolean;
+  secret: boolean;
+  defaultValue?: string;
+}
+
+export interface RepositoryScheduleTemplateItem {
+  id: string;
+  name: string;
+  cronExpression: string;
+  input: Record<string, unknown>;
+  enabledByDefault: boolean;
+}
+
+export interface RepositoryToolDetail {
+  descriptor: RepositoryToolDescriptor;
+  source: string;
+  configTemplate: RepositoryConfigTemplateItem[];
+  scheduleTemplate: RepositoryScheduleTemplateItem[];
+}
+
+export interface RepositoryInstallRequest {
+  installSchedules: boolean;
+}
+
+export interface RepositoryPublishConfigItem {
+  key: string;
+  publishMode: "INLINE" | "PLACEHOLDER";
+}
+
+export interface RepositoryPublishRequest {
+  scriptId: string;
+  toolId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  description?: string;
+  tags?: string[];
+  scheduleIds?: string[];
+  configItems?: RepositoryPublishConfigItem[];
 }

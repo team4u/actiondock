@@ -58,6 +58,14 @@ public class JpaScriptScheduleRepositoryAdapter implements ScriptScheduleReposit
         repository.deleteAllByScriptId(scriptId);
     }
 
+    /**
+     * 将调度领域对象转换为 JPA 实体。
+     * <p>
+     * 调度输入使用 JSON 序列化存储。
+     *
+     * @param schedule 调度领域对象
+     * @return JPA 实体
+     */
     private ScriptScheduleEntity toEntity(ScriptSchedule schedule) {
         ScriptScheduleEntity entity = new ScriptScheduleEntity();
         entity.setId(schedule.getId());
@@ -66,6 +74,10 @@ public class JpaScriptScheduleRepositoryAdapter implements ScriptScheduleReposit
         entity.setCronExpression(schedule.getCronExpression());
         entity.setInputJson(jsonCodec.write(schedule.getInput()));
         entity.setEnabled(schedule.isEnabled());
+        entity.setEditable(schedule.isEditable());
+        entity.setRepositoryId(schedule.getRepositoryId());
+        entity.setRepositoryToolId(schedule.getRepositoryToolId());
+        entity.setRepositoryVersion(schedule.getRepositoryVersion());
         entity.setLastTriggeredAt(schedule.getLastTriggeredAt());
         entity.setLastExecutionId(schedule.getLastExecutionId());
         entity.setCreatedAt(schedule.getCreatedAt());
@@ -73,6 +85,14 @@ public class JpaScriptScheduleRepositoryAdapter implements ScriptScheduleReposit
         return entity;
     }
 
+    /**
+     * 将 JPA 实体转换为调度领域对象。
+     * <p>
+     * JSON 字段反序列化为调度输入 Map。
+     *
+     * @param entity JPA 实体
+     * @return 调度领域对象
+     */
     private ScriptSchedule toDomain(ScriptScheduleEntity entity) {
         return new ScriptSchedule()
                 .setId(entity.getId())
@@ -81,6 +101,10 @@ public class JpaScriptScheduleRepositoryAdapter implements ScriptScheduleReposit
                 .setCronExpression(entity.getCronExpression())
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
                 .setEnabled(entity.isEnabled())
+                .setEditable(entity.isEditable())
+                .setRepositoryId(entity.getRepositoryId())
+                .setRepositoryToolId(entity.getRepositoryToolId())
+                .setRepositoryVersion(entity.getRepositoryVersion())
                 .setLastTriggeredAt(entity.getLastTriggeredAt())
                 .setLastExecutionId(entity.getLastExecutionId())
                 .setCreatedAt(entity.getCreatedAt())

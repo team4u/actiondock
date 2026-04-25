@@ -54,17 +54,32 @@ public class ScriptScheduleDispatcher {
         this.scriptRepository = scriptRepository;
     }
 
+    /**
+     * 应用启动就绪时自动加载所有已启用的调度任务。
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         refreshAll();
     }
 
+    /**
+     * 刷新全部调度任务。
+     * <p>
+     * 取消当前所有已注册的任务，重新加载所有已启用的调度并注册。
+     */
     public synchronized void refreshAll() {
         Set<String> scheduleIds = Set.copyOf(scheduledTasks.keySet());
         scheduleIds.forEach(this::cancelSchedule);
         scheduleApplicationService.listEnabled().forEach(this::registerSchedule);
     }
 
+    /**
+     * 刷新指定脚本关联的调度任务。
+     * <p>
+     * 取消该脚本下的所有现有调度，重新加载并注册已启用的调度。
+     *
+     * @param scriptId 脚本 ID
+     */
     public synchronized void refreshScript(String scriptId) {
         scheduleScriptIndex.entrySet().stream()
                 .filter(entry -> entry.getValue().equals(scriptId))

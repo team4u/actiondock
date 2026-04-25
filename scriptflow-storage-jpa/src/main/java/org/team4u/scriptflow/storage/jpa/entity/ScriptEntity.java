@@ -52,6 +52,16 @@ public class ScriptEntity {
 
     private String status;
     private Integer versionValue;
+    private String scope;
+    private String repositoryId;
+    private String repositoryToolId;
+    private String repositoryVersion;
+    private boolean editable = true;
+    private String owner;
+    @Lob
+    private String description;
+    @Lob
+    private String tagsJson;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -81,6 +91,22 @@ public class ScriptEntity {
     public void setStatus(String status) { this.status = status; }
     public Integer getVersionValue() { return versionValue; }
     public void setVersionValue(Integer versionValue) { this.versionValue = versionValue; }
+    public String getScope() { return scope; }
+    public void setScope(String scope) { this.scope = scope; }
+    public String getRepositoryId() { return repositoryId; }
+    public void setRepositoryId(String repositoryId) { this.repositoryId = repositoryId; }
+    public String getRepositoryToolId() { return repositoryToolId; }
+    public void setRepositoryToolId(String repositoryToolId) { this.repositoryToolId = repositoryToolId; }
+    public String getRepositoryVersion() { return repositoryVersion; }
+    public void setRepositoryVersion(String repositoryVersion) { this.repositoryVersion = repositoryVersion; }
+    public boolean isEditable() { return editable; }
+    public void setEditable(boolean editable) { this.editable = editable; }
+    public String getOwner() { return owner; }
+    public void setOwner(String owner) { this.owner = owner; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public String getTagsJson() { return tagsJson; }
+    public void setTagsJson(String tagsJson) { this.tagsJson = tagsJson; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

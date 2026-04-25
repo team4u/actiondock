@@ -13,6 +13,12 @@ public class ConfigValue {
     private String key;
     private String value = "";
     private String description;
+    private String repositoryId;
+    private String repositoryToolId;
+    private String repositoryVersion;
+    private String publishMode;
+    private boolean managed;
+    private boolean overridden;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -40,6 +46,60 @@ public class ConfigValue {
 
     public ConfigValue setDescription(String description) {
         this.description = description;
+        return this;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public ConfigValue setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+        return this;
+    }
+
+    public String getRepositoryToolId() {
+        return repositoryToolId;
+    }
+
+    public ConfigValue setRepositoryToolId(String repositoryToolId) {
+        this.repositoryToolId = repositoryToolId;
+        return this;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public ConfigValue setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
+        return this;
+    }
+
+    public String getPublishMode() {
+        return publishMode;
+    }
+
+    public ConfigValue setPublishMode(String publishMode) {
+        this.publishMode = publishMode;
+        return this;
+    }
+
+    public boolean isManaged() {
+        return managed;
+    }
+
+    public ConfigValue setManaged(boolean managed) {
+        this.managed = managed;
+        return this;
+    }
+
+    public boolean isOverridden() {
+        return overridden;
+    }
+
+    public ConfigValue setOverridden(boolean overridden) {
+        this.overridden = overridden;
         return this;
     }
 

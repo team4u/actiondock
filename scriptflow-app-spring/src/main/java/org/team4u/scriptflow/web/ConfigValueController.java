@@ -27,16 +27,33 @@ public class ConfigValueController {
         this.configValueApplicationService = configValueApplicationService;
     }
 
+    /**
+     * 查询所有全局配置值列表。
+     *
+     * @return API 响应，包含配置值列表
+     */
     @GetMapping
     public ApiResponse<List<ConfigValue>> list() {
         return ApiResponse.success(configValueApplicationService.list());
     }
 
+    /**
+     * 根据键查询配置值详情。
+     *
+     * @param key 配置键
+     * @return API 响应，包含配置值
+     */
     @GetMapping("/{key}")
     public ApiResponse<ConfigValue> detail(@PathVariable String key) {
         return ApiResponse.success(configValueApplicationService.get(key));
     }
 
+    /**
+     * 创建全局配置值。
+     *
+     * @param request 配置值创建请求
+     * @return API 响应，包含创建后的配置值
+     */
     @PostMapping
     public ApiResponse<ConfigValue> create(@RequestBody ConfigValueRequest request) {
         return ApiResponse.success(
@@ -45,6 +62,13 @@ public class ConfigValueController {
         );
     }
 
+    /**
+     * 更新指定键的配置值。
+     *
+     * @param key 配置键
+     * @param request 配置值更新请求
+     * @return API 响应，包含更新后的配置值
+     */
     @PutMapping("/{key}")
     public ApiResponse<ConfigValue> update(@PathVariable String key, @RequestBody ConfigValueRequest request) {
         return ApiResponse.success(
@@ -53,6 +77,12 @@ public class ConfigValueController {
         );
     }
 
+    /**
+     * 删除指定键的配置值。
+     *
+     * @param key 配置键
+     * @return API 响应，无数据
+     */
     @DeleteMapping("/{key}")
     public ApiResponse<Void> delete(@PathVariable String key) {
         configValueApplicationService.delete(key);

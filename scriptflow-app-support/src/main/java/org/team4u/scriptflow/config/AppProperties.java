@@ -2,6 +2,7 @@ package org.team4u.scriptflow.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,10 +15,19 @@ import java.util.List;
  */
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
+    private String homeDir = defaultHomeDir();
     private final Auth auth = new Auth();
     private final Plugins plugins = new Plugins();
     private final Execution execution = new Execution();
     private final Schedules schedules = new Schedules();
+
+    public String getHomeDir() {
+        return homeDir;
+    }
+
+    public void setHomeDir(String homeDir) {
+        this.homeDir = homeDir;
+    }
 
     public Auth getAuth() {
         return auth;
@@ -33,6 +43,14 @@ public class AppProperties {
 
     public Schedules getSchedules() {
         return schedules;
+    }
+
+    public static String defaultHomeDir() {
+        return Path.of(System.getProperty("user.home"), ".scriptflow").toString();
+    }
+
+    public static String defaultPluginsDir() {
+        return Path.of(defaultHomeDir(), "plugins").toString();
     }
 
     public static class Auth {
@@ -70,7 +88,7 @@ public class AppProperties {
     }
 
     public static class Plugins {
-        private String dir = "./plugins";
+        private String dir = defaultPluginsDir();
 
         public String getDir() {
             return dir;

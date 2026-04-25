@@ -37,10 +37,23 @@ public final class CliConfigService {
         this.homeDirectory = homeDirectory;
     }
 
+    /**
+     * 获取 CLI 配置文件路径。
+     *
+     * @return 配置文件路径，位于用户主目录下的 {@code .scriptflow/config.json}
+     */
     public Path configPath() {
         return homeDirectory.resolve(".scriptflow").resolve("config.json");
     }
 
+    /**
+     * 加载 CLI 配置文件。
+     * <p>
+     * 如果配置文件不存在则返回空的 {@link ConfigFile}。
+     *
+     * @return 配置文件对象
+     * @throws UncheckedIOException 如果配置文件读取或解析失败
+     */
     public ConfigFile load() {
         Path path = configPath();
         if (Files.notExists(path)) {
@@ -57,6 +70,14 @@ public final class CliConfigService {
         }
     }
 
+    /**
+     * 保存 CLI 配置到文件系统。
+     * <p>
+     * 自动创建父目录，以 JSON 格式写入配置。
+     *
+     * @param file 要保存的配置文件对象
+     * @throws UncheckedIOException 如果写入失败
+     */
     public void save(ConfigFile file) {
         try {
             Files.createDirectories(configPath().getParent());
@@ -66,6 +87,15 @@ public final class CliConfigService {
         }
     }
 
+    /**
+     * 解析最终生效的连接配置。
+     * <p>
+     * 按优先级合并：命令行参数 > 环境变量 > profile 文件 > 默认值，
+     * 返回包含每个配置项来源信息的解析结果。
+     *
+     * @param request 包含命令行传入的配置覆盖项
+     * @return 包含最终配置值和来源信息的解析结果
+     */
     public ResolvedConnectionConfig resolve(ResolutionRequest request) {
         ConfigFile file = load();
         ValueWithSource<String> profileValue = firstString(
@@ -133,6 +163,14 @@ public final class CliConfigService {
         );
     }
 
+    /**
+     * 将解析后的连接配置转换为 JSON 节点，用于 CLI 输出。
+     * <p>
+     * 包含 profile、baseUrl、token（脱敏）、超时和配置文件路径等信息。
+     *
+     * @param config 解析后的连接配置
+     * @return 包含完整连接信息的 JSON 节点
+     */
     public ObjectNode toResolvedNode(ResolvedConnectionConfig config) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("profile", config.profile());
@@ -150,6 +188,12 @@ public final class CliConfigService {
         return objectMapper.valueToTree(payload);
     }
 
+    /**
+     * 将配置文件中的 profile 列表转换为 JSON 节点。
+     *
+     * @param file CLI 配置文件
+     * @return 包含当前 profile 名称和所有 profile 名称列表的 JSON 节点
+     */
     public ObjectNode toProfilesNode(ConfigFile file) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("currentProfile", normalizeString(file.currentProfile));
@@ -157,6 +201,14 @@ public final class CliConfigService {
         return objectMapper.valueToTree(payload);
     }
 
+    /**
+     * 将单个 profile 配置转换为 JSON 节点。
+     *
+     * @param name    profile 名称
+     * @param profile profile 配置
+     * @param current 是否为当前激活的 profile
+     * @return 包含 profile 详情的 JSON 节点
+     */
     public ObjectNode toProfileNode(String name, ProfileConfig profile, boolean current) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("name", name);
@@ -169,6 +221,14 @@ public final class CliConfigService {
         return objectMapper.valueToTree(payload);
     }
 
+    /**
+     * 规范化服务端基础 URL。
+     * <p>
+     * 去除首尾空白和末尾的斜杠，空字符串视为 null。
+     *
+     * @param value 原始 URL 值
+     * @return 规范化后的 URL，无效值返回 null
+     */
     public String normalizeBaseUrl(String value) {
         String normalized = normalizeString(value);
         if (normalized == null) {
@@ -180,6 +240,14 @@ public final class CliConfigService {
         return normalized.isBlank() ? null : normalized;
     }
 
+    /**
+     * 规范化字符串值。
+     * <p>
+     * 去除首尾空白，空字符串转为 null。
+     *
+     * @param value 原始字符串
+     * @return 规范化后的字符串，空白值返回 null
+     */
     public String normalizeString(String value) {
         if (value == null) {
             return null;
@@ -188,6 +256,14 @@ public final class CliConfigService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    /**
+     * 对令牌进行脱敏处理。
+     * <p>
+     * 保留首尾各 2 个字符，中间用星号替换。长度不超过 4 则全部脱敏。
+     *
+     * @param value 原始令牌值
+     * @return 脱敏后的令牌字符串
+     */
     public String maskToken(String value) {
         String normalized = normalizeString(value);
         if (normalized == null) {

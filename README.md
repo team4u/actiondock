@@ -375,7 +375,8 @@ curl -X POST http://localhost:8080/api/config-values \
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `server.port` | 8080 | Web 服务端口 |
-| `spring.datasource.url` | `jdbc:h2:file:./data/dsl-runtime;AUTO_SERVER=TRUE` | 默认 H2 文件库 |
+| `spring.datasource.url` | `jdbc:h2:file:${app.home-dir}/data/dsl-runtime;AUTO_SERVER=TRUE` | 默认 H2 文件库 |
+| `app.home-dir` | `${user.home}/.scriptflow` | 本机运行时根目录 |
 | `app.auth.api-keys` | `[]` | 可选 API Key 列表，非空时可由鉴权组件使用 |
 | `app.execution.async-pool-size` | `4` | 异步执行线程池大小 |
 | `app.execution.groovy.enabled` | `true` | 是否启用 `GROOVY` 脚本编译缓存 |
@@ -383,14 +384,15 @@ curl -X POST http://localhost:8080/api/config-values \
 | `app.execution.groovy.cache-expire-after-access-minutes` | `30` | `GROOVY` 编译缓存空闲过期时间 |
 | `app.execution.python.executable` | `python3` | `PYTHON` 脚本使用的解释器命令 |
 | `app.execution.python.timeout-seconds` | `30` | `PYTHON` 脚本单次执行超时时间 |
-| `app.plugins.dir` | `./plugins` | PF4J 插件目录 |
+| `app.plugins.dir` | `${app.home-dir}/plugins` | PF4J 插件目录 |
 
 示例：
 
 ```yaml
 app:
+  home-dir: ${user.home}/.scriptflow
   plugins:
-    dir: ./plugins
+    dir: ${app.home-dir}/plugins
   auth:
     api-keys:
       - local-dev-key
@@ -807,7 +809,7 @@ curl -X POST http://localhost:8080/api/executions \
 ### H2 控制台
 
 H2 数据库 Web 控制台地址：`/h2-console`
-- JDBC URL：`jdbc:h2:file:./data/dsl-runtime;AUTO_SERVER=TRUE`
+- JDBC URL：`jdbc:h2:file:${app.home-dir}/data/dsl-runtime;AUTO_SERVER=TRUE`
 - 用户名：`sa`
 - 密码：（空）
 

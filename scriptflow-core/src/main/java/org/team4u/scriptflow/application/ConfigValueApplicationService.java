@@ -34,15 +34,34 @@ public class ConfigValueApplicationService {
         this.enabled = false;
     }
 
+    /**
+     * 使用配置值仓库创建启用的配置值服务实例。
+     *
+     * @param configValueRepository 配置值持久化仓库
+     * @throws NullPointerException 如果 configValueRepository 为 null
+     */
     public ConfigValueApplicationService(ConfigValueRepository configValueRepository) {
         this.configValueRepository = Objects.requireNonNull(configValueRepository);
         this.enabled = true;
     }
 
+    /**
+     * 获取禁用状态的配置值服务实例。
+     * <p>
+     * 禁用状态下所有配置操作将抛出 {@link IllegalStateException}，
+     * 查询类方法返回空结果。
+     *
+     * @return 禁用状态的单例实例
+     */
     public static ConfigValueApplicationService disabled() {
         return DISABLED;
     }
 
+    /**
+     * 查询所有配置值，按 key 字母序排列。
+     *
+     * @return 配置值列表（禁用状态下返回空列表）
+     */
     public List<ConfigValue> list() {
         if (!enabled) {
             return List.of();
@@ -53,11 +72,29 @@ public class ConfigValueApplicationService {
                 .toList();
     }
 
+    /**
+     * 根据 key 查询配置值。
+     *
+     * @param key 配置键名
+     * @return 配置值
+     * @throws IllegalArgumentException 如果 key 格式不合法或配置值不存在
+     * @throws IllegalStateException    如果服务未启用
+     */
     public ConfigValue get(String key) {
         ensureEnabled();
         return copy(requireExisting(normalizeKey(key)));
     }
 
+    /**
+     * 创建配置值。
+     * <p>
+     * 自动标准化 key 格式并设置创建和更新时间。不允许创建重复 key。
+     *
+     * @param configValue 配置值信息（需包含 key 和 value）
+     * @return 创建后的配置值
+     * @throws IllegalArgumentException 如果参数为空、key 格式不合法或 key 已存在
+     * @throws IllegalStateException    如果服务未启用
+     */
     public ConfigValue create(ConfigValue configValue) {
         ensureEnabled();
         ConfigValue normalized = normalizeForCreate(configValue);
@@ -69,15 +106,41 @@ public class ConfigValueApplicationService {
         return copy(configValueRepository.save(normalized));
     }
 
+    /**
+     * 更新配置值。
+     * <p>
+     * 根据 key 定位已有配置值，更新其 value 和 description。
+     * 不支持修改 key 本身。
+     *
+     * @param key         要更新的配置键名
+     * @param configValue 新的配置值信息
+     * @return 更新后的配置值
+     * @throws IllegalArgumentException 如果 key 不存在、参数为空或试图修改 key
+     * @throws IllegalStateException    如果服务未启用
+     */
     public ConfigValue update(String key, ConfigValue configValue) {
         ensureEnabled();
         String normalizedKey = normalizeKey(key);
         ConfigValue existing = requireExisting(normalizedKey);
         ConfigValue normalized = normalizeForUpdate(normalizedKey, configValue);
-        normalized.setCreatedAt(existing.getCreatedAt()).setUpdatedAt(LocalDateTime.now());
+        normalized.setCreatedAt(existing.getCreatedAt())
+                .setUpdatedAt(LocalDateTime.now())
+                .setRepositoryId(existing.getRepositoryId())
+                .setRepositoryToolId(existing.getRepositoryToolId())
+                .setRepositoryVersion(existing.getRepositoryVersion())
+                .setPublishMode(existing.getPublishMode())
+                .setManaged(existing.isManaged())
+                .setOverridden(existing.isManaged() || existing.isOverridden());
         return copy(configValueRepository.save(normalized));
     }
 
+    /**
+     * 删除配置值。
+     *
+     * @param key 要删除的配置键名
+     * @throws IllegalArgumentException 如果 key 格式不合法或配置值不存在
+     * @throws IllegalStateException    如果服务未启用
+     */
     public void delete(String key) {
         ensureEnabled();
         String normalizedKey = normalizeKey(key);
@@ -85,6 +148,15 @@ public class ConfigValueApplicationService {
         configValueRepository.deleteByKey(normalizedKey);
     }
 
+    /**
+     * 生成配置值的解析快照。
+     * <p>
+     * 加载所有原始配置值，递归解析其中的 {@code ${config.xxx}} 占位符引用，
+     * 并检测循环引用。返回不可变的已解析键值映射。
+     *
+     * @return 已解析的配置值快照（禁用状态下返回空 Map）
+     * @throws IllegalArgumentException 如果存在循环引用或引用了不存在的 key
+     */
     public Map<String, String> snapshot() {
         if (!enabled) {
             return Map.of();
@@ -95,6 +167,14 @@ public class ConfigValueApplicationService {
         return Collections.unmodifiableMap(new LinkedHashMap<>(resolved));
     }
 
+    /**
+     * 解析 Map 结构中的所有配置占位符。
+     * <p>
+     * 递归遍历 Map 中的所有字符串值，将 {@code ${config.xxx}} 占位符替换为实际配置值。
+     *
+     * @param source 原始输入 Map，可以为 null
+     * @return 解析后的 Map
+     */
     public Map<String, Object> resolveMap(Map<String, Object> source) {
         if (source == null) {
             return new LinkedHashMap<>();
@@ -104,10 +184,27 @@ public class ConfigValueApplicationService {
         return resolved;
     }
 
+    /**
+     * 解析对象中的所有配置占位符。
+     * <p>
+     * 支持 Map、List 和 String 类型的递归解析，其他类型直接返回。
+     *
+     * @param value 待解析的对象
+     * @return 解析后的对象
+     */
     public Object resolveObject(Object value) {
         return resolveObject(value, snapshot());
     }
 
+    /**
+     * 解析字符串中的配置占位符。
+     * <p>
+     * 将字符串中所有 {@code ${config.xxx}} 格式的占位符替换为对应的配置值。
+     *
+     * @param value 待解析的字符串
+     * @return 解析后的字符串
+     * @throws IllegalArgumentException 如果引用了不存在的配置 key
+     */
     public String resolveText(String value) {
         return resolveText(value, snapshot());
     }
@@ -184,7 +281,13 @@ public class ConfigValueApplicationService {
         return new ConfigValue()
                 .setKey(normalizeKey(configValue.getKey()))
                 .setValue(configValue.getValue())
-                .setDescription(normalizeDescription(configValue.getDescription()));
+                .setDescription(normalizeDescription(configValue.getDescription()))
+                .setRepositoryId(configValue.getRepositoryId())
+                .setRepositoryToolId(configValue.getRepositoryToolId())
+                .setRepositoryVersion(configValue.getRepositoryVersion())
+                .setPublishMode(configValue.getPublishMode())
+                .setManaged(configValue.isManaged())
+                .setOverridden(configValue.isOverridden());
     }
 
     private ConfigValue normalizeForUpdate(String key, ConfigValue configValue) {
@@ -197,7 +300,13 @@ public class ConfigValueApplicationService {
         return new ConfigValue()
                 .setKey(key)
                 .setValue(configValue.getValue())
-                .setDescription(normalizeDescription(configValue.getDescription()));
+                .setDescription(normalizeDescription(configValue.getDescription()))
+                .setRepositoryId(configValue.getRepositoryId())
+                .setRepositoryToolId(configValue.getRepositoryToolId())
+                .setRepositoryVersion(configValue.getRepositoryVersion())
+                .setPublishMode(configValue.getPublishMode())
+                .setManaged(configValue.isManaged())
+                .setOverridden(configValue.isOverridden());
     }
 
     private String normalizeKey(String key) {
@@ -228,6 +337,12 @@ public class ConfigValueApplicationService {
                 .setKey(source.getKey())
                 .setValue(source.getValue())
                 .setDescription(source.getDescription())
+                .setRepositoryId(source.getRepositoryId())
+                .setRepositoryToolId(source.getRepositoryToolId())
+                .setRepositoryVersion(source.getRepositoryVersion())
+                .setPublishMode(source.getPublishMode())
+                .setManaged(source.isManaged())
+                .setOverridden(source.isOverridden())
                 .setCreatedAt(source.getCreatedAt())
                 .setUpdatedAt(source.getUpdatedAt());
     }

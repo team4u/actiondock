@@ -13,15 +13,23 @@ import {
 } from "antd";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { onAuthRequired } from "./auth";
 import { ColorModeContext, type ColorMode, useColorMode } from "./contexts/ColorModeContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
-const ScriptListPage = lazy(() =>
-  import("./pages/ScriptListPage").then((module) => ({ default: module.ScriptListPage }))
+const RepositoryDiscoveryPage = lazy(() =>
+  import("./pages/RepositoryDiscoveryPage").then((module) => ({ default: module.RepositoryDiscoveryPage }))
+);
+const InstalledToolsPage = lazy(() =>
+  import("./pages/InstalledToolsPage").then((module) => ({ default: module.InstalledToolsPage }))
+);
+const MyToolsPage = lazy(() =>
+  import("./pages/MyToolsPage").then((module) => ({ default: module.MyToolsPage }))
+);
+const RepositoryManagementPage = lazy(() =>
+  import("./pages/RepositoryManagementPage").then((module) => ({ default: module.RepositoryManagementPage }))
 );
 const ScriptEditorPage = lazy(() =>
   import("./pages/ScriptEditorPage").then((module) => ({ default: module.ScriptEditorPage }))
@@ -40,9 +48,6 @@ const ScheduleManagementPage = lazy(() =>
 );
 const ScheduleEditorPage = lazy(() =>
   import("./pages/ScheduleEditorPage").then((module) => ({ default: module.ScheduleEditorPage }))
-);
-const ApiKeyManagementPage = lazy(() =>
-  import("./pages/ApiKeyManagementPage").then((module) => ({ default: module.ApiKeyManagementPage }))
 );
 const ConfigValueManagementPage = lazy(() =>
   import("./pages/ConfigValueManagementPage").then((module) => ({ default: module.ConfigValueManagementPage }))
@@ -87,30 +92,38 @@ function AdminShell() {
       ? "schedules"
       : location.pathname.startsWith("/config-values")
         ? "config-values"
-      : location.pathname.startsWith("/settings")
-        ? "settings"
-        : location.pathname.startsWith("/scripts")
-          ? "scripts"
-          : "";
+        : location.pathname.startsWith("/repositories")
+          ? "repositories"
+          : location.pathname.startsWith("/installed")
+            ? "installed"
+            : location.pathname.startsWith("/discover")
+              ? "discover"
+              : location.pathname.startsWith("/my-tools") || location.pathname.startsWith("/scripts")
+                ? "my-tools"
+                : "";
   const title =
-    selectedNavKey === "plugins"
-      ? "插件管理"
+    selectedNavKey === "discover"
+      ? "发现工具"
+      : selectedNavKey === "installed"
+        ? "已安装工具"
+        : selectedNavKey === "repositories"
+          ? "工具仓库"
+          : selectedNavKey === "plugins"
+            ? "插件管理"
       : selectedNavKey === "schedules"
         ? "定时任务"
         : selectedNavKey === "config-values"
-          ? "配置值管理"
-        : selectedNavKey === "settings"
-          ? "API Key 管理"
-          : "脚本管理";
+          ? "本机配置"
+          : "我的工具";
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
 
   const navigationMenu = (
     <div className="app-navigation">
       <div className="brand-block">
-        <Text className="brand-kicker">控制台</Text>
+        <Text className="brand-kicker">Local Runner</Text>
         <Title level={4}>Scriptflow</Title>
-        <Text type="secondary">脚本管理控制台</Text>
+        <Text type="secondary">工具仓库浏览、安装与本机运行</Text>
       </div>
       <Menu
         mode="inline"
@@ -118,9 +131,24 @@ function AdminShell() {
         selectedKeys={[selectedNavKey]}
         items={[
           {
-            key: "scripts",
-            label: "脚本管理",
-            onClick: () => navigate("/scripts")
+            key: "discover",
+            label: "发现工具",
+            onClick: () => navigate("/discover")
+          },
+          {
+            key: "installed",
+            label: "已安装",
+            onClick: () => navigate("/installed")
+          },
+          {
+            key: "my-tools",
+            label: "我的工具",
+            onClick: () => navigate("/my-tools")
+          },
+          {
+            key: "repositories",
+            label: "仓库管理",
+            onClick: () => navigate("/repositories")
           },
           {
             key: "plugins",
@@ -134,13 +162,8 @@ function AdminShell() {
           },
           {
             key: "config-values",
-            label: "配置值管理",
+            label: "本机配置",
             onClick: () => navigate("/config-values")
-          },
-          {
-            key: "settings",
-            label: "API Key 管理",
-            onClick: () => navigate("/settings/api-key")
           }
         ]}
       />
@@ -180,8 +203,12 @@ function AdminShell() {
             }
           >
             <Routes>
-              <Route path="/" element={<Navigate to="/scripts" replace />} />
-              <Route path="/scripts" element={<ScriptListPage />} />
+              <Route path="/" element={<Navigate to="/discover" replace />} />
+              <Route path="/discover" element={<RepositoryDiscoveryPage />} />
+              <Route path="/installed" element={<InstalledToolsPage />} />
+              <Route path="/my-tools" element={<MyToolsPage />} />
+              <Route path="/repositories" element={<RepositoryManagementPage />} />
+              <Route path="/scripts" element={<Navigate to="/my-tools" replace />} />
               <Route path="/schedules" element={<ScheduleManagementPage />} />
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
@@ -191,7 +218,6 @@ function AdminShell() {
                 path="/plugins/:pluginId"
                 element={<PluginDetailPage />}
               />
-              <Route path="/settings/api-key" element={<ApiKeyManagementPage />} />
               <Route
                 path="/scripts/new"
                 element={<ScriptEditorPage mode="create" colorMode={colorMode} />}
@@ -200,7 +226,7 @@ function AdminShell() {
                 path="/scripts/:id"
                 element={<ScriptEditorPage mode="edit" colorMode={colorMode} />}
               />
-              <Route path="*" element={<Navigate to="/scripts" replace />} />
+              <Route path="*" element={<Navigate to="/discover" replace />} />
             </Routes>
           </Suspense>
         </Content>
@@ -221,28 +247,10 @@ function AdminShell() {
 export function App() {
   const colorMode = useSystemColorMode();
   const isDark = colorMode === "dark";
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     document.documentElement.dataset.theme = colorMode;
   }, [colorMode]);
-
-  useEffect(
-    () =>
-      onAuthRequired(() => {
-        if (location.pathname === "/settings/api-key") {
-          return;
-        }
-
-        navigate("/settings/api-key", {
-          state: {
-            from: `${location.pathname}${location.search}${location.hash}`
-          }
-        });
-      }),
-    [location.hash, location.pathname, location.search, navigate]
-  );
 
   return (
     <ConfigProvider

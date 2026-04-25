@@ -61,8 +61,14 @@ public class ScriptPluginContext {
     }
 
     /**
-     * Returns the effective plugin config converted to the requested Java type.
-     * Default values are expected to come from the platform's merged config, not from this conversion step.
+     * 获取最终生效的插件配置，并转换为指定的 Java 类型。
+     * <p>
+     * 内部委托 {@link PluginConfigBinder#bind} 进行类型转换。
+     * 默认值由平台合并后注入，此方法仅负责反序列化。
+     *
+     * @param type 目标 Java 类型
+     * @param <T>  目标类型泛型
+     * @return 绑定后的配置对象实例
      */
     public <T> T getPluginConfig(Class<T> type) {
         return PluginConfigBinder.bind(pluginConfig, type);

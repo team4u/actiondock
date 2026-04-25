@@ -53,11 +53,29 @@ public class GroovyScriptEngine implements ScriptEngine {
                 : scriptInvocationService;
     }
 
+    /**
+     * 校验 Groovy 脚本语法是否正确。
+     * <p>
+     * 通过编译缓存编译脚本源码，若语法有误将抛出异常。
+     *
+     * @param definition 脚本定义，包含待校验的源码
+     * @throws IllegalArgumentException 如果脚本语法错误
+     */
     @Override
     public void validate(ScriptDefinition definition) {
         compiledScriptCache.getOrCompile(definition.getSource());
     }
 
+    /**
+     * 执行 Groovy 脚本。
+     * <p>
+     * 从编译缓存获取或编译脚本类，创建绑定变量（input、config、log、plugins、scripts）后执行脚本。
+     *
+     * @param definition       脚本定义，包含源码和元信息
+     * @param input            脚本输入数据，通过 {@code input} 绑定变量提供给脚本
+     * @param executionContext 脚本执行上下文，包含执行 ID、配置和日志收集器
+     * @return 脚本执行的返回值
+     */
     @Override
     public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         Binding binding = newBinding(definition, input, executionContext);
@@ -66,6 +84,14 @@ public class GroovyScriptEngine implements ScriptEngine {
         return script.run();
     }
 
+    /**
+     * 编译 Groovy 脚本源码为脚本类。
+     * <p>
+     * 使用空绑定变量解析并编译脚本，编译后的类可被缓存和复用。
+     *
+     * @param source Groovy 脚本源码
+     * @return 编译后的脚本类
+     */
     protected Class<? extends Script> compileScriptClass(String source) {
         return new GroovyShell(newBinding(null, null, null)).parse(source).getClass().asSubclass(Script.class);
     }

@@ -8,6 +8,7 @@ interface CodeEditorProps {
   defaultLanguage?: string;
   height?: string;
   placeholder?: string;
+  readOnly?: boolean;
 }
 
 export function CodeEditor({
@@ -17,7 +18,8 @@ export function CodeEditor({
   language = "json",
   defaultLanguage,
   height = "260px",
-  placeholder
+  placeholder,
+  readOnly = false
 }: CodeEditorProps) {
   return (
     <div className="app-code-editor">
@@ -36,7 +38,8 @@ export function CodeEditor({
           automaticLayout: true,
           tabSize: 2,
           lineNumbersMinChars: 3,
-          padding: { top: 12, bottom: 12 }
+          padding: { top: 12, bottom: 12 },
+          readOnly
         }}
       />
       {placeholder && !value.trim() ? (

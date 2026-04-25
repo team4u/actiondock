@@ -43,6 +43,9 @@ class SchedulesCommands implements Runnable {
         @Option(names = "--script-id", description = "Only list schedules for the specified script.")
         String scriptId;
 
+        /**
+         * 列出调度列表，支持按脚本 ID 过滤。
+         */
         @Override
         public Integer call() {
             if (scriptId != null && !scriptId.isBlank()) {
@@ -63,6 +66,9 @@ class SchedulesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
+        /**
+         * 查询单个调度的详情信息。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().get("/api/schedules/" + parent.root().encodePath(scheduleId), Map.of()));
@@ -82,6 +88,9 @@ class SchedulesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the schedule request body JSON file. Use - to read from stdin.")
         String filePath;
 
+        /**
+         * 从 JSON 文件创建新的调度规则。
+         */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Schedule request body");
@@ -105,6 +114,9 @@ class SchedulesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the schedule request body JSON file. Use - to read from stdin.")
         String filePath;
 
+        /**
+         * 从 JSON 文件更新指定调度的配置。
+         */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Schedule request body");
@@ -124,6 +136,9 @@ class SchedulesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
+        /**
+         * 启用指定调度。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().postJson("/api/schedules/" + parent.root().encodePath(scheduleId) + "/enable", Map.of(), "{}"));
@@ -138,6 +153,9 @@ class SchedulesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
+        /**
+         * 禁用指定调度。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().postJson("/api/schedules/" + parent.root().encodePath(scheduleId) + "/disable", Map.of(), "{}"));
@@ -152,6 +170,9 @@ class SchedulesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
+        /**
+         * 删除指定调度。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().delete("/api/schedules/" + parent.root().encodePath(scheduleId), Map.of()));

@@ -22,11 +22,27 @@ public class DemoScriptFlowPlugin implements ScriptFlowPlugin {
         return "scriptflow-demo-plugin";
     }
 
+    /**
+     * 校验插件配置，通过将配置绑定到 {@link DemoPluginConfig} 来验证结构是否正确。
+     *
+     * @param config 插件配置字典
+     */
     @Override
     public void validateConfig(Map<String, Object> config) {
         PluginConfigBinder.bind(config, DemoPluginConfig.class);
     }
 
+    /**
+     * 调用插件的 echo 动作，将输入消息加上配置前缀后返回。
+     * <p>
+     * 目前仅支持 "echo" 动作，将 {@code args.message} 与配置前缀拼接后返回。
+     *
+     * @param action  动作名称，目前仅支持 "echo"
+     * @param context 脚本执行上下文
+     * @param args    调用参数，包含 "message" 字段
+     * @return 包含拼接后消息和上下文信息的 Map
+     * @throws IllegalArgumentException 如果动作名称不被支持
+     */
     @Override
     public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
         if ("echo".equals(action)) {

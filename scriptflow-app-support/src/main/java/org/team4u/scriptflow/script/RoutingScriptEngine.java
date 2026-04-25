@@ -18,16 +18,37 @@ import java.util.Map;
 public class RoutingScriptEngine implements ScriptEngine {
     private final Map<ScriptType, ScriptEngine> delegates = new EnumMap<>(ScriptType.class);
 
+    /**
+     * 创建路由脚本引擎。
+     *
+     * @param groovyScriptEngine Groovy 脚本引擎实现
+     * @param pythonScriptEngine Python 脚本引擎实现
+     */
     public RoutingScriptEngine(ScriptEngine groovyScriptEngine, ScriptEngine pythonScriptEngine) {
         delegates.put(ScriptType.GROOVY, groovyScriptEngine);
         delegates.put(ScriptType.PYTHON, pythonScriptEngine);
     }
 
+    /**
+     * 校验脚本语法，根据脚本类型路由到对应的引擎实现。
+     *
+     * @param definition 脚本定义，包含类型和源码
+     * @throws IllegalArgumentException 如果脚本类型不支持或语法错误
+     */
     @Override
     public void validate(ScriptDefinition definition) {
         resolve(definition).validate(definition);
     }
 
+    /**
+     * 执行脚本，根据脚本类型路由到对应的引擎实现。
+     *
+     * @param definition       脚本定义，包含类型和源码
+     * @param input            脚本输入数据
+     * @param executionContext 脚本执行上下文
+     * @return 脚本执行的返回值
+     * @throws IllegalArgumentException 如果脚本类型不支持
+     */
     @Override
     public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         return resolve(definition).execute(definition, input, executionContext);

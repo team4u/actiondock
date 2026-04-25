@@ -57,16 +57,51 @@ public class ExecutionApplicationService {
                 : configValueApplicationService;
     }
 
+    /**
+     * 执行指定脚本（使用当前版本）。
+     * <p>
+     * 触发来源默认为手动执行（MANUAL），不关联调度。
+     *
+     * @param scriptId   脚本 ID
+     * @param input      输入参数
+     * @param submitMode 提交模式（SYNC 或 ASYNC）
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果脚本不存在或输入参数校验失败
+     */
     public ExecutionRecord execute(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
         ScriptDefinition scriptDefinition = getScript(scriptId);
         return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
     }
 
+    /**
+     * 执行指定脚本的已发布版本。
+     * <p>
+     * 仅使用脚本的发布快照进行执行，触发来源默认为手动执行。
+     *
+     * @param scriptId   脚本 ID
+     * @param input      输入参数
+     * @param submitMode 提交模式（SYNC 或 ASYNC）
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果脚本不存在、未发布或输入参数校验失败
+     */
     public ExecutionRecord executePublished(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
         ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
         return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
     }
 
+    /**
+     * 执行指定脚本的已发布版本，并指定触发来源和关联调度。
+     * <p>
+     * 用于定时调度等自动化触发场景，可记录触发来源和关联的调度 ID。
+     *
+     * @param scriptId      脚本 ID
+     * @param input         输入参数
+     * @param submitMode    提交模式（SYNC 或 ASYNC）
+     * @param triggerSource 触发来源（如 MANUAL、SCHEDULE）
+     * @param scheduleId    关联的调度 ID，可为 null
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果脚本不存在、未发布或输入参数校验失败
+     */
     public ExecutionRecord executePublished(String scriptId,
                                             Map<String, Object> input,
                                             SubmitMode submitMode,
@@ -165,11 +200,25 @@ public class ExecutionApplicationService {
         return values;
     }
 
+    /**
+     * 根据 ID 查询执行记录。
+     *
+     * @param id 执行记录 ID
+     * @return 执行记录
+     * @throws IllegalArgumentException 如果执行记录不存在
+     */
     public ExecutionRecord get(String id) {
         return executionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + id));
     }
 
+    /**
+     * 查询指定脚本的所有执行记录。
+     *
+     * @param scriptId 脚本 ID
+     * @return 执行记录列表
+     * @throws IllegalArgumentException 如果 scriptId 为空
+     */
     public List<ExecutionRecord> list(String scriptId) {
         if (scriptId == null || scriptId.isBlank()) {
             throw new IllegalArgumentException("scriptId 不能为空");
@@ -177,6 +226,14 @@ public class ExecutionApplicationService {
         return executionRepository.findByScriptId(scriptId);
     }
 
+    /**
+     * 删除执行记录。
+     * <p>
+     * 仅允许删除已完成（SUCCESS 或 FAILED）的执行记录，进行中的记录无法删除。
+     *
+     * @param id 执行记录 ID
+     * @throws IllegalArgumentException 如果记录不存在或仍在执行中
+     */
     public void delete(String id) {
         ExecutionRecord record = executionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + id));
@@ -184,6 +241,14 @@ public class ExecutionApplicationService {
         executionRepository.deleteById(id);
     }
 
+    /**
+     * 清除指定脚本的所有执行记录。
+     * <p>
+     * 仅删除已完成（SUCCESS 或 FAILED）的记录。如果存在进行中的记录，将抛出异常。
+     *
+     * @param scriptId 脚本 ID
+     * @throws IllegalArgumentException 如果 scriptId 为空或存在仍在执行中的记录
+     */
     public void clear(String scriptId) {
         if (scriptId == null || scriptId.isBlank()) {
             throw new IllegalArgumentException("scriptId 不能为空");

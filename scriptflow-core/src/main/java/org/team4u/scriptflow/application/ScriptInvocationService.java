@@ -37,10 +37,32 @@ public class ScriptInvocationService {
         this.enabled = true;
     }
 
+    /**
+     * 获取禁用状态的脚本互调服务实例。
+     * <p>
+     * 禁用状态下调用 {@link #invokePublished} 将抛出 {@link IllegalStateException}。
+     *
+     * @return 禁用状态的单例实例
+     */
     public static ScriptInvocationService disabled() {
         return DISABLED;
     }
 
+    /**
+     * 同步调用已发布的目标脚本。
+     * <p>
+     * 根据脚本 ID 查找已发布的脚本定义，校验输入参数是否符合模式，
+     * 构建嵌套执行上下文后同步执行目标脚本。
+     * 支持脚本调用链路追踪和循环调用检测。
+     *
+     * @param scriptId          目标脚本 ID
+     * @param callerDefinition  调用方脚本定义，用于构建调用栈
+     * @param executionContext  当前执行上下文，包含执行 ID、配置等信息
+     * @param input             传递给目标脚本的输入参数
+     * @return 目标脚本的执行结果，已规范化为 Map 结构
+     * @throws IllegalStateException    如果脚本互调未启用或检测到循环调用
+     * @throws IllegalArgumentException 如果脚本不存在、未发布或输入参数校验失败
+     */
     public Object invokePublished(String scriptId,
                                   ScriptDefinition callerDefinition,
                                   ScriptExecutionContext executionContext,

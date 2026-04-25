@@ -1,6 +1,8 @@
 package org.team4u.scriptflow.domain.model;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -21,6 +23,14 @@ public class ScriptDefinition {
     private ScriptStatus status = ScriptStatus.DRAFT;
     private Integer version = 1;
     private PublishedScriptSnapshot publishedSnapshot;
+    private ScriptScope scope = ScriptScope.PERSONAL;
+    private String repositoryId;
+    private String repositoryToolId;
+    private String repositoryVersion;
+    private boolean editable = true;
+    private String owner;
+    private String description;
+    private List<String> tags = new ArrayList<>();
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -96,6 +106,78 @@ public class ScriptDefinition {
 
     public ScriptDefinition setVersion(Integer version) {
         this.version = version;
+        return this;
+    }
+
+    public ScriptScope getScope() {
+        return scope;
+    }
+
+    public ScriptDefinition setScope(ScriptScope scope) {
+        this.scope = scope == null ? ScriptScope.PERSONAL : scope;
+        return this;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public ScriptDefinition setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+        return this;
+    }
+
+    public String getRepositoryToolId() {
+        return repositoryToolId;
+    }
+
+    public ScriptDefinition setRepositoryToolId(String repositoryToolId) {
+        this.repositoryToolId = repositoryToolId;
+        return this;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public ScriptDefinition setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
+        return this;
+    }
+
+    public boolean isEditable() {
+        return editable;
+    }
+
+    public ScriptDefinition setEditable(boolean editable) {
+        this.editable = editable;
+        return this;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public ScriptDefinition setOwner(String owner) {
+        this.owner = owner;
+        return this;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public ScriptDefinition setDescription(String description) {
+        this.description = description;
+        return this;
+    }
+
+    public List<String> getTags() {
+        return List.copyOf(tags);
+    }
+
+    public ScriptDefinition setTags(List<String> tags) {
+        this.tags = tags == null ? new ArrayList<>() : new ArrayList<>(tags);
         return this;
     }
 
@@ -180,6 +262,14 @@ public class ScriptDefinition {
                 .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(version)
                 .setPublishedSnapshot(snapshot)
+                .setScope(scope)
+                .setRepositoryId(repositoryId)
+                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryVersion(repositoryVersion)
+                .setEditable(editable)
+                .setOwner(owner)
+                .setDescription(description)
+                .setTags(tags)
                 .setCreatedAt(createdAt)
                 .setUpdatedAt(updatedAt);
     }

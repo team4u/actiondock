@@ -46,29 +46,73 @@ public class ScheduleApplicationService {
                 : configValueApplicationService;
     }
 
+    /**
+     * 查询指定脚本的所有调度配置。
+     *
+     * @param scriptId 脚本 ID
+     * @return 该脚本关联的调度列表
+     * @throws IllegalArgumentException 如果脚本不存在
+     */
     public List<ScriptSchedule> list(String scriptId) {
         ensureScriptExists(scriptId);
         return scriptScheduleRepository.findByScriptId(scriptId);
     }
 
+    /**
+     * 查询所有调度配置。
+     *
+     * @return 全部调度列表
+     */
     public List<ScriptSchedule> listAll() {
         return scriptScheduleRepository.findAll();
     }
 
+    /**
+     * 查询所有已启用的调度配置。
+     *
+     * @return 已启用的调度列表
+     */
     public List<ScriptSchedule> listEnabled() {
         return scriptScheduleRepository.findEnabled();
     }
 
+    /**
+     * 根据 ID 获取调度配置。
+     *
+     * @param scheduleId 调度 ID
+     * @return 调度配置
+     * @throws IllegalArgumentException 如果调度不存在
+     */
     public ScriptSchedule getById(String scheduleId) {
         return getByIdInternal(scheduleId);
     }
 
+    /**
+     * 获取指定脚本下的调度配置，并校验归属关系。
+     *
+     * @param scriptId   脚本 ID
+     * @param scheduleId 调度 ID
+     * @return 调度配置
+     * @throws IllegalArgumentException 如果调度不存在或不属于该脚本
+     */
     public ScriptSchedule get(String scriptId, String scheduleId) {
         ScriptSchedule schedule = getById(scheduleId);
         ensureScheduleBelongsToScript(schedule, scriptId);
         return schedule;
     }
 
+    /**
+     * 保存调度配置（新增或更新）。
+     * <p>
+     * 要求关联脚本必须已发布。新建时自动生成 ID 和时间戳，
+     * 更新时校验调度归属关系并刷新时间戳。
+     * 保存前会验证 Cron 表达式合法性，并对解析配置值后的输入参数执行模式校验。
+     *
+     * @param scriptId 脚本 ID
+     * @param schedule 调度配置信息
+     * @return 保存后的调度配置
+     * @throws IllegalArgumentException 如果脚本未发布、参数为空或校验失败
+     */
     public ScriptSchedule save(String scriptId, ScriptSchedule schedule) {
         ScriptDefinition script = ensurePublishedScript(scriptId);
         if (schedule == null) {
@@ -84,6 +128,7 @@ public class ScheduleApplicationService {
         } else {
             target = getById(schedule.getId());
             ensureScheduleBelongsToScript(target, scriptId);
+            ensureEditable(target);
         }
 
         String name = normalize(schedule.getName(), "定时任务名称不能为空");
@@ -102,25 +147,66 @@ public class ScheduleApplicationService {
         return scriptScheduleRepository.save(target);
     }
 
+    /**
+     * 启用调度配置。
+     * <p>
+     * 启用前会重新校验 Cron 表达式的合法性，确保调度可正常触发。
+     *
+     * @param scriptId   脚本 ID
+     * @param scheduleId 调度 ID
+     * @return 启用后的调度配置
+     * @throws IllegalArgumentException 如果脚本未发布、调度不存在或 Cron 表达式不合法
+     */
     public ScriptSchedule enable(String scriptId, String scheduleId) {
         ensurePublishedScript(scriptId);
         ScriptSchedule schedule = get(scriptId, scheduleId);
+        ensureEditable(schedule);
         scheduleExpressionValidator.validate(schedule.getCronExpression());
         schedule.setEnabled(true).setUpdatedAt(LocalDateTime.now());
         return scriptScheduleRepository.save(schedule);
     }
 
+    /**
+     * 禁用调度配置。
+     * <p>
+     * 禁用后调度将不再被定时触发，但配置仍保留。
+     *
+     * @param scriptId   脚本 ID
+     * @param scheduleId 调度 ID
+     * @return 禁用后的调度配置
+     * @throws IllegalArgumentException 如果调度不存在或不属于该脚本
+     */
     public ScriptSchedule disable(String scriptId, String scheduleId) {
         ScriptSchedule schedule = get(scriptId, scheduleId);
+        ensureEditable(schedule);
         schedule.setEnabled(false).setUpdatedAt(LocalDateTime.now());
         return scriptScheduleRepository.save(schedule);
     }
 
+    /**
+     * 删除指定脚本下的调度配置。
+     *
+     * @param scriptId   脚本 ID
+     * @param scheduleId 调度 ID
+     * @throws IllegalArgumentException 如果调度不存在或不属于该脚本
+     */
     public void delete(String scriptId, String scheduleId) {
         ScriptSchedule schedule = get(scriptId, scheduleId);
+        ensureEditable(schedule);
         scriptScheduleRepository.deleteById(schedule.getId());
     }
 
+    /**
+     * 标记调度已被触发，记录触发时间和关联的执行 ID。
+     * <p>
+     * 由调度引擎在每次成功触发执行后调用。
+     *
+     * @param scheduleId  调度 ID
+     * @param executionId 本次触发产生的执行记录 ID
+     * @param triggeredAt 触发时间
+     * @return 更新后的调度配置
+     * @throws IllegalArgumentException 如果调度不存在
+     */
     public ScriptSchedule markTriggered(String scheduleId, String executionId, LocalDateTime triggeredAt) {
         ScriptSchedule schedule = getById(scheduleId);
         schedule.setLastExecutionId(executionId)
@@ -129,6 +215,11 @@ public class ScheduleApplicationService {
         return scriptScheduleRepository.save(schedule);
     }
 
+    /**
+     * 清除指定脚本下的所有调度配置。
+     *
+     * @param scriptId 脚本 ID
+     */
     public void clearByScriptId(String scriptId) {
         scriptScheduleRepository.deleteByScriptId(scriptId);
     }
@@ -166,5 +257,11 @@ public class ScheduleApplicationService {
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    private void ensureEditable(ScriptSchedule schedule) {
+        if (!schedule.isEditable()) {
+            throw new IllegalArgumentException("团队定时任务为只读");
+        }
     }
 }

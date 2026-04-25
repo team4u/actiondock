@@ -10,6 +10,13 @@ import org.springframework.web.bind.annotation.GetMapping;
  */
 @Controller
 public class AdminUiController {
+    /**
+     * 管理后台首页路由。
+     * <p>
+     * 将所有管理后台前端路由统一转发到静态 index.html，由前端路由处理页面跳转。
+     *
+     * @return 转发到 admin/index.html
+     */
     @GetMapping({
             "/admin",
             "/admin/",

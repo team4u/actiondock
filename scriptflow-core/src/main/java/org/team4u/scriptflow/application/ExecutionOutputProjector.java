@@ -11,6 +11,16 @@ import java.util.Map;
  * @author jay.wu
  */
 public class ExecutionOutputProjector {
+    /**
+     * 根据输出模式（outputSchema）投影过滤原始执行结果。
+     * <p>
+     * 仅保留模式中 properties 声明的字段，未在模式中定义的字段将被裁剪。
+     * 如果模式为空或不含 properties，则返回原始输出的完整拷贝。
+     *
+     * @param rawOutput    脚本执行的原始输出
+     * @param outputSchema 输出模式定义，遵循 JSON Schema 格式
+     * @return 经过投影过滤后的输出结果
+     */
     public Map<String, Object> project(Map<String, Object> rawOutput, Map<String, Object> outputSchema) {
         Map<String, Object> source = rawOutput == null ? new LinkedHashMap<>() : new LinkedHashMap<>(rawOutput);
         Map<String, Object> properties = propertiesOf(outputSchema);

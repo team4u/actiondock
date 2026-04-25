@@ -172,6 +172,21 @@ a {
   min-width: 0;
 }
 
+.repository-config-publish-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+}
+
+.repository-config-publish-row .ant-checkbox-wrapper {
+  flex: 1 1 auto;
+}
+
 .editor-footer {
   margin-top: 10px;
   align-items: flex-start;

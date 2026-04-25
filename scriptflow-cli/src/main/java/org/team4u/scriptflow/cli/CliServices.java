@@ -31,6 +31,13 @@ public final class CliServices {
     private final Sleeper sleeper;
     private final ApiClientFactory apiClientFactory;
 
+    /**
+     * 创建默认的 CLI 服务容器。
+     * <p>
+     * 使用系统环境变量、用户主目录、标准 IO 流和默认 API 客户端工厂。
+     *
+     * @return 默认配置的 CLI 服务实例
+     */
     public static CliServices defaultServices() {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         return new CliServices(

@@ -37,6 +37,11 @@ public class ScriptScheduleEntity {
 
     @Column(nullable = false)
     private boolean enabled;
+    @Column(nullable = false)
+    private boolean editable = true;
+    private String repositoryId;
+    private String repositoryToolId;
+    private String repositoryVersion;
 
     private LocalDateTime lastTriggeredAt;
 
@@ -92,6 +97,38 @@ public class ScriptScheduleEntity {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isEditable() {
+        return editable;
+    }
+
+    public void setEditable(boolean editable) {
+        this.editable = editable;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public void setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+    }
+
+    public String getRepositoryToolId() {
+        return repositoryToolId;
+    }
+
+    public void setRepositoryToolId(String repositoryToolId) {
+        this.repositoryToolId = repositoryToolId;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public void setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
     }
 
     public LocalDateTime getLastTriggeredAt() {

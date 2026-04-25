@@ -43,6 +43,9 @@ class ScriptsCommands implements Runnable {
         @ParentCommand
         ScriptsCommands parent;
 
+        /**
+         * 列出所有脚本草稿，包含 UI Schema 信息。
+         */
         @Override
         public Integer call() {
             ScriptFlowApiClient client = parent.root().apiClient();
@@ -60,6 +63,9 @@ class ScriptsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Script ID.")
         String scriptId;
 
+        /**
+         * 查询脚本的当前保存定义（含未发布草稿），包含 UI Schema 信息。
+         */
         @Override
         public Integer call() {
             ScriptFlowApiClient client = parent.root().apiClient();
@@ -77,6 +83,9 @@ class ScriptsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Script ID.")
         String scriptId;
 
+        /**
+         * 查询脚本的当前发布版本定义，包含 UI Schema 信息。
+         */
         @Override
         public Integer call() {
             ScriptFlowApiClient client = parent.root().apiClient();
@@ -94,6 +103,9 @@ class ScriptsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Script ID.")
         String scriptId;
 
+        /**
+         * 查询脚本的输入/输出 Schema 摘要。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().get("/api/schema/" + parent.root().encodePath(scriptId), Map.of()));
@@ -112,6 +124,9 @@ class ScriptsCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the script definition JSON file. Use - to read from stdin.")
         String filePath;
 
+        /**
+         * 从 JSON 文件创建新的脚本草稿，包含 UI Schema 信息。
+         */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Script definition");
@@ -136,6 +151,9 @@ class ScriptsCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the script definition JSON file. Use - to read from stdin.")
         String filePath;
 
+        /**
+         * 更新脚本草稿定义，包含 UI Schema 信息。
+         */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Script definition");
@@ -157,6 +175,9 @@ class ScriptsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Script ID.")
         String scriptId;
 
+        /**
+         * 删除指定脚本。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().delete("/api/scripts/" + parent.root().encodePath(scriptId), Map.of()));
@@ -171,6 +192,9 @@ class ScriptsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Script ID.")
         String scriptId;
 
+        /**
+         * 校验脚本的当前保存定义是否可执行，不触发发布。
+         */
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().postJson(
@@ -193,6 +217,9 @@ class ScriptsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Script ID.")
         String scriptId;
 
+        /**
+         * 发布脚本的当前保存定义，递增版本号，包含 UI Schema 信息。
+         */
         @Override
         public Integer call() {
             Map<String, Object> query = new LinkedHashMap<>();
@@ -217,6 +244,9 @@ class ScriptsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Script ID.")
         String scriptId;
 
+        /**
+         * 丢弃脚本的未发布草稿，恢复为已发布版本快照，包含 UI Schema 信息。
+         */
         @Override
         public Integer call() {
             Map<String, Object> query = new LinkedHashMap<>();
@@ -263,6 +293,9 @@ class ScriptsCommands implements Runnable {
         @Option(names = "--poll-interval-ms", defaultValue = "1000", description = "Polling interval for execution status, in milliseconds. Only applies with --wait. Default: ${DEFAULT-VALUE}.")
         long pollIntervalMs;
 
+        /**
+         * 执行脚本的已发布版本，忽略未发布的草稿变更，可选择等待执行完成。
+         */
         @Override
         public Integer call() {
             ScriptFlowCommand root = parent.root();

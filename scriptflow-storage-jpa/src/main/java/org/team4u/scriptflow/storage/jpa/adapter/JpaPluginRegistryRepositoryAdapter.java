@@ -49,6 +49,14 @@ public class JpaPluginRegistryRepositoryAdapter implements PluginRegistryReposit
         repository.deleteById(pluginId);
     }
 
+    /**
+     * 将插件注册领域对象转换为 JPA 实体。
+     * <p>
+     * 配置 Schema、默认配置和动作列表使用 JSON 序列化存储。
+     *
+     * @param registration 插件注册领域对象
+     * @return JPA 实体
+     */
     private PluginRegistrationEntity toEntity(PluginRegistration registration) {
         PluginRegistrationEntity entity = new PluginRegistrationEntity();
         entity.setPluginId(registration.getPluginId());
@@ -65,6 +73,14 @@ public class JpaPluginRegistryRepositoryAdapter implements PluginRegistryReposit
         return entity;
     }
 
+    /**
+     * 将 JPA 实体转换为插件注册领域对象。
+     * <p>
+     * JSON 字段反序列化为配置 Schema、默认配置和动作列表。
+     *
+     * @param entity JPA 实体
+     * @return 插件注册领域对象
+     */
     private PluginRegistration toDomain(PluginRegistrationEntity entity) {
         return new PluginRegistration()
                 .setPluginId(entity.getPluginId())

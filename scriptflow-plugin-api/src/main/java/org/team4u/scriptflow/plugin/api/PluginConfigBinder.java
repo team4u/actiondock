@@ -17,8 +17,16 @@ public final class PluginConfigBinder {
     }
 
     /**
-     * Binds a plugin config map to a Java type using Jackson deserialization only.
-     * Platform-level defaults must already be applied by the caller before invoking this method.
+     * 将插件配置 Map 绑定到指定的 Java 类型。
+     * <p>
+     * 通过 Jackson 反序列化将配置字典转换为目标类型实例。
+     * 调用方需在调用此方法前完成平台默认值的合并。
+     *
+     * @param source 插件配置字典，可以为 null（视为空配置）
+     * @param type   目标 Java 类型
+     * @param <T>    目标类型泛型
+     * @return 绑定后的配置对象实例
+     * @throws IllegalArgumentException 如果 type 为 null，或配置无法反序列化为目标类型
      */
     public static <T> T bind(Map<String, Object> source, Class<T> type) {
         if (type == null) {

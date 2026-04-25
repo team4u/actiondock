@@ -14,6 +14,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    /**
+     * 处理脚本执行输入校验异常，返回 400 响应及字段级错误详情。
+     *
+     * @param exception 输入校验异常
+     * @return 400 响应，包含校验错误详情
+     */
     @ExceptionHandler(InvalidExecutionInputException.class)
     public ResponseEntity<ApiResponse<ValidationErrorResponse>> handleInvalidExecutionInput(InvalidExecutionInputException exception) {
         ValidationErrorResponse data = new ValidationErrorResponse(
@@ -24,6 +30,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(exception.getMessage(), 400, data));
     }
 
+    /**
+     * 处理非法参数异常，返回 400 响应及错误摘要。
+     *
+     * @param exception 非法参数异常
+     * @return 400 响应，包含错误详情
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<ErrorDetail>> handleIllegalArgument(IllegalArgumentException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error(
@@ -33,6 +45,12 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    /**
+     * 兜底异常处理，捕获所有未处理的异常并返回 500 响应。
+     *
+     * @param exception 未预期的异常
+     * @return 500 响应，包含错误详情
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<ErrorDetail>> handleException(Exception exception) {
         return ResponseEntity.internalServerError().body(ApiResponse.error(

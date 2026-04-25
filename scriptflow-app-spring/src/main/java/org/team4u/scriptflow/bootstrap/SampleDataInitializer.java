@@ -21,6 +21,13 @@ public class SampleDataInitializer implements CommandLineRunner {
         this.scriptApplicationService = scriptApplicationService;
     }
 
+    /**
+     * 应用启动时执行，检测并创建示例 Groovy 脚本。
+     * <p>
+     * 若示例脚本不存在则自动创建并发布。
+     *
+     * @param args 启动参数
+     */
     @Override
     public void run(String... args) {
         try {

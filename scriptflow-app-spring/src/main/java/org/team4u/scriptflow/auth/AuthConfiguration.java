@@ -12,6 +12,12 @@ import org.team4u.scriptflow.config.AppProperties;
  */
 @Configuration
 public class AuthConfiguration {
+    /**
+     * 注册 API Key 认证过滤器，拦截 /api/* 路径的请求。
+     *
+     * @param properties 应用配置属性
+     * @return 过滤器注册 Bean
+     */
     @Bean
     public FilterRegistrationBean<ApiKeyAuthFilter> apiKeyAuthFilter(AppProperties properties) {
         FilterRegistrationBean<ApiKeyAuthFilter> bean = new FilterRegistrationBean<>();
