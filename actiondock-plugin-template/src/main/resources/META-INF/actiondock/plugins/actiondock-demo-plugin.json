@@ -1,0 +1,54 @@
+{
+  "pluginId": "actiondock-demo-plugin",
+  "name": "ActionDock Demo Plugin",
+  "description": "Template plugin exposing sample actions to Groovy scripts.",
+  "version": "0.2.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "prefix": {
+        "type": "string",
+        "title": "Prefix"
+      }
+    }
+  },
+  "defaultConfig": {
+    "prefix": "demo"
+  },
+  "actions": [
+    {
+      "action": "echo",
+      "title": "Echo message",
+      "description": "Return a message prefixed by plugin configuration.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "scriptId": {
+            "type": "string",
+            "title": "Script ID"
+          },
+          "executionId": {
+            "type": "string",
+            "title": "Execution ID"
+          }
+        }
+      },
+      "exampleArgs": {
+        "message": "hello"
+      }
+    }
+  ]
+}

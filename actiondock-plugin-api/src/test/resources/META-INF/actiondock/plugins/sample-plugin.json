@@ -1,0 +1,44 @@
+{
+  "pluginId": "sample-plugin",
+  "name": "Sample Plugin",
+  "description": "Sample manifest for loader tests.",
+  "version": "0.0.1",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "prefix": {
+        "type": "string",
+        "title": "Prefix"
+      }
+    }
+  },
+  "defaultConfig": {
+    "prefix": "sample"
+  },
+  "actions": [
+    {
+      "action": "echo",
+      "title": "Echo",
+      "description": "Echo a message.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "message": "hello"
+      }
+    }
+  ]
+}
