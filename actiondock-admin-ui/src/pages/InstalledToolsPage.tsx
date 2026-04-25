@@ -361,6 +361,9 @@ export function InstalledToolsPage() {
         confirmLoading={Boolean(forkTarget && actionKey === `fork:${forkTarget.id}`)}
         destroyOnHidden
       >
+        <Text type="secondary">
+          Fork 会复制脚本和定时任务；复制出的定时任务默认停用，配置值继续共享现有全局 Key。
+        </Text>
         <Form form={forkForm} layout="vertical">
           <Form.Item
             label="新工具 ID"

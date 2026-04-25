@@ -1,6 +1,7 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
@@ -10,6 +11,7 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 脚本应用服务，提供脚本定义的 CRUD 操作和发布管理。
@@ -189,11 +191,15 @@ public class ScriptApplicationService {
             throw new IllegalArgumentException("仅支持从仓库工具创建 Fork");
         }
         String normalizedId = normalize(targetId, "Fork 脚本 ID 不能为空");
-        ScriptDefinition fork = source.getPublishedSnapshot() == null ? source : source.toPublishedDefinition();
+        if (scriptRepository.findById(normalizedId).isPresent()) {
+            throw new IllegalArgumentException("脚本已存在: " + normalizedId);
+        }
+        PublishedScriptSnapshot sourceSnapshot = source.getPublishedSnapshot();
+        ScriptDefinition fork = sourceSnapshot == null ? copyCurrentDefinition(source) : source.toPublishedDefinition();
         fork.setId(normalizedId)
                 .setName(normalize(targetName, "Fork 名称不能为空"))
                 .setStatus(ScriptStatus.DRAFT)
-                .setPublishedSnapshot(source.getPublishedSnapshot())
+                .setPublishedSnapshot(sourceSnapshot)
                 .setVersion(1)
                 .setScope(ScriptScope.FORK)
                 .setRepositoryId(source.getRepositoryId())
@@ -202,7 +208,53 @@ public class ScriptApplicationService {
                 .setEditable(true)
                 .setCreatedAt(null)
                 .setUpdatedAt(null);
-        return save(fork);
+        ScriptDefinition saved = save(fork);
+        copySchedulesToFork(source.getId(), saved.getId());
+        return saved;
+    }
+
+    private ScriptDefinition copyCurrentDefinition(ScriptDefinition source) {
+        return new ScriptDefinition()
+                .setId(source.getId())
+                .setName(source.getName())
+                .setType(source.getType())
+                .setSource(source.getSource())
+                .setInputSchema(source.getInputSchema())
+                .setOutputSchema(source.getOutputSchema())
+                .setStatus(source.getStatus())
+                .setVersion(source.getVersion())
+                .setPublishedSnapshot(source.getPublishedSnapshot())
+                .setScope(source.getScope())
+                .setRepositoryId(source.getRepositoryId())
+                .setRepositoryToolId(source.getRepositoryToolId())
+                .setRepositoryVersion(source.getRepositoryVersion())
+                .setEditable(source.isEditable())
+                .setOwner(source.getOwner())
+                .setDescription(source.getDescription())
+                .setTags(source.getTags())
+                .setCreatedAt(source.getCreatedAt())
+                .setUpdatedAt(source.getUpdatedAt());
+    }
+
+    private void copySchedulesToFork(String sourceScriptId, String forkScriptId) {
+        LocalDateTime now = LocalDateTime.now();
+        for (ScriptSchedule sourceSchedule : scriptScheduleRepository.findByScriptId(sourceScriptId)) {
+            scriptScheduleRepository.save(new ScriptSchedule()
+                    .setId(UUID.randomUUID().toString())
+                    .setScriptId(forkScriptId)
+                    .setName(sourceSchedule.getName())
+                    .setCronExpression(sourceSchedule.getCronExpression())
+                    .setInput(sourceSchedule.getInput())
+                    .setEnabled(false)
+                    .setEditable(true)
+                    .setRepositoryId(null)
+                    .setRepositoryToolId(null)
+                    .setRepositoryVersion(null)
+                    .setLastTriggeredAt(null)
+                    .setLastExecutionId(null)
+                    .setCreatedAt(now)
+                    .setUpdatedAt(now));
+        }
     }
 
     private void normalizePublicationState(ScriptDefinition definition) {

@@ -3,11 +3,14 @@ package org.team4u.actiondock.application;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptSchedule;
+import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -211,6 +214,100 @@ class ScriptApplicationServiceTest {
         assertThatThrownBy(() -> service.discardDraft("script-1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("脚本未发布: script-1");
+    }
+
+    @Test
+    void createForkCopiesRepositoryScriptAndSchedules() {
+        ScriptDefinition source = new ScriptDefinition()
+                .setId("repo.tool")
+                .setName("Repository Tool")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [message: 'draft']")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Live Tool")
+                        .setType(ScriptType.PYTHON)
+                        .setSource("return {'message': 'live'}")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")))
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setVersion(4)
+                .setScope(ScriptScope.REPOSITORY)
+                .setRepositoryId("repo")
+                .setRepositoryToolId("tool")
+                .setRepositoryVersion("1.0.0")
+                .setEditable(false);
+        ScriptSchedule sourceSchedule = new ScriptSchedule()
+                .setId("schedule-1")
+                .setScriptId("repo.tool")
+                .setName("Nightly")
+                .setCronExpression("0 0 2 * * *")
+                .setInput(Map.of("endpoint", "${config.service.endpoint}"))
+                .setEnabled(true)
+                .setEditable(false)
+                .setRepositoryId("repo")
+                .setRepositoryToolId("repo.tool")
+                .setRepositoryVersion("1.0.0")
+                .setLastTriggeredAt(LocalDateTime.of(2026, 4, 24, 2, 0))
+                .setLastExecutionId("exec-1");
+        when(scriptRepository.findById("repo.tool")).thenReturn(Optional.of(source));
+        when(scriptRepository.findById("tool-fork")).thenReturn(Optional.empty());
+        when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scriptScheduleRepository.findByScriptId("repo.tool")).thenReturn(List.of(sourceSchedule));
+        when(scriptScheduleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScriptDefinition fork = service.createFork("repo.tool", "tool-fork", "Tool Fork");
+
+        assertThat(fork.getId()).isEqualTo("tool-fork");
+        assertThat(fork.getName()).isEqualTo("Tool Fork");
+        assertThat(fork.getScope()).isEqualTo(ScriptScope.FORK);
+        assertThat(fork.isEditable()).isTrue();
+        assertThat(fork.getRepositoryId()).isEqualTo("repo");
+        assertThat(fork.getRepositoryToolId()).isEqualTo("tool");
+        assertThat(fork.getRepositoryVersion()).isEqualTo("1.0.0");
+        assertThat(fork.getSource()).isEqualTo("return {'message': 'live'}");
+        assertThat(fork.getPublishedSnapshot()).isNotNull();
+
+        ArgumentCaptor<ScriptSchedule> scheduleCaptor = ArgumentCaptor.forClass(ScriptSchedule.class);
+        verify(scriptScheduleRepository).save(scheduleCaptor.capture());
+        ScriptSchedule forkSchedule = scheduleCaptor.getValue();
+        assertThat(forkSchedule.getId()).isNotEqualTo("schedule-1");
+        assertThat(forkSchedule.getScriptId()).isEqualTo("tool-fork");
+        assertThat(forkSchedule.getName()).isEqualTo("Nightly");
+        assertThat(forkSchedule.getCronExpression()).isEqualTo("0 0 2 * * *");
+        assertThat(forkSchedule.getInput()).containsEntry("endpoint", "${config.service.endpoint}");
+        assertThat(forkSchedule.isEnabled()).isFalse();
+        assertThat(forkSchedule.isEditable()).isTrue();
+        assertThat(forkSchedule.getRepositoryId()).isNull();
+        assertThat(forkSchedule.getRepositoryToolId()).isNull();
+        assertThat(forkSchedule.getRepositoryVersion()).isNull();
+        assertThat(forkSchedule.getLastTriggeredAt()).isNull();
+        assertThat(forkSchedule.getLastExecutionId()).isNull();
+        assertThat(forkSchedule.getCreatedAt()).isNotNull();
+        assertThat(forkSchedule.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void createForkRejectsExistingTargetId() {
+        when(scriptRepository.findById("repo.tool")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("repo.tool")
+                .setScope(ScriptScope.REPOSITORY)));
+        when(scriptRepository.findById("tool-fork")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("tool-fork")));
+
+        assertThatThrownBy(() -> service.createFork("repo.tool", "tool-fork", "Tool Fork"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("脚本已存在: tool-fork");
+    }
+
+    @Test
+    void createForkRejectsNonRepositoryScript() {
+        when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("script-1")
+                .setScope(ScriptScope.PERSONAL)));
+
+        assertThatThrownBy(() -> service.createFork("script-1", "script-fork", "Script Fork"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("仅支持从仓库工具创建 Fork");
     }
 
     @Test
