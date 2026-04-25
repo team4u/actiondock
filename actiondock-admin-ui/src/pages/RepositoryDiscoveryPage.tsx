@@ -1,6 +1,5 @@
 import {
   DownloadOutlined,
-  EyeOutlined,
   ReloadOutlined,
   SyncOutlined
 } from "@ant-design/icons";
@@ -34,6 +33,7 @@ import {
 } from "../api";
 import { CodeEditor } from "../components/CodeEditor";
 import { PageHeader } from "../components/PageHeader";
+import { TableLinkCell } from "../components/TableLinkCell";
 import type {
   RepositoryDefinition,
   RepositoryToolDescriptor,
@@ -219,7 +219,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
           <Space wrap size={[8, 8]}>
-            <Text strong>{record.displayName}</Text>
+            <TableLinkCell onClick={() => void openDetail(record)}>{record.displayName}</TableLinkCell>
             <Text code>{record.installedScriptId}</Text>
           </Space>
           <Text type="secondary">{record.description || "未填写描述"}</Text>
@@ -279,9 +279,6 @@ export function RepositoryDiscoveryPage() {
       width: 220,
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => void openDetail(record)}>
-            详情
-          </Button>
           {record.installed ? (
             <Button
               size="small"

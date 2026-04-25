@@ -2,7 +2,6 @@ import {
   CopyOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  EditOutlined,
   PlusOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -43,6 +42,7 @@ import {
   parseConfigValueImportBundle
 } from "../scriptTransfer";
 import { PageHeader } from "../components/PageHeader";
+import { TableLinkCell } from "../components/TableLinkCell";
 import type { ConfigValue, ConfigValueRequest } from "../types";
 import { copyText, formatDateTime, getErrorMessage } from "../utils";
 
@@ -165,7 +165,9 @@ export function ConfigValueManagementPage() {
       dataIndex: "key",
       key: "key",
       width: 260,
-      render: (value: string) => <Text code>{value}</Text>
+      render: (value: string, record) => (
+        <TableLinkCell onClick={() => openEdit(record)}><Text code>{value}</Text></TableLinkCell>
+      )
     },
     {
       title: "值",
@@ -199,9 +201,6 @@ export function ConfigValueManagementPage() {
       width: 180,
       render: (_: unknown, record) => (
         <Space wrap>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
-            编辑
-          </Button>
           <Popconfirm
             title="确认删除这个配置值？"
             description="删除后，运行时引用该 key 的配置会在解析时报错。"

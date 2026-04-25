@@ -1,6 +1,5 @@
 import {
   DeleteOutlined,
-  EditOutlined,
   PlusOutlined,
   ReloadOutlined,
   SyncOutlined
@@ -32,6 +31,7 @@ import {
   updateRepository
 } from "../api";
 import { PageHeader } from "../components/PageHeader";
+import { TableLinkCell } from "../components/TableLinkCell";
 import type { RepositoryDefinition } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
@@ -192,7 +192,7 @@ export function RepositoryManagementPage() {
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
           <Space wrap size={[8, 8]}>
-            <Text strong>{record.name}</Text>
+            <TableLinkCell onClick={() => openEdit(record)}>{record.name}</TableLinkCell>
             {record.enabled ? <Tag color="blue">已启用</Tag> : <Tag>已禁用</Tag>}
           </Space>
           <Text type="secondary">{record.description || record.url}</Text>
@@ -233,9 +233,6 @@ export function RepositoryManagementPage() {
             onClick={() => void handleSync(record.id)}
           >
             同步
-          </Button>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
-            编辑
           </Button>
           <Popconfirm
             title="确认删除这个仓库？"

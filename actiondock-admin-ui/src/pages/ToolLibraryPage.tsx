@@ -3,7 +3,6 @@ import {
   CopyOutlined,
   DeleteOutlined,
   DownloadOutlined,
-  EditOutlined,
   ExportOutlined,
   ForkOutlined,
   PlayCircleOutlined,
@@ -350,7 +349,7 @@ export function ToolLibraryPage() {
       content: (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Text>
-            将从仓库 <Text code>{descriptor.repositoryAlias}</Text> 更新 <Text code>{tool.id}</Text>。
+            将从仓库 <Text code>{descriptor.repositoryId}</Text> 更新 <Text code>{tool.id}</Text>。
           </Text>
           {scheduleCount > 0 ? (
             <Checkbox
@@ -573,17 +572,13 @@ export function ToolLibraryPage() {
 
         return (
           <Space wrap size={[4, 4]}>
-            {record.scope === "SAMPLE" ? (
+            {record.scope === "SAMPLE" && (
               <Button
                 size="small"
                 icon={<CopyOutlined />}
                 onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(record.id)}`)}
               >
                 复制
-              </Button>
-            ) : (
-              <Button size="small" type="primary" icon={<EditOutlined />} onClick={() => navigate(`/scripts/${record.id}`)}>
-                编辑
               </Button>
             )}
             <Button
