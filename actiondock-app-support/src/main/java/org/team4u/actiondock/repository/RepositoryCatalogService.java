@@ -296,6 +296,9 @@ public class RepositoryCatalogService {
         if (existing != null && existing.getScope() != ScriptScope.DEVELOPMENT) {
             throw new IllegalArgumentException("脚本 ID 已存在，请指定其他开发脚本 ID: " + scriptId);
         }
+        if (existing != null) {
+            return pullDevelopmentScript(scriptId, false);
+        }
         ToolSourceState state = resolveToolSourceState(repository, detail);
         return saveDevelopmentScript(scriptId, existing, detail, state);
     }
@@ -306,9 +309,10 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(script.getRepositoryId());
         RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
         ToolSourceState state = resolveToolSourceState(repository, detail);
-        boolean remoteChanged = !Objects.equals(script.getSourceCommit(), state.commit())
-                || !Objects.equals(script.getSourceDigest(), state.digest());
-        boolean dirty = script.isDirty();
+        String localDigest = computeDevelopmentLocalDigest(script);
+        String syncState = resolveDevelopmentSyncState(script, localDigest, state);
+        boolean remoteChanged = isRemoteChanged(script, state);
+        boolean dirty = isLocalChanged(script, localDigest);
         return new DevelopmentStatus(
                 script.getId(),
                 script.getRepositoryId(),
@@ -317,9 +321,11 @@ public class RepositoryCatalogService {
                 script.getSourceCommit(),
                 state.commit(),
                 script.getSourceDigest(),
+                localDigest,
                 state.digest(),
                 dirty,
                 remoteChanged,
+                syncState,
                 detail.descriptor().version(),
                 script.getSourceSyncedAt()
         );
@@ -332,12 +338,42 @@ public class RepositoryCatalogService {
         syncRepository(repository.getId());
         RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
         ToolSourceState state = resolveToolSourceState(repository, detail);
-        boolean remoteChanged = !Objects.equals(script.getSourceCommit(), state.commit())
-                || !Objects.equals(script.getSourceDigest(), state.digest());
-        if (script.isDirty() && remoteChanged && !force) {
+        String localDigest = computeDevelopmentLocalDigest(script);
+        String syncState = resolveDevelopmentSyncState(script, localDigest, state);
+        if ("SYNCED".equals(syncState)) {
+            return script;
+        }
+        if ("LOCAL_CHANGES".equals(syncState) && !force) {
+            return script;
+        }
+        if ("DIVERGED".equals(syncState) && !force) {
             throw new DevelopmentConflictException(script.getId(), script.getRepositoryId(), script.getRepositoryToolId());
         }
         return saveDevelopmentScript(script.getId(), script, detail, state);
+    }
+
+    private boolean isRemoteChanged(ScriptDefinition script, ToolSourceState state) {
+        return !Objects.equals(script.getSourceCommit(), state.commit())
+                || !Objects.equals(script.getSourceDigest(), state.digest());
+    }
+
+    private boolean isLocalChanged(ScriptDefinition script, String localDigest) {
+        return !Objects.equals(script.getSourceDigest(), localDigest);
+    }
+
+    private String resolveDevelopmentSyncState(ScriptDefinition script, String localDigest, ToolSourceState remoteState) {
+        boolean localChanged = isLocalChanged(script, localDigest);
+        boolean remoteChanged = isRemoteChanged(script, remoteState);
+        if (localChanged && remoteChanged) {
+            return "DIVERGED";
+        }
+        if (localChanged) {
+            return "LOCAL_CHANGES";
+        }
+        if (remoteChanged) {
+            return "REMOTE_CHANGES";
+        }
+        return "SYNCED";
     }
 
     private void ensureDevelopmentRepository(RepositoryDefinition repository) {
@@ -399,14 +435,10 @@ public class RepositoryCatalogService {
     }
 
     private void assertDevelopmentPublishSafe(ScriptDefinition script, RepositoryDefinition repository) {
-        if (!script.isDirty()) {
-            return;
-        }
         RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
         ToolSourceState state = resolveToolSourceState(repository, detail);
-        boolean remoteChanged = !Objects.equals(script.getSourceCommit(), state.commit())
-                || !Objects.equals(script.getSourceDigest(), state.digest());
-        if (remoteChanged) {
+        String syncState = resolveDevelopmentSyncState(script, computeDevelopmentLocalDigest(script), state);
+        if ("REMOTE_CHANGES".equals(syncState) || "DIVERGED".equals(syncState)) {
             throw new DevelopmentConflictException(script.getId(), script.getRepositoryId(), script.getRepositoryToolId());
         }
     }
@@ -604,6 +636,22 @@ public class RepositoryCatalogService {
         values.put("source", detail.source());
         values.put("inputSchema", readSchema(descriptor.repositoryId(), descriptor.inputSchemaPath()));
         values.put("outputSchema", readSchema(descriptor.repositoryId(), descriptor.outputSchemaPath()));
+        return sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String computeDevelopmentLocalDigest(ScriptDefinition script) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("toolId", script.getRepositoryToolId());
+        values.put("displayName", script.getName());
+        values.put("version", script.getRepositoryVersion());
+        values.put("type", script.getType() == null ? null : script.getType().name());
+        values.put("description", script.getDescription());
+        values.put("owner", script.getOwner());
+        values.put("tags", script.getTags());
+        values.put("pluginDependencies", script.getPluginDependencies());
+        values.put("source", script.getSource());
+        values.put("inputSchema", script.getInputSchema());
+        values.put("outputSchema", script.getOutputSchema());
         return sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
     }
 
@@ -1098,6 +1146,56 @@ public class RepositoryCatalogService {
                 .filter(script -> tool.id().equals(script.getRepositoryToolId()))
                 .findFirst()
                 .orElse(null);
+        String developmentSyncState = null;
+        boolean developmentDirty = false;
+        boolean developmentRemoteChanged = false;
+        if (developmentScript != null) {
+            ToolSourceState state = resolveToolSourceState(repository, new RepositoryToolDetail(
+                    toDescriptorWithoutDevelopment(repository, tool, toolPath),
+                    readRepositoryFile(repository, toolDirectoryPath(toolPath).resolve(tool.sourcePath())),
+                    List.of(),
+                    List.of()
+            ));
+            String localDigest = computeDevelopmentLocalDigest(developmentScript);
+            developmentSyncState = resolveDevelopmentSyncState(developmentScript, localDigest, state);
+            developmentDirty = isLocalChanged(developmentScript, localDigest);
+            developmentRemoteChanged = isRemoteChanged(developmentScript, state);
+        }
+        RepositoryToolDescriptor base = toDescriptorWithoutDevelopment(repository, tool, toolPath);
+        return new RepositoryToolDescriptor(
+                base.repositoryId(),
+                base.toolId(),
+                base.installedScriptId(),
+                base.displayName(),
+                base.version(),
+                base.description(),
+                base.releaseNotes(),
+                base.owner(),
+                base.tags(),
+                base.type(),
+                base.sourcePath(),
+                base.inputSchemaPath(),
+                base.outputSchemaPath(),
+                base.configTemplatePath(),
+                base.scheduleTemplatePath(),
+                base.digest(),
+                base.riskLevel(),
+                base.pluginDependencies(),
+                base.installed(),
+                base.installedVersion(),
+                base.updateAvailable(),
+                base.trusted(),
+                base.repositoryUsage(),
+                developmentScript == null ? null : developmentScript.getId(),
+                developmentDirty,
+                developmentRemoteChanged,
+                developmentSyncState
+        );
+    }
+
+    private RepositoryToolDescriptor toDescriptorWithoutDevelopment(RepositoryDefinition repository, ToolFile tool, String toolPath) {
+        String installedScriptId = repository.getId() + "." + tool.id();
+        RepositoryToolInstallation installation = repositoryToolInstallationRepository.findByToolId(installedScriptId).orElse(null);
         return new RepositoryToolDescriptor(
                 repository.getId(),
                 tool.id(),
@@ -1122,8 +1220,10 @@ public class RepositoryCatalogService {
                 installation != null && !Objects.equals(installation.getVersion(), tool.version()),
                 "TRUSTED".equalsIgnoreCase(repository.getTrustLevel()),
                 normalizeOrDefault(repository.getUsage(), "DISTRIBUTION"),
-                developmentScript == null ? null : developmentScript.getId(),
-                developmentScript != null && developmentScript.isDirty()
+                null,
+                false,
+                false,
+                null
         );
     }
 
@@ -1462,7 +1562,9 @@ public class RepositoryCatalogService {
             boolean trusted,
             String repositoryUsage,
             String developmentScriptId,
-            boolean developmentDirty
+            boolean developmentDirty,
+            boolean developmentRemoteChanged,
+            String developmentSyncState
     ) {
     }
 
@@ -1497,10 +1599,12 @@ public class RepositoryCatalogService {
                                     String repositoryVersion,
                                     String localCommit,
                                     String remoteCommit,
+                                    String baseDigest,
                                     String localDigest,
                                     String remoteDigest,
                                     boolean dirty,
                                     boolean remoteChanged,
+                                    String syncState,
                                     String remoteVersion,
                                     LocalDateTime sourceSyncedAt) {
     }

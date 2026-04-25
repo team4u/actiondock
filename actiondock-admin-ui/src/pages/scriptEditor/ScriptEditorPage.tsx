@@ -71,6 +71,21 @@ import type { ScriptEditorPageProps } from "./types";
 
 const { Text } = Typography;
 
+function getDevelopmentSyncTag(state?: string) {
+  switch (state) {
+    case "LOCAL_CHANGES":
+      return <Tag color="orange">本地有修改</Tag>;
+    case "REMOTE_CHANGES":
+      return <Tag color="processing">远端有更新</Tag>;
+    case "DIVERGED":
+      return <Tag color="red">双方都有修改</Tag>;
+    case "SYNCED":
+      return <Tag color="green">已同步</Tag>;
+    default:
+      return <Tag>未检查</Tag>;
+  }
+}
+
 export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -186,6 +201,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   const dangerousMoreActionKeys = new Set(["discard-draft", "delete"]);
   const moreMenuItems: MenuProps["items"] = [
+    ...(editor.currentScript?.scope === "DEVELOPMENT"
+      ? [{
+          key: "pull-development",
+          icon: <SyncOutlined />,
+          label: "拉取远端",
+          disabled: editor.developmentPulling,
+          onClick: () => void editor.handlePullDevelopment()
+        }]
+      : []),
     ...editor.headerActionModel.moreActionKeys
       .filter((key) => !dangerousMoreActionKeys.has(key))
       .map((key) => {
@@ -254,6 +278,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     return (
       <>
         {contextHolder}
+        {editor.modalContextHolder}
         <div className="page-loading">
           <Spin size="large" />
         </div>
@@ -264,6 +289,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   return (
     <>
       {contextHolder}
+      {editor.modalContextHolder}
 
       <GeneratedScriptImportModal
         open={generatedScriptModalOpen}
@@ -363,15 +389,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       </Button>
                     )
                   ) : null}
-                  {editor.currentScript?.scope === "DEVELOPMENT" ? (
-                    <Button
-                      icon={<SyncOutlined />}
-                      onClick={() => void editor.handlePullDevelopment()}
-                      loading={editor.developmentPulling}
-                    >
-                      拉取远端
-                    </Button>
-                  ) : null}
                   {editor.headerActionModel.showMore ? (
                     <Dropdown trigger={["click"]} menu={{ items: moreMenuItems }}>
                       <Button icon={<MoreOutlined />}>更多</Button>
@@ -424,17 +441,34 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label="类型">{editor.currentScript.type}</Descriptions.Item>
-              <Descriptions.Item label="版本">{editor.currentScript.version}</Descriptions.Item>
+              {editor.detectedPluginDependencies.length > 0 ? (
+                <Descriptions.Item label="插件依赖">
+                  <Space size={[4, 4]} wrap>
+                    {editor.detectedPluginDependencies.map((dep) => (
+                      <Tooltip key={dep.pluginId} title={`版本范围: ${dep.versionRange || "任意"}`}>
+                        <Tag color="geekblue">{dep.pluginId}</Tag>
+                      </Tooltip>
+                    ))}
+                  </Space>
+                </Descriptions.Item>
+              ) : null}
+              {editor.currentScript.scope === "DEVELOPMENT" ? (
+                <Descriptions.Item label="本地发布号">{editor.currentScript.version}</Descriptions.Item>
+              ) : (
+                <Descriptions.Item label="版本">{editor.currentScript.version}</Descriptions.Item>
+              )}
               <Descriptions.Item label="来源仓库">{editor.currentScript.repositoryId || "-"}</Descriptions.Item>
               <Descriptions.Item label="来源工具">{editor.currentScript.repositoryToolId || "-"}</Descriptions.Item>
-              <Descriptions.Item label="仓库版本">{editor.currentScript.repositoryVersion || "-"}</Descriptions.Item>
+              <Descriptions.Item label={editor.currentScript.scope === "DEVELOPMENT" ? "上次同步仓库版本" : "仓库版本"}>
+                {editor.currentScript.repositoryVersion || "-"}
+              </Descriptions.Item>
               {editor.currentScript.scope === "DEVELOPMENT" ? (
                 <>
+                  <Descriptions.Item label="当前仓库版本">{editor.developmentStatus?.remoteVersion || "-"}</Descriptions.Item>
                   <Descriptions.Item label="开发路径">{editor.currentScript.sourcePath || "-"}</Descriptions.Item>
                   <Descriptions.Item label="同步状态">
                     <Space size={8} wrap>
-                      {editor.developmentStatus?.dirty || editor.currentScript.dirty ? <Tag color="orange">本地有修改</Tag> : <Tag color="green">已同步</Tag>}
-                      {editor.developmentStatus?.remoteChanged ? <Tag color="processing">远端有更新</Tag> : null}
+                      {getDevelopmentSyncTag(editor.developmentStatus?.syncState)}
                       {editor.currentScript.sourceSyncedAt ? <Text type="secondary">{formatDateTime(editor.currentScript.sourceSyncedAt)}</Text> : null}
                     </Space>
                   </Descriptions.Item>

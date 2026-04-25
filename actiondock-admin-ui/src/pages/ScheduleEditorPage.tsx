@@ -28,13 +28,13 @@ import {
   createSchedule,
   deleteSchedule,
   executePublishedScript,
-  getExecution,
   getSchedule,
   listScripts,
   updateSchedule
 } from "../api";
 import { buildExecutionInputFromValues, type ObjectInputMode } from "../commands";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
+import { usePollingExecution } from "../hooks/usePollingExecution";
 import { InfoHint } from "../components/InfoHint";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import { resolveSchemaFields } from "../schema";
@@ -132,14 +132,21 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
   const [debugResult, setDebugResult] = useState<ScheduleDebugResult | null>(null);
   const [debugValidationError, setDebugValidationError] = useState<ValidationErrorData | null>(null);
   const [executionMode, setExecutionMode] = useState<SubmitMode>("SYNC");
-  const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
   const [form] = Form.useForm<ScheduleFormValues>();
   const [inputForm] = Form.useForm<Record<string, unknown>>();
   const [messageApi, contextHolder] = message.useMessage();
   const [scheduleInputMode, setScheduleInputMode] = useState<ObjectInputMode>("JSON");
   const [scheduleInputJson, setScheduleInputJson] = useState("{}");
-  const pollingTimerRef = useRef<number | null>(null);
   const debugPanelRef = useRef<HTMLDivElement | null>(null);
+  const { pollingExecutionId, startPolling, clearPolling } = usePollingExecution({
+    onPollResult: (record) => setDebugResult(record),
+    onCompleted: () => messageApi.success("调试执行完成"),
+    onFailed: (record) => messageApi.error(record.errorMessage || "调试执行失败"),
+    onError: (error) => {
+      const detail = error instanceof ApiError ? error.message : "查询调试结果失败";
+      messageApi.error(detail);
+    }
+  });
 
   const publishedScripts = useMemo(
     () =>
@@ -206,14 +213,6 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
     [selectedScript?.inputSchema]
   );
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
-
-  const clearPolling = () => {
-    if (pollingTimerRef.current !== null) {
-      window.clearTimeout(pollingTimerRef.current);
-      pollingTimerRef.current = null;
-    }
-    setPollingExecutionId(null);
-  };
 
   const clearDebugState = () => {
     clearPolling();
@@ -337,42 +336,6 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
       }, 0);
     }
   }, [loading, searchParams]);
-
-  const isExecutionActive = (status: ExecutionStatus) => status === "PENDING" || status === "RUNNING";
-
-  const pollExecution = async (executionId: string) => {
-    try {
-      const record = await getExecution(executionId);
-      setDebugResult(record);
-
-      if (isExecutionActive(record.status)) {
-        setPollingExecutionId(executionId);
-        pollingTimerRef.current = window.setTimeout(() => {
-          void pollExecution(executionId);
-        }, 2000);
-        return;
-      }
-
-      clearPolling();
-      if (record.status === "SUCCESS") {
-        messageApi.success("调试执行完成");
-      } else if (record.status === "FAILED") {
-        messageApi.error(record.errorMessage || "调试执行失败");
-      }
-    } catch (error) {
-      clearPolling();
-      const detail = error instanceof ApiError ? error.message : "查询调试结果失败";
-      messageApi.error(detail);
-    }
-  };
-
-  const startPolling = (executionId: string) => {
-    clearPolling();
-    setPollingExecutionId(executionId);
-    pollingTimerRef.current = window.setTimeout(() => {
-      void pollExecution(executionId);
-    }, 2000);
-  };
 
   const buildCurrentInput = async (label: string): Promise<Record<string, unknown>> => {
     if (scheduleInputMode === "SCHEMA" && supportedInputFields.length > 0) {

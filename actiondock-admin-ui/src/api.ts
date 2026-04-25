@@ -209,36 +209,22 @@ export function getPlugin(pluginId: string): Promise<PluginView> {
   return request<PluginView>(`/api/plugins/${pluginId}`);
 }
 
-async function uploadPluginFile(path: string, file: File, fallbackMessage: string): Promise<PluginView> {
+export async function installPlugin(file: File): Promise<PluginView> {
   const formData = new FormData();
   formData.append("file", file);
-
-  const headers = new Headers();
-
-  const response = await fetch(path, {
+  return request<PluginView>("/api/plugins/install", {
     method: "POST",
-    headers,
     body: formData
   });
-
-  const payload = (await response.json()) as ApiResponse<PluginView> | ApiErrorPayload;
-  if (!response.ok) {
-    const message = "msg" in payload && payload.msg ? payload.msg : fallbackMessage;
-    const data = "data" in payload ? payload.data : undefined;
-    throw new ApiError(message, response.status, data);
-  }
-  if (!("data" in payload)) {
-    throw new ApiError("接口返回格式不正确", 500);
-  }
-  return payload.data as PluginView;
-}
-
-export async function installPlugin(file: File): Promise<PluginView> {
-  return uploadPluginFile("/api/plugins/install", file, "上传插件失败");
 }
 
 export async function upgradePlugin(pluginId: string, file: File): Promise<PluginView> {
-  return uploadPluginFile(`/api/plugins/${pluginId}/upgrade`, file, "升级插件失败");
+  const formData = new FormData();
+  formData.append("file", file);
+  return request<PluginView>(`/api/plugins/${pluginId}/upgrade`, {
+    method: "POST",
+    body: formData
+  });
 }
 
 export function startPlugin(pluginId: string): Promise<PluginView> {

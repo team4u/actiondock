@@ -240,11 +240,11 @@ export function useScriptPublishToRepo({
         && (error as { data?: { code?: string } }).data?.code === "DEVELOPMENT_CONFLICT";
       if (conflict) {
         if (!retry) {
-          messageApi.error("远端工具已更新，但本地也有未发布修改。请先拉取远端或确认后再强制发布。");
+          messageApi.error("远端工具已更新。请先拉取远端，或确认后再强制发布。");
           return;
         }
         void Modal.confirm({
-          title: "远端已更新，本地也有修改",
+          title: "远端工具已更新",
           content: "强制发布会用当前脚本内容作为新版本写回仓库。版本号仍必须是仓库中不存在的新版本。",
           okText: "强制发布",
           cancelText: "取消",

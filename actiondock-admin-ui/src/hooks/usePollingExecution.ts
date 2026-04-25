@@ -8,6 +8,7 @@ export interface UsePollingExecutionOptions {
   onPollResult?: (record: ExecutionRecord) => void;
   onCompleted?: (record: ExecutionRecord) => void;
   onFailed?: (record: ExecutionRecord) => void;
+  onFinished?: (record: ExecutionRecord) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -40,6 +41,7 @@ export function usePollingExecution(options: UsePollingExecutionOptions = {}) {
         }
 
         clearPolling();
+        optionsRef.current.onFinished?.(record);
         if (record.status === "SUCCESS") {
           optionsRef.current.onCompleted?.(record);
         } else if (record.status === "FAILED") {

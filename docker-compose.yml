@@ -1,0 +1,14 @@
+services:
+  actiondock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: actiondock
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./.actiondock:/app/data
+    environment:
+      - APP_HOME_DIR=/app/data
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    restart: unless-stopped

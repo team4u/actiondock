@@ -44,7 +44,7 @@ export function useScriptEditor({
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [modal] = Modal.useModal();
+  const [modal, modalContextHolder] = Modal.useModal();
   const initializedCopySourceRef = useRef<string | null>(null);
 
   const [loading, setLoading] = useState(mode === "edit");
@@ -411,7 +411,13 @@ export function useScriptEditor({
       applyScriptToEditor(pulled);
       await loadScriptReferences();
       await loadDevelopmentStatus(pulled);
-      messageApi.success("已拉取远端更新");
+      if (developmentStatus?.syncState === "REMOTE_CHANGES") {
+        messageApi.success("已拉取远端更新");
+      } else if (developmentStatus?.syncState === "LOCAL_CHANGES") {
+        messageApi.info("远端没有新更新，已保留你的本地修改");
+      } else {
+        messageApi.info("远端没有新更新");
+      }
     } catch (error) {
       const conflict = error instanceof ApiError
         && typeof error.data === "object"
@@ -591,6 +597,7 @@ export function useScriptEditor({
     publishMenuItems,
     moreMenuItems,
     openDeleteScriptConfirm,
-    openDiscardDraftConfirm
+    openDiscardDraftConfirm,
+    modalContextHolder
   };
 }

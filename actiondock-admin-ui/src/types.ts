@@ -9,6 +9,7 @@ export type ExecutionLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
 export type RepositoryUsage = "DISTRIBUTION" | "DEVELOPMENT";
+export type DevelopmentSyncState = "SYNCED" | "LOCAL_CHANGES" | "REMOTE_CHANGES" | "DIVERGED";
 
 export interface PublishedScriptSnapshot {
   name: string;
@@ -281,6 +282,8 @@ export interface RepositoryToolDescriptor {
   repositoryUsage?: RepositoryUsage;
   developmentScriptId?: string;
   developmentDirty?: boolean;
+  developmentRemoteChanged?: boolean;
+  developmentSyncState?: DevelopmentSyncState;
 }
 
 export interface RepositoryConfigTemplateItem {
@@ -388,10 +391,12 @@ export interface DevelopmentStatus {
   repositoryVersion?: string;
   localCommit?: string;
   remoteCommit?: string;
+  baseDigest?: string;
   localDigest?: string;
   remoteDigest?: string;
   dirty: boolean;
   remoteChanged: boolean;
+  syncState: DevelopmentSyncState;
   remoteVersion?: string;
   sourceSyncedAt?: string;
 }

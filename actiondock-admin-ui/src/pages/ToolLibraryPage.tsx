@@ -42,6 +42,7 @@ import {
   listRepositoryTools,
   listScripts,
   listToolsByRepository,
+  pullDevelopmentScript,
   syncRepository,
   uninstallInstalledTool,
   updateRepositoryTool,
@@ -57,14 +58,13 @@ import {
   formatScriptExportFileName,
   parseScriptImportBundle
 } from "../scriptTransfer";
-import { resolveEffectivePluginDependencies } from "../pluginDependencies";
-import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
+import type { DevelopmentSyncState, PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
 
 type SourceFilter = "ALL" | Exclude<ScriptScope, undefined>;
-type StatusFilter = "ALL" | ScriptStatus | "UPDATE_AVAILABLE" | "READ_ONLY";
+type StatusFilter = "ALL" | ScriptStatus | "UPDATE_AVAILABLE" | "REMOTE_CHANGES" | "DIVERGED" | "READ_ONLY";
 type TypeFilter = "ALL" | ScriptType;
 
 interface ForkFormValues {
@@ -97,6 +97,21 @@ function renderPluginDependencies(dependencies: PluginDependency[]) {
       ))}
     </Space>
   );
+}
+
+function getDevelopmentSyncTag(state?: DevelopmentSyncState) {
+  switch (state) {
+    case "LOCAL_CHANGES":
+      return <Tag color="orange">本地有修改</Tag>;
+    case "REMOTE_CHANGES":
+      return <Tag color="processing">远端有更新</Tag>;
+    case "DIVERGED":
+      return <Tag color="red">有冲突</Tag>;
+    case "SYNCED":
+      return <Tag color="purple">已同步</Tag>;
+    default:
+      return <Tag color="purple">开发同步</Tag>;
+  }
 }
 
 export function ToolLibraryPage() {
@@ -149,10 +164,16 @@ export function ToolLibraryPage() {
     void loadData();
   }, []);
 
-  const descriptorMap = useMemo(
-    () => new Map(toolDescriptors.map((item) => [item.installedScriptId, item])),
-    [toolDescriptors]
-  );
+  const descriptorMap = useMemo(() => {
+    const next = new Map<string, RepositoryToolDescriptor>();
+    toolDescriptors.forEach((item) => {
+      next.set(item.installedScriptId, item);
+      if (item.developmentScriptId) {
+        next.set(item.developmentScriptId, item);
+      }
+    });
+    return next;
+  }, [toolDescriptors]);
 
   const editableScripts = useMemo(() => scripts.filter(isEditableAsset), [scripts]);
 
@@ -173,6 +194,12 @@ export function ToolLibraryPage() {
         return false;
       }
       if (statusFilter === "UPDATE_AVAILABLE" && !descriptor?.updateAvailable) {
+        return false;
+      }
+      if (statusFilter === "REMOTE_CHANGES" && descriptor?.developmentSyncState !== "REMOTE_CHANGES") {
+        return false;
+      }
+      if (statusFilter === "DIVERGED" && descriptor?.developmentSyncState !== "DIVERGED") {
         return false;
       }
       if (statusFilter === "READ_ONLY" && script.scope !== "REPOSITORY") {
@@ -442,11 +469,19 @@ export function ToolLibraryPage() {
       }
 
       const updateTargets: RepositoryToolDescriptor[] = [];
+      const developmentPullTargets: RepositoryToolDescriptor[] = [];
       for (const repositoryId of syncedRepositoryIds) {
         try {
           const repositoryTools = await listToolsByRepository(repositoryId);
           updateTargets.push(
             ...repositoryTools.filter((tool) => tool.installed && tool.updateAvailable)
+          );
+          developmentPullTargets.push(
+            ...repositoryTools.filter((tool) =>
+              tool.repositoryUsage === "DEVELOPMENT"
+              && Boolean(tool.developmentScriptId)
+              && tool.developmentSyncState === "REMOTE_CHANGES"
+            )
           );
         } catch (error) {
           repositoryFailures.push(`${repositoryId}: ${getErrorMessage(error, "读取工具失败")}`);
@@ -465,9 +500,19 @@ export function ToolLibraryPage() {
         }
       }
 
+      let pulledCount = 0;
+      for (const tool of developmentPullTargets) {
+        try {
+          await pullDevelopmentScript(tool.developmentScriptId!);
+          pulledCount += 1;
+        } catch (error) {
+          toolFailures.push(`${tool.developmentScriptId}: ${getErrorMessage(error, "拉取失败")}`);
+        }
+      }
+
       await loadData();
 
-      if (updateTargets.length === 0 && repositoryFailures.length === 0) {
+      if (updateTargets.length === 0 && developmentPullTargets.length === 0 && repositoryFailures.length === 0) {
         messageApi.success("已是最新");
         return;
       }
@@ -479,7 +524,7 @@ export function ToolLibraryPage() {
         return;
       }
 
-      messageApi.success(`已更新 ${updatedCount} 个工具`);
+      messageApi.success(`已更新 ${updatedCount} 个工具，拉取 ${pulledCount} 个开发脚本`);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "一键更新失败"));
     } finally {
@@ -509,7 +554,6 @@ export function ToolLibraryPage() {
       width: 160,
       render: (_value: unknown, record) => {
         const descriptor = descriptorMap.get(record.id);
-        const pluginDependencyCount = resolveEffectivePluginDependencies(record, descriptor, plugins).length;
         return (
           <Space wrap size={[4, 4]}>
             {record.scope !== "REPOSITORY" && (
@@ -519,27 +563,10 @@ export function ToolLibraryPage() {
             )}
             {record.scope === "REPOSITORY" ? <Tag>只读</Tag> : null}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-            {pluginDependencyCount > 0 ? <Tag color="geekblue">插件依赖 {pluginDependencyCount}</Tag> : null}
+            {record.scope === "DEVELOPMENT" ? getDevelopmentSyncTag(descriptor?.developmentSyncState) : null}
             {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
-      }
-    },
-    {
-      title: "版本",
-      key: "version",
-      width: 170,
-      render: (_value: unknown, record) => {
-        const descriptor = descriptorMap.get(record.id);
-        if (record.scope === "REPOSITORY") {
-          return (
-            <Space direction="vertical" size={2}>
-              <Text>本机 {record.repositoryVersion || "-"}</Text>
-              {descriptor?.version ? <Text type="secondary">远端 {descriptor.version}</Text> : null}
-            </Space>
-          );
-        }
-        return <Text>{record.version}</Text>;
       }
     },
     {
@@ -578,6 +605,17 @@ export function ToolLibraryPage() {
           >
             导出
           </Button>
+          {record.scope === "REPOSITORY" ? (
+            <Button
+              size="small"
+              icon={<SyncOutlined />}
+              loading={actionKey === `update:${record.id}`}
+              disabled={!descriptorMap.get(record.id)?.updateAvailable}
+              onClick={() => void handleUpdate(record)}
+            >
+              更新
+            </Button>
+          ) : null}
         </Space>
       )
     }
@@ -652,6 +690,7 @@ export function ToolLibraryPage() {
                 { value: "PERSONAL", label: "本机" },
                 { value: "FORK", label: "Fork" },
                 { value: "REPOSITORY", label: "仓库" },
+                { value: "DEVELOPMENT", label: "开发" },
                 { value: "SAMPLE", label: "示例" }
               ]}
             />
@@ -664,6 +703,8 @@ export function ToolLibraryPage() {
                 { value: "PUBLISHED", label: "已发布" },
                 { value: "DRAFT", label: "草稿" },
                 { value: "UPDATE_AVAILABLE", label: "可更新" },
+                { value: "REMOTE_CHANGES", label: "远端有更新" },
+                { value: "DIVERGED", label: "有冲突" },
                 { value: "READ_ONLY", label: "只读" }
               ]}
             />

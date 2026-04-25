@@ -6,12 +6,12 @@ import {
   clearExecutions,
   deleteExecution,
   executeScript,
-  getExecution,
   listExecutions
 } from "../../api";
 import {
   buildExecutionInputFromValues
 } from "../../commands";
+import { usePollingExecution } from "../../hooks/usePollingExecution";
 import {
   buildSchemaObjectEditorJsonText,
   parseSchemaObjectEditorJsonText
@@ -77,8 +77,26 @@ export function useScriptExecution({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deletingExecutionId, setDeletingExecutionId] = useState<string | null>(null);
   const [clearingExecutionHistory, setClearingExecutionHistory] = useState(false);
-  const [pollingExecutionId, setPollingExecutionId] = useState<string | null>(null);
-  const pollingTimerRef = useRef<number | null>(null);
+  const currentScriptRef = useRef(currentScript);
+  currentScriptRef.current = currentScript;
+  const { pollingExecutionId, startPolling, clearPolling } = usePollingExecution({
+    onPollResult: (record) => {
+      setCurrentExecution((previous) => (previous?.id === record.id ? record : previous));
+      setExecutionHistory((previous) =>
+        sortExecutions([record, ...previous.filter((item) => item.id !== record.id)])
+      );
+    },
+    onFinished: (record) => {
+      const scriptId = currentScriptRef.current?.id;
+      if (scriptId) {
+        void loadExecutionHistory(scriptId, record.id);
+      }
+    },
+    onError: (error) => {
+      const detail = error instanceof ApiError ? error.message : "查询执行结果失败";
+      messageApi.error(detail);
+    }
+  });
 
   const { supportedFields, unsupportedFields } = useMemo(
     () => resolveSchemaFields(currentScript?.inputSchema),
@@ -96,14 +114,6 @@ export function useScriptExecution({
   const hasOutputSchema = Boolean(currentScript?.outputSchema && Object.keys(currentScript.outputSchema).length > 0);
   const supportsSchemaForm = supportedFields.length > 0;
   const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
-
-  const clearPolling = () => {
-    if (pollingTimerRef.current !== null) {
-      window.clearTimeout(pollingTimerRef.current);
-      pollingTimerRef.current = null;
-    }
-    setPollingExecutionId(null);
-  };
 
   const sortExecutions = (records: ExecutionRecord[]): ExecutionRecord[] =>
     [...records].sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
@@ -135,39 +145,6 @@ export function useScriptExecution({
     }
   };
 
-  const pollExecution = async (executionId: string, scriptId: string) => {
-    try {
-      const record = await getExecution(executionId);
-      setCurrentExecution((previous) => (previous?.id === executionId ? record : previous));
-      setExecutionHistory((previous) =>
-        sortExecutions([record, ...previous.filter((item) => item.id !== record.id)])
-      );
-
-      if (isExecutionActive(record.status)) {
-        setPollingExecutionId(executionId);
-        pollingTimerRef.current = window.setTimeout(() => {
-          void pollExecution(executionId, scriptId);
-        }, 2000);
-        return;
-      }
-
-      clearPolling();
-      await loadExecutionHistory(scriptId, executionId);
-    } catch (error) {
-      clearPolling();
-      const detail = error instanceof ApiError ? error.message : "查询执行结果失败";
-      messageApi.error(detail);
-    }
-  };
-
-  const startPolling = (executionId: string, scriptId: string) => {
-    clearPolling();
-    setPollingExecutionId(executionId);
-    pollingTimerRef.current = window.setTimeout(() => {
-      void pollExecution(executionId, scriptId);
-    }, 2000);
-  };
-
   useEffect(() => {
     clearPolling();
     executionForm.resetFields();
@@ -187,8 +164,6 @@ export function useScriptExecution({
     setCurrentExecution(null);
     void loadExecutionHistory(currentScript.id);
   }, [currentScript?.id, executionForm, executionInitialState, supportsSchemaForm]);
-
-  useEffect(() => () => clearPolling(), []);
 
   const handleExecute = async () => {
     if (!currentScript?.id) {
@@ -215,7 +190,7 @@ export function useScriptExecution({
       if (response.submitMode === "ASYNC" && isExecutionActive(response.status)) {
         messageApi.success("异步执行已提交");
         await loadExecutionHistory(currentScript.id, response.id);
-        startPolling(response.id, currentScript.id);
+        startPolling(response.id);
       } else {
         clearPolling();
         await loadExecutionHistory(currentScript.id, response.id);

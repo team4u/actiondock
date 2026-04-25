@@ -81,6 +81,23 @@ java -jar actiondock-app-spring/target/actiondock-app-spring.jar
 
 管理控制台访问地址：`http://localhost:8080/admin/scripts`
 
+### Docker
+
+```bash
+# 构建并启动
+docker compose up -d --build
+
+# 查看日志
+docker compose logs -f actiondock
+
+# 停止
+docker compose down
+```
+
+管理控制台访问地址：`http://localhost:8080/admin/scripts`
+
+容器通过 Docker Volume 持久化 H2 数据库和插件文件，数据不会随容器销毁而丢失。默认 JVM 堆内存为 512MB，可通过 `JAVA_OPTS` 环境变量调整。
+
 ### CLI（薄封装 REST Client）
 
 CLI 不直接嵌入运行时，只负责调用现有 Web API。
@@ -350,9 +367,10 @@ repository-root/
 开发仓库中的工具可以在"发现工具"页点击"同步开发"，同步后会创建本地可编辑脚本：
 
 - 本地脚本默认 ID 为仓库 `toolId`；如果已被占用，需要输入自定义 ID
-- 同步后的脚本以 `DEVELOPMENT` 范围存在，保留来源仓库、来源工具、版本、路径、commit/digest 和同步时间
-- 编辑保存后会标记为本地有修改
-- 可以在脚本编辑页拉取远端更新，或发布回来源仓库
+- 同步后的脚本以 `DEVELOPMENT` 范围存在，保留来源仓库、来源工具、上次同步的仓库版本、路径、commit/digest 和同步时间
+- 本地脚本 `version` 只是本地发布号，不参与判断本地和仓库谁更新
+- 同步状态使用上次同步内容作为 base，对比本地内容和当前仓库内容：`SYNCED`、`LOCAL_CHANGES`、`REMOTE_CHANGES`、`DIVERGED`
+- 可以在工具库、发现页或脚本编辑页拉取远端更新，或发布回来源仓库
 
 开发仓库发布仍遵守仓库版本规则：同一仓库内 `toolId + version` 必须唯一。强制发布只用于确认覆盖远端变更冲突，不允许覆盖已经存在的相同版本。
 

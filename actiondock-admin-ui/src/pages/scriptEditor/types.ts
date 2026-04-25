@@ -169,4 +169,5 @@ export interface ScriptEditorContext {
   developmentStatus: DevelopmentStatus | null;
   developmentPulling: boolean;
   handlePullDevelopment: () => Promise<void>;
+  modalContextHolder: React.ReactNode;
 }

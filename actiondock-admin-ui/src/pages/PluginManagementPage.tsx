@@ -15,10 +15,13 @@ import {
   getPlugin,
   installRepositoryPlugin,
   installPlugin,
+  listPluginsByRepository,
   listPlugins,
+  listRepositories,
   listRepositoryPlugins,
   startPlugin,
   stopPlugin,
+  syncRepository,
   updateRepositoryPlugin,
   upgradePlugin,
   uninstallPlugin
@@ -38,6 +41,7 @@ export function PluginManagementPage() {
   const [repositoryPlugins, setRepositoryPlugins] = useState<RepositoryPluginDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const { actionId, withAction } = useActionWithLoading();
   const [pendingUploadPluginId, setPendingUploadPluginId] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
@@ -90,6 +94,15 @@ export function PluginManagementPage() {
       .map((item) => `${item.scriptId}${item.requiredVersionRange ? ` (${item.requiredVersionRange})` : ""}`)
       .join("\n");
 
+  const isPluginVersionConflict = (
+    error: unknown
+  ): error is ApiError & { data: { code?: string; conflicts?: RepositoryPluginConflict[] } } =>
+    error instanceof ApiError &&
+    typeof error.data === "object" &&
+    error.data !== null &&
+    "code" in error.data &&
+    (error.data as { code?: string }).code === "PLUGIN_VERSION_CONFLICT";
+
   const handleRepositoryPluginAction = async (record: RepositoryPluginDescriptor, action: "install" | "update", force = false) => {
     await withAction(`${action}:${record.repositoryId}:${record.pluginId}`, async () => {
       try {
@@ -100,13 +113,7 @@ export function PluginManagementPage() {
         await refreshRepositoryPlugins();
         messageApi.success(action === "install" ? "插件已从仓库安装" : "插件已从仓库更新");
       } catch (error) {
-        if (
-          error instanceof ApiError &&
-          typeof error.data === "object" &&
-          error.data !== null &&
-          "code" in error.data &&
-          (error.data as { code?: string }).code === "PLUGIN_VERSION_CONFLICT"
-        ) {
+        if (isPluginVersionConflict(error)) {
           const conflicts = ((error.data as { conflicts?: RepositoryPluginConflict[] }).conflicts ?? []);
           await modal.confirm({
             title: "插件版本会影响已安装工具",
@@ -165,6 +172,86 @@ export function PluginManagementPage() {
       messageApi.error(getErrorMessage(error, "安装插件失败"));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleUpdateAll = async () => {
+    setBulkUpdating(true);
+    const repositoryFailures: string[] = [];
+    const pluginFailures: string[] = [];
+    let updatedCount = 0;
+
+    try {
+      const installedPlugins = await listPlugins();
+      const repositoryInstalledPlugins = new Map(
+        installedPlugins
+          .filter((plugin) => Boolean(plugin.repositoryId))
+          .map((plugin) => [plugin.pluginId, plugin])
+      );
+
+      const repositories = await listRepositories();
+      const syncedRepositoryIds: string[] = [];
+      for (const repository of repositories.filter((item) => item.enabled)) {
+        try {
+          await syncRepository(repository.id);
+          syncedRepositoryIds.push(repository.id);
+        } catch (error) {
+          repositoryFailures.push(`${repository.id}: ${getErrorMessage(error, "同步失败")}`);
+        }
+      }
+
+      const targetByPluginId = new Map<string, RepositoryPluginDescriptor>();
+      for (const repositoryId of syncedRepositoryIds) {
+        try {
+          const descriptors = await listPluginsByRepository(repositoryId);
+          for (const descriptor of descriptors) {
+            const installedPlugin = repositoryInstalledPlugins.get(descriptor.pluginId);
+            if (!installedPlugin || !descriptor.installed || !descriptor.updateAvailable) {
+              continue;
+            }
+
+            const previous = targetByPluginId.get(descriptor.pluginId);
+            const matchesInstalledSource = descriptor.repositoryId === installedPlugin.repositoryId;
+            const previousMatchesInstalledSource = previous?.repositoryId === installedPlugin.repositoryId;
+            if (!previous || (matchesInstalledSource && !previousMatchesInstalledSource)) {
+              targetByPluginId.set(descriptor.pluginId, descriptor);
+            }
+          }
+        } catch (error) {
+          repositoryFailures.push(`${repositoryId}: ${getErrorMessage(error, "读取插件失败")}`);
+        }
+      }
+
+      const updateTargets = [...targetByPluginId.values()];
+      for (const plugin of updateTargets) {
+        try {
+          await updateRepositoryPlugin(plugin.repositoryId, plugin.pluginId, { force: false });
+          updatedCount += 1;
+        } catch (error) {
+          const fallbackMessage = isPluginVersionConflict(error) ? "版本冲突" : "更新失败";
+          pluginFailures.push(`${plugin.pluginId}: ${getErrorMessage(error, fallbackMessage)}`);
+        }
+      }
+
+      await loadPlugins();
+
+      if (updateTargets.length === 0 && repositoryFailures.length === 0) {
+        messageApi.success("已是最新");
+        return;
+      }
+
+      if (repositoryFailures.length > 0 || pluginFailures.length > 0) {
+        messageApi.warning(
+          `更新完成，成功 ${updatedCount} 个，失败 ${repositoryFailures.length + pluginFailures.length} 项`
+        );
+        return;
+      }
+
+      messageApi.success(`已更新 ${updatedCount} 个插件`);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "一键更新失败"));
+    } finally {
+      setBulkUpdating(false);
     }
   };
 
@@ -393,6 +480,14 @@ export function PluginManagementPage() {
             <>
               <Button icon={<ReloadOutlined />} onClick={() => void loadPlugins()} loading={loading}>
                 刷新
+              </Button>
+              <Button
+                icon={<SyncOutlined />}
+                loading={bulkUpdating}
+                disabled={loading || uploading}
+                onClick={() => void handleUpdateAll()}
+              >
+                一键更新
               </Button>
               <Button
                 type="primary"

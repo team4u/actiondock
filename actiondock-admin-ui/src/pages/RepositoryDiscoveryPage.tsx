@@ -31,7 +31,6 @@ import {
   installRepositoryTool,
   listRepositories,
   listRepositoryTools,
-  pullDevelopmentScript,
   updateRepositoryTool
 } from "../api";
 import { CodeEditor } from "../components/CodeEditor";
@@ -39,6 +38,7 @@ import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import type {
+  DevelopmentSyncState,
   PluginDependency,
   RepositoryDefinition,
   RepositoryToolDescriptor,
@@ -66,6 +66,36 @@ function getTrustTag(trusted: boolean) {
 
 function getTypeLabel(type: RepositoryToolDescriptor["type"]): string {
   return type === "PYTHON" ? "Python" : "Groovy";
+}
+
+function getDevelopmentSyncTag(state?: DevelopmentSyncState) {
+  switch (state) {
+    case "LOCAL_CHANGES":
+      return <Tag color="orange">本地有修改</Tag>;
+    case "REMOTE_CHANGES":
+      return <Tag color="processing">远端有更新</Tag>;
+    case "DIVERGED":
+      return <Tag color="red">有冲突</Tag>;
+    case "SYNCED":
+      return <Tag color="purple">已同步</Tag>;
+    default:
+      return <Tag color="purple">开发同步</Tag>;
+  }
+}
+
+function getDevelopmentActionLabel(state?: DevelopmentSyncState) {
+  switch (state) {
+    case "LOCAL_CHANGES":
+      return "本地有修改";
+    case "REMOTE_CHANGES":
+      return "远端有更新";
+    case "DIVERGED":
+      return "有冲突";
+    case "SYNCED":
+      return "已同步";
+    default:
+      return "打开开发脚本";
+  }
 }
 
 function renderPluginDependencies(dependencies: PluginDependency[]) {
@@ -298,75 +328,28 @@ export function RepositoryDiscoveryPage() {
     }
   };
 
-  const handlePullDevelopmentTool = async (descriptor: RepositoryToolDescriptor) => {
-    if (!descriptor.developmentScriptId) {
-      return;
-    }
-    setActionKey(`pull:${descriptor.developmentScriptId}`);
-    try {
-      await pullDevelopmentScript(descriptor.developmentScriptId);
-      messageApi.success("开发脚本已拉取远端更新");
-      await loadData();
-    } catch (error) {
-      const conflict = error instanceof ApiError
-        && typeof error.data === "object"
-        && error.data !== null
-        && (error.data as { code?: string }).code === "DEVELOPMENT_CONFLICT";
-      if (conflict) {
-        await modal.confirm({
-          title: "远端已更新，本地也有修改",
-          content: "为避免覆盖本地修改，默认不会自动拉取。确认后将放弃本地修改并使用远端版本。",
-          okText: "放弃本地并拉取",
-          cancelText: "取消",
-          okButtonProps: { danger: true },
-          onOk: async () => {
-            await pullDevelopmentScript(descriptor.developmentScriptId!, true);
-            messageApi.success("已使用远端版本覆盖本地开发脚本");
-            await loadData();
-          }
-        });
-        return;
-      }
-      messageApi.error(getErrorMessage(error, "拉取开发脚本失败"));
-    } finally {
-      setActionKey(null);
-    }
-  };
-
   const columns: ColumnsType<RepositoryToolDescriptor> = [
     {
       title: "工具",
       key: "tool",
       render: (_value: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          <Space wrap size={[8, 8]}>
-            <TableLinkCell onClick={() => void openDetail(record)}>{record.displayName}</TableLinkCell>
-            <Text code>{record.installedScriptId}</Text>
-            {record.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : null}
-            {record.pluginDependencies.length > 0 ? <Tag color="geekblue">插件依赖 {record.pluginDependencies.length}</Tag> : null}
-          </Space>
-          <Text type="secondary">{record.description || "未填写描述"}</Text>
-          {record.releaseNotes ? <Text type="secondary">发布日志：{record.releaseNotes}</Text> : null}
+        <Space wrap size={[8, 8]}>
+          <TableLinkCell onClick={() => void openDetail(record)}>{record.displayName}</TableLinkCell>
+          <Text code>{record.installedScriptId}</Text>
         </Space>
       )
     },
     {
       title: "来源",
       key: "repositoryId",
-      width: 160,
+      width: 260,
       render: (_value: unknown, record) => (
-        <Space direction="vertical" size={2}>
+        <Space size={[4, 4]}>
           <Text>{record.repositoryId}</Text>
+          {record.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : null}
           {getTrustTag(record.trusted)}
         </Space>
       )
-    },
-    {
-      title: "类型",
-      dataIndex: "type",
-      key: "type",
-      width: 110,
-      render: (value: RepositoryToolDescriptor["type"]) => getTypeLabel(value)
     },
     {
       title: "版本",
@@ -374,46 +357,31 @@ export function RepositoryDiscoveryPage() {
       width: 150,
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
-          <Text>远端 {record.version}</Text>
-          {record.installedVersion ? <Text type="secondary">本机 {record.installedVersion}</Text> : null}
-        </Space>
-      )
-    },
-    {
-      title: "风险",
-      dataIndex: "riskLevel",
-      key: "riskLevel",
-      width: 110,
-      render: (value?: string) => getRiskTag(value)
-    },
-    {
-      title: "状态",
-      key: "installed",
-      width: 140,
-      render: (_value: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          {record.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
-          {record.developmentScriptId ? <Tag color={record.developmentDirty ? "orange" : "purple"}>开发同步</Tag> : null}
-          {record.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
+          <Text>{record.version}</Text>
+          {record.installedVersion ? <Text type="secondary">已装 {record.installedVersion}</Text> : null}
         </Space>
       )
     },
     {
       title: "操作",
       key: "actions",
-      width: 220,
+      width: 180,
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
           {record.installed ? (
             record.repositoryUsage === "DEVELOPMENT" ? (
-              <Button
-                size="small"
-                icon={<SyncOutlined />}
-                loading={actionKey === `pull:${record.developmentScriptId}`}
-                onClick={() => void handlePullDevelopmentTool(record)}
-              >
-                拉取更新
-              </Button>
+              record.developmentScriptId ? (
+                <Button
+                  size="small"
+                  type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
+                  danger={record.developmentSyncState === "DIVERGED"}
+                  ghost={record.developmentSyncState === "REMOTE_CHANGES"}
+                  icon={<SyncOutlined />}
+                  onClick={() => navigate(`/scripts/${record.developmentScriptId}`)}
+                >
+                  {getDevelopmentActionLabel(record.developmentSyncState)}
+                </Button>
+              ) : null
             ) : (
               <Button
                 size="small"
@@ -424,18 +392,20 @@ export function RepositoryDiscoveryPage() {
                 loading={actionKey === `update:${record.installedScriptId}`}
                 onClick={() => void confirmInstallAction(record, "update")}
               >
-                更新
+                {record.updateAvailable ? "更新" : "已安装"}
               </Button>
             )
           ) : record.repositoryUsage === "DEVELOPMENT" ? (
             record.developmentScriptId ? (
               <Button
                 size="small"
+                type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
+                danger={record.developmentSyncState === "DIVERGED"}
+                ghost={record.developmentSyncState === "REMOTE_CHANGES"}
                 icon={<SyncOutlined />}
-                loading={actionKey === `pull:${record.developmentScriptId}`}
-                onClick={() => void handlePullDevelopmentTool(record)}
+                onClick={() => navigate(`/scripts/${record.developmentScriptId}`)}
               >
-                拉取更新
+                {getDevelopmentActionLabel(record.developmentSyncState)}
               </Button>
             ) : (
               <Button
@@ -571,10 +541,14 @@ export function RepositoryDiscoveryPage() {
               items={[
                 { key: "tool", label: "工具 ID", children: <Text code>{detail.descriptor.installedScriptId}</Text> },
                 { key: "repo", label: "来源仓库", children: detail.descriptor.repositoryId },
+                { key: "usage", label: "仓库用途", children: detail.descriptor.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag>分发仓库</Tag> },
+                { key: "type", label: "类型", children: getTypeLabel(detail.descriptor.type) },
                 { key: "version", label: "远端版本", children: detail.descriptor.version },
+                { key: "installedVersion", label: "本机版本", children: detail.descriptor.installedVersion || "-" },
                 { key: "owner", label: "维护人", children: detail.descriptor.owner || "-" },
                 { key: "risk", label: "风险等级", children: getRiskTag(detail.descriptor.riskLevel) },
-                { key: "trust", label: "仓库信任", children: getTrustTag(detail.descriptor.trusted) }
+                { key: "trust", label: "仓库信任", children: getTrustTag(detail.descriptor.trusted) },
+                { key: "syncState", label: "开发同步", children: detail.descriptor.developmentScriptId ? getDevelopmentSyncTag(detail.descriptor.developmentSyncState) : <Text type="secondary">-</Text> }
               ]}
             />
 
@@ -582,7 +556,7 @@ export function RepositoryDiscoveryPage() {
               {detail.descriptor.tags.map((tag) => (
                 <Tag key={tag}>{tag}</Tag>
               ))}
-              {detail.descriptor.installed ? <Tag color="blue">已安装</Tag> : null}
+              {detail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
               {detail.descriptor.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
             </Space>
 
