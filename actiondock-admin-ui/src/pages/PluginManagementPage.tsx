@@ -7,11 +7,12 @@ import {
   SyncOutlined,
   UploadOutlined
 } from "@ant-design/icons";
-import { Button, Card, Modal, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Descriptions, Drawer, Modal, Space, Spin, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
+  getPlugin,
   installRepositoryPlugin,
   installPlugin,
   listPlugins,
@@ -23,9 +24,11 @@ import {
   uninstallPlugin
 } from "../api";
 import { PageHeader } from "../components/PageHeader";
+import { MarkdownDescription } from "../components/MarkdownDescription";
+import { PluginActionsOverview } from "../components/PluginActionsOverview";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
-import type { PluginView, RepositoryPluginConflict, RepositoryPluginDescriptor } from "../types";
+import type { PluginAction, PluginView, RepositoryPluginConflict, RepositoryPluginDescriptor } from "../types";
 import { getErrorMessage } from "../utils";
 
 const { Text } = Typography;
@@ -40,6 +43,10 @@ export function PluginManagementPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [modal, modalContextHolder] = Modal.useModal();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [drawerDescriptor, setDrawerDescriptor] = useState<RepositoryPluginDescriptor | null>(null);
+  const [drawerActions, setDrawerActions] = useState<PluginAction[]>([]);
+  const [drawerDescription, setDrawerDescription] = useState("");
+  const [drawerActionsLoading, setDrawerActionsLoading] = useState(false);
 
   const loadPlugins = async () => {
     setLoading(true);
@@ -258,28 +265,6 @@ export function PluginManagementPage() {
               启动
             </Button>
           )}
-          <Popconfirm
-            title="确认卸载这个插件？"
-            description="将删除插件文件与相关配置。"
-            okText="卸载"
-            cancelText="取消"
-            onConfirm={() =>
-              withAction(record.pluginId, async () => {
-                await uninstallPlugin(record.pluginId);
-                setPlugins((previous) => previous.filter((item) => item.pluginId !== record.pluginId));
-                messageApi.success("插件已卸载");
-              })
-            }
-          >
-            <Button
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              loading={actionId === record.pluginId}
-            >
-              卸载
-            </Button>
-          </Popconfirm>
         </Space>
       )
     }
@@ -292,10 +277,31 @@ export function PluginManagementPage() {
       render: (_: unknown, record) => (
         <Space direction="vertical" size={2}>
           <Space wrap size={[8, 8]}>
-            <Text strong>{record.displayName || record.pluginId}</Text>
+            <TableLinkCell
+              to="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setDrawerDescriptor(record);
+                setDrawerActions([]);
+                setDrawerDescription("");
+                setDrawerActionsLoading(true);
+                getPlugin(record.pluginId)
+                  .then((plugin) => {
+                    setDrawerActions(plugin.actions);
+                    setDrawerDescription(plugin.description);
+                  })
+                  .catch(() => {})
+                  .finally(() => setDrawerActionsLoading(false));
+              }}
+            >
+              {record.displayName || record.pluginId}
+            </TableLinkCell>
             <Text code>{record.pluginId}</Text>
           </Space>
           <Text type="secondary">{record.description || "未填写描述"}</Text>
+          {record.releaseNotes ? (
+            <MarkdownDescription value={record.releaseNotes} className="markdown-description--compact" />
+          ) : null}
         </Space>
       )
     },
@@ -423,6 +429,57 @@ export function PluginManagementPage() {
           />
         </Card>
       </Space>
+      <Drawer
+        title={drawerDescriptor?.displayName || drawerDescriptor?.pluginId || "仓库插件详情"}
+        open={drawerDescriptor !== null}
+        onClose={() => setDrawerDescriptor(null)}
+        width={680}
+        destroyOnClose
+      >
+        {drawerDescriptor ? (
+          <Space direction="vertical" size={20} style={{ width: "100%" }}>
+            <Text type="secondary">{drawerDescriptor.pluginId}</Text>
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="版本">{drawerDescriptor.version}</Descriptions.Item>
+              <Descriptions.Item label="来源仓库">{drawerDescriptor.repositoryId}</Descriptions.Item>
+              <Descriptions.Item label="状态">
+                <Space size={4}>
+                  {drawerDescriptor.installed ? <Tag color="blue">已安装{drawerDescriptor.installedVersion ? ` (${drawerDescriptor.installedVersion})` : ""}</Tag> : <Tag>未安装</Tag>}
+                  {drawerDescriptor.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
+                  {drawerDescriptor.trusted ? <Tag color="green">可信仓库</Tag> : <Tag color="gold">未信任</Tag>}
+                </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label="风险等级">{drawerDescriptor.riskLevel || "—"}</Descriptions.Item>
+              <Descriptions.Item label="维护人">{drawerDescriptor.owner || "—"}</Descriptions.Item>
+              <Descriptions.Item label="依赖工具数">{drawerDescriptor.dependentToolCount}</Descriptions.Item>
+              <Descriptions.Item label="标签">
+                {drawerDescriptor.tags.length > 0 ? drawerDescriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : "—"}
+              </Descriptions.Item>
+              {drawerDescriptor.sha256 ? (
+                <Descriptions.Item label="SHA-256">
+                  <Text code style={{ wordBreak: "break-all", fontSize: 12 }}>{drawerDescriptor.sha256}</Text>
+                </Descriptions.Item>
+              ) : null}
+            </Descriptions>
+            {drawerDescriptor.releaseNotes ? (
+              <div>
+                <Text strong style={{ display: "block", marginBottom: 8 }}>发布日志</Text>
+                <MarkdownDescription value={drawerDescriptor.releaseNotes} className="markdown-description--panel" />
+              </div>
+            ) : null}
+            {drawerActionsLoading ? (
+              <div style={{ textAlign: "center", padding: "24px 0" }}><Spin /></div>
+            ) : drawerActions.length > 0 ? (
+              <div>
+                <Text strong style={{ display: "block", marginBottom: 12 }}>动作与字段</Text>
+                <PluginActionsOverview description={drawerDescription} actions={drawerActions} />
+              </div>
+            ) : !drawerDescriptor.installed ? (
+              <Text type="secondary">插件未安装，无法查看动作和字段信息。安装后即可查看。</Text>
+            ) : null}
+          </Space>
+        ) : null}
+      </Drawer>
     </>
   );
 }

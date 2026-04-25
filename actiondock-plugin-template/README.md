@@ -102,7 +102,7 @@ public class MyActionDockPlugin implements ActionDockPlugin {
 {
   "pluginId": "my-plugin",
   "name": "My Plugin",
-  "description": "A custom ActionDock plugin.",
+  "description": "## My Plugin\n\nA custom **ActionDock** plugin.",
   "version": "1.0.0",
   "configSchema": {
     "type": "object",
@@ -120,7 +120,7 @@ public class MyActionDockPlugin implements ActionDockPlugin {
     {
       "action": "hello",
       "title": "打招呼",
-      "description": "返回一句问候语。",
+      "description": "返回一句问候语。\n\n- 读取输入 `name`\n- 返回 `greeting`",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -288,7 +288,7 @@ public class MyConfig {
 |------|------|
 | `pluginId` | 插件唯一标识 |
 | `name` | 显示名称 |
-| `description` | 插件描述 |
+| `description` | 插件描述，支持 Markdown/GFM；原始 HTML 按文本展示 |
 | `version` | 版本号 |
 | `configSchema` | JSON Schema 格式的配置定义，用于 UI 渲染配置表单 |
 | `defaultConfig` | 默认配置值 |
@@ -302,10 +302,12 @@ public class MyConfig {
 |------|------|
 | `action` | 动作标识（在 invoke 中用于路由） |
 | `title` | 动作显示名称 |
-| `description` | 动作描述 |
+| `description` | 动作描述，支持 Markdown/GFM；原始 HTML 按文本展示 |
 | `inputSchema` | 输入参数的 JSON Schema |
 | `outputSchema` | 输出结果的 JSON Schema |
 | `exampleArgs` | 示例调用参数，用于文档和测试 |
+
+插件发布到仓库时，`description` 会直接来自 manifest，不在发布界面二次编辑。发布界面填写的是 `releaseNotes`，用于记录当前版本的发布日志。同一仓库内 `pluginId + version` 必须唯一；相同版本已经存在时会拒绝发布。
 
 ---
 

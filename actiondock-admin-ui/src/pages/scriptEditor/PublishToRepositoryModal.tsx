@@ -95,7 +95,7 @@ export function PublishToRepositoryModal({
             type="info"
             showIcon
             message="发布前会先执行本地保存、校验与发布"
-            description="配置项只会按你选择的模式导出为模板；密钥类内容请使用 PLACEHOLDER，避免把真实值写入仓库。"
+            description="工具说明来自脚本自己的说明字段；这里填写的是本次版本发布日志。配置项只会按你选择的模式导出为模板。"
           />
           <Form form={form} layout="vertical">
             <Form.Item
@@ -143,8 +143,11 @@ export function PublishToRepositoryModal({
                 <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" />
               </Form.Item>
             </Space>
-            <Form.Item label="说明" name="description">
-              <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="仓库中展示的工具说明" />
+            <Form.Item label="发布日志" name="releaseNotes">
+              <Input.TextArea
+                autoSize={{ minRows: 5, maxRows: 12 }}
+                placeholder="本次发布的变更说明，支持 Markdown 语法"
+              />
             </Form.Item>
             <Form.Item label={`定时任务模板 (${schedules.length})`} name="scheduleIds">
               <Select

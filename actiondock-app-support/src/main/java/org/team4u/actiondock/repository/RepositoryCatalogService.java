@@ -311,13 +311,16 @@ public class RepositoryCatalogService {
 
         ScriptDefinition script = scriptApplicationService.getPublished(normalize(request.scriptId(), "scriptId 不能为空"));
         String toolId = normalize(request.toolId(), "toolId 不能为空");
+        String version = normalize(request.version(), "version 不能为空");
         Path root = resolveRepositoryRoot(repository);
+        RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
+        assertToolVersionAvailable(repositoryId, current, toolId, version);
         Path toolDir = root.resolve("tools").resolve(toolId);
         writeToolFiles(toolDir, toolId, script, request);
         updateRepositoryIndex(root, repository, toolId, script, request);
 
         if ("GIT".equals(repository.getType())) {
-            commitAndPush(repository, toolId, request.version());
+            commitAndPush(repository, toolId, version, request.releaseNotes());
         }
         return getRepositoryTool(repositoryId, toolId).descriptor();
     }
@@ -338,13 +341,15 @@ public class RepositoryCatalogService {
         byte[] content = pluginRuntimeService.readPluginFile(pluginId);
         String version = normalizeOrDefault(request.version(), registration.getVersion());
         Path root = resolveRepositoryRoot(repository);
+        RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
+        assertPluginVersionAvailable(repositoryId, current, pluginId, version);
         Path pluginDir = root.resolve("plugins").resolve(pluginId);
         String jarFileName = pluginId + "-" + version + ".jar";
         writePluginFiles(pluginDir, jarFileName, content, registration, request, version);
         updateRepositoryPluginIndex(root, repository, pluginId, registration, request, version);
 
         if ("GIT".equals(repository.getType())) {
-            commitAndPush(repository, pluginId, version);
+            commitAndPush(repository, pluginId, version, request.releaseNotes());
         }
         return getRepositoryPlugin(repositoryId, pluginId).descriptor();
     }
@@ -686,7 +691,8 @@ public class RepositoryCatalogService {
                     registration.getPluginId(),
                     normalizeOrDefault(request.displayName(), registration.getName()),
                     version,
-                    normalizeOrDefault(request.description(), registration.getDescription()),
+                    normalizeNullable(registration.getDescription()),
+                    normalizeNullable(request.releaseNotes()),
                     normalizeNullable(request.owner()),
                     request.tags() == null ? List.of() : request.tags(),
                     jarFileName,
@@ -707,7 +713,8 @@ public class RepositoryCatalogService {
                 normalizeOrDefault(request.displayName(), script.getName()),
                 normalize(request.version(), "version 不能为空"),
                 script.getType().name(),
-                normalizeNullable(request.description()),
+                normalizeNullable(script.getDescription()),
+                normalizeNullable(request.releaseNotes()),
                 normalizeNullable(request.owner()),
                 request.tags() == null ? List.of() : request.tags(),
                 sourceFileName,
@@ -823,7 +830,8 @@ public class RepositoryCatalogService {
                 normalizeOrDefault(request.displayName(), script.getName()),
                 normalize(request.version(), "version 不能为空"),
                 script.getType().name(),
-                normalizeNullable(request.description()),
+                normalizeNullable(script.getDescription()),
+                normalizeNullable(request.releaseNotes()),
                 "tools/" + toolId + "/tool.json"
         );
         entries.removeIf(item -> toolId.equals(item.id()));
@@ -852,7 +860,8 @@ public class RepositoryCatalogService {
                 pluginId,
                 normalizeOrDefault(request.displayName(), registration.getName()),
                 version,
-                normalizeNullable(request.description()),
+                normalizeNullable(registration.getDescription()),
+                normalizeNullable(request.releaseNotes()),
                 "plugins/" + pluginId + "/plugin.json"
         );
         entries.removeIf(item -> pluginId.equals(item.id()));
@@ -867,10 +876,18 @@ public class RepositoryCatalogService {
         ));
     }
 
-    private void commitAndPush(RepositoryDefinition repository, String toolId, String version) {
+    private void commitAndPush(RepositoryDefinition repository, String toolId, String version, String releaseNotes) {
         Path root = resolveRepositoryRoot(repository);
         runGit(root, List.of("git", "-C", root.toString(), "add", "."));
-        runGit(root, List.of("git", "-C", root.toString(), "commit", "-m", "publish(" + toolId + "): " + version), true);
+        List<String> commitCommand = new ArrayList<>(List.of(
+                "git", "-C", root.toString(), "commit", "-m", "publish(" + toolId + "): " + version
+        ));
+        String normalizedReleaseNotes = normalizeNullable(releaseNotes);
+        if (normalizedReleaseNotes != null) {
+            commitCommand.add("-m");
+            commitCommand.add(normalizedReleaseNotes);
+        }
+        runGit(root, commitCommand, true);
         runGit(root, List.of("git", "-C", root.toString(), "push", "origin", normalizeOrDefault(repository.getBranch(), "main")));
     }
 
@@ -891,6 +908,7 @@ public class RepositoryCatalogService {
                 tool.name(),
                 tool.version(),
                 tool.description(),
+                tool.releaseNotes(),
                 tool.owner(),
                 tool.tags() == null ? List.of() : tool.tags(),
                 tool.type(),
@@ -917,6 +935,7 @@ public class RepositoryCatalogService {
                 plugin.name(),
                 plugin.version(),
                 plugin.description(),
+                plugin.releaseNotes(),
                 plugin.owner(),
                 plugin.tags() == null ? List.of() : plugin.tags(),
                 plugin.artifactPath(),
@@ -1149,6 +1168,34 @@ public class RepositoryCatalogService {
         return index == null || index.plugins() == null ? List.of() : index.plugins();
     }
 
+    private RepositoryIndexFile readRepositoryIndexFile(Path root, RepositoryDefinition repository) {
+        return Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
+                ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>());
+    }
+
+    static void assertToolVersionAvailable(String repositoryId,
+                                           RepositoryIndexFile index,
+                                           String toolId,
+                                           String version) {
+        for (RepositoryIndexEntry entry : index == null || index.tools() == null ? List.<RepositoryIndexEntry>of() : index.tools()) {
+            if (Objects.equals(toolId, entry.id()) && Objects.equals(version, entry.version())) {
+                throw new RepositoryVersionExistsException("TOOL", repositoryId, toolId, version);
+            }
+        }
+    }
+
+    static void assertPluginVersionAvailable(String repositoryId,
+                                             RepositoryIndexFile index,
+                                             String pluginId,
+                                             String version) {
+        for (RepositoryPluginIndexEntry entry : index == null || index.plugins() == null ? List.<RepositoryPluginIndexEntry>of() : index.plugins()) {
+            if (Objects.equals(pluginId, entry.id()) && Objects.equals(version, entry.version())) {
+                throw new RepositoryVersionExistsException("PLUGIN", repositoryId, pluginId, version);
+            }
+        }
+    }
+
     private RelativeRepositoryPath toolDirectoryPath(String toolPath) {
         return new RelativeRepositoryPath(Path.of(toolPath).getParent().toString().replace('\\', '/'));
     }
@@ -1175,6 +1222,7 @@ public class RepositoryCatalogService {
             String displayName,
             String version,
             String description,
+            String releaseNotes,
             String owner,
             List<String> tags,
             String type,
@@ -1207,7 +1255,7 @@ public class RepositoryCatalogService {
             String displayName,
             String version,
             String owner,
-            String description,
+            String releaseNotes,
             List<String> tags,
             List<String> scheduleIds,
             List<RepositoryPublishConfigItem> configItems
@@ -1220,6 +1268,7 @@ public class RepositoryCatalogService {
             String displayName,
             String version,
             String description,
+            String releaseNotes,
             String owner,
             List<String> tags,
             String artifactPath,
@@ -1245,7 +1294,7 @@ public class RepositoryCatalogService {
             String displayName,
             String version,
             String owner,
-            String description,
+            String releaseNotes,
             List<String> tags,
             String riskLevel
     ) {
@@ -1279,6 +1328,7 @@ public class RepositoryCatalogService {
                                        String version,
                                        String type,
                                        String description,
+                                       String releaseNotes,
                                        String toolPath) {
     }
 
@@ -1286,6 +1336,7 @@ public class RepositoryCatalogService {
                                              String name,
                                              String version,
                                              String description,
+                                             String releaseNotes,
                                              String pluginPath) {
     }
 
@@ -1295,6 +1346,7 @@ public class RepositoryCatalogService {
                            String version,
                            String type,
                            String description,
+                           String releaseNotes,
                            String owner,
                            List<String> tags,
                            String sourcePath,
@@ -1312,6 +1364,7 @@ public class RepositoryCatalogService {
                              String name,
                              String version,
                              String description,
+                             String releaseNotes,
                              String owner,
                              List<String> tags,
                              String artifactPath,
@@ -1363,6 +1416,37 @@ public class RepositoryCatalogService {
 
         public List<RepositoryPluginConflict> getConflicts() {
             return conflicts;
+        }
+    }
+
+    public static class RepositoryVersionExistsException extends IllegalArgumentException {
+        private final String assetKind;
+        private final String repositoryId;
+        private final String assetId;
+        private final String version;
+
+        public RepositoryVersionExistsException(String assetKind, String repositoryId, String assetId, String version) {
+            super(("PLUGIN".equals(assetKind) ? "插件" : "工具") + "版本已存在: " + assetId + "@" + version);
+            this.assetKind = assetKind;
+            this.repositoryId = repositoryId;
+            this.assetId = assetId;
+            this.version = version;
+        }
+
+        public String getAssetKind() {
+            return assetKind;
+        }
+
+        public String getRepositoryId() {
+            return repositoryId;
+        }
+
+        public String getAssetId() {
+            return assetId;
+        }
+
+        public String getVersion() {
+            return version;
         }
     }
 }

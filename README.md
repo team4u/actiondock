@@ -264,7 +264,8 @@ repository-root/
 {
   "id": "hello-world",
   "name": "Hello World",
-  "description": "示例工具",
+  "description": "## 示例工具\n\n支持 **Markdown** 说明。",
+  "releaseNotes": "## 1.0.0\n\n- 首次发布",
   "version": "1.0.0",
   "scriptId": "hello-world",
   "type": "GROOVY",
@@ -284,6 +285,8 @@ repository-root/
 }
 ```
 
+`description` 是工具资产自身说明，发布到仓库时来自脚本自己的说明字段，支持 Markdown/GFM。`releaseNotes` 是当前版本的发布日志，用于记录本次发布变更，也支持 Markdown/GFM。管理台详情页会渲染标题、列表、表格、代码块等语法；原始 HTML 不会作为 HTML 执行或渲染，仍按文本展示。
+
 ### 插件元数据 (plugin.json)
 
 ```json
@@ -291,7 +294,8 @@ repository-root/
   "pluginFileVersion": 1,
   "pluginId": "actiondock-demo-plugin",
   "name": "ActionDock Demo Plugin",
-  "description": "示例插件",
+  "description": "## 示例插件\n\n支持 **Markdown** 说明。",
+  "releaseNotes": "## 0.2.0\n\n- 发布 echo 动作",
   "version": "0.2.0",
   "owner": "team4u",
   "tags": ["example"],
@@ -301,11 +305,15 @@ repository-root/
 }
 ```
 
+仓库插件的 `description` 来自插件 manifest，是插件自身说明；`releaseNotes` 是发布插件时填写的当前版本发布日志。两者都支持 Markdown/GFM；列表中保持紧凑摘要，详情和参考视图展示格式化内容。
+
 仓库插件按 `pluginId` 全局安装一次，多个仓库工具共享同一个插件实例。工具通过 `pluginDependencies` 显式声明依赖；安装工具时可以同时安装或更新缺失的插件依赖。平台默认阻止会破坏其他已安装工具版本约束的插件升级，管理员可在管理台或 CLI 中使用强制覆盖。
 
 ### 发布脚本到仓库
 
 在脚本编辑器页面，点击"发布到仓库"按钮，选择目标仓库并填写工具 ID 和版本即可发布。
+
+同一仓库内，`toolId + version` 必须唯一。相同工具版本已经存在时会拒绝发布；如需重新发布变更，请提升版本号。仓库索引仍按 `toolId` 保留当前可发现版本，安装端通过版本差异判断是否可更新。
 
 发布操作会将脚本的已发布版本写入仓库目录：
 - 创建 `tools/{toolId}/tool.json` 元数据文件
@@ -315,6 +323,8 @@ repository-root/
 ### 发布插件到仓库
 
 插件管理页可以将本机已安装插件发布到 `LOCAL_DIR` 或 `GIT` 仓库。发布会复制当前插件 JAR 到 `plugins/{pluginId}/`，生成 `plugin.json`，并更新仓库索引；Git 仓库会自动提交并推送。
+
+同一仓库内，`pluginId + version` 必须唯一。相同插件版本已经存在时会拒绝发布；如需发布新的插件内容，请先升级插件包版本。
 
 ### 从仓库安装工具
 
@@ -611,7 +621,7 @@ META-INF/actiondock/plugins/{pluginId}.json
 
 - `pluginId`
 - `name`
-- `description`
+- `description`：支持 Markdown/GFM；原始 HTML 按文本展示
 - `version`
 - `configSchema`
 - `defaultConfig`
@@ -621,7 +631,7 @@ META-INF/actiondock/plugins/{pluginId}.json
 
 - `action`
 - `title`
-- `description`
+- `description`：支持 Markdown/GFM；原始 HTML 按文本展示
 - `inputSchema`
 - `outputSchema`
 - `exampleArgs`

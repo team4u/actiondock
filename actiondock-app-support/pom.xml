@@ -55,11 +55,6 @@
         </dependency>
 
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.team4u</groupId>
             <artifactId>actiondock-plugin-template</artifactId>
             <version>${project.version}</version>

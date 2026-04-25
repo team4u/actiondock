@@ -61,6 +61,21 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(RepositoryCatalogService.RepositoryVersionExistsException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleRepositoryVersionExists(RepositoryCatalogService.RepositoryVersionExistsException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+                exception.getMessage(),
+                400,
+                Map.of(
+                        "code", "REPOSITORY_VERSION_EXISTS",
+                        "assetKind", exception.getAssetKind(),
+                        "repositoryId", exception.getRepositoryId(),
+                        "assetId", exception.getAssetId(),
+                        "version", exception.getVersion()
+                )
+        ));
+    }
+
     /**
      * 兜底异常处理，捕获所有未处理的异常并返回 500 响应。
      *

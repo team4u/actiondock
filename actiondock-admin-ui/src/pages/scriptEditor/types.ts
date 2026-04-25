@@ -18,6 +18,7 @@ export interface ScriptEditorFormValues {
   id: string;
   name: string;
   type: ScriptType;
+  description?: string;
 }
 
 export interface PublishToRepositoryFormValues {
@@ -26,7 +27,7 @@ export interface PublishToRepositoryFormValues {
   displayName: string;
   version: string;
   owner?: string;
-  description?: string;
+  releaseNotes?: string;
   tags?: string[];
   scheduleIds?: string[];
 }

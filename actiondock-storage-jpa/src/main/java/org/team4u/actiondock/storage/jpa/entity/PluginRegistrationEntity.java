@@ -22,6 +22,7 @@ public class PluginRegistrationEntity {
     @Column(nullable = false)
     private String name;
 
+    @Lob
     private String description;
 
     private String version;

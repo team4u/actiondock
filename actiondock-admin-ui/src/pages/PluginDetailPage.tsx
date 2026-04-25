@@ -44,7 +44,7 @@ import { CodeEditor } from "../components/CodeEditor";
 import { buildStandardCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
-import { SchemaFieldList } from "../components/SchemaFieldList";
+import { PluginActionsOverview } from "../components/PluginActionsOverview";
 import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/SchemaObjectEditor";
 import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
@@ -80,7 +80,7 @@ interface PublishPluginFormValues {
   displayName: string;
   version: string;
   owner?: string;
-  description?: string;
+  releaseNotes?: string;
   tags?: string[];
   riskLevel?: string;
 }
@@ -416,7 +416,7 @@ export function PluginDetailPage() {
         displayName: plugin.name || plugin.pluginId,
         version: plugin.version,
         owner: "",
-        description: plugin.description || "",
+        releaseNotes: "",
         tags: [],
         riskLevel: "LOW"
       });
@@ -440,7 +440,7 @@ export function PluginDetailPage() {
         displayName: values.displayName.trim(),
         version: values.version.trim(),
         owner: values.owner?.trim() || undefined,
-        description: values.description?.trim() || undefined,
+        releaseNotes: values.releaseNotes?.trim() || undefined,
         tags: values.tags ?? [],
         riskLevel: values.riskLevel || undefined
       });
@@ -632,42 +632,7 @@ export function PluginDetailPage() {
                 key: "overview",
                 label: "概览",
                 children: plugin ? (
-                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                    {plugin.description ? <Alert type="info" showIcon message={plugin.description} /> : null}
-                    {plugin.actions.length === 0 ? (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前插件没有可用动作。" />
-                    ) : (
-                      <Tabs
-                        activeKey={currentAction?.action}
-                        onChange={setSelectedActionName}
-                        items={plugin.actions.map((action) => ({
-                          key: action.action,
-                          label: getActionLabel(action),
-                          children: (
-                            <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                              {action.description ? <Text type="secondary">{action.description}</Text> : null}
-                              <Row gutter={[16, 16]}>
-                                <Col xs={24} xl={12}>
-                                  <SchemaFieldList
-                                    schema={action.inputSchema}
-                                    title="输入字段"
-                                    emptyDescription="当前动作没有声明输入字段。"
-                                  />
-                                </Col>
-                                <Col xs={24} xl={12}>
-                                  <SchemaFieldList
-                                    schema={action.outputSchema}
-                                    title="输出字段"
-                                    emptyDescription="当前动作没有声明输出字段。"
-                                  />
-                                </Col>
-                              </Row>
-                            </Space>
-                          )
-                        }))}
-                      />
-                    )}
-                  </Space>
+                  <PluginActionsOverview description={plugin.description} actions={plugin.actions} snippetContext={{ pluginId: plugin.pluginId, scriptType: "GROOVY" }} />
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="插件详情不存在或加载失败。" />
                 )
@@ -855,7 +820,7 @@ export function PluginDetailPage() {
       >
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
           <Text type="secondary">
-            发布会把当前已安装插件的 JAR 写入目标仓库，并更新仓库索引。HTTP 仓库不支持发布。
+            发布会把当前已安装插件的 JAR 写入目标仓库，并更新仓库索引。插件说明来自插件 manifest；这里填写的是本次版本发布日志。
           </Text>
           <Form form={publishForm} layout="vertical">
             <Form.Item
@@ -905,8 +870,11 @@ export function PluginDetailPage() {
             <Form.Item label="标签" name="tags">
               <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" />
             </Form.Item>
-            <Form.Item label="说明" name="description">
-              <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} />
+            <Form.Item label="发布日志" name="releaseNotes">
+              <Input.TextArea
+                autoSize={{ minRows: 5, maxRows: 12 }}
+                placeholder="本次发布的变更说明，支持 Markdown 语法"
+              />
             </Form.Item>
           </Form>
         </Space>

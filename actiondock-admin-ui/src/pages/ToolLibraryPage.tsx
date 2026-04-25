@@ -552,110 +552,34 @@ export function ToolLibraryPage() {
     {
       title: "操作",
       key: "actions",
-      width: 340,
-      render: (_value: unknown, record) => {
-        const descriptor = descriptorMap.get(record.id);
-        if (record.scope === "REPOSITORY") {
-          return (
-            <Space wrap size={[4, 4]}>
-              <Button
-                size="small"
-                icon={<PlayCircleOutlined />}
-                disabled={!isRunnable(record)}
-                onClick={() => navigate(`/run/${record.id}`)}
-              >
-                运行
-              </Button>
-              {descriptor?.updateAvailable ? (
-                <Button
-                  size="small"
-                  type="primary"
-                  ghost
-                  icon={<SyncOutlined />}
-                  loading={actionKey === `update:${record.id}`}
-                  disabled={bulkUpdating}
-                  onClick={() => void handleUpdate(record)}
-                >
-                  更新
-                </Button>
-              ) : (
-                <Button size="small" icon={<CheckCircleOutlined />} disabled>
-                  已是最新
-                </Button>
-              )}
-              <Button
-                size="small"
-                icon={<ForkOutlined />}
-                loading={actionKey === `fork:${record.id}`}
-                onClick={() => openForkModal(record)}
-              >
-                Fork
-              </Button>
-              <Popconfirm
-                title="确认卸载这个工具？"
-                description="会删除本机安装记录和仓库只读脚本；不会影响你的 Fork。"
-                okText="卸载"
-                cancelText="取消"
-                onConfirm={async () => {
-                  setActionKey(`delete:${record.id}`);
-                  try {
-                    await uninstallInstalledTool(record.id);
-                    messageApi.success("工具已卸载");
-                    await loadData();
-                  } catch (error) {
-                    messageApi.error(getErrorMessage(error, "卸载工具失败"));
-                  } finally {
-                    setActionKey(null);
-                  }
-                }}
-              >
-                <Button danger size="small" icon={<DeleteOutlined />} loading={actionKey === `delete:${record.id}`}>
-                  卸载
-                </Button>
-              </Popconfirm>
-            </Space>
-          );
-        }
-
-        return (
-          <Space wrap size={[4, 4]}>
-            {record.scope === "SAMPLE" && (
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(record.id)}`)}
-              >
-                复制
-              </Button>
-            )}
-            <Button
-              size="small"
-              icon={<PlayCircleOutlined />}
-              disabled={!isRunnable(record)}
-              onClick={() => navigate(`/run/${record.id}`)}
-            >
-              运行
-            </Button>
-            {record.scope !== "SAMPLE" ? (
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(record.id)}`)}
-              >
-                复制
-              </Button>
-            ) : null}
-            <Button
-              size="small"
-              icon={<ExportOutlined />}
-              disabled={!isEditableAsset(record)}
-              onClick={() => exportScripts([record], `已导出 ${record.name || record.id}`)}
-            >
-              导出
-            </Button>
-          </Space>
-        );
-      }
+      width: 240,
+      render: (_value: unknown, record) => (
+        <Space wrap size={[4, 4]}>
+          <Button
+            size="small"
+            icon={<PlayCircleOutlined />}
+            disabled={!isRunnable(record)}
+            onClick={() => navigate(`/run/${record.id}`)}
+          >
+            运行
+          </Button>
+          <Button
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(record.id)}`)}
+          >
+            复制
+          </Button>
+          <Button
+            size="small"
+            icon={<ExportOutlined />}
+            disabled={!isEditableAsset(record)}
+            onClick={() => exportScripts([record], `已导出 ${record.name || record.id}`)}
+          >
+            导出
+          </Button>
+        </Space>
+      )
     }
   ];
 

@@ -143,6 +143,15 @@ export function ScriptDefinitionTab({
                   />
                 </Form.Item>
               </Col>
+              <Col xs={24}>
+                <Form.Item label="说明" name="description">
+                  <Input.TextArea
+                    autoSize={{ minRows: 5, maxRows: 12 }}
+                    disabled={isReadOnlyScript}
+                    placeholder="脚本自己的说明，支持 Markdown 语法；发布到仓库时会作为工具说明"
+                  />
+                </Form.Item>
+              </Col>
             </Row>
           </Form>
         </Card>

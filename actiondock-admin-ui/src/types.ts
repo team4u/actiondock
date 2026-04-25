@@ -255,6 +255,7 @@ export interface RepositoryToolDescriptor {
   displayName: string;
   version: string;
   description?: string;
+  releaseNotes?: string;
   owner?: string;
   tags: string[];
   type: ScriptType;
@@ -308,6 +309,7 @@ export interface RepositoryPluginDescriptor {
   displayName: string;
   version: string;
   description?: string;
+  releaseNotes?: string;
   owner?: string;
   tags: string[];
   artifactPath: string;
@@ -346,7 +348,7 @@ export interface RepositoryPluginPublishRequest {
   displayName: string;
   version: string;
   owner?: string;
-  description?: string;
+  releaseNotes?: string;
   tags?: string[];
   riskLevel?: string;
 }
@@ -362,7 +364,7 @@ export interface RepositoryPublishRequest {
   displayName: string;
   version: string;
   owner?: string;
-  description?: string;
+  releaseNotes?: string;
   tags?: string[];
   scheduleIds?: string[];
   configItems?: RepositoryPublishConfigItem[];

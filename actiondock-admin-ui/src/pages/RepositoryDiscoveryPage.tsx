@@ -32,6 +32,7 @@ import {
   updateRepositoryTool
 } from "../api";
 import { CodeEditor } from "../components/CodeEditor";
+import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import type {
@@ -275,6 +276,7 @@ export function RepositoryDiscoveryPage() {
             {record.pluginDependencies.length > 0 ? <Tag color="geekblue">插件依赖 {record.pluginDependencies.length}</Tag> : null}
           </Space>
           <Text type="secondary">{record.description || "未填写描述"}</Text>
+          {record.releaseNotes ? <Text type="secondary">发布日志：{record.releaseNotes}</Text> : null}
         </Space>
       )
     },
@@ -483,6 +485,28 @@ export function RepositoryDiscoveryPage() {
 
             <Tabs
               items={[
+                {
+                  key: "description",
+                  label: "说明",
+                  children: (
+                    <MarkdownDescription
+                      value={detail.descriptor.description}
+                      emptyText="该工具没有填写说明。"
+                      className="markdown-description--panel"
+                    />
+                  )
+                },
+                {
+                  key: "releaseNotes",
+                  label: "发布日志",
+                  children: (
+                    <MarkdownDescription
+                      value={detail.descriptor.releaseNotes}
+                      emptyText="该版本没有填写发布日志。"
+                      className="markdown-description--panel"
+                    />
+                  )
+                },
                 {
                   key: "source",
                   label: "源码",

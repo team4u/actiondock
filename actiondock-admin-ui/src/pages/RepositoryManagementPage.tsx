@@ -7,10 +7,10 @@ import {
 import {
   Button,
   Card,
+  Drawer,
   Empty,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -299,16 +299,12 @@ export function RepositoryManagementPage() {
         </Card>
       </Space>
 
-      <Modal
+      <Drawer
         title={editorState?.mode === "edit" ? "编辑仓库" : "添加仓库"}
         open={Boolean(editorState)}
-        onCancel={closeEditor}
-        onOk={() => void handleSubmit()}
-        okText={editorState?.mode === "edit" ? "保存" : "创建"}
-        cancelText="取消"
-        confirmLoading={saving}
-        destroyOnHidden
-        width={640}
+        onClose={closeEditor}
+        destroyOnClose
+        width={480}
       >
         <Form form={form} layout="vertical" initialValues={{ enabled: true, trustLevel: "UNTRUSTED", type: "GIT" }}>
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -376,9 +372,13 @@ export function RepositoryManagementPage() {
             <Form.Item label="启用仓库" name="enabled" valuePropName="checked">
               <Switch checkedChildren="启用" unCheckedChildren="禁用" />
             </Form.Item>
+
+            <Button type="primary" loading={saving} onClick={() => void handleSubmit()} block>
+              {editorState?.mode === "edit" ? "保存" : "创建"}
+            </Button>
           </Space>
         </Form>
-      </Modal>
+      </Drawer>
     </>
   );
 }

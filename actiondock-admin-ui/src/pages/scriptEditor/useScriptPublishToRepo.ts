@@ -85,7 +85,7 @@ export function useScriptPublishToRepo({
         displayName: script.name,
         version: suggestNextRepositoryVersion(script.repositoryVersion),
         owner: script.owner ?? "",
-        description: script.description ?? "",
+        releaseNotes: "",
         tags: toTagOptions(script.tags),
         scheduleIds: []
       });
@@ -135,7 +135,7 @@ export function useScriptPublishToRepo({
         displayName: values.displayName.trim(),
         version: values.version.trim(),
         owner: values.owner?.trim() || undefined,
-        description: values.description?.trim() || undefined,
+        releaseNotes: values.releaseNotes?.trim() || undefined,
         tags: toTagOptions(values.tags),
         scheduleIds: values.scheduleIds ?? [],
         configItems

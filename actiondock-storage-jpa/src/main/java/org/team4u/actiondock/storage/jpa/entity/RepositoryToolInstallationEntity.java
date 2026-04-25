@@ -2,6 +2,7 @@ package org.team4u.actiondock.storage.jpa.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
@@ -21,6 +22,7 @@ public class RepositoryToolInstallationEntity {
     private String versionValue;
     private String latestVersion;
     private String owner;
+    @Lob
     private String description;
     private LocalDateTime installedAt;
     private LocalDateTime updatedAt;

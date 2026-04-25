@@ -97,7 +97,8 @@ export function useScriptEditor({
     form.setFieldsValue({
       id: script.id,
       name: script.name,
-      type: script.type
+      type: script.type,
+      description: script.description ?? ""
     });
     setSourceText(script.source);
     setInputSchemaState(deserializeSchema(script.inputSchema));
@@ -109,7 +110,8 @@ export function useScriptEditor({
     form.setFieldsValue({
       id: draft.id,
       name: draft.name,
-      type: draft.type
+      type: draft.type,
+      description: draft.description ?? ""
     });
     form.setFields([{ name: "id", errors: [] }]);
     setSourceText(draft.source);
@@ -253,6 +255,7 @@ export function useScriptEditor({
       outputSchema,
       status: currentScript?.status ?? "DRAFT",
       version: currentScript?.version ?? 1,
+      description: values.description?.trim() || undefined,
       pluginDependencies: selectedScriptType === "GROOVY" ? detectedPluginDependencies : [],
       publishedSnapshot: currentScript?.publishedSnapshot,
       createdAt: currentScript?.createdAt,
