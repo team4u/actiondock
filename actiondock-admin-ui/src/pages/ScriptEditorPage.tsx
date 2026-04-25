@@ -7,6 +7,7 @@ import {
   ExportOutlined,
   ForkOutlined,
   ImportOutlined,
+  MoreOutlined,
   PlayCircleOutlined,
   RollbackOutlined,
   ReloadOutlined,
@@ -21,6 +22,7 @@ import {
   Col,
   Collapse,
   Descriptions,
+  Dropdown,
   Empty,
   Form,
   Grid,
@@ -39,6 +41,7 @@ import {
   Typography,
   message
 } from "antd";
+import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -109,6 +112,7 @@ import {
   buildSchemaFieldInitialState,
   isValidationErrorData
 } from "../schemaExecution";
+import { buildScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
 import { buildDuplicatedScriptDefinition } from "../scriptDuplication";
 import { buildPluginInvokeSnippet, buildScriptInvokeSnippet } from "../scriptInvocationSnippets";
 import type {
@@ -282,6 +286,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [scriptReferencePage, setScriptReferencePage] = useState(1);
   const [scriptReferencePageSize, setScriptReferencePageSize] = useState(10);
   const [messageApi, contextHolder] = message.useMessage();
+  const [modal, modalContextHolder] = Modal.useModal();
   const pollingTimerRef = useRef<number | null>(null);
   const initializedCopySourceRef = useRef<string | null>(null);
   const selectedScriptType = (Form.useWatch("type", form) as ScriptType | undefined) ?? "GROOVY";
@@ -341,6 +346,25 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   );
   const isReadOnlyScript = Boolean(mode === "edit" && currentScript && currentScript.editable === false);
   const canPublishToRepository = Boolean(currentScript && currentScript.scope !== "REPOSITORY");
+  const headerActionModel = useMemo(
+    () =>
+      buildScriptEditorHeaderActionModel({
+        mode,
+        canImportGeneratedScript,
+        isReadOnlyScript,
+        hasUnpublishedChanges,
+        canPublishToRepository,
+        hasCurrentScript: Boolean(currentScript)
+      }),
+    [
+      mode,
+      canImportGeneratedScript,
+      isReadOnlyScript,
+      hasUnpublishedChanges,
+      canPublishToRepository,
+      currentScript
+    ]
+  );
   const supportsSchemaForm = supportedFields.length > 0;
   const hasActiveExecutionHistory = executionHistory.some((record) => isExecutionActive(record.status));
   const apiKey = undefined;
@@ -1014,6 +1038,36 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     }
   };
 
+  const openDiscardDraftConfirm = () => {
+    if (!currentScript?.id || !hasUnpublishedChanges) {
+      return;
+    }
+
+    void modal.confirm({
+      title: "确认丢弃当前草稿？",
+      content: "会恢复到最近一次发布的版本，未发布修改将被移除。",
+      okText: "丢弃草稿",
+      cancelText: "取消",
+      onOk: () => handleDiscardDraft()
+    });
+  };
+
+  const openDeleteScriptConfirm = () => {
+    if (!currentScript?.id) {
+      messageApi.warning("请先保存脚本");
+      return;
+    }
+
+    void modal.confirm({
+      title: "确认删除这个工具？",
+      content: "删除后不可恢复。",
+      okText: "删除",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      onOk: () => handleDeleteScript()
+    });
+  };
+
   const handleExecute = async () => {
     if (!currentScript?.id) {
       messageApi.warning("请先保存脚本");
@@ -1096,6 +1150,69 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     setExecutionJsonInput(executionInitialState.jsonText);
     setExecutionValidationError(null);
   };
+
+  const publishMenuItems: MenuProps["items"] = headerActionModel.publishMenuKeys.map((key) => ({
+    key,
+    icon: <ExportOutlined />,
+    label: "发布到仓库",
+    onClick: () => void openPublishToRepositoryModal()
+  }));
+
+  const dangerousMoreActionKeys = new Set(["discard-draft", "delete"]);
+  const moreMenuItems: MenuProps["items"] = [
+    ...headerActionModel.moreActionKeys
+      .filter((key) => !dangerousMoreActionKeys.has(key))
+      .map((key) => {
+        if (key === "validate") {
+          return {
+            key,
+            icon: <CheckCircleOutlined />,
+            label: "校验",
+            onClick: () => void handleValidate()
+          };
+        }
+
+        if (key === "copy") {
+          return {
+            key,
+            icon: <CopyOutlined />,
+            label: "复制工具",
+            onClick: () => navigate(`/scripts/new?copyFrom=${encodeURIComponent(currentScript?.id ?? "")}`)
+          };
+        }
+
+        return {
+          key,
+          icon: <ImportOutlined />,
+          label: "粘贴生成结果",
+          onClick: () => setGeneratedScriptModalOpen(true)
+        };
+      }),
+    ...(headerActionModel.moreActionKeys.some((key) => dangerousMoreActionKeys.has(key))
+      ? [{ type: "divider" as const }]
+      : []),
+    ...headerActionModel.moreActionKeys
+      .filter((key) => dangerousMoreActionKeys.has(key))
+      .map((key) => {
+        if (key === "discard-draft") {
+          return {
+            key,
+            icon: <RollbackOutlined />,
+            label: "丢弃草稿",
+            danger: true,
+            onClick: openDiscardDraftConfirm
+          };
+        }
+
+        return {
+          key,
+          icon: <DeleteOutlined />,
+          label: "删除",
+          danger: true,
+          onClick: openDeleteScriptConfirm
+        };
+      })
+  ];
 
   const handleTabChange = (key: string) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -1291,6 +1408,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   return (
     <>
       {contextHolder}
+      {modalContextHolder}
       <Modal
         title="粘贴 generate-script 输出"
         open={generatedScriptModalOpen}
@@ -1658,98 +1776,57 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   {mode === "create" ? "新建工具" : currentScript?.name || "工具详情"}
                 </Typography.Title>
                 {currentScript?.description ? <Text type="secondary">{currentScript.description}</Text> : null}
+                {!isReadOnlyScript ? (
+                  <Text type="secondary" className="script-editor-page__header-hint">
+                    发布会自动保存并校验；发布到仓库会在发布后同步导出仓库版本。
+                  </Text>
+                ) : null}
               </Space>
             </Col>
             <Col>
-              <Space className="page-card-actions" wrap>
-                {mode === "create" && canImportGeneratedScript && !isReadOnlyScript ? (
-                  <Button icon={<ImportOutlined />} onClick={() => setGeneratedScriptModalOpen(true)}>
-                    粘贴生成结果
-                  </Button>
-                ) : null}
-                {mode === "edit" && currentScript && !isReadOnlyScript ? (
-                  <Button
-                    icon={<CopyOutlined />}
-                    onClick={() => navigate(`/scripts/new?copyFrom=${encodeURIComponent(currentScript.id)}`)}
-                  >
-                    复制工具
-                  </Button>
-                ) : null}
-                {currentScript?.scope === "REPOSITORY" ? (
+              <Space className="page-card-actions script-editor-page__header-actions" wrap>
+                {headerActionModel.showForkOnly && currentScript?.scope === "REPOSITORY" ? (
                   <Button icon={<ForkOutlined />} type="primary" onClick={openForkModal} loading={forkingRepositoryTool}>
                     Fork 到我的工具
                   </Button>
-                ) : null}
-                {mode === "edit" && currentScript && !isReadOnlyScript ? (
-                  <Popconfirm
-                    title="确认删除这个工具？"
-                    description="删除后不可恢复。"
-                    okText="删除"
-                    cancelText="取消"
-                    okButtonProps={{ danger: true, loading: deletingScript }}
-                    onConfirm={() => void handleDeleteScript()}
-                  >
-                    <Button
-                      danger
-                      icon={<DeleteOutlined />}
-                      loading={deletingScript}
-                    >
-                      删除
-                    </Button>
-                  </Popconfirm>
-                ) : null}
-                {!isReadOnlyScript ? (
-                  <Button
-                    icon={<CheckCircleOutlined />}
-                    onClick={() => void handleValidate()}
-                    loading={validating}
-                  >
-                    校验
-                  </Button>
-                ) : null}
-                {!isReadOnlyScript && hasUnpublishedChanges ? (
-                  <Popconfirm
-                    title="确认丢弃当前草稿？"
-                    description="会恢复到最近一次发布的版本，未发布修改将被移除。"
-                    okText="丢弃草稿"
-                    cancelText="取消"
-                    onConfirm={() => void handleDiscardDraft()}
-                  >
-                    <Button icon={<RollbackOutlined />} loading={discardingDraft}>
-                      丢弃草稿
-                    </Button>
-                  </Popconfirm>
-                ) : null}
-                {!isReadOnlyScript ? (
-                  <Button
-                    icon={<RocketOutlined />}
-                    type="primary"
-                    ghost
-                    onClick={() => void handlePublish()}
-                    loading={publishing}
-                  >
-                    本地发布
-                  </Button>
-                ) : null}
-                {canPublishToRepository ? (
-                  <Button
-                    icon={<ExportOutlined />}
-                    onClick={() => void openPublishToRepositoryModal()}
-                    loading={publishingToRepository || publishMetadataLoading}
-                  >
-                    发布到仓库
-                  </Button>
-                ) : null}
-                {!isReadOnlyScript ? (
-                  <Button
-                    icon={<SaveOutlined />}
-                    type="primary"
-                    onClick={() => void handleSave()}
-                    loading={saving}
-                  >
-                    保存
-                  </Button>
-                ) : null}
+                ) : (
+                  <>
+                    {headerActionModel.showSave ? (
+                      <Button
+                        icon={<SaveOutlined />}
+                        type="primary"
+                        onClick={() => void handleSave()}
+                        loading={saving}
+                      >
+                        保存
+                      </Button>
+                    ) : null}
+                    {headerActionModel.showPublish ? (
+                      headerActionModel.publishMenuKeys.length > 0 ? (
+                        <Dropdown.Button
+                          menu={{ items: publishMenuItems }}
+                          onClick={() => void handlePublish()}
+                          loading={publishing || publishingToRepository || publishMetadataLoading}
+                        >
+                          发布
+                        </Dropdown.Button>
+                      ) : (
+                        <Button
+                          icon={<RocketOutlined />}
+                          onClick={() => void handlePublish()}
+                          loading={publishing}
+                        >
+                          发布
+                        </Button>
+                      )
+                    ) : null}
+                    {headerActionModel.showMore ? (
+                      <Dropdown trigger={["click"]} menu={{ items: moreMenuItems }}>
+                        <Button icon={<MoreOutlined />}>更多</Button>
+                      </Dropdown>
+                    ) : null}
+                  </>
+                )}
               </Space>
             </Col>
           </Row>

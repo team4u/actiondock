@@ -552,6 +552,21 @@ a {
   padding-bottom: 4px;
 }
 
+.script-editor-page__header-hint {
+  max-width: 42rem;
+}
+
+.script-editor-page__header-actions {
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.script-editor-page__header-actions .ant-btn,
+.script-editor-page__header-actions .ant-dropdown-button {
+  white-space: nowrap;
+}
+
 .script-editor-page__execution-toolbar {
   display: flex;
   align-items: center;
@@ -1019,6 +1034,14 @@ a {
   .app-header__actions .ant-btn,
   .page-card-actions .ant-btn,
   .script-list-toolbar__actions .ant-btn {
+    width: 100%;
+  }
+
+  .page-card-actions .ant-dropdown-button {
+    width: 100%;
+  }
+
+  .page-card-actions .ant-dropdown-button .ant-btn {
     width: 100%;
   }
 

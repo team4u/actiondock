@@ -232,6 +232,9 @@ class ScriptApplicationServiceTest {
 
     @Test
     void deleteRemovesSchedulesBeforeDeletingScript() {
+        when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("script-1")));
+
         service.delete("script-1");
 
         verify(scriptScheduleRepository).deleteByScriptId("script-1");
