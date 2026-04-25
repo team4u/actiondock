@@ -599,7 +599,7 @@ export function ToolLibraryPage() {
                 刷新
               </Button>
               <Button icon={<DownloadOutlined />} onClick={handleExportVisible} disabled={filteredScripts.every((item) => !isEditableAsset(item))}>
-                导出当前可编辑
+                导出可编辑
               </Button>
               <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
                 导入工具

@@ -199,7 +199,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                         description={`当前${label}为空，可添加字段生成 schema`}
                       />
                       <Button type="primary" icon={<PlusOutlined />} onClick={addField} disabled={disabled}>
-                        新增第一个字段
+                        添加字段
                       </Button>
                     </div>
                   ) : (

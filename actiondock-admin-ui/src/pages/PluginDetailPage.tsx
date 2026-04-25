@@ -685,7 +685,7 @@ export function PluginDetailPage() {
                                 disabled={!plugin?.started || !currentAction}
                                 block
                               >
-                                调试动作
+                                调试
                               </Button>
                             </Space>
                           </Card>

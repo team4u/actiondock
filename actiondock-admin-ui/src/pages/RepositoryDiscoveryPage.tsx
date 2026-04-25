@@ -168,7 +168,7 @@ export function RepositoryDiscoveryPage() {
 
     await modal.confirm({
       title: action === "install" ? "安装工具" : "更新工具",
-      okText: action === "install" ? "开始安装" : "开始更新",
+      okText: action === "install" ? "安装" : "更新",
       cancelText: "取消",
       content: (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>

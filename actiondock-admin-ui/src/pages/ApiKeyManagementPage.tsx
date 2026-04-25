@@ -63,7 +63,7 @@ export function ApiKeyManagementPage() {
                     style={{ paddingInline: 0 }}
                     onClick={() => navigate(returnPath)}
                   >
-                    返回上一页
+                    返回
                   </Button>
                 ) : null}
                 <Title level={4} style={{ margin: 0 }}>
@@ -79,7 +79,7 @@ export function ApiKeyManagementPage() {
               <Space className="page-card-actions" wrap>
                 <Button onClick={handleClear}>清除</Button>
                 <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>
-                  {returnPath ? "保存并返回" : "保存"}
+                  保存
                 </Button>
               </Space>
             </Col>

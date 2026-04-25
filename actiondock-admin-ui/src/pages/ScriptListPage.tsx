@@ -242,7 +242,7 @@ export function ScriptListPage() {
               disabled={!isPublished}
               onClick={() => navigate(`/run/${record.id}`)}
             >
-              正式使用
+              运行
             </Button>
           </Space>
         );

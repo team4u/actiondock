@@ -1046,7 +1046,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     void modal.confirm({
       title: "确认丢弃当前草稿？",
       content: "会恢复到最近一次发布的版本，未发布修改将被移除。",
-      okText: "丢弃草稿",
+      okText: "丢弃",
       cancelText: "取消",
       onOk: () => handleDiscardDraft()
     });
@@ -1184,7 +1184,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         return {
           key,
           icon: <ImportOutlined />,
-          label: "粘贴生成结果",
+          label: "粘贴结果",
           onClick: () => setGeneratedScriptModalOpen(true)
         };
       }),
@@ -1412,7 +1412,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       <Modal
         title="粘贴 generate-script 输出"
         open={generatedScriptModalOpen}
-        okText="导入并回填"
+        okText="导入"
         cancelText="取消"
         onOk={handleImportGeneratedScript}
         onCancel={() => setGeneratedScriptModalOpen(false)}
@@ -1439,7 +1439,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         open={publishToRepositoryOpen}
         onCancel={() => setPublishToRepositoryOpen(false)}
         onOk={() => void handlePublishToRepository()}
-        okText="发布到仓库"
+        okText="发布"
         cancelText="取消"
         confirmLoading={publishingToRepository}
         width={760}
@@ -1579,7 +1579,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         open={forkModalOpen}
         onCancel={() => setForkModalOpen(false)}
         onOk={() => void handleForkRepositoryScript()}
-        okText="创建 Fork"
+        okText="确认 Fork"
         cancelText="取消"
         confirmLoading={forkingRepositoryTool}
         destroyOnHidden
@@ -2362,7 +2362,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                                   onClick={() => void loadExecutionHistory(currentScript.id)}
                                   loading={historyLoading}
                                 >
-                                  刷新历史
+                                  刷新记录
                                 </Button>
                                 <Popconfirm
                                   title="确认清空当前脚本的历史执行结果？"

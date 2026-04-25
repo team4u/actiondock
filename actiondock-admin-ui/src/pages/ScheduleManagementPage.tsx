@@ -337,10 +337,10 @@ export function ScheduleManagementPage() {
           </Space>
           <Space wrap className="script-list-toolbar__actions">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
-              新建定时任务
+              新建任务
             </Button>
             <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
-              导入定时任务
+              导入任务
             </Button>
             <Button icon={<DownloadOutlined />} disabled={loading || importing || schedules.length === 0} onClick={handleExportAll}>
               导出全部

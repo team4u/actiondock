@@ -273,7 +273,7 @@ export function ScriptRunPage() {
         <div className={`run-page run-page--${colorMode}`}>
           <div className="run-page__topbar">
             <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate(backPath)}>
-              返回工具列表
+              返回列表
             </Button>
           </div>
           <StatusCallout
@@ -281,7 +281,7 @@ export function ScriptRunPage() {
             description={pageError.description}
             action={
               <Button type="primary" onClick={() => navigate(backPath)}>
-                返回管理台
+                返回
               </Button>
             }
           />
@@ -296,10 +296,10 @@ export function ScriptRunPage() {
       <div className={`run-page run-page--${colorMode}`}>
         <div className="run-page__topbar">
           <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate(backPath)}>
-            返回工具列表
+            返回列表
           </Button>
           <Button icon={<ReloadOutlined />} onClick={handleReset}>
-            重置为默认值
+            重置默认值
           </Button>
         </div>
 
