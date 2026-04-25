@@ -1,4 +1,4 @@
-import type { PluginDependency, PluginView } from "./types";
+import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition } from "./types";
 
 const PLUGIN_INVOKE_PATTERN = /plugins\s*\.\s*invoke\s*\(\s*(["'`])([^"'`]+)\1\s*,\s*(["'`])([^"'`]+)\3/g;
 
@@ -30,4 +30,24 @@ export function extractPluginDependenciesFromSource(source: string, plugins: Plu
       requiredActions: [...actions]
     };
   });
+}
+
+export function resolveEffectivePluginDependencies(
+  script: ScriptDefinition,
+  descriptor: RepositoryToolDescriptor | undefined,
+  plugins: PluginView[]
+): PluginDependency[] {
+  if (descriptor?.pluginDependencies.length) {
+    return descriptor.pluginDependencies;
+  }
+
+  if (script.pluginDependencies?.length) {
+    return script.pluginDependencies;
+  }
+
+  if (script.type !== "GROOVY") {
+    return [];
+  }
+
+  return extractPluginDependenciesFromSource(script.source, plugins);
 }

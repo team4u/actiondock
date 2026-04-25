@@ -37,6 +37,7 @@ import {
   createScript,
   forkRepositoryTool,
   getRepositoryTool,
+  listPlugins,
   listRepositories,
   listRepositoryTools,
   listScripts,
@@ -56,7 +57,8 @@ import {
   formatScriptExportFileName,
   parseScriptImportBundle
 } from "../scriptTransfer";
-import type { PluginDependency, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
+import { resolveEffectivePluginDependencies } from "../pluginDependencies";
+import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
@@ -106,6 +108,7 @@ export function ToolLibraryPage() {
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
   const [toolDescriptors, setToolDescriptors] = useState<RepositoryToolDescriptor[]>([]);
+  const [plugins, setPlugins] = useState<PluginView[]>([]);
   const [selectedScriptIds, setSelectedScriptIds] = useState<Key[]>([]);
   const [searchText, setSearchText] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
@@ -119,12 +122,17 @@ export function ToolLibraryPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [scriptData, descriptorData] = await Promise.all([listScripts(), listRepositoryTools()]);
+      const [scriptData, descriptorData, pluginData] = await Promise.all([
+        listScripts(),
+        listRepositoryTools(),
+        listPlugins().catch(() => [])
+      ]);
       const sortedScripts = [...scriptData].sort((left, right) =>
         (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "")
       );
       setScripts(sortedScripts);
       setToolDescriptors(descriptorData);
+      setPlugins(pluginData);
       setSelectedScriptIds((previous) =>
         previous.filter((id) =>
           sortedScripts.some((script) => script.id === id && isEditableAsset(script))
@@ -501,6 +509,7 @@ export function ToolLibraryPage() {
       width: 160,
       render: (_value: unknown, record) => {
         const descriptor = descriptorMap.get(record.id);
+        const pluginDependencyCount = resolveEffectivePluginDependencies(record, descriptor, plugins).length;
         return (
           <Space wrap size={[4, 4]}>
             {record.scope !== "REPOSITORY" && (
@@ -510,7 +519,7 @@ export function ToolLibraryPage() {
             )}
             {record.scope === "REPOSITORY" ? <Tag>只读</Tag> : null}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-            {descriptor?.pluginDependencies.length ? <Tag color="geekblue">插件依赖 {descriptor.pluginDependencies.length}</Tag> : null}
+            {pluginDependencyCount > 0 ? <Tag color="geekblue">插件依赖 {pluginDependencyCount}</Tag> : null}
             {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
