@@ -1,0 +1,46 @@
+{
+  "bin": {
+    "actiondock-app-spring": "jdeploy-bundle/jdeploy.js"
+  },
+  "author": "",
+  "description": "",
+  "main": "index.js",
+  "preferGlobal": true,
+  "repository": "",
+  "version": "1.0.0",
+  "jdeploy": {
+    "jdk": false,
+    "generateLegacyBundles": false,
+    "javaVersion": "21",
+    "jar": "target/actiondock-app-spring-0.2.0.jar",
+    "javafx": false,
+    "title": "Actiondock App Spring",
+    "installers": [
+      "mac-x64",
+      "mac-arm64",
+      "win",
+      "linux"
+    ],
+    "bundles": [
+      "mac-x64",
+      "mac-arm64",
+      "win",
+      "linux"
+    ]
+  },
+  "dependencies": {
+    "command-exists-promise": "^2.0.2",
+    "node-fetch": "2.6.7",
+    "tar": "^4.4.8",
+    "yauzl": "^2.10.0",
+    "shelljs": "^0.8.4"
+  },
+  "license": "ISC",
+  "name": "actiondock-app-spring",
+  "files": [
+    "jdeploy-bundle"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
