@@ -67,4 +67,8 @@ app:
       timeout-seconds: 30
 ```
 
-如果本地曾运行过包含 page 能力的旧版本，开发阶段请删除 `~/.scriptflow/data/dsl-runtime*` 后再重新启动，避免旧 H2 文件残留未使用的 page 表。
+默认运行时目录：
+
+- 数据库：`~/.scriptflow/data/dsl-runtime*`
+- 插件：`~/.scriptflow/plugins`
+- 仓库缓存：`~/.scriptflow/repositories`

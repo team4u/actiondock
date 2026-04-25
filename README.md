@@ -25,6 +25,7 @@
 - **多运行方式**：支持正式页面、Web API 与薄封装 REST CLI 三种统一调用方式
 - **在线编辑器**：集成 Monaco Editor，提供语法高亮和代码补全
 - **执行追踪**：完整的执行记录和状态追踪
+- **仓库发布管理**：支持将脚本发布到本地仓库或 Git 仓库，实现团队共享和版本管理
 
 ## 技术栈
 
@@ -174,11 +175,135 @@ scriptflow
 | PUT | `/api/config-values/{key}` | 更新配置值 |
 | DELETE | `/api/config-values/{key}` | 删除配置值 |
 
+### 仓库管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/repositories` | 获取所有仓库列表 |
+| POST | `/api/repositories` | 创建仓库定义 |
+| PUT | `/api/repositories/{id}` | 更新仓库定义 |
+| DELETE | `/api/repositories/{id}` | 删除仓库 |
+| POST | `/api/repositories/{id}/sync` | 同步仓库工具列表 |
+| GET | `/api/repositories/tools` | 获取所有仓库的工具列表 |
+| GET | `/api/repositories/{id}/tools` | 获取指定仓库的工具列表 |
+| GET | `/api/repositories/{id}/tools/{toolId}` | 获取工具详情 |
+| POST | `/api/repositories/{id}/tools/{toolId}/install` | 安装工具到本地 |
+| POST | `/api/repositories/{id}/tools/{toolId}/update` | 更新已安装的工具 |
+| POST | `/api/repositories/{id}/publish` | 发布脚本到仓库 |
+
+### 已安装工具管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| DELETE | `/api/installed-tools/{scriptId}` | 卸载已安装的仓库工具 |
+
 ### 响应视图
 
 执行接口支持 `responseView` 参数：
 - `RESULT`（默认）：轻量级响应，按 Schema 投影输出字段
 - `DEBUG`：完整响应，包含原始输入和输出
+
+## 仓库发布管理
+
+ScriptFlow 支持将脚本发布到本地仓库或 Git 仓库，实现团队内的脚本共享和版本管理。
+
+### 脚本范围
+
+脚本支持四种作用域：
+
+| 范围 | 说明 |
+|------|------|
+| `PERSONAL` | 个人脚本，仅创建者可见和编辑 |
+| `REPOSITORY` | 仓库工具，由仓库安装到本地的脚本，可更新但不可直接编辑 |
+| `FORK` | Fork 脚本，从仓库工具 fork 到个人的副本，可自由编辑 |
+| `SAMPLE` | 示例脚本，系统内置的示例工具 |
+
+### 仓库类型
+
+| 类型 | 说明 |
+|------|------|
+| `LOCAL_DIR` | 本地目录仓库，适合个人或小团队共享 |
+| `GIT` | Git 仓库，支持从远程仓库拉取工具，适合团队协作 |
+| `HTTP` | HTTP 仓库，通过 HTTP 接口获取工具列表（暂不支持发布） |
+
+### 仓库信任级别
+
+| 级别 | 说明 |
+|------|------|
+| `TRUSTED` | 可信仓库，安装时自动安装调度配置 |
+| `UNTRUSTED` | 不可信仓库，安装时不自动安装调度配置 |
+
+### 仓库工具文件结构
+
+仓库采用约定优于配置的设计，工具文件存放在仓库根目录的 `tools/` 目录下：
+
+```
+repository-root/
+├── scriptflow.repository.json    # 仓库索引文件
+└── tools/
+    └── {toolId}/
+        ├── tool.json             # 工具元数据
+        ├── config-template.json  # 可选，配置模板
+        ├── schedule-template.json # 可选，调度模板
+        └── source.{ext}          # 脚本源码（.groovy 或 .py）
+```
+
+### 工具元数据 (tool.json)
+
+```json
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "description": "示例工具",
+  "version": "1.0.0",
+  "scriptId": "hello-world",
+  "type": "GROOVY",
+  "tags": ["example", "demo"],
+  "inputSchema": { ... },
+  "outputSchema": { ... },
+  "configTemplatePath": "config-template.json",
+  "scheduleTemplatePath": "schedule-template.json",
+  "sourcePath": "source.groovy"
+}
+```
+
+### 发布脚本到仓库
+
+在脚本编辑器页面，点击"发布到仓库"按钮，选择目标仓库并填写工具 ID 和版本即可发布。
+
+发布操作会将脚本的已发布版本写入仓库目录：
+- 创建 `tools/{toolId}/tool.json` 元数据文件
+- 创建 `tools/{toolId}/source.{ext}` 源码文件
+- 对于 Git 仓库，自动提交并推送更改
+
+### 从仓库安装工具
+
+1. **仓库管理**：在管理界面添加并同步仓库
+2. **工具发现**：访问"发现"页面浏览所有可用工具
+3. **安装**：点击安装按钮，将工具安装到本地
+4. **使用**：安装后的工具以 `REPOSITORY` 范围存在，可执行但不可直接编辑
+
+### Fork 仓库工具
+
+对于已安装的仓库工具，可以点击"Fork"创建个人副本：
+- Fork 后的脚本以 `FORK` 范围存在
+- 继承原始工具的代码和 Schema
+- 可自由编辑和发布
+
+### 目录结构约定
+
+```
+~/.scriptflow/
+├── config.json              # CLI 配置文件
+├── data/
+│   └── dsl-runtime.mv.db    # H2 数据库文件
+├── plugins/                 # 插件目录
+│   └── .scriptflow-config/  # 插件配置文件
+└── repositories/            # 本地仓库根目录
+    └── {repository-alias}/  # 各仓库工作目录
+        ├── .git/            # Git 仓库（可选）
+        └── tools/           # 工具目录
+```
 
 ## 脚本示例
 
