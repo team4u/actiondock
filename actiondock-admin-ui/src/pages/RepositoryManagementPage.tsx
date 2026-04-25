@@ -52,6 +52,7 @@ interface RepositoryFormValues {
   branch?: string;
   enabled: boolean;
   trustLevel: RepositoryDefinition["trustLevel"];
+  usage: NonNullable<RepositoryDefinition["usage"]>;
   description?: string;
 }
 
@@ -68,6 +69,10 @@ function getTypeLabel(type: RepositoryDefinition["type"]): string {
 
 function getTrustTag(level: RepositoryDefinition["trustLevel"]) {
   return level === "TRUSTED" ? <Tag color="green">可信</Tag> : <Tag color="gold">未信任</Tag>;
+}
+
+function getUsageTag(usage?: RepositoryDefinition["usage"]) {
+  return usage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag color="blue">普通分发</Tag>;
 }
 
 export function RepositoryManagementPage() {
@@ -108,6 +113,7 @@ export function RepositoryManagementPage() {
       branch: "main",
       enabled: true,
       trustLevel: "UNTRUSTED",
+      usage: "DISTRIBUTION",
       description: ""
     });
     setEditorState({ mode: "create" });
@@ -122,6 +128,7 @@ export function RepositoryManagementPage() {
       branch: item.branch,
       enabled: item.enabled,
       trustLevel: item.trustLevel,
+      usage: item.usage ?? "DISTRIBUTION",
       description: item.description ?? ""
     });
     setEditorState({ mode: "edit", repositoryId: item.id });
@@ -144,6 +151,7 @@ export function RepositoryManagementPage() {
         branch: values.type === "GIT" ? values.branch?.trim() || "main" : undefined,
         enabled: values.enabled,
         trustLevel: values.trustLevel,
+        usage: values.type === "HTTP" ? "DISTRIBUTION" : values.usage,
         description: values.description?.trim() || undefined
       };
       const saved = editorState?.mode === "edit" && editorState.repositoryId
@@ -194,6 +202,7 @@ export function RepositoryManagementPage() {
           <Space wrap size={[8, 8]}>
             <TableLinkCell onClick={() => openEdit(record)}>{record.name}</TableLinkCell>
             {record.enabled ? <Tag color="blue">已启用</Tag> : <Tag>已禁用</Tag>}
+            {getUsageTag(record.usage)}
           </Space>
           <Text type="secondary">{record.description || record.url}</Text>
         </Space>
@@ -346,6 +355,20 @@ export function RepositoryManagementPage() {
                 />
               </Form.Item>
             </Space>
+
+            <Form.Item
+              label="仓库用途"
+              name="usage"
+              tooltip="开发仓库中的脚本可同步为本地可编辑源码，并发布回来源仓库。"
+            >
+              <Select
+                options={[
+                  { value: "DISTRIBUTION", label: "普通分发仓库" },
+                  { value: "DEVELOPMENT", label: "开发仓库" }
+                ]}
+                disabled={repositoryType === "HTTP"}
+              />
+            </Form.Item>
 
             <Form.Item
               label={repositoryType === "LOCAL_DIR" ? "本地路径" : "地址"}

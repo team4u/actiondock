@@ -9,8 +9,10 @@ import {
   discardDraft,
   deleteScript,
   getScript,
+  getDevelopmentStatus,
   listPlugins,
   listScripts,
+  pullDevelopmentScript,
   publishScript,
   updateScript,
   validateScript
@@ -20,7 +22,7 @@ import { createEmptySchemaEditorState, deserializeSchema, deserializeSchemaJsonT
 import { extractPluginDependenciesFromSource } from "../../pluginDependencies";
 import { parseGeneratedScriptText } from "../../generatedScript";
 import { buildScriptEditorHeaderActionModel } from "../scriptEditorHeaderActions";
-import type { PluginView, ScriptDefinition, ScriptType } from "../../types";
+import type { DevelopmentStatus, PluginView, ScriptDefinition, ScriptType } from "../../types";
 import type { SchemaEditorState } from "../../schema";
 import {
   type ScriptEditorFormValues,
@@ -64,6 +66,8 @@ export function useScriptEditor({
   const [scriptsLoading, setScriptsLoading] = useState(false);
   const [availablePlugins, setAvailablePlugins] = useState<PluginView[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(false);
+  const [developmentStatus, setDevelopmentStatus] = useState<DevelopmentStatus | null>(null);
+  const [developmentPulling, setDevelopmentPulling] = useState(false);
 
   const selectedScriptType = (form.getFieldValue("type") as ScriptType | undefined) ?? "GROOVY";
   const copyFromScriptId = mode === "create" ? searchParams.get("copyFrom")?.trim() || null : null;
@@ -103,6 +107,18 @@ export function useScriptEditor({
     setSourceText(script.source);
     setInputSchemaState(deserializeSchema(script.inputSchema));
     setOutputSchemaState(deserializeSchema(script.outputSchema));
+  };
+
+  const loadDevelopmentStatus = async (script: ScriptDefinition | null = currentScript) => {
+    if (!script || script.scope !== "DEVELOPMENT") {
+      setDevelopmentStatus(null);
+      return;
+    }
+    try {
+      setDevelopmentStatus(await getDevelopmentStatus(script.id));
+    } catch {
+      setDevelopmentStatus(null);
+    }
   };
 
   const applyCreateDraftToEditor = (draft: ScriptDefinition) => {
@@ -233,7 +249,10 @@ export function useScriptEditor({
     if (mode === "create" || !id) return;
     setLoading(true);
     void getScript(id)
-      .then((script) => applyScriptToEditor(script))
+      .then((script) => {
+        applyScriptToEditor(script);
+        void loadDevelopmentStatus(script);
+      })
       .catch((error) => {
         const detail = error instanceof ApiError ? error.message : "加载脚本失败";
         messageApi.error(detail);
@@ -324,6 +343,7 @@ export function useScriptEditor({
     setSaving(true);
     try {
       const saved = await persistCurrentScript();
+      await loadDevelopmentStatus(saved);
       await loadScriptReferences();
       messageApi.success("保存成功");
       if (mode === "create") {
@@ -378,6 +398,45 @@ export function useScriptEditor({
       await ensureCurrentScriptPublished("保存、校验并发布成功");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handlePullDevelopment = async () => {
+    if (!currentScript?.id || currentScript.scope !== "DEVELOPMENT") {
+      return;
+    }
+    setDevelopmentPulling(true);
+    try {
+      const pulled = await pullDevelopmentScript(currentScript.id);
+      applyScriptToEditor(pulled);
+      await loadScriptReferences();
+      await loadDevelopmentStatus(pulled);
+      messageApi.success("已拉取远端更新");
+    } catch (error) {
+      const conflict = error instanceof ApiError
+        && typeof error.data === "object"
+        && error.data !== null
+        && (error.data as { code?: string }).code === "DEVELOPMENT_CONFLICT";
+      if (conflict) {
+        void modal.confirm({
+          title: "远端已更新，本地也有修改",
+          content: "确认后将放弃本地未发布修改，并使用远端版本覆盖当前开发脚本。",
+          okText: "放弃本地并拉取",
+          cancelText: "取消",
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            const pulled = await pullDevelopmentScript(currentScript.id, true);
+            applyScriptToEditor(pulled);
+            await loadDevelopmentStatus(pulled);
+            messageApi.success("已使用远端版本覆盖本地开发脚本");
+          }
+        });
+        return;
+      }
+      const detail = error instanceof ApiError ? error.message : "拉取远端失败";
+      messageApi.error(detail);
+    } finally {
+      setDevelopmentPulling(false);
     }
   };
 
@@ -519,9 +578,12 @@ export function useScriptEditor({
     discardingDraft,
     validating,
     detectedPluginDependencies,
+    developmentStatus,
+    developmentPulling,
     handleSave,
     handlePublish,
     handleValidate,
+    handlePullDevelopment,
     handleScriptTypeChange,
     handleImportGeneratedScript,
     ensureCurrentScriptPublished,

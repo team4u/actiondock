@@ -1,6 +1,6 @@
 export type ScriptStatus = "DRAFT" | "PUBLISHED";
 export type ScriptType = "GROOVY" | "PYTHON";
-export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "SAMPLE";
+export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "DEVELOPMENT" | "SAMPLE";
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
@@ -8,6 +8,7 @@ export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED";
 export type ExecutionLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
+export type RepositoryUsage = "DISTRIBUTION" | "DEVELOPMENT";
 
 export interface PublishedScriptSnapshot {
   name: string;
@@ -30,6 +31,11 @@ export interface ScriptDefinition {
   repositoryId?: string;
   repositoryToolId?: string;
   repositoryVersion?: string;
+  sourcePath?: string;
+  sourceCommit?: string;
+  sourceDigest?: string;
+  sourceSyncedAt?: string;
+  dirty?: boolean;
   editable?: boolean;
   owner?: string;
   description?: string;
@@ -242,6 +248,7 @@ export interface RepositoryDefinition {
   branch?: string;
   enabled: boolean;
   trustLevel: RepositoryTrustLevel;
+  usage?: RepositoryUsage;
   description?: string;
   lastSyncedAt?: string;
   createdAt?: string;
@@ -271,6 +278,9 @@ export interface RepositoryToolDescriptor {
   installedVersion?: string;
   updateAvailable: boolean;
   trusted: boolean;
+  repositoryUsage?: RepositoryUsage;
+  developmentScriptId?: string;
+  developmentDirty?: boolean;
 }
 
 export interface RepositoryConfigTemplateItem {
@@ -368,4 +378,20 @@ export interface RepositoryPublishRequest {
   tags?: string[];
   scheduleIds?: string[];
   configItems?: RepositoryPublishConfigItem[];
+  force?: boolean;
+}
+
+export interface DevelopmentStatus {
+  scriptId: string;
+  repositoryId: string;
+  repositoryToolId: string;
+  repositoryVersion?: string;
+  localCommit?: string;
+  remoteCommit?: string;
+  localDigest?: string;
+  remoteDigest?: string;
+  dirty: boolean;
+  remoteChanged: boolean;
+  remoteVersion?: string;
+  sourceSyncedAt?: string;
 }

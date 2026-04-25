@@ -18,6 +18,7 @@ import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.SubmitMode;
+import org.team4u.actiondock.repository.RepositoryCatalogService;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -61,6 +62,9 @@ class ScriptControllerTest {
 
     @MockBean
     private ExecutionApplicationService executionApplicationService;
+
+    @MockBean
+    private RepositoryCatalogService repositoryCatalogService;
 
     @Test
     void detailReturnsWrappedScriptDefinition() throws Exception {

@@ -120,6 +120,13 @@ public class RepositoryCatalogService {
         if (!List.of("TRUSTED", "UNTRUSTED").contains(trustLevel)) {
             throw new IllegalArgumentException("trustLevel 仅支持 TRUSTED / UNTRUSTED");
         }
+        String usage = normalizeOrDefault(target.getUsage(), "DISTRIBUTION").toUpperCase(Locale.ROOT);
+        if (!List.of("DISTRIBUTION", "DEVELOPMENT").contains(usage)) {
+            throw new IllegalArgumentException("usage 仅支持 DISTRIBUTION / DEVELOPMENT");
+        }
+        if ("HTTP".equals(type) && "DEVELOPMENT".equals(usage)) {
+            throw new IllegalArgumentException("HTTP 仓库不支持作为开发仓库");
+        }
 
         LocalDateTime now = LocalDateTime.now();
         RepositoryDefinition existing = repositoryDefinitionRepository.findById(id).orElse(null);
@@ -131,6 +138,7 @@ public class RepositoryCatalogService {
                 .setBranch("GIT".equals(type) ? normalizeOrDefault(target.getBranch(), "main") : null)
                 .setEnabled(target.isEnabled())
                 .setTrustLevel(trustLevel)
+                .setUsage(usage)
                 .setDescription(normalizeNullable(target.getDescription()))
                 .setLastSyncedAt(existing == null ? null : existing.getLastSyncedAt())
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())
@@ -279,6 +287,144 @@ public class RepositoryCatalogService {
         return installOrUpdateTool(repositoryId, toolId, installSchedules, true, installPluginDependencies, forcePluginUpgrade);
     }
 
+    public ScriptDefinition syncToolForDevelopment(String repositoryId, String toolId, DevelopmentSyncRequest request) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        ensureDevelopmentRepository(repository);
+        RepositoryToolDetail detail = getRepositoryTool(repositoryId, toolId);
+        String scriptId = normalizeOrDefault(request == null ? null : request.scriptId(), detail.descriptor().toolId());
+        ScriptDefinition existing = scriptRepository.findById(scriptId).orElse(null);
+        if (existing != null && existing.getScope() != ScriptScope.DEVELOPMENT) {
+            throw new IllegalArgumentException("脚本 ID 已存在，请指定其他开发脚本 ID: " + scriptId);
+        }
+        ToolSourceState state = resolveToolSourceState(repository, detail);
+        return saveDevelopmentScript(scriptId, existing, detail, state);
+    }
+
+    public DevelopmentStatus getDevelopmentStatus(String scriptId) {
+        ScriptDefinition script = scriptApplicationService.get(scriptId);
+        ensureDevelopmentScript(script);
+        RepositoryDefinition repository = getRepository(script.getRepositoryId());
+        RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
+        ToolSourceState state = resolveToolSourceState(repository, detail);
+        boolean remoteChanged = !Objects.equals(script.getSourceCommit(), state.commit())
+                || !Objects.equals(script.getSourceDigest(), state.digest());
+        boolean dirty = script.isDirty();
+        return new DevelopmentStatus(
+                script.getId(),
+                script.getRepositoryId(),
+                script.getRepositoryToolId(),
+                script.getRepositoryVersion(),
+                script.getSourceCommit(),
+                state.commit(),
+                script.getSourceDigest(),
+                state.digest(),
+                dirty,
+                remoteChanged,
+                detail.descriptor().version(),
+                script.getSourceSyncedAt()
+        );
+    }
+
+    public ScriptDefinition pullDevelopmentScript(String scriptId, boolean force) {
+        ScriptDefinition script = scriptApplicationService.get(scriptId);
+        ensureDevelopmentScript(script);
+        RepositoryDefinition repository = getRepository(script.getRepositoryId());
+        syncRepository(repository.getId());
+        RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
+        ToolSourceState state = resolveToolSourceState(repository, detail);
+        boolean remoteChanged = !Objects.equals(script.getSourceCommit(), state.commit())
+                || !Objects.equals(script.getSourceDigest(), state.digest());
+        if (script.isDirty() && remoteChanged && !force) {
+            throw new DevelopmentConflictException(script.getId(), script.getRepositoryId(), script.getRepositoryToolId());
+        }
+        return saveDevelopmentScript(script.getId(), script, detail, state);
+    }
+
+    private void ensureDevelopmentRepository(RepositoryDefinition repository) {
+        if (!"DEVELOPMENT".equalsIgnoreCase(repository.getUsage())) {
+            throw new IllegalArgumentException("仓库不是开发仓库: " + repository.getId());
+        }
+        if ("HTTP".equals(repository.getType())) {
+            throw new IllegalArgumentException("HTTP 仓库不支持开发同步");
+        }
+    }
+
+    private void ensureDevelopmentScript(ScriptDefinition script) {
+        if (script.getScope() != ScriptScope.DEVELOPMENT) {
+            throw new IllegalArgumentException("脚本不是开发仓库脚本: " + script.getId());
+        }
+        normalize(script.getRepositoryId(), "开发脚本缺少来源仓库");
+        normalize(script.getRepositoryToolId(), "开发脚本缺少来源工具");
+    }
+
+    private ScriptDefinition saveDevelopmentScript(String scriptId,
+                                                   ScriptDefinition existing,
+                                                   RepositoryToolDetail detail,
+                                                   ToolSourceState state) {
+        LocalDateTime now = LocalDateTime.now();
+        Map<String, Object> inputSchema = readSchema(detail.descriptor().repositoryId(), detail.descriptor().inputSchemaPath());
+        Map<String, Object> outputSchema = readSchema(detail.descriptor().repositoryId(), detail.descriptor().outputSchemaPath());
+        ScriptDefinition definition = new ScriptDefinition()
+                .setId(scriptId)
+                .setName(detail.descriptor().displayName())
+                .setType(ScriptType.valueOf(detail.descriptor().type()))
+                .setSource(detail.source())
+                .setInputSchema(inputSchema)
+                .setOutputSchema(outputSchema)
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName(detail.descriptor().displayName())
+                        .setType(ScriptType.valueOf(detail.descriptor().type()))
+                        .setSource(detail.source())
+                        .setInputSchema(inputSchema)
+                        .setOutputSchema(outputSchema))
+                .setVersion(existing == null ? 1 : existing.getVersion())
+                .setScope(ScriptScope.DEVELOPMENT)
+                .setRepositoryId(detail.descriptor().repositoryId())
+                .setRepositoryToolId(detail.descriptor().toolId())
+                .setRepositoryVersion(detail.descriptor().version())
+                .setSourcePath(state.path())
+                .setSourceCommit(state.commit())
+                .setSourceDigest(state.digest())
+                .setSourceSyncedAt(now)
+                .setDirty(false)
+                .setEditable(true)
+                .setOwner(detail.descriptor().owner())
+                .setDescription(detail.descriptor().description())
+                .setTags(detail.descriptor().tags())
+                .setPluginDependencies(detail.descriptor().pluginDependencies())
+                .setCreatedAt(existing == null ? now : existing.getCreatedAt())
+                .setUpdatedAt(now);
+        return scriptRepository.save(definition);
+    }
+
+    private void assertDevelopmentPublishSafe(ScriptDefinition script, RepositoryDefinition repository) {
+        if (!script.isDirty()) {
+            return;
+        }
+        RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
+        ToolSourceState state = resolveToolSourceState(repository, detail);
+        boolean remoteChanged = !Objects.equals(script.getSourceCommit(), state.commit())
+                || !Objects.equals(script.getSourceDigest(), state.digest());
+        if (remoteChanged) {
+            throw new DevelopmentConflictException(script.getId(), script.getRepositoryId(), script.getRepositoryToolId());
+        }
+    }
+
+    private void updateDevelopmentSourceMetadata(ScriptDefinition sourceScript,
+                                                 RepositoryDefinition repository,
+                                                 RepositoryToolDetail detail) {
+        ToolSourceState state = resolveToolSourceState(repository, detail);
+        ScriptDefinition updated = scriptApplicationService.get(sourceScript.getId())
+                .setRepositoryVersion(detail.descriptor().version())
+                .setSourcePath(state.path())
+                .setSourceCommit(state.commit())
+                .setSourceDigest(state.digest())
+                .setSourceSyncedAt(LocalDateTime.now())
+                .setDirty(false);
+        scriptRepository.save(updated);
+    }
+
     public void uninstallTool(String installedScriptId) {
         ScriptDefinition definition = scriptRepository.findById(installedScriptId)
                 .orElseThrow(() -> new IllegalArgumentException("已安装工具不存在: " + installedScriptId));
@@ -309,7 +455,13 @@ public class RepositoryCatalogService {
             ensureLocalDirRepository(repository);
         }
 
-        ScriptDefinition script = scriptApplicationService.getPublished(normalize(request.scriptId(), "scriptId 不能为空"));
+        ScriptDefinition sourceScript = scriptApplicationService.get(normalize(request.scriptId(), "scriptId 不能为空"));
+        if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
+                && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
+                && !request.force()) {
+            assertDevelopmentPublishSafe(sourceScript, repository);
+        }
+        ScriptDefinition script = scriptApplicationService.getPublished(sourceScript.getId());
         String toolId = normalize(request.toolId(), "toolId 不能为空");
         String version = normalize(request.version(), "version 不能为空");
         Path root = resolveRepositoryRoot(repository);
@@ -322,7 +474,13 @@ public class RepositoryCatalogService {
         if ("GIT".equals(repository.getType())) {
             commitAndPush(repository, toolId, version, request.releaseNotes());
         }
-        return getRepositoryTool(repositoryId, toolId).descriptor();
+        RepositoryToolDetail publishedDetail = getRepositoryTool(repositoryId, toolId);
+        if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
+                && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
+                && Objects.equals(sourceScript.getRepositoryToolId(), toolId)) {
+            updateDevelopmentSourceMetadata(sourceScript, repository, publishedDetail);
+        }
+        return publishedDetail.descriptor();
     }
 
     public RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryPluginPublishRequest request) {
@@ -414,6 +572,39 @@ public class RepositoryCatalogService {
                         .orElse(null)).orElse(now))
                 .setUpdatedAt(now);
         return repositoryToolInstallationRepository.save(installation);
+    }
+
+    private ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryToolDetail detail) {
+        String toolPath = findRepositoryToolPath(repository, detail.descriptor().toolId());
+        String digest = computeToolDigest(detail);
+        String commit = "GIT".equals(repository.getType()) ? gitHead(resolveRepositoryRoot(repository)) : null;
+        return new ToolSourceState(toolDirectoryPath(toolPath).value(), commit, digest);
+    }
+
+    private String findRepositoryToolPath(RepositoryDefinition repository, String toolId) {
+        RepositoryIndexFile index = readRepositoryIndex(repository);
+        return safeTools(index).stream()
+                .filter(item -> toolId.equals(item.id()))
+                .findFirst()
+                .map(RepositoryIndexEntry::toolPath)
+                .orElseThrow(() -> new IllegalArgumentException("仓库工具不存在: " + toolId));
+    }
+
+    private String computeToolDigest(RepositoryToolDetail detail) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        RepositoryToolDescriptor descriptor = detail.descriptor();
+        values.put("toolId", descriptor.toolId());
+        values.put("displayName", descriptor.displayName());
+        values.put("version", descriptor.version());
+        values.put("type", descriptor.type());
+        values.put("description", descriptor.description());
+        values.put("owner", descriptor.owner());
+        values.put("tags", descriptor.tags());
+        values.put("pluginDependencies", descriptor.pluginDependencies());
+        values.put("source", detail.source());
+        values.put("inputSchema", readSchema(descriptor.repositoryId(), descriptor.inputSchemaPath()));
+        values.put("outputSchema", readSchema(descriptor.repositoryId(), descriptor.outputSchemaPath()));
+        return sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
     }
 
     private RepositoryPluginInstallResult installOrUpdatePlugin(String repositoryId,
@@ -901,6 +1092,12 @@ public class RepositoryCatalogService {
     private RepositoryToolDescriptor toDescriptor(RepositoryDefinition repository, ToolFile tool, String toolPath) {
         String installedScriptId = repository.getId() + "." + tool.id();
         RepositoryToolInstallation installation = repositoryToolInstallationRepository.findByToolId(installedScriptId).orElse(null);
+        ScriptDefinition developmentScript = scriptRepository.findAll().stream()
+                .filter(script -> script.getScope() == ScriptScope.DEVELOPMENT)
+                .filter(script -> repository.getId().equals(script.getRepositoryId()))
+                .filter(script -> tool.id().equals(script.getRepositoryToolId()))
+                .findFirst()
+                .orElse(null);
         return new RepositoryToolDescriptor(
                 repository.getId(),
                 tool.id(),
@@ -923,7 +1120,10 @@ public class RepositoryCatalogService {
                 installation != null,
                 installation == null ? null : installation.getVersion(),
                 installation != null && !Objects.equals(installation.getVersion(), tool.version()),
-                "TRUSTED".equalsIgnoreCase(repository.getTrustLevel())
+                "TRUSTED".equalsIgnoreCase(repository.getTrustLevel()),
+                normalizeOrDefault(repository.getUsage(), "DISTRIBUTION"),
+                developmentScript == null ? null : developmentScript.getId(),
+                developmentScript != null && developmentScript.isDirty()
         );
     }
 
@@ -1144,6 +1344,28 @@ public class RepositoryCatalogService {
         }
     }
 
+    private String gitHead(Path root) {
+        return runGitOutput(root, List.of("git", "-C", root.toString(), "rev-parse", "HEAD")).trim();
+    }
+
+    private String runGitOutput(Path workdir, List<String> command) {
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.directory(workdir.toFile());
+        try {
+            Process process = builder.start();
+            String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IllegalStateException("Git 命令失败: " + String.join(" ", command) + "\n" + stdout + stderr);
+            }
+            return stdout;
+        } catch (IOException | InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("执行 Git 命令失败: " + String.join(" ", command), exception);
+        }
+    }
+
     private String joinHttpPath(String baseUrl, String relativePath) {
         String normalizedBase = normalize(baseUrl, "仓库地址不能为空");
         while (normalizedBase.endsWith("/")) {
@@ -1237,7 +1459,10 @@ public class RepositoryCatalogService {
             boolean installed,
             String installedVersion,
             boolean updateAvailable,
-            boolean trusted
+            boolean trusted,
+            String repositoryUsage,
+            String developmentScriptId,
+            boolean developmentDirty
     ) {
     }
 
@@ -1258,8 +1483,26 @@ public class RepositoryCatalogService {
             String releaseNotes,
             List<String> tags,
             List<String> scheduleIds,
-            List<RepositoryPublishConfigItem> configItems
+            List<RepositoryPublishConfigItem> configItems,
+            boolean force
     ) {
+    }
+
+    public record DevelopmentSyncRequest(String scriptId) {
+    }
+
+    public record DevelopmentStatus(String scriptId,
+                                    String repositoryId,
+                                    String repositoryToolId,
+                                    String repositoryVersion,
+                                    String localCommit,
+                                    String remoteCommit,
+                                    String localDigest,
+                                    String remoteDigest,
+                                    boolean dirty,
+                                    boolean remoteChanged,
+                                    String remoteVersion,
+                                    LocalDateTime sourceSyncedAt) {
     }
 
     public record RepositoryPluginDescriptor(
@@ -1400,6 +1643,9 @@ public class RepositoryCatalogService {
         }
     }
 
+    private record ToolSourceState(String path, String commit, String digest) {
+    }
+
     public static class RepositoryPluginConflictException extends IllegalArgumentException {
         private final String pluginId;
         private final List<RepositoryPluginConflict> conflicts;
@@ -1447,6 +1693,31 @@ public class RepositoryCatalogService {
 
         public String getVersion() {
             return version;
+        }
+    }
+
+    public static class DevelopmentConflictException extends IllegalArgumentException {
+        private final String scriptId;
+        private final String repositoryId;
+        private final String toolId;
+
+        public DevelopmentConflictException(String scriptId, String repositoryId, String toolId) {
+            super("远端工具已更新，但本地也有未发布修改");
+            this.scriptId = scriptId;
+            this.repositoryId = repositoryId;
+            this.toolId = toolId;
+        }
+
+        public String getScriptId() {
+            return scriptId;
+        }
+
+        public String getRepositoryId() {
+            return repositoryId;
+        }
+
+        public String getToolId() {
+            return toolId;
         }
     }
 }

@@ -3,6 +3,7 @@ import type { MenuProps } from "antd";
 import type {
   PluginDependency,
   PluginView,
+  DevelopmentStatus,
   RepositoryToolDescriptor,
   ScriptDefinition,
   ScriptType
@@ -165,4 +166,7 @@ export interface ScriptEditorContext {
   discardingDraft: boolean;
   validating: boolean;
   detectedPluginDependencies: PluginDependency[];
+  developmentStatus: DevelopmentStatus | null;
+  developmentPulling: boolean;
+  handlePullDevelopment: () => Promise<void>;
 }

@@ -6,6 +6,7 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.schedule.ScriptScheduleDispatcher;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.repository.RepositoryCatalogService;
 
 import java.util.List;
 
@@ -21,13 +22,16 @@ public class ScriptController {
     private final ExecutionApplicationService executionApplicationService;
     private final ScriptScheduleDispatcher scriptScheduleDispatcher;
     private final ExecutionResponseMapper executionResponseMapper;
+    private final RepositoryCatalogService repositoryCatalogService;
 
     public ScriptController(ScriptApplicationService scriptApplicationService,
                             ExecutionApplicationService executionApplicationService,
-                            ScriptScheduleDispatcher scriptScheduleDispatcher) {
+                            ScriptScheduleDispatcher scriptScheduleDispatcher,
+                            RepositoryCatalogService repositoryCatalogService) {
         this.scriptApplicationService = scriptApplicationService;
         this.executionApplicationService = executionApplicationService;
         this.scriptScheduleDispatcher = scriptScheduleDispatcher;
+        this.repositoryCatalogService = repositoryCatalogService;
         this.executionResponseMapper = new ExecutionResponseMapper();
     }
 
@@ -196,6 +200,21 @@ public class ScriptController {
         return ApiResponse.success(
                 toResponse(scriptApplicationService.createFork(id, request.getId(), request.getName()), includeUiSchema),
                 "Fork 创建成功"
+        );
+    }
+
+    @GetMapping("/{id}/development-status")
+    public ApiResponse<RepositoryCatalogService.DevelopmentStatus> developmentStatus(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.getDevelopmentStatus(id));
+    }
+
+    @PostMapping("/{id}/development-pull")
+    public ApiResponse<ScriptDefinition> developmentPull(@PathVariable String id,
+                                                         @RequestParam(defaultValue = "false") boolean force,
+                                                         @RequestParam(defaultValue = "false") boolean includeUiSchema) {
+        return ApiResponse.success(
+                toResponse(repositoryCatalogService.pullDevelopmentScript(id, force), includeUiSchema),
+                "开发脚本已拉取远端更新"
         );
     }
 

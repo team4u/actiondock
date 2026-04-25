@@ -76,6 +76,20 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(RepositoryCatalogService.DevelopmentConflictException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleDevelopmentConflict(RepositoryCatalogService.DevelopmentConflictException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+                exception.getMessage(),
+                400,
+                Map.of(
+                        "code", "DEVELOPMENT_CONFLICT",
+                        "scriptId", exception.getScriptId(),
+                        "repositoryId", exception.getRepositoryId(),
+                        "toolId", exception.getToolId()
+                )
+        ));
+    }
+
     /**
      * 兜底异常处理，捕获所有未处理的异常并返回 500 响应。
      *

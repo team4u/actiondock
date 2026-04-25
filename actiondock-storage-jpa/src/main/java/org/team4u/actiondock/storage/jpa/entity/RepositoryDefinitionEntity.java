@@ -22,6 +22,7 @@ public class RepositoryDefinitionEntity {
     private String branch;
     private boolean enabled = true;
     private String trustLevel;
+    private String usage;
     private String description;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;
@@ -81,6 +82,14 @@ public class RepositoryDefinitionEntity {
 
     public void setTrustLevel(String trustLevel) {
         this.trustLevel = trustLevel;
+    }
+
+    public String getUsage() {
+        return usage;
+    }
+
+    public void setUsage(String usage) {
+        this.usage = usage;
     }
 
     public String getDescription() {

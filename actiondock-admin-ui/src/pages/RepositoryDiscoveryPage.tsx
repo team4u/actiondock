@@ -23,12 +23,15 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ApiError,
+  developRepositoryTool,
   getRepositoryTool,
   installRepositoryTool,
   listRepositories,
   listRepositoryTools,
+  pullDevelopmentScript,
   updateRepositoryTool
 } from "../api";
 import { CodeEditor } from "../components/CodeEditor";
@@ -105,6 +108,7 @@ function renderPluginDependencies(dependencies: PluginDependency[]) {
 }
 
 export function RepositoryDiscoveryPage() {
+  const navigate = useNavigate();
   const colorMode = useColorMode();
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
@@ -264,6 +268,71 @@ export function RepositoryDiscoveryPage() {
     }
   };
 
+  const handleDevelopTool = async (descriptor: RepositoryToolDescriptor, scriptId?: string) => {
+    setActionKey(`develop:${descriptor.repositoryId}:${descriptor.toolId}`);
+    try {
+      const script = await developRepositoryTool(descriptor.repositoryId, descriptor.toolId, { scriptId });
+      messageApi.success("已同步为本地开发脚本");
+      await loadData();
+      navigate(`/scripts/${encodeURIComponent(script.id)}`);
+    } catch (error) {
+      if (error instanceof ApiError && !scriptId && error.message.includes("脚本 ID 已存在")) {
+        let customScriptId = descriptor.toolId;
+        await modal.confirm({
+          title: "指定开发脚本 ID",
+          okText: "同步",
+          cancelText: "取消",
+          content: (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Text type="secondary">默认脚本 ID 已被占用，请输入一个本地开发脚本 ID。</Text>
+              <Input defaultValue={customScriptId} onChange={(event) => { customScriptId = event.target.value; }} />
+            </Space>
+          ),
+          onOk: () => handleDevelopTool(descriptor, customScriptId.trim())
+        });
+        return;
+      }
+      messageApi.error(getErrorMessage(error, "同步开发脚本失败"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const handlePullDevelopmentTool = async (descriptor: RepositoryToolDescriptor) => {
+    if (!descriptor.developmentScriptId) {
+      return;
+    }
+    setActionKey(`pull:${descriptor.developmentScriptId}`);
+    try {
+      await pullDevelopmentScript(descriptor.developmentScriptId);
+      messageApi.success("开发脚本已拉取远端更新");
+      await loadData();
+    } catch (error) {
+      const conflict = error instanceof ApiError
+        && typeof error.data === "object"
+        && error.data !== null
+        && (error.data as { code?: string }).code === "DEVELOPMENT_CONFLICT";
+      if (conflict) {
+        await modal.confirm({
+          title: "远端已更新，本地也有修改",
+          content: "为避免覆盖本地修改，默认不会自动拉取。确认后将放弃本地修改并使用远端版本。",
+          okText: "放弃本地并拉取",
+          cancelText: "取消",
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            await pullDevelopmentScript(descriptor.developmentScriptId!, true);
+            messageApi.success("已使用远端版本覆盖本地开发脚本");
+            await loadData();
+          }
+        });
+        return;
+      }
+      messageApi.error(getErrorMessage(error, "拉取开发脚本失败"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
   const columns: ColumnsType<RepositoryToolDescriptor> = [
     {
       title: "工具",
@@ -273,6 +342,7 @@ export function RepositoryDiscoveryPage() {
           <Space wrap size={[8, 8]}>
             <TableLinkCell onClick={() => void openDetail(record)}>{record.displayName}</TableLinkCell>
             <Text code>{record.installedScriptId}</Text>
+            {record.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : null}
             {record.pluginDependencies.length > 0 ? <Tag color="geekblue">插件依赖 {record.pluginDependencies.length}</Tag> : null}
           </Space>
           <Text type="secondary">{record.description || "未填写描述"}</Text>
@@ -323,6 +393,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
           {record.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
+          {record.developmentScriptId ? <Tag color={record.developmentDirty ? "orange" : "purple"}>开发同步</Tag> : null}
           {record.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
         </Space>
       )
@@ -334,17 +405,49 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
           {record.installed ? (
-            <Button
-              size="small"
-              type={record.updateAvailable ? "primary" : "default"}
-              ghost={record.updateAvailable}
-              icon={<SyncOutlined />}
-              disabled={!record.updateAvailable}
-              loading={actionKey === `update:${record.installedScriptId}`}
-              onClick={() => void confirmInstallAction(record, "update")}
-            >
-              更新
-            </Button>
+            record.repositoryUsage === "DEVELOPMENT" ? (
+              <Button
+                size="small"
+                icon={<SyncOutlined />}
+                loading={actionKey === `pull:${record.developmentScriptId}`}
+                onClick={() => void handlePullDevelopmentTool(record)}
+              >
+                拉取更新
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                type={record.updateAvailable ? "primary" : "default"}
+                ghost={record.updateAvailable}
+                icon={<SyncOutlined />}
+                disabled={!record.updateAvailable}
+                loading={actionKey === `update:${record.installedScriptId}`}
+                onClick={() => void confirmInstallAction(record, "update")}
+              >
+                更新
+              </Button>
+            )
+          ) : record.repositoryUsage === "DEVELOPMENT" ? (
+            record.developmentScriptId ? (
+              <Button
+                size="small"
+                icon={<SyncOutlined />}
+                loading={actionKey === `pull:${record.developmentScriptId}`}
+                onClick={() => void handlePullDevelopmentTool(record)}
+              >
+                拉取更新
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                type="primary"
+                icon={<DownloadOutlined />}
+                loading={actionKey === `develop:${record.repositoryId}:${record.toolId}`}
+                onClick={() => void handleDevelopTool(record)}
+              >
+                同步开发
+              </Button>
+            )
           ) : (
             <Button
               size="small"

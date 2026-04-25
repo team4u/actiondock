@@ -1,4 +1,4 @@
-import { Form } from "antd";
+import { Form, Modal } from "antd";
 import type { FormInstance } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useRef, useState } from "react";
@@ -94,7 +94,9 @@ export function useScriptPublishToRepo({
       syncedRepositoryIdsRef.current = new Set();
       versionManuallyEditedRef.current = false;
       publishForm.setFieldsValue({
-        repositoryId: publishableRepositories[0]?.id,
+        repositoryId: script.scope === "DEVELOPMENT" && script.repositoryId
+          ? script.repositoryId
+          : publishableRepositories[0]?.id,
         toolId: script.repositoryToolId || script.id,
         displayName: script.name,
         version: suggestNextRepositoryVersion(script.repositoryVersion),
@@ -201,6 +203,7 @@ export function useScriptPublishToRepo({
   };
 
   const handlePublishToRepository = async () => {
+    let retry: { repositoryId: string; payload: Parameters<typeof publishRepositoryTool>[1] } | null = null;
     try {
       const values = await publishForm.validateFields();
       setPublishingToRepository(true);
@@ -209,7 +212,7 @@ export function useScriptPublishToRepo({
         key,
         publishMode
       }));
-      await publishRepositoryTool(values.repositoryId, {
+      const payload = {
         scriptId: publishedScript.id,
         toolId: values.toolId.trim(),
         displayName: values.displayName.trim(),
@@ -219,7 +222,9 @@ export function useScriptPublishToRepo({
         tags: toTagOptions(values.tags),
         scheduleIds: values.scheduleIds ?? [],
         configItems
-      });
+      };
+      retry = { repositoryId: values.repositoryId, payload };
+      await publishRepositoryTool(values.repositoryId, payload);
       setPublishToRepositoryOpen(false);
       messageApi.success("已发布到目标仓库");
     } catch (error) {
@@ -227,6 +232,29 @@ export function useScriptPublishToRepo({
         return;
       }
       if (typeof error === "object" && error !== null && "handled" in error) {
+        return;
+      }
+      const conflict = error instanceof Error
+        && "data" in error
+        && typeof (error as { data?: unknown }).data === "object"
+        && (error as { data?: { code?: string } }).data?.code === "DEVELOPMENT_CONFLICT";
+      if (conflict) {
+        if (!retry) {
+          messageApi.error("远端工具已更新，但本地也有未发布修改。请先拉取远端或确认后再强制发布。");
+          return;
+        }
+        void Modal.confirm({
+          title: "远端已更新，本地也有修改",
+          content: "强制发布会用当前脚本内容作为新版本写回仓库。版本号仍必须是仓库中不存在的新版本。",
+          okText: "强制发布",
+          cancelText: "取消",
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            await publishRepositoryTool(retry!.repositoryId, { ...retry!.payload, force: true });
+            setPublishToRepositoryOpen(false);
+            messageApi.success("已强制发布到目标仓库");
+          }
+        });
         return;
       }
       messageApi.error(getErrorMessage(error, "发布到仓库失败"));

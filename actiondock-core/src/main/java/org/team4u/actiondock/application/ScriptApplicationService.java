@@ -82,6 +82,23 @@ public class ScriptApplicationService {
             if (definition.getRepositoryVersion() == null) {
                 definition.setRepositoryVersion(existing.getRepositoryVersion());
             }
+            if (definition.getSourcePath() == null) {
+                definition.setSourcePath(existing.getSourcePath());
+            }
+            if (definition.getSourceCommit() == null) {
+                definition.setSourceCommit(existing.getSourceCommit());
+            }
+            if (definition.getSourceDigest() == null) {
+                definition.setSourceDigest(existing.getSourceDigest());
+            }
+            if (definition.getSourceSyncedAt() == null) {
+                definition.setSourceSyncedAt(existing.getSourceSyncedAt());
+            }
+            if (definition.getScope() == ScriptScope.DEVELOPMENT) {
+                definition.setDirty(existing.isDirty() || !definition.snapshotCurrent().equals(existing.snapshotCurrent()));
+            } else {
+                definition.setDirty(existing.isDirty());
+            }
             definition.setEditable(existing.isEditable());
         }
         normalizePublicationState(definition);
@@ -228,6 +245,11 @@ public class ScriptApplicationService {
                 .setRepositoryId(source.getRepositoryId())
                 .setRepositoryToolId(source.getRepositoryToolId())
                 .setRepositoryVersion(source.getRepositoryVersion())
+                .setSourcePath(source.getSourcePath())
+                .setSourceCommit(source.getSourceCommit())
+                .setSourceDigest(source.getSourceDigest())
+                .setSourceSyncedAt(source.getSourceSyncedAt())
+                .setDirty(source.isDirty())
                 .setEditable(source.isEditable())
                 .setOwner(source.getOwner())
                 .setDescription(source.getDescription())

@@ -15,6 +15,7 @@ public class RepositoryDefinition {
     private String branch;
     private boolean enabled = true;
     private String trustLevel;
+    private String usage = "DISTRIBUTION";
     private String description;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;
@@ -80,6 +81,15 @@ public class RepositoryDefinition {
 
     public RepositoryDefinition setTrustLevel(String trustLevel) {
         this.trustLevel = trustLevel;
+        return this;
+    }
+
+    public String getUsage() {
+        return usage;
+    }
+
+    public RepositoryDefinition setUsage(String usage) {
+        this.usage = usage == null || usage.isBlank() ? "DISTRIBUTION" : usage;
         return this;
     }
 

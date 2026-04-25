@@ -9,5 +9,6 @@ public enum ScriptScope {
     PERSONAL,
     REPOSITORY,
     FORK,
+    DEVELOPMENT,
     SAMPLE
 }

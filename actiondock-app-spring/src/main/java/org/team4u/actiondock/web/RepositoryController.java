@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
+import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 
 import java.util.List;
@@ -197,6 +198,13 @@ public class RepositoryController {
                 installPluginDependencies,
                 forcePluginUpgrade
         ), "更新完成");
+    }
+
+    @PostMapping("/{id}/tools/{toolId}/develop")
+    public ApiResponse<ScriptDefinition> develop(@PathVariable String id,
+                                                 @PathVariable String toolId,
+                                                 @RequestBody(required = false) RepositoryCatalogService.DevelopmentSyncRequest request) {
+        return ApiResponse.success(repositoryCatalogService.syncToolForDevelopment(id, toolId, request), "已同步为开发脚本");
     }
 
     /**

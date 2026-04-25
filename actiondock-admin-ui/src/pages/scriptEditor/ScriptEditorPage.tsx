@@ -9,7 +9,8 @@ import {
   MoreOutlined,
   RollbackOutlined,
   RocketOutlined,
-  SaveOutlined
+  SaveOutlined,
+  SyncOutlined
 } from "@ant-design/icons";
 import {
   Alert,
@@ -362,6 +363,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                       </Button>
                     )
                   ) : null}
+                  {editor.currentScript?.scope === "DEVELOPMENT" ? (
+                    <Button
+                      icon={<SyncOutlined />}
+                      onClick={() => void editor.handlePullDevelopment()}
+                      loading={editor.developmentPulling}
+                    >
+                      拉取远端
+                    </Button>
+                  ) : null}
                   {editor.headerActionModel.showMore ? (
                     <Dropdown trigger={["click"]} menu={{ items: moreMenuItems }}>
                       <Button icon={<MoreOutlined />}>更多</Button>
@@ -418,6 +428,18 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               <Descriptions.Item label="来源仓库">{editor.currentScript.repositoryId || "-"}</Descriptions.Item>
               <Descriptions.Item label="来源工具">{editor.currentScript.repositoryToolId || "-"}</Descriptions.Item>
               <Descriptions.Item label="仓库版本">{editor.currentScript.repositoryVersion || "-"}</Descriptions.Item>
+              {editor.currentScript.scope === "DEVELOPMENT" ? (
+                <>
+                  <Descriptions.Item label="开发路径">{editor.currentScript.sourcePath || "-"}</Descriptions.Item>
+                  <Descriptions.Item label="同步状态">
+                    <Space size={8} wrap>
+                      {editor.developmentStatus?.dirty || editor.currentScript.dirty ? <Tag color="orange">本地有修改</Tag> : <Tag color="green">已同步</Tag>}
+                      {editor.developmentStatus?.remoteChanged ? <Tag color="processing">远端有更新</Tag> : null}
+                      {editor.currentScript.sourceSyncedAt ? <Text type="secondary">{formatDateTime(editor.currentScript.sourceSyncedAt)}</Text> : null}
+                    </Space>
+                  </Descriptions.Item>
+                </>
+              ) : null}
               <Descriptions.Item label="创建时间">{formatDateTime(editor.currentScript.createdAt)}</Descriptions.Item>
             </Descriptions>
           </Card>

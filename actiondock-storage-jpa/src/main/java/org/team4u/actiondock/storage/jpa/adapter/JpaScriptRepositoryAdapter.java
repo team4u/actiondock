@@ -76,6 +76,11 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setRepositoryId(definition.getRepositoryId());
         entity.setRepositoryToolId(definition.getRepositoryToolId());
         entity.setRepositoryVersion(definition.getRepositoryVersion());
+        entity.setSourcePath(definition.getSourcePath());
+        entity.setSourceCommit(definition.getSourceCommit());
+        entity.setSourceDigest(definition.getSourceDigest());
+        entity.setSourceSyncedAt(definition.getSourceSyncedAt());
+        entity.setDirty(definition.isDirty());
         entity.setEditable(definition.isEditable());
         entity.setOwner(definition.getOwner());
         entity.setDescription(definition.getDescription());
@@ -109,6 +114,11 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setRepositoryId(entity.getRepositoryId())
                 .setRepositoryToolId(entity.getRepositoryToolId())
                 .setRepositoryVersion(entity.getRepositoryVersion())
+                .setSourcePath(entity.getSourcePath())
+                .setSourceCommit(entity.getSourceCommit())
+                .setSourceDigest(entity.getSourceDigest())
+                .setSourceSyncedAt(entity.getSourceSyncedAt())
+                .setDirty(entity.isDirty())
                 .setEditable(entity.isEditable())
                 .setOwner(entity.getOwner())
                 .setDescription(entity.getDescription())

@@ -86,6 +86,44 @@ class ScriptApplicationServiceTest {
     }
 
     @Test
+    void saveMarksDevelopmentScriptDirtyWhenDefinitionChanges() {
+        when(scriptRepository.findById("dev-tool")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("dev-tool")
+                .setName("Dev Tool")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [message: 'remote']")
+                .setInputSchema(Map.of("type", "object"))
+                .setOutputSchema(Map.of("type", "object"))
+                .setScope(ScriptScope.DEVELOPMENT)
+                .setRepositoryId("repo")
+                .setRepositoryToolId("tool")
+                .setRepositoryVersion("1.0.0")
+                .setSourcePath("tools/tool")
+                .setSourceCommit("abc123")
+                .setSourceDigest("digest")
+                .setDirty(false)
+                .setVersion(1)
+                .setStatus(ScriptStatus.DRAFT)));
+        when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScriptDefinition saved = service.save(new ScriptDefinition()
+                .setId("dev-tool")
+                .setName("Dev Tool")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [message: 'local']")
+                .setInputSchema(Map.of("type", "object"))
+                .setOutputSchema(Map.of("type", "object"))
+                .setScope(ScriptScope.DEVELOPMENT));
+
+        assertThat(saved.isDirty()).isTrue();
+        assertThat(saved.getRepositoryId()).isEqualTo("repo");
+        assertThat(saved.getRepositoryToolId()).isEqualTo("tool");
+        assertThat(saved.getSourcePath()).isEqualTo("tools/tool");
+        assertThat(saved.getSourceCommit()).isEqualTo("abc123");
+        assertThat(saved.getSourceDigest()).isEqualTo("digest");
+    }
+
+    @Test
     void validateDelegatesToScriptEngine() {
         ScriptDefinition definition = new ScriptDefinition().setId("script-1");
         when(scriptRepository.findById("script-1")).thenReturn(Optional.of(definition));

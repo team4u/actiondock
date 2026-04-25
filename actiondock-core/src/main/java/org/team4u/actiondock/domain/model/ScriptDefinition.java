@@ -27,6 +27,11 @@ public class ScriptDefinition {
     private String repositoryId;
     private String repositoryToolId;
     private String repositoryVersion;
+    private String sourcePath;
+    private String sourceCommit;
+    private String sourceDigest;
+    private LocalDateTime sourceSyncedAt;
+    private boolean dirty;
     private boolean editable = true;
     private String owner;
     private String description;
@@ -143,6 +148,51 @@ public class ScriptDefinition {
 
     public ScriptDefinition setRepositoryVersion(String repositoryVersion) {
         this.repositoryVersion = repositoryVersion;
+        return this;
+    }
+
+    public String getSourcePath() {
+        return sourcePath;
+    }
+
+    public ScriptDefinition setSourcePath(String sourcePath) {
+        this.sourcePath = sourcePath;
+        return this;
+    }
+
+    public String getSourceCommit() {
+        return sourceCommit;
+    }
+
+    public ScriptDefinition setSourceCommit(String sourceCommit) {
+        this.sourceCommit = sourceCommit;
+        return this;
+    }
+
+    public String getSourceDigest() {
+        return sourceDigest;
+    }
+
+    public ScriptDefinition setSourceDigest(String sourceDigest) {
+        this.sourceDigest = sourceDigest;
+        return this;
+    }
+
+    public LocalDateTime getSourceSyncedAt() {
+        return sourceSyncedAt;
+    }
+
+    public ScriptDefinition setSourceSyncedAt(LocalDateTime sourceSyncedAt) {
+        this.sourceSyncedAt = sourceSyncedAt;
+        return this;
+    }
+
+    public boolean isDirty() {
+        return dirty;
+    }
+
+    public ScriptDefinition setDirty(boolean dirty) {
+        this.dirty = dirty;
         return this;
     }
 
@@ -286,6 +336,11 @@ public class ScriptDefinition {
                 .setRepositoryId(repositoryId)
                 .setRepositoryToolId(repositoryToolId)
                 .setRepositoryVersion(repositoryVersion)
+                .setSourcePath(sourcePath)
+                .setSourceCommit(sourceCommit)
+                .setSourceDigest(sourceDigest)
+                .setSourceSyncedAt(sourceSyncedAt)
+                .setDirty(dirty)
                 .setEditable(editable)
                 .setOwner(owner)
                 .setDescription(description)

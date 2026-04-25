@@ -4,6 +4,7 @@ import type {
   ConfigValue,
   ConfigValueRequest,
   RepositoryDefinition,
+  DevelopmentStatus,
   RepositoryInstallRequest,
   RepositoryPublishRequest,
   RepositoryPluginDescriptor,
@@ -377,6 +378,24 @@ export function updateRepositoryTool(repositoryId: string, toolId: string, paylo
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
+  });
+}
+
+export function developRepositoryTool(repositoryId: string, toolId: string, payload: { scriptId?: string }): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}/develop`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getDevelopmentStatus(scriptId: string): Promise<DevelopmentStatus> {
+  return request<DevelopmentStatus>(`/api/scripts/${encodeURIComponent(scriptId)}/development-status`);
+}
+
+export function pullDevelopmentScript(scriptId: string, force = false): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${encodeURIComponent(scriptId)}/development-pull?includeUiSchema=true&force=${force}`, {
+    method: "POST"
   });
 }
 
