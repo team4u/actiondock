@@ -46,14 +46,13 @@ import {
 import type {
   ExecutionRecord,
   ExecutionResponse,
-  ExecutionStatus,
   ScriptDefinition,
   ScriptSchedule,
   ScriptScheduleUpsertRequest,
   SubmitMode,
   ValidationErrorData
 } from "../types";
-import { formatDateTime, parseJsonText, prettyJson } from "../utils";
+import { formatDateTime, getExecutionStatusColor, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
 
@@ -89,21 +88,6 @@ function toPublishedScheduleScript(script: ScriptDefinition): ScriptDefinition |
   }
 
   return null;
-}
-
-function getExecutionStatusColor(status?: ExecutionStatus): string {
-  switch (status) {
-    case "SUCCESS":
-      return "green";
-    case "FAILED":
-      return "red";
-    case "RUNNING":
-      return "processing";
-    case "PENDING":
-      return "gold";
-    default:
-      return "default";
-  }
 }
 
 function hasDebugPayload(

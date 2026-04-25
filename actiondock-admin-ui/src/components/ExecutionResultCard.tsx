@@ -9,8 +9,8 @@ import type { ReactNode } from "react";
 import { ErrorDetailPanel } from "./ErrorDetailPanel";
 import { ExecutionLogPanel } from "./ExecutionLogPanel";
 import { SchemaObjectResultView } from "./SchemaObjectResultView";
-import type { ExecutionRecord, ExecutionResponse, ExecutionStatus } from "../types";
-import { formatDateTime, prettyJson } from "../utils";
+import type { ExecutionRecord, ExecutionResponse } from "../types";
+import { formatDateTime, getExecutionStatusColor, prettyJson } from "../utils";
 
 const { Text } = Typography;
 
@@ -27,21 +27,6 @@ export interface ExecutionResultCardProps {
   pollingExecutionId?: string | null;
   emptyDescription?: string;
   errorTitle?: string;
-}
-
-function getExecutionStatusColor(status?: ExecutionStatus): string {
-  switch (status) {
-    case "SUCCESS":
-      return "green";
-    case "FAILED":
-      return "red";
-    case "RUNNING":
-      return "processing";
-    case "PENDING":
-      return "gold";
-    default:
-      return "default";
-  }
 }
 
 function getTriggerSourceLabel(source: string): string {

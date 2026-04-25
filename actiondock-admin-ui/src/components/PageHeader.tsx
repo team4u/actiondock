@@ -1,6 +1,8 @@
 import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Col, Row, Space } from "antd";
+import { Button, Col, Row, Space, Typography } from "antd";
 import type { ReactNode } from "react";
+
+const { Title, Text } = Typography;
 
 export interface PageHeaderProps {
   title: string;
@@ -10,7 +12,7 @@ export interface PageHeaderProps {
   actions?: ReactNode;
 }
 
-export function PageHeader({ onBack, backLabel = "返回列表", actions }: PageHeaderProps) {
+export function PageHeader({ title, onBack, backLabel = "返回列表", meta, actions }: PageHeaderProps) {
   return (
     <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
       <Col>
@@ -24,6 +26,8 @@ export function PageHeader({ onBack, backLabel = "返回列表", actions }: Page
             {backLabel}
           </Button>
         ) : null}
+        <Title level={4} style={{ margin: 0 }}>{title}</Title>
+        {meta ? <Text type="secondary">{meta}</Text> : null}
       </Col>
       {actions ? (
         <Col>
