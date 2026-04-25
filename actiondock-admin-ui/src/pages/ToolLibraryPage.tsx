@@ -164,7 +164,7 @@ export function ToolLibraryPage() {
         script.owner ?? "",
         script.repositoryId ?? "",
         script.repositoryToolId ?? "",
-        descriptor?.repositoryAlias ?? "",
+        descriptor?.repositoryId ?? "",
         descriptor?.toolId ?? ""
       ]
         .join(" ")
@@ -396,7 +396,7 @@ export function ToolLibraryPage() {
           await syncRepository(repository.id);
           syncedRepositoryIds.push(repository.id);
         } catch (error) {
-          repositoryFailures.push(`${repository.alias || repository.id}: ${getErrorMessage(error, "同步失败")}`);
+          repositoryFailures.push(`${repository.id}: ${getErrorMessage(error, "同步失败")}`);
         }
       }
 

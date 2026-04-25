@@ -835,7 +835,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       ]);
       const publishableRepositories = repositories
         .filter((item) => item.enabled && item.type !== "HTTP")
-        .sort((left, right) => left.alias.localeCompare(right.alias));
+        .sort((left, right) => left.id.localeCompare(right.id));
       const relatedSchedules = schedules
         .filter((item) => item.scriptId === script.id)
         .sort((left, right) => left.name.localeCompare(right.name));
@@ -1467,7 +1467,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 <Select
                   options={publishRepositories.map((item) => ({
                     value: item.id,
-                    label: `${item.alias} · ${item.name}`
+                    label: item.name
                   }))}
                 />
               </Form.Item>

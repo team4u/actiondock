@@ -47,7 +47,6 @@ interface EditorState {
 interface RepositoryFormValues {
   id: string;
   name: string;
-  alias: string;
   type: RepositoryDefinition["type"];
   url: string;
   branch?: string;
@@ -104,7 +103,6 @@ export function RepositoryManagementPage() {
     form.setFieldsValue({
       id: "",
       name: "",
-      alias: "",
       type: "GIT",
       url: "",
       branch: "main",
@@ -119,7 +117,6 @@ export function RepositoryManagementPage() {
     form.setFieldsValue({
       id: item.id,
       name: item.name,
-      alias: item.alias,
       type: item.type,
       url: item.url,
       branch: item.branch,
@@ -142,7 +139,6 @@ export function RepositoryManagementPage() {
       const payload: RepositoryDefinition = {
         id: values.id.trim(),
         name: values.name.trim(),
-        alias: values.alias.trim(),
         type: values.type,
         url: values.url.trim(),
         branch: values.type === "GIT" ? values.branch?.trim() || "main" : undefined,
@@ -197,7 +193,6 @@ export function RepositoryManagementPage() {
         <Space direction="vertical" size={2}>
           <Space wrap size={[8, 8]}>
             <Text strong>{record.name}</Text>
-            <Text code>{record.alias}</Text>
             {record.enabled ? <Tag color="blue">已启用</Tag> : <Tag>已禁用</Tag>}
           </Space>
           <Text type="secondary">{record.description || record.url}</Text>
@@ -337,17 +332,6 @@ export function RepositoryManagementPage() {
               rules={[{ required: true, message: "请输入仓库名称" }]}
             >
               <Input placeholder="例如 平台组工具仓库" />
-            </Form.Item>
-
-            <Form.Item
-              label="别名"
-              name="alias"
-              rules={[
-                { required: true, message: "请输入仓库别名" },
-                { pattern: /^[A-Za-z0-9._-]+$/, message: "仅支持字母、数字、点、中横线和下划线" }
-              ]}
-            >
-              <Input placeholder="例如 platform" />
             </Form.Item>
 
             <Space size={12} style={{ width: "100%" }} wrap>

@@ -128,7 +128,7 @@ export function RepositoryDiscoveryPage() {
         tool.installedScriptId,
         tool.description ?? "",
         tool.owner ?? "",
-        tool.repositoryAlias
+        tool.repositoryId
       ]
         .join(" ")
         .toLowerCase();
@@ -228,11 +228,11 @@ export function RepositoryDiscoveryPage() {
     },
     {
       title: "来源",
-      key: "repositoryAlias",
+      key: "repositoryId",
       width: 160,
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
-          <Text>{record.repositoryAlias}</Text>
+          <Text>{record.repositoryId}</Text>
           {getTrustTag(record.trusted)}
         </Space>
       )
@@ -340,7 +340,7 @@ export function RepositoryDiscoveryPage() {
               style={{ minWidth: 180 }}
               options={[
                 { value: "ALL", label: "全部仓库" },
-                ...repositories.map((item) => ({ value: item.id, label: `${item.alias} · ${item.name}` }))
+                ...repositories.map((item) => ({ value: item.id, label: item.name }))
               ]}
             />
             <Select
@@ -416,7 +416,7 @@ export function RepositoryDiscoveryPage() {
               column={2}
               items={[
                 { key: "tool", label: "工具 ID", children: <Text code>{detail.descriptor.installedScriptId}</Text> },
-                { key: "repo", label: "来源仓库", children: `${detail.descriptor.repositoryAlias} / ${detail.descriptor.repositoryId}` },
+                { key: "repo", label: "来源仓库", children: detail.descriptor.repositoryId },
                 { key: "version", label: "远端版本", children: detail.descriptor.version },
                 { key: "owner", label: "维护人", children: detail.descriptor.owner || "-" },
                 { key: "risk", label: "风险等级", children: getRiskTag(detail.descriptor.riskLevel) },

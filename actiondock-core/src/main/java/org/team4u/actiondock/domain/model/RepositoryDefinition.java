@@ -10,7 +10,6 @@ import java.time.LocalDateTime;
 public class RepositoryDefinition {
     private String id;
     private String name;
-    private String alias;
     private String type;
     private String url;
     private String branch;
@@ -36,15 +35,6 @@ public class RepositoryDefinition {
 
     public RepositoryDefinition setName(String name) {
         this.name = name;
-        return this;
-    }
-
-    public String getAlias() {
-        return alias;
-    }
-
-    public RepositoryDefinition setAlias(String alias) {
-        this.alias = alias;
         return this;
     }
 

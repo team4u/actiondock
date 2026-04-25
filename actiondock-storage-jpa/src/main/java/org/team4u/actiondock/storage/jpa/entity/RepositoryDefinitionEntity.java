@@ -17,7 +17,6 @@ public class RepositoryDefinitionEntity {
     @Id
     private String id;
     private String name;
-    private String alias;
     private String type;
     private String url;
     private String branch;
@@ -42,14 +41,6 @@ public class RepositoryDefinitionEntity {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getAlias() {
-        return alias;
-    }
-
-    public void setAlias(String alias) {
-        this.alias = alias;
     }
 
     public String getType() {

@@ -95,7 +95,6 @@ public class RepositoryCatalogService {
     public RepositoryDefinition saveRepository(RepositoryDefinition definition) {
         RepositoryDefinition target = definition == null ? new RepositoryDefinition() : definition;
         String id = normalize(target.getId(), "仓库 ID 不能为空");
-        String alias = normalize(target.getAlias(), "仓库别名不能为空").toLowerCase(Locale.ROOT);
         String type = normalizeOrDefault(target.getType(), "GIT").toUpperCase(Locale.ROOT);
         if (!List.of("GIT", "HTTP", "LOCAL_DIR").contains(type)) {
             throw new IllegalArgumentException("仓库类型仅支持 GIT / HTTP / LOCAL_DIR");
@@ -110,7 +109,6 @@ public class RepositoryCatalogService {
         RepositoryDefinition value = new RepositoryDefinition()
                 .setId(id)
                 .setName(normalize(target.getName(), "仓库名称不能为空"))
-                .setAlias(alias)
                 .setType(type)
                 .setUrl(normalize(target.getUrl(), "仓库地址不能为空"))
                 .setBranch("GIT".equals(type) ? normalizeOrDefault(target.getBranch(), "main") : null)
@@ -483,11 +481,10 @@ public class RepositoryCatalogService {
     }
 
     private RepositoryToolDescriptor toDescriptor(RepositoryDefinition repository, ToolFile tool, String toolPath) {
-        String installedScriptId = repository.getAlias() + "." + tool.id();
+        String installedScriptId = repository.getId() + "." + tool.id();
         RepositoryToolInstallation installation = repositoryToolInstallationRepository.findByToolId(installedScriptId).orElse(null);
         return new RepositoryToolDescriptor(
                 repository.getId(),
-                repository.getAlias(),
                 tool.id(),
                 installedScriptId,
                 tool.name(),
@@ -541,7 +538,7 @@ public class RepositoryCatalogService {
         if (!Files.exists(indexPath)) {
             writeJson(indexPath, new RepositoryIndexFile(
                     1,
-                    normalizeOrDefault(repository.getName(), repository.getAlias()),
+                    normalizeOrDefault(repository.getName(), repository.getId()),
                     normalizeNullable(repository.getDescription()),
                     new ArrayList<>()
             ));
@@ -696,7 +693,6 @@ public class RepositoryCatalogService {
 
     public record RepositoryToolDescriptor(
             String repositoryId,
-            String repositoryAlias,
             String toolId,
             String installedScriptId,
             String displayName,

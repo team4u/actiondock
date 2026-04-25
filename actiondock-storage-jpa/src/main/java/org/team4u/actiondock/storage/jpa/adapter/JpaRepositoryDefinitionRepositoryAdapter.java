@@ -50,7 +50,6 @@ public class JpaRepositoryDefinitionRepositoryAdapter implements RepositoryDefin
         RepositoryDefinitionEntity entity = new RepositoryDefinitionEntity();
         entity.setId(definition.getId());
         entity.setName(definition.getName());
-        entity.setAlias(definition.getAlias());
         entity.setType(definition.getType());
         entity.setUrl(definition.getUrl());
         entity.setBranch(definition.getBranch());
@@ -73,7 +72,6 @@ public class JpaRepositoryDefinitionRepositoryAdapter implements RepositoryDefin
         return new RepositoryDefinition()
                 .setId(entity.getId())
                 .setName(entity.getName())
-                .setAlias(entity.getAlias())
                 .setType(entity.getType())
                 .setUrl(entity.getUrl())
                 .setBranch(entity.getBranch())

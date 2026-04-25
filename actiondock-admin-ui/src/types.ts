@@ -227,7 +227,6 @@ export interface ConfigValueRequest {
 export interface RepositoryDefinition {
   id: string;
   name: string;
-  alias: string;
   type: RepositoryType;
   url: string;
   branch?: string;
@@ -241,7 +240,6 @@ export interface RepositoryDefinition {
 
 export interface RepositoryToolDescriptor {
   repositoryId: string;
-  repositoryAlias: string;
   toolId: string;
   installedScriptId: string;
   displayName: string;
