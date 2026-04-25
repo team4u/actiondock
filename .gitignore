@@ -38,3 +38,4 @@ actiondock-admin-ui/.vite/
 data/
 .cx-index.db
 plugins/
+.planning/
