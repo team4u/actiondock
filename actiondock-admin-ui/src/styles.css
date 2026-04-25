@@ -1185,9 +1185,11 @@ a {
   .app-header__main,
   .app-header__actions,
   .page-card-actions,
+  .page-card-header__back,
   .script-list-toolbar__actions,
   .history-card-actions {
     width: 100%;
+    display: flex;
   }
 
   .app-header__actions .ant-space-item,
@@ -1204,10 +1206,17 @@ a {
 
   .page-card-actions .ant-dropdown-button {
     width: 100%;
+    display: flex;
   }
 
-  .page-card-actions .ant-dropdown-button .ant-btn {
-    width: 100%;
+  .page-card-actions .ant-dropdown-button > .ant-btn:first-child {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .page-card-actions .ant-dropdown-button > .ant-btn:last-child {
+    flex: none;
+    width: 32px;
   }
 
   .app-content .ant-card-head-wrapper {

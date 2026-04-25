@@ -213,9 +213,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     ...editor.headerActionModel.moreActionKeys
       .filter((key) => !dangerousMoreActionKeys.has(key))
       .map((key) => {
-        if (key === "validate") {
-          return { key, icon: <CheckCircleOutlined />, label: "校验", onClick: () => void editor.handleValidate() };
-        }
         if (key === "copy") {
           return {
             key,
@@ -341,8 +338,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       />
 
       <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
-        <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
-          <Col>
+        <Row className="page-card-header" justify="end" align="middle" gutter={[12, 12]}>
+          <Col className="page-card-header__back">
             <Button
               type="link"
               icon={<ArrowLeftOutlined />}
@@ -352,7 +349,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               返回工具列表
             </Button>
           </Col>
-          <Col>
+          <Col className="page-card-actions">
             <Space className="page-card-actions script-editor-page__header-actions" wrap>
               {editor.headerActionModel.showForkOnly && editor.currentScript?.scope === "REPOSITORY" ? (
                 <Button icon={<ForkOutlined />} type="primary" onClick={fork.openForkModal} loading={fork.forkingRepositoryTool}>

@@ -543,38 +543,25 @@ export function ToolLibraryPage() {
       )
     },
     {
-      title: "来源",
-      key: "source",
-      width: 120,
-      render: (_value: unknown, record) => <ScopeTag scope={record.scope} />
-    },
-    {
-      title: "状态",
+      title: "来源 / 状态",
       key: "status",
-      width: 160,
+      width: 200,
       render: (_value: unknown, record) => {
         const descriptor = descriptorMap.get(record.id);
         return (
           <Space wrap size={[4, 4]}>
+            <ScopeTag scope={record.scope} />
             {record.scope !== "REPOSITORY" && (
               <Tag color={record.status === "PUBLISHED" ? "green" : "gold"}>
                 {record.status === "PUBLISHED" ? "已发布" : "草稿"}
               </Tag>
             )}
-            {record.scope === "REPOSITORY" ? <Tag>只读</Tag> : null}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
             {record.scope === "DEVELOPMENT" ? getDevelopmentSyncTag(descriptor?.developmentSyncState) : null}
             {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
       }
-    },
-    {
-      title: "更新时间",
-      dataIndex: "updatedAt",
-      key: "updatedAt",
-      width: 180,
-      render: (value?: string) => formatDateTime(value)
     },
     {
       title: "操作",

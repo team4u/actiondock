@@ -1,4 +1,4 @@
-import { Alert, Input, Modal, Space } from "antd";
+import { Alert, Button, Drawer, Input, Space } from "antd";
 
 interface GeneratedScriptImportModalProps {
   open: boolean;
@@ -16,14 +16,17 @@ export function GeneratedScriptImportModal({
   onCancel
 }: GeneratedScriptImportModalProps) {
   return (
-    <Modal
+    <Drawer
       title="粘贴 generate-script 输出"
       open={open}
-      okText="导入"
-      cancelText="取消"
-      onOk={onImport}
-      onCancel={onCancel}
       width={760}
+      onClose={onCancel}
+      extra={
+        <Space>
+          <Button onClick={onCancel}>取消</Button>
+          <Button type="primary" onClick={onImport}>导入</Button>
+        </Space>
+      }
     >
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
         <Alert
@@ -40,6 +43,6 @@ export function GeneratedScriptImportModal({
           autoSize={{ minRows: 14, maxRows: 22 }}
         />
       </Space>
-    </Modal>
+    </Drawer>
   );
 }
