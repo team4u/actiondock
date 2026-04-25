@@ -35,7 +35,7 @@ export function TableLinkCell({
     display: "inline-flex",
     alignItems: "center",
     maxWidth: "100%",
-    color: "#1677ff",
+    color: "var(--app-primary)",
     textDecoration: "none",
     cursor: onClick ? "pointer" : undefined
   };

@@ -39,32 +39,32 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  color: rgba(244, 247, 255, 0.92);
-  background: #0b1220;
-  --app-text: rgba(244, 247, 255, 0.92);
-  --app-background: #0b1220;
-  --app-background-top-glow: rgba(74, 122, 255, 0.18);
-  --app-background-start: #0d1424;
-  --app-background-end: #09101c;
-  --app-border-subtle: rgba(148, 163, 184, 0.18);
-  --app-primary: #7aa2ff;
-  --app-primary-soft: rgba(74, 122, 255, 0.18);
-  --app-primary-soft-strong: rgba(74, 122, 255, 0.28);
-  --app-card-start: rgba(16, 26, 43, 0.98);
-  --app-card-end: rgba(11, 18, 32, 0.98);
-  --app-card-shadow: 0 20px 48px rgba(2, 6, 23, 0.32);
-  --app-panel-start: rgba(15, 23, 42, 0.96);
-  --app-panel-end: rgba(12, 19, 33, 0.96);
-  --app-code-border: rgba(148, 163, 184, 0.18);
-  --app-code-text: #dbe7ff;
-  --app-code-preview-bg: #08111f;
-  --app-code-preview-text: #dbe7ff;
-  --app-command-start: rgba(8, 17, 31, 0.98);
-  --app-command-end: rgba(15, 23, 42, 0.98);
-  --app-command-accent: rgba(74, 122, 255, 0.24);
-  --app-command-text: #e2e8f0;
-  --app-placeholder: rgba(219, 231, 255, 0.36);
-  --app-selection: rgba(74, 122, 255, 0.16);
+  color: #ececec;
+  background: #212121;
+  --app-text: #ececec;
+  --app-background: #212121;
+  --app-background-top-glow: rgba(255, 255, 255, 0);
+  --app-background-start: #212121;
+  --app-background-end: #212121;
+  --app-border-subtle: rgba(255, 255, 255, 0.08);
+  --app-primary: #8ab4ff;
+  --app-primary-soft: rgba(138, 180, 255, 0.14);
+  --app-primary-soft-strong: rgba(138, 180, 255, 0.22);
+  --app-card-start: rgba(41, 41, 41, 0.98);
+  --app-card-end: rgba(36, 36, 36, 0.98);
+  --app-card-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+  --app-panel-start: rgba(43, 43, 43, 0.96);
+  --app-panel-end: rgba(38, 38, 38, 0.96);
+  --app-code-border: rgba(255, 255, 255, 0.1);
+  --app-code-text: #ececec;
+  --app-code-preview-bg: #171717;
+  --app-code-preview-text: #ececec;
+  --app-command-start: rgba(23, 23, 23, 0.98);
+  --app-command-end: rgba(33, 33, 33, 0.98);
+  --app-command-accent: rgba(138, 180, 255, 0.12);
+  --app-command-text: #ececec;
+  --app-placeholder: rgba(236, 236, 236, 0.38);
+  --app-selection: rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -683,6 +683,20 @@ a {
   background: var(--app-selection) !important;
 }
 
+:root[data-theme="dark"] .ant-tag-blue,
+:root[data-theme="dark"] .ant-tag-processing,
+:root[data-theme="dark"] .ant-tag-geekblue {
+  border-color: rgba(138, 180, 255, 0.26);
+  background: rgba(138, 180, 255, 0.1);
+  color: #c7d9ff;
+}
+
+:root[data-theme="dark"] .ant-tag-blue .anticon,
+:root[data-theme="dark"] .ant-tag-processing .anticon,
+:root[data-theme="dark"] .ant-tag-geekblue .anticon {
+  color: #c7d9ff;
+}
+
 .page-loading {
   min-height: 60vh;
   display: grid;
@@ -721,6 +735,17 @@ a {
   background: radial-gradient(circle, rgba(201, 177, 104, 0.22), transparent 68%);
 }
 
+:root[data-theme="dark"] .run-page::before {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+:root[data-theme="dark"] .run-page::after {
+  background: radial-gradient(circle, rgba(214, 189, 120, 0.12), transparent 68%);
+}
+
 .run-page__topbar,
 .run-page__headline,
 .run-page__layout {
@@ -751,7 +776,7 @@ a {
 }
 
 :root[data-theme="dark"] .run-status-card__kicker {
-  color: #d8bc73;
+  color: #d6bd78;
 }
 
 .run-status-card__title {
@@ -812,7 +837,7 @@ a {
 
 :root[data-theme="dark"] .run-status-card {
   background:
-    linear-gradient(135deg, rgba(33, 27, 12, 0.24), rgba(12, 19, 33, 0.92)),
+    linear-gradient(135deg, rgba(68, 57, 30, 0.14), rgba(41, 41, 41, 0.9)),
     linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
 }
 
@@ -841,7 +866,7 @@ a {
 
 :root[data-theme="dark"] .run-field {
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.78), rgba(12, 19, 33, 0.84)),
+    linear-gradient(180deg, rgba(43, 43, 43, 0.78), rgba(38, 38, 38, 0.84)),
     linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
 }
 
@@ -869,6 +894,10 @@ a {
   text-transform: uppercase;
 }
 
+:root[data-theme="dark"] .run-field__name {
+  color: #b4b4b4;
+}
+
 .run-result__summary {
   display: flex;
   align-items: center;
@@ -894,7 +923,7 @@ a {
 
 :root[data-theme="dark"] .run-output-item {
   background:
-    linear-gradient(135deg, rgba(33, 27, 12, 0.18), rgba(15, 23, 42, 0.78)),
+    linear-gradient(135deg, rgba(68, 57, 30, 0.12), rgba(43, 43, 43, 0.78)),
     linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
 }
 

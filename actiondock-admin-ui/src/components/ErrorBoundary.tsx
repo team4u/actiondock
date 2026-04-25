@@ -1,5 +1,8 @@
 import { Component } from "react";
 import type { ReactNode } from "react";
+import { Button, Typography } from "antd";
+
+const { Text, Title } = Typography;
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -24,21 +27,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.state.hasError) {
       return (
         <div style={{ padding: 24 }}>
-          <h3>页面出现异常</h3>
-          <p style={{ color: "#666" }}>{this.state.error?.message}</p>
-          <button
+          <Title level={3}>页面出现异常</Title>
+          <Text type="secondary">{this.state.error?.message}</Text>
+          <br />
+          <Button
+            type="primary"
             onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              padding: "6px 16px",
-              background: "#2357d5",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer"
-            }}
+            style={{ marginTop: 16 }}
           >
             重试
-          </button>
+          </Button>
         </div>
       );
     }
