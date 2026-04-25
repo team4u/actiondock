@@ -35,6 +35,7 @@ import { CodeEditor } from "../components/CodeEditor";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import type {
+  PluginDependency,
   RepositoryDefinition,
   RepositoryToolDescriptor,
   RepositoryToolDetail
@@ -61,6 +62,45 @@ function getTrustTag(trusted: boolean) {
 
 function getTypeLabel(type: RepositoryToolDescriptor["type"]): string {
   return type === "PYTHON" ? "Python" : "Groovy";
+}
+
+function renderPluginDependencies(dependencies: PluginDependency[]) {
+  if (dependencies.length === 0) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有声明插件依赖" />;
+  }
+
+  return (
+    <Table<PluginDependency>
+      rowKey="pluginId"
+      size="small"
+      pagination={false}
+      dataSource={dependencies}
+      columns={[
+        {
+          title: "插件 ID",
+          dataIndex: "pluginId",
+          key: "pluginId",
+          render: (value: string) => <Text code>{value}</Text>
+        },
+        {
+          title: "版本要求",
+          dataIndex: "versionRange",
+          key: "versionRange",
+          render: (value?: string) => value ? <Tag color="blue">{value}</Tag> : <Tag>未锁定版本</Tag>
+        },
+        {
+          title: "动作",
+          dataIndex: "requiredActions",
+          key: "requiredActions",
+          render: (actions: string[]) => (
+            <Space wrap size={[4, 4]}>
+              {actions.length > 0 ? actions.map((action) => <Tag key={action}>{action}</Tag>) : <Text type="secondary">未声明</Text>}
+            </Space>
+          )
+        }
+      ]}
+    />
+  );
 }
 
 export function RepositoryDiscoveryPage() {
@@ -184,9 +224,12 @@ export function RepositoryDiscoveryPage() {
             <Text type="secondary">该工具没有定时任务模板。</Text>
           )}
           {descriptor.pluginDependencies.length > 0 ? (
-            <Checkbox defaultChecked onChange={(event) => { installPluginDependencies = event.target.checked; }}>
-              同时安装或更新 {descriptor.pluginDependencies.length} 个插件依赖
-            </Checkbox>
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Checkbox defaultChecked onChange={(event) => { installPluginDependencies = event.target.checked; }}>
+                同时安装或更新 {descriptor.pluginDependencies.length} 个插件依赖
+              </Checkbox>
+              {renderPluginDependencies(descriptor.pluginDependencies)}
+            </Space>
           ) : (
             <Text type="secondary">该工具没有声明插件依赖。</Text>
           )}
@@ -229,6 +272,7 @@ export function RepositoryDiscoveryPage() {
           <Space wrap size={[8, 8]}>
             <TableLinkCell onClick={() => void openDetail(record)}>{record.displayName}</TableLinkCell>
             <Text code>{record.installedScriptId}</Text>
+            {record.pluginDependencies.length > 0 ? <Tag color="geekblue">插件依赖 {record.pluginDependencies.length}</Tag> : null}
           </Space>
           <Text type="secondary">{record.description || "未填写描述"}</Text>
         </Space>
@@ -484,12 +528,17 @@ export function RepositoryDiscoveryPage() {
                         }
                       ]}
                     />
-                  ) : (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有配置模板" />
-                  )
-                },
-                {
-                  key: "schedules",
+	                  ) : (
+	                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有配置模板" />
+	                  )
+	                },
+	                {
+	                  key: "plugins",
+	                  label: `插件依赖 (${detail.descriptor.pluginDependencies.length})`,
+	                  children: renderPluginDependencies(detail.descriptor.pluginDependencies)
+	                },
+	                {
+	                  key: "schedules",
                   label: `定时模板 (${detail.scheduleTemplate.length})`,
                   children: detail.scheduleTemplate.length > 0 ? (
                     <Table

@@ -56,7 +56,7 @@ import {
   formatScriptExportFileName,
   parseScriptImportBundle
 } from "../scriptTransfer";
-import type { RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
+import type { PluginDependency, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
@@ -77,6 +77,24 @@ function isEditableAsset(script: ScriptDefinition): boolean {
 
 function isRunnable(script: ScriptDefinition): boolean {
   return script.status === "PUBLISHED";
+}
+
+function renderPluginDependencies(dependencies: PluginDependency[]) {
+  if (dependencies.length === 0) {
+    return <Text type="secondary">该工具没有声明插件依赖。</Text>;
+  }
+
+  return (
+    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+      {dependencies.map((dependency) => (
+        <Space key={dependency.pluginId} wrap size={[6, 6]}>
+          <Text code>{dependency.pluginId}</Text>
+          {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>未锁定版本</Tag>}
+          {dependency.requiredActions.map((action) => <Tag key={action}>{action}</Tag>)}
+        </Space>
+      ))}
+    </Space>
+  );
 }
 
 export function ToolLibraryPage() {
@@ -364,14 +382,17 @@ export function ToolLibraryPage() {
             <Text type="secondary">该工具没有额外定时模板可同步。</Text>
           )}
           {descriptor?.pluginDependencies.length ? (
-            <Checkbox
-              defaultChecked
-              onChange={(event) => {
-                installPluginDependencies = event.target.checked;
-              }}
-            >
-              同时安装或更新 {descriptor.pluginDependencies.length} 个插件依赖
-            </Checkbox>
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Checkbox
+                defaultChecked
+                onChange={(event) => {
+                  installPluginDependencies = event.target.checked;
+                }}
+              >
+                同时安装或更新 {descriptor.pluginDependencies.length} 个插件依赖
+              </Checkbox>
+              {renderPluginDependencies(descriptor.pluginDependencies)}
+            </Space>
           ) : (
             <Text type="secondary">该工具没有声明插件依赖。</Text>
           )}
@@ -489,6 +510,7 @@ export function ToolLibraryPage() {
             )}
             {record.scope === "REPOSITORY" ? <Tag>只读</Tag> : null}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
+            {descriptor?.pluginDependencies.length ? <Tag color="geekblue">插件依赖 {descriptor.pluginDependencies.length}</Tag> : null}
             {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );

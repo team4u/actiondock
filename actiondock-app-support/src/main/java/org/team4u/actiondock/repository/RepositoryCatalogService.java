@@ -39,12 +39,16 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 仓库发现、安装、更新和发布服务。
@@ -53,6 +57,9 @@ import java.util.UUID;
  */
 public class RepositoryCatalogService {
     private static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
+    private static final Pattern GROOVY_PLUGIN_INVOKE_PATTERN = Pattern.compile(
+            "plugins\\s*\\.\\s*invoke\\s*\\(\\s*([\"'`])([^\"'`]+)\\1\\s*,\\s*([\"'`])([^\"'`]+)\\3"
+    );
 
     private final RepositoryDefinitionRepository repositoryDefinitionRepository;
     private final RepositoryToolInstallationRepository repositoryToolInstallationRepository;
@@ -710,8 +717,68 @@ public class RepositoryCatalogService {
                 request.scheduleIds() == null || request.scheduleIds().isEmpty() ? null : "schedules.template.json",
                 null,
                 null,
-                script.getPluginDependencies()
+                resolveToolPluginDependencies(script)
         );
+    }
+
+    private List<PluginDependency> resolveToolPluginDependencies(ScriptDefinition script) {
+        Map<String, String> installedPluginVersions = new LinkedHashMap<>();
+        for (PluginView plugin : pluginRuntimeService.list()) {
+            installedPluginVersions.put(plugin.getPluginId(), plugin.getVersion());
+        }
+        Map<String, PluginDependency> dependencies = new LinkedHashMap<>();
+        mergePluginDependencies(dependencies, script.getPluginDependencies());
+        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
+        mergePluginDependencies(
+                dependencies,
+                extractPluginDependenciesFromSource(snapshot == null ? script.getSource() : snapshot.getSource(), installedPluginVersions)
+        );
+        return List.copyOf(dependencies.values());
+    }
+
+    static List<PluginDependency> extractPluginDependenciesFromSource(String source, Map<String, String> installedPluginVersions) {
+        if (source == null || source.isBlank()) {
+            return List.of();
+        }
+
+        Map<String, LinkedHashSet<String>> actionsByPlugin = new LinkedHashMap<>();
+        Matcher matcher = GROOVY_PLUGIN_INVOKE_PATTERN.matcher(source);
+        while (matcher.find()) {
+            String pluginId = matcher.group(2).trim();
+            String action = matcher.group(4).trim();
+            if (pluginId.isBlank() || action.isBlank()) {
+                continue;
+            }
+            actionsByPlugin.computeIfAbsent(pluginId, ignored -> new LinkedHashSet<>()).add(action);
+        }
+
+        List<PluginDependency> dependencies = new ArrayList<>();
+        for (Map.Entry<String, LinkedHashSet<String>> entry : actionsByPlugin.entrySet()) {
+            String version = installedPluginVersions == null ? null : installedPluginVersions.get(entry.getKey());
+            dependencies.add(new PluginDependency()
+                    .setPluginId(entry.getKey())
+                    .setVersionRange(version == null || version.isBlank() ? null : ">= " + version)
+                    .setRequiredActions(new ArrayList<>(entry.getValue())));
+        }
+        return dependencies;
+    }
+
+    private void mergePluginDependencies(Map<String, PluginDependency> target, List<PluginDependency> source) {
+        for (PluginDependency dependency : source == null ? List.<PluginDependency>of() : source) {
+            if (dependency.getPluginId() == null || dependency.getPluginId().isBlank()) {
+                continue;
+            }
+            PluginDependency existing = target.computeIfAbsent(dependency.getPluginId(), pluginId -> new PluginDependency()
+                    .setPluginId(pluginId)
+                    .setRequiredActions(List.of()));
+            if ((existing.getVersionRange() == null || existing.getVersionRange().isBlank())
+                    && dependency.getVersionRange() != null && !dependency.getVersionRange().isBlank()) {
+                existing.setVersionRange(dependency.getVersionRange());
+            }
+            LinkedHashSet<String> actions = new LinkedHashSet<>(existing.getRequiredActions());
+            actions.addAll(dependency.getRequiredActions());
+            existing.setRequiredActions(new ArrayList<>(actions));
+        }
     }
 
     private List<ConfigTemplateItem> buildConfigTemplate(RepositoryPublishRequest request) {

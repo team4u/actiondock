@@ -116,11 +116,13 @@ import {
 import { buildScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
 import { buildDuplicatedScriptDefinition } from "../scriptDuplication";
 import { buildPluginInvokeSnippet, buildScriptInvokeSnippet } from "../scriptInvocationSnippets";
+import { extractPluginDependenciesFromSource } from "../pluginDependencies";
 import type {
   ConfigValue,
   ExecutionRecord,
   ExecutionStatus,
   ExecutionTriggerSource,
+  PluginDependency,
   PluginView,
   RepositoryDefinition,
   ScriptDefinition,
@@ -225,6 +227,34 @@ function suggestNextRepositoryVersion(value?: string): string {
   return next.join(".");
 }
 
+function renderPluginDependencyList(dependencies: PluginDependency[]) {
+  if (dependencies.length === 0) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前源码没有检测到插件调用" />;
+  }
+
+  return (
+    <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      {dependencies.map((dependency) => (
+        <div key={dependency.pluginId} className="plugin-dependency-row">
+          <Space direction="vertical" size={4}>
+            <Space wrap size={[8, 8]}>
+              <Text code>{dependency.pluginId}</Text>
+              {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>未锁定版本</Tag>}
+            </Space>
+            <Space wrap size={[6, 6]}>
+              {dependency.requiredActions.length > 0 ? (
+                dependency.requiredActions.map((action) => <Tag key={action}>{action}</Tag>)
+              ) : (
+                <Text type="secondary">未声明动作</Text>
+              )}
+            </Space>
+          </Space>
+        </div>
+      ))}
+    </Space>
+  );
+}
+
 export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -318,6 +348,10 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   });
   const referencePlugin = pluginReferences.find((plugin) => plugin.pluginId === referencePluginId) ?? null;
   const referenceScript = scriptReferences.find((script) => script.id === referenceScriptId) ?? null;
+  const detectedPluginDependencies = useMemo(
+    () => selectedScriptType === "GROOVY" ? extractPluginDependenciesFromSource(sourceText, availablePlugins) : [],
+    [availablePlugins, selectedScriptType, sourceText]
+  );
 
   const requestedTab = searchParams.get("tab");
   const activeTab =
@@ -747,6 +781,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       outputSchema,
       status: currentScript?.status ?? "DRAFT",
       version: currentScript?.version ?? 1,
+      pluginDependencies: selectedScriptType === "GROOVY" ? detectedPluginDependencies : [],
       publishedSnapshot: currentScript?.publishedSnapshot,
       createdAt: currentScript?.createdAt,
       updatedAt: currentScript?.updatedAt
@@ -1519,6 +1554,15 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 />
               </Form.Item>
             </Form>
+
+            <Card type="inner" title={`插件依赖 (${detectedPluginDependencies.length})`}>
+              {renderPluginDependencyList(detectedPluginDependencies)}
+              {detectedPluginDependencies.length > 0 ? (
+                <Text type="secondary">
+                  发布会把这些依赖写入仓库工具描述；安装工具时可选择同步安装或更新依赖插件。请先把对应插件发布到同一仓库。
+                </Text>
+              ) : null}
+            </Card>
 
             <Card type="inner" title={`配置模板 (${publishConfigValues.length})`}>
               {publishConfigValues.length === 0 ? (
