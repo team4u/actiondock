@@ -46,6 +46,7 @@ import {
   updateRepositoryTool,
   updateScript
 } from "../api";
+import { ScriptImportDiffModal, type ScriptImportDiffItem } from "../components/diff/ScriptImportDiffModal";
 import { PageHeader } from "../components/PageHeader";
 import { ScopeTag, getScopeLabel } from "../components/ScopeTag";
 import { TableLinkCell } from "../components/TableLinkCell";
@@ -56,6 +57,7 @@ import {
   formatScriptExportFileName,
   parseScriptImportBundle
 } from "../scriptTransfer";
+import { buildScriptDiff, toDiffTarget } from "../scriptDiff";
 import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 import { DevelopmentSyncTag } from "../components/domain/DevelopmentSyncTag";
@@ -116,6 +118,11 @@ export function ToolLibraryPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const fork = useForkScript({ messageApi });
   const [modal, modalContextHolder] = Modal.useModal();
+  const [importDiffOpen, setImportDiffOpen] = useState(false);
+  const [importDiffItems, setImportDiffItems] = useState<ScriptImportDiffItem[]>([]);
+  const [selectedImportDiffId, setSelectedImportDiffId] = useState<string | null>(null);
+  const [pendingImportScripts, setPendingImportScripts] = useState<ScriptDefinition[]>([]);
+  const [pendingImportCreateCount, setPendingImportCreateCount] = useState(0);
 
   const loadData = async () => {
     setLoading(true);
@@ -284,27 +291,31 @@ export function ToolLibraryPage() {
     try {
       const importedScripts = parseScriptImportBundle(await file.text());
       const analysis = analyzeScriptImport(importedScripts, editableScripts);
-      const overwritePreview = analysis.overwriteIds.slice(0, 10);
+      const currentById = new Map(editableScripts.map((script) => [script.id, script]));
+      const importedById = new Map(analysis.scripts.map((script) => [script.id, script]));
+      const overwriteItems = analysis.overwriteIds
+        .map((id) => {
+          const currentScript = currentById.get(id);
+          const importedScript = importedById.get(id);
+          if (!currentScript || !importedScript) {
+            return null;
+          }
+          return {
+            id,
+            currentScript,
+            importedScript,
+            diff: buildScriptDiff(toDiffTarget(currentScript), toDiffTarget(importedScript), {
+              context: "import"
+            })
+          };
+        })
+        .filter((item): item is ScriptImportDiffItem => Boolean(item));
 
-      await modal.confirm({
-        title: "确认导入工具",
-        okText: "开始导入",
-        cancelText: "取消",
-        width: 680,
-        content: (
-          <div className="script-import-summary">
-            <Text>共解析到 {analysis.scripts.length} 个工具。</Text>
-            <Text>新增 {analysis.createIds.length} 个，覆盖 {analysis.overwriteIds.length} 个。</Text>
-            {analysis.overwriteIds.length > 0 ? (
-              <>
-                <Text strong>将被覆盖的工具 ID</Text>
-                <pre className="script-import-result__code">{overwritePreview.join("\n")}</pre>
-              </>
-            ) : null}
-          </div>
-        ),
-        onOk: () => runImport(analysis.scripts)
-      });
+      setPendingImportScripts(analysis.scripts);
+      setPendingImportCreateCount(analysis.createIds.length);
+      setImportDiffItems(overwriteItems);
+      setSelectedImportDiffId(overwriteItems[0]?.id ?? null);
+      setImportDiffOpen(true);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "导入工具失败"));
     }
@@ -323,6 +334,12 @@ export function ToolLibraryPage() {
     }
 
     await handleImportFile(file);
+  };
+
+  const handleConfirmImportDiff = async () => {
+    const scriptsToImport = pendingImportScripts;
+    setImportDiffOpen(false);
+    await runImport(scriptsToImport);
   };
 
 
@@ -400,6 +417,11 @@ export function ToolLibraryPage() {
       setActionKey(null);
     }
   };
+
+  const diffEditorTheme =
+    typeof document !== "undefined" && document.documentElement.dataset.theme === "dark"
+      ? "vs-dark"
+      : "vs-light";
 
   const handleUpdateAll = async () => {
     setBulkUpdating(true);
@@ -691,6 +713,19 @@ export function ToolLibraryPage() {
           />
         </Card>
       </Space>
+
+      <ScriptImportDiffModal
+        open={importDiffOpen}
+        onCancel={() => setImportDiffOpen(false)}
+        onOk={() => void handleConfirmImportDiff()}
+        confirmLoading={importing}
+        overwriteItems={importDiffItems}
+        selectedId={selectedImportDiffId}
+        onSelect={setSelectedImportDiffId}
+        createCount={pendingImportCreateCount}
+        totalCount={pendingImportScripts.length}
+        theme={diffEditorTheme}
+      />
 
       <ForkScriptModal
         title={fork.forkModalOpen ? "创建 Fork" : undefined}

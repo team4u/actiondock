@@ -19,6 +19,7 @@ import {
   Descriptions,
   Dropdown,
   Form,
+  Modal,
   Row,
   Space,
   Spin,
@@ -57,6 +58,10 @@ import {
 import { formatDateTime } from "../../utils";
 import { useCopyMessage } from "../../hooks/useCopyMessage";
 import { DevelopmentSyncTag } from "../../components/domain/DevelopmentSyncTag";
+import { ScriptDiffDrawer } from "../../components/diff/ScriptDiffDrawer";
+import { ScriptDiffSummary } from "../../components/diff/ScriptDiffSummary";
+import { formatSchemaEditorState } from "../../schema";
+import { buildPublishDiffTarget, buildPublishScriptDiff } from "../../scriptDiff";
 import { useScriptEditor } from "./useScriptEditor";
 import { useScriptExecution } from "./useScriptExecution";
 import { useScriptPublishToRepo } from "./useScriptPublishToRepo";
@@ -72,19 +77,32 @@ import { ScriptCommandsTab } from "./ScriptCommandsTab";
 import { ScriptExecutionTab } from "./ScriptExecutionTab";
 import type { ScriptEditorFormValues } from "./types";
 import type { ScriptEditorPageProps } from "./types";
+import { parseJsonText } from "../../utils";
+import type { ScriptType } from "../../types";
 
 const { Text } = Typography;
+
+function resolvePreviewSchema(rawText: string): Record<string, unknown> {
+  try {
+    return parseJsonText(rawText, "Schema");
+  } catch {
+    return {};
+  }
+}
 
 export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [messageApi, contextHolder] = message.useMessage();
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [scriptDiffDrawerOpen, setScriptDiffDrawerOpen] = useState(false);
 
   const [scriptForm] = Form.useForm<ScriptEditorFormValues>();
   const [executionForm] = Form.useForm<Record<string, unknown>>();
   const [generatedScriptModalOpen, setGeneratedScriptModalOpen] = useState(false);
   const [generatedScriptText, setGeneratedScriptText] = useState("");
+  const watchedScriptValues = Form.useWatch([], scriptForm) as Partial<ScriptEditorFormValues> | undefined;
 
   // --- Core editor hook (also manages plugins) ---
   const editor = useScriptEditor({ mode, form: scriptForm, messageApi });
@@ -180,6 +198,62 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         }
       }
     : undefined;
+
+  const previewInputSchemaText = formatSchemaEditorState(editor.inputSchemaState);
+  const previewOutputSchemaText = formatSchemaEditorState(editor.outputSchemaState);
+  const previewScriptType =
+    (watchedScriptValues?.type as ScriptType | undefined) ?? editor.selectedScriptType;
+  const publishDiff = useMemo(() => {
+    const target = buildPublishDiffTarget({
+      name: watchedScriptValues?.name?.trim() || editor.currentScript?.name || "",
+      type: previewScriptType,
+      source: editor.sourceText,
+      inputSchema: resolvePreviewSchema(previewInputSchemaText),
+      outputSchema: resolvePreviewSchema(previewOutputSchemaText),
+      rawInputSchemaText: previewInputSchemaText,
+      rawOutputSchemaText: previewOutputSchemaText
+    });
+
+    return buildPublishScriptDiff(
+      editor.currentScript ?? {
+        id: "",
+        name: target.name ?? "",
+        type: previewScriptType,
+        source: editor.sourceText,
+        inputSchema: target.inputSchema ?? {},
+        outputSchema: target.outputSchema ?? {},
+        status: "DRAFT",
+        version: 1
+      },
+      target
+    );
+  }, [
+    editor.currentScript,
+    editor.selectedScriptType,
+    editor.sourceText,
+    previewInputSchemaText,
+    previewOutputSchemaText,
+    previewScriptType,
+    watchedScriptValues?.name
+  ]);
+  const showDiffNotice =
+    mode === "edit"
+    && !editor.isReadOnlyScript
+    && Boolean(editor.currentScript?.publishedSnapshot)
+    && publishDiff.hasChanges;
+
+  const openPublishConfirm = () => {
+    if (!publishDiff.hasChanges && publishDiff.comparisonMode !== "INITIAL") {
+      void editor.handlePublish();
+      return;
+    }
+    setPublishConfirmOpen(true);
+  };
+
+  const handleConfirmPublish = async () => {
+    setPublishConfirmOpen(false);
+    await editor.handlePublish();
+  };
 
   // --- Menu items ---
   const publishMenuItems: MenuProps["items"] = editor.headerActionModel.publishMenuKeys.map((key) => ({
@@ -322,6 +396,32 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         messageApi={messageApi}
       />
 
+      <Modal
+        title="发布确认"
+        open={publishConfirmOpen}
+        onCancel={() => setPublishConfirmOpen(false)}
+        onOk={() => void handleConfirmPublish()}
+        okText="确认发布"
+        cancelText="取消"
+        confirmLoading={editor.publishing}
+        width={760}
+        destroyOnHidden
+      >
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <ScriptDiffSummary diff={publishDiff} />
+          <Button onClick={() => setScriptDiffDrawerOpen(true)}>查看完整 Diff</Button>
+        </Space>
+      </Modal>
+
+      <ScriptDiffDrawer
+        open={scriptDiffDrawerOpen}
+        onClose={() => setScriptDiffDrawerOpen(false)}
+        diff={publishDiff}
+        scriptId={editor.currentScript?.id || watchedScriptValues?.id}
+        theme={editorTheme}
+        targetType={previewScriptType}
+      />
+
       <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
         <Row className="page-card-header" justify="end" align="middle" gutter={[12, 12]}>
           <Col className="page-card-header__back">
@@ -356,7 +456,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                     editor.headerActionModel.publishMenuKeys.length > 0 ? (
                       <Dropdown.Button
                         menu={{ items: publishMenuItems }}
-                        onClick={() => void editor.handlePublish()}
+                        onClick={openPublishConfirm}
                         loading={editor.publishing || publishToRepo.publishingToRepository || publishToRepo.publishMetadataLoading}
                       >
                         发布
@@ -364,7 +464,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                     ) : (
                       <Button
                         icon={<RocketOutlined />}
-                        onClick={() => void editor.handlePublish()}
+                        onClick={openPublishConfirm}
                         loading={editor.publishing}
                       >
                         发布
@@ -388,6 +488,25 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             showIcon
             message={`已从 ${editor.copiedFromScript.name || editor.copiedFromScript.id} 复制当前内容`}
             description="已自动生成新的脚本 ID，并预填源码、类型和输入输出结构。保存前请确认脚本 ID 未与现有脚本冲突。"
+          />
+        ) : null}
+
+        {showDiffNotice ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="有未发布变更"
+            description="当前本地内容与已发布版本存在差异，发布前建议先核对完整 Diff。"
+            action={
+              <Space wrap>
+                <Button size="small" onClick={() => setScriptDiffDrawerOpen(true)}>
+                  查看变更
+                </Button>
+                <Button size="small" type="primary" onClick={openPublishConfirm}>
+                  发布
+                </Button>
+              </Space>
+            }
           />
         ) : null}
 

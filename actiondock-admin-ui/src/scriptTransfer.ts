@@ -1,5 +1,6 @@
 import type {
   ConfigValue,
+  PluginDependency,
   PublishedScriptSnapshot,
   ScriptSchedule,
   ScriptDefinition,
@@ -78,6 +79,41 @@ function assertSchemaObject(value: unknown, fieldName: string): Record<string, u
   return value;
 }
 
+function assertOptionalStringArray(value: unknown, fieldName: string): string[] | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${fieldName} 必须是字符串数组`);
+  }
+  return value.map((item) => item.trim()).filter(Boolean);
+}
+
+function parsePluginDependency(value: unknown, fieldName: string): PluginDependency {
+  if (!isRecord(value)) {
+    throw new Error(`${fieldName} 必须是对象`);
+  }
+  if (!isNonEmptyString(value.pluginId)) {
+    throw new Error(`${fieldName}.pluginId 缺少合法值`);
+  }
+  const requiredActions = assertOptionalStringArray(value.requiredActions, `${fieldName}.requiredActions`) ?? [];
+  return {
+    pluginId: value.pluginId.trim(),
+    versionRange: assertOptionalString(value.versionRange, `${fieldName}.versionRange`),
+    requiredActions
+  };
+}
+
+function parsePluginDependencies(value: unknown, fieldName: string): PluginDependency[] | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} 必须是数组`);
+  }
+  return value.map((item, index) => parsePluginDependency(item, `${fieldName}[${index}]`));
+}
+
 function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScriptSnapshot | undefined {
   if (value == null) {
     return undefined;
@@ -149,6 +185,13 @@ function parseScriptDefinition(value: unknown, index: number): ScriptDefinition 
     outputSchema: assertSchemaObject(value.outputSchema, `第 ${index + 1} 条脚本 ${id} 的 outputSchema`),
     status: status as ScriptStatus,
     version: Number(version),
+    owner: assertOptionalString(value.owner, `第 ${index + 1} 条脚本 ${id} 的 owner`),
+    description: assertOptionalString(value.description, `第 ${index + 1} 条脚本 ${id} 的 description`),
+    tags: assertOptionalStringArray(value.tags, `第 ${index + 1} 条脚本 ${id} 的 tags`),
+    pluginDependencies: parsePluginDependencies(
+      value.pluginDependencies,
+      `第 ${index + 1} 条脚本 ${id} 的 pluginDependencies`
+    ),
     publishedSnapshot: parsePublishedSnapshot(value.publishedSnapshot, `第 ${index + 1} 条脚本 ${id} 的 publishedSnapshot`),
     createdAt: assertOptionalString(value.createdAt, `第 ${index + 1} 条脚本 ${id} 的 createdAt`),
     updatedAt: assertOptionalString(value.updatedAt, `第 ${index + 1} 条脚本 ${id} 的 updatedAt`)

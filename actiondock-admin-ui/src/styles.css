@@ -377,6 +377,60 @@ a {
   gap: 8px;
 }
 
+.script-import-diff-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 520px;
+}
+
+.script-import-diff-sidebar {
+  min-width: 0;
+  max-height: 72vh;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+}
+
+.script-import-diff-item {
+  cursor: pointer;
+  padding-inline: 10px !important;
+  border-radius: var(--app-radius-sm);
+  transition: background-color 0.2s ease;
+}
+
+.script-import-diff-item:hover {
+  background: var(--app-selection);
+}
+
+.script-import-diff-item--active {
+  background: var(--app-selection);
+}
+
+.script-import-diff-main {
+  min-width: 0;
+}
+
+.script-diff-source-viewer {
+  overflow: hidden;
+  border: 1px solid var(--app-code-border);
+  border-radius: var(--app-radius-md);
+}
+
+.script-diff-raw-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.script-diff-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .script-import-result__code {
   margin: 0;
   padding: 10px 12px;
@@ -805,6 +859,11 @@ a {
 }
 
 @media (max-width: 767px) {
+  .script-import-diff-layout,
+  .script-diff-raw-grid {
+    grid-template-columns: 1fr;
+  }
+
   .script-editor-page__execution-actions {
     width: 100%;
   }
