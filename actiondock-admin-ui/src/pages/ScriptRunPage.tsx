@@ -1,6 +1,7 @@
 import {
   ArrowLeftOutlined,
   PlayCircleOutlined,
+  QuestionCircleOutlined,
   ReloadOutlined
 } from "@ant-design/icons";
 import {
@@ -14,6 +15,7 @@ import {
   Spin,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message
 } from "antd";
@@ -346,7 +348,7 @@ export function ScriptRunPage() {
                 <div className="run-page__layout">
                   <Card
                     className="run-panel run-panel--input"
-                    title="输入"
+                    title={<Space>输入 <Tooltip title="字符串输入支持 ${config.xxx}；脚本内部也可通过只读变量 config 读取全局配置值。"><QuestionCircleOutlined style={{ color: "#1677ff", fontSize: 14 }} /></Tooltip></Space>}
                     extra={
                       <Button
                         type="primary"
@@ -378,13 +380,6 @@ export function ScriptRunPage() {
                         style={{ marginBottom: 14 }}
                       />
                     ) : null}
-
-                    <Alert
-                      type="info"
-                      showIcon
-                      message="字符串输入支持 ${config.xxx}；脚本内部也可通过只读变量 config 读取全局配置值。"
-                      style={{ marginBottom: 14 }}
-                    />
 
                     <Radio.Group
                       value={executionMode}

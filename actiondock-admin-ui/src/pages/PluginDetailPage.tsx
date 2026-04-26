@@ -3,6 +3,7 @@ import {
   DeleteOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
+  QuestionCircleOutlined,
   ReloadOutlined,
   UploadOutlined
 } from "@ant-design/icons";
@@ -20,6 +21,7 @@ import {
   Space,
   Spin,
   Tabs,
+  Tooltip,
   Typography,
   message
 } from "antd";
@@ -656,18 +658,13 @@ export function PluginDetailPage() {
               },
               {
                 key: "config",
-                label: "配置",
+                label: <Space>配置 <Tooltip title="字符串字段支持使用 ${config.xxx} 引用全局配置值；插件真正执行时会按最新值解析。"><QuestionCircleOutlined style={{ color: "#1677ff", fontSize: 14 }} /></Tooltip></Space>,
                 children: configLoading ? (
                   <Alert type="info" showIcon message="正在加载插件配置" />
                 ) : !currentConfig ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="插件配置不存在或加载失败。" />
                 ) : (
                   <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                    <Alert
-                      type="info"
-                      showIcon
-                      message="字符串字段支持使用 ${config.xxx} 引用全局配置值；插件真正执行时会按最新值解析。"
-                    />
                     <SchemaObjectEditor
                       form={configForm}
                       supportedFields={configSupportedFields}
@@ -706,13 +703,8 @@ export function PluginDetailPage() {
                     {plugin?.actions.length ? (
                       <Row gutter={[16, 16]} align="stretch" className="equal-height-row">
                         <Col xs={24} xl={10} className="equal-height-col">
-                          <Card type="inner" title="动作参数" className="equal-height-card">
+                          <Card type="inner" title={<Space>动作参数 <Tooltip title="调试参数和脚本输入模拟里的字符串也支持 ${config.xxx}。"><QuestionCircleOutlined style={{ color: "#1677ff", fontSize: 14 }} /></Tooltip></Space>} className="equal-height-card">
                             <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                              <Alert
-                                type="info"
-                                showIcon
-                                message="调试参数和脚本输入模拟里的字符串也支持 ${config.xxx}。"
-                              />
                               <Form layout="vertical">
                                 <Form.Item label="动作名称">
                                   <Select value={currentAction?.action} options={actionOptions} onChange={setSelectedActionName} />

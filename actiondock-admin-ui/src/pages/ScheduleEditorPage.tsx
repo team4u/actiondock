@@ -1,7 +1,8 @@
 import {
   ArrowLeftOutlined,
   DeleteOutlined,
-  PlayCircleOutlined
+  PlayCircleOutlined,
+  QuestionCircleOutlined
 } from "@ant-design/icons";
 import {
   Alert,
@@ -16,6 +17,7 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
   Typography,
   message
 } from "antd";
@@ -635,14 +637,8 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                       </Form>
 
                       <div>
-                        <Text strong>固定输入</Text>
+                        <Space><Text strong>固定输入</Text><Tooltip title="固定输入中的字符串支持 ${config.xxx}；保存时会先解析并按脚本 inputSchema 校验。"><QuestionCircleOutlined style={{ color: "#1677ff", fontSize: 14 }} /></Tooltip></Space>
                         <div style={{ marginTop: 12 }}>
-                          <Alert
-                            type="info"
-                            showIcon
-                            message="固定输入中的字符串支持 ${config.xxx}；保存时会先解析并按脚本 inputSchema 校验。"
-                            style={{ marginBottom: 12 }}
-                          />
                           <SchemaObjectEditor
                             form={inputForm}
                             supportedFields={supportedInputFields}
