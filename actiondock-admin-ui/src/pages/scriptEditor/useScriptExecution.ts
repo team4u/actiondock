@@ -61,6 +61,7 @@ export interface ScriptExecutionContext {
   handleClearExecutionHistory: () => Promise<void>;
   handleExecutionInputModeChange: (nextMode: string) => void;
   handleRefillExecutionInput: (record: ExecutionRecord) => void;
+  handleLoadPreset: (input: Record<string, unknown>) => void;
   handleResetExecutionInput: () => void;
   loadExecutionHistory: (scriptId: string, preferredExecutionId?: string) => Promise<void>;
 }
@@ -283,8 +284,8 @@ export function useScriptExecution({
     setExecutionValidationError(null);
   };
 
-  const handleRefillExecutionInput = (record: ExecutionRecord) => {
-    const refillState = buildSchemaFieldRefillState(supportedFields, record.input);
+  const refillFormInput = (input: Record<string, unknown>, successMessage: string, fallbackMessage: string) => {
+    const refillState = buildSchemaFieldRefillState(supportedFields, input);
 
     executionForm.resetFields();
     executionForm.setFieldsValue(refillState.formValues as Record<string, any>);
@@ -292,13 +293,19 @@ export function useScriptExecution({
     setExecutionValidationError(null);
 
     if (refillState.compatibleWithSchemaForm || !supportsSchemaForm) {
-      messageApi.success("已将历史输入填充到调试区");
+      messageApi.success(successMessage);
       return;
     }
 
     setExecutionInputMode("JSON");
-    messageApi.info("已回填历史输入，并切换到 JSON 模式以保留完整参数");
+    messageApi.info(fallbackMessage);
   };
+
+  const handleRefillExecutionInput = (record: ExecutionRecord) =>
+    refillFormInput(record.input, "已将历史输入填充到调试区", "已回填历史输入，并切换到 JSON 模式以保留完整参数");
+
+  const handleLoadPreset = (input: Record<string, unknown>) =>
+    refillFormInput(input, "已加载预设", "预设含非表单字段，已切换到 JSON 模式");
 
   const handleDeleteExecution = async (record: ExecutionRecord) => {
     setDeletingExecutionId(record.id);
@@ -362,6 +369,7 @@ export function useScriptExecution({
     handleClearExecutionHistory,
     handleExecutionInputModeChange,
     handleRefillExecutionInput,
+    handleLoadPreset,
     handleResetExecutionInput,
     loadExecutionHistory
   };

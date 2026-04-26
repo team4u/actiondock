@@ -6,6 +6,7 @@ import { ExecutionResultCard } from "../../components/ExecutionResultCard";
 import { SchemaObjectEditor } from "../../components/SchemaObjectEditor";
 import type { ColumnsType } from "antd/es/table";
 import type { FormInstance } from "antd";
+import type { ReactNode } from "react";
 import type { ExecutionRecord, ExecutionStatus, ScriptDefinition, SubmitMode, ValidationErrorData } from "../../types";
 import { formatDateTime, getExecutionStatusColor, isExecutionActive } from "../../utils";
 import type { SchemaFieldDefinition } from "../../schema";
@@ -46,6 +47,7 @@ interface ScriptExecutionTabProps {
   onExecutionHistoryRowClick: (record: ExecutionRecord) => void;
   onRefillCurrentExecutionInput: (record: ExecutionRecord) => void;
   activeExecutionId: string | null;
+  presetBar: ReactNode;
 }
 
 export function ScriptExecutionTab({
@@ -76,7 +78,8 @@ export function ScriptExecutionTab({
   onRefreshHistory,
   onExecutionHistoryRowClick,
   onRefillCurrentExecutionInput,
-  activeExecutionId
+  activeExecutionId,
+  presetBar
 }: ScriptExecutionTabProps) {
   const historyColumns: ColumnsType<ExecutionRecord> = [
     {
@@ -191,7 +194,7 @@ export function ScriptExecutionTab({
                   value={executionMode}
                   optionType="button"
                   buttonStyle="solid"
-                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => onExecutionModeChange(event.target.value as SubmitMode)}
+                  onChange={(event) => onExecutionModeChange(event.target.value as SubmitMode)}
                   options={[
                     { label: "同步执行", value: "SYNC" },
                     { label: "异步执行", value: "ASYNC" }
@@ -212,6 +215,8 @@ export function ScriptExecutionTab({
                   </Button>
                 </Space>
               </div>
+
+              {presetBar}
 
               <SchemaObjectEditor
                 form={executionForm}

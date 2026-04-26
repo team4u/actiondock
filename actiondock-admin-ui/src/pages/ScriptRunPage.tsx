@@ -27,11 +27,13 @@ import {
 } from "../api";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { ExecutionLogPanel } from "../components/ExecutionLogPanel";
+import { ExecutionPresetBar } from "../components/ExecutionPresetBar";
 import { usePollingExecution } from "../hooks/usePollingExecution";
 import { resolveSchemaFields } from "../schema";
 import {
   buildSchemaExecutionInput,
   buildSchemaFieldInitialState,
+  buildSchemaFieldRefillState,
   formatSchemaFieldSupplement,
   isValidationErrorData
 } from "../schemaExecution";
@@ -113,6 +115,24 @@ export function ScriptRunPage() {
   const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
   const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
   const backPath = "/tools";
+
+  const watchedFormValues = Form.useWatch([], form) as Record<string, unknown> | undefined;
+
+  const currentRunInput = useMemo(() => {
+    if (!script || supportedInputFields.length === 0) return null;
+    try {
+      return buildSchemaExecutionInput(supportedInputFields, form.getFieldsValue(true) as Record<string, unknown>);
+    } catch {
+      return null;
+    }
+  }, [script, supportedInputFields, watchedFormValues]);
+
+  const handleLoadPreset = (input: Record<string, unknown>) => {
+    const refillState = buildSchemaFieldRefillState(supportedInputFields, input);
+    form.resetFields();
+    form.setFieldsValue(refillState.formValues as Record<string, unknown>);
+    setValidationError(null);
+  };
 
   useEffect(() => {
     if (!id) {
@@ -358,13 +378,23 @@ export function ScriptRunPage() {
               value={executionMode}
               optionType="button"
               buttonStyle="solid"
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setExecutionMode(event.target.value as SubmitMode)}
+              onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
               options={[
                 { label: "同步执行", value: "SYNC" },
                 { label: "异步执行", value: "ASYNC" }
               ]}
               style={{ marginBottom: 16 }}
             />
+
+            {supportedInputFields.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <ExecutionPresetBar
+                  scriptId={script?.id}
+                  currentInput={currentRunInput}
+                  onLoadPreset={handleLoadPreset}
+                />
+              </div>
+            )}
 
             {supportedInputFields.length === 0 ? (
               <div className="run-panel__empty">
