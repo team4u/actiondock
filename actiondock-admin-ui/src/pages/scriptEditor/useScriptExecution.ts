@@ -18,6 +18,7 @@ import {
 } from "../../schemaObjectEditorSupport";
 import {
   buildSchemaFieldInitialState,
+  buildSchemaFieldMergedState,
   isValidationErrorData
 } from "../../schemaExecution";
 import { resolveSchemaFields } from "../../schema";
@@ -79,6 +80,8 @@ export function useScriptExecution({
   const [clearingExecutionHistory, setClearingExecutionHistory] = useState(false);
   const currentScriptRef = useRef(currentScript);
   currentScriptRef.current = currentScript;
+  const previousScriptIdRef = useRef<string | null>(null);
+  const skipSchemaMergeRef = useRef(false);
   const { pollingExecutionId, startPolling, clearPolling } = usePollingExecution({
     onPollResult: (record) => {
       setCurrentExecution((previous) => (previous?.id === record.id ? record : previous));
@@ -146,6 +149,13 @@ export function useScriptExecution({
   };
 
   useEffect(() => {
+    const scriptId = currentScript?.id ?? null;
+    if (previousScriptIdRef.current === scriptId) {
+      return;
+    }
+    previousScriptIdRef.current = scriptId;
+    skipSchemaMergeRef.current = true;
+
     clearPolling();
     executionForm.resetFields();
     executionForm.setFieldsValue(executionInitialState.formValues as Record<string, any>);
@@ -154,7 +164,7 @@ export function useScriptExecution({
     setExecutionInputMode(supportsSchemaForm ? "SCHEMA" : "JSON");
     setExecutionValidationError(null);
 
-    if (!currentScript?.id) {
+    if (!scriptId) {
       setExecutionHistory([]);
       setCurrentExecution(null);
       return;
@@ -162,8 +172,31 @@ export function useScriptExecution({
 
     setExecutionHistory([]);
     setCurrentExecution(null);
-    void loadExecutionHistory(currentScript.id);
-  }, [currentScript?.id, executionForm, executionInitialState, supportsSchemaForm]);
+    void loadExecutionHistory(scriptId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScript?.id]);
+
+  useEffect(() => {
+    if (skipSchemaMergeRef.current) {
+      skipSchemaMergeRef.current = false;
+      return;
+    }
+
+    const scriptId = currentScript?.id ?? null;
+    if (!scriptId) return;
+
+    const currentUserValues = executionForm.getFieldsValue(true) as Record<string, unknown>;
+    const currentJsonText = executionJsonInput;
+
+    const merged = buildSchemaFieldMergedState(supportedFields, currentUserValues, currentJsonText);
+
+    executionForm.resetFields();
+    executionForm.setFieldsValue(merged.formValues as Record<string, any>);
+    setExecutionJsonInput(merged.jsonText);
+    setExecutionInputMode(supportsSchemaForm ? "SCHEMA" : "JSON");
+    setExecutionValidationError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supportedFields]);
 
   const handleExecute = async () => {
     if (!currentScript?.id) {

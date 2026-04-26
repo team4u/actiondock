@@ -118,11 +118,11 @@ public class ConfigValueApplicationService {
      * @throws IllegalArgumentException 如果 key 不存在、参数为空或试图修改 key
      * @throws IllegalStateException    如果服务未启用
      */
-    public ConfigValue update(String key, ConfigValue configValue) {
+    public ConfigValue update(String key, ConfigValue configValue, boolean preserveValue) {
         ensureEnabled();
         String normalizedKey = normalizeKey(key);
         ConfigValue existing = requireExisting(normalizedKey);
-        ConfigValue normalized = normalizeForUpdate(normalizedKey, configValue);
+        ConfigValue normalized = normalizeForUpdate(normalizedKey, configValue, preserveValue, existing);
         normalized.setCreatedAt(existing.getCreatedAt())
                 .setUpdatedAt(LocalDateTime.now())
                 .setRepositoryId(existing.getRepositoryId())
@@ -282,6 +282,7 @@ public class ConfigValueApplicationService {
                 .setKey(normalizeKey(configValue.getKey()))
                 .setValue(configValue.getValue())
                 .setDescription(normalizeDescription(configValue.getDescription()))
+                .setSecret(configValue.isSecret())
                 .setRepositoryId(configValue.getRepositoryId())
                 .setRepositoryToolId(configValue.getRepositoryToolId())
                 .setRepositoryVersion(configValue.getRepositoryVersion())
@@ -290,7 +291,10 @@ public class ConfigValueApplicationService {
                 .setOverridden(configValue.isOverridden());
     }
 
-    private ConfigValue normalizeForUpdate(String key, ConfigValue configValue) {
+    private ConfigValue normalizeForUpdate(String key,
+                                           ConfigValue configValue,
+                                           boolean preserveValue,
+                                           ConfigValue existing) {
         if (configValue == null) {
             throw new IllegalArgumentException("配置值不能为空");
         }
@@ -299,8 +303,9 @@ public class ConfigValueApplicationService {
         }
         return new ConfigValue()
                 .setKey(key)
-                .setValue(configValue.getValue())
+                .setValue(preserveValue ? existing.getValue() : configValue.getValue())
                 .setDescription(normalizeDescription(configValue.getDescription()))
+                .setSecret(configValue.isSecret())
                 .setRepositoryId(configValue.getRepositoryId())
                 .setRepositoryToolId(configValue.getRepositoryToolId())
                 .setRepositoryVersion(configValue.getRepositoryVersion())
@@ -337,6 +342,7 @@ public class ConfigValueApplicationService {
                 .setKey(source.getKey())
                 .setValue(source.getValue())
                 .setDescription(source.getDescription())
+                .setSecret(source.isSecret())
                 .setRepositoryId(source.getRepositoryId())
                 .setRepositoryToolId(source.getRepositoryToolId())
                 .setRepositoryVersion(source.getRepositoryVersion())

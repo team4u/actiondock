@@ -53,9 +53,6 @@ java -jar ../actiondock-cli/target/actiondock-cli.jar \
 ```yaml
 app:
   home-dir: ${user.home}/.actiondock
-  auth:
-    api-keys:
-      - local-dev-key
   execution:
     async-pool-size: 4
     groovy:

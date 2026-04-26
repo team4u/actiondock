@@ -201,16 +201,24 @@ function parseConfigValue(value: unknown, index: number): ConfigValue {
 
   const key = value.key;
   const rawValue = value.value;
+  const secret = value.secret == null ? false : assertBoolean(value.secret, `第 ${index + 1} 条配置值 ${String(key)} 的 secret`);
+  const hasValue = value.hasValue == null ? undefined : assertBoolean(value.hasValue, `第 ${index + 1} 条配置值 ${String(key)} 的 hasValue`);
   if (!isNonEmptyString(key)) {
     throw new Error(`第 ${index + 1} 条配置值缺少合法 key`);
   }
-  if (typeof rawValue !== "string") {
+  if (!secret && typeof rawValue !== "string") {
+    throw new Error(`第 ${index + 1} 条配置值 ${key} 的 value 必须是字符串`);
+  }
+  if (secret && rawValue != null && typeof rawValue !== "string") {
     throw new Error(`第 ${index + 1} 条配置值 ${key} 的 value 必须是字符串`);
   }
 
   return {
     key: key.trim(),
-    value: rawValue,
+    value: typeof rawValue === "string" ? rawValue : undefined,
+    valueMasked: secret && (hasValue ?? (typeof rawValue === "string" && rawValue.length > 0)) ? "********" : undefined,
+    hasValue: secret ? (hasValue ?? (typeof rawValue === "string" && rawValue.length > 0)) : undefined,
+    secret,
     description: assertOptionalString(value.description, `第 ${index + 1} 条配置值 ${key} 的 description`),
     createdAt: assertOptionalString(value.createdAt, `第 ${index + 1} 条配置值 ${key} 的 createdAt`),
     updatedAt: assertOptionalString(value.updatedAt, `第 ${index + 1} 条配置值 ${key} 的 updatedAt`)
@@ -395,11 +403,20 @@ export function analyzeScheduleImport(
   };
 }
 
-export function buildConfigValueExportBundle(configValues: ConfigValue[]): ConfigValueExportBundleV1 {
+export function buildConfigValueExportBundle(
+  configValues: ConfigValue[],
+  options?: { includeSecretValues?: boolean }
+): ConfigValueExportBundleV1 {
+  const includeSecretValues = options?.includeSecretValues ?? false;
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    configValues: [...configValues].sort((left, right) => left.key.localeCompare(right.key))
+    configValues: [...configValues]
+      .sort((left, right) => left.key.localeCompare(right.key))
+      .map((item) => ({
+        ...item,
+        value: item.secret && !includeSecretValues ? undefined : item.value
+      }))
   };
 }
 

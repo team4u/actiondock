@@ -5,10 +5,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.team4u.actiondock.config.AppProperties;
+import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * API Key 认证过滤器，通过 Bearer Token 验证 API 请求。
@@ -16,10 +15,10 @@ import java.util.List;
  * @author jay.wu
  */
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
-    private final AppProperties properties;
+    private final ApiAccessTokenApplicationService apiAccessTokenApplicationService;
 
-    public ApiKeyAuthFilter(AppProperties properties) {
-        this.properties = properties;
+    public ApiKeyAuthFilter(ApiAccessTokenApplicationService apiAccessTokenApplicationService) {
+        this.apiAccessTokenApplicationService = apiAccessTokenApplicationService;
     }
 
     /**
@@ -52,15 +51,14 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        List<String> apiKeys = properties.getAuth().getApiKeys();
-        if (apiKeys == null || apiKeys.isEmpty()) {
+        if (!apiAccessTokenApplicationService.hasAnyToken()) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String authorization = request.getHeader("Authorization");
         String token = authorization == null ? null : authorization.replaceFirst("(?i)^Bearer\\s+", "");
-        if (token == null || !apiKeys.contains(token)) {
+        if (token == null || !apiAccessTokenApplicationService.authenticate(token)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }

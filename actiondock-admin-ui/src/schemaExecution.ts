@@ -55,6 +55,50 @@ export function buildSchemaFieldInitialState(fields: SchemaFieldDefinition[]): {
   };
 }
 
+export function buildSchemaFieldMergedState(
+  newFields: SchemaFieldDefinition[],
+  previousFormValues: Record<string, unknown>,
+  previousJsonText: string
+): {
+  formValues: Record<string, unknown>;
+  jsonText: string;
+} {
+  const defaults = buildSchemaFieldInitialValues(newFields);
+
+  const mergedFormValues: Record<string, unknown> = {};
+  for (const field of newFields) {
+    const previous = previousFormValues[field.name];
+    if (previous !== undefined && isMatchingSchemaFieldValue(field, previous)) {
+      mergedFormValues[field.name] = previous;
+    } else if (defaults[field.name] !== undefined) {
+      mergedFormValues[field.name] = defaults[field.name];
+    }
+  }
+
+  let mergedJsonText: string;
+  try {
+    const previousJson = JSON.parse(previousJsonText || "{}");
+    if (typeof previousJson === "object" && previousJson !== null && !Array.isArray(previousJson)) {
+      const mergedJson: Record<string, unknown> = {};
+      for (const field of newFields) {
+        const previousJsonValue = (previousJson as Record<string, unknown>)[field.name];
+        if (previousJsonValue !== undefined && isMatchingSchemaFieldValue(field, previousJsonValue)) {
+          mergedJson[field.name] = previousJsonValue;
+        } else if (defaults[field.name] !== undefined) {
+          mergedJson[field.name] = defaults[field.name];
+        }
+      }
+      mergedJsonText = prettyJson(mergedJson);
+    } else {
+      mergedJsonText = prettyJson(mergedFormValues);
+    }
+  } catch {
+    mergedJsonText = prettyJson(mergedFormValues);
+  }
+
+  return { formValues: mergedFormValues, jsonText: mergedJsonText };
+}
+
 function buildSchemaFieldPlaceholderValue(field: SchemaFieldDefinition): unknown {
   switch (field.kind) {
     case "enum":

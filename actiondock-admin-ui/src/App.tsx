@@ -18,7 +18,7 @@ import { ColorModeContext, type ColorMode, useColorMode } from "./contexts/Color
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   buildSystemSettingsSearch,
-  isApiKeySettingsRoute
+  isSystemSettingsRoute
 } from "./settingsRouting";
 
 const { Header, Content, Sider } = Layout;
@@ -53,9 +53,6 @@ const ScheduleEditorPage = lazy(() =>
 );
 const SystemSettingsPage = lazy(() =>
   import("./pages/SystemSettingsPage").then((module) => ({ default: module.SystemSettingsPage }))
-);
-const ConfigValueManagementPage = lazy(() =>
-  import("./pages/ConfigValueManagementPage").then((module) => ({ default: module.ConfigValueManagementPage }))
 );
 
 function getSystemColorMode(): ColorMode {
@@ -93,9 +90,6 @@ function resolveSelectedNavKey(pathname: string): string {
   if (pathname.startsWith("/settings")) {
     return "settings";
   }
-  if (pathname.startsWith("/config-values")) {
-    return "config-values";
-  }
   if (pathname.startsWith("/repositories")) {
     return "repositories";
   }
@@ -122,8 +116,6 @@ function resolveTitle(selectedNavKey: string): string {
       return "系统配置";
     case "schedules":
       return "定时任务";
-    case "config-values":
-      return "配置值管理";
     default:
       return "工具库";
   }
@@ -181,12 +173,7 @@ function AdminShell() {
           {
             key: "settings",
             label: "系统配置",
-            onClick: () => navigate(`/settings${buildSystemSettingsSearch("api-key")}`)
-          },
-          {
-            key: "config-values",
-            label: "配置值管理",
-            onClick: () => navigate("/config-values")
+            onClick: () => navigate(`/settings${buildSystemSettingsSearch("config-values")}`)
           }
         ]}
       />
@@ -234,8 +221,6 @@ function AdminShell() {
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
               <Route path="/settings" element={<SystemSettingsPage />} />
-              <Route path="/settings/api-key" element={<LegacyApiKeySettingsRedirect />} />
-              <Route path="/config-values" element={<ConfigValueManagementPage />} />
               <Route
                 path="/plugins/:pluginId"
                 element={<PluginDetailPage />}
@@ -266,21 +251,6 @@ function AdminShell() {
   );
 }
 
-function LegacyApiKeySettingsRedirect() {
-  const location = useLocation();
-
-  return (
-    <Navigate
-      to={{
-        pathname: "/settings",
-        search: buildSystemSettingsSearch("api-key")
-      }}
-      replace
-      state={location.state}
-    />
-  );
-}
-
 export function App() {
   const colorMode = useSystemColorMode();
   const isDark = colorMode === "dark";
@@ -296,11 +266,11 @@ export function App() {
   useEffect(
     () =>
       onAuthRequired(() => {
-        if (isApiKeySettingsRoute(location.pathname, location.search)) {
+        if (isSystemSettingsRoute(location.pathname)) {
           return;
         }
 
-        navigate(`/settings${buildSystemSettingsSearch("api-key")}`, {
+        navigate(`/settings${buildSystemSettingsSearch("console-token")}`, {
           state: {
             from: `${location.pathname}${location.search}${location.hash}`
           }

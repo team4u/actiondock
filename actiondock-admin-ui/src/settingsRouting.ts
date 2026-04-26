@@ -1,13 +1,15 @@
-export const SYSTEM_SETTINGS_TABS = ["api-key"] as const;
+export const SYSTEM_SETTINGS_TABS = ["config-values", "access-tokens", "console-token"] as const;
 
 export type SystemSettingsTab = (typeof SYSTEM_SETTINGS_TABS)[number];
 
-const DEFAULT_SYSTEM_SETTINGS_TAB: SystemSettingsTab = "api-key";
+const DEFAULT_SYSTEM_SETTINGS_TAB: SystemSettingsTab = "config-values";
 
 export function resolveSystemSettingsTab(search: URLSearchParams | string): SystemSettingsTab {
   const searchParams = typeof search === "string" ? new URLSearchParams(search) : search;
   const requestedTab = searchParams.get("tab");
-  return requestedTab === "api-key" ? requestedTab : DEFAULT_SYSTEM_SETTINGS_TAB;
+  return SYSTEM_SETTINGS_TABS.includes(requestedTab as SystemSettingsTab)
+    ? requestedTab as SystemSettingsTab
+    : DEFAULT_SYSTEM_SETTINGS_TAB;
 }
 
 export function buildSystemSettingsSearch(tab: SystemSettingsTab): string {
@@ -16,7 +18,6 @@ export function buildSystemSettingsSearch(tab: SystemSettingsTab): string {
   return `?${searchParams.toString()}`;
 }
 
-export function isApiKeySettingsRoute(pathname: string, search: string): boolean {
-  return pathname === "/settings/api-key"
-    || (pathname === "/settings" && resolveSystemSettingsTab(search) === "api-key");
+export function isSystemSettingsRoute(pathname: string): boolean {
+  return pathname === "/settings";
 }

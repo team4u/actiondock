@@ -228,8 +228,11 @@ export interface PluginInvokeRequest {
 
 export interface ConfigValue {
   key: string;
-  value: string;
+  value?: string | null;
+  valueMasked?: string | null;
+  hasValue?: boolean;
   description?: string;
+  secret?: boolean;
   repositoryId?: string;
   repositoryToolId?: string;
   repositoryVersion?: string;
@@ -244,6 +247,23 @@ export interface ConfigValueRequest {
   key: string;
   value: string;
   description?: string;
+  secret?: boolean;
+  preserveValue?: boolean;
+}
+
+export interface AccessToken {
+  id: string;
+  name: string;
+  tokenPreview: string;
+  enabled: boolean;
+  tokenValue?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastUsedAt?: string;
+}
+
+export interface AccessTokenRequest {
+  name: string;
 }
 
 export interface RepositoryDefinition {

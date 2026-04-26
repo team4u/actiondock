@@ -62,6 +62,25 @@ class ConfigValueApplicationServiceTest {
                 .hasMessageContaining("配置值引用存在循环");
     }
 
+    @Test
+    void updateCanPreserveSecretValue() {
+        service.create(new ConfigValue()
+                .setKey("openai.api_key")
+                .setValue("sk-old")
+                .setDescription("OpenAI")
+                .setSecret(true));
+
+        ConfigValue updated = service.update("openai.api_key", new ConfigValue()
+                .setKey("openai.api_key")
+                .setValue("")
+                .setDescription("Updated")
+                .setSecret(true), true);
+
+        assertThat(updated.getValue()).isEqualTo("sk-old");
+        assertThat(updated.isSecret()).isTrue();
+        assertThat(updated.getDescription()).isEqualTo("Updated");
+    }
+
     private static final class InMemoryConfigValueRepository implements ConfigValueRepository {
         private final Map<String, ConfigValue> values = new LinkedHashMap<>();
 
@@ -96,6 +115,7 @@ class ConfigValueApplicationServiceTest {
                     .setKey(source.getKey())
                     .setValue(source.getValue())
                     .setDescription(source.getDescription())
+                    .setSecret(source.isSecret())
                     .setCreatedAt(source.getCreatedAt())
                     .setUpdatedAt(source.getUpdatedAt());
         }

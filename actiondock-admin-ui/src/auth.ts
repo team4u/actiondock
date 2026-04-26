@@ -1,4 +1,4 @@
-const TOKEN_KEY = "actiondock-admin-api-key";
+const TOKEN_KEY = "actiondock-admin-access-token";
 const AUTH_EVENT = "actiondock:auth-required";
 
 export function getApiKey(): string {

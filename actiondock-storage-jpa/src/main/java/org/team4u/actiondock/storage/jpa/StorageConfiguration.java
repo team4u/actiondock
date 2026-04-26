@@ -3,6 +3,7 @@ package org.team4u.actiondock.storage.jpa;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -13,6 +14,7 @@ import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.storage.jpa.adapter.JpaConfigValueRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaExecutionRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaApiAccessTokenRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaPluginRegistryRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryDefinitionRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaScriptRepositoryAdapter;
@@ -21,6 +23,7 @@ import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryToolInstallationRe
 import org.team4u.actiondock.storage.jpa.json.JacksonJsonCodec;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataConfigValueRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionEntityRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataApiAccessTokenRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataPluginRegistrationRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryDefinitionRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
@@ -54,6 +57,11 @@ public class StorageConfiguration {
     @Bean
     public ConfigValueRepository configValueRepository(SpringDataConfigValueRepository repository) {
         return new JpaConfigValueRepositoryAdapter(repository);
+    }
+
+    @Bean
+    public ApiAccessTokenRepository apiAccessTokenRepository(SpringDataApiAccessTokenRepository repository) {
+        return new JpaApiAccessTokenRepositoryAdapter(repository);
     }
 
     /**

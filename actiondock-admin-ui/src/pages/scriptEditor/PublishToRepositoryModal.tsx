@@ -212,6 +212,7 @@ export function PublishToRepositoryModal({
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 {configValues.map((item) => {
                   const selectedMode = configModes[item.key];
+                  const forcedPlaceholder = Boolean(item.secret);
                   return (
                     <div key={item.key} className="repository-config-publish-row">
                       <Checkbox
@@ -227,22 +228,25 @@ export function PublishToRepositoryModal({
                           }
                           onConfigModesChange((previous) => ({
                             ...previous,
-                            [item.key]: previous[item.key] ?? "PLACEHOLDER"
+                            [item.key]: forcedPlaceholder ? "PLACEHOLDER" : (previous[item.key] ?? "PLACEHOLDER")
                           }));
                         }}
                       >
                         <Space direction="vertical" size={2}>
-                          <Text code>{item.key}</Text>
+                          <Space wrap size={[8, 8]}>
+                            <Text code>{item.key}</Text>
+                            {item.secret ? <Tag color="gold">SECRET</Tag> : null}
+                          </Space>
                           <Text type="secondary">{item.description || "未填写说明"}</Text>
                         </Space>
                       </Checkbox>
                       <Select
-                        value={selectedMode}
-                        disabled={!selectedMode}
+                        value={forcedPlaceholder && selectedMode ? "PLACEHOLDER" : selectedMode}
+                        disabled={!selectedMode || forcedPlaceholder}
                         style={{ width: 160 }}
                         options={[
                           { value: "PLACEHOLDER", label: "PLACEHOLDER" },
-                          { value: "INLINE", label: "INLINE" }
+                          ...(forcedPlaceholder ? [] : [{ value: "INLINE", label: "INLINE" }])
                         ]}
                         onChange={(nextValue) =>
                           onConfigModesChange((previous) => ({

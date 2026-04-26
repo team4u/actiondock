@@ -18,7 +18,7 @@ describe("api request auth handling", () => {
     vi.unstubAllGlobals();
   });
 
-  it("adds Authorization header when API key exists", async () => {
+  it("adds Authorization header when browser token exists", async () => {
     getApiKeyMock.mockReturnValue("secret-token");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: 0, msg: "ok", data: [] }), {
@@ -36,7 +36,7 @@ describe("api request auth handling", () => {
     expect(headers.get("Authorization")).toBe("Bearer secret-token");
   });
 
-  it("omits Authorization header when API key is empty", async () => {
+  it("omits Authorization header when browser token is empty", async () => {
     getApiKeyMock.mockReturnValue("");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: 0, msg: "ok", data: [] }), {
@@ -67,7 +67,7 @@ describe("api request auth handling", () => {
 
     await expect(listScripts()).rejects.toEqual(
       expect.objectContaining({
-        message: "API Key 无效或缺失",
+        message: "访问令牌无效或缺失",
         status: 401
       })
     );

@@ -12,9 +12,13 @@ import org.team4u.actiondock.config.WebCorsConfiguration;
 import org.team4u.actiondock.schedule.ScheduleConfiguration;
 import org.team4u.actiondock.storage.jpa.StorageConfiguration;
 import org.team4u.actiondock.storage.jpa.entity.ExecutionEntity;
+import org.team4u.actiondock.storage.jpa.entity.ApiAccessTokenEntity;
 import org.team4u.actiondock.storage.jpa.entity.PluginRegistrationEntity;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
 import org.team4u.actiondock.storage.jpa.entity.ScriptScheduleEntity;
+import org.team4u.actiondock.storage.jpa.entity.ConfigValueEntity;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataApiAccessTokenRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataConfigValueRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataPluginRegistrationRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
@@ -22,12 +26,21 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptScheduleEntityRepo
 import org.team4u.actiondock.web.ScriptController;
 
 @SpringBootApplication(scanBasePackageClasses = {ScriptController.class, SampleDataInitializer.class})
-@EntityScan(basePackageClasses = {ScriptEntity.class, ExecutionEntity.class, PluginRegistrationEntity.class, ScriptScheduleEntity.class})
+@EntityScan(basePackageClasses = {
+        ScriptEntity.class,
+        ExecutionEntity.class,
+        PluginRegistrationEntity.class,
+        ScriptScheduleEntity.class,
+        ConfigValueEntity.class,
+        ApiAccessTokenEntity.class
+})
 @EnableJpaRepositories(basePackageClasses = {
         SpringDataScriptEntityRepository.class,
         SpringDataExecutionEntityRepository.class,
         SpringDataPluginRegistrationRepository.class,
-        SpringDataScriptScheduleEntityRepository.class
+        SpringDataScriptScheduleEntityRepository.class,
+        SpringDataConfigValueRepository.class,
+        SpringDataApiAccessTokenRepository.class
 })
 @Import({RuntimeConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class, ScheduleConfiguration.class})
 /**

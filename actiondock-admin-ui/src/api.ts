@@ -1,5 +1,7 @@
 import { emitAuthRequired, getApiKey } from "./auth";
 import type {
+  AccessToken,
+  AccessTokenRequest,
   ApiErrorPayload,
   ApiResponse,
   ConfigValue,
@@ -58,7 +60,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (response.status === 401) {
     emitAuthRequired();
-    throw new ApiError("API Key 无效或缺失", 401);
+    throw new ApiError("访问令牌无效或缺失", 401);
   }
 
   const isJson = response.headers.get("content-type")?.includes("application/json");
@@ -305,6 +307,44 @@ export function updateConfigValue(key: string, payload: ConfigValueRequest): Pro
 
 export function deleteConfigValue(key: string): Promise<void> {
   return request<void>(`/api/config-values/${encodeURIComponent(key)}`, {
+    method: "DELETE"
+  });
+}
+
+export function listAccessTokens(): Promise<AccessToken[]> {
+  return request<AccessToken[]>("/api/access-tokens");
+}
+
+export function createAccessToken(payload: AccessTokenRequest): Promise<AccessToken> {
+  return request<AccessToken>("/api/access-tokens", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateAccessToken(id: string, payload: AccessTokenRequest): Promise<AccessToken> {
+  return request<AccessToken>(`/api/access-tokens/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function enableAccessToken(id: string): Promise<AccessToken> {
+  return request<AccessToken>(`/api/access-tokens/${encodeURIComponent(id)}/enable`, {
+    method: "POST"
+  });
+}
+
+export function disableAccessToken(id: string): Promise<AccessToken> {
+  return request<AccessToken>(`/api/access-tokens/${encodeURIComponent(id)}/disable`, {
+    method: "POST"
+  });
+}
+
+export function deleteAccessToken(id: string): Promise<void> {
+  return request<void>(`/api/access-tokens/${encodeURIComponent(id)}`, {
     method: "DELETE"
   });
 }

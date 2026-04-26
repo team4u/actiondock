@@ -558,7 +558,7 @@ log.error("downstream request failed")
 
 管理方式：
 
-- 管理台新增“配置值管理”菜单
+- 管理台在“系统配置”中提供“配置值”页签
 - REST API 使用 `/api/config-values`
 - 当前只做明文存储，不做加密
 
@@ -619,7 +619,6 @@ curl -X POST http://localhost:8080/api/config-values \
 | `server.port` | 8080 | Web 服务端口 |
 | `spring.datasource.url` | `jdbc:h2:file:${app.home-dir}/data/dsl-runtime;AUTO_SERVER=TRUE` | 默认 H2 文件库 |
 | `app.home-dir` | `${user.home}/.actiondock` | 本机运行时根目录 |
-| `app.auth.api-keys` | `[]` | 可选 API Key 列表，非空时请求需携带 `Authorization: Bearer <key>`，否则返回 401；为空时免认证放行 |
 | `app.execution.async-pool-size` | `4` | 异步执行线程池大小 |
 | `app.execution.groovy.enabled` | `true` | 是否启用 `GROOVY` 脚本编译缓存 |
 | `app.execution.groovy.cache-max-size` | `128` | `GROOVY` 编译缓存最大条目数 |
@@ -635,9 +634,6 @@ app:
   home-dir: ${user.home}/.actiondock
   plugins:
     dir: ${app.home-dir}/plugins
-  auth:
-    api-keys:
-      - local-dev-key
   execution:
     async-pool-size: 8
     groovy:
@@ -649,47 +645,11 @@ app:
       timeout-seconds: 60
 ```
 
-### API Key 运行时注入
+### 访问令牌
 
-`app.auth.api-keys` 支持通过以下方式在运行时覆盖，无需修改 jar 内的默认配置：
-
-**命令行参数：**
-
-```bash
-java -jar actiondock-app-spring.jar \
-  --app.auth.api-keys[0]=sk-key-1 \
-  --app.auth.api-keys[1]=sk-key-2
-```
-
-**环境变量：**
-
-```bash
-# 多个 key 用逗号分隔，Spring Boot 对 List 类型自动拆分
-export APP_AUTH_API_KEYS=sk-key-1,sk-key-2
-java -jar actiondock-app-spring.jar
-```
-
-**外部配置文件：**
-
-在 jar 同级目录放置 `application.yml`，会覆盖 jar 内的默认值：
-
-```yaml
-app:
-  auth:
-    api-keys:
-      - sk-key-1
-      - sk-key-2
-```
-
-**Docker：**
-
-```yaml
-# docker-compose.yml
-environment:
-  - APP_AUTH_API_KEYS=sk-key-1,sk-key-2
-```
-
-优先级从高到低：命令行参数 > 环境变量 > 外部配置文件 > jar 内默认配置。
+- 服务端 Bearer Token 不再通过配置文件注入。
+- 访问令牌统一在管理台“系统配置 -> 访问令牌”中创建、启用、停用和删除。
+- 当系统中还没有任何访问令牌时，`/api/*` 请求默认免认证；创建首个访问令牌后开始校验 `Authorization: Bearer <token>`。
 
 ## 插件开发与使用
 

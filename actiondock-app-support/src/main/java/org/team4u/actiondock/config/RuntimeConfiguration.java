@@ -5,12 +5,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.application.ScheduleApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
+import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
@@ -50,6 +52,11 @@ public class RuntimeConfiguration {
     @Bean
     public ConfigValueApplicationService configValueApplicationService(ConfigValueRepository configValueRepository) {
         return new ConfigValueApplicationService(configValueRepository);
+    }
+
+    @Bean
+    public ApiAccessTokenApplicationService apiAccessTokenApplicationService(ApiAccessTokenRepository apiAccessTokenRepository) {
+        return new ApiAccessTokenApplicationService(apiAccessTokenRepository);
     }
 
     @Bean

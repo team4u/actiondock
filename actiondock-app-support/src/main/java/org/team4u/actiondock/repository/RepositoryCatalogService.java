@@ -1069,13 +1069,13 @@ public class RepositoryCatalogService {
         List<ConfigTemplateItem> templates = new ArrayList<>();
         for (RepositoryPublishConfigItem item : request.configItems() == null ? List.<RepositoryPublishConfigItem>of() : request.configItems()) {
             ConfigValue value = configValueApplicationService.get(item.key());
-            boolean inline = "INLINE".equalsIgnoreCase(item.publishMode());
+            boolean inline = !value.isSecret() && "INLINE".equalsIgnoreCase(item.publishMode());
             templates.add(new ConfigTemplateItem(
                     value.getKey(),
                     value.getDescription(),
                     "string",
                     false,
-                    !inline,
+                    value.isSecret() || !inline,
                     inline ? value.getValue() : null
             ));
         }

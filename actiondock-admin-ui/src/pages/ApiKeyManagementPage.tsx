@@ -35,7 +35,7 @@ export function ApiKeySettingsPanel() {
     setApiKey(apiKey);
     const normalizedValue = getApiKey();
     setApiKeyState(normalizedValue);
-    messageApi.success(normalizedValue ? "API Key 已保存到当前浏览器" : "API Key 已清除");
+    messageApi.success(normalizedValue ? "控制台凭证已保存到当前浏览器" : "控制台凭证已清除");
 
     if (returnPath && returnPath !== location.pathname) {
       navigate(returnPath, { replace: true });
@@ -45,7 +45,7 @@ export function ApiKeySettingsPanel() {
   const handleClear = () => {
     setApiKey("");
     setApiKeyState("");
-    messageApi.success("API Key 已清除");
+    messageApi.success("控制台凭证已清除");
   };
 
   return (
@@ -67,11 +67,11 @@ export function ApiKeySettingsPanel() {
                   </Button>
                 ) : null}
                 <Title level={4} style={{ margin: 0 }}>
-                  API Key
+                  控制台凭证
                 </Title>
                 <Space size={8} wrap>
                   <Tag color={hasApiKey ? "blue" : "default"}>{hasApiKey ? "已配置" : "未配置"}</Tag>
-                  <Text type="secondary">管理台和正式使用页都会复用这里保存的 Bearer Token。</Text>
+                  <Text type="secondary">当前浏览器访问管理台时会复用这里保存的 Bearer Token。</Text>
                 </Space>
               </Space>
             </Col>
@@ -93,16 +93,15 @@ export function ApiKeySettingsPanel() {
               extra={
                 <Space direction="vertical" size={4}>
                   <Paragraph style={{ marginBottom: 0 }}>
-                    如果服务端启用了 <Text code>app.auth.api-keys</Text>，请求会自动附带
-                    <Text code>Authorization: Bearer ...</Text> 头。
+                    管理台请求会自动附带 <Text code>Authorization: Bearer ...</Text> 请求头。
                   </Paragraph>
-                  <Text type="secondary">仅保存在当前浏览器的本地存储中，不会回传到服务端。</Text>
+                  <Text type="secondary">仅保存在当前浏览器的本地存储中，不会回传到服务端，也不会自动创建服务端访问令牌。</Text>
                 </Space>
               }
             >
               <Input.Password
                 prefix={<LockOutlined />}
-                placeholder="输入 API Key"
+                placeholder="输入 Bearer Token"
                 value={apiKey}
                 onChange={(event) => setApiKeyState(event.target.value)}
               />

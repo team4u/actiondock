@@ -17,6 +17,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -55,19 +56,22 @@ class ConfigValueControllerTest {
                         .setKey("openai.api_key")
                         .setValue("sk-test")
                         .setDescription("OpenAI key")
+                        .setSecret(true)
                         .setUpdatedAt(LocalDateTime.of(2026, 4, 23, 12, 0))
         ));
 
         mockMvc.perform(get("/api/config-values"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].key").value("openai.api_key"))
-                .andExpect(jsonPath("$.data[0].value").value("sk-test"))
+                .andExpect(jsonPath("$.data[0].value").doesNotExist())
+                .andExpect(jsonPath("$.data[0].valueMasked").value("********"))
+                .andExpect(jsonPath("$.data[0].secret").value(true))
                 .andExpect(jsonPath("$.data[0].description").value("OpenAI key"));
     }
 
     @Test
     void updateUsesPathKey() throws Exception {
-        when(configValueApplicationService.update(eq("openai.api_key"), any())).thenReturn(
+        when(configValueApplicationService.update(eq("openai.api_key"), any(), anyBoolean())).thenReturn(
                 new ConfigValue()
                         .setKey("openai.api_key")
                         .setValue("sk-live")

@@ -33,8 +33,8 @@ public class ConfigValueController {
      * @return API 响应，包含配置值列表
      */
     @GetMapping
-    public ApiResponse<List<ConfigValue>> list() {
-        return ApiResponse.success(configValueApplicationService.list());
+    public ApiResponse<List<ConfigValueView>> list() {
+        return ApiResponse.success(configValueApplicationService.list().stream().map(this::toView).toList());
     }
 
     /**
@@ -44,8 +44,8 @@ public class ConfigValueController {
      * @return API 响应，包含配置值
      */
     @GetMapping("/{key}")
-    public ApiResponse<ConfigValue> detail(@PathVariable String key) {
-        return ApiResponse.success(configValueApplicationService.get(key));
+    public ApiResponse<ConfigValueView> detail(@PathVariable String key) {
+        return ApiResponse.success(toView(configValueApplicationService.get(key)));
     }
 
     /**
@@ -55,9 +55,9 @@ public class ConfigValueController {
      * @return API 响应，包含创建后的配置值
      */
     @PostMapping
-    public ApiResponse<ConfigValue> create(@RequestBody ConfigValueRequest request) {
+    public ApiResponse<ConfigValueView> create(@RequestBody ConfigValueRequest request) {
         return ApiResponse.success(
-                configValueApplicationService.create(toDomain(request)),
+                toView(configValueApplicationService.create(toDomain(request))),
                 "配置值已创建"
         );
     }
@@ -70,9 +70,9 @@ public class ConfigValueController {
      * @return API 响应，包含更新后的配置值
      */
     @PutMapping("/{key}")
-    public ApiResponse<ConfigValue> update(@PathVariable String key, @RequestBody ConfigValueRequest request) {
+    public ApiResponse<ConfigValueView> update(@PathVariable String key, @RequestBody ConfigValueRequest request) {
         return ApiResponse.success(
-                configValueApplicationService.update(key, toDomain(request)),
+                toView(configValueApplicationService.update(key, toDomain(request), request != null && request.isPreserveValue())),
                 "配置值已更新"
         );
     }
@@ -94,6 +94,26 @@ public class ConfigValueController {
         return new ConfigValue()
                 .setKey(value.getKey())
                 .setValue(value.getValue())
-                .setDescription(value.getDescription());
+                .setDescription(value.getDescription())
+                .setSecret(value.isSecret());
+    }
+
+    private ConfigValueView toView(ConfigValue value) {
+        boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
+        return new ConfigValueView()
+                .setKey(value.getKey())
+                .setValue(value.isSecret() ? null : value.getValue())
+                .setValueMasked(value.isSecret() && hasValue ? "********" : null)
+                .setHasValue(hasValue)
+                .setDescription(value.getDescription())
+                .setSecret(value.isSecret())
+                .setRepositoryId(value.getRepositoryId())
+                .setRepositoryToolId(value.getRepositoryToolId())
+                .setRepositoryVersion(value.getRepositoryVersion())
+                .setPublishMode(value.getPublishMode())
+                .setManaged(value.isManaged())
+                .setOverridden(value.isOverridden())
+                .setCreatedAt(value.getCreatedAt())
+                .setUpdatedAt(value.getUpdatedAt());
     }
 }

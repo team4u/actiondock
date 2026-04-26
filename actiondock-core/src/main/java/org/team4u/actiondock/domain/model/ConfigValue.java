@@ -13,6 +13,7 @@ public class ConfigValue {
     private String key;
     private String value = "";
     private String description;
+    private boolean secret;
     private String repositoryId;
     private String repositoryToolId;
     private String repositoryVersion;
@@ -46,6 +47,15 @@ public class ConfigValue {
 
     public ConfigValue setDescription(String description) {
         this.description = description;
+        return this;
+    }
+
+    public boolean isSecret() {
+        return secret;
+    }
+
+    public ConfigValue setSecret(boolean secret) {
+        this.secret = secret;
         return this;
     }
 
