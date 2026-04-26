@@ -58,6 +58,12 @@ describe("batch parser", () => {
     });
   });
 
+  it("accepts single-column CSV exported from template flow", () => {
+    const csv = parseCsvSource("name\na\nb");
+    expect(csv.headers).toEqual(["name"]);
+    expect(csv.rows).toEqual([{ name: "a" }, { name: "b" }]);
+  });
+
   it("flags required and enum-like mismatches via object draft validation", () => {
     const draft = buildDraftFromObjectRows(
       [{ dryRun: "true" as unknown as boolean }],

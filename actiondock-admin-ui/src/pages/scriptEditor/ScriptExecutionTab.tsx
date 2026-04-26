@@ -223,7 +223,7 @@ export function ScriptExecutionTab({
                           value={executionMode}
                           optionType="button"
                           buttonStyle="solid"
-                          onChange={(event) =>
+                          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                             onExecutionModeChange(event.target.value as SubmitMode)
                           }
                           options={[

@@ -389,7 +389,7 @@ export function ScriptRunPage() {
                       value={executionMode}
                       optionType="button"
                       buttonStyle="solid"
-                      onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
+                      onChange={(event: React.ChangeEvent<HTMLInputElement>) => setExecutionMode(event.target.value as SubmitMode)}
                       options={[
                         { label: "同步执行", value: "SYNC" },
                         { label: "异步执行", value: "ASYNC" }

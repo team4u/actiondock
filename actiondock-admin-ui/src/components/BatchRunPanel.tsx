@@ -2,7 +2,10 @@ import {
   Alert,
   Button,
   Card,
+  Collapse,
   Descriptions,
+  Dropdown,
+  Drawer,
   Empty,
   Input,
   Radio,
@@ -18,6 +21,7 @@ import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CopyOutlined,
+  DownOutlined,
   DeleteOutlined,
   DownloadOutlined,
   PlayCircleOutlined,
@@ -155,6 +159,7 @@ export function BatchRunPanel({
   const [failStrategy, setFailStrategy] = useState<"CONTINUE" | "STOP_ON_FAILURE">("CONTINUE");
   const [csvMapping, setCsvMapping] = useState<CsvColumnMapping>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
 
   const {
     session,
@@ -268,20 +273,26 @@ export function BatchRunPanel({
   }, [csvMapping, dataSource, parsedCsvState, supportedFields, unsupportedFields]);
 
   useEffect(() => {
-    if (session?.items.length) {
-      if (!selectedItemId || !session.items.some((item) => item.id === selectedItemId)) {
-        setSelectedItemId(session.items[0]?.id ?? null);
-      }
-      return;
+    if (selectedItemId && !session?.items.some((item) => item.id === selectedItemId)) {
+      setSelectedItemId(null);
+      setDetailDrawerOpen(false);
     }
-    setSelectedItemId(null);
   }, [selectedItemId, session]);
 
   const selectedItem = useMemo(
     () => session?.items.find((item) => item.id === selectedItemId) ?? null,
     [selectedItemId, session]
   );
-
+  const previewSummaryTags = (
+    <Space size="small" wrap>
+      <Tag color="blue">共 {preview.summary.totalCount} 条</Tag>
+      <Tag color="green">有效 {preview.summary.validCount} 条</Tag>
+      <Tag color="red">错误 {preview.summary.invalidCount} 条</Tag>
+      {preview.summary.warningCount > 0 ? (
+        <Tag color="gold">警告 {preview.summary.warningCount} 条</Tag>
+      ) : null}
+    </Space>
+  );
   const previewColumns: ColumnsType<(typeof preview.items)[number]> = [
     {
       title: "行号",
@@ -359,11 +370,12 @@ export function BatchRunPanel({
       width: 220,
       render: (_value, record) => (
         <Space size="small" wrap>
-          <Button
+            <Button
             size="small"
             onClick={(event) => {
               event.stopPropagation();
               setSelectedItemId(record.id);
+              setDetailDrawerOpen(true);
             }}
           >
             查看
@@ -508,6 +520,35 @@ export function BatchRunPanel({
       </Button>
     </Space>
   );
+  const exportMenu = {
+    items: [
+      {
+        key: "all-json",
+        label: "导出全部 JSON",
+        icon: <DownloadOutlined />,
+        onClick: handleExportAllJson
+      },
+      {
+        key: "all-csv",
+        label: "导出全部 CSV",
+        icon: <DownloadOutlined />,
+        onClick: handleExportAllCsv
+      },
+      {
+        key: "failed-json",
+        label: "导出失败 JSON",
+        icon: <DownloadOutlined />,
+        onClick: handleExportFailedJson
+      },
+      {
+        key: "failed-csv",
+        label: "导出失败 CSV",
+        icon: <DownloadOutlined />,
+        onClick: handleExportFailedCsv
+      }
+    ]
+  };
+  const previewCollapseDefaultActiveKey = preview.summary.invalidCount > 0 ? ["preview-details"] : [];
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -527,261 +568,296 @@ export function BatchRunPanel({
         />
       ) : null}
 
-      <Card
-        type="inner"
-        title="数据来源"
-        extra={sourceExtra}
-      >
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Tabs
-            activeKey={dataSource.sourceType}
-            onChange={(key) => setDataSource((current) => ({ ...current, sourceType: key as BatchInputSource }))}
-            items={[
-              { key: "JSON_ARRAY", label: "JSON 数组" },
-              { key: "JSONL", label: "JSONL" },
-              { key: "CSV", label: "CSV" }
-            ]}
-          />
+      <div className="batch-run-panel__layout">
+        <div className="batch-run-panel__sidebar">
+          <Card
+            type="inner"
+            title="批量提交"
+            extra={sourceExtra}
+            className="batch-run-panel__sticky-card"
+          >
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <Tabs
+                activeKey={dataSource.sourceType}
+                onChange={(key) => setDataSource((current) => ({ ...current, sourceType: key as BatchInputSource }))}
+                items={[
+                  { key: "JSON_ARRAY", label: "JSON 数组" },
+                  { key: "JSONL", label: "JSONL" },
+                  { key: "CSV", label: "CSV" }
+                ]}
+              />
 
-          {unsupportedFields.length > 0 ? (
-            <Alert
-              type="info"
-              showIcon
-              message="复杂字段说明"
-              description={
-                dataSource.sourceType === "CSV"
-                  ? `CSV 仅支持简单顶层字段；以下复杂字段请改用 JSON/JSONL：${unsupportedFields.join("、")}`
-                  : `以下复杂字段不会做前端预校验，仍会在提交时由后端校验：${unsupportedFields.join("、")}`
-              }
-            />
-          ) : null}
+              {unsupportedFields.length > 0 ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  message="复杂字段说明"
+                  description={
+                    dataSource.sourceType === "CSV"
+                      ? `CSV 仅支持简单顶层字段；以下复杂字段请改用 JSON/JSONL：${unsupportedFields.join("、")}`
+                      : `以下复杂字段不会做前端预校验，仍会在提交时由后端校验：${unsupportedFields.join("、")}`
+                  }
+                />
+              ) : null}
 
-          {preview.error ? (
-            <Alert type="error" showIcon message={preview.error} />
-          ) : null}
+              {preview.error ? <Alert type="error" showIcon message={preview.error} /> : null}
 
-          <CodeEditor
-            value={dataSource.text}
-            onChange={(text) => setDataSource((current) => ({ ...current, text }))}
-            theme={editorTheme}
-            language={getEditorLanguage(dataSource.sourceType)}
-            height="260px"
-            placeholder={`请输入或上传${formatSourceLabel(dataSource.sourceType)}数据`}
-          />
+              <CodeEditor
+                value={dataSource.text}
+                onChange={(text) => setDataSource((current) => ({ ...current, text }))}
+                theme={editorTheme}
+                language={getEditorLanguage(dataSource.sourceType)}
+                height="240px"
+                placeholder={`请输入或上传${formatSourceLabel(dataSource.sourceType)}数据`}
+              />
 
-          {dataSource.sourceType === "CSV" && parsedCsvState.data ? (
-            <Card type="inner" title="参数映射">
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                {parsedCsvState.data.headers.map((header) => (
-                  <div key={header} className="batch-run-panel__mapping-row">
-                    <Text code>{header}</Text>
-                    <Select
-                      value={csvMapping[header] ?? null}
-                      onChange={(value) =>
-                        setCsvMapping((current) => ({
-                          ...current,
-                          [header]: value
-                        }))
+              {dataSource.sourceType === "CSV" && parsedCsvState.data ? (
+                <Collapse
+                  ghost
+                  className="batch-run-panel__collapse"
+                  items={[
+                    {
+                      key: "mapping",
+                      label: `参数映射（${parsedCsvState.data.headers.length} 列）`,
+                      children: (
+                        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                          {parsedCsvState.data.headers.map((header) => (
+                            <div key={header} className="batch-run-panel__mapping-row">
+                              <Text code>{header}</Text>
+                              <Select
+                                value={csvMapping[header] ?? null}
+                                onChange={(value) =>
+                                  setCsvMapping((current) => ({
+                                    ...current,
+                                    [header]: value
+                                  }))
+                                }
+                                style={{ minWidth: 220 }}
+                                options={[
+                                  { value: null, label: "忽略此列" },
+                                  ...supportedFields.map((field) => ({
+                                    value: field.name,
+                                    label: `${field.label} (${field.name})`
+                                  }))
+                                ]}
+                              />
+                            </div>
+                          ))}
+                        </Space>
+                      )
+                    }
+                  ]}
+                />
+              ) : null}
+
+              <div className="batch-run-panel__section">
+                <div className="batch-run-panel__section-header">
+                  <Text strong>执行设置</Text>
+                </div>
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Input
+                    value={batchName}
+                    onChange={(event) => setBatchName(event.target.value)}
+                    placeholder="请输入批次名称"
+                  />
+
+                  <div className="batch-run-panel__toolbar">
+                    <Radio.Group
+                      value={submitMode}
+                      optionType="button"
+                      buttonStyle="solid"
+                      onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                        setSubmitMode(event.target.value as SubmitMode)
                       }
-                      style={{ minWidth: 220 }}
                       options={[
-                        { value: null, label: "忽略此列" },
-                        ...supportedFields.map((field) => ({
-                          value: field.name,
-                          label: `${field.label} (${field.name})`
-                        }))
+                        { label: "同步执行", value: "SYNC" },
+                        { label: "异步执行", value: "ASYNC" }
                       ]}
                     />
+
+                    <Select
+                      value={concurrency}
+                      style={{ width: 120 }}
+                      onChange={setConcurrency}
+                      options={[
+                        { value: 1, label: "并发 1" },
+                        { value: 3, label: "并发 3" },
+                        { value: 5, label: "并发 5" }
+                      ]}
+                    />
+
+                    <Select
+                      value={failStrategy}
+                      style={{ width: 180 }}
+                      onChange={(value) => setFailStrategy(value)}
+                      options={[
+                        { value: "CONTINUE", label: "继续执行" },
+                        { value: "STOP_ON_FAILURE", label: "遇错停止" }
+                      ]}
+                    />
+
+                    <Button
+                      type="primary"
+                      icon={<PlayCircleOutlined />}
+                      onClick={() => void handleStart()}
+                      disabled={!canExecute || running}
+                    >
+                      开始批量运行
+                    </Button>
                   </div>
-                ))}
+                </Space>
+              </div>
+
+              <div className="batch-run-panel__section">
+                <div className="batch-run-panel__section-header">
+                  <Text strong>校验摘要</Text>
+                </div>
+                {previewSummaryTags}
+              </div>
+
+              <Collapse
+                ghost
+                className="batch-run-panel__collapse"
+                defaultActiveKey={previewCollapseDefaultActiveKey}
+                items={[
+                  {
+                    key: "preview-details",
+                    label: "校验明细",
+                    children: (
+                      <Table
+                        rowKey="id"
+                        columns={previewColumns}
+                        dataSource={preview.items}
+                        pagination={{ pageSize: 5 }}
+                        scroll={{ x: 900 }}
+                        locale={{ emptyText: "等待导入批量数据" }}
+                      />
+                    )
+                  }
+                ]}
+              />
+            </Space>
+          </Card>
+        </div>
+
+        <div className="batch-run-panel__main">
+          <Card
+            type="inner"
+            title="批量结果"
+            extra={
+              <Space size="small" wrap>
+                <Button
+                  icon={<ReloadOutlined />}
+                  disabled={!session || running}
+                  onClick={() => void retryFailed()}
+                >
+                  重试失败项
+                </Button>
+                <Dropdown menu={exportMenu} disabled={!session}>
+                  <Button icon={<DownloadOutlined />} disabled={!session}>
+                    导出
+                    <DownOutlined />
+                  </Button>
+                </Dropdown>
+                <Button
+                  icon={<DeleteOutlined />}
+                  disabled={!session || running}
+                  onClick={clearSession}
+                >
+                  清空结果
+                </Button>
               </Space>
-            </Card>
-          ) : null}
-        </Space>
-      </Card>
+            }
+          >
+            {!session ? (
+              <Empty description="批量运行后将在这里汇总结果、导出和重试。" />
+            ) : (
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <div className="batch-run-panel__summary">
+                  <div className="batch-run-panel__summary-main">
+                    <Text strong className="batch-run-panel__summary-title">
+                      {session.batchName}
+                    </Text>
+                    <Space size="small" wrap>
+                      <Tag color={session.status === "SUCCESS" ? "green" : session.status === "RUNNING" ? "processing" : "red"}>
+                        {session.status}
+                      </Tag>
+                      <Tag>{formatSourceLabel(session.sourceType)}</Tag>
+                      <Tag>{session.submitMode}</Tag>
+                    </Space>
+                  </div>
+                  <div className="batch-run-panel__stats">
+                    <div className="batch-run-panel__stat">
+                      <Text type="secondary">进度</Text>
+                      <Text strong>{stats.finished} / {stats.total}</Text>
+                    </div>
+                    <div className="batch-run-panel__stat">
+                      <Text type="secondary">成功</Text>
+                      <Text strong>{stats.success}</Text>
+                    </div>
+                    <div className="batch-run-panel__stat">
+                      <Text type="secondary">失败</Text>
+                      <Text strong>{stats.failed}</Text>
+                    </div>
+                    <div className="batch-run-panel__stat">
+                      <Text type="secondary">跳过 / 中断</Text>
+                      <Text strong>{stats.skipped + stats.interrupted}</Text>
+                    </div>
+                  </div>
+                </div>
 
-      <Card type="inner" title="执行设置">
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Input
-            value={batchName}
-            onChange={(event) => setBatchName(event.target.value)}
-            placeholder="请输入批次名称"
-          />
-
-          <Space size={12} wrap>
-            <Radio.Group
-              value={submitMode}
-              optionType="button"
-              buttonStyle="solid"
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSubmitMode(event.target.value as SubmitMode)}
-              options={[
-                { label: "同步执行", value: "SYNC" },
-                { label: "异步执行", value: "ASYNC" }
-              ]}
-            />
-
-            <Select
-              value={concurrency}
-              style={{ width: 120 }}
-              onChange={setConcurrency}
-              options={[
-                { value: 1, label: "并发 1" },
-                { value: 3, label: "并发 3" },
-                { value: 5, label: "并发 5" }
-              ]}
-            />
-
-            <Select
-              value={failStrategy}
-              style={{ width: 180 }}
-              onChange={(value) => setFailStrategy(value)}
-              options={[
-                { value: "CONTINUE", label: "继续执行" },
-                { value: "STOP_ON_FAILURE", label: "遇错停止" }
-              ]}
-            />
-
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={() => void handleStart()}
-              disabled={!canExecute || running}
-            >
-              开始批量运行
-            </Button>
-          </Space>
-        </Space>
-      </Card>
-
-      <Card type="inner" title="数据预览">
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Space size="small" wrap>
-            <Tag color="blue">共 {preview.summary.totalCount} 条</Tag>
-            <Tag color="green">有效 {preview.summary.validCount} 条</Tag>
-            <Tag color="red">错误 {preview.summary.invalidCount} 条</Tag>
-            {preview.summary.warningCount > 0 ? (
-              <Tag color="gold">警告 {preview.summary.warningCount} 条</Tag>
-            ) : null}
-          </Space>
-
-          <Table
-            rowKey="id"
-            columns={previewColumns}
-            dataSource={preview.items}
-            pagination={{ pageSize: 5 }}
-            scroll={{ x: 900 }}
-            locale={{ emptyText: "等待导入批量数据" }}
-          />
-        </Space>
-      </Card>
-
-      <Card
-        type="inner"
-        title="批量结果"
-        extra={
-          <Space size="small" wrap>
-            <Button
-              icon={<ReloadOutlined />}
-              disabled={!session || running}
-              onClick={() => void retryFailed()}
-            >
-              重试失败项
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              disabled={!session}
-              onClick={handleExportAllJson}
-            >
-              导出全部 JSON
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              disabled={!session}
-              onClick={handleExportAllCsv}
-            >
-              导出全部 CSV
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              disabled={!session}
-              onClick={handleExportFailedJson}
-            >
-              导出失败 JSON
-            </Button>
-            <Button
-              icon={<DownloadOutlined />}
-              disabled={!session}
-              onClick={handleExportFailedCsv}
-            >
-              导出失败 CSV
-            </Button>
-            <Button
-              icon={<DeleteOutlined />}
-              disabled={!session || running}
-              onClick={clearSession}
-            >
-              清空结果
-            </Button>
-          </Space>
-        }
-      >
-        {!session ? (
-          <Empty description="批量运行后将在这里汇总结果、导出和重试。" />
-        ) : (
-          <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            <Descriptions size="small" bordered column={{ xs: 1, md: 2, xl: 4 }}>
-              <Descriptions.Item label="批次名称">{session.batchName}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag color={session.status === "SUCCESS" ? "green" : session.status === "RUNNING" ? "processing" : "red"}>
-                  {session.status}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="输入来源">{formatSourceLabel(session.sourceType)}</Descriptions.Item>
-              <Descriptions.Item label="提交模式">{session.submitMode}</Descriptions.Item>
-              <Descriptions.Item label="进度">{stats.finished} / {stats.total}</Descriptions.Item>
-              <Descriptions.Item label="成功">{stats.success}</Descriptions.Item>
-              <Descriptions.Item label="失败">{stats.failed}</Descriptions.Item>
-              <Descriptions.Item label="跳过 / 中断">{stats.skipped + stats.interrupted}</Descriptions.Item>
-            </Descriptions>
-
-            <Table
-              rowKey="id"
-              columns={resultColumns}
-              dataSource={session.items}
-              pagination={{ pageSize: 10 }}
-              scroll={{ x: 1200 }}
-          onRow={(record: BatchSessionItem) => ({
-            onClick: () => setSelectedItemId(record.id)
-          })}
-          rowClassName={(record: BatchSessionItem) =>
-            record.id === selectedItemId
-              ? "execution-history-row execution-history-row-active"
-              : "execution-history-row"
-          }
-        />
-
-            {selectedItem ? (
-              selectedItem.execution ? (
-                <ExecutionResultCard
-                  execution={selectedItem.execution}
-                  inputSchema={inputSchema}
-                  outputSchema={outputSchema}
-                  title={`第 ${selectedItem.rowIndex} 行详情`}
+                <Table
+                  rowKey="id"
+                  columns={resultColumns}
+                  dataSource={session.items}
+                  pagination={{ pageSize: 10 }}
+                  scroll={{ x: 1200 }}
+                  rowClassName={(record: BatchSessionItem) =>
+                    record.id === selectedItemId && detailDrawerOpen
+                      ? "execution-history-row execution-history-row-active"
+                      : "execution-history-row"
+                  }
                 />
-              ) : (
-                <Card type="inner" title={`第 ${selectedItem.rowIndex} 行详情`}>
-                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                    <Title level={5} style={{ margin: 0 }}>输入</Title>
-                    <pre className="json-preview">{prettyJson(selectedItem.input)}</pre>
-                    <Title level={5} style={{ margin: 0 }}>问题</Title>
-                    <Text>{selectedItem.errorMessage ?? ([...selectedItem.errors, ...selectedItem.warnings].join("；") || "-")}</Text>
-                  </Space>
-                </Card>
-              )
-            ) : null}
-          </Space>
-        )}
-      </Card>
+              </Space>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      <Drawer
+        title={selectedItem ? `第 ${selectedItem.rowIndex} 行详情` : "执行详情"}
+        placement="right"
+        width={720}
+        open={detailDrawerOpen}
+        onClose={() => setDetailDrawerOpen(false)}
+        destroyOnClose={false}
+      >
+        {selectedItem ? (
+          selectedItem.execution ? (
+            <ExecutionResultCard
+              execution={selectedItem.execution}
+              inputSchema={inputSchema}
+              outputSchema={outputSchema}
+              title={`第 ${selectedItem.rowIndex} 行详情`}
+            />
+          ) : (
+            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+              <Descriptions size="small" bordered column={1}>
+                <Descriptions.Item label="状态">
+                  <Tag color="red">{selectedItem.status}</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="错误">
+                  {selectedItem.errorMessage ?? ([...selectedItem.errors, ...selectedItem.warnings].join("；") || "-")}
+                </Descriptions.Item>
+              </Descriptions>
+              <div>
+                <Title level={5} style={{ marginTop: 0 }}>输入</Title>
+                <pre className="json-preview">{prettyJson(selectedItem.input)}</pre>
+              </div>
+            </Space>
+          )
+        ) : null}
+      </Drawer>
     </Space>
   );
 }

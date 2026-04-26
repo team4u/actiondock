@@ -11,7 +11,7 @@ const messageApi = {
 } as unknown as MessageInstance;
 
 describe("BatchRunPanel", () => {
-  it("renders source tabs and start action", () => {
+  it("renders workspace layout with submit and result areas", () => {
     const html = renderToStaticMarkup(
       <BatchRunPanel
         surface="editor"
@@ -39,6 +39,9 @@ describe("BatchRunPanel", () => {
     expect(html).toContain("JSON 数组");
     expect(html).toContain("JSONL");
     expect(html).toContain("CSV");
+    expect(html).toContain("批量提交");
+    expect(html).toContain("批量结果");
+    expect(html).toContain("校验明细");
     expect(html).toContain("开始批量运行");
   });
 });

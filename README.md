@@ -26,6 +26,7 @@
 - **多运行方式**：支持正式页面、Web API 与薄封装 REST CLI 三种统一调用方式
 - **在线编辑器**：集成 Monaco Editor，提供语法高亮和代码补全
 - **执行追踪**：完整的执行记录和状态追踪
+- **参数预设**：保存常用参数组合为命名预设，一键加载到表单，避免反复填写相同参数；支持重命名和删除管理
 - **仓库发布管理**：支持将脚本发布到本地仓库或 Git 仓库，实现团队共享和版本管理
 
 ## 技术栈
@@ -224,6 +225,15 @@ actiondock
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | DELETE | `/api/installed-tools/{scriptId}` | 卸载已安装的仓库工具 |
+
+### 执行参数预设
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/scripts/{scriptId}/presets` | 获取脚本的所有参数预设 |
+| POST | `/api/scripts/{scriptId}/presets` | 创建参数预设 |
+| PUT | `/api/scripts/{scriptId}/presets/{presetId}` | 更新参数预设 |
+| DELETE | `/api/scripts/{scriptId}/presets/{presetId}` | 删除参数预设 |
 
 ### 响应视图
 

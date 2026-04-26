@@ -101,8 +101,9 @@ export function parseCsvSource(text: string): CsvSourceData {
     transformHeader: (header) => header.trim()
   });
 
-  if (result.errors.length > 0) {
-    const first = result.errors[0];
+  const blockingErrors = result.errors.filter((error) => !isIgnorableCsvError(error));
+  if (blockingErrors.length > 0) {
+    const first = blockingErrors[0];
     const rowNumber = typeof first.row === "number" ? first.row + 1 : 1;
     throw new Error(`CSV 解析失败: 第 ${rowNumber} 行 ${first.message}`);
   }
@@ -121,6 +122,10 @@ export function parseCsvSource(text: string): CsvSourceData {
       }, {})
     )
   };
+}
+
+function isIgnorableCsvError(error: Papa.ParseError): boolean {
+  return error.type === "Delimiter" && error.code === "UndetectableDelimiter";
 }
 
 export function buildAutoCsvMapping(
