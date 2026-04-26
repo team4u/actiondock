@@ -128,6 +128,23 @@ CLI 配置优先级：
 - `~/.actiondock/config.json`
 - 默认 `http://localhost:8080`
 
+#### 执行参数预设
+
+```bash
+# 列出脚本的参数预设
+java -jar actiondock-cli/target/actiondock-cli.jar presets list --script-id my-script
+
+# 创建预设
+echo '{"name":"my-preset","input":{"name":"World"}}' | \
+  java -jar actiondock-cli/target/actiondock-cli.jar presets create --script-id my-script --file -
+
+# 更新预设
+java -jar actiondock-cli/target/actiondock-cli.jar presets update --script-id my-script <presetId> --file preset.json
+
+# 删除预设
+java -jar actiondock-cli/target/actiondock-cli.jar presets delete --script-id my-script <presetId>
+```
+
 ## 项目结构
 
 ```

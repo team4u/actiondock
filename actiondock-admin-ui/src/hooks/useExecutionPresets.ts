@@ -9,10 +9,15 @@ export interface UseExecutionPresetsOptions {
 export interface UseExecutionPresetsReturn {
   presets: ExecutionPreset[];
   loading: boolean;
-  savePreset: (name: string, input: Record<string, unknown>) => Promise<void>;
-  renamePreset: (presetId: string, newName: string) => Promise<void>;
+  savePreset: (name: string, input: Record<string, unknown>) => Promise<ExecutionPreset | null>;
+  updatePresetInput: (presetId: string, input: Record<string, unknown>) => Promise<ExecutionPreset | null>;
+  renamePreset: (presetId: string, newName: string) => Promise<ExecutionPreset | null>;
   deletePreset: (presetId: string) => Promise<void>;
   refresh: () => void;
+}
+
+function sortPresets(records: ExecutionPreset[]): ExecutionPreset[] {
+  return [...records].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
 }
 
 export function useExecutionPresets({ scriptId }: UseExecutionPresetsOptions): UseExecutionPresetsReturn {
@@ -27,7 +32,7 @@ export function useExecutionPresets({ scriptId }: UseExecutionPresetsOptions): U
     setLoading(true);
     try {
       const data = await listPresets(scriptId);
-      setPresets(data);
+      setPresets(sortPresets(data));
     } catch {
       setPresets([]);
     } finally {
@@ -40,19 +45,31 @@ export function useExecutionPresets({ scriptId }: UseExecutionPresetsOptions): U
   }, [load]);
 
   const savePreset = useCallback(async (name: string, input: Record<string, unknown>) => {
-    if (!scriptId) return;
+    if (!scriptId) return null;
     const payload: ExecutionPresetUpsertRequest = { name, input };
     const created = await createPreset(scriptId, payload);
-    setPresets((prev) => [created, ...prev]);
+    setPresets((prev) => sortPresets([created, ...prev]));
+    return created;
   }, [scriptId]);
 
-  const renamePreset = useCallback(async (presetId: string, newName: string) => {
-    if (!scriptId) return;
+  const updatePresetInput = useCallback(async (presetId: string, input: Record<string, unknown>) => {
+    if (!scriptId) return null;
     const preset = presets.find((p) => p.id === presetId);
-    if (!preset) return;
+    if (!preset) return null;
+    const payload: ExecutionPresetUpsertRequest = { name: preset.name, input };
+    const updated = await updatePreset(scriptId, presetId, payload);
+    setPresets((prev) => sortPresets(prev.map((p) => p.id === presetId ? updated : p)));
+    return updated;
+  }, [scriptId, presets]);
+
+  const renamePreset = useCallback(async (presetId: string, newName: string) => {
+    if (!scriptId) return null;
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return null;
     const payload: ExecutionPresetUpsertRequest = { name: newName, input: preset.input };
     const updated = await updatePreset(scriptId, presetId, payload);
-    setPresets((prev) => prev.map((p) => p.id === presetId ? updated : p));
+    setPresets((prev) => sortPresets(prev.map((p) => p.id === presetId ? updated : p)));
+    return updated;
   }, [scriptId, presets]);
 
   const handleDelete = useCallback(async (presetId: string) => {
@@ -61,5 +78,13 @@ export function useExecutionPresets({ scriptId }: UseExecutionPresetsOptions): U
     setPresets((prev) => prev.filter((p) => p.id !== presetId));
   }, [scriptId]);
 
-  return { presets, loading, savePreset, renamePreset, deletePreset: handleDelete, refresh: load };
+  return {
+    presets,
+    loading,
+    savePreset,
+    updatePresetInput,
+    renamePreset,
+    deletePreset: handleDelete,
+    refresh: load
+  };
 }

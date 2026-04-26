@@ -136,6 +136,7 @@ export function ScriptRunPage() {
     form.resetFields();
     form.setFieldsValue(refillState.formValues as Record<string, unknown>);
     setValidationError(null);
+    messageApi.success("已加载预设");
   };
 
   useEffect(() => {
@@ -401,6 +402,7 @@ export function ScriptRunPage() {
                       <div style={{ marginBottom: 16 }}>
                         <ExecutionPresetBar
                           scriptId={script?.id}
+                          inputSchema={script?.inputSchema}
                           currentInput={currentRunInput}
                           onLoadPreset={handleLoadPreset}
                         />

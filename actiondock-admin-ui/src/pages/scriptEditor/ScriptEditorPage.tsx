@@ -156,6 +156,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const executionPresetBar = (
     <ExecutionPresetBar
       scriptId={editor.currentScript?.id}
+      inputSchema={editor.currentScript?.inputSchema}
       currentInput={currentExecutionInput}
       onLoadPreset={execution.handleLoadPreset}
     />

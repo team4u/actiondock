@@ -32,7 +32,8 @@ import java.util.concurrent.Callable;
                 PluginsCommands.class,
                 SchedulesCommands.class,
                 ConfigValuesCommands.class,
-                RepositoriesCommands.class
+                RepositoriesCommands.class,
+                PresetsCommands.class
         }
 )
 /**
