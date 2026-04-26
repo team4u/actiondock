@@ -11,21 +11,21 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class AdminUiController {
     /**
-     * 管理后台首页路由。
-     * <p>
-     * 将所有管理后台前端路由统一转发到静态 index.html，由前端路由处理页面跳转。
+     * 管理后台入口重定向。
+     *
+     * @return 重定向到 /admin/app
+     */
+    @GetMapping({"/admin", "/admin/"})
+    public String redirect() {
+        return "redirect:/admin/app";
+    }
+
+    /**
+     * 管理后台 SPA 前端路由 Catch-All。
      *
      * @return 转发到 admin/index.html
      */
-    @GetMapping({
-            "/admin",
-            "/admin/",
-            "/admin/scripts",
-            "/admin/plugins",
-            "/admin/scripts/new",
-            "/admin/scripts/{id:[A-Za-z0-9_-]+}",
-            "/admin/run/{id:[A-Za-z0-9_-]+}"
-    })
+    @GetMapping({"/admin/app", "/admin/app/", "/admin/app/**"})
     public String index() {
         return "forward:/admin/index.html";
     }

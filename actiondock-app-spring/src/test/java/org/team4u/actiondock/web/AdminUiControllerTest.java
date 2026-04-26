@@ -9,6 +9,7 @@ import org.team4u.actiondock.RuntimeApplication;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(
@@ -32,22 +33,36 @@ class AdminUiControllerTest {
     private MockMvc mockMvc;
 
     @Test
-    void forwardsAdminEntryToIndex() throws Exception {
-        mockMvc.perform(get("/admin/scripts"))
+    void redirectsBareAdminToApp() throws Exception {
+        mockMvc.perform(get("/admin"))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/admin/app"));
+    }
+
+    @Test
+    void redirectsAdminTrailingSlashToApp() throws Exception {
+        mockMvc.perform(get("/admin/"))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/admin/app"));
+    }
+
+    @Test
+    void forwardsAppRootToIndex() throws Exception {
+        mockMvc.perform(get("/admin/app"))
                 .andExpect(status().isOk())
                 .andExpect(forwardedUrl("/admin/index.html"));
     }
 
     @Test
-    void forwardsPluginEntryToIndex() throws Exception {
-        mockMvc.perform(get("/admin/plugins"))
+    void forwardsAppDeepRouteToIndex() throws Exception {
+        mockMvc.perform(get("/admin/app/scripts/my-script-id"))
                 .andExpect(status().isOk())
                 .andExpect(forwardedUrl("/admin/index.html"));
     }
 
     @Test
-    void forwardsRunEntryToIndex() throws Exception {
-        mockMvc.perform(get("/admin/run/hello-groovy"))
+    void forwardsAppRunRouteToIndex() throws Exception {
+        mockMvc.perform(get("/admin/app/run/hello-groovy"))
                 .andExpect(status().isOk())
                 .andExpect(forwardedUrl("/admin/index.html"));
     }
