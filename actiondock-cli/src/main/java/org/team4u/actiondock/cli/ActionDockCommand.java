@@ -28,13 +28,15 @@ import java.util.concurrent.Callable;
                 ScriptsCommands.class,
                 ExecutionsCommands.class,
                 PluginsCommands.class,
-                SchedulesCommands.class
+                SchedulesCommands.class,
+                ConfigValuesCommands.class,
+                RepositoriesCommands.class
         }
 )
 /**
  * CLI 根命令，提供全局连接配置和通用工具方法。
  * <p>
- * 包含 scripts、executions、plugins、schedules、config 五个子命令组。
+ * 包含 scripts、executions、plugins、schedules、config、config-values、repositories 等子命令组。
  *
  * @author jay.wu
  */

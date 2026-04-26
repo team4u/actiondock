@@ -140,6 +140,129 @@ class ActionDockCommandIntegrationTest {
     }
 
     @Test
+    void configValuesCommandsUseConfigValueApi() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> createRef = new AtomicReference<>();
+        AtomicReference<CapturedRequest> updateRef = new AtomicReference<>();
+        server.register("POST", "/api/config-values", request -> {
+            createRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"created","data":{"key":"openai.api_key"}}
+                    """);
+        });
+        server.register("PUT", "/api/config-values/openai.api_key", request -> {
+            updateRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"updated","data":{"key":"openai.api_key"}}
+                    """);
+        });
+
+        Path configFile = tempHome.resolve("config-value.json");
+        Files.writeString(configFile, """
+                {"key":"openai.api_key","value":"secret","description":"OpenAI key"}
+                """);
+
+        ExecutionResult createResult = execute("config-values", "create", "--file", configFile.toString());
+        ExecutionResult updateResult = execute("config-values", "update", "openai.api_key", "--file", configFile.toString());
+
+        assertThat(createResult.exitCode()).isEqualTo(0);
+        assertThat(updateResult.exitCode()).isEqualTo(0);
+        assertThat(parseJson(createRef.get().body()).path("key").asText()).isEqualTo("openai.api_key");
+        assertThat(parseJson(updateRef.get().body()).path("value").asText()).isEqualTo("secret");
+    }
+
+    @Test
+    void repositoriesCommandsCoverDefinitionsAndTools() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> createRef = new AtomicReference<>();
+        AtomicReference<CapturedRequest> installRef = new AtomicReference<>();
+        AtomicReference<CapturedRequest> developRef = new AtomicReference<>();
+        server.register("POST", "/api/repositories", request -> {
+            createRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"created","data":{"id":"repo-main"}}
+                    """);
+        });
+        server.register("POST", "/api/repositories/repo-main/tools/hello/install", request -> {
+            installRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"installed","data":{"scriptId":"hello"}}
+                    """);
+        });
+        server.register("POST", "/api/repositories/repo-main/tools/hello/develop", request -> {
+            developRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"developed","data":{"id":"hello-dev"}}
+                    """);
+        });
+
+        Path repoFile = tempHome.resolve("repository.json");
+        Files.writeString(repoFile, """
+                {"id":"repo-main","name":"Main","type":"LOCAL_DIR","url":"/tmp/repo","enabled":true,"trustLevel":"TRUSTED"}
+                """);
+
+        ExecutionResult createResult = execute("repositories", "create", "--file", repoFile.toString());
+        ExecutionResult installResult = execute(
+                "repositories", "tools", "install", "repo-main", "hello",
+                "--install-schedules",
+                "--install-plugin-dependencies",
+                "--force-plugin-upgrade"
+        );
+        ExecutionResult developResult = execute("repositories", "tools", "develop", "repo-main", "hello", "--script-id", "hello-dev");
+
+        assertThat(createResult.exitCode()).isEqualTo(0);
+        assertThat(installResult.exitCode()).isEqualTo(0);
+        assertThat(developResult.exitCode()).isEqualTo(0);
+        assertThat(parseJson(createRef.get().body()).path("id").asText()).isEqualTo("repo-main");
+        JsonNode installBody = parseJson(installRef.get().body());
+        assertThat(installBody.path("installSchedules").asBoolean()).isTrue();
+        assertThat(installBody.path("installPluginDependencies").asBoolean()).isTrue();
+        assertThat(installBody.path("forcePluginUpgrade").asBoolean()).isTrue();
+        assertThat(parseJson(developRef.get().body()).path("scriptId").asText()).isEqualTo("hello-dev");
+    }
+
+    @Test
+    void repositoriesPluginsAndScriptsDevelopmentCommandsUseExpectedEndpoints() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> pluginDetailRef = new AtomicReference<>();
+        AtomicReference<CapturedRequest> forkRef = new AtomicReference<>();
+        AtomicReference<CapturedRequest> pullRef = new AtomicReference<>();
+        server.register("GET", "/api/repositories/repo-main/plugins/demo-plugin", request -> {
+            pluginDetailRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"success","data":{"descriptor":{"pluginId":"demo-plugin"}}}
+                    """);
+        });
+        server.register("POST", "/api/scripts/source/fork", request -> {
+            forkRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"forked","data":{"id":"source-fork"}}
+                    """);
+        });
+        server.register("POST", "/api/scripts/hello-dev/development-pull", request -> {
+            pullRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"pulled","data":{"id":"hello-dev"}}
+                    """);
+        });
+
+        ExecutionResult pluginGetResult = execute("repositories", "plugins", "get", "repo-main", "demo-plugin");
+        ExecutionResult legacyPluginGetResult = execute("plugins", "repository", "get", "repo-main", "demo-plugin");
+        ExecutionResult forkResult = execute("scripts", "fork", "source", "--id", "source-fork", "--name", "Source Fork");
+        ExecutionResult pullResult = execute("scripts", "development-pull", "hello-dev", "--force");
+
+        assertThat(pluginGetResult.exitCode()).isEqualTo(0);
+        assertThat(legacyPluginGetResult.exitCode()).isEqualTo(0);
+        assertThat(forkResult.exitCode()).isEqualTo(0);
+        assertThat(pullResult.exitCode()).isEqualTo(0);
+        assertThat(pluginDetailRef.get().path()).isEqualTo("/api/repositories/repo-main/plugins/demo-plugin");
+        assertThat(forkRef.get().query()).isEqualTo("includeUiSchema=true");
+        assertThat(parseJson(forkRef.get().body()).path("id").asText()).isEqualTo("source-fork");
+        assertThat(pullRef.get().query()).contains("includeUiSchema=true");
+        assertThat(pullRef.get().query()).contains("force=true");
+    }
+
+    @Test
     void invalidJsonInputReturnsValidationEnvelope() throws Exception {
         server = new TestServer();
 

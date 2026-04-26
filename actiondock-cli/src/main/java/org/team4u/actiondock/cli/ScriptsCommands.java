@@ -15,7 +15,8 @@ import java.util.concurrent.Callable;
 @Command(name = "scripts", mixinStandardHelpOptions = true, description = "Commands for script drafts, published versions, and execution.", subcommands = {
         ScriptsCommands.ListScripts.class, ScriptsCommands.GetScript.class, ScriptsCommands.GetPublishedScript.class, ScriptsCommands.GetScriptSchema.class,
         ScriptsCommands.CreateScript.class, ScriptsCommands.UpdateScript.class, ScriptsCommands.DeleteScript.class, ScriptsCommands.ValidateScript.class,
-        ScriptsCommands.PublishScript.class, ScriptsCommands.DiscardDraftScript.class, ScriptsCommands.ExecutePublishedScript.class
+        ScriptsCommands.PublishScript.class, ScriptsCommands.DiscardDraftScript.class, ScriptsCommands.ExecutePublishedScript.class,
+        ScriptsCommands.ForkScript.class, ScriptsCommands.GetDevelopmentStatus.class, ScriptsCommands.PullDevelopmentScript.class
 })
 /**
  * 脚本管理命令组，提供脚本的 CRUD、发布和执行等子命令。
@@ -311,6 +312,81 @@ class ScriptsCommands implements Runnable {
                 response = root.waitForExecution(client, response, waitTimeoutSeconds, pollIntervalMs);
             }
             return root.emit(response);
+        }
+    }
+
+    @Command(name = "fork", mixinStandardHelpOptions = true, description = {
+            "Fork a repository script into a new editable script.",
+            "Requests include includeUiSchema=true."
+    })
+    static class ForkScript implements Callable<Integer> {
+        @ParentCommand
+        ScriptsCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "Source script ID.")
+        String scriptId;
+
+        @Option(names = "--id", required = true, description = "Target script ID.")
+        String targetId;
+
+        @Option(names = "--name", required = true, description = "Target script name.")
+        String name;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            Map<String, Object> query = new LinkedHashMap<>();
+            query.put("includeUiSchema", true);
+            return root.emit(root.apiClient().postJson(
+                    "/api/scripts/" + root.encodePath(scriptId) + "/fork",
+                    query,
+                    root.jsonObject(Map.of("id", targetId, "name", name))
+            ));
+        }
+    }
+
+    @Command(name = "development-status", mixinStandardHelpOptions = true, description = "Get repository development sync status for a development script.")
+    static class GetDevelopmentStatus implements Callable<Integer> {
+        @ParentCommand
+        ScriptsCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "Development script ID.")
+        String scriptId;
+
+        @Override
+        public Integer call() {
+            return parent.root().emit(parent.root().apiClient().get(
+                    "/api/scripts/" + parent.root().encodePath(scriptId) + "/development-status",
+                    Map.of()
+            ));
+        }
+    }
+
+    @Command(name = "development-pull", mixinStandardHelpOptions = true, description = {
+            "Pull remote repository updates into a development script.",
+            "Requests include includeUiSchema=true. Use --force to pull even when the server reports local conflicts."
+    })
+    static class PullDevelopmentScript implements Callable<Integer> {
+        @ParentCommand
+        ScriptsCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<scriptId>", description = "Development script ID.")
+        String scriptId;
+
+        @Option(names = "--force", description = "Force pulling remote changes.")
+        boolean force;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            Map<String, Object> query = new LinkedHashMap<>();
+            query.put("includeUiSchema", true);
+            query.put("force", force);
+            return root.emit(root.apiClient().postJson(
+                    "/api/scripts/" + root.encodePath(scriptId) + "/development-pull",
+                    query,
+                    "{}"
+            ));
         }
     }
 }

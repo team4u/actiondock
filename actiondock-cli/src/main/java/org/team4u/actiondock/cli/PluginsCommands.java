@@ -34,7 +34,7 @@ class PluginsCommands implements Runnable {
     }
 
     @Command(name = "repository", mixinStandardHelpOptions = true, description = "Commands for repository-managed plugins.", subcommands = {
-            ListRepositoryPlugins.class, InstallRepositoryPlugin.class, UpdateRepositoryPlugin.class, PublishRepositoryPlugin.class
+            ListRepositoryPlugins.class, GetRepositoryPlugin.class, InstallRepositoryPlugin.class, UpdateRepositoryPlugin.class, PublishRepositoryPlugin.class
     })
     static class RepositoryPluginCommands implements Runnable {
         @ParentCommand
@@ -67,6 +67,27 @@ class PluginsCommands implements Runnable {
                     ? "/api/repositories/plugins"
                     : "/api/repositories/" + parent.root().encodePath(repositoryId) + "/plugins";
             return parent.root().emit(parent.root().apiClient().get(path, Map.of()));
+        }
+    }
+
+    @Command(name = "get", mixinStandardHelpOptions = true, description = "Get details for a repository plugin.")
+    static class GetRepositoryPlugin implements Callable<Integer> {
+        @ParentCommand
+        RepositoryPluginCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
+        String repositoryId;
+
+        @Parameters(index = "1", paramLabel = "<pluginId>", description = "Plugin ID.")
+        String pluginId;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            return root.emit(root.apiClient().get(
+                    "/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId),
+                    Map.of()
+            ));
         }
     }
 

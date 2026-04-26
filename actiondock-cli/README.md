@@ -19,10 +19,11 @@ mvn -pl actiondock-cli -am package
 
 | 配置项 | CLI Flag | 环境变量 | 说明 |
 |--------|----------|----------|------|
-| 服务地址 | `--base-url` | `SF_BASE_URL` | 例如 `http://localhost:8080` |
-| 认证令牌 | `--token` | `SF_TOKEN` | Bearer token |
-| 连接超时 | `--connect-timeout-ms` | `SF_CONNECT_TIMEOUT_MS` | HTTP 连接超时（毫秒） |
-| 读超时 | `--read-timeout-ms` | `SF_READ_TIMEOUT_MS` | HTTP 读超时（毫秒） |
+| Profile | `--profile` | `ACTIONDOCK_PROFILE` | 本地 profile 名称 |
+| 服务地址 | `--base-url` | `ACTIONDOCK_BASE_URL` | 例如 `http://localhost:8080` |
+| 认证令牌 | `--token` | `ACTIONDOCK_TOKEN` | Bearer token |
+| 连接超时 | `--connect-timeout-ms` | - | HTTP 连接超时（毫秒） |
+| 读超时 | `--read-timeout-ms` | - | HTTP 读超时（毫秒） |
 
 ## 命令总览
 
@@ -37,6 +38,8 @@ actiondock-cli <command> <subcommand> [options]
 | [executions](#executions-执行记录) | 执行记录的提交、查询和清理 |
 | [schedules](#schedules-定时任务) | 定时任务的查询和维护 |
 | [plugins](#plugins-插件管理) | 插件的安装、生命周期和调用 |
+| [config-values](#config-values-全局配置值) | 服务端全局配置值管理 |
+| [repositories](#repositories-仓库和工具库) | 仓库、仓库工具和仓库插件管理 |
 
 ---
 
@@ -210,6 +213,31 @@ java -jar actiondock-cli.jar scripts execute-published <scriptId> \
 | `--wait-timeout-seconds` | 30 | 等待超时时间（秒） |
 | `--poll-interval-ms` | 1000 | 轮询间隔（毫秒） |
 
+### scripts fork
+
+Fork 仓库脚本到一个新的可编辑脚本。
+
+```bash
+java -jar actiondock-cli.jar scripts fork <scriptId> --id hello-fork --name "Hello Fork"
+```
+
+### scripts development-status
+
+查看开发脚本与来源仓库工具的同步状态。
+
+```bash
+java -jar actiondock-cli.jar scripts development-status <scriptId>
+```
+
+### scripts development-pull
+
+从来源仓库拉取开发脚本更新。
+
+```bash
+java -jar actiondock-cli.jar scripts development-pull <scriptId>
+java -jar actiondock-cli.jar scripts development-pull <scriptId> --force
+```
+
 ---
 
 ## executions 执行记录
@@ -367,6 +395,113 @@ java -jar actiondock-cli.jar schedules delete <scheduleId>
 
 ---
 
+## config-values 全局配置值
+
+### config-values list
+
+```bash
+java -jar actiondock-cli.jar config-values list
+```
+
+### config-values get
+
+```bash
+java -jar actiondock-cli.jar config-values get openai.api_key
+```
+
+### config-values create
+
+```bash
+java -jar actiondock-cli.jar config-values create --file config-value.json
+```
+
+### config-values update
+
+```bash
+java -jar actiondock-cli.jar config-values update openai.api_key --file config-value.json
+```
+
+### config-values delete
+
+```bash
+java -jar actiondock-cli.jar config-values delete openai.api_key
+```
+
+配置值 JSON 示例：
+
+```json
+{
+  "key": "openai.api_key",
+  "value": "sk-...",
+  "description": "OpenAI API Key"
+}
+```
+
+---
+
+## repositories 仓库和工具库
+
+### repositories list/create/update/delete/sync
+
+管理仓库定义。
+
+```bash
+java -jar actiondock-cli.jar repositories list
+java -jar actiondock-cli.jar repositories create --file repository.json
+java -jar actiondock-cli.jar repositories update repo-main --file repository.json
+java -jar actiondock-cli.jar repositories delete repo-main
+java -jar actiondock-cli.jar repositories sync repo-main
+```
+
+### repositories tools list/get
+
+查询仓库工具。
+
+```bash
+java -jar actiondock-cli.jar repositories tools list
+java -jar actiondock-cli.jar repositories tools list --repository-id repo-main
+java -jar actiondock-cli.jar repositories tools get repo-main hello-tool
+```
+
+### repositories tools install/update
+
+安装或更新仓库工具。
+
+```bash
+java -jar actiondock-cli.jar repositories tools install repo-main hello-tool \
+  --install-schedules \
+  --install-plugin-dependencies
+
+java -jar actiondock-cli.jar repositories tools update repo-main hello-tool \
+  --install-plugin-dependencies \
+  --force-plugin-upgrade
+```
+
+### repositories tools develop/publish/uninstall
+
+开发同步、发布本地脚本到仓库，以及卸载已安装工具。
+
+```bash
+java -jar actiondock-cli.jar repositories tools develop repo-main hello-tool --script-id hello-dev
+java -jar actiondock-cli.jar repositories tools publish repo-main --file publish-tool.json
+java -jar actiondock-cli.jar repositories tools uninstall hello-tool
+```
+
+### repositories plugins list/get/install/update/publish
+
+管理仓库声明的插件。
+
+```bash
+java -jar actiondock-cli.jar repositories plugins list
+java -jar actiondock-cli.jar repositories plugins list --repository-id repo-main
+java -jar actiondock-cli.jar repositories plugins get repo-main demo-plugin
+java -jar actiondock-cli.jar repositories plugins install repo-main demo-plugin
+java -jar actiondock-cli.jar repositories plugins update repo-main demo-plugin --force
+java -jar actiondock-cli.jar repositories plugins publish repo-main --file publish-plugin.json
+```
+
+---
+
 ## plugins 插件管理
 
 ### plugins list
@@ -483,6 +618,18 @@ cat config.json | java -jar actiondock-cli.jar plugins config set <pluginId> --f
     "settingKey": "settingValue"
   }
 }
+```
+
+### plugins repository
+
+兼容入口，功能等同于 `repositories plugins` 的对应子命令。
+
+```bash
+java -jar actiondock-cli.jar plugins repository list
+java -jar actiondock-cli.jar plugins repository get repo-main demo-plugin
+java -jar actiondock-cli.jar plugins repository install repo-main demo-plugin
+java -jar actiondock-cli.jar plugins repository update repo-main demo-plugin --force
+java -jar actiondock-cli.jar plugins repository publish repo-main --file publish-plugin.json
 ```
 
 ---

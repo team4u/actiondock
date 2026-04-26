@@ -158,6 +158,9 @@ actiondock
 | DELETE | `/api/scripts/{id}` | 删除脚本 |
 | POST | `/api/scripts/{id}/validate` | 校验脚本 |
 | POST | `/api/scripts/{id}/publish` | 发布脚本 |
+| POST | `/api/scripts/{id}/fork` | Fork 仓库脚本 |
+| GET | `/api/scripts/{id}/development-status` | 查看开发脚本同步状态 |
+| POST | `/api/scripts/{id}/development-pull` | 拉取开发脚本远端更新 |
 
 ### 脚本执行
 
@@ -206,6 +209,7 @@ actiondock
 | GET | `/api/repositories/{id}/tools/{toolId}` | 获取工具详情 |
 | POST | `/api/repositories/{id}/tools/{toolId}/install` | 安装工具到本地 |
 | POST | `/api/repositories/{id}/tools/{toolId}/update` | 更新已安装的工具 |
+| POST | `/api/repositories/{id}/tools/{toolId}/develop` | 同步仓库工具为开发脚本 |
 | GET | `/api/repositories/plugins` | 获取所有仓库插件列表 |
 | GET | `/api/repositories/{id}/plugins` | 获取指定仓库的插件列表 |
 | GET | `/api/repositories/{id}/plugins/{pluginId}` | 获取仓库插件详情 |
