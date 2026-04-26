@@ -305,11 +305,15 @@ class PluginsCommands implements Runnable {
             "Invoke a plugin action.",
             "The action name comes from the path parameter. --args provides action-specific arguments and --script-input provides the script input context passed to the plugin. They map to PluginInvokeRequest.args and PluginInvokeRequest.scriptInput on the server.",
             "--args/--args-file and --script-input/--script-input-file are mutually exclusive pairs. Each value must be a JSON object at the top level. If omitted, {} is used.",
+            "Use --file to provide the complete plugin invoke request body as a JSON object. Use --file=- to read from stdin.",
             "--response-view=RESULT returns only the result. DEBUG additionally returns a debug block containing the raw args and scriptInput."
     })
     static class InvokePlugin implements Callable<Integer> {
         @ParentCommand
         PluginsCommands parent;
+
+        @Spec
+        CommandSpec spec;
 
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
@@ -329,6 +333,9 @@ class PluginsCommands implements Runnable {
         @Option(names = "--script-input-file", description = "Path to the script input context JSON file. Use - to read from stdin. Mutually exclusive with --script-input.")
         String scriptInputFile;
 
+        @Option(names = "--file", description = "Path to the complete plugin invoke request body JSON file. Use - to read from stdin. Mutually exclusive with --args, --args-file, --script-input, and --script-input-file.")
+        String filePath;
+
         @Option(names = "--response-view", defaultValue = "RESULT", description = "Response view: ${COMPLETION-CANDIDATES}. RESULT returns the business result, DEBUG returns debug details. Default: ${DEFAULT-VALUE}.")
         ActionDockCommand.ResponseViewOption responseView;
 
@@ -338,18 +345,34 @@ class PluginsCommands implements Runnable {
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
-            String resolvedArgs = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), args, argsFile, "Plugin args");
-            String resolvedScriptInput = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), scriptInput, scriptInputFile, "Script input");
-            String body = root.jsonObject(Map.of(
-                    "args", JsonInputSupport.readTree(root.objectMapper(), root.output(), resolvedArgs),
-                    "scriptInput", JsonInputSupport.readTree(root.objectMapper(), root.output(), resolvedScriptInput),
-                    "responseView", responseView.name()
-            ));
+            String body;
+            if (hasText(filePath)) {
+                if (hasText(args) || hasText(argsFile) || hasText(scriptInput) || hasText(scriptInputFile) || matched("--response-view")) {
+                    throw CliException.validation(root.output(), "--file cannot be combined with --args, --args-file, --script-input, --script-input-file, or --response-view");
+                }
+                body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Plugin invoke request body");
+            } else {
+                String resolvedArgs = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), args, argsFile, "Plugin args");
+                String resolvedScriptInput = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), scriptInput, scriptInputFile, "Script input");
+                body = root.jsonObject(Map.of(
+                        "args", JsonInputSupport.readTree(root.objectMapper(), root.output(), resolvedArgs),
+                        "scriptInput", JsonInputSupport.readTree(root.objectMapper(), root.output(), resolvedScriptInput),
+                        "responseView", responseView.name()
+                ));
+            }
             return root.emit(root.apiClient().postJson(
                     "/api/plugins/" + root.encodePath(pluginId) + "/actions/" + root.encodePath(action) + "/invoke",
                     Map.of(),
                     body
             ));
+        }
+
+        private boolean hasText(String value) {
+            return value != null && !value.isBlank();
+        }
+
+        private boolean matched(String optionName) {
+            return spec.commandLine().getParseResult().hasMatchedOption(optionName);
         }
     }
 

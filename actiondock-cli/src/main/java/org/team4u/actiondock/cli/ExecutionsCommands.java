@@ -38,6 +38,7 @@ class ExecutionsCommands implements Runnable {
             "Submit a script execution.",
             "--script-id selects the current saved script definition. This command calls /api/executions, so the script does not need to be published and the current saved content is used.",
             "Execution input can be provided with --input or --input-file, but not both. The top level must be a JSON object. If omitted, {} is used.",
+            "Use --file to provide the complete /api/executions request body as a JSON object. Use --file=- to read from stdin.",
             "--mode=SYNC/ASYNC controls the server-side submit mode. --wait polls execution status by executionId until it is no longer PENDING/RUNNING or until timeout.",
             "--response-view=RESULT returns the business result. DEBUG returns more detailed debug information."
     })
@@ -45,7 +46,10 @@ class ExecutionsCommands implements Runnable {
         @ParentCommand
         ExecutionsCommands parent;
 
-        @Option(names = "--script-id", required = true, description = "Script ID to execute.")
+        @Spec
+        CommandSpec spec;
+
+        @Option(names = "--script-id", description = "Script ID to execute. Required unless --file is used.")
         String scriptId;
 
         @Option(names = "--input", description = "Inline execution input JSON. The top level must be a JSON object. Mutually exclusive with --input-file.")
@@ -53,6 +57,9 @@ class ExecutionsCommands implements Runnable {
 
         @Option(names = "--input-file", description = "Path to the execution input JSON file. Use - to read from stdin. Mutually exclusive with --input.")
         String inputFile;
+
+        @Option(names = "--file", description = "Path to the complete /api/executions request body JSON file. Use - to read from stdin. Mutually exclusive with --script-id, --input, and --input-file.")
+        String filePath;
 
         @Option(names = "--mode", defaultValue = "SYNC", description = "Server submit mode: ${COMPLETION-CANDIDATES}. Default: ${DEFAULT-VALUE}.")
         ActionDockCommand.SubmitModeOption mode;
@@ -76,18 +83,37 @@ class ExecutionsCommands implements Runnable {
         public Integer call() {
             ActionDockCommand root = parent.root();
             ActionDockApiClient client = root.apiClient();
-            String resolvedInput = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), input, inputFile, "Execution input");
-            String body = root.jsonObject(Map.of(
-                    "scriptId", scriptId,
-                    "input", JsonInputSupport.readTree(root.objectMapper(), root.output(), resolvedInput),
-                    "mode", mode.name(),
-                    "responseView", responseView.name()
-            ));
+            String body;
+            if (hasText(filePath)) {
+                if (hasText(scriptId) || hasText(input) || hasText(inputFile) || matched("--mode") || matched("--response-view")) {
+                    throw CliException.validation(root.output(), "--file cannot be combined with --script-id, --input, --input-file, --mode, or --response-view");
+                }
+                body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Execution request body");
+            } else {
+                if (!hasText(scriptId)) {
+                    throw CliException.validation(root.output(), "--script-id is required unless --file is used");
+                }
+                String resolvedInput = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), input, inputFile, "Execution input");
+                body = root.jsonObject(Map.of(
+                        "scriptId", scriptId,
+                        "input", JsonInputSupport.readTree(root.objectMapper(), root.output(), resolvedInput),
+                        "mode", mode.name(),
+                        "responseView", responseView.name()
+                ));
+            }
             JsonNode response = client.postJson("/api/executions", Map.of(), body);
             if (wait) {
                 response = root.waitForExecution(client, response, waitTimeoutSeconds, pollIntervalMs);
             }
             return root.emit(response);
+        }
+
+        private boolean hasText(String value) {
+            return value != null && !value.isBlank();
+        }
+
+        private boolean matched(String optionName) {
+            return spec.commandLine().getParseResult().hasMatchedOption(optionName);
         }
     }
 

@@ -519,6 +519,7 @@ export function PluginDetailPage() {
       httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
       cliBash: buildPluginInvokeCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
       cliPowerShell: buildPluginInvokePowerShellCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliPowerShellEnvironment: "PowerShell temp file",
       cliCmd: buildPluginInvokeCmdCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
     });
   }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);

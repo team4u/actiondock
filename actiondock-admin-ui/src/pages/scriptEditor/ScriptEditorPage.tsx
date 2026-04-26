@@ -164,6 +164,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
       cliBash: buildExecuteCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
       cliPowerShell: buildExecutePowerShellCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      cliPowerShellEnvironment: "PowerShell stdin",
       cliCmd: buildExecuteCmdCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
     });
   }, [editor.currentScript, apiKey, origin, commandInput, execution.executionMode]);

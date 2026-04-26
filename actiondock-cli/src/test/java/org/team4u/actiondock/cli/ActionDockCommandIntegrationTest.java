@@ -101,6 +101,98 @@ class ActionDockCommandIntegrationTest {
     }
 
     @Test
+    void executionsSubmitAcceptsCompleteRequestBodyFile() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> submitRef = new AtomicReference<>();
+        server.register("POST", "/api/executions", request -> {
+            submitRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"Accepted","data":{"id":"exec-1","status":"SUCCESS"}}
+                    """);
+        });
+        Path requestFile = tempHome.resolve("execution-request.json");
+        Files.writeString(requestFile, """
+                {"scriptId":"hello","input":{"name":"Alice"},"mode":"ASYNC","responseView":"DEBUG"}
+                """);
+
+        ExecutionResult result = execute("executions", "submit", "--file", requestFile.toString());
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode body = parseJson(submitRef.get().body());
+        assertThat(body.path("scriptId").asText()).isEqualTo("hello");
+        assertThat(body.path("input").path("name").asText()).isEqualTo("Alice");
+        assertThat(body.path("mode").asText()).isEqualTo("ASYNC");
+        assertThat(body.path("responseView").asText()).isEqualTo("DEBUG");
+    }
+
+    @Test
+    void scriptsExecutePublishedAcceptsCompleteRequestBodyFile() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> requestRef = new AtomicReference<>();
+        server.register("POST", "/api/scripts/hello/published/execute", request -> {
+            requestRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"Accepted","data":{"id":"exec-1","status":"SUCCESS"}}
+                    """);
+        });
+        Path requestFile = tempHome.resolve("published-execute-request.json");
+        Files.writeString(requestFile, """
+                {"input":{"name":"Alice"},"mode":"SYNC","responseView":"RESULT"}
+                """);
+
+        ExecutionResult result = execute("scripts", "execute-published", "hello", "--file", requestFile.toString());
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode body = parseJson(requestRef.get().body());
+        assertThat(body.path("input").path("name").asText()).isEqualTo("Alice");
+        assertThat(body.path("mode").asText()).isEqualTo("SYNC");
+        assertThat(body.path("responseView").asText()).isEqualTo("RESULT");
+    }
+
+    @Test
+    void pluginsInvokeAcceptsCompleteRequestBodyFile() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> requestRef = new AtomicReference<>();
+        server.register("POST", "/api/plugins/plugin-a/actions/summarize/invoke", request -> {
+            requestRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"Plugin invoked","data":{"result":{"ok":true}}}
+                    """);
+        });
+        Path requestFile = tempHome.resolve("plugin-invoke-request.json");
+        Files.writeString(requestFile, """
+                {"args":{"topic":"ops"},"scriptInput":{"locale":"zh-CN"},"responseView":"DEBUG"}
+                """);
+
+        ExecutionResult result = execute("plugins", "invoke", "plugin-a", "summarize", "--file", requestFile.toString());
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode body = parseJson(requestRef.get().body());
+        assertThat(body.path("args").path("topic").asText()).isEqualTo("ops");
+        assertThat(body.path("scriptInput").path("locale").asText()).isEqualTo("zh-CN");
+        assertThat(body.path("responseView").asText()).isEqualTo("DEBUG");
+    }
+
+    @Test
+    void completeRequestBodyFileCannotBeCombinedWithSplitJsonOptions() throws Exception {
+        server = new TestServer();
+        Path requestFile = tempHome.resolve("execution-request.json");
+        Files.writeString(requestFile, """
+                {"scriptId":"hello","input":{}}
+                """);
+
+        ExecutionResult result = execute(
+                "executions", "submit",
+                "--file", requestFile.toString(),
+                "--script-id", "hello",
+                "--input", "{}"
+        );
+
+        assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
+        assertThat(parseJson(result.stderr()).path("msg").asText()).contains("--file cannot be combined");
+    }
+
+    @Test
     void pluginsInstallSendsMultipartRequest() throws Exception {
         server = new TestServer();
         AtomicReference<CapturedRequest> requestRef = new AtomicReference<>();
@@ -275,6 +367,20 @@ class ActionDockCommandIntegrationTest {
     }
 
     @Test
+    void invalidInlineJsonGuidesPowerShellUsersTowardFilesOrStdin() throws Exception {
+        server = new TestServer();
+
+        ExecutionResult result = execute("executions", "submit", "--script-id", "hello", "--input", "{\"name\":");
+
+        assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
+        String message = parseJson(result.stderr()).path("msg").asText();
+        assertThat(message).contains("is not valid JSON");
+        assertThat(message).contains("PowerShell");
+        assertThat(message).contains("--input-file input.json");
+        assertThat(message).contains("--input-file -");
+    }
+
+    @Test
     void rootHelpExplainsConfigResolutionOrder() throws Exception {
         ExecutionResult result = execute("--help");
 
@@ -296,7 +402,9 @@ class ActionDockCommandIntegrationTest {
         assertThat(submitHelp.stdout()).contains("current");
         assertThat(submitHelp.stdout()).contains("saved content is used");
         assertThat(submitHelp.stdout()).contains("polls /api/executions/{id}");
-        assertThat(submitHelp.stdout()).contains("it does not change --mode");
+        assertThat(submitHelp.stdout()).contains("does not change");
+        assertThat(submitHelp.stdout()).contains("--mode");
+        assertThat(submitHelp.stdout()).contains("--file");
         assertThat(clearHelp.exitCode()).isEqualTo(0);
         assertThat(clearHelp.stdout()).contains("The server requires --script-id");
         assertThat(clearHelp.stdout()).contains("unconditional full clearing");

@@ -198,6 +198,10 @@ java -jar actiondock-cli.jar scripts execute-published <scriptId> \
 java -jar actiondock-cli.jar scripts execute-published <scriptId> \
   --input-file input.json
 
+# 从完整请求体文件读取
+java -jar actiondock-cli.jar scripts execute-published <scriptId> \
+  --file execute-request.json
+
 # 指定返回视图
 java -jar actiondock-cli.jar scripts execute-published <scriptId> \
   --response-view DEBUG
@@ -207,6 +211,7 @@ java -jar actiondock-cli.jar scripts execute-published <scriptId> \
 |------|--------|------|
 | `--input` | `{}` | 内联执行入参 JSON |
 | `--input-file` | - | 执行入参 JSON 文件路径，传 `-` 表示从 stdin 读取 |
+| `--file` | - | 完整请求体 JSON 文件路径，传 `-` 表示从 stdin 读取 |
 | `--mode` | `SYNC` | 提交模式：`SYNC` 或 `ASYNC` |
 | `--response-view` | `RESULT` | 返回视图：`RESULT` 或 `DEBUG` |
 | `--wait` | false | 提交后等待执行结束 |
@@ -266,11 +271,33 @@ java -jar actiondock-cli.jar executions submit \
   --wait-timeout-seconds 120
 ```
 
+PowerShell 推荐把 JSON 作为 stdin 或文件传入，不把 JSON 作为命令行参数：
+
+```powershell
+@'
+{
+  "name": "Alice \"Ops\"",
+  "team": "O'Brien"
+}
+'@ | java -jar actiondock-cli.jar `
+  --script-id hello-groovy `
+  --input-file - `
+  --mode ASYNC `
+  --response-view RESULT
+```
+
+```bash
+# 完整请求体文件，适合复杂 JSON、CI/CD 和 Agent 调用
+java -jar actiondock-cli.jar executions submit \
+  --file execution-request.json
+```
+
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `--script-id` | 必填 | 要执行的脚本 ID |
-| `--input` | `{}` | 内联执行入参 JSON |
-| `--input-file` | - | 执行入参 JSON 文件路径 |
+| `--script-id` | 必填，除非使用 `--file` | 要执行的脚本 ID |
+| `--input` | `{}` | 内联执行入参 JSON；bash/zsh 简单对象可用，PowerShell 建议用文件或 stdin |
+| `--input-file` | - | 执行入参 JSON 文件路径，传 `-` 表示从 stdin 读取 |
+| `--file` | - | 完整 `/api/executions` 请求体 JSON 文件路径，传 `-` 表示从 stdin 读取 |
 | `--mode` | `SYNC` | 提交模式：`SYNC` 或 `ASYNC` |
 | `--response-view` | `RESULT` | 返回视图：`RESULT` 或 `DEBUG` |
 | `--wait` | false | 提交后等待执行结束 |
@@ -582,12 +609,51 @@ java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
   --response-view DEBUG
 ```
 
+PowerShell 推荐把多个 JSON 分别写入临时文件，或使用完整请求体文件：
+
+```powershell
+$argsJson = @'
+{
+  "topic": "ops \"night\""
+}
+'@
+
+$scriptInputJson = @'
+{
+  "locale": "zh-CN"
+}
+'@
+
+$argsPath = Join-Path $env:TEMP ("actiondock-args-{0}.json" -f [guid]::NewGuid())
+$scriptInputPath = Join-Path $env:TEMP ("actiondock-script-input-{0}.json" -f [guid]::NewGuid())
+
+[System.IO.File]::WriteAllText($argsPath, $argsJson, [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::WriteAllText($scriptInputPath, $scriptInputJson, [System.Text.UTF8Encoding]::new($false))
+
+try {
+  java -jar actiondock-cli.jar plugins invoke <pluginId> <action> `
+    --args-file $argsPath `
+    --script-input-file $scriptInputPath `
+    --response-view RESULT
+} finally {
+  Remove-Item $argsPath -ErrorAction SilentlyContinue
+  Remove-Item $scriptInputPath -ErrorAction SilentlyContinue
+}
+```
+
+```bash
+# 完整请求体文件
+java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
+  --file plugin-invoke-request.json
+```
+
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `--args` | `{}` | 内联 action 参数 JSON |
-| `--args-file` | - | action 参数 JSON 文件路径 |
-| `--script-input` | `{}` | 内联脚本输入上下文 JSON |
-| `--script-input-file` | - | 脚本输入上下文 JSON 文件路径 |
+| `--args` | `{}` | 内联 action 参数 JSON；bash/zsh 简单对象可用，PowerShell 建议用文件 |
+| `--args-file` | - | action 参数 JSON 文件路径，传 `-` 表示从 stdin 读取 |
+| `--script-input` | `{}` | 内联脚本输入上下文 JSON；bash/zsh 简单对象可用，PowerShell 建议用文件 |
+| `--script-input-file` | - | 脚本输入上下文 JSON 文件路径，传 `-` 表示从 stdin 读取 |
+| `--file` | - | 完整插件调用请求体 JSON 文件路径，传 `-` 表示从 stdin 读取 |
 | `--response-view` | `RESULT` | 返回视图：`RESULT` 或 `DEBUG` |
 
 ### plugins config get

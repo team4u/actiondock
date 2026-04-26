@@ -156,29 +156,38 @@ function buildPowerShellCliArgumentParts({
   origin: string;
 }): string[] {
   const parts = [
-    "-jar actiondock-cli.jar",
-    `--base-url ${cmdQuote(origin)}`
+    "java -jar actiondock-cli.jar",
+    `--base-url ${powerShellQuote(origin)}`
   ];
   if (apiKey) {
-    parts.push(`--token ${cmdQuote(apiKey)}`);
+    parts.push(`--token ${powerShellQuote(apiKey)}`);
   }
   return parts;
+}
+
+function buildPowerShellCliCommand(parts: string[]): string {
+  const lines = [`${parts[0]} \``];
+  parts.slice(1).forEach((part, index) => {
+    lines.push(`  ${part}${index < parts.length - 2 ? " `" : ""}`);
+  });
+  return lines.join("\n");
+}
+
+function buildPowerShellCliHereStringPipeCommand(payload: Record<string, unknown>, parts: string[]): string {
+  return [
+    "@'",
+    JSON.stringify(payload, null, 2),
+    `'@ | ${parts[0]} \``,
+    ...parts.slice(1).map((part, index) => `  ${part}${index < parts.length - 2 ? " `" : ""}`)
+  ].join("\n");
 }
 
 function buildPowerShellCliJsonVariableSection(variableName: string, payload: Record<string, unknown>): string {
   return [
     `${variableName} = @'`,
     JSON.stringify(payload, null, 2),
-    `'@ | ConvertFrom-Json | ConvertTo-Json -Compress`
+    "'@"
   ].join("\n");
-}
-
-function buildPowerShellCliEscapedVariableSection(variableName: string, escapedVariableName: string): string {
-  return `${escapedVariableName} = ${variableName}.Replace('"', '\\"')`;
-}
-
-function buildPowerShellCliStartProcessSection(argLineExpression: string): string {
-  return [`$argLine = ${argLineExpression}`, "Start-Process java -ArgumentList $argLine -Wait -NoNewWindow"].join("\n\n");
 }
 
 export function buildExecutionInputFromValues(
@@ -407,8 +416,8 @@ export function buildScriptDetailPowerShellCliCommand({
   scriptId: string;
 }): string {
   const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  parts.push("scripts", "get", cmdQuote(scriptId));
-  return buildPowerShellCliStartProcessSection(powerShellQuote(joinSingleLineCommand(parts)));
+  parts.push(`scripts get ${powerShellQuote(scriptId)}`);
+  return buildPowerShellCliCommand(parts);
 }
 
 export function buildToolDetailCurlCommand({
@@ -482,8 +491,8 @@ export function buildToolDetailPowerShellCliCommand({
   scriptId: string;
 }): string {
   const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  parts.push("scripts", "schema", cmdQuote(scriptId));
-  return buildPowerShellCliStartProcessSection(powerShellQuote(joinSingleLineCommand(parts)));
+  parts.push(`scripts schema ${powerShellQuote(scriptId)}`);
+  return buildPowerShellCliCommand(parts);
 }
 
 export function buildExecuteCurlCommand({
@@ -606,22 +615,14 @@ export function buildExecutePowerShellCliCommand({
   scriptId: string;
 }): string {
   const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  const prefix = `${joinSingleLineCommand([
-    ...parts,
-    "executions",
-    "submit",
-    "--script-id",
-    cmdQuote(scriptId),
-    "--input"
-  ])} "`;
-  const suffix = `" --mode ${mode}`;
-  return joinPowerShellScript([
-    buildPowerShellCliJsonVariableSection("$json", input),
-    buildPowerShellCliEscapedVariableSection("$json", "$jsonEscaped"),
-    buildPowerShellCliStartProcessSection(
-      `${powerShellQuote(prefix)} + $jsonEscaped + ${powerShellQuote(suffix)}`
-    )
-  ]);
+  parts.push(
+    "executions submit",
+    `--script-id ${powerShellQuote(scriptId)}`,
+    "--input-file -",
+    `--mode ${mode}`,
+    "--response-view RESULT"
+  );
+  return buildPowerShellCliHereStringPipeCommand(input, parts);
 }
 
 export function buildPluginInvokeCurlCommand({
@@ -766,23 +767,27 @@ export function buildPluginInvokePowerShellCliCommand({
   scriptInput: Record<string, unknown>;
 }): string {
   const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  const prefix = `${joinSingleLineCommand([
-    ...parts,
-    "plugins",
-    "invoke",
-    cmdQuote(pluginId),
-    cmdQuote(action),
-    "--args"
-  ])} "`;
-  const middle = `" --script-input "`;
-  const suffix = `" --response-view ${responseView ?? "RESULT"}`;
+  parts.push(
+    `plugins invoke ${powerShellQuote(pluginId)} ${powerShellQuote(action)}`,
+    "--args-file $argsPath",
+    "--script-input-file $scriptInputPath",
+    `--response-view ${responseView ?? "RESULT"}`
+  );
   return joinPowerShellScript([
     buildPowerShellCliJsonVariableSection("$argsJson", args),
-    buildPowerShellCliEscapedVariableSection("$argsJson", "$argsJsonEscaped"),
     buildPowerShellCliJsonVariableSection("$scriptInputJson", scriptInput),
-    buildPowerShellCliEscapedVariableSection("$scriptInputJson", "$scriptInputJsonEscaped"),
-    buildPowerShellCliStartProcessSection(
-      `${powerShellQuote(prefix)} + $argsJsonEscaped + ${powerShellQuote(middle)} + $scriptInputJsonEscaped + ${powerShellQuote(suffix)}`
-    )
+    `$argsPath = Join-Path $env:TEMP ("actiondock-args-{0}.json" -f [guid]::NewGuid())`,
+    `$scriptInputPath = Join-Path $env:TEMP ("actiondock-script-input-{0}.json" -f [guid]::NewGuid())`,
+    [
+      "[System.IO.File]::WriteAllText($argsPath, $argsJson, [System.Text.UTF8Encoding]::new($false))",
+      "[System.IO.File]::WriteAllText($scriptInputPath, $scriptInputJson, [System.Text.UTF8Encoding]::new($false))",
+      "",
+      "try {",
+      buildPowerShellCliCommand(parts).split("\n").map((line) => `  ${line}`).join("\n"),
+      "} finally {",
+      "  Remove-Item $argsPath -ErrorAction SilentlyContinue",
+      "  Remove-Item $scriptInputPath -ErrorAction SilentlyContinue",
+      "}"
+    ].join("\n")
   ]);
 }

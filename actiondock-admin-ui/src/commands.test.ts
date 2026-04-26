@@ -71,9 +71,10 @@ describe("CLI command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$argLine = '-jar actiondock-cli.jar --base-url "http://localhost:8080" --token "local-dev-key" scripts get "hello-groovy"'
-
-Start-Process java -ArgumentList $argLine -Wait -NoNewWindow`);
+    ).toBe(`java -jar actiondock-cli.jar \`
+  --base-url 'http://localhost:8080' \`
+  --token 'local-dev-key' \`
+  scripts get 'hello-groovy'`);
 
     expect(
       buildToolDetailPowerShellCliCommand({
@@ -81,9 +82,10 @@ Start-Process java -ArgumentList $argLine -Wait -NoNewWindow`);
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$argLine = '-jar actiondock-cli.jar --base-url "http://localhost:8080" --token "local-dev-key" scripts schema "hello-groovy"'
-
-Start-Process java -ArgumentList $argLine -Wait -NoNewWindow`);
+    ).toBe(`java -jar actiondock-cli.jar \`
+  --base-url 'http://localhost:8080' \`
+  --token 'local-dev-key' \`
+  scripts schema 'hello-groovy'`);
   });
 
   it("builds execution command with inline input", () => {
@@ -123,17 +125,18 @@ Start-Process java -ArgumentList $argLine -Wait -NoNewWindow`);
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`$json = @'
+    ).toBe(`@'
 {
   "name": "Alice \\"Ops\\""
 }
-'@ | ConvertFrom-Json | ConvertTo-Json -Compress
-
-$jsonEscaped = $json.Replace('"', '\\"')
-
-$argLine = '-jar actiondock-cli.jar --base-url "http://localhost:8080" --token "secret-token" executions submit --script-id "hello-groovy" --input "' + $jsonEscaped + '" --mode ASYNC'
-
-Start-Process java -ArgumentList $argLine -Wait -NoNewWindow`);
+'@ | java -jar actiondock-cli.jar \`
+  --base-url 'http://localhost:8080' \`
+  --token 'secret-token' \`
+  executions submit \`
+  --script-id 'hello-groovy' \`
+  --input-file - \`
+  --mode ASYNC \`
+  --response-view RESULT`);
   });
 
   it("builds plugin invoke command with args and script input", () => {
@@ -179,21 +182,32 @@ Start-Process java -ArgumentList $argLine -Wait -NoNewWindow`);
 {
   "topic": "ops \\"night\\""
 }
-'@ | ConvertFrom-Json | ConvertTo-Json -Compress
-
-$argsJsonEscaped = $argsJson.Replace('"', '\\"')
+'@
 
 $scriptInputJson = @'
 {
   "locale": "zh-CN"
 }
-'@ | ConvertFrom-Json | ConvertTo-Json -Compress
+'@
 
-$scriptInputJsonEscaped = $scriptInputJson.Replace('"', '\\"')
+$argsPath = Join-Path $env:TEMP ("actiondock-args-{0}.json" -f [guid]::NewGuid())
 
-$argLine = '-jar actiondock-cli.jar --base-url "http://localhost:8080" plugins invoke "plugin-a" "summarize" --args "' + $argsJsonEscaped + '" --script-input "' + $scriptInputJsonEscaped + '" --response-view RESULT'
+$scriptInputPath = Join-Path $env:TEMP ("actiondock-script-input-{0}.json" -f [guid]::NewGuid())
 
-Start-Process java -ArgumentList $argLine -Wait -NoNewWindow`);
+[System.IO.File]::WriteAllText($argsPath, $argsJson, [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::WriteAllText($scriptInputPath, $scriptInputJson, [System.Text.UTF8Encoding]::new($false))
+
+try {
+  java -jar actiondock-cli.jar \`
+    --base-url 'http://localhost:8080' \`
+    plugins invoke 'plugin-a' 'summarize' \`
+    --args-file $argsPath \`
+    --script-input-file $scriptInputPath \`
+    --response-view RESULT
+} finally {
+  Remove-Item $argsPath -ErrorAction SilentlyContinue
+  Remove-Item $scriptInputPath -ErrorAction SilentlyContinue
+}`);
   });
 });
 

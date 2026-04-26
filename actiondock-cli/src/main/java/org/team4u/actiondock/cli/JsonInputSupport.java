@@ -34,7 +34,7 @@ public final class JsonInputSupport {
         if (filePath == null || filePath.isBlank()) {
             throw CliException.validation(output, label + " file path must not be empty");
         }
-        return normalizeJsonObject(output, objectMapper, readText(output, filePath, label), label);
+        return normalizeJsonObject(output, objectMapper, readText(output, filePath, label), label, false);
     }
 
     /**
@@ -59,10 +59,10 @@ public final class JsonInputSupport {
             throw CliException.validation(output, label + " must be provided either as inline JSON or as a file, but not both");
         }
         if (hasText(inlineValue)) {
-            return normalizeJsonObject(output, objectMapper, inlineValue, label);
+            return normalizeJsonObject(output, objectMapper, inlineValue, label, true);
         }
         if (hasText(filePath)) {
-            return normalizeJsonObject(output, objectMapper, readText(output, filePath, label), label);
+            return normalizeJsonObject(output, objectMapper, readText(output, filePath, label), label, false);
         }
         return "{}";
     }
@@ -99,7 +99,7 @@ public final class JsonInputSupport {
         }
     }
 
-    private static String normalizeJsonObject(CliOutput output, ObjectMapper objectMapper, String rawJson, String label) {
+    private static String normalizeJsonObject(CliOutput output, ObjectMapper objectMapper, String rawJson, String label, boolean inline) {
         try {
             JsonNode parsed = objectMapper.readTree(rawJson);
             if (!(parsed instanceof ObjectNode)) {
@@ -109,7 +109,11 @@ public final class JsonInputSupport {
         } catch (CliException exception) {
             throw exception;
         } catch (Exception exception) {
-            throw CliException.validation(output, label + " is not valid JSON");
+            String message = label + " is not valid JSON";
+            if (inline) {
+                message += ". If you are using PowerShell, prefer a JSON file or stdin, for example: --input-file input.json or @' ... '@ | actiondock executions submit --input-file -";
+            }
+            throw CliException.validation(output, message);
         }
     }
 
