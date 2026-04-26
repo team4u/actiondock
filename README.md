@@ -619,7 +619,7 @@ curl -X POST http://localhost:8080/api/config-values \
 | `server.port` | 8080 | Web 服务端口 |
 | `spring.datasource.url` | `jdbc:h2:file:${app.home-dir}/data/dsl-runtime;AUTO_SERVER=TRUE` | 默认 H2 文件库 |
 | `app.home-dir` | `${user.home}/.actiondock` | 本机运行时根目录 |
-| `app.auth.api-keys` | `[]` | 可选 API Key 列表，非空时可由鉴权组件使用 |
+| `app.auth.api-keys` | `[]` | 可选 API Key 列表，非空时请求需携带 `Authorization: Bearer <key>`，否则返回 401；为空时免认证放行 |
 | `app.execution.async-pool-size` | `4` | 异步执行线程池大小 |
 | `app.execution.groovy.enabled` | `true` | 是否启用 `GROOVY` 脚本编译缓存 |
 | `app.execution.groovy.cache-max-size` | `128` | `GROOVY` 编译缓存最大条目数 |
@@ -648,6 +648,48 @@ app:
       executable: python3
       timeout-seconds: 60
 ```
+
+### API Key 运行时注入
+
+`app.auth.api-keys` 支持通过以下方式在运行时覆盖，无需修改 jar 内的默认配置：
+
+**命令行参数：**
+
+```bash
+java -jar actiondock-app-spring.jar \
+  --app.auth.api-keys[0]=sk-key-1 \
+  --app.auth.api-keys[1]=sk-key-2
+```
+
+**环境变量：**
+
+```bash
+# 多个 key 用逗号分隔，Spring Boot 对 List 类型自动拆分
+export APP_AUTH_API_KEYS=sk-key-1,sk-key-2
+java -jar actiondock-app-spring.jar
+```
+
+**外部配置文件：**
+
+在 jar 同级目录放置 `application.yml`，会覆盖 jar 内的默认值：
+
+```yaml
+app:
+  auth:
+    api-keys:
+      - sk-key-1
+      - sk-key-2
+```
+
+**Docker：**
+
+```yaml
+# docker-compose.yml
+environment:
+  - APP_AUTH_API_KEYS=sk-key-1,sk-key-2
+```
+
+优先级从高到低：命令行参数 > 环境变量 > 外部配置文件 > jar 内默认配置。
 
 ## 插件开发与使用
 
