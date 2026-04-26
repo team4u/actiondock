@@ -12,15 +12,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "plugins", mixinStandardHelpOptions = true, description = "Commands for plugin installation, lifecycle operations, invocation, and config.", subcommands = {
-        PluginsCommands.ListPlugins.class, PluginsCommands.GetPlugin.class, PluginsCommands.InstallPlugin.class, PluginsCommands.UpgradePlugin.class,
-        PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class
-})
 /**
  * 插件管理命令组，提供插件的安装、启停、调用和配置等子命令。
  *
  * @author jay.wu
  */
+@Command(name = "plugins", mixinStandardHelpOptions = true, description = "Commands for plugin installation, lifecycle operations, invocation, and config.", subcommands = {
+        PluginsCommands.ListPlugins.class, PluginsCommands.GetPlugin.class, PluginsCommands.InstallPlugin.class, PluginsCommands.UpgradePlugin.class,
+        PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class
+})
 class PluginsCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;
@@ -274,8 +274,8 @@ class PluginsCommands implements Runnable {
         public Integer call() {
             ActionDockCommand root = parent.root();
             String body;
-            if (hasText(filePath)) {
-                if (hasText(args) || hasText(argsFile) || hasText(scriptInput) || hasText(scriptInputFile) || matched("--response-view")) {
+            if (JsonInputSupport.hasText(filePath)) {
+                if (JsonInputSupport.hasText(args) || JsonInputSupport.hasText(argsFile) || JsonInputSupport.hasText(scriptInput) || JsonInputSupport.hasText(scriptInputFile) || matched("--response-view")) {
                     throw CliException.validation(
                             root.output(),
                             "--file cannot be combined with --args, --args-file, --script-input, --script-input-file, or --response-view",
@@ -299,10 +299,6 @@ class PluginsCommands implements Runnable {
                     CliRequest.postJson("/api/plugins/" + root.encodePath(pluginId) + "/actions/" + root.encodePath(action) + "/invoke", Map.of(), body),
                     AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins invoke")
             );
-        }
-
-        private boolean hasText(String value) {
-            return value != null && !value.isBlank();
         }
 
         private boolean matched(String optionName) {

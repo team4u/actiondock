@@ -8,9 +8,10 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
+  Divider,
   Empty,
   Form,
-  Radio,
   Space,
   Spin,
   Tabs,
@@ -325,9 +326,6 @@ export function ScriptRunPage() {
           <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate(backPath)}>
             返回列表
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={handleReset}>
-            重置默认值
-          </Button>
         </div>
 
         <header className="run-page__headline">
@@ -349,17 +347,6 @@ export function ScriptRunPage() {
                   <Card
                     className="run-panel run-panel--input"
                     title={<Space>输入 <Tooltip title="字符串输入支持 ${config.xxx}；脚本内部也可通过只读变量 config 读取全局配置值。"><QuestionCircleOutlined style={{ color: "#1677ff", fontSize: 14 }} /></Tooltip></Space>}
-                    extra={
-                      <Button
-                        type="primary"
-                        icon={<PlayCircleOutlined />}
-                        loading={executing}
-                        disabled={!canExecute}
-                        onClick={() => void handleExecute()}
-                      >
-                        执行
-                      </Button>
-                    }
                   >
                     {unsupportedInputFields.length > 0 ? (
                       <Alert
@@ -381,17 +368,24 @@ export function ScriptRunPage() {
                       />
                     ) : null}
 
-                    <Radio.Group
-                      value={executionMode}
-                      optionType="button"
-                      buttonStyle="solid"
-                      onChange={(event: React.ChangeEvent<HTMLInputElement>) => setExecutionMode(event.target.value as SubmitMode)}
-                      options={[
-                        { label: "同步执行", value: "SYNC" },
-                        { label: "异步执行", value: "ASYNC" }
-                      ]}
-                      style={{ marginBottom: 16 }}
-                    />
+                    <div className="script-editor-page__execution-toolbar" style={{ marginBottom: 16 }}>
+                      <Space size={12} wrap className="script-editor-page__execution-actions">
+                        <Button icon={<ReloadOutlined />} onClick={handleReset}>
+                          重置
+                        </Button>
+                        <Button
+                          type="primary"
+                          icon={<PlayCircleOutlined />}
+                          loading={executing}
+                          disabled={!canExecute}
+                          onClick={() => void handleExecute()}
+                        >
+                          执行
+                        </Button>
+                      </Space>
+                    </div>
+
+                    <Divider style={{ margin: '0 0 16px 0' }} />
 
                     {supportedInputFields.length > 0 && (
                       <div style={{ marginBottom: 16 }}>
@@ -403,6 +397,14 @@ export function ScriptRunPage() {
                         />
                       </div>
                     )}
+
+                    <Checkbox
+                      checked={executionMode === "ASYNC"}
+                      onChange={(event) => setExecutionMode(event.target.checked ? "ASYNC" : "SYNC")}
+                      style={{ marginBottom: 16 }}
+                    >
+                      异步执行
+                    </Checkbox>
 
                     {supportedInputFields.length === 0 ? (
                       <div className="run-panel__empty">

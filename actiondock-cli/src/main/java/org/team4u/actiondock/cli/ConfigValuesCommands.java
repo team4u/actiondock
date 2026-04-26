@@ -10,6 +10,11 @@ import picocli.CommandLine.Spec;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
+/**
+ * 全局配置值命令组，提供服务端配置值的查询和维护能力。
+ *
+ * @author jay.wu
+ */
 @Command(name = "config-values", mixinStandardHelpOptions = true, description = "Commands for global runtime config values.", subcommands = {
         ConfigValuesCommands.ListConfigValues.class,
         ConfigValuesCommands.GetConfigValue.class,
@@ -17,11 +22,6 @@ import java.util.concurrent.Callable;
         ConfigValuesCommands.UpdateConfigValue.class,
         ConfigValuesCommands.DeleteConfigValue.class
 })
-/**
- * 全局配置值命令组，提供服务端配置值的查询和维护能力。
- *
- * @author jay.wu
- */
 class ConfigValuesCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;

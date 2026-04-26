@@ -275,7 +275,7 @@ public class ExecutionApplicationService {
 
         private void append(ExecutionLogLevel level, String message) {
             synchronized (monitor) {
-                record.getLogs().add(new ExecutionLogEntry()
+                record.addLog(new ExecutionLogEntry()
                         .setLevel(level)
                         .setMessage(message)
                         .setCreatedAt(LocalDateTime.now()));

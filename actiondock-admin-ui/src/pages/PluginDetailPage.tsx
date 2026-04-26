@@ -25,7 +25,7 @@ import {
   Typography,
   message
 } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getApiKey } from "../auth";
 import { useColorMode } from "../contexts/ColorModeContext";
@@ -132,8 +132,8 @@ export function PluginDetailPage() {
   const navigate = useNavigate();
   const colorMode = useColorMode();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [configForm] = Form.useForm<Record<string, any>>();
-  const [argsForm] = Form.useForm<Record<string, any>>();
+  const [configForm] = Form.useForm<Record<string, unknown>>();
+  const [argsForm] = Form.useForm<Record<string, unknown>>();
   const [publishForm] = Form.useForm<PublishPluginFormValues>();
   const watchedArgsValues = Form.useWatch([], argsForm) as Record<string, unknown> | undefined;
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
@@ -200,57 +200,34 @@ export function PluginDetailPage() {
   const apiKey = getApiKey() || undefined;
   const origin = window.location.origin;
 
-  const loadPlugin = async () => {
+  const loadAll = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
+    setConfigLoading(true);
     try {
-      setPlugin(await getPlugin(pluginId));
+      const [pluginResult, configResult] = await Promise.all([
+        getPlugin(pluginId),
+        getPluginConfig(pluginId),
+      ]);
+      if (signal?.aborted) return;
+      setPlugin(pluginResult);
+      setCurrentConfig(configResult);
     } catch (error) {
+      if (signal?.aborted) return;
       const detail = error instanceof ApiError ? error.message : "加载插件详情失败";
       messageApi.error(detail);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+        setConfigLoading(false);
+      }
     }
-  };
-
-  const loadConfig = async () => {
-    setConfigLoading(true);
-    try {
-      setCurrentConfig(await getPluginConfig(pluginId));
-    } catch (error) {
-      const detail = error instanceof ApiError ? error.message : "加载插件配置失败";
-      messageApi.error(detail);
-    } finally {
-      setConfigLoading(false);
-    }
-  };
+  }, [pluginId, messageApi]);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setConfigLoading(true);
-      try {
-        const [pluginResult, configResult] = await Promise.all([
-          getPlugin(pluginId),
-          getPluginConfig(pluginId),
-        ]);
-        if (cancelled) return;
-        setPlugin(pluginResult);
-        setCurrentConfig(configResult);
-      } catch (error) {
-        if (cancelled) return;
-        const detail = error instanceof ApiError ? error.message : "加载插件详情失败";
-        messageApi.error(detail);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setConfigLoading(false);
-        }
-      }
-    };
-    void load();
-    return () => { cancelled = true; };
-  }, [pluginId]);
+    const controller = new AbortController();
+    void loadAll(controller.signal);
+    return () => { controller.abort(); };
+  }, [loadAll]);
 
   useEffect(() => {
     if (!plugin?.actions.length) {
@@ -574,7 +551,7 @@ export function PluginDetailPage() {
                 <Button
                   icon={<ReloadOutlined />}
                   loading={loading || configLoading}
-                  onClick={() => void Promise.all([loadPlugin(), loadConfig()])}
+                  onClick={() => void loadAll()}
                 >
                   刷新
                 </Button>

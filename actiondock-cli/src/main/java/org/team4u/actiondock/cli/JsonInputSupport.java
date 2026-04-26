@@ -141,7 +141,7 @@ public final class JsonInputSupport {
         }
     }
 
-    private static boolean hasText(String value) {
+    public static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
 

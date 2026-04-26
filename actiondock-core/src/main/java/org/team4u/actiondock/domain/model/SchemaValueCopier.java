@@ -13,7 +13,7 @@ import java.util.Map;
  *
  * @author jay.wu
  */
-final class SchemaValueCopier {
+public final class SchemaValueCopier {
     private SchemaValueCopier() {
     }
 
@@ -23,7 +23,7 @@ final class SchemaValueCopier {
      * @param value 要拷贝的 Map，可以为 null
      * @return 拷贝后的新 Map，如果是 null 则返回空 Map
      */
-    static Map<String, Object> copyMap(Map<String, Object> value) {
+    public static Map<String, Object> copyMap(Map<String, Object> value) {
         if (value == null) {
             return new LinkedHashMap<>();
         }

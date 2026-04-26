@@ -10,15 +10,15 @@ import picocli.CommandLine.Spec;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "presets", mixinStandardHelpOptions = true, description = "Commands for managing execution parameter presets.", subcommands = {
-        PresetsCommands.ListPresets.class, PresetsCommands.CreatePreset.class, PresetsCommands.UpdatePreset.class,
-        PresetsCommands.DeletePreset.class
-})
 /**
  * 执行参数预设命令组，提供预设的查询、创建、更新和删除等子命令。
  *
  * @author jay.wu
  */
+@Command(name = "presets", mixinStandardHelpOptions = true, description = "Commands for managing execution parameter presets.", subcommands = {
+        PresetsCommands.ListPresets.class, PresetsCommands.CreatePreset.class, PresetsCommands.UpdatePreset.class,
+        PresetsCommands.DeletePreset.class
+})
 class PresetsCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;

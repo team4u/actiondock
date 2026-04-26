@@ -15,6 +15,13 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
+/**
+ * CLI 根命令，提供全局连接配置和通用工具方法。
+ * <p>
+ * 包含 scripts、executions、plugins、schedules、config、config-values、repositories 等子命令组。
+ *
+ * @author jay.wu
+ */
 @Command(
         name = "actiondock",
         mixinStandardHelpOptions = true,
@@ -36,13 +43,6 @@ import java.util.concurrent.Callable;
                 PresetsCommands.class
         }
 )
-/**
- * CLI 根命令，提供全局连接配置和通用工具方法。
- * <p>
- * 包含 scripts、executions、plugins、schedules、config、config-values、repositories 等子命令组。
- *
- * @author jay.wu
- */
 public class ActionDockCommand implements Runnable {
     enum SubmitModeOption {
         SYNC,

@@ -1552,20 +1552,26 @@ a {
 }
 
 @media (max-width: 768px) {
-  .execution-preset-panel__toolbar,
+  .execution-preset-panel__toolbar {
+    gap: 6px;
+  }
+
+  .execution-preset-panel__select {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .execution-preset-panel__label {
+    flex-shrink: 0;
+  }
+
+  .execution-preset-panel__actions {
+    flex-shrink: 0;
+  }
+
   .execution-preset-drawer .ant-collapse-header {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .execution-preset-panel__label,
-  .execution-preset-panel__actions {
-    width: 100%;
-  }
-
-  .execution-preset-panel__actions .ant-btn,
-  .execution-preset-panel__select {
-    width: 100%;
   }
 
   .execution-preset-panel__meta {

@@ -273,7 +273,6 @@ export function ExecutionPresetBar({
         <div className="execution-preset-panel__toolbar">
           <div className="execution-preset-panel__label">
             <Text type="secondary">参数预设</Text>
-            {currentStatusTag}
           </div>
 
           <Select

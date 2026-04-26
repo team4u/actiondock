@@ -10,15 +10,15 @@ import picocli.CommandLine.Spec;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "schedules", mixinStandardHelpOptions = true, description = "Commands for querying and maintaining schedules.", subcommands = {
-        SchedulesCommands.ListSchedules.class, SchedulesCommands.GetSchedule.class, SchedulesCommands.CreateSchedule.class, SchedulesCommands.UpdateSchedule.class,
-        SchedulesCommands.EnableSchedule.class, SchedulesCommands.DisableSchedule.class, SchedulesCommands.DeleteSchedule.class
-})
 /**
  * 定时调度命令组，提供调度的查询、创建、启停和删除等子命令。
  *
  * @author jay.wu
  */
+@Command(name = "schedules", mixinStandardHelpOptions = true, description = "Commands for querying and maintaining schedules.", subcommands = {
+        SchedulesCommands.ListSchedules.class, SchedulesCommands.GetSchedule.class, SchedulesCommands.CreateSchedule.class, SchedulesCommands.UpdateSchedule.class,
+        SchedulesCommands.EnableSchedule.class, SchedulesCommands.DisableSchedule.class, SchedulesCommands.DeleteSchedule.class
+})
 class SchedulesCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;

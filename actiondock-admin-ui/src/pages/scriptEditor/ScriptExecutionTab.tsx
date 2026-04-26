@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Radio, Row, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, Empty, Row, Space, Table, Tabs, Tag, Typography } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import type { ColumnsType } from "antd/es/table";
 import type { FormInstance } from "antd";
@@ -219,19 +219,6 @@ export function ScriptExecutionTab({
                       ) : null}
 
                       <div className="script-editor-page__execution-toolbar">
-                        <Radio.Group
-                          value={executionMode}
-                          optionType="button"
-                          buttonStyle="solid"
-                          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                            onExecutionModeChange(event.target.value as SubmitMode)
-                          }
-                          options={[
-                            { label: "同步执行", value: "SYNC" },
-                            { label: "异步执行", value: "ASYNC" }
-                          ]}
-                        />
-
                         <Space size={12} wrap className="script-editor-page__execution-actions">
                           <Button icon={<ReloadOutlined />} onClick={onResetExecutionInput}>
                             重置
@@ -248,6 +235,15 @@ export function ScriptExecutionTab({
                       </div>
 
                       {presetBar}
+
+                      <Checkbox
+                        checked={executionMode === "ASYNC"}
+                        onChange={(event) =>
+                          onExecutionModeChange(event.target.checked ? "ASYNC" : "SYNC")
+                        }
+                      >
+                        异步执行
+                      </Checkbox>
 
                       <SchemaObjectEditor
                         form={executionForm}

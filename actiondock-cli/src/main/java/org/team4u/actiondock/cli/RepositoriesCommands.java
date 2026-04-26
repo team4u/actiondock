@@ -11,6 +11,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
+/**
+ * 仓库命令组，提供仓库定义、仓库工具和仓库插件的 REST CLI 入口。
+ *
+ * @author jay.wu
+ */
 @Command(name = "repositories", mixinStandardHelpOptions = true, description = "Commands for repository definitions, tools, and repository plugins.", subcommands = {
         RepositoriesCommands.ListRepositories.class,
         RepositoriesCommands.CreateRepository.class,
@@ -20,11 +25,6 @@ import java.util.concurrent.Callable;
         RepositoriesCommands.RepositoryToolCommands.class,
         RepositoriesCommands.RepositoryPluginCommands.class
 })
-/**
- * 仓库命令组，提供仓库定义、仓库工具和仓库插件的 REST CLI 入口。
- *
- * @author jay.wu
- */
 class RepositoriesCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;

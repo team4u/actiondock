@@ -1,5 +1,6 @@
 package org.team4u.actiondock.application;
 
+import org.team4u.actiondock.domain.model.SchemaValueCopier;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;
@@ -131,8 +132,8 @@ public class ScheduleApplicationService {
             ensureEditable(target);
         }
 
-        String name = normalize(schedule.getName(), "定时任务名称不能为空");
-        String cronExpression = normalize(schedule.getCronExpression(), "Cron 表达式不能为空");
+        String name = ApplicationServiceSupport.normalize(schedule.getName(), "定时任务名称不能为空");
+        String cronExpression = ApplicationServiceSupport.normalize(schedule.getCronExpression(), "Cron 表达式不能为空");
         scheduleExpressionValidator.validate(cronExpression);
 
         target.setScriptId(script.getId())
@@ -227,36 +228,29 @@ public class ScheduleApplicationService {
     private ScriptDefinition ensurePublishedScript(String scriptId) {
         ScriptDefinition script = ensureScriptExists(scriptId);
         if (script.getPublishedSnapshot() == null) {
-            throw new IllegalArgumentException("Script not published: " + scriptId);
+            throw new IllegalArgumentException("脚本未发布: " + scriptId);
         }
         return script;
     }
 
     private ScriptDefinition ensureScriptExists(String scriptId) {
         return scriptRepository.findById(scriptId)
-                .orElseThrow(() -> new IllegalArgumentException("Script not found: " + scriptId));
+                .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + scriptId));
     }
 
     private ScriptSchedule getByIdInternal(String scheduleId) {
         return scriptScheduleRepository.findById(scheduleId)
-                .orElseThrow(() -> new IllegalArgumentException("Schedule not found: " + scheduleId));
+                .orElseThrow(() -> new IllegalArgumentException("调度不存在: " + scheduleId));
     }
 
     private void ensureScheduleBelongsToScript(ScriptSchedule schedule, String scriptId) {
         if (!schedule.getScriptId().equals(scriptId)) {
-            throw new IllegalArgumentException("Schedule does not belong to script: " + schedule.getId());
+            throw new IllegalArgumentException("调度不属于该脚本: " + schedule.getId());
         }
     }
 
     private Map<String, Object> copy(Map<String, Object> input) {
-        return input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
-    }
-
-    private String normalize(String value, String message) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(message);
-        }
-        return value.trim();
+        return input == null ? new LinkedHashMap<>() : SchemaValueCopier.copyMap(input);
     }
 
     private void ensureEditable(ScriptSchedule schedule) {

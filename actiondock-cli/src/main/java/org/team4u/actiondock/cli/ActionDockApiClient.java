@@ -139,6 +139,13 @@ public final class ActionDockApiClient {
             if (parsed != null) {
                 throw CliException.fromServer(CliException.EXIT_BUSINESS, "Server returned an error", parsed);
             }
+            if (response.body() != null && !response.body().isBlank()) {
+                throw CliException.transport(
+                        output,
+                        "Server returned non-JSON response: " + response.body().substring(0, Math.min(response.body().length(), 200)),
+                        objectMapper.valueToTree(Map.of("httpStatus", response.httpStatus(), "body", response.body()))
+                );
+            }
             throw CliException.transport(
                     output,
                     "HTTP request failed",

@@ -1,5 +1,6 @@
 package org.team4u.actiondock.domain.model;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -65,8 +66,13 @@ public class PublishedScriptSnapshot {
         return this;
     }
 
+    /**
+     * 获取输入模式的不可变视图。
+     *
+     * @return 输入模式的不可变映射
+     */
     public Map<String, Object> getInputSchema() {
-        return inputSchema;
+        return Collections.unmodifiableMap(inputSchema);
     }
 
     public PublishedScriptSnapshot setInputSchema(Map<String, Object> inputSchema) {
@@ -74,8 +80,13 @@ public class PublishedScriptSnapshot {
         return this;
     }
 
+    /**
+     * 获取输出模式的不可变视图。
+     *
+     * @return 输出模式的不可变映射
+     */
     public Map<String, Object> getOutputSchema() {
-        return outputSchema;
+        return Collections.unmodifiableMap(outputSchema);
     }
 
     public PublishedScriptSnapshot setOutputSchema(Map<String, Object> outputSchema) {

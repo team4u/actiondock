@@ -8,7 +8,7 @@ import {
   Drawer,
   Empty,
   Input,
-  Radio,
+  Checkbox,
   Select,
   Space,
   Table,
@@ -662,18 +662,14 @@ export function BatchRunPanel({
                   />
 
                   <div className="batch-run-panel__toolbar">
-                    <Radio.Group
-                      value={submitMode}
-                      optionType="button"
-                      buttonStyle="solid"
-                      onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                        setSubmitMode(event.target.value as SubmitMode)
+                    <Checkbox
+                      checked={submitMode === "ASYNC"}
+                      onChange={(event) =>
+                        setSubmitMode(event.target.checked ? "ASYNC" : "SYNC")
                       }
-                      options={[
-                        { label: "同步执行", value: "SYNC" },
-                        { label: "异步执行", value: "ASYNC" }
-                      ]}
-                    />
+                    >
+                      异步执行
+                    </Checkbox>
 
                     <Select
                       value={concurrency}

@@ -12,12 +12,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "config", mixinStandardHelpOptions = true, description = "Commands for CLI connection settings and profile management.", subcommands = {ConfigCommands.CurrentConfig.class, ConfigCommands.ProfileCommands.class})
 /**
  * 配置管理命令组，提供连接配置查看和 profile 管理等子命令。
  *
  * @author jay.wu
  */
+@Command(name = "config", mixinStandardHelpOptions = true, description = "Commands for CLI connection settings and profile management.", subcommands = {ConfigCommands.CurrentConfig.class, ConfigCommands.ProfileCommands.class})
 class ConfigCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;

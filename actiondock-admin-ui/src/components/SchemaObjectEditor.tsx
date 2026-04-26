@@ -27,7 +27,7 @@ export function SchemaObjectEditor({
   editorHeight = "320px",
   fieldInputOptions
 }: {
-  form: FormInstance<Record<string, any>>;
+  form: FormInstance<Record<string, unknown>>;
   supportedFields: SchemaFieldDefinition[];
   unsupportedFields?: string[];
   inputMode: SchemaObjectEditorMode;

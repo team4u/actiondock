@@ -43,7 +43,7 @@ class ScheduleApplicationServiceTest {
                 .setName("Nightly")
                 .setCronExpression("0 0 * * * *")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Script not published: script-1");
+                .hasMessage("脚本未发布: script-1");
     }
 
     @Test

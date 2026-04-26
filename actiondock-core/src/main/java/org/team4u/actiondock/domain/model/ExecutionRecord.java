@@ -2,6 +2,7 @@ package org.team4u.actiondock.domain.model;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,14 +96,12 @@ public class ExecutionRecord {
     }
 
     /**
-     * 获取执行输入参数。
-     * <p>
-     * 返回参数映射表的引用，键为参数名，值为参数值。
+     * 获取执行输入参数的不可变视图。
      *
-     * @return 输入参数映射，如果为空则返回空 Map
+     * @return 输入参数的不可变映射
      */
     public Map<String, Object> getInput() {
-        return input;
+        return Collections.unmodifiableMap(input);
     }
 
     public ExecutionRecord setInput(Map<String, Object> input) {
@@ -111,14 +110,12 @@ public class ExecutionRecord {
     }
 
     /**
-     * 获取执行输出结果。
-     * <p>
-     * 返回结果映射表的引用，键为输出名，值为输出值。
+     * 获取执行输出结果的不可变视图。
      *
-     * @return 输出结果映射，如果为空则返回空 Map
+     * @return 输出结果的不可变映射
      */
     public Map<String, Object> getOutput() {
-        return output;
+        return Collections.unmodifiableMap(output);
     }
 
     public ExecutionRecord setOutput(Map<String, Object> output) {
@@ -126,8 +123,22 @@ public class ExecutionRecord {
         return this;
     }
 
+    /**
+     * 获取执行日志的不可变视图。
+     *
+     * @return 执行日志列表的不可变视图
+     */
     public List<ExecutionLogEntry> getLogs() {
-        return logs;
+        return Collections.unmodifiableList(logs);
+    }
+
+    /**
+     * 添加一条执行日志。
+     *
+     * @param entry 日志条目
+     */
+    public void addLog(ExecutionLogEntry entry) {
+        this.logs.add(entry);
     }
 
     public ExecutionRecord setLogs(List<ExecutionLogEntry> logs) {

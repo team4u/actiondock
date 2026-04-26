@@ -64,6 +64,12 @@ public class ScriptApplicationService {
             if (definition.getVersion() == null) {
                 definition.setVersion(existing.getVersion());
             }
+            if (definition.getOwner() == null) {
+                definition.setOwner(existing.getOwner());
+            }
+            if (definition.getDescription() == null) {
+                definition.setDescription(existing.getDescription());
+            }
             if (definition.getStatus() == null) {
                 definition.setStatus(existing.getStatus());
             }
@@ -207,14 +213,14 @@ public class ScriptApplicationService {
         if (source.getScope() != ScriptScope.REPOSITORY) {
             throw new IllegalArgumentException("仅支持从仓库工具创建 Fork");
         }
-        String normalizedId = normalize(targetId, "Fork 脚本 ID 不能为空");
+        String normalizedId = ApplicationServiceSupport.normalize(targetId, "Fork 脚本 ID 不能为空");
         if (scriptRepository.findById(normalizedId).isPresent()) {
             throw new IllegalArgumentException("脚本已存在: " + normalizedId);
         }
         PublishedScriptSnapshot sourceSnapshot = source.getPublishedSnapshot();
         ScriptDefinition fork = sourceSnapshot == null ? copyCurrentDefinition(source) : source.toPublishedDefinition();
         fork.setId(normalizedId)
-                .setName(normalize(targetName, "Fork 名称不能为空"))
+                .setName(ApplicationServiceSupport.normalize(targetName, "Fork 名称不能为空"))
                 .setStatus(ScriptStatus.DRAFT)
                 .setPublishedSnapshot(sourceSnapshot)
                 .setVersion(1)
@@ -295,10 +301,4 @@ public class ScriptApplicationService {
         }
     }
 
-    private String normalize(String value, String message) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(message);
-        }
-        return value.trim();
-    }
 }

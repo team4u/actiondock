@@ -13,17 +13,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
+/**
+ * 脚本管理命令组，提供脚本的 CRUD、发布和执行等子命令。
+ *
+ * @author jay.wu
+ */
 @Command(name = "scripts", mixinStandardHelpOptions = true, description = "Commands for script drafts, published versions, and execution.", subcommands = {
         ScriptsCommands.ListScripts.class, ScriptsCommands.GetScript.class, ScriptsCommands.GetPublishedScript.class, ScriptsCommands.GetScriptSchema.class,
         ScriptsCommands.CreateScript.class, ScriptsCommands.UpdateScript.class, ScriptsCommands.DeleteScript.class, ScriptsCommands.ValidateScript.class,
         ScriptsCommands.PublishScript.class, ScriptsCommands.DiscardDraftScript.class, ScriptsCommands.ExecutePublishedScript.class,
         ScriptsCommands.ForkScript.class, ScriptsCommands.GetDevelopmentStatus.class, ScriptsCommands.PullDevelopmentScript.class
 })
-/**
- * 脚本管理命令组，提供脚本的 CRUD、发布和执行等子命令。
- *
- * @author jay.wu
- */
 class ScriptsCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;
@@ -410,8 +410,8 @@ class ScriptsCommands implements Runnable {
         public Integer call() {
             ActionDockCommand root = parent.root();
             String body;
-            if (hasText(filePath)) {
-                if (hasText(input) || hasText(inputFile) || matched("--mode") || matched("--response-view")) {
+            if (JsonInputSupport.hasText(filePath)) {
+                if (JsonInputSupport.hasText(input) || JsonInputSupport.hasText(inputFile) || matched("--mode") || matched("--response-view")) {
                     throw CliException.validation(
                             root.output(),
                             "--file cannot be combined with --input, --input-file, --mode, or --response-view",
@@ -440,10 +440,6 @@ class ScriptsCommands implements Runnable {
                 response = root.waitForExecution(root.apiClient(), response, waitTimeoutSeconds, pollIntervalMs);
             }
             return root.emit(response);
-        }
-
-        private boolean hasText(String value) {
-            return value != null && !value.isBlank();
         }
 
         private boolean matched(String optionName) {

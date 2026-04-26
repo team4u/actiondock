@@ -13,12 +13,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-@Command(name = "executions", mixinStandardHelpOptions = true, description = "Commands for submitting, querying, and clearing execution records.", subcommands = {ExecutionsCommands.SubmitExecution.class, ExecutionsCommands.GetExecution.class, ExecutionsCommands.ListExecutions.class, ExecutionsCommands.DeleteExecution.class, ExecutionsCommands.ClearExecutions.class})
 /**
  * 执行记录命令组，提供执行提交、查询和清理等子命令。
  *
  * @author jay.wu
  */
+@Command(name = "executions", mixinStandardHelpOptions = true, description = "Commands for submitting, querying, and clearing execution records.", subcommands = {ExecutionsCommands.SubmitExecution.class, ExecutionsCommands.GetExecution.class, ExecutionsCommands.ListExecutions.class, ExecutionsCommands.DeleteExecution.class, ExecutionsCommands.ClearExecutions.class})
 class ExecutionsCommands implements Runnable {
     @ParentCommand
     ActionDockCommand root;
@@ -114,8 +114,8 @@ class ExecutionsCommands implements Runnable {
         public Integer call() {
             ActionDockCommand root = parent.root();
             String body;
-            if (hasText(filePath)) {
-                if (hasText(scriptId) || hasText(input) || hasText(inputFile) || matched("--mode") || matched("--response-view")) {
+            if (JsonInputSupport.hasText(filePath)) {
+                if (JsonInputSupport.hasText(scriptId) || JsonInputSupport.hasText(input) || JsonInputSupport.hasText(inputFile) || matched("--mode") || matched("--response-view")) {
                     throw CliException.validation(
                             root.output(),
                             "--file cannot be combined with --script-id, --input, --input-file, --mode, or --response-view",
@@ -127,7 +127,7 @@ class ExecutionsCommands implements Runnable {
                 }
                 body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Execution request body");
             } else {
-                if (!hasText(scriptId)) {
+                if (!JsonInputSupport.hasText(scriptId)) {
                     throw CliException.validation(
                             root.output(),
                             "--script-id is required unless --file is used",
@@ -157,10 +157,6 @@ class ExecutionsCommands implements Runnable {
             return root.emit(response);
         }
 
-        private boolean hasText(String value) {
-            return value != null && !value.isBlank();
-        }
-
         private boolean matched(String optionName) {
             return spec.commandLine().getParseResult().hasMatchedOption(optionName);
         }
@@ -173,12 +169,6 @@ class ExecutionsCommands implements Runnable {
 
         @Parameters(index = "0", paramLabel = "<executionId>", description = "Execution record ID.")
         String executionId;
-
-        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without deleting.")
-        boolean dryRun;
-
-        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client or deleting.")
-        boolean validateOnly;
 
         /**
          * 查询单条执行记录的详情。
@@ -241,7 +231,7 @@ class ExecutionsCommands implements Runnable {
         @ParentCommand
         ExecutionsCommands parent;
 
-        @Option(names = "--script-id", description = "Script ID whose execution records should be cleared. Required by the server.")
+        @Option(names = "--script-id", required = true, description = "Script ID whose execution records should be cleared. Required by the server.")
         String scriptId;
 
         @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without clearing.")
