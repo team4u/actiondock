@@ -1082,19 +1082,6 @@ java -jar actiondock-cli.jar plugins config set <pluginId> --file config.json --
 }
 ```
 
-### plugins repository
-
-兼容入口，功能等同于 `repositories plugins` 的对应子命令。
-
-```bash
-java -jar actiondock-cli.jar plugins repository list
-java -jar actiondock-cli.jar plugins repository get repo-main demo-plugin
-java -jar actiondock-cli.jar plugins repository install repo-main demo-plugin
-java -jar actiondock-cli.jar plugins repository update repo-main demo-plugin --force
-java -jar actiondock-cli.jar plugins repository publish repo-main --file publish-plugin.json
-java -jar actiondock-cli.jar plugins repository install repo-main demo-plugin --dry-run
-```
-
 ---
 
 ## 示例

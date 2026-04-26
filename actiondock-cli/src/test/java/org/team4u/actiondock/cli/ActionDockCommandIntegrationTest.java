@@ -339,12 +339,10 @@ class ActionDockCommandIntegrationTest {
         });
 
         ExecutionResult pluginGetResult = execute("repositories", "plugins", "get", "repo-main", "demo-plugin");
-        ExecutionResult legacyPluginGetResult = execute("plugins", "repository", "get", "repo-main", "demo-plugin");
         ExecutionResult forkResult = execute("scripts", "fork", "source", "--id", "source-fork", "--name", "Source Fork");
         ExecutionResult pullResult = execute("scripts", "development-pull", "hello-dev", "--force");
 
         assertThat(pluginGetResult.exitCode()).isEqualTo(0);
-        assertThat(legacyPluginGetResult.exitCode()).isEqualTo(0);
         assertThat(forkResult.exitCode()).isEqualTo(0);
         assertThat(pullResult.exitCode()).isEqualTo(0);
         assertThat(pluginDetailRef.get().path()).isEqualTo("/api/repositories/repo-main/plugins/demo-plugin");
@@ -352,6 +350,14 @@ class ActionDockCommandIntegrationTest {
         assertThat(parseJson(forkRef.get().body()).path("id").asText()).isEqualTo("source-fork");
         assertThat(pullRef.get().query()).contains("includeUiSchema=true");
         assertThat(pullRef.get().query()).contains("force=true");
+    }
+
+    @Test
+    void pluginsRepositoryCompatibilityEntryIsNotRegistered() throws Exception {
+        ExecutionResult result = execute("plugins", "repository", "get", "repo-main", "demo-plugin");
+
+        assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
+        assertThat(result.stderr()).contains("Unmatched argument");
     }
 
     @Test
@@ -530,6 +536,7 @@ class ActionDockCommandIntegrationTest {
         assertThat(data.path("schemaVersion").asText()).isEqualTo("actiondock.cli.discover.v1");
         assertThat(data.path("agentFeatures").toString()).contains("--help-json");
         assertThat(data.path("commands").toString()).contains("executions");
+        assertThat(data.path("commands").toString()).doesNotContain("plugins repository");
         assertThat(data.path("recommendedFlows").toString()).contains("execute script safely");
     }
 

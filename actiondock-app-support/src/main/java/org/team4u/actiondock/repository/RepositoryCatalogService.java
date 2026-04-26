@@ -1,5 +1,8 @@
 package org.team4u.actiondock.repository;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
@@ -57,6 +60,7 @@ import java.util.regex.Pattern;
  */
 public class RepositoryCatalogService {
     private static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
+    private static final ObjectMapper METADATA_OBJECT_MAPPER = new ObjectMapper();
     private static final Pattern GROOVY_PLUGIN_INVOKE_PATTERN = Pattern.compile(
             "plugins\\s*\\.\\s*invoke\\s*\\(\\s*([\"'`])([^\"'`]+)\\1\\s*,\\s*([\"'`])([^\"'`]+)\\3"
     );
@@ -1487,7 +1491,9 @@ public class RepositoryCatalogService {
 
     private <T> T readJson(Path path, Class<T> type) {
         try (InputStream stream = Files.newInputStream(path)) {
-            return jsonCodec.read(new String(stream.readAllBytes(), StandardCharsets.UTF_8), type);
+            String raw = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            assertLatestRepositoryMetadata(raw, type, path.toString());
+            return jsonCodec.read(raw, type);
         } catch (IOException exception) {
             throw new IllegalStateException("读取仓库文件失败: " + path, exception);
         }
@@ -1495,7 +1501,47 @@ public class RepositoryCatalogService {
 
     private <T> T readHttpJson(String url, Class<T> type) {
         String text = readHttpText(url);
+        assertLatestRepositoryMetadata(text, type, url);
         return jsonCodec.read(text, type);
+    }
+
+    static void assertLatestRepositoryMetadata(String raw, Class<?> type, String source) {
+        if (type != RepositoryIndexFile.class && type != ToolFile.class && type != PluginFile.class) {
+            return;
+        }
+        JsonNode root;
+        try {
+            root = METADATA_OBJECT_MAPPER.readTree(raw);
+        } catch (JsonProcessingException exception) {
+            return;
+        }
+        if (root == null || !root.isObject()) {
+            return;
+        }
+        if (type == RepositoryIndexFile.class) {
+            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("tools"), source, "tools");
+            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("plugins"), source, "plugins");
+            return;
+        }
+        assertReleaseNotesField(root, source, "releaseNotes");
+    }
+
+    private static void assertRepositoryIndexEntriesIncludeReleaseNotes(JsonNode entries, String source, String fieldName) {
+        if (entries == null || !entries.isArray()) {
+            return;
+        }
+        for (int index = 0; index < entries.size(); index++) {
+            JsonNode entry = entries.get(index);
+            if (entry != null && entry.isObject()) {
+                assertReleaseNotesField(entry, source, fieldName + "[" + index + "].releaseNotes");
+            }
+        }
+    }
+
+    private static void assertReleaseNotesField(JsonNode node, String source, String path) {
+        if (!node.has("releaseNotes")) {
+            throw new IllegalArgumentException("仓库元数据缺少 releaseNotes 字段: " + source + " " + path);
+        }
     }
 
     private String readHttpText(String url) {

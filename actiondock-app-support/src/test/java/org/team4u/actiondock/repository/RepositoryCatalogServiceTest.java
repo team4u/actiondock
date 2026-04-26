@@ -91,23 +91,162 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
-    void repositoryMetadataReadsLegacyFilesWithoutReleaseNotes() throws Exception {
-        String legacyIndexEntryJson = """
+    void repositoryMetadataRejectsIndexEntriesWithoutReleaseNotes() {
+        String indexJson = """
+                {
+                  "repositoryVersion": 1,
+                  "name": "Demo Repository",
+                  "tools": [
+                    {
+                      "id": "demo-tool",
+                      "name": "Demo Tool",
+                      "version": "1.0.0",
+                      "type": "GROOVY",
+                      "description": "Asset docs",
+                      "toolPath": "tools/demo-tool/tool.json"
+                    }
+                  ],
+                  "plugins": []
+                }
+                """;
+        String toolJson = """
+                {
+                  "toolVersion": 1,
+                  "id": "demo-tool",
+                  "name": "Demo Tool",
+                  "version": "1.0.0",
+                  "type": "GROOVY",
+                  "description": "Asset docs",
+                  "tags": [],
+                  "sourcePath": "source.groovy",
+                  "inputSchemaPath": "input.schema.json",
+                  "outputSchemaPath": "output.schema.json",
+                  "pluginDependencies": []
+                }
+                """;
+        String pluginJson = """
+                {
+                  "pluginFileVersion": 1,
+                  "pluginId": "demo-plugin",
+                  "name": "Demo Plugin",
+                  "version": "1.0.0",
+                  "description": "Plugin docs",
+                  "owner": "team",
+                  "tags": [],
+                  "artifact": {
+                    "uri": "local://plugins/demo-plugin/demo-plugin.jar"
+                  },
+                  "riskLevel": "LOW"
+                }
+                """;
+
+        assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+                indexJson,
+                RepositoryCatalogService.RepositoryIndexFile.class,
+                "actiondock.repository.json"
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tools[0].releaseNotes");
+        assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+                toolJson,
+                RepositoryCatalogService.ToolFile.class,
+                "tool.json"
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tool.json releaseNotes");
+        assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+                pluginJson,
+                RepositoryCatalogService.PluginFile.class,
+                "plugin.json"
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plugin.json releaseNotes");
+    }
+
+    @Test
+    void repositoryMetadataAcceptsExplicitNullReleaseNotes() throws Exception {
+        String indexJson = """
+                {
+                  "repositoryVersion": 1,
+                  "name": "Demo Repository",
+                  "tools": [
+                    {
+                      "id": "demo-tool",
+                      "name": "Demo Tool",
+                      "version": "1.0.0",
+                      "type": "GROOVY",
+                      "description": "Asset docs",
+                      "releaseNotes": null,
+                      "toolPath": "tools/demo-tool/tool.json"
+                    }
+                  ],
+                  "plugins": []
+                }
+                """;
+        String indexEntryJson = """
                 {
                   "id": "demo-tool",
                   "name": "Demo Tool",
                   "version": "1.0.0",
                   "type": "GROOVY",
                   "description": "Asset docs",
+                  "releaseNotes": null,
                   "toolPath": "tools/demo-tool/tool.json"
                 }
                 """;
+        String toolJson = """
+                {
+                  "toolVersion": 1,
+                  "id": "demo-tool",
+                  "name": "Demo Tool",
+                  "version": "1.0.0",
+                  "type": "GROOVY",
+                  "description": "Asset docs",
+                  "releaseNotes": null,
+                  "tags": [],
+                  "sourcePath": "source.groovy",
+                  "inputSchemaPath": "input.schema.json",
+                  "outputSchemaPath": "output.schema.json",
+                  "pluginDependencies": []
+                }
+                """;
+        String pluginJson = """
+                {
+                  "pluginFileVersion": 1,
+                  "pluginId": "demo-plugin",
+                  "name": "Demo Plugin",
+                  "version": "1.0.0",
+                  "description": "Plugin docs",
+                  "releaseNotes": null,
+                  "owner": "team",
+                  "tags": [],
+                  "artifact": {
+                    "uri": "local://plugins/demo-plugin/demo-plugin.jar"
+                  },
+                  "riskLevel": "LOW"
+                }
+                """;
+
+        assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+                indexJson,
+                RepositoryCatalogService.RepositoryIndexFile.class,
+                "actiondock.repository.json"
+        )).doesNotThrowAnyException();
+        assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+                toolJson,
+                RepositoryCatalogService.ToolFile.class,
+                "tool.json"
+        )).doesNotThrowAnyException();
+        assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+                pluginJson,
+                RepositoryCatalogService.PluginFile.class,
+                "plugin.json"
+        )).doesNotThrowAnyException();
 
         RepositoryCatalogService.RepositoryIndexEntry entry = objectMapper.readValue(
-                legacyIndexEntryJson,
+                indexEntryJson,
                 RepositoryCatalogService.RepositoryIndexEntry.class
         );
-
         assertThat(entry.description()).isEqualTo("Asset docs");
         assertThat(entry.releaseNotes()).isNull();
     }

@@ -1,6 +1,5 @@
 package org.team4u.actiondock.cli;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
@@ -15,8 +14,7 @@ import java.util.concurrent.Callable;
 
 @Command(name = "plugins", mixinStandardHelpOptions = true, description = "Commands for plugin installation, lifecycle operations, invocation, and config.", subcommands = {
         PluginsCommands.ListPlugins.class, PluginsCommands.GetPlugin.class, PluginsCommands.InstallPlugin.class, PluginsCommands.UpgradePlugin.class,
-        PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class,
-        PluginsCommands.RepositoryPluginCommands.class
+        PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class
 })
 /**
  * 插件管理命令组，提供插件的安装、启停、调用和配置等子命令。
@@ -32,164 +30,6 @@ class PluginsCommands implements Runnable {
 
     ActionDockCommand root() {
         return root;
-    }
-
-    @Command(name = "repository", mixinStandardHelpOptions = true, description = "Commands for repository-managed plugins.", subcommands = {
-            ListRepositoryPlugins.class, GetRepositoryPlugin.class, InstallRepositoryPlugin.class, UpdateRepositoryPlugin.class, PublishRepositoryPlugin.class
-    })
-    static class RepositoryPluginCommands implements Runnable {
-        @ParentCommand
-        PluginsCommands parent;
-
-        @Spec
-        CommandSpec spec;
-
-        ActionDockCommand root() {
-            return parent.root();
-        }
-
-        @Override
-        public void run() {
-            spec.commandLine().usage(root().services.stdout());
-        }
-    }
-
-    @Command(name = "list", mixinStandardHelpOptions = true, description = "List plugins declared by repositories.")
-    static class ListRepositoryPlugins implements Callable<Integer> {
-        @ParentCommand
-        RepositoryPluginCommands parent;
-
-        @Option(names = "--repository-id", description = "Optional repository ID. If omitted, all enabled repositories are scanned.")
-        String repositoryId;
-
-        @Override
-        public Integer call() {
-            String path = repositoryId == null || repositoryId.isBlank()
-                    ? "/api/repositories/plugins"
-                    : "/api/repositories/" + parent.root().encodePath(repositoryId) + "/plugins";
-            return parent.root().emit(parent.root().apiClient().get(path, Map.of()));
-        }
-    }
-
-    @Command(name = "get", mixinStandardHelpOptions = true, description = "Get details for a repository plugin.")
-    static class GetRepositoryPlugin implements Callable<Integer> {
-        @ParentCommand
-        RepositoryPluginCommands parent;
-
-        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
-        String repositoryId;
-
-        @Parameters(index = "1", paramLabel = "<pluginId>", description = "Plugin ID.")
-        String pluginId;
-
-        @Override
-        public Integer call() {
-            ActionDockCommand root = parent.root();
-            return root.emit(root.apiClient().get(
-                    "/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId),
-                    Map.of()
-            ));
-        }
-    }
-
-    @Command(name = "install", mixinStandardHelpOptions = true, description = "Install a plugin from a repository.")
-    static class InstallRepositoryPlugin implements Callable<Integer> {
-        @ParentCommand
-        RepositoryPluginCommands parent;
-
-        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
-        String repositoryId;
-
-        @Parameters(index = "1", paramLabel = "<pluginId>", description = "Plugin ID.")
-        String pluginId;
-
-        @Option(names = "--force", description = "Force installation when the target plugin version conflicts with installed tool dependency ranges.")
-        boolean force;
-
-        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without installing.")
-        boolean dryRun;
-
-        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
-        boolean validateOnly;
-
-        @Override
-        public Integer call() {
-            ActionDockCommand root = parent.root();
-            return root.submitRequest(
-                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/install", Map.of(), root.jsonObject(Map.of("force", force))),
-                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins repository install")
-            );
-        }
-    }
-
-    @Command(name = "update", mixinStandardHelpOptions = true, description = "Update an installed plugin from a repository.")
-    static class UpdateRepositoryPlugin implements Callable<Integer> {
-        @ParentCommand
-        RepositoryPluginCommands parent;
-
-        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
-        String repositoryId;
-
-        @Parameters(index = "1", paramLabel = "<pluginId>", description = "Plugin ID.")
-        String pluginId;
-
-        @Option(names = "--force", description = "Force update when the target plugin version conflicts with installed tool dependency ranges.")
-        boolean force;
-
-        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating.")
-        boolean dryRun;
-
-        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
-        boolean validateOnly;
-
-        @Override
-        public Integer call() {
-            ActionDockCommand root = parent.root();
-            return root.submitRequest(
-                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/update", Map.of(), root.jsonObject(Map.of("force", force))),
-                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins repository update")
-            );
-        }
-    }
-
-    @Command(name = "publish", mixinStandardHelpOptions = true, description = {
-            "Purpose:",
-            "  Publish an installed plugin into a repository.",
-            "Required:",
-            "  <repositoryId>",
-            "  --file <path|-> repository plugin publish request JSON object.",
-            "Examples:",
-            "  actiondock plugins repository publish repo-main --file plugin-publish.json",
-            "Input JSON shape:",
-            "  {\"pluginId\":\"demo-plugin\",\"displayName\":\"Demo Plugin\",\"version\":\"1.0.0\",\"owner\":\"team4u\",\"description\":\"Demo\",\"releaseNotes\":\"Initial release\",\"tags\":[\"demo\"],\"riskLevel\":\"LOW\",\"artifact\":{\"uri\":\"local://plugins/demo.jar\",\"sha256\":\"...\",\"fileName\":\"demo.jar\"}}",
-            "Recoverable errors:",
-            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
-    })
-    static class PublishRepositoryPlugin implements Callable<Integer> {
-        @ParentCommand
-        RepositoryPluginCommands parent;
-
-        @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
-        String repositoryId;
-
-        @Option(names = "--file", required = true, description = "Path to the publish request JSON file. Use - to read from stdin.")
-        String filePath;
-
-        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without publishing.")
-        boolean dryRun;
-
-        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
-        boolean validateOnly;
-
-        @Override
-        public Integer call() {
-            ActionDockCommand root = parent.root();
-            String body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Repository plugin publish request body");
-            return root.submitRequest(
-                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/publish-plugin", Map.of(), body),
-                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins repository publish")
-            );
-        }
     }
 
     @Override
