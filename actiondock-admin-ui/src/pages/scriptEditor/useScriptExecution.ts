@@ -17,6 +17,7 @@ import {
   parseSchemaObjectEditorJsonText
 } from "../../schemaObjectEditorSupport";
 import {
+  buildSchemaFieldRefillState,
   buildSchemaFieldInitialState,
   buildSchemaFieldMergedState,
   isValidationErrorData
@@ -59,6 +60,7 @@ export interface ScriptExecutionContext {
   handleDeleteExecution: (record: ExecutionRecord) => Promise<void>;
   handleClearExecutionHistory: () => Promise<void>;
   handleExecutionInputModeChange: (nextMode: string) => void;
+  handleRefillExecutionInput: (record: ExecutionRecord) => void;
   handleResetExecutionInput: () => void;
   loadExecutionHistory: (scriptId: string, preferredExecutionId?: string) => Promise<void>;
 }
@@ -281,6 +283,23 @@ export function useScriptExecution({
     setExecutionValidationError(null);
   };
 
+  const handleRefillExecutionInput = (record: ExecutionRecord) => {
+    const refillState = buildSchemaFieldRefillState(supportedFields, record.input);
+
+    executionForm.resetFields();
+    executionForm.setFieldsValue(refillState.formValues as Record<string, any>);
+    setExecutionJsonInput(refillState.jsonText);
+    setExecutionValidationError(null);
+
+    if (refillState.compatibleWithSchemaForm || !supportsSchemaForm) {
+      messageApi.success("已将历史输入填充到调试区");
+      return;
+    }
+
+    setExecutionInputMode("JSON");
+    messageApi.info("已回填历史输入，并切换到 JSON 模式以保留完整参数");
+  };
+
   const handleDeleteExecution = async (record: ExecutionRecord) => {
     setDeletingExecutionId(record.id);
     try {
@@ -342,6 +361,7 @@ export function useScriptExecution({
     handleDeleteExecution,
     handleClearExecutionHistory,
     handleExecutionInputModeChange,
+    handleRefillExecutionInput,
     handleResetExecutionInput,
     loadExecutionHistory
   };

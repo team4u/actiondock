@@ -22,6 +22,7 @@ export interface ExecutionResultCardProps {
   outputSchema?: Record<string, unknown>;
   inputOverride?: Record<string, unknown>;
   title?: string;
+  headerActions?: ReactNode;
   titleExtra?: ReactNode;
   showTriggerSource?: boolean;
   pollingExecutionId?: string | null;
@@ -61,6 +62,7 @@ export function ExecutionResultCard({
   outputSchema,
   inputOverride,
   title = "执行结果",
+  headerActions,
   titleExtra,
   showTriggerSource = false,
   pollingExecutionId,
@@ -77,6 +79,11 @@ export function ExecutionResultCard({
       title={
         <div className="execution-result-card__title-row">
           <span className="execution-result-card__title-text">{title}</span>
+          {headerActions ? (
+            <Space size={8} wrap className="execution-result-card__header-actions">
+              {headerActions}
+            </Space>
+          ) : null}
           {titleExtra ?? (
             <Space size={8} wrap className="execution-result-card__header-extra">
               <Text code className="execution-result-card__header-id">

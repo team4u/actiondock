@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Empty, Radio, Row, Space, Spin, Table, Tag, Typography } from "antd";
 import { Col } from "../../components/SafeCol";
-import { DeleteOutlined, PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, HistoryOutlined, PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../../components/ExecutionResultCard";
 import { SchemaObjectEditor } from "../../components/SchemaObjectEditor";
@@ -44,6 +44,7 @@ interface ScriptExecutionTabProps {
   onClearExecutionHistory: () => Promise<void>;
   onRefreshHistory: () => void;
   onExecutionHistoryRowClick: (record: ExecutionRecord) => void;
+  onRefillCurrentExecutionInput: (record: ExecutionRecord) => void;
   activeExecutionId: string | null;
 }
 
@@ -74,6 +75,7 @@ export function ScriptExecutionTab({
   onClearExecutionHistory,
   onRefreshHistory,
   onExecutionHistoryRowClick,
+  onRefillCurrentExecutionInput,
   activeExecutionId
 }: ScriptExecutionTabProps) {
   const historyColumns: ColumnsType<ExecutionRecord> = [
@@ -235,6 +237,14 @@ export function ScriptExecutionTab({
               inputSchema={currentScript?.inputSchema}
               outputSchema={currentScript?.outputSchema}
               showTriggerSource={true}
+              headerActions={
+                <Button
+                  icon={<HistoryOutlined />}
+                  onClick={() => onRefillCurrentExecutionInput(currentExecution)}
+                >
+                  回填本次输入
+                </Button>
+              }
               titleExtra={
                 currentExecution ? (
                   <Space size={8} wrap className="execution-result-card__header-extra">

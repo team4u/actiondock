@@ -559,6 +559,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           onClearExecutionHistory={execution.handleClearExecutionHistory}
                           onRefreshHistory={() => void execution.loadExecutionHistory(editor.currentScript!.id)}
                           onExecutionHistoryRowClick={(record) => execution.setCurrentExecution(record)}
+                          onRefillCurrentExecutionInput={execution.handleRefillExecutionInput}
                           activeExecutionId={execution.currentExecution?.id ?? null}
                         />
                       )

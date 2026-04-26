@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { SchemaFieldDefinition } from "./schema";
-import { buildSchemaFieldExampleValues, buildSchemaFieldMergedState } from "./schemaExecution";
+import {
+  buildSchemaFieldExampleValues,
+  buildSchemaFieldMergedState,
+  buildSchemaFieldRefillState
+} from "./schemaExecution";
 
 describe("buildSchemaFieldExampleValues", () => {
   it("prefers the first matching schema example", () => {
@@ -193,5 +197,55 @@ describe("buildSchemaFieldMergedState", () => {
 
     expect(result.formValues).toEqual({});
     expect(result.jsonText).toBe("{}");
+  });
+});
+
+describe("buildSchemaFieldRefillState", () => {
+  it("keeps compatible history input available for both form and json", () => {
+    const fields: SchemaFieldDefinition[] = [
+      { name: "name", label: "Name", kind: "string", required: true },
+      { name: "count", label: "Count", kind: "integer", required: false }
+    ];
+
+    const result = buildSchemaFieldRefillState(fields, {
+      name: "Alice",
+      count: 3
+    });
+
+    expect(result.compatibleWithSchemaForm).toBe(true);
+    expect(result.formValues).toEqual({ name: "Alice", count: 3 });
+    expect(JSON.parse(result.jsonText)).toEqual({ name: "Alice", count: 3 });
+  });
+
+  it("falls back to json preservation when history input has unsupported fields", () => {
+    const fields: SchemaFieldDefinition[] = [
+      { name: "name", label: "Name", kind: "string", required: true }
+    ];
+
+    const result = buildSchemaFieldRefillState(fields, {
+      name: "Alice",
+      metadata: { nested: true }
+    });
+
+    expect(result.compatibleWithSchemaForm).toBe(false);
+    expect(result.formValues).toEqual({ name: "Alice" });
+    expect(JSON.parse(result.jsonText)).toEqual({
+      name: "Alice",
+      metadata: { nested: true }
+    });
+  });
+
+  it("falls back to json preservation when a supported field has an incompatible type", () => {
+    const fields: SchemaFieldDefinition[] = [
+      { name: "count", label: "Count", kind: "integer", required: false }
+    ];
+
+    const result = buildSchemaFieldRefillState(fields, {
+      count: "3"
+    });
+
+    expect(result.compatibleWithSchemaForm).toBe(false);
+    expect(result.formValues).toEqual({});
+    expect(JSON.parse(result.jsonText)).toEqual({ count: "3" });
   });
 });

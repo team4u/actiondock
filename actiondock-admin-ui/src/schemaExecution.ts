@@ -99,6 +99,35 @@ export function buildSchemaFieldMergedState(
   return { formValues: mergedFormValues, jsonText: mergedJsonText };
 }
 
+export function buildSchemaFieldRefillState(
+  fields: SchemaFieldDefinition[],
+  input: Record<string, unknown> | undefined
+): {
+  formValues: Record<string, unknown>;
+  jsonText: string;
+  compatibleWithSchemaForm: boolean;
+} {
+  const source = input ?? {};
+  const fieldMap = new Map(fields.map((field) => [field.name, field]));
+  const formValues: Record<string, unknown> = {};
+  let compatibleWithSchemaForm = true;
+
+  Object.entries(source).forEach(([name, value]) => {
+    const field = fieldMap.get(name);
+    if (!field || !isMatchingSchemaFieldValue(field, value)) {
+      compatibleWithSchemaForm = false;
+      return;
+    }
+    formValues[name] = value;
+  });
+
+  return {
+    formValues,
+    jsonText: prettyJson(source),
+    compatibleWithSchemaForm
+  };
+}
+
 function buildSchemaFieldPlaceholderValue(field: SchemaFieldDefinition): unknown {
   switch (field.kind) {
     case "enum":
