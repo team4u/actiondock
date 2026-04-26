@@ -9,6 +9,7 @@ import picocli.CommandLine.ParentCommand;
 import picocli.CommandLine.Spec;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
@@ -105,14 +106,19 @@ class PluginsCommands implements Runnable {
         @Option(names = "--force", description = "Force installation when the target plugin version conflicts with installed tool dependency ranges.")
         boolean force;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without installing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
-            return root.emit(root.apiClient().postJson(
-                    "/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/install",
-                    Map.of(),
-                    root.jsonObject(Map.of("force", force))
-            ));
+            return root.submitRequest(
+                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/install", Map.of(), root.jsonObject(Map.of("force", force))),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins repository install")
+            );
         }
     }
 
@@ -130,20 +136,34 @@ class PluginsCommands implements Runnable {
         @Option(names = "--force", description = "Force update when the target plugin version conflicts with installed tool dependency ranges.")
         boolean force;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
-            return root.emit(root.apiClient().postJson(
-                    "/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/update",
-                    Map.of(),
-                    root.jsonObject(Map.of("force", force))
-            ));
+            return root.submitRequest(
+                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/update", Map.of(), root.jsonObject(Map.of("force", force))),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins repository update")
+            );
         }
     }
 
     @Command(name = "publish", mixinStandardHelpOptions = true, description = {
-            "Publish an installed plugin into a repository.",
-            "--file is required and must provide a JSON object matching the /api/repositories/{repositoryId}/publish-plugin request body."
+            "Purpose:",
+            "  Publish an installed plugin into a repository.",
+            "Required:",
+            "  <repositoryId>",
+            "  --file <path|-> repository plugin publish request JSON object.",
+            "Examples:",
+            "  actiondock plugins repository publish repo-main --file plugin-publish.json",
+            "Input JSON shape:",
+            "  {\"pluginId\":\"demo-plugin\",\"displayName\":\"Demo Plugin\",\"version\":\"1.0.0\",\"owner\":\"team4u\",\"description\":\"Demo\",\"releaseNotes\":\"Initial release\",\"tags\":[\"demo\"],\"riskLevel\":\"LOW\",\"artifact\":{\"uri\":\"local://plugins/demo.jar\",\"sha256\":\"...\",\"fileName\":\"demo.jar\"}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class PublishRepositoryPlugin implements Callable<Integer> {
         @ParentCommand
@@ -155,15 +175,20 @@ class PluginsCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the publish request JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without publishing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
             String body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Repository plugin publish request body");
-            return root.emit(root.apiClient().postJson(
-                    "/api/repositories/" + root.encodePath(repositoryId) + "/publish-plugin",
-                    Map.of(),
-                    body
-            ));
+            return root.submitRequest(
+                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/publish-plugin", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins repository publish")
+            );
         }
     }
 
@@ -211,6 +236,12 @@ class PluginsCommands implements Runnable {
         @Option(names = "--jar", required = true, description = "Path to the plugin JAR to install.")
         String jarPath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final multipart request preview without installing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JAR readability without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 上传并安装插件 JAR 包。
          */
@@ -218,7 +249,10 @@ class PluginsCommands implements Runnable {
         public Integer call() {
             ActionDockCommand root = parent.root();
             byte[] content = JsonInputSupport.readBinaryFile(root.output(), jarPath, "Plugin JAR");
-            return root.emit(root.apiClient().postMultipart("/api/plugins/install", Map.of(), "file", Path.of(jarPath), content));
+            return root.submitRequest(
+                    CliRequest.postMultipart("/api/plugins/install", Map.of(), "file", Path.of(jarPath), content),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins install")
+            );
         }
     }
 
@@ -233,6 +267,12 @@ class PluginsCommands implements Runnable {
         @Option(names = "--jar", required = true, description = "Path to the plugin JAR used for the upgrade.")
         String jarPath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final multipart request preview without upgrading.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JAR readability without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 使用新的 JAR 包升级指定插件。
          */
@@ -240,13 +280,10 @@ class PluginsCommands implements Runnable {
         public Integer call() {
             ActionDockCommand root = parent.root();
             byte[] content = JsonInputSupport.readBinaryFile(root.output(), jarPath, "Plugin JAR");
-            return root.emit(root.apiClient().postMultipart(
-                    "/api/plugins/" + root.encodePath(pluginId) + "/upgrade",
-                    Map.of(),
-                    "file",
-                    Path.of(jarPath),
-                    content
-            ));
+            return root.submitRequest(
+                    CliRequest.postMultipart("/api/plugins/" + root.encodePath(pluginId) + "/upgrade", Map.of(), "file", Path.of(jarPath), content),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins upgrade")
+            );
         }
     }
 
@@ -258,12 +295,21 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without starting.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 启动指定插件。
          */
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().postJson("/api/plugins/" + parent.root().encodePath(pluginId) + "/start", Map.of(), "{}"));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/plugins/" + parent.root().encodePath(pluginId) + "/start", Map.of(), "{}"),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins start")
+            );
         }
     }
 
@@ -275,12 +321,21 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without stopping.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 停止指定插件。
          */
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().postJson("/api/plugins/" + parent.root().encodePath(pluginId) + "/stop", Map.of(), "{}"));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/plugins/" + parent.root().encodePath(pluginId) + "/stop", Map.of(), "{}"),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins stop")
+            );
         }
     }
 
@@ -292,21 +347,48 @@ class PluginsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
         String pluginId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without deleting.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 删除指定插件。
          */
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().delete("/api/plugins/" + parent.root().encodePath(pluginId), Map.of()));
+            return parent.root().submitRequest(
+                    CliRequest.delete("/api/plugins/" + parent.root().encodePath(pluginId), Map.of()),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins delete")
+            );
         }
     }
 
     @Command(name = "invoke", mixinStandardHelpOptions = true, description = {
-            "Invoke a plugin action.",
-            "The action name comes from the path parameter. --args provides action-specific arguments and --script-input provides the script input context passed to the plugin. They map to PluginInvokeRequest.args and PluginInvokeRequest.scriptInput on the server.",
-            "--args/--args-file and --script-input/--script-input-file are mutually exclusive pairs. Each value must be a JSON object at the top level. If omitted, {} is used.",
-            "Use --file to provide the complete plugin invoke request body as a JSON object. Use --file=- to read from stdin.",
-            "--response-view=RESULT returns only the result. DEBUG additionally returns a debug block containing the raw args and scriptInput."
+            "Purpose:",
+            "  Invoke a plugin action.",
+            "Required:",
+            "  <pluginId> <action>",
+            "Input:",
+            "  --args <jsonObject> or --args-file <path|->",
+            "  --script-input <jsonObject> or --script-input-file <path|->",
+            "  --file <path|-> complete plugin invoke request body.",
+            "Mutual exclusion:",
+            "  --args cannot be combined with --args-file.",
+            "  --script-input cannot be combined with --script-input-file.",
+            "  --file cannot be combined with split JSON options or --response-view.",
+            "Defaults:",
+            "  --response-view RESULT",
+            "Examples:",
+            "  actiondock plugins invoke demo summarize --args '{\"topic\":\"ops\"}' --script-input '{}'",
+            "  actiondock plugins invoke demo summarize --file invoke.json",
+            "Input JSON shape:",
+            "  --file: {\"args\":{\"topic\":\"ops\"},\"scriptInput\":{\"locale\":\"zh-CN\"},\"responseView\":\"RESULT\"}",
+            "Output JSON shape:",
+            "  {\"status\":0,\"msg\":\"Success\",\"data\":{\"result\":{...}}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means plugin/server error."
     })
     static class InvokePlugin implements Callable<Integer> {
         @ParentCommand
@@ -339,6 +421,12 @@ class PluginsCommands implements Runnable {
         @Option(names = "--response-view", defaultValue = "RESULT", description = "Response view: ${COMPLETION-CANDIDATES}. RESULT returns the business result, DEBUG returns debug details. Default: ${DEFAULT-VALUE}.")
         ActionDockCommand.ResponseViewOption responseView;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without invoking.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 调用插件的指定动作，传入动作参数和脚本输入上下文。
          */
@@ -348,7 +436,14 @@ class PluginsCommands implements Runnable {
             String body;
             if (hasText(filePath)) {
                 if (hasText(args) || hasText(argsFile) || hasText(scriptInput) || hasText(scriptInputFile) || matched("--response-view")) {
-                    throw CliException.validation(root.output(), "--file cannot be combined with --args, --args-file, --script-input, --script-input-file, or --response-view");
+                    throw CliException.validation(
+                            root.output(),
+                            "--file cannot be combined with --args, --args-file, --script-input, --script-input-file, or --response-view",
+                            CliErrorDetails.mutuallyExclusive(root.output(), "actiondock plugins invoke", List.of("--file", "--args", "--args-file", "--script-input", "--script-input-file", "--response-view"), List.of(
+                                    "actiondock plugins invoke <pluginId> <action> --file request.json",
+                                    "actiondock plugins invoke <pluginId> <action> --args '{}' --script-input '{}'"
+                            ))
+                    );
                 }
                 body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Plugin invoke request body");
             } else {
@@ -360,11 +455,10 @@ class PluginsCommands implements Runnable {
                         "responseView", responseView.name()
                 ));
             }
-            return root.emit(root.apiClient().postJson(
-                    "/api/plugins/" + root.encodePath(pluginId) + "/actions/" + root.encodePath(action) + "/invoke",
-                    Map.of(),
-                    body
-            ));
+            return root.submitRequest(
+                    CliRequest.postJson("/api/plugins/" + root.encodePath(pluginId) + "/actions/" + root.encodePath(action) + "/invoke", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins invoke")
+            );
         }
 
         private boolean hasText(String value) {
@@ -412,10 +506,19 @@ class PluginsCommands implements Runnable {
     }
 
     @Command(name = "set", mixinStandardHelpOptions = true, description = {
-            "Update plugin config.",
-            "--file is required and must provide a plugin config request body whose top level is a JSON object.",
-            "The payload must match the /api/plugins/{pluginId}/config contract, which means the top level contains a config field, for example {\"config\":{...}}.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Update plugin config.",
+            "Required:",
+            "  <pluginId>",
+            "  --file <path|-> plugin config request JSON object.",
+            "Examples:",
+            "  actiondock plugins config set demo --file plugin-config.json",
+            "Input JSON shape:",
+            "  {\"config\":{\"apiKey\":\"sk-...\",\"endpoint\":\"https://example.test\"}}",
+            "Output JSON shape:",
+            "  {\"status\":0,\"msg\":\"Success\",\"data\":{\"config\":{...}}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class SetPluginConfig implements Callable<Integer> {
         @ParentCommand
@@ -427,17 +530,22 @@ class PluginsCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the plugin config request body JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating config.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 更新指定插件的配置，从 JSON 文件读取请求体。
          */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Plugin config request body");
-            return parent.root().emit(parent.root().apiClient().putJson(
-                    "/api/plugins/" + parent.root().encodePath(pluginId) + "/config",
-                    Map.of(),
-                    body
-            ));
+            return parent.root().submitRequest(
+                    CliRequest.putJson("/api/plugins/" + parent.root().encodePath(pluginId) + "/config", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins config set")
+            );
         }
     }
 }

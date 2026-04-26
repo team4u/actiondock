@@ -32,7 +32,13 @@ public final class JsonInputSupport {
      */
     public static String readRequiredJsonObject(CliOutput output, ObjectMapper objectMapper, String filePath, String label) {
         if (filePath == null || filePath.isBlank()) {
-            throw CliException.validation(output, label + " file path must not be empty");
+            throw CliException.validation(output, label + " file path must not be empty", CliErrorDetails.missingRequired(
+                    output,
+                    null,
+                    java.util.List.of("--file"),
+                    java.util.List.of("--file -"),
+                    java.util.List.of("actiondock <command> --file request.json", "cat request.json | actiondock <command> --file -")
+            ));
         }
         return normalizeJsonObject(output, objectMapper, readText(output, filePath, label), label, false);
     }
@@ -53,10 +59,14 @@ public final class JsonInputSupport {
     public static String readOptionalJsonObject(CliOutput output,
                                                 ObjectMapper objectMapper,
                                                 String inlineValue,
-                                                String filePath,
-                                                String label) {
+        String filePath,
+        String label) {
         if (hasText(inlineValue) && hasText(filePath)) {
-            throw CliException.validation(output, label + " must be provided either as inline JSON or as a file, but not both");
+            throw CliException.validation(
+                    output,
+                    label + " must be provided either as inline JSON or as a file, but not both",
+                    CliErrorDetails.mutuallyExclusive(output, null, java.util.List.of("inline JSON", "file input"), jsonRetryExamples(label))
+            );
         }
         if (hasText(inlineValue)) {
             return normalizeJsonObject(output, objectMapper, inlineValue, label, true);
@@ -78,13 +88,19 @@ public final class JsonInputSupport {
      */
     public static byte[] readBinaryFile(CliOutput output, String filePath, String label) {
         if (!hasText(filePath)) {
-            throw CliException.validation(output, label + " file path must not be empty");
+            throw CliException.validation(output, label + " file path must not be empty", CliErrorDetails.missingRequired(
+                    output,
+                    null,
+                    java.util.List.of("--jar"),
+                    java.util.List.of(),
+                    java.util.List.of("actiondock plugins install --jar plugin.jar")
+            ));
         }
         Path path = Path.of(filePath);
         try {
             return Files.readAllBytes(path);
         } catch (IOException exception) {
-            throw CliException.validation(output, "Failed to read " + label + " file: " + path);
+            throw CliException.validation(output, "Failed to read " + label + " file: " + path, CliErrorDetails.fileRead(output, null, label, path.toString()));
         }
     }
 
@@ -95,7 +111,7 @@ public final class JsonInputSupport {
             }
             return Files.readString(Path.of(filePath), StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            throw CliException.validation(output, "Failed to read " + label + " file: " + filePath);
+            throw CliException.validation(output, "Failed to read " + label + " file: " + filePath, CliErrorDetails.fileRead(output, null, label, filePath));
         }
     }
 
@@ -103,7 +119,11 @@ public final class JsonInputSupport {
         try {
             JsonNode parsed = objectMapper.readTree(rawJson);
             if (!(parsed instanceof ObjectNode)) {
-                throw CliException.validation(output, label + " must be a JSON object at the top level");
+                throw CliException.validation(
+                        output,
+                        label + " must be a JSON object at the top level",
+                        CliErrorDetails.invalidJson(output, null, "INVALID_JSON_OBJECT", "JSON object", detectJsonType(parsed), jsonRetryExamples(label))
+                );
             }
             return objectMapper.writeValueAsString(parsed);
         } catch (CliException exception) {
@@ -113,7 +133,11 @@ public final class JsonInputSupport {
             if (inline) {
                 message += ". If you are using PowerShell, prefer a JSON file or stdin, for example: --input-file input.json or @' ... '@ | actiondock executions submit --input-file -";
             }
-            throw CliException.validation(output, message);
+            throw CliException.validation(
+                    output,
+                    message,
+                    CliErrorDetails.invalidJson(output, null, "INVALID_JSON", "valid JSON object", "invalid JSON", jsonRetryExamples(label))
+            );
         }
     }
 
@@ -134,7 +158,40 @@ public final class JsonInputSupport {
         try {
             return objectMapper.readTree(json);
         } catch (Exception exception) {
-            throw CliException.validation(output, "Failed to parse request body JSON");
+            throw CliException.validation(
+                    output,
+                    "Failed to parse request body JSON",
+                    CliErrorDetails.invalidJson(output, null, "INVALID_JSON", "valid JSON object", "invalid JSON", jsonRetryExamples("Request body"))
+            );
         }
+    }
+
+    private static String detectJsonType(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "null";
+        }
+        if (node.isObject()) {
+            return "object";
+        }
+        if (node.isArray()) {
+            return "array";
+        }
+        if (node.isTextual()) {
+            return "string";
+        }
+        if (node.isNumber()) {
+            return "number";
+        }
+        if (node.isBoolean()) {
+            return "boolean";
+        }
+        return node.getNodeType().name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static java.util.List<String> jsonRetryExamples(String label) {
+        if (label != null && label.toLowerCase(java.util.Locale.ROOT).contains("input")) {
+            return java.util.List.of("--input '{}'", "--input-file input.json", "echo '{}' | actiondock <command> --input-file -");
+        }
+        return java.util.List.of("--file request.json", "cat request.json | actiondock <command> --file -");
     }
 }

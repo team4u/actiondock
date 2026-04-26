@@ -76,10 +76,18 @@ class SchedulesCommands implements Runnable {
     }
 
     @Command(name = "create", mixinStandardHelpOptions = true, description = {
-            "Create a schedule.",
-            "--file is required and must provide the schedule request body as JSON with a JSON object at the top level.",
-            "The request is sent to /api/schedules. Global creation requires scriptId. Common fields include name, cronExpression, input, and enabled.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Create a schedule.",
+            "Required:",
+            "  --file <path|-> schedule request JSON object.",
+            "Examples:",
+            "  actiondock schedules create --file schedule.json",
+            "Input JSON shape:",
+            "  {\"scriptId\":\"hello\",\"name\":\"Daily hello\",\"cronExpression\":\"0 0 9 * * *\",\"input\":{\"name\":\"Alice\"},\"enabled\":true}",
+            "Output JSON shape:",
+            "  {\"status\":0,\"msg\":\"Success\",\"data\":{\"id\":\"...\",...}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class CreateSchedule implements Callable<Integer> {
         @ParentCommand
@@ -88,21 +96,38 @@ class SchedulesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the schedule request body JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without creating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 从 JSON 文件创建新的调度规则。
          */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Schedule request body");
-            return parent.root().emit(parent.root().apiClient().postJson("/api/schedules", Map.of(), body));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/schedules", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock schedules create")
+            );
         }
     }
 
     @Command(name = "update", mixinStandardHelpOptions = true, description = {
-            "Update a schedule.",
-            "--file is required and must provide the schedule request body as JSON with a JSON object at the top level.",
-            "The payload must still include scriptId, and the server does not allow moving a schedule to a different script through this request.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Update a schedule.",
+            "Required:",
+            "  <scheduleId>",
+            "  --file <path|-> schedule request JSON object.",
+            "Examples:",
+            "  actiondock schedules update schedule-1 --file schedule.json",
+            "Input JSON shape:",
+            "  {\"scriptId\":\"hello\",\"name\":\"Daily hello\",\"cronExpression\":\"0 0 9 * * *\",\"input\":{\"name\":\"Alice\"},\"enabled\":true}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means the server rejected the update.",
+            "  The server does not allow moving a schedule to a different script."
     })
     static class UpdateSchedule implements Callable<Integer> {
         @ParentCommand
@@ -114,17 +139,22 @@ class SchedulesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the schedule request body JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 从 JSON 文件更新指定调度的配置。
          */
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Schedule request body");
-            return parent.root().emit(parent.root().apiClient().putJson(
-                    "/api/schedules/" + parent.root().encodePath(scheduleId),
-                    Map.of(),
-                    body
-            ));
+            return parent.root().submitRequest(
+                    CliRequest.putJson("/api/schedules/" + parent.root().encodePath(scheduleId), Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock schedules update")
+            );
         }
     }
 
@@ -136,12 +166,21 @@ class SchedulesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without enabling.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 启用指定调度。
          */
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().postJson("/api/schedules/" + parent.root().encodePath(scheduleId) + "/enable", Map.of(), "{}"));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/schedules/" + parent.root().encodePath(scheduleId) + "/enable", Map.of(), "{}"),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock schedules enable")
+            );
         }
     }
 
@@ -153,12 +192,21 @@ class SchedulesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without disabling.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 禁用指定调度。
          */
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().postJson("/api/schedules/" + parent.root().encodePath(scheduleId) + "/disable", Map.of(), "{}"));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/schedules/" + parent.root().encodePath(scheduleId) + "/disable", Map.of(), "{}"),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock schedules disable")
+            );
         }
     }
 
@@ -170,12 +218,21 @@ class SchedulesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scheduleId>", description = "Schedule ID.")
         String scheduleId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without deleting.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         /**
          * 删除指定调度。
          */
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().delete("/api/schedules/" + parent.root().encodePath(scheduleId), Map.of()));
+            return parent.root().submitRequest(
+                    CliRequest.delete("/api/schedules/" + parent.root().encodePath(scheduleId), Map.of()),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock schedules delete")
+            );
         }
     }
 }

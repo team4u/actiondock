@@ -53,9 +53,18 @@ class RepositoriesCommands implements Runnable {
     }
 
     @Command(name = "create", mixinStandardHelpOptions = true, description = {
-            "Create a repository definition.",
-            "--file is required and must provide a JSON object matching the /api/repositories request body.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Create a repository definition.",
+            "Required:",
+            "  --file <path|-> repository definition JSON object.",
+            "Examples:",
+            "  actiondock repositories create --file repository.json",
+            "Input JSON shape:",
+            "  {\"id\":\"repo-main\",\"name\":\"Main\",\"type\":\"LOCAL_DIR\",\"url\":\"/tmp/actiondock-repo\",\"branch\":\"main\",\"enabled\":true,\"trustLevel\":\"TRUSTED\",\"usage\":\"DISTRIBUTION\",\"description\":\"Main repository\"}",
+            "Output JSON shape:",
+            "  {\"status\":0,\"msg\":\"Success\",\"data\":{\"id\":\"repo-main\",...}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class CreateRepository implements Callable<Integer> {
         @ParentCommand
@@ -64,17 +73,34 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the repository definition JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without creating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Repository definition");
-            return parent.root().emit(parent.root().apiClient().postJson("/api/repositories", Map.of(), body));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/repositories", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories create")
+            );
         }
     }
 
     @Command(name = "update", mixinStandardHelpOptions = true, description = {
-            "Update a repository definition.",
-            "--file is required and must provide a JSON object matching the /api/repositories/{id} request body.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Update a repository definition.",
+            "Required:",
+            "  <repositoryId>",
+            "  --file <path|-> repository definition JSON object.",
+            "Examples:",
+            "  actiondock repositories update repo-main --file repository.json",
+            "Input JSON shape:",
+            "  {\"id\":\"repo-main\",\"name\":\"Main\",\"type\":\"LOCAL_DIR\",\"url\":\"/tmp/actiondock-repo\",\"branch\":\"main\",\"enabled\":true,\"trustLevel\":\"TRUSTED\",\"usage\":\"DISTRIBUTION\",\"description\":\"Main repository\"}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class UpdateRepository implements Callable<Integer> {
         @ParentCommand
@@ -86,11 +112,20 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the repository definition JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
             String body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Repository definition");
-            return root.emit(root.apiClient().putJson("/api/repositories/" + root.encodePath(repositoryId), Map.of(), body));
+            return root.submitRequest(
+                    CliRequest.putJson("/api/repositories/" + root.encodePath(repositoryId), Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories update")
+            );
         }
     }
 
@@ -102,9 +137,18 @@ class RepositoriesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
         String repositoryId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without deleting.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().delete("/api/repositories/" + parent.root().encodePath(repositoryId), Map.of()));
+            return parent.root().submitRequest(
+                    CliRequest.delete("/api/repositories/" + parent.root().encodePath(repositoryId), Map.of()),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories delete")
+            );
         }
     }
 
@@ -116,9 +160,18 @@ class RepositoriesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<repositoryId>", description = "Repository ID.")
         String repositoryId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without syncing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().postJson("/api/repositories/" + parent.root().encodePath(repositoryId) + "/sync", Map.of(), "{}"));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/repositories/" + parent.root().encodePath(repositoryId) + "/sync", Map.of(), "{}"),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories sync")
+            );
         }
     }
 
@@ -206,9 +259,15 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--force-plugin-upgrade", description = "Force plugin dependency upgrades when version ranges conflict.")
         boolean forcePluginUpgrade;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without installing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return submitToolInstall(parent.root(), repositoryId, toolId, "install", installSchedules, installPluginDependencies, forcePluginUpgrade);
+            return submitToolInstall(parent.root(), repositoryId, toolId, "install", installSchedules, installPluginDependencies, forcePluginUpgrade, dryRun, validateOnly);
         }
     }
 
@@ -232,9 +291,15 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--force-plugin-upgrade", description = "Force plugin dependency upgrades when version ranges conflict.")
         boolean forcePluginUpgrade;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return submitToolInstall(parent.root(), repositoryId, toolId, "update", installSchedules, installPluginDependencies, forcePluginUpgrade);
+            return submitToolInstall(parent.root(), repositoryId, toolId, "update", installSchedules, installPluginDependencies, forcePluginUpgrade, dryRun, validateOnly);
         }
     }
 
@@ -252,6 +317,12 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--script-id", description = "Optional target development script ID.")
         String scriptId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without syncing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
@@ -259,18 +330,25 @@ class RepositoriesCommands implements Runnable {
             if (scriptId != null && !scriptId.isBlank()) {
                 body.put("scriptId", scriptId);
             }
-            return root.emit(root.apiClient().postJson(
-                    "/api/repositories/" + root.encodePath(repositoryId) + "/tools/" + root.encodePath(toolId) + "/develop",
-                    Map.of(),
-                    root.jsonObject(body)
-            ));
+            return root.submitRequest(
+                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/tools/" + root.encodePath(toolId) + "/develop", Map.of(), root.jsonObject(body)),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories tools develop")
+            );
         }
     }
 
     @Command(name = "publish", mixinStandardHelpOptions = true, description = {
-            "Publish a local script into a repository.",
-            "--file is required and must provide a JSON object matching the /api/repositories/{repositoryId}/publish request body.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Publish a local script into a repository.",
+            "Required:",
+            "  <repositoryId>",
+            "  --file <path|-> repository tool publish request JSON object.",
+            "Examples:",
+            "  actiondock repositories tools publish repo-main --file publish.json",
+            "Input JSON shape:",
+            "  {\"scriptId\":\"hello\",\"toolId\":\"hello\",\"displayName\":\"Hello\",\"version\":\"1.0.0\",\"owner\":\"team4u\",\"releaseNotes\":\"Initial release\",\"tags\":[\"demo\"],\"scheduleIds\":[],\"configItems\":[],\"force\":false}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class PublishRepositoryTool implements Callable<Integer> {
         @ParentCommand
@@ -282,15 +360,20 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the publish request JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without publishing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
             String body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Repository tool publish request body");
-            return root.emit(root.apiClient().postJson(
-                    "/api/repositories/" + root.encodePath(repositoryId) + "/publish",
-                    Map.of(),
-                    body
-            ));
+            return root.submitRequest(
+                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/publish", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories tools publish")
+            );
         }
     }
 
@@ -302,9 +385,18 @@ class RepositoriesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<scriptId>", description = "Installed script ID.")
         String scriptId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without uninstalling.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().delete("/api/installed-tools/" + parent.root().encodePath(scriptId), Map.of()));
+            return parent.root().submitRequest(
+                    CliRequest.delete("/api/installed-tools/" + parent.root().encodePath(scriptId), Map.of()),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories tools uninstall")
+            );
         }
     }
 
@@ -384,9 +476,15 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--force", description = "Force installation when the target plugin version conflicts with installed tool dependency ranges.")
         boolean force;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without installing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return submitRepositoryPlugin(parent.root(), repositoryId, pluginId, "install", force);
+            return submitRepositoryPlugin(parent.root(), repositoryId, pluginId, "install", force, dryRun, validateOnly);
         }
     }
 
@@ -404,16 +502,30 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--force", description = "Force update when the target plugin version conflicts with installed tool dependency ranges.")
         boolean force;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return submitRepositoryPlugin(parent.root(), repositoryId, pluginId, "update", force);
+            return submitRepositoryPlugin(parent.root(), repositoryId, pluginId, "update", force, dryRun, validateOnly);
         }
     }
 
     @Command(name = "publish", mixinStandardHelpOptions = true, description = {
-            "Publish an installed plugin into a repository.",
-            "--file is required and must provide a JSON object matching the /api/repositories/{repositoryId}/publish-plugin request body.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Publish an installed plugin into a repository.",
+            "Required:",
+            "  <repositoryId>",
+            "  --file <path|-> repository plugin publish request JSON object.",
+            "Examples:",
+            "  actiondock repositories plugins publish repo-main --file plugin-publish.json",
+            "Input JSON shape:",
+            "  {\"pluginId\":\"demo-plugin\",\"displayName\":\"Demo Plugin\",\"version\":\"1.0.0\",\"owner\":\"team4u\",\"description\":\"Demo\",\"releaseNotes\":\"Initial release\",\"tags\":[\"demo\"],\"riskLevel\":\"LOW\",\"artifact\":{\"uri\":\"local://plugins/demo.jar\",\"sha256\":\"...\",\"fileName\":\"demo.jar\"}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class PublishRepositoryPlugin implements Callable<Integer> {
         @ParentCommand
@@ -425,15 +537,20 @@ class RepositoriesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the publish request JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without publishing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
             String body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Repository plugin publish request body");
-            return root.emit(root.apiClient().postJson(
-                    "/api/repositories/" + root.encodePath(repositoryId) + "/publish-plugin",
-                    Map.of(),
-                    body
-            ));
+            return root.submitRequest(
+                    CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/publish-plugin", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories plugins publish")
+            );
         }
     }
 
@@ -443,27 +560,29 @@ class RepositoriesCommands implements Runnable {
                                  String operation,
                                  boolean installSchedules,
                                  boolean installPluginDependencies,
-                                 boolean forcePluginUpgrade) {
-        return root.emit(root.apiClient().postJson(
-                "/api/repositories/" + root.encodePath(repositoryId) + "/tools/" + root.encodePath(toolId) + "/" + operation,
-                Map.of(),
-                root.jsonObject(Map.of(
+                                 boolean forcePluginUpgrade,
+                                 boolean dryRun,
+                                 boolean validateOnly) {
+        return root.submitRequest(
+                CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/tools/" + root.encodePath(toolId) + "/" + operation, Map.of(), root.jsonObject(Map.of(
                         "installSchedules", installSchedules,
                         "installPluginDependencies", installPluginDependencies,
                         "forcePluginUpgrade", forcePluginUpgrade
-                ))
-        ));
+                ))),
+                AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories tools " + operation)
+        );
     }
 
     static int submitRepositoryPlugin(ActionDockCommand root,
                                       String repositoryId,
                                       String pluginId,
                                       String operation,
-                                      boolean force) {
-        return root.emit(root.apiClient().postJson(
-                "/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/" + operation,
-                Map.of(),
-                root.jsonObject(Map.of("force", force))
-        ));
+                                      boolean force,
+                                      boolean dryRun,
+                                      boolean validateOnly) {
+        return root.submitRequest(
+                CliRequest.postJson("/api/repositories/" + root.encodePath(repositoryId) + "/plugins/" + root.encodePath(pluginId) + "/" + operation, Map.of(), root.jsonObject(Map.of("force", force))),
+                AgentExecutionOptions.of(dryRun, validateOnly, "actiondock repositories plugins " + operation)
+        );
     }
 }

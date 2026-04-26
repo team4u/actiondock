@@ -40,6 +40,185 @@ actiondock-cli <command> <subcommand> [options]
 | [plugins](#plugins-插件管理) | 插件的安装、生命周期和调用 |
 | [config-values](#config-values-全局配置值) | 服务端全局配置值管理 |
 | [repositories](#repositories-仓库和工具库) | 仓库、仓库工具和仓库插件管理 |
+| [discover](#discover-agent-发现入口) | 输出机器可读的 CLI 能力树和推荐 Agent 流程 |
+
+---
+
+## Agent / LLM 使用协议
+
+CLI 默认面向机器输出：成功和失败都使用 JSON envelope。
+
+成功示例：
+
+```json
+{
+  "status": 0,
+  "msg": "Success",
+  "data": {}
+}
+```
+
+本地 CLI 参数错误会额外包含 `error` 字段，便于 Agent 修复后重试：
+
+```json
+{
+  "status": 2,
+  "msg": "--script-id is required unless --file is used",
+  "data": null,
+  "error": {
+    "code": "MISSING_REQUIRED_OPTION",
+    "command": "actiondock executions submit",
+    "missing": ["--script-id"],
+    "alternatives": ["--file"],
+    "retryExamples": [
+      "actiondock executions submit --script-id <scriptId> --input '{}'",
+      "actiondock executions submit --file request.json"
+    ]
+  }
+}
+```
+
+退出码约定：
+
+| 退出码 | 含义 |
+|--------|------|
+| 0 | 成功 |
+| 2 | CLI 参数、互斥关系、JSON 或文件读取校验失败 |
+| 3 | 本地配置或认证配置错误 |
+| 4 | HTTP/网络传输错误 |
+| 5 | 服务端业务错误 |
+| 6 | 等待执行完成超时 |
+
+### --help-json
+
+任意命令都可以使用 `--help-json` 输出机器可读 help，不需要提供该命令原本的必填参数：
+
+```bash
+java -jar actiondock-cli.jar executions submit --help-json
+java -jar actiondock-cli.jar scripts schema --help-json
+```
+
+输出示例：
+
+```json
+{
+  "status": 0,
+  "msg": "Success",
+  "data": {
+    "schemaVersion": "actiondock.cli.help.v1",
+    "command": "actiondock executions submit",
+    "purpose": "Submit a script execution against the current saved script definition.",
+    "arguments": [],
+    "options": [
+      {
+        "names": ["--input"],
+        "type": "jsonObject",
+        "required": false,
+        "mutuallyExclusiveWith": ["--input-file", "--file"],
+        "example": {"name": "Alice"}
+      }
+    ],
+    "constraints": [],
+    "defaults": {},
+    "inputShapes": {},
+    "outputShape": {},
+    "examples": [],
+    "exitCodes": {
+      "0": "success",
+      "2": "validation error",
+      "3": "config error",
+      "4": "transport error",
+      "5": "business error",
+      "6": "timeout"
+    }
+  }
+}
+```
+
+### --dry-run / --validate-only
+
+所有 REST 写操作支持：
+
+| 选项 | 行为 |
+|------|------|
+| `--validate-only` | 只校验本地 CLI 参数、互斥关系、JSON object 和文件可读性；不创建 HTTP client，不读取连接配置，不调用服务端 |
+| `--dry-run` | 构造最终 HTTP request preview 并输出；不调用服务端 |
+
+两者互斥，同时使用会返回 `status=2` 和 `error.code=MUTUALLY_EXCLUSIVE_OPTIONS`。
+
+该能力覆盖 `scripts`、`executions`、`schedules`、`plugins`、`config-values`、`repositories` 下的 REST 写操作；`config profile set/delete` 是本地配置文件写入，不属于 REST 写操作。
+
+示例：
+
+```bash
+java -jar actiondock-cli.jar executions submit \
+  --script-id hello \
+  --input '{"name":"Alice"}' \
+  --validate-only
+
+java -jar actiondock-cli.jar executions submit \
+  --script-id hello \
+  --input '{"name":"Alice"}' \
+  --dry-run
+```
+
+`--dry-run` 输出示例：
+
+```json
+{
+  "status": 0,
+  "msg": "Dry run",
+  "data": {
+    "request": {
+      "method": "POST",
+      "path": "/api/executions",
+      "query": {},
+      "contentType": "application/json",
+      "body": {
+        "scriptId": "hello",
+        "input": {"name": "Alice"},
+        "mode": "SYNC",
+        "responseView": "RESULT"
+      }
+    }
+  }
+}
+```
+
+Multipart 命令（如 `plugins install --jar`）的 dry-run 只输出文件名和大小，不输出文件内容。
+
+### discover Agent 发现入口
+
+```bash
+java -jar actiondock-cli.jar discover
+java -jar actiondock-cli.jar discover --json
+```
+
+输出当前 CLI 的能力树、Agent 特性和推荐流程：
+
+```json
+{
+  "status": 0,
+  "msg": "Success",
+  "data": {
+    "schemaVersion": "actiondock.cli.discover.v1",
+    "defaultOutput": "json-envelope",
+    "agentFeatures": ["--help-json", "--dry-run", "--validate-only", "scripts schema --example"],
+    "commands": [],
+    "recommendedFlows": [
+      {
+        "name": "execute script safely",
+        "steps": [
+          "actiondock scripts schema <scriptId> --example",
+          "actiondock executions submit --script-id <scriptId> --input '<json>' --validate-only",
+          "actiondock executions submit --script-id <scriptId> --input '<json>' --dry-run",
+          "actiondock executions submit --script-id <scriptId> --input '<json>' --wait"
+        ]
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -125,6 +304,37 @@ java -jar actiondock-cli.jar scripts get-published <scriptId>
 
 ```bash
 java -jar actiondock-cli.jar scripts schema <scriptId>
+java -jar actiondock-cli.jar scripts schema <scriptId> --example
+```
+
+`--example` 会返回原始 `inputSchema` / `outputSchema`，并根据 schema 的 `examples`、`default`、`enum` 和字段类型生成 `inputExample` / `outputExample`，适合 Agent 在执行前构造入参。
+
+输出示例：
+
+```json
+{
+  "status": 0,
+  "msg": "Success",
+  "data": {
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "examples": ["Alice"]},
+        "limit": {"type": "integer", "default": 10}
+      },
+      "required": ["name"]
+    },
+    "inputExample": {
+      "name": "Alice",
+      "limit": 10
+    },
+    "outputSchema": {},
+    "outputExample": {},
+    "notes": [
+      "Only send fields declared in inputSchema unless the script explicitly supports extra fields."
+    ]
+  }
+}
 ```
 
 ### scripts create
@@ -137,6 +347,31 @@ java -jar actiondock-cli.jar scripts create --file script.json
 
 # 从 stdin 读取
 cat script.json | java -jar actiondock-cli.jar scripts create --file -
+
+# 只校验本地 JSON，不调用服务端
+java -jar actiondock-cli.jar scripts create --file script.json --validate-only
+
+# 预览最终 HTTP 请求，不调用服务端
+java -jar actiondock-cli.jar scripts create --file script.json --dry-run
+```
+
+脚本定义 JSON 最小示例：
+
+```json
+{
+  "id": "hello",
+  "name": "Hello",
+  "type": "GROOVY",
+  "source": "return [ok:true]",
+  "inputSchema": {
+    "type": "object",
+    "properties": {}
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {}
+  }
+}
 ```
 
 ### scripts update
@@ -145,6 +380,7 @@ cat script.json | java -jar actiondock-cli.jar scripts create --file -
 
 ```bash
 java -jar actiondock-cli.jar scripts update <scriptId> --file script.json
+java -jar actiondock-cli.jar scripts update <scriptId> --file script.json --dry-run
 ```
 
 ### scripts delete
@@ -153,6 +389,7 @@ java -jar actiondock-cli.jar scripts update <scriptId> --file script.json
 
 ```bash
 java -jar actiondock-cli.jar scripts delete <scriptId>
+java -jar actiondock-cli.jar scripts delete <scriptId> --dry-run
 ```
 
 ### scripts validate
@@ -161,6 +398,7 @@ java -jar actiondock-cli.jar scripts delete <scriptId>
 
 ```bash
 java -jar actiondock-cli.jar scripts validate <scriptId>
+java -jar actiondock-cli.jar scripts validate <scriptId> --dry-run
 ```
 
 ### scripts publish
@@ -169,6 +407,7 @@ java -jar actiondock-cli.jar scripts validate <scriptId>
 
 ```bash
 java -jar actiondock-cli.jar scripts publish <scriptId>
+java -jar actiondock-cli.jar scripts publish <scriptId> --dry-run
 ```
 
 ### scripts discard-draft
@@ -177,6 +416,7 @@ java -jar actiondock-cli.jar scripts publish <scriptId>
 
 ```bash
 java -jar actiondock-cli.jar scripts discard-draft <scriptId>
+java -jar actiondock-cli.jar scripts discard-draft <scriptId> --dry-run
 ```
 
 ### scripts execute-published
@@ -205,6 +445,15 @@ java -jar actiondock-cli.jar scripts execute-published <scriptId> \
 # 指定返回视图
 java -jar actiondock-cli.jar scripts execute-published <scriptId> \
   --response-view DEBUG
+
+# Agent 安全流程：先校验，再预览，再执行
+java -jar actiondock-cli.jar scripts execute-published <scriptId> \
+  --input '{"name":"Alice"}' \
+  --validate-only
+
+java -jar actiondock-cli.jar scripts execute-published <scriptId> \
+  --input '{"name":"Alice"}' \
+  --dry-run
 ```
 
 | 选项 | 默认值 | 说明 |
@@ -217,6 +466,8 @@ java -jar actiondock-cli.jar scripts execute-published <scriptId> \
 | `--wait` | false | 提交后等待执行结束 |
 | `--wait-timeout-seconds` | 30 | 等待超时时间（秒） |
 | `--poll-interval-ms` | 1000 | 轮询间隔（毫秒） |
+| `--dry-run` | false | 只输出最终 HTTP request preview，不执行脚本 |
+| `--validate-only` | false | 只做本地参数和 JSON 校验，不创建 HTTP client |
 
 ### scripts fork
 
@@ -224,6 +475,7 @@ Fork 仓库脚本到一个新的可编辑脚本。
 
 ```bash
 java -jar actiondock-cli.jar scripts fork <scriptId> --id hello-fork --name "Hello Fork"
+java -jar actiondock-cli.jar scripts fork <scriptId> --id hello-fork --name "Hello Fork" --dry-run
 ```
 
 ### scripts development-status
@@ -241,6 +493,7 @@ java -jar actiondock-cli.jar scripts development-status <scriptId>
 ```bash
 java -jar actiondock-cli.jar scripts development-pull <scriptId>
 java -jar actiondock-cli.jar scripts development-pull <scriptId> --force
+java -jar actiondock-cli.jar scripts development-pull <scriptId> --force --dry-run
 ```
 
 ---
@@ -269,6 +522,17 @@ java -jar actiondock-cli.jar executions submit \
   --input '{"name":"Carol"}' \
   --wait \
   --wait-timeout-seconds 120
+
+# Agent 安全流程：先校验，再预览，再提交
+java -jar actiondock-cli.jar executions submit \
+  --script-id hello-groovy \
+  --input '{"name":"Alice"}' \
+  --validate-only
+
+java -jar actiondock-cli.jar executions submit \
+  --script-id hello-groovy \
+  --input '{"name":"Alice"}' \
+  --dry-run
 ```
 
 PowerShell 推荐把 JSON 作为 stdin 或文件传入，不把 JSON 作为命令行参数：
@@ -292,6 +556,19 @@ java -jar actiondock-cli.jar executions submit \
   --file execution-request.json
 ```
 
+完整请求体 JSON 示例：
+
+```json
+{
+  "scriptId": "hello-groovy",
+  "input": {
+    "name": "Alice"
+  },
+  "mode": "SYNC",
+  "responseView": "RESULT"
+}
+```
+
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
 | `--script-id` | 必填，除非使用 `--file` | 要执行的脚本 ID |
@@ -303,6 +580,8 @@ java -jar actiondock-cli.jar executions submit \
 | `--wait` | false | 提交后等待执行结束 |
 | `--wait-timeout-seconds` | 30 | 等待超时时间（秒） |
 | `--poll-interval-ms` | 1000 | 轮询间隔（毫秒） |
+| `--dry-run` | false | 只输出最终 `/api/executions` request preview，不提交 |
+| `--validate-only` | false | 只做本地参数和 JSON 校验，不创建 HTTP client |
 
 ### executions get
 
@@ -330,6 +609,7 @@ java -jar actiondock-cli.jar executions list --script-id hello-groovy
 
 ```bash
 java -jar actiondock-cli.jar executions delete <executionId>
+java -jar actiondock-cli.jar executions delete <executionId> --dry-run
 ```
 
 ### executions clear
@@ -338,6 +618,7 @@ java -jar actiondock-cli.jar executions delete <executionId>
 
 ```bash
 java -jar actiondock-cli.jar executions clear --script-id hello-groovy
+java -jar actiondock-cli.jar executions clear --script-id hello-groovy --dry-run
 ```
 
 ---
@@ -374,6 +655,10 @@ java -jar actiondock-cli.jar schedules create --file schedule.json
 
 # 从 stdin 读取
 cat schedule.json | java -jar actiondock-cli.jar schedules create --file -
+
+# 校验或预览
+java -jar actiondock-cli.jar schedules create --file schedule.json --validate-only
+java -jar actiondock-cli.jar schedules create --file schedule.json --dry-run
 ```
 
 定时任务 JSON 示例：
@@ -394,6 +679,7 @@ cat schedule.json | java -jar actiondock-cli.jar schedules create --file -
 
 ```bash
 java -jar actiondock-cli.jar schedules update <scheduleId> --file schedule.json
+java -jar actiondock-cli.jar schedules update <scheduleId> --file schedule.json --dry-run
 ```
 
 ### schedules enable
@@ -402,6 +688,7 @@ java -jar actiondock-cli.jar schedules update <scheduleId> --file schedule.json
 
 ```bash
 java -jar actiondock-cli.jar schedules enable <scheduleId>
+java -jar actiondock-cli.jar schedules enable <scheduleId> --dry-run
 ```
 
 ### schedules disable
@@ -410,6 +697,7 @@ java -jar actiondock-cli.jar schedules enable <scheduleId>
 
 ```bash
 java -jar actiondock-cli.jar schedules disable <scheduleId>
+java -jar actiondock-cli.jar schedules disable <scheduleId> --dry-run
 ```
 
 ### schedules delete
@@ -418,6 +706,7 @@ java -jar actiondock-cli.jar schedules disable <scheduleId>
 
 ```bash
 java -jar actiondock-cli.jar schedules delete <scheduleId>
+java -jar actiondock-cli.jar schedules delete <scheduleId> --dry-run
 ```
 
 ---
@@ -440,18 +729,22 @@ java -jar actiondock-cli.jar config-values get openai.api_key
 
 ```bash
 java -jar actiondock-cli.jar config-values create --file config-value.json
+java -jar actiondock-cli.jar config-values create --file config-value.json --validate-only
+java -jar actiondock-cli.jar config-values create --file config-value.json --dry-run
 ```
 
 ### config-values update
 
 ```bash
 java -jar actiondock-cli.jar config-values update openai.api_key --file config-value.json
+java -jar actiondock-cli.jar config-values update openai.api_key --file config-value.json --dry-run
 ```
 
 ### config-values delete
 
 ```bash
 java -jar actiondock-cli.jar config-values delete openai.api_key
+java -jar actiondock-cli.jar config-values delete openai.api_key --dry-run
 ```
 
 配置值 JSON 示例：
@@ -478,6 +771,26 @@ java -jar actiondock-cli.jar repositories create --file repository.json
 java -jar actiondock-cli.jar repositories update repo-main --file repository.json
 java -jar actiondock-cli.jar repositories delete repo-main
 java -jar actiondock-cli.jar repositories sync repo-main
+
+# Agent 安全流程
+java -jar actiondock-cli.jar repositories create --file repository.json --validate-only
+java -jar actiondock-cli.jar repositories create --file repository.json --dry-run
+```
+
+仓库定义 JSON 示例：
+
+```json
+{
+  "id": "repo-main",
+  "name": "Main",
+  "type": "LOCAL_DIR",
+  "url": "/tmp/actiondock-repo",
+  "branch": "main",
+  "enabled": true,
+  "trustLevel": "TRUSTED",
+  "usage": "DISTRIBUTION",
+  "description": "Main repository"
+}
 ```
 
 ### repositories tools list/get
@@ -499,6 +812,10 @@ java -jar actiondock-cli.jar repositories tools install repo-main hello-tool \
   --install-schedules \
   --install-plugin-dependencies
 
+java -jar actiondock-cli.jar repositories tools install repo-main hello-tool \
+  --install-schedules \
+  --dry-run
+
 java -jar actiondock-cli.jar repositories tools update repo-main hello-tool \
   --install-plugin-dependencies \
   --force-plugin-upgrade
@@ -512,6 +829,25 @@ java -jar actiondock-cli.jar repositories tools update repo-main hello-tool \
 java -jar actiondock-cli.jar repositories tools develop repo-main hello-tool --script-id hello-dev
 java -jar actiondock-cli.jar repositories tools publish repo-main --file publish-tool.json
 java -jar actiondock-cli.jar repositories tools uninstall hello-tool
+
+java -jar actiondock-cli.jar repositories tools publish repo-main --file publish-tool.json --dry-run
+```
+
+发布仓库工具 JSON 示例：
+
+```json
+{
+  "scriptId": "hello",
+  "toolId": "hello",
+  "displayName": "Hello",
+  "version": "1.0.0",
+  "owner": "team4u",
+  "releaseNotes": "Initial release",
+  "tags": ["demo"],
+  "scheduleIds": [],
+  "configItems": [],
+  "force": false
+}
 ```
 
 ### repositories plugins list/get/install/update/publish
@@ -525,6 +861,29 @@ java -jar actiondock-cli.jar repositories plugins get repo-main demo-plugin
 java -jar actiondock-cli.jar repositories plugins install repo-main demo-plugin
 java -jar actiondock-cli.jar repositories plugins update repo-main demo-plugin --force
 java -jar actiondock-cli.jar repositories plugins publish repo-main --file publish-plugin.json
+
+java -jar actiondock-cli.jar repositories plugins install repo-main demo-plugin --dry-run
+java -jar actiondock-cli.jar repositories plugins publish repo-main --file publish-plugin.json --dry-run
+```
+
+发布仓库插件 JSON 示例：
+
+```json
+{
+  "pluginId": "demo-plugin",
+  "displayName": "Demo Plugin",
+  "version": "1.0.0",
+  "owner": "team4u",
+  "description": "Demo",
+  "releaseNotes": "Initial release",
+  "tags": ["demo"],
+  "riskLevel": "LOW",
+  "artifact": {
+    "uri": "local://plugins/demo.jar",
+    "sha256": "...",
+    "fileName": "demo.jar"
+  }
+}
 ```
 
 ---
@@ -553,7 +912,11 @@ java -jar actiondock-cli.jar plugins get <pluginId>
 
 ```bash
 java -jar actiondock-cli.jar plugins install --jar plugin.jar
+java -jar actiondock-cli.jar plugins install --jar plugin.jar --dry-run
+java -jar actiondock-cli.jar plugins install --jar plugin.jar --validate-only
 ```
+
+`plugins install --dry-run` 会输出 multipart request preview，只包含 `fieldName`、`fileName` 和 `size`，不会输出 JAR 内容。
 
 ### plugins upgrade
 
@@ -561,6 +924,7 @@ java -jar actiondock-cli.jar plugins install --jar plugin.jar
 
 ```bash
 java -jar actiondock-cli.jar plugins upgrade <pluginId> --jar new-plugin.jar
+java -jar actiondock-cli.jar plugins upgrade <pluginId> --jar new-plugin.jar --dry-run
 ```
 
 ### plugins start
@@ -569,6 +933,7 @@ java -jar actiondock-cli.jar plugins upgrade <pluginId> --jar new-plugin.jar
 
 ```bash
 java -jar actiondock-cli.jar plugins start <pluginId>
+java -jar actiondock-cli.jar plugins start <pluginId> --dry-run
 ```
 
 ### plugins stop
@@ -577,6 +942,7 @@ java -jar actiondock-cli.jar plugins start <pluginId>
 
 ```bash
 java -jar actiondock-cli.jar plugins stop <pluginId>
+java -jar actiondock-cli.jar plugins stop <pluginId> --dry-run
 ```
 
 ### plugins delete
@@ -585,6 +951,7 @@ java -jar actiondock-cli.jar plugins stop <pluginId>
 
 ```bash
 java -jar actiondock-cli.jar plugins delete <pluginId>
+java -jar actiondock-cli.jar plugins delete <pluginId> --dry-run
 ```
 
 ### plugins invoke
@@ -607,6 +974,15 @@ java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
 # 返回调试信息
 java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
   --response-view DEBUG
+
+# Agent 安全流程
+java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
+  --args '{"key":"value"}' \
+  --validate-only
+
+java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
+  --args '{"key":"value"}' \
+  --dry-run
 ```
 
 PowerShell 推荐把多个 JSON 分别写入临时文件，或使用完整请求体文件：
@@ -647,6 +1023,20 @@ java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
   --file plugin-invoke-request.json
 ```
 
+完整插件调用请求体 JSON 示例：
+
+```json
+{
+  "args": {
+    "topic": "ops"
+  },
+  "scriptInput": {
+    "locale": "zh-CN"
+  },
+  "responseView": "RESULT"
+}
+```
+
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
 | `--args` | `{}` | 内联 action 参数 JSON；bash/zsh 简单对象可用，PowerShell 建议用文件 |
@@ -655,6 +1045,8 @@ java -jar actiondock-cli.jar plugins invoke <pluginId> <action> \
 | `--script-input-file` | - | 脚本输入上下文 JSON 文件路径，传 `-` 表示从 stdin 读取 |
 | `--file` | - | 完整插件调用请求体 JSON 文件路径，传 `-` 表示从 stdin 读取 |
 | `--response-view` | `RESULT` | 返回视图：`RESULT` 或 `DEBUG` |
+| `--dry-run` | false | 只输出最终插件调用 request preview，不调用插件 |
+| `--validate-only` | false | 只做本地参数和 JSON 校验，不创建 HTTP client |
 
 ### plugins config get
 
@@ -674,6 +1066,10 @@ java -jar actiondock-cli.jar plugins config set <pluginId> --file config.json
 
 # 从 stdin 读取
 cat config.json | java -jar actiondock-cli.jar plugins config set <pluginId> --file -
+
+# 校验或预览
+java -jar actiondock-cli.jar plugins config set <pluginId> --file config.json --validate-only
+java -jar actiondock-cli.jar plugins config set <pluginId> --file config.json --dry-run
 ```
 
 配置 JSON 示例（顶层需要包含 `config` 字段）：
@@ -696,6 +1092,7 @@ java -jar actiondock-cli.jar plugins repository get repo-main demo-plugin
 java -jar actiondock-cli.jar plugins repository install repo-main demo-plugin
 java -jar actiondock-cli.jar plugins repository update repo-main demo-plugin --force
 java -jar actiondock-cli.jar plugins repository publish repo-main --file publish-plugin.json
+java -jar actiondock-cli.jar plugins repository install repo-main demo-plugin --dry-run
 ```
 
 ---

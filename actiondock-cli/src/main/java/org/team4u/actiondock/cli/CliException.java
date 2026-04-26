@@ -52,6 +52,18 @@ public final class CliException extends RuntimeException {
     }
 
     /**
+     * 创建带机器可读修复详情的参数校验失败异常（退出码 2）。
+     *
+     * @param output  CLI 输出工具
+     * @param message 错误描述信息
+     * @param error   机器可读的错误详情
+     * @return 校验异常实例
+     */
+    public static CliException validation(CliOutput output, String message, JsonNode error) {
+        return new CliException(EXIT_VALIDATION, message, output.error(EXIT_VALIDATION, message, null, error));
+    }
+
+    /**
      * 创建配置错误异常（退出码 3）。
      *
      * @param output  CLI 输出工具
@@ -118,6 +130,19 @@ public final class CliException extends RuntimeException {
      */
     public static CliException timeout(CliOutput output, String message, JsonNode data) {
         return new CliException(EXIT_TIMEOUT, message, output.error(EXIT_TIMEOUT, message, data));
+    }
+
+    /**
+     * 创建带机器可读修复详情的超时异常（退出码 6）。
+     *
+     * @param output  CLI 输出工具
+     * @param message 错误描述信息
+     * @param data    附加的错误数据
+     * @param error   机器可读的错误详情
+     * @return 超时异常实例
+     */
+    public static CliException timeout(CliOutput output, String message, JsonNode data, JsonNode error) {
+        return new CliException(EXIT_TIMEOUT, message, output.error(EXIT_TIMEOUT, message, data, error));
     }
 
     /**

@@ -71,6 +71,25 @@ public final class CliOutput {
     }
 
     /**
+     * 构建带机器可读错误详情的错误响应信封。
+     *
+     * @param status  错误状态码（非零）
+     * @param message 错误描述信息
+     * @param data    附加的错误数据
+     * @param error   机器可读的修复提示
+     * @return 包含错误状态、消息、数据和错误详情的 JSON 信封
+     */
+    public ObjectNode error(int status, String message, JsonNode data, JsonNode error) {
+        ObjectNode envelope = envelope(status, message, data);
+        if (error == null) {
+            envelope.putNull("error");
+        } else {
+            envelope.set("error", error);
+        }
+        return envelope;
+    }
+
+    /**
      * 将 JSON 内容输出到标准输出流。
      *
      * @param value 要输出的 JSON 节点

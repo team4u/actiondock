@@ -364,6 +364,9 @@ class ActionDockCommandIntegrationTest {
         JsonNode stderrJson = parseJson(result.stderr());
         assertThat(stderrJson.path("status").asInt()).isEqualTo(CliException.EXIT_VALIDATION);
         assertThat(stderrJson.path("msg").asText()).contains("must be a JSON object at the top level");
+        assertThat(stderrJson.path("error").path("code").asText()).isEqualTo("INVALID_JSON_OBJECT");
+        assertThat(stderrJson.path("error").path("expected").asText()).isEqualTo("JSON object");
+        assertThat(stderrJson.path("error").path("actual").asText()).isEqualTo("array");
     }
 
     @Test
@@ -378,6 +381,82 @@ class ActionDockCommandIntegrationTest {
         assertThat(message).contains("PowerShell");
         assertThat(message).contains("--input-file input.json");
         assertThat(message).contains("--input-file -");
+        JsonNode stderrJson = parseJson(result.stderr());
+        assertThat(stderrJson.path("error").path("code").asText()).isEqualTo("INVALID_JSON");
+        assertThat(stderrJson.path("error").path("retryExamples")).isNotEmpty();
+    }
+
+    @Test
+    void missingScriptIdReturnsRecoverableErrorDetails() throws Exception {
+        server = new TestServer();
+
+        ExecutionResult result = execute("executions", "submit");
+
+        assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
+        JsonNode stderrJson = parseJson(result.stderr());
+        assertThat(stderrJson.path("error").path("code").asText()).isEqualTo("MISSING_REQUIRED_OPTION");
+        assertThat(stderrJson.path("error").path("command").asText()).isEqualTo("actiondock executions submit");
+        assertThat(stderrJson.path("error").path("missing").toString()).contains("--script-id");
+        assertThat(stderrJson.path("error").path("alternatives").toString()).contains("--file");
+        assertThat(stderrJson.path("error").path("retryExamples").toString()).contains("--script-id");
+    }
+
+    @Test
+    void mutuallyExclusiveRequestBodyOptionsReturnRecoverableErrorDetails() throws Exception {
+        server = new TestServer();
+        Path requestFile = tempHome.resolve("request.json");
+        Files.writeString(requestFile, """
+                {"scriptId":"hello","input":{}}
+                """);
+
+        ExecutionResult result = execute("executions", "submit", "--file", requestFile.toString(), "--script-id", "hello");
+
+        assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
+        JsonNode stderrJson = parseJson(result.stderr());
+        assertThat(stderrJson.path("error").path("code").asText()).isEqualTo("MUTUALLY_EXCLUSIVE_OPTIONS");
+        assertThat(stderrJson.path("error").path("mutuallyExclusiveWith").toString()).contains("--file");
+        assertThat(stderrJson.path("error").path("retryExamples").toString()).contains("request.json");
+    }
+
+    @Test
+    void scriptsSchemaExampleGeneratesInputAndOutputExamples() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> requestRef = new AtomicReference<>();
+        server.register("GET", "/api/scripts/hello", request -> {
+            requestRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"Success","data":{
+                      "id":"hello",
+                      "inputSchema":{
+                        "type":"object",
+                        "properties":{
+                          "name":{"type":"string","examples":["Alice"]},
+                          "limit":{"type":"integer","default":10},
+                          "mode":{"type":"string","enum":["FAST","SAFE"]}
+                        },
+                        "required":["name"]
+                      },
+                      "outputSchema":{
+                        "type":"object",
+                        "properties":{
+                          "ok":{"type":"boolean"},
+                          "count":{"type":"integer"}
+                        }
+                      }
+                    }}
+                    """);
+        });
+
+        ExecutionResult result = execute("scripts", "schema", "hello", "--example");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(requestRef.get().query()).isEqualTo("includeUiSchema=true");
+        JsonNode data = parseJson(result.stdout()).path("data");
+        assertThat(data.path("inputExample").path("name").asText()).isEqualTo("Alice");
+        assertThat(data.path("inputExample").path("limit").asInt()).isEqualTo(10);
+        assertThat(data.path("inputExample").path("mode").asText()).isEqualTo("FAST");
+        assertThat(data.path("outputExample").path("ok").asBoolean()).isTrue();
+        assertThat(data.path("notes")).isNotEmpty();
     }
 
     @Test
@@ -397,14 +476,12 @@ class ActionDockCommandIntegrationTest {
         ExecutionResult clearHelp = execute("executions", "clear", "--help");
 
         assertThat(submitHelp.exitCode()).isEqualTo(0);
-        assertThat(submitHelp.stdout()).contains("This command calls");
-        assertThat(submitHelp.stdout()).contains("/api/executions");
-        assertThat(submitHelp.stdout()).contains("current");
-        assertThat(submitHelp.stdout()).contains("saved content is used");
-        assertThat(submitHelp.stdout()).contains("polls /api/executions/{id}");
-        assertThat(submitHelp.stdout()).contains("does not change");
-        assertThat(submitHelp.stdout()).contains("--mode");
-        assertThat(submitHelp.stdout()).contains("--file");
+        assertThat(submitHelp.stdout()).contains("Purpose:");
+        assertThat(submitHelp.stdout()).contains("Required:");
+        assertThat(submitHelp.stdout()).contains("Input JSON shape:");
+        assertThat(submitHelp.stdout()).contains("Recoverable errors:");
+        assertThat(submitHelp.stdout()).contains("\"scriptId\":\"hello\"");
+        assertThat(submitHelp.stdout()).contains("--mode SYNC");
         assertThat(clearHelp.exitCode()).isEqualTo(0);
         assertThat(clearHelp.stdout()).contains("The server requires --script-id");
         assertThat(clearHelp.stdout()).contains("unconditional full clearing");
@@ -419,13 +496,14 @@ class ActionDockCommandIntegrationTest {
         ExecutionResult scheduleUpdateHelp = execute("schedules", "update", "--help");
 
         assertThat(executePublishedHelp.exitCode()).isEqualTo(0);
-        assertThat(executePublishedHelp.stdout()).contains("Execute the published version of a script");
-        assertThat(executePublishedHelp.stdout()).contains("ignore any current unpublished");
+        assertThat(executePublishedHelp.stdout()).contains("Purpose:");
+        assertThat(executePublishedHelp.stdout()).contains("Input JSON shape:");
+        assertThat(executePublishedHelp.stdout()).contains("ignore current unpublished");
         assertThat(discardDraftHelp.exitCode()).isEqualTo(0);
         assertThat(discardDraftHelp.stdout()).contains("requires the script to already have a published version");
         assertThat(scheduleUpdateHelp.exitCode()).isEqualTo(0);
-        assertThat(scheduleUpdateHelp.stdout()).contains("the server does not allow moving");
-        assertThat(scheduleUpdateHelp.stdout()).contains("schedule to a different script");
+        assertThat(scheduleUpdateHelp.stdout()).contains("Input JSON shape:");
+        assertThat(scheduleUpdateHelp.stdout()).contains("does not allow moving a schedule");
     }
 
     @Test
@@ -434,13 +512,109 @@ class ActionDockCommandIntegrationTest {
         ExecutionResult configSetHelp = execute("plugins", "config", "set", "--help");
 
         assertThat(invokeHelp.exitCode()).isEqualTo(0);
-        assertThat(invokeHelp.stdout()).contains("additionally returns");
-        assertThat(invokeHelp.stdout()).contains("debug block");
-        assertThat(invokeHelp.stdout()).contains("raw args");
+        assertThat(invokeHelp.stdout()).contains("Purpose:");
+        assertThat(invokeHelp.stdout()).contains("Mutual exclusion:");
         assertThat(invokeHelp.stdout()).contains("scriptInput");
+        assertThat(invokeHelp.stdout()).contains("Input JSON shape:");
         assertThat(configSetHelp.exitCode()).isEqualTo(0);
-        assertThat(configSetHelp.stdout()).contains("top level contains a config field");
-        assertThat(configSetHelp.stdout()).contains("{\"config\":{...}}");
+        assertThat(configSetHelp.stdout()).contains("Input JSON shape:");
+        assertThat(configSetHelp.stdout()).contains("\"config\"");
+    }
+
+    @Test
+    void discoverReturnsCommandTreeAndRecommendedFlows() throws Exception {
+        ExecutionResult result = execute("discover", "--json");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode data = parseJson(result.stdout()).path("data");
+        assertThat(data.path("schemaVersion").asText()).isEqualTo("actiondock.cli.discover.v1");
+        assertThat(data.path("agentFeatures").toString()).contains("--help-json");
+        assertThat(data.path("commands").toString()).contains("executions");
+        assertThat(data.path("recommendedFlows").toString()).contains("execute script safely");
+    }
+
+    @Test
+    void helpJsonWorksForLeafCommandWithoutRequiredArguments() throws Exception {
+        ExecutionResult result = execute("executions", "submit", "--help-json");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode data = parseJson(result.stdout()).path("data");
+        assertThat(data.path("schemaVersion").asText()).isEqualTo("actiondock.cli.help.v1");
+        assertThat(data.path("command").asText()).isEqualTo("actiondock executions submit");
+        assertThat(data.path("options").toString()).contains("--script-id");
+        assertThat(data.path("options").toString()).contains("--dry-run");
+        assertThat(data.path("constraints").toString()).contains("--file is mutually exclusive");
+        assertThat(data.path("inputShapes").path("file").path("scriptId").asText()).isEqualTo("hello");
+        assertThat(data.path("exitCodes").path("2").asText()).isEqualTo("validation error");
+    }
+
+    @Test
+    void validateOnlyDoesNotContactServer() throws Exception {
+        Path configFile = tempHome.resolve("config-value.json");
+        Files.writeString(configFile, """
+                {"key":"openai.api_key","value":"secret","description":"OpenAI key"}
+                """);
+
+        ExecutionResult result = execute("config-values", "create", "--file", configFile.toString(), "--validate-only");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode stdoutJson = parseJson(result.stdout());
+        assertThat(stdoutJson.path("msg").asText()).isEqualTo("Validation passed");
+        assertThat(stdoutJson.path("data").path("valid").asBoolean()).isTrue();
+        assertThat(stdoutJson.path("data").path("command").asText()).isEqualTo("actiondock config-values create");
+    }
+
+    @Test
+    void dryRunReturnsJsonRequestPreviewWithoutContactingServer() throws Exception {
+        ExecutionResult result = execute(
+                "executions", "submit",
+                "--script-id", "hello",
+                "--input", "{\"name\":\"Alice\"}",
+                "--wait",
+                "--dry-run"
+        );
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode data = parseJson(result.stdout()).path("data");
+        assertThat(parseJson(result.stdout()).path("msg").asText()).isEqualTo("Dry run");
+        assertThat(data.path("request").path("method").asText()).isEqualTo("POST");
+        assertThat(data.path("request").path("path").asText()).isEqualTo("/api/executions");
+        assertThat(data.path("request").path("body").path("scriptId").asText()).isEqualTo("hello");
+        assertThat(data.path("request").path("body").path("input").path("name").asText()).isEqualTo("Alice");
+        assertThat(data.path("metadata").path("waitRequested").asBoolean()).isTrue();
+    }
+
+    @Test
+    void dryRunReturnsMultipartPreviewWithoutFileBytes() throws Exception {
+        Path jarFile = tempHome.resolve("demo.jar");
+        Files.writeString(jarFile, "jar-content");
+
+        ExecutionResult result = execute("plugins", "install", "--jar", jarFile.toString(), "--dry-run");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode request = parseJson(result.stdout()).path("data").path("request");
+        assertThat(request.path("method").asText()).isEqualTo("POST");
+        assertThat(request.path("path").asText()).isEqualTo("/api/plugins/install");
+        assertThat(request.path("contentType").asText()).isEqualTo("multipart/form-data");
+        assertThat(request.path("multipart").path("fileName").asText()).isEqualTo("demo.jar");
+        assertThat(request.path("multipart").path("size").asInt()).isEqualTo("jar-content".getBytes(StandardCharsets.UTF_8).length);
+        assertThat(request.toString()).doesNotContain("jar-content");
+    }
+
+    @Test
+    void dryRunAndValidateOnlyAreMutuallyExclusive() throws Exception {
+        ExecutionResult result = execute(
+                "executions", "submit",
+                "--script-id", "hello",
+                "--input", "{}",
+                "--dry-run",
+                "--validate-only"
+        );
+
+        assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
+        JsonNode stderrJson = parseJson(result.stderr());
+        assertThat(stderrJson.path("error").path("code").asText()).isEqualTo("MUTUALLY_EXCLUSIVE_OPTIONS");
+        assertThat(stderrJson.path("error").path("mutuallyExclusiveWith").toString()).contains("--dry-run");
     }
 
     private ExecutionResult execute(String... args) throws Exception {
@@ -462,25 +636,9 @@ class ActionDockCommandIntegrationTest {
         ActionDockCommand root = new ActionDockCommand(services);
         writeDefaultProfile(tempHome, server == null ? "http://localhost:8080" : server.baseUrl());
 
-        CommandLine commandLine = new CommandLine(root);
-        commandLine.setCaseInsensitiveEnumValuesAllowed(true);
+        CommandLine commandLine = ActionDockCliApplication.createCommandLine(root);
         commandLine.setOut(new PrintWriter(stdout, true, StandardCharsets.UTF_8));
         commandLine.setErr(new PrintWriter(stderr, true, StandardCharsets.UTF_8));
-        commandLine.setExecutionExceptionHandler((exception, cmd, parseResult) -> {
-            CliOutput output = root.output();
-            if (exception instanceof CliException cliException) {
-                cliException.writeTo(output);
-                return cliException.exitCode();
-            }
-            CliException cliException = CliException.transport(output, exception.getMessage() == null ? "Command execution failed" : exception.getMessage());
-            cliException.writeTo(output);
-            return cliException.exitCode();
-        });
-        commandLine.setParameterExceptionHandler((exception, args1) -> {
-            CliException cliException = CliException.validation(root.output(), exception.getMessage());
-            cliException.writeTo(root.output());
-            return cliException.exitCode();
-        });
 
         int exitCode = commandLine.execute(args);
         stdout.flush();

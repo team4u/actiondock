@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.util.UriUtils;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
@@ -24,6 +25,7 @@ import java.util.concurrent.Callable;
                 "Defaults: profile=default, baseUrl=http://localhost:8080, connectTimeoutMs=5000, readTimeoutMs=30000."
         },
         subcommands = {
+                DiscoverCommands.class,
                 ConfigCommands.class,
                 ScriptsCommands.class,
                 ExecutionsCommands.class,
@@ -65,6 +67,9 @@ public class ActionDockCommand implements Runnable {
 
     @Option(names = "--read-timeout-ms", description = "HTTP read timeout in milliseconds. Default: 30000.")
     Integer readTimeoutMs;
+
+    @Option(names = "--help-json", help = true, scope = ScopeType.INHERIT, description = "Print machine-readable command help as JSON and exit.")
+    boolean helpJson;
 
     @Spec
     CommandSpec spec;
@@ -197,6 +202,40 @@ public class ActionDockCommand implements Runnable {
         return emitLocalSuccess(objectMapper().valueToTree(value), message);
     }
 
+    int submitRequest(CliRequest request, AgentExecutionOptions options) {
+        return submitRequest(request, options, Map.of());
+    }
+
+    int submitRequest(CliRequest request, AgentExecutionOptions options, Map<String, Object> metadata) {
+        options.validate(output);
+        if (options.validateOnly()) {
+            return emitLocalSuccess(CliRequestPreview.validation(objectMapper(), options.command()), "Validation passed");
+        }
+        if (options.dryRun()) {
+            return emitLocalSuccess(CliRequestPreview.dryRun(objectMapper(), request, metadata), "Dry run");
+        }
+        return emit(executeRequest(request));
+    }
+
+    JsonNode executeRequest(CliRequest request) {
+        ActionDockApiClient client = apiClient();
+        return switch (request.method()) {
+            case "GET" -> client.get(request.path(), request.query());
+            case "DELETE" -> client.delete(request.path(), request.query());
+            case "POST" -> request.multipartBody() == null
+                    ? client.postJson(request.path(), request.query(), request.jsonBody())
+                    : client.postMultipart(
+                            request.path(),
+                            request.query(),
+                            request.multipartBody().fieldName(),
+                            request.multipartBody().file(),
+                            request.multipartBody().content()
+                    );
+            case "PUT" -> client.putJson(request.path(), request.query(), request.jsonBody());
+            default -> throw CliException.validation(output, "Unsupported HTTP method for CLI request");
+        };
+    }
+
     /**
      * 将 Map 序列化为 JSON 字符串，用于构建请求体。
      *
@@ -271,6 +310,10 @@ public class ActionDockCommand implements Runnable {
                         "executionId", executionId,
                         "lastStatus", currentStatus,
                         "timeoutSeconds", waitTimeoutSeconds
+                )),
+                CliErrorDetails.timeout(output, "actiondock executions submit", java.util.List.of(
+                        "actiondock executions get " + executionId,
+                        "actiondock executions submit --script-id <scriptId> --wait --wait-timeout-seconds " + Math.max(waitTimeoutSeconds * 2, waitTimeoutSeconds + 1)
                 ))
         );
     }

@@ -9,6 +9,7 @@ import picocli.CommandLine.ParentCommand;
 import picocli.CommandLine.Spec;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
@@ -35,12 +36,36 @@ class ExecutionsCommands implements Runnable {
     }
 
     @Command(name = "submit", mixinStandardHelpOptions = true, description = {
-            "Submit a script execution.",
-            "--script-id selects the current saved script definition. This command calls /api/executions, so the script does not need to be published and the current saved content is used.",
-            "Execution input can be provided with --input or --input-file, but not both. The top level must be a JSON object. If omitted, {} is used.",
-            "Use --file to provide the complete /api/executions request body as a JSON object. Use --file=- to read from stdin.",
-            "--mode=SYNC/ASYNC controls the server-side submit mode. --wait polls execution status by executionId until it is no longer PENDING/RUNNING or until timeout.",
-            "--response-view=RESULT returns the business result. DEBUG returns more detailed debug information."
+            "Purpose:",
+            "  Submit a script execution against the current saved script definition.",
+            "Required:",
+            "  --script-id <scriptId> unless --file is used.",
+            "Input:",
+            "  --input <jsonObject>",
+            "  --input-file <path|->",
+            "  --file <path|-> complete /api/executions request body.",
+            "Mutual exclusion:",
+            "  --input cannot be combined with --input-file.",
+            "  --file cannot be combined with --script-id, --input, --input-file, --mode, or --response-view.",
+            "Defaults:",
+            "  --mode SYNC",
+            "  --response-view RESULT",
+            "  --wait-timeout-seconds 30",
+            "  --poll-interval-ms 1000",
+            "Examples:",
+            "  actiondock executions submit --script-id hello --input '{\"name\":\"Alice\"}'",
+            "  echo '{\"name\":\"Alice\"}' | actiondock executions submit --script-id hello --input-file -",
+            "  actiondock executions submit --file request.json --wait",
+            "Input JSON shape:",
+            "  --input / --input-file: {\"name\":\"Alice\"}",
+            "  --file: {\"scriptId\":\"hello\",\"input\":{\"name\":\"Alice\"},\"mode\":\"SYNC\",\"responseView\":\"RESULT\"}",
+            "Output JSON shape:",
+            "  {\"status\":0,\"msg\":\"Success\",\"data\":{...}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input. Fix arguments or JSON and retry.",
+            "  status=4 means transport failure. Check base URL, token, and network.",
+            "  status=5 means server/business error. Inspect data.",
+            "  status=6 means wait timeout. Retry executions get <executionId> or increase --wait-timeout-seconds."
     })
     static class SubmitExecution implements Callable<Integer> {
         @ParentCommand
@@ -76,22 +101,41 @@ class ExecutionsCommands implements Runnable {
         @Option(names = "--poll-interval-ms", defaultValue = "1000", description = "Polling interval for execution status, in milliseconds. Only applies with --wait. Default: ${DEFAULT-VALUE}.")
         long pollIntervalMs;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without submitting it.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client or submitting.")
+        boolean validateOnly;
+
         /**
          * 提交脚本执行请求，可选择等待执行完成后返回结果。
          */
         @Override
         public Integer call() {
             ActionDockCommand root = parent.root();
-            ActionDockApiClient client = root.apiClient();
             String body;
             if (hasText(filePath)) {
                 if (hasText(scriptId) || hasText(input) || hasText(inputFile) || matched("--mode") || matched("--response-view")) {
-                    throw CliException.validation(root.output(), "--file cannot be combined with --script-id, --input, --input-file, --mode, or --response-view");
+                    throw CliException.validation(
+                            root.output(),
+                            "--file cannot be combined with --script-id, --input, --input-file, --mode, or --response-view",
+                            CliErrorDetails.mutuallyExclusive(root.output(), "actiondock executions submit", List.of("--file", "--script-id", "--input", "--input-file", "--mode", "--response-view"), List.of(
+                                    "actiondock executions submit --file request.json",
+                                    "actiondock executions submit --script-id <scriptId> --input '{}'"
+                            ))
+                    );
                 }
                 body = JsonInputSupport.readRequiredJsonObject(root.output(), root.objectMapper(), filePath, "Execution request body");
             } else {
                 if (!hasText(scriptId)) {
-                    throw CliException.validation(root.output(), "--script-id is required unless --file is used");
+                    throw CliException.validation(
+                            root.output(),
+                            "--script-id is required unless --file is used",
+                            CliErrorDetails.missingRequired(root.output(), "actiondock executions submit", List.of("--script-id"), List.of("--file"), List.of(
+                                    "actiondock executions submit --script-id <scriptId> --input '{}'",
+                                    "actiondock executions submit --file request.json"
+                            ))
+                    );
                 }
                 String resolvedInput = JsonInputSupport.readOptionalJsonObject(root.output(), root.objectMapper(), input, inputFile, "Execution input");
                 body = root.jsonObject(Map.of(
@@ -101,9 +145,14 @@ class ExecutionsCommands implements Runnable {
                         "responseView", responseView.name()
                 ));
             }
-            JsonNode response = client.postJson("/api/executions", Map.of(), body);
+            AgentExecutionOptions options = AgentExecutionOptions.of(dryRun, validateOnly, "actiondock executions submit");
+            CliRequest request = CliRequest.postJson("/api/executions", Map.of(), body);
+            if (dryRun || validateOnly) {
+                return root.submitRequest(request, options, Map.of("waitRequested", wait));
+            }
+            JsonNode response = root.executeRequest(request);
             if (wait) {
-                response = root.waitForExecution(client, response, waitTimeoutSeconds, pollIntervalMs);
+                response = root.waitForExecution(root.apiClient(), response, waitTimeoutSeconds, pollIntervalMs);
             }
             return root.emit(response);
         }
@@ -124,6 +173,12 @@ class ExecutionsCommands implements Runnable {
 
         @Parameters(index = "0", paramLabel = "<executionId>", description = "Execution record ID.")
         String executionId;
+
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without deleting.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client or deleting.")
+        boolean validateOnly;
 
         /**
          * 查询单条执行记录的详情。
@@ -163,12 +218,21 @@ class ExecutionsCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<executionId>", description = "Execution record ID.")
         String executionId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without deleting.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client or deleting.")
+        boolean validateOnly;
+
         /**
          * 删除单条执行记录。
          */
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().delete("/api/executions/" + parent.root().encodePath(executionId), Map.of()));
+            return parent.root().submitRequest(
+                    CliRequest.delete("/api/executions/" + parent.root().encodePath(executionId), Map.of()),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock executions delete")
+            );
         }
     }
 
@@ -180,6 +244,12 @@ class ExecutionsCommands implements Runnable {
         @Option(names = "--script-id", description = "Script ID whose execution records should be cleared. Required by the server.")
         String scriptId;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without clearing.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client or clearing.")
+        boolean validateOnly;
+
         /**
          * 批量清理指定脚本的执行记录。
          */
@@ -189,7 +259,10 @@ class ExecutionsCommands implements Runnable {
             if (scriptId != null && !scriptId.isBlank()) {
                 query.put("scriptId", scriptId);
             }
-            return parent.root().emit(parent.root().apiClient().delete("/api/executions", query));
+            return parent.root().submitRequest(
+                    CliRequest.delete("/api/executions", query),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock executions clear")
+            );
         }
     }
 }

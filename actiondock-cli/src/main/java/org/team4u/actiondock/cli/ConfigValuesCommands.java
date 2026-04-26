@@ -64,9 +64,18 @@ class ConfigValuesCommands implements Runnable {
     }
 
     @Command(name = "create", mixinStandardHelpOptions = true, description = {
-            "Create a global config value.",
-            "--file is required and must provide a JSON object matching the /api/config-values request body.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Create a global config value.",
+            "Required:",
+            "  --file <path|-> config value request JSON object.",
+            "Examples:",
+            "  actiondock config-values create --file value.json",
+            "Input JSON shape:",
+            "  {\"key\":\"openai.api_key\",\"value\":\"sk-...\",\"description\":\"OpenAI API key\"}",
+            "Output JSON shape:",
+            "  {\"status\":0,\"msg\":\"Success\",\"data\":{\"key\":\"openai.api_key\",...}}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class CreateConfigValue implements Callable<Integer> {
         @ParentCommand
@@ -75,17 +84,34 @@ class ConfigValuesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the config value request JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without creating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Config value request body");
-            return parent.root().emit(parent.root().apiClient().postJson("/api/config-values", Map.of(), body));
+            return parent.root().submitRequest(
+                    CliRequest.postJson("/api/config-values", Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock config-values create")
+            );
         }
     }
 
     @Command(name = "update", mixinStandardHelpOptions = true, description = {
-            "Update a global config value.",
-            "--file is required and must provide a JSON object matching the /api/config-values/{key} request body.",
-            "Use --file=- to read from stdin."
+            "Purpose:",
+            "  Update a global config value.",
+            "Required:",
+            "  <key>",
+            "  --file <path|-> config value request JSON object.",
+            "Examples:",
+            "  actiondock config-values update openai.api_key --file value.json",
+            "Input JSON shape:",
+            "  {\"key\":\"openai.api_key\",\"value\":\"sk-...\",\"description\":\"OpenAI API key\"}",
+            "Recoverable errors:",
+            "  status=2 means invalid CLI input or JSON. status=5 means server validation failed."
     })
     static class UpdateConfigValue implements Callable<Integer> {
         @ParentCommand
@@ -97,14 +123,19 @@ class ConfigValuesCommands implements Runnable {
         @Option(names = "--file", required = true, description = "Path to the config value request JSON file. Use - to read from stdin.")
         String filePath;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without updating.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments and JSON payload without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
             String body = JsonInputSupport.readRequiredJsonObject(parent.root().output(), parent.root().objectMapper(), filePath, "Config value request body");
-            return parent.root().emit(parent.root().apiClient().putJson(
-                    "/api/config-values/" + parent.root().encodePath(key),
-                    Map.of(),
-                    body
-            ));
+            return parent.root().submitRequest(
+                    CliRequest.putJson("/api/config-values/" + parent.root().encodePath(key), Map.of(), body),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock config-values update")
+            );
         }
     }
 
@@ -116,9 +147,18 @@ class ConfigValuesCommands implements Runnable {
         @Parameters(index = "0", paramLabel = "<key>", description = "Config key.")
         String key;
 
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without deleting.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
         @Override
         public Integer call() {
-            return parent.root().emit(parent.root().apiClient().delete("/api/config-values/" + parent.root().encodePath(key), Map.of()));
+            return parent.root().submitRequest(
+                    CliRequest.delete("/api/config-values/" + parent.root().encodePath(key), Map.of()),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock config-values delete")
+            );
         }
     }
 }
