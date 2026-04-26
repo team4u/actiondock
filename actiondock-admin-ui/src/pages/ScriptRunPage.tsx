@@ -12,6 +12,7 @@ import {
   Radio,
   Space,
   Spin,
+  Tabs,
   Tag,
   Typography,
   message
@@ -23,8 +24,10 @@ import { useColorMode } from "../contexts/ColorModeContext";
 import {
   ApiError,
   executePublishedScript,
+  getExecution,
   getPublishedScript
 } from "../api";
+import { BatchRunPanel } from "../components/BatchRunPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { ExecutionLogPanel } from "../components/ExecutionLogPanel";
 import { usePollingExecution } from "../hooks/usePollingExecution";
@@ -111,6 +114,7 @@ export function ScriptRunPage() {
     [supportedInputFields]
   );
   const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
+  const canBatchExecute = Boolean(script?.status === "PUBLISHED");
   const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
   const backPath = "/tools";
 
@@ -311,154 +315,195 @@ export function ScriptRunPage() {
           <StatusCallout title={pageError.title} description={pageError.description} />
         ) : null}
 
-        <div className="run-page__layout">
-          <Card
-            className="run-panel run-panel--input"
-            title="输入"
-            extra={
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                loading={executing}
-                disabled={!canExecute}
-                onClick={() => void handleExecute()}
-              >
-                执行
-              </Button>
-            }
-          >
-            {unsupportedInputFields.length > 0 ? (
-              <Alert
-                type="warning"
-                showIcon
-                message="当前脚本含复杂输入结构"
-                description={`正式页暂不支持这些字段类型：${unsupportedInputFields.join("、")}`}
-                style={{ marginBottom: 14 }}
-              />
-            ) : null}
-
-            {validationError ? (
-              <Alert
-                type="error"
-                showIcon
-                message="输入参数校验失败"
-                description={validationError.fieldErrors.map((item) => item.message).join("；")}
-                style={{ marginBottom: 14 }}
-              />
-            ) : null}
-
-            <Alert
-              type="info"
-              showIcon
-              message="字符串输入支持 ${config.xxx}；脚本内部也可通过只读变量 config 读取全局配置值。"
-              style={{ marginBottom: 14 }}
-            />
-
-            <Radio.Group
-              value={executionMode}
-              optionType="button"
-              buttonStyle="solid"
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setExecutionMode(event.target.value as SubmitMode)}
-              options={[
-                { label: "同步执行", value: "SYNC" },
-                { label: "异步执行", value: "ASYNC" }
-              ]}
-              style={{ marginBottom: 16 }}
-            />
-
-            {supportedInputFields.length === 0 ? (
-              <div className="run-panel__empty">
-                <Text strong>该脚本无需输入参数</Text>
-                <Text type="secondary">点击“执行”后会以空对象提交。</Text>
-              </div>
-            ) : (
-              <Form form={form} layout="vertical" className="run-form">
-                {supportedInputFields.map((field) => {
-                  const supplement = formatSchemaFieldSupplement(field);
-
-                  return (
-                    <div key={field.name} className="run-field">
-                      <div className="run-field__header">
-                        <div>
-                          <Text className="run-field__label">{field.label}</Text>
-                          <Text className="run-field__name">{field.name}</Text>
-                        </div>
-                        {field.required ? <Tag color="red">必填</Tag> : <Tag>选填</Tag>}
-                      </div>
-                      <Form.Item
-                        name={field.name}
-                        rules={buildSchemaFieldRules(field)}
-                        valuePropName={getSchemaFieldValuePropName(field)}
-                        extra={supplement ?? undefined}
-                        style={{ marginBottom: 0 }}
+        <Tabs
+          defaultActiveKey="single"
+          items={[
+            {
+              key: "single",
+              label: "单次运行",
+              children: (
+                <div className="run-page__layout">
+                  <Card
+                    className="run-panel run-panel--input"
+                    title="输入"
+                    extra={
+                      <Button
+                        type="primary"
+                        icon={<PlayCircleOutlined />}
+                        loading={executing}
+                        disabled={!canExecute}
+                        onClick={() => void handleExecute()}
                       >
-                        {renderSchemaFieldInput(field, {
-                          booleanLabels: {
-                            checked: "是",
-                            unchecked: "否"
-                          }
-                        })}
-                      </Form.Item>
-                    </div>
-                  );
-                })}
-              </Form>
-            )}
-          </Card>
+                        执行
+                      </Button>
+                    }
+                  >
+                    {unsupportedInputFields.length > 0 ? (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="当前脚本含复杂输入结构"
+                        description={`正式页暂不支持这些字段类型：${unsupportedInputFields.join("、")}`}
+                        style={{ marginBottom: 14 }}
+                      />
+                    ) : null}
 
-          <Card className="run-panel run-panel--output" title="结果">
-            {!executionResult ? (
-              <div className="run-panel__empty">
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="执行后这里会显示正式输出"
-                />
-              </div>
-            ) : (
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <div className="run-result__summary">
-                  {pollingExecutionId ? (
-                    <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
-                  ) : (
-                    <>
-                      <Text type="secondary">状态：</Text>
-                      <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
-                        {executionResult.status}
-                      </Tag>
-                      <Text type="secondary">完成时间：</Text>
-                      <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
-                    </>
-                  )}
-                </div>
+                    {validationError ? (
+                      <Alert
+                        type="error"
+                        showIcon
+                        message="输入参数校验失败"
+                        description={validationError.fieldErrors.map((item) => item.message).join("；")}
+                        style={{ marginBottom: 14 }}
+                      />
+                    ) : null}
 
-                <ErrorDetailPanel
-                  title="执行失败"
-                  message={executionResult.errorMessage}
-                  detail={executionResult.errorDetail}
-                />
+                    <Alert
+                      type="info"
+                      showIcon
+                      message="字符串输入支持 ${config.xxx}；脚本内部也可通过只读变量 config 读取全局配置值。"
+                      style={{ marginBottom: 14 }}
+                    />
 
-                {hasStructuredOutput ? (
-                  <div className="run-output-list">
-                    {outputFields.map((field) => (
-                      <div key={field.name} className="run-output-item">
-                        <Text className="run-output-item__label">{field.label}</Text>
-                        <Text className="run-output-item__value">
-                          {formatOutputValue(executionResult.output?.[field.name])}
-                        </Text>
+                    <Radio.Group
+                      value={executionMode}
+                      optionType="button"
+                      buttonStyle="solid"
+                      onChange={(event: React.ChangeEvent<HTMLInputElement>) => setExecutionMode(event.target.value as SubmitMode)}
+                      options={[
+                        { label: "同步执行", value: "SYNC" },
+                        { label: "异步执行", value: "ASYNC" }
+                      ]}
+                      style={{ marginBottom: 16 }}
+                    />
+
+                    {supportedInputFields.length === 0 ? (
+                      <div className="run-panel__empty">
+                        <Text strong>该脚本无需输入参数</Text>
+                        <Text type="secondary">点击“执行”后会以空对象提交。</Text>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <pre className="json-preview run-json-preview">
-                    {prettyJson(executionResult.output)}
-                  </pre>
-                )}
+                    ) : (
+                      <Form form={form} layout="vertical" className="run-form">
+                        {supportedInputFields.map((field) => {
+                          const supplement = formatSchemaFieldSupplement(field);
 
-                <ExecutionLogPanel logs={executionResult.logs} />
-              </Space>
-            )}
-          </Card>
-        </div>
+                          return (
+                            <div key={field.name} className="run-field">
+                              <div className="run-field__header">
+                                <div>
+                                  <Text className="run-field__label">{field.label}</Text>
+                                  <Text className="run-field__name">{field.name}</Text>
+                                </div>
+                                {field.required ? <Tag color="red">必填</Tag> : <Tag>选填</Tag>}
+                              </div>
+                              <Form.Item
+                                name={field.name}
+                                rules={buildSchemaFieldRules(field)}
+                                valuePropName={getSchemaFieldValuePropName(field)}
+                                extra={supplement ?? undefined}
+                                style={{ marginBottom: 0 }}
+                              >
+                                {renderSchemaFieldInput(field, {
+                                  booleanLabels: {
+                                    checked: "是",
+                                    unchecked: "否"
+                                  }
+                                })}
+                              </Form.Item>
+                            </div>
+                          );
+                        })}
+                      </Form>
+                    )}
+                  </Card>
+
+                  <Card className="run-panel run-panel--output" title="结果">
+                    {!executionResult ? (
+                      <div className="run-panel__empty">
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="执行后这里会显示正式输出"
+                        />
+                      </div>
+                    ) : (
+                      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                        <div className="run-result__summary">
+                          {pollingExecutionId ? (
+                            <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
+                          ) : (
+                            <>
+                              <Text type="secondary">状态：</Text>
+                              <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
+                                {executionResult.status}
+                              </Tag>
+                              <Text type="secondary">完成时间：</Text>
+                              <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
+                            </>
+                          )}
+                        </div>
+
+                        <ErrorDetailPanel
+                          title="执行失败"
+                          message={executionResult.errorMessage}
+                          detail={executionResult.errorDetail}
+                        />
+
+                        {hasStructuredOutput ? (
+                          <div className="run-output-list">
+                            {outputFields.map((field) => (
+                              <div key={field.name} className="run-output-item">
+                                <Text className="run-output-item__label">{field.label}</Text>
+                                <Text className="run-output-item__value">
+                                  {formatOutputValue(executionResult.output?.[field.name])}
+                                </Text>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <pre className="json-preview run-json-preview">
+                            {prettyJson(executionResult.output)}
+                          </pre>
+                        )}
+
+                        <ExecutionLogPanel logs={executionResult.logs} />
+                      </Space>
+                    )}
+                  </Card>
+                </div>
+              )
+            },
+            {
+              key: "batch",
+              label: "批量运行",
+              children: script ? (
+                <BatchRunPanel
+                  surface="published"
+                  scriptId={script.id}
+                  scriptName={script.name}
+                  inputSchema={script.inputSchema}
+                  outputSchema={script.outputSchema}
+                  supportedFields={supportedInputFields}
+                  supportedOutputFields={outputFields}
+                  unsupportedFields={unsupportedInputFields}
+                  editorTheme={colorMode === "dark" ? "vs-dark" : "vs-light"}
+                  messageApi={messageApi}
+                  submitExecution={(input, mode) =>
+                    executePublishedScript(script.id, {
+                      input,
+                      mode,
+                      responseView: "RESULT"
+                    })
+                  }
+                  fetchExecution={getExecution}
+                  canExecute={canBatchExecute}
+                  disabledReason={!canBatchExecute ? "当前脚本尚未发布" : undefined}
+                />
+              ) : (
+                <Empty description="脚本加载后可进行批量运行" />
+              )
+            }
+          ]}
+        />
       </div>
     </>
   );

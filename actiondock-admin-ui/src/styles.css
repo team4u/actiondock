@@ -260,6 +260,17 @@ a {
   margin-bottom: 8px;
 }
 
+.batch-run-panel__mapping-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-panel-end));
+}
+
 .schema-field-card__index {
   width: 24px;
   height: 24px;

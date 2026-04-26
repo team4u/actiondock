@@ -31,6 +31,7 @@ import {
 import type { MenuProps } from "antd";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { executeScript, getExecution } from "../../api";
 import { getApiKey } from "../../auth";
 import { ScopeTag } from "../../components/ScopeTag";
 import { Col } from "../../components/SafeCol";
@@ -544,6 +545,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           executionValidationError={execution.executionValidationError}
                           supportedFields={execution.supportedFields}
                           unsupportedFields={execution.unsupportedFields}
+                          supportedOutputFields={execution.supportedOutputFields}
                           executing={execution.executing}
                           currentExecution={execution.currentExecution}
                           executionHistory={execution.executionHistory}
@@ -561,6 +563,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           onExecutionHistoryRowClick={(record) => execution.setCurrentExecution(record)}
                           onRefillCurrentExecutionInput={execution.handleRefillExecutionInput}
                           activeExecutionId={execution.currentExecution?.id ?? null}
+                          messageApi={messageApi}
+                          submitBatchExecution={(input, mode) =>
+                            executeScript({
+                              scriptId: editor.currentScript!.id,
+                              input,
+                              mode,
+                              responseView: "RESULT"
+                            })
+                          }
+                          fetchBatchExecution={getExecution}
+                          onBatchSessionFinished={() => execution.loadExecutionHistory(editor.currentScript!.id)}
                         />
                       )
                     }

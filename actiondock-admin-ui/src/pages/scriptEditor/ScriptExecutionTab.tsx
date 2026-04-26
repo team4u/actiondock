@@ -1,14 +1,28 @@
-import { Alert, Button, Card, Empty, Radio, Row, Space, Spin, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, Empty, Radio, Row, Space, Table, Tabs, Tag, Typography } from "antd";
+import type { MessageInstance } from "antd/es/message/interface";
+import type { ColumnsType } from "antd/es/table";
+import type { FormInstance } from "antd";
+import {
+  DeleteOutlined,
+  HistoryOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined
+} from "@ant-design/icons";
 import { Col } from "../../components/SafeCol";
-import { DeleteOutlined, HistoryOutlined, PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../../components/ExecutionResultCard";
 import { SchemaObjectEditor } from "../../components/SchemaObjectEditor";
-import type { ColumnsType } from "antd/es/table";
-import type { FormInstance } from "antd";
-import type { ExecutionRecord, ExecutionStatus, ScriptDefinition, SubmitMode, ValidationErrorData } from "../../types";
-import { formatDateTime, getExecutionStatusColor, isExecutionActive } from "../../utils";
+import { BatchRunPanel } from "../../components/BatchRunPanel";
 import type { SchemaFieldDefinition } from "../../schema";
+import { formatDateTime, getExecutionStatusColor, isExecutionActive } from "../../utils";
+import type {
+  ExecutionRecord,
+  ExecutionStatus,
+  ScriptDefinition,
+  SubmitMode,
+  ValidationErrorData
+} from "../../types";
+import type { BatchExecutionFetcher, BatchExecutionSubmitter } from "../../batch/types";
 import type { ExecutionInputMode } from "./types";
 
 const { Text } = Typography;
@@ -29,6 +43,7 @@ interface ScriptExecutionTabProps {
   executionValidationError: ValidationErrorData | null;
   supportedFields: SchemaFieldDefinition[];
   unsupportedFields: string[];
+  supportedOutputFields: SchemaFieldDefinition[];
   executing: boolean;
   currentExecution: ExecutionRecord | null;
   executionHistory: ExecutionRecord[];
@@ -46,6 +61,10 @@ interface ScriptExecutionTabProps {
   onExecutionHistoryRowClick: (record: ExecutionRecord) => void;
   onRefillCurrentExecutionInput: (record: ExecutionRecord) => void;
   activeExecutionId: string | null;
+  messageApi: MessageInstance;
+  submitBatchExecution: BatchExecutionSubmitter;
+  fetchBatchExecution: BatchExecutionFetcher;
+  onBatchSessionFinished?: () => void | Promise<void>;
 }
 
 export function ScriptExecutionTab({
@@ -60,6 +79,7 @@ export function ScriptExecutionTab({
   executionValidationError,
   supportedFields,
   unsupportedFields,
+  supportedOutputFields,
   executing,
   currentExecution,
   executionHistory,
@@ -76,7 +96,11 @@ export function ScriptExecutionTab({
   onRefreshHistory,
   onExecutionHistoryRowClick,
   onRefillCurrentExecutionInput,
-  activeExecutionId
+  activeExecutionId,
+  messageApi,
+  submitBatchExecution,
+  fetchBatchExecution,
+  onBatchSessionFinished
 }: ScriptExecutionTabProps) {
   const historyColumns: ColumnsType<ExecutionRecord> = [
     {
@@ -91,9 +115,7 @@ export function ScriptExecutionTab({
       dataIndex: "status",
       key: "status",
       width: 120,
-      render: (status: ExecutionStatus) => (
-        <Tag color={getExecutionStatusColor(status)}>{status}</Tag>
-      )
+      render: (status: ExecutionStatus) => <Tag color={getExecutionStatusColor(status)}>{status}</Tag>
     },
     {
       title: "方式",
@@ -157,170 +179,198 @@ export function ScriptExecutionTab({
   ];
 
   return (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Row gutter={[16, 16]} align="stretch" className="equal-height-row">
-        <Col xs={24} xl={10} className="equal-height-col">
-          <Card
-            type="inner"
-            title="执行入参"
-            extra={<Text type="secondary">根据 inputSchema 自动生成</Text>}
-            className="equal-height-card"
-          >
+    <Tabs
+      defaultActiveKey="single"
+      items={[
+        {
+          key: "single",
+          label: "单次运行",
+          children: (
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
-              {executionValidationError && (
-                <Alert
-                  type="error"
-                  showIcon
-                  message="参数校验失败"
-                  description={
-                    <div>
-                      {executionValidationError.fieldErrors.map((fieldError) => (
-                        <div key={`${fieldError.field}-${fieldError.reason}`}>
-                          <Text code>{fieldError.field}</Text>
-                          {" - "}
-                          {fieldError.message}
-                        </div>
-                      ))}
-                    </div>
+              <Row gutter={[16, 16]} align="stretch" className="equal-height-row">
+                <Col xs={24} xl={10} className="equal-height-col">
+                  <Card
+                    type="inner"
+                    title="执行入参"
+                    extra={<Text type="secondary">根据 inputSchema 自动生成</Text>}
+                    className="equal-height-card"
+                  >
+                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                      {executionValidationError ? (
+                        <Alert
+                          type="error"
+                          showIcon
+                          message="参数校验失败"
+                          description={
+                            <div>
+                              {executionValidationError.fieldErrors.map((fieldError) => (
+                                <div key={`${fieldError.field}-${fieldError.reason}`}>
+                                  <Text code>{fieldError.field}</Text>
+                                  {" - "}
+                                  {fieldError.message}
+                                </div>
+                              ))}
+                            </div>
+                          }
+                        />
+                      ) : null}
+
+                      <div className="script-editor-page__execution-toolbar">
+                        <Radio.Group
+                          value={executionMode}
+                          optionType="button"
+                          buttonStyle="solid"
+                          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                            onExecutionModeChange(event.target.value as SubmitMode)
+                          }
+                          options={[
+                            { label: "同步执行", value: "SYNC" },
+                            { label: "异步执行", value: "ASYNC" }
+                          ]}
+                        />
+
+                        <Space size={12} wrap className="script-editor-page__execution-actions">
+                          <Button icon={<ReloadOutlined />} onClick={onResetExecutionInput}>
+                            重置
+                          </Button>
+                          <Button
+                            type="primary"
+                            icon={<PlayCircleOutlined />}
+                            onClick={() => void onExecute()}
+                            loading={executing}
+                          >
+                            执行
+                          </Button>
+                        </Space>
+                      </div>
+
+                      <SchemaObjectEditor
+                        form={executionForm}
+                        supportedFields={supportedFields}
+                        unsupportedFields={unsupportedFields}
+                        inputMode={executionInputMode}
+                        onInputModeChange={onExecutionInputModeChange}
+                        jsonText={executionJsonInput}
+                        onJsonTextChange={onExecutionJsonInputChange}
+                        jsonLabel="执行入参 JSON"
+                        jsonExtra="直接输入 JSON 对象执行，不依赖 inputSchema。"
+                        noSchemaExtra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
+                        editorTheme={editorTheme}
+                      />
+                    </Space>
+                  </Card>
+                </Col>
+
+                <Col xs={24} xl={14} className="equal-height-col">
+                  {currentExecution ? (
+                    <ExecutionResultCard
+                      execution={currentExecution}
+                      inputSchema={currentScript?.inputSchema}
+                      outputSchema={currentScript?.outputSchema}
+                      showTriggerSource={true}
+                      headerActions={
+                        <Button
+                          icon={<HistoryOutlined />}
+                          onClick={() => onRefillCurrentExecutionInput(currentExecution)}
+                        >
+                          回填本次输入
+                        </Button>
+                      }
+                      titleExtra={
+                        <Space size={8} wrap className="execution-result-card__header-extra">
+                          <Text code className="execution-result-card__header-id">
+                            {currentExecution.id}
+                          </Text>
+                          <Tag color={getExecutionStatusColor(currentExecution.status)}>
+                            {currentExecution.status}
+                          </Tag>
+                        </Space>
+                      }
+                    />
+                  ) : (
+                    <Card type="inner" title="执行结果" className="equal-height-card">
+                      <Empty description="执行后将在这里查看结果详情。" />
+                    </Card>
+                  )}
+                </Col>
+              </Row>
+
+              <Card
+                type="inner"
+                title="历史执行结果"
+                extra={
+                  <Space className="history-card-actions" size="small" wrap>
+                    {pollingExecutionId ? (
+                      <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
+                    ) : null}
+                    <Button icon={<ReloadOutlined />} onClick={onRefreshHistory} loading={historyLoading}>
+                      刷新记录
+                    </Button>
+                    <ConfirmDangerAction
+                      title="确认清空当前脚本的历史执行结果？"
+                      okText="清空"
+                      onConfirm={() => void onClearExecutionHistory()}
+                      loading={clearingExecutionHistory}
+                      disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
+                    >
+                      <Button
+                        danger
+                        icon={<DeleteOutlined />}
+                        disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        全部删除
+                      </Button>
+                    </ConfirmDangerAction>
+                  </Space>
+                }
+              >
+                <Table
+                  className="execution-history-table"
+                  rowKey="id"
+                  loading={historyLoading}
+                  columns={historyColumns}
+                  dataSource={executionHistory}
+                  pagination={{ pageSize: 5 }}
+                  scroll={{ x: 900 }}
+                  locale={{ emptyText: "当前脚本暂无执行记录" }}
+                  onRow={(record: ExecutionRecord) => ({
+                    onClick: () => onExecutionHistoryRowClick(record)
+                  })}
+                  rowClassName={(record: ExecutionRecord) =>
+                    record.id === activeExecutionId
+                      ? "execution-history-row execution-history-row-active"
+                      : "execution-history-row"
                   }
                 />
-              )}
-
-              <div className="script-editor-page__execution-toolbar">
-                <Radio.Group
-                  value={executionMode}
-                  optionType="button"
-                  buttonStyle="solid"
-                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => onExecutionModeChange(event.target.value as SubmitMode)}
-                  options={[
-                    { label: "同步执行", value: "SYNC" },
-                    { label: "异步执行", value: "ASYNC" }
-                  ]}
-                />
-
-                <Space size={12} wrap className="script-editor-page__execution-actions">
-                  <Button icon={<ReloadOutlined />} onClick={onResetExecutionInput}>
-                    重置
-                  </Button>
-                  <Button
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    onClick={() => void onExecute()}
-                    loading={executing}
-                  >
-                    执行
-                  </Button>
-                </Space>
-              </div>
-
-              <SchemaObjectEditor
-                form={executionForm}
-                supportedFields={supportedFields}
-                unsupportedFields={unsupportedFields}
-                inputMode={executionInputMode}
-                onInputModeChange={onExecutionInputModeChange}
-                jsonText={executionJsonInput}
-                onJsonTextChange={onExecutionJsonInputChange}
-                jsonLabel="执行入参 JSON"
-                jsonExtra="直接输入 JSON 对象执行，不依赖 inputSchema。"
-                noSchemaExtra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
-                editorTheme={editorTheme}
-              />
+              </Card>
             </Space>
-          </Card>
-        </Col>
-
-        <Col xs={24} xl={14} className="equal-height-col">
-          {currentExecution ? (
-            <ExecutionResultCard
-              execution={currentExecution}
+          )
+        },
+        {
+          key: "batch",
+          label: "批量运行",
+          children: (
+            <BatchRunPanel
+              surface="editor"
+              scriptId={currentScript?.id ?? ""}
+              scriptName={currentScript?.name ?? "script"}
               inputSchema={currentScript?.inputSchema}
               outputSchema={currentScript?.outputSchema}
-              showTriggerSource={true}
-              headerActions={
-                <Button
-                  icon={<HistoryOutlined />}
-                  onClick={() => onRefillCurrentExecutionInput(currentExecution)}
-                >
-                  回填本次输入
-                </Button>
-              }
-              titleExtra={
-                currentExecution ? (
-                  <Space size={8} wrap className="execution-result-card__header-extra">
-                    <Text code className="execution-result-card__header-id">
-                      {currentExecution.id}
-                    </Text>
-                    <Tag color={getExecutionStatusColor(currentExecution.status)}>
-                      {currentExecution.status}
-                    </Tag>
-                  </Space>
-                ) : (
-                  <Text type="secondary">暂无结果</Text>
-                )
-              }
+              supportedFields={supportedFields}
+              supportedOutputFields={supportedOutputFields}
+              unsupportedFields={unsupportedFields}
+              editorTheme={editorTheme}
+              messageApi={messageApi}
+              submitExecution={submitBatchExecution}
+              fetchExecution={fetchBatchExecution}
+              canExecute={Boolean(currentScript?.id)}
+              disabledReason={currentScript?.id ? undefined : "请先保存脚本"}
+              onSessionFinished={onBatchSessionFinished}
             />
-          ) : (
-            <Card type="inner" title="执行结果" className="equal-height-card">
-              <Empty description="执行后将在这里查看结果详情。" />
-            </Card>
-          )}
-        </Col>
-      </Row>
-
-      <Card
-        type="inner"
-        title="历史执行结果"
-        extra={
-          <Space className="history-card-actions" size="small" wrap>
-            {pollingExecutionId && (
-              <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
-            )}
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={onRefreshHistory}
-              loading={historyLoading}
-            >
-              刷新记录
-            </Button>
-            <ConfirmDangerAction
-              title="确认清空当前脚本的历史执行结果？"
-              okText="清空"
-              onConfirm={() => void onClearExecutionHistory()}
-              loading={clearingExecutionHistory}
-              disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
-            >
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
-                onClick={(event) => event.stopPropagation()}
-              >
-                全部删除
-              </Button>
-            </ConfirmDangerAction>
-          </Space>
+          )
         }
-      >
-        <Table
-          className="execution-history-table"
-          rowKey="id"
-          loading={historyLoading}
-          columns={historyColumns}
-          dataSource={executionHistory}
-          pagination={{ pageSize: 5 }}
-          scroll={{ x: 900 }}
-          locale={{ emptyText: "当前脚本暂无执行记录" }}
-          onRow={(record: ExecutionRecord) => ({
-            onClick: () => onExecutionHistoryRowClick(record)
-          })}
-          rowClassName={(record: ExecutionRecord) =>
-            record.id === activeExecutionId
-              ? "execution-history-row execution-history-row-active"
-              : "execution-history-row"
-          }
-        />
-      </Card>
-    </Space>
+      ]}
+    />
   );
 }
