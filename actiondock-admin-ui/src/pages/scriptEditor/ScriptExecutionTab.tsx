@@ -13,6 +13,7 @@ import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../../components/ExecutionResultCard";
 import { SchemaObjectEditor } from "../../components/SchemaObjectEditor";
 import { BatchRunPanel } from "../../components/BatchRunPanel";
+import type { ReactNode } from "react";
 import type { SchemaFieldDefinition } from "../../schema";
 import { formatDateTime, getExecutionStatusColor, isExecutionActive } from "../../utils";
 import type {
@@ -65,6 +66,7 @@ interface ScriptExecutionTabProps {
   submitBatchExecution: BatchExecutionSubmitter;
   fetchBatchExecution: BatchExecutionFetcher;
   onBatchSessionFinished?: () => void | Promise<void>;
+  presetBar: ReactNode;
 }
 
 export function ScriptExecutionTab({
@@ -100,7 +102,8 @@ export function ScriptExecutionTab({
   messageApi,
   submitBatchExecution,
   fetchBatchExecution,
-  onBatchSessionFinished
+  onBatchSessionFinished,
+  presetBar
 }: ScriptExecutionTabProps) {
   const historyColumns: ColumnsType<ExecutionRecord> = [
     {
@@ -220,7 +223,7 @@ export function ScriptExecutionTab({
                           value={executionMode}
                           optionType="button"
                           buttonStyle="solid"
-                          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                          onChange={(event) =>
                             onExecutionModeChange(event.target.value as SubmitMode)
                           }
                           options={[
@@ -243,6 +246,8 @@ export function ScriptExecutionTab({
                           </Button>
                         </Space>
                       </div>
+
+                      {presetBar}
 
                       <SchemaObjectEditor
                         form={executionForm}

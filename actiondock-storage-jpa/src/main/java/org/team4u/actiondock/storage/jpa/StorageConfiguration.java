@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
+import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
@@ -13,6 +14,7 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.storage.jpa.adapter.JpaConfigValueRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaExecutionPresetRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaExecutionRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaApiAccessTokenRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaPluginRegistryRepositoryAdapter;
@@ -22,6 +24,7 @@ import org.team4u.actiondock.storage.jpa.adapter.JpaScriptScheduleRepositoryAdap
 import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryToolInstallationRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.json.JacksonJsonCodec;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataConfigValueRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionPresetEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataApiAccessTokenRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataPluginRegistrationRepository;
@@ -132,5 +135,17 @@ public class StorageConfiguration {
     @Bean
     public RepositoryToolInstallationRepository repositoryToolInstallationRepository(SpringDataRepositoryToolInstallationRepository repository) {
         return new JpaRepositoryToolInstallationRepositoryAdapter(repository);
+    }
+
+    /**
+     * 注册执行参数预设备储适配器。
+     *
+     * @param repository Spring Data 执行参数预设实体仓储
+     * @param jsonCodec JSON 编解码器
+     * @return 执行参数预设备储端口实现
+     */
+    @Bean
+    public ExecutionPresetRepository executionPresetRepository(SpringDataExecutionPresetEntityRepository repository, JsonCodec jsonCodec) {
+        return new JpaExecutionPresetRepositoryAdapter(repository, jsonCodec);
     }
 }

@@ -36,7 +36,8 @@ import { executeScript, getExecution } from "../../api";
 import { getApiKey } from "../../auth";
 import { ScopeTag } from "../../components/ScopeTag";
 import { Col } from "../../components/SafeCol";
-import { buildStandardCommandPresets } from "../../commands";
+import { ExecutionPresetBar } from "../../components/ExecutionPresetBar";
+import { buildStandardCommandPresets, buildExecutionInputFromValues } from "../../commands";
 import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
@@ -55,7 +56,7 @@ import {
   buildToolDetailPowerShellCommand,
   resolveExecutionCommandInput
 } from "../../commands";
-import { formatDateTime } from "../../utils";
+import { formatDateTime, parseJsonText } from "../../utils";
 import { useCopyMessage } from "../../hooks/useCopyMessage";
 import { DevelopmentSyncTag } from "../../components/domain/DevelopmentSyncTag";
 import { ScriptDiffDrawer } from "../../components/diff/ScriptDiffDrawer";
@@ -137,6 +138,30 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   // --- Execution command input ---
   const watchedExecutionValues = Form.useWatch([], executionForm) as Record<string, unknown> | undefined;
+  const currentExecutionInput = useMemo(() => {
+    if (!editor.currentScript) return null;
+    try {
+      if (execution.executionInputMode === "SCHEMA" && execution.supportsSchemaForm) {
+        return buildExecutionInputFromValues(
+          execution.supportedFields,
+          executionForm.getFieldsValue(true) as Record<string, unknown>
+        );
+      }
+      return parseJsonText(execution.executionJsonInput, "执行入参");
+    } catch {
+      return null;
+    }
+  }, [editor.currentScript, execution.executionInputMode, execution.supportsSchemaForm,
+      execution.supportedFields, execution.executionJsonInput, watchedExecutionValues]);
+
+  const executionPresetBar = (
+    <ExecutionPresetBar
+      scriptId={editor.currentScript?.id}
+      currentInput={currentExecutionInput}
+      onLoadPreset={execution.handleLoadPreset}
+    />
+  );
+
   const commandInput = useMemo(
     () => resolveExecutionCommandInput({
       fields: execution.supportedFields,
@@ -693,6 +718,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           }
                           fetchBatchExecution={getExecution}
                           onBatchSessionFinished={() => execution.loadExecutionHistory(editor.currentScript!.id)}
+                          presetBar={executionPresetBar}
                         />
                       )
                     }

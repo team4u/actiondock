@@ -432,3 +432,17 @@ export interface DevelopmentStatus {
   remoteVersion?: string;
   sourceSyncedAt?: string;
 }
+
+export interface ExecutionPreset {
+  id: string;
+  scriptId: string;
+  name: string;
+  input: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ExecutionPresetUpsertRequest {
+  name: string;
+  input: Record<string, unknown>;
+}
