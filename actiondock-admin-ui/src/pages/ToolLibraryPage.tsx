@@ -619,7 +619,7 @@ export function ToolLibraryPage() {
               allowClear
               placeholder="搜索名称、ID、描述、维护人或来源"
               value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSearchText(event.target.value)}
               style={{ minWidth: 220, flex: "1 1 280px" }}
             />
             <Select<SourceFilter>

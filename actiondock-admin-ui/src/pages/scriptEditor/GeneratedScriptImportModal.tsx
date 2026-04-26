@@ -38,7 +38,7 @@ export function GeneratedScriptImportModal({
         <Input.TextArea
           className="generated-script-textarea"
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)}
           placeholder={`支持两种粘贴方式，例如：\n\n1. 固定格式\n### 脚本 ID\nhello-groovy\n\n### 脚本名称\nHello Groovy\n\n### Groovy 脚本\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\`\n\n### Input Schema（输入参数）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n### Output Schema（输出结果）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n2. 直接粘贴源码\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\``}
           autoSize={{ minRows: 14, maxRows: 22 }}
         />

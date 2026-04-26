@@ -20,7 +20,6 @@ import {
   Dropdown,
   Form,
   Row,
-  Col,
   Space,
   Spin,
   Tabs,
@@ -32,7 +31,9 @@ import {
 import type { MenuProps } from "antd";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { getApiKey } from "../../auth";
 import { ScopeTag } from "../../components/ScopeTag";
+import { Col } from "../../components/SafeCol";
 import { buildStandardCommandPresets } from "../../commands";
 import {
   buildExecuteCliCommand,
@@ -129,43 +130,44 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   // --- Command presets ---
   const origin = window.location.origin;
+  const apiKey = getApiKey() || undefined;
 
   const detailCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
     return buildStandardCommandPresets({
       keyPrefix: "detail",
-      httpBash: buildScriptDetailCurlCommand({ origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildScriptDetailPowerShellCommand({ origin, scriptId: editor.currentScript.id }),
-      cliBash: buildScriptDetailCliCommand({ origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildScriptDetailPowerShellCliCommand({ origin, scriptId: editor.currentScript.id }),
-      cliCmd: buildScriptDetailCmdCliCommand({ origin, scriptId: editor.currentScript.id })
+      httpBash: buildScriptDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      httpPowerShell: buildScriptDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      cliBash: buildScriptDetailCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      cliPowerShell: buildScriptDetailPowerShellCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      cliCmd: buildScriptDetailCmdCliCommand({ apiKey, origin, scriptId: editor.currentScript.id })
     });
-  }, [editor.currentScript, origin]);
+  }, [editor.currentScript, apiKey, origin]);
 
   const executeCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
     return buildStandardCommandPresets({
       keyPrefix: "execute",
-      httpBash: buildExecuteCurlCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildExecutePowerShellCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      cliBash: buildExecuteCliCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildExecutePowerShellCliCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      httpBash: buildExecuteCurlCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      cliBash: buildExecuteCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      cliPowerShell: buildExecutePowerShellCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
       cliPowerShellEnvironment: "PowerShell stdin",
-      cliCmd: buildExecuteCmdCliCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
+      cliCmd: buildExecuteCmdCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
     });
-  }, [editor.currentScript, origin, commandInput, execution.executionMode]);
+  }, [editor.currentScript, apiKey, origin, commandInput, execution.executionMode]);
 
   const schemaCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
     return buildStandardCommandPresets({
       keyPrefix: "schema",
-      httpBash: buildToolDetailCurlCommand({ origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildToolDetailPowerShellCommand({ origin, scriptId: editor.currentScript.id }),
-      cliBash: buildToolDetailCliCommand({ origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildToolDetailPowerShellCliCommand({ origin, scriptId: editor.currentScript.id }),
-      cliCmd: buildToolDetailCmdCliCommand({ origin, scriptId: editor.currentScript.id })
+      httpBash: buildToolDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      httpPowerShell: buildToolDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      cliBash: buildToolDetailCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      cliPowerShell: buildToolDetailPowerShellCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+      cliCmd: buildToolDetailCmdCliCommand({ apiKey, origin, scriptId: editor.currentScript.id })
     });
-  }, [editor.currentScript, origin]);
+  }, [editor.currentScript, apiKey, origin]);
 
   const toolContractResponseExample = editor.currentScript
     ? {
@@ -513,6 +515,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                         <ScriptCommandsTab
                           currentScriptId={editor.currentScript.id}
                           origin={origin}
+                          apiKey={apiKey}
                           executionMode={execution.executionMode}
                           commandInput={commandInput}
                           detailCommandPresets={detailCommandPresets}

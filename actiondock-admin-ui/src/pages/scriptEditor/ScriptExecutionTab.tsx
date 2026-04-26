@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Col, Empty, Radio, Row, Space, Spin, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, Empty, Radio, Row, Space, Spin, Table, Tag, Typography } from "antd";
+import { Col } from "../../components/SafeCol";
 import { DeleteOutlined, PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../../components/ExecutionResultCard";
@@ -188,7 +189,7 @@ export function ScriptExecutionTab({
                   value={executionMode}
                   optionType="button"
                   buttonStyle="solid"
-                  onChange={(event) => onExecutionModeChange(event.target.value as SubmitMode)}
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => onExecutionModeChange(event.target.value as SubmitMode)}
                   options={[
                     { label: "同步执行", value: "SYNC" },
                     { label: "异步执行", value: "ASYNC" }
@@ -300,10 +301,10 @@ export function ScriptExecutionTab({
           pagination={{ pageSize: 5 }}
           scroll={{ x: 900 }}
           locale={{ emptyText: "当前脚本暂无执行记录" }}
-          onRow={(record) => ({
+          onRow={(record: ExecutionRecord) => ({
             onClick: () => onExecutionHistoryRowClick(record)
           })}
-          rowClassName={(record) =>
+          rowClassName={(record: ExecutionRecord) =>
             record.id === activeExecutionId
               ? "execution-history-row execution-history-row-active"
               : "execution-history-row"

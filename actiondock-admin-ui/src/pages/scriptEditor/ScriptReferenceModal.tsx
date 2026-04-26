@@ -1,4 +1,5 @@
-import { Button, Col, Descriptions, Modal, Row, Space, Tag, Typography } from "antd";
+import { Button, Descriptions, Modal, Row, Space, Tag, Typography } from "antd";
+import { Col } from "../../components/SafeCol";
 import type { MessageInstance } from "antd/es/message/interface";
 import { CopyOutlined } from "@ant-design/icons";
 import { SchemaFieldList } from "../../components/SchemaFieldList";

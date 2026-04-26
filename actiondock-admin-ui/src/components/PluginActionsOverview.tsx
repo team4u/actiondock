@@ -1,5 +1,6 @@
 import { CopyOutlined } from "@ant-design/icons";
-import { Button, Col, Collapse, Empty, Row, Space, Tabs, Typography } from "antd";
+import { Button, Collapse, Empty, Row, Space, Tabs, Typography } from "antd";
+import { Col } from "./SafeCol";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useState } from "react";
 import { MarkdownDescription } from "./MarkdownDescription";

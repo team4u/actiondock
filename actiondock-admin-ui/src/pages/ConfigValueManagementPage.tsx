@@ -399,7 +399,8 @@ export function ConfigValueManagementPage() {
       />
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title="本机配置"
+          title="配置值管理"
+          meta="平台全局字符串配置值，可被脚本、插件、调度和调试参数复用。"
           actions={
             <>
               <Input.Search
@@ -407,7 +408,7 @@ export function ConfigValueManagementPage() {
                 placeholder="按 key / 说明 / 值搜索"
                 style={{ width: 280 }}
                 value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setSearchText(event.target.value)}
               />
               <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
                 导入配置值

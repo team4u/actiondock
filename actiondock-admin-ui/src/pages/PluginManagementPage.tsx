@@ -515,7 +515,7 @@ export function PluginManagementPage() {
         </Card>
         <Card title="仓库插件">
           <Table
-            rowKey={(item) => `${item.repositoryId}:${item.pluginId}`}
+            rowKey={(item: RepositoryPluginDescriptor) => `${item.repositoryId}:${item.pluginId}`}
             loading={loading}
             columns={repositoryColumns}
             dataSource={repositoryPlugins}

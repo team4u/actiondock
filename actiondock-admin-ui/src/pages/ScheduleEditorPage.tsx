@@ -7,7 +7,6 @@ import {
   Alert,
   Button,
   Card,
-  Col,
   Empty,
   Form,
   Input,
@@ -33,6 +32,7 @@ import {
 } from "../api";
 import { buildExecutionInputFromValues, type ObjectInputMode } from "../commands";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
+import { Col } from "../components/SafeCol";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { usePollingExecution } from "../hooks/usePollingExecution";
 import { InfoHint } from "../components/InfoHint";
@@ -699,7 +699,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                           value={executionMode}
                           optionType="button"
                           buttonStyle="solid"
-                          onChange={(event) => setExecutionMode(event.target.value as SubmitMode)}
+                          onChange={(event: React.ChangeEvent<HTMLInputElement>) => setExecutionMode(event.target.value as SubmitMode)}
                           options={[
                             { label: "同步执行", value: "SYNC" },
                             { label: "异步执行", value: "ASYNC" }

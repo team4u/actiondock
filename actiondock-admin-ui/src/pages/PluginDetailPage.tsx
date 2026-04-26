@@ -10,7 +10,6 @@ import {
   Alert,
   Button,
   Card,
-  Col,
   Drawer,
   Empty,
   Form,
@@ -26,6 +25,7 @@ import {
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { getApiKey } from "../auth";
 import { useColorMode } from "../contexts/ColorModeContext";
 import {
   ApiError,
@@ -41,6 +41,7 @@ import {
   upgradePlugin
 } from "../api";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
+import { Col } from "../components/SafeCol";
 import { CodeEditor } from "../components/CodeEditor";
 import { buildStandardCommandPresets } from "../commands";
 import { CommandPanel } from "../components/CommandPanel";
@@ -194,6 +195,7 @@ export function PluginDetailPage() {
     () => resolvePluginScriptInputCommandInput(scriptInputText),
     [scriptInputText]
   );
+  const apiKey = getApiKey() || undefined;
   const origin = window.location.origin;
 
   const loadPlugin = async () => {
@@ -509,14 +511,14 @@ export function PluginDetailPage() {
     if (!plugin || !currentAction) return [];
     return buildStandardCommandPresets({
       keyPrefix: "invoke",
-      httpBash: buildPluginInvokeCurlCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      httpPowerShell: buildPluginInvokePowerShellCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      cliBash: buildPluginInvokeCliCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      cliPowerShell: buildPluginInvokePowerShellCliCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliBash: buildPluginInvokeCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliPowerShell: buildPluginInvokePowerShellCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
       cliPowerShellEnvironment: "PowerShell temp file",
-      cliCmd: buildPluginInvokeCmdCliCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
+      cliCmd: buildPluginInvokeCmdCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
     });
-  }, [plugin, currentAction, origin, commandArgsInput, commandScriptInput]);
+  }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);
   if (loading && !plugin) {
     return (
       <div className="page-loading">
@@ -788,7 +790,11 @@ export function PluginDetailPage() {
 	                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
 	                    <InfoHint
 	                      label="调用命令会跟随当前动作和调试入参变化"
-	                      content={`命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`}
+	                      content={
+	                        apiKey
+	                          ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
+	                          : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
+	                      }
 	                    />
 	                    {commandArgsInput.note ? <Alert type="info" showIcon message={commandArgsInput.note} /> : null}
 	                    {commandScriptInput.note ? <Alert type="warning" showIcon message={commandScriptInput.note} /> : null}

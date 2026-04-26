@@ -1,5 +1,6 @@
 import { CodeOutlined } from "@ant-design/icons";
-import { Card, Col, Empty, Form, Input, Row, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Card, Empty, Form, Input, Row, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Col } from "../../components/SafeCol";
 import { CodeEditor } from "../../components/CodeEditor";
 import { SchemaBuilder } from "../../components/SchemaBuilder";
 import type { FormInstance } from "antd";
@@ -227,7 +228,7 @@ export function ScriptDefinitionTab({
                 <Input.Search
                   allowClear
                   value={scriptReferenceQuery}
-                  onChange={(event) => onScriptReferenceQueryChange(event.target.value)}
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => onScriptReferenceQueryChange(event.target.value)}
                   placeholder="搜索脚本名称或 scriptId"
                 />
                 <Table<ScriptDefinition>
@@ -238,7 +239,7 @@ export function ScriptDefinitionTab({
                     {
                       key: "name",
                       dataIndex: "name",
-                      render: (_value: string, script) => (
+                      render: (_value: string, script: ScriptDefinition) => (
                         <Space wrap size={[8, 8]}>
                           <Text>{script.name || script.id}</Text>
                           {script.publishedSnapshot ? <Tag>{script.publishedSnapshot.type}</Tag> : null}
@@ -253,14 +254,14 @@ export function ScriptDefinitionTab({
                     pageSize: scriptReferencePageSize,
                     showSizeChanger: true,
                     pageSizeOptions: [10, 20, 50],
-                    showTotal: (total) => `共 ${total} 个脚本`,
-                    onChange: (page, pageSize) => {
+                    showTotal: (total: number) => `共 ${total} 个脚本`,
+                    onChange: (page: number, pageSize: number) => {
                       onScriptReferencePageChange(page);
                       onScriptReferencePageSizeChange(pageSize);
                     }
                   }}
                   locale={{ emptyText: "没有匹配的脚本" }}
-                  onRow={(script) => ({
+                  onRow={(script: ScriptDefinition) => ({
                     onClick: () => onScriptReferenceClick(script.id)
                   })}
                 />
@@ -286,7 +287,7 @@ export function ScriptDefinitionTab({
                   <Input.Search
                     allowClear
                     value={pluginReferenceQuery}
-                    onChange={(event) => onPluginReferenceQueryChange(event.target.value)}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => onPluginReferenceQueryChange(event.target.value)}
                     placeholder="搜索插件名称或 pluginId"
                   />
                   <Table<PluginView>
@@ -297,7 +298,7 @@ export function ScriptDefinitionTab({
                       {
                         key: "name",
                         dataIndex: "name",
-                        render: (_value: string, plugin) => plugin.name || plugin.pluginId
+                        render: (_value: string, plugin: PluginView) => plugin.name || plugin.pluginId
                       }
                     ]}
                     dataSource={filteredPluginReferences}
@@ -306,14 +307,14 @@ export function ScriptDefinitionTab({
                       pageSize: pluginReferencePageSize,
                       showSizeChanger: true,
                       pageSizeOptions: [10, 20, 50],
-                      showTotal: (total) => `共 ${total} 个插件`,
-                      onChange: (page, pageSize) => {
+                      showTotal: (total: number) => `共 ${total} 个插件`,
+                      onChange: (page: number, pageSize: number) => {
                         onPluginReferencePageChange(page);
                         onPluginReferencePageSizeChange(pageSize);
                       }
                     }}
                     locale={{ emptyText: "没有匹配的插件" }}
-                    onRow={(plugin) => ({
+                    onRow={(plugin: PluginView) => ({
                       onClick: () => onPluginReferenceClick(plugin.pluginId)
                     })}
                   />

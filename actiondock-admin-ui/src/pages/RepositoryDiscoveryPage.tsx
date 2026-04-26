@@ -42,6 +42,7 @@ import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import type {
+  PluginDependency,
   RepositoryDefinition,
   RepositoryToolDescriptor,
   RepositoryToolDetail
@@ -409,7 +410,7 @@ export function RepositoryDiscoveryPage() {
             <Input.Search
               allowClear
               value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSearchText(event.target.value)}
               placeholder="搜索名称、toolId、来源或维护人"
               style={{ minWidth: 220, flex: "1 1 280px" }}
             />
@@ -457,7 +458,7 @@ export function RepositoryDiscoveryPage() {
 
         <Card>
           <Table<RepositoryToolDescriptor>
-            rowKey={(item) => `${item.repositoryId}:${item.toolId}`}
+            rowKey={(item: RepositoryToolDescriptor) => `${item.repositoryId}:${item.toolId}`}
             loading={loading}
             columns={columns}
             dataSource={filteredTools}

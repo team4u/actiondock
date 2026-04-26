@@ -1,3 +1,4 @@
+import { emitAuthRequired, getApiKey } from "./auth";
 import type {
   ApiErrorPayload,
   ApiResponse,
@@ -41,15 +42,24 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getApiKey();
   const headers = new Headers(init?.headers ?? {});
   if (!headers.has("Content-Type") && init?.body && !(init?.body instanceof FormData)) {
     headers.set("Content-Type", JSON_HEADERS["Content-Type"]);
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
   const response = await fetch(path, {
     ...init,
     headers
   });
+
+  if (response.status === 401) {
+    emitAuthRequired();
+    throw new ApiError("API Key 无效或缺失", 401);
+  }
 
   const isJson = response.headers.get("content-type")?.includes("application/json");
   const payload = isJson ? ((await response.json()) as ApiResponse<T> | ApiErrorPayload) : null;

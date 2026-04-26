@@ -19,7 +19,7 @@ function readReturnPath(state: unknown): string | null {
   return typeof locationState.from === "string" && locationState.from.trim() ? locationState.from : null;
 }
 
-export function ApiKeyManagementPage() {
+export function ApiKeySettingsPanel() {
   const navigate = useNavigate();
   const location = useLocation();
   const [apiKey, setApiKeyState] = useState(getApiKey());
@@ -67,7 +67,7 @@ export function ApiKeyManagementPage() {
                   </Button>
                 ) : null}
                 <Title level={4} style={{ margin: 0 }}>
-                  API Key 管理
+                  API Key
                 </Title>
                 <Space size={8} wrap>
                   <Tag color={hasApiKey ? "blue" : "default"}>{hasApiKey ? "已配置" : "未配置"}</Tag>
@@ -112,4 +112,8 @@ export function ApiKeyManagementPage() {
       </Space>
     </>
   );
+}
+
+export function ApiKeyManagementPage() {
+  return <ApiKeySettingsPanel />;
 }

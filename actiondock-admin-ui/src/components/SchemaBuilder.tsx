@@ -328,7 +328,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                   autoSize={{ minRows: 1, maxRows: 2 }}
                                   placeholder="字段说明"
                                   disabled={disabled}
-                                  onChange={(event) => setField(field.id, { description: event.target.value })}
+                                  onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setField(field.id, { description: event.target.value })}
                                 />
                               </div>
 
@@ -382,7 +382,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                     autoSize={{ minRows: 1, maxRows: 3 }}
                                     placeholder="默认值"
                                     disabled={disabled}
-                                    onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
+                                    onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setField(field.id, { defaultValue: event.target.value })}
                                   />
                                 ) : (
                                   <Input

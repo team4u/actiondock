@@ -13,8 +13,13 @@ import {
 } from "antd";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { onAuthRequired } from "./auth";
 import { ColorModeContext, type ColorMode, useColorMode } from "./contexts/ColorModeContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import {
+  buildSystemSettingsSearch,
+  isApiKeySettingsRoute
+} from "./settingsRouting";
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -46,6 +51,9 @@ const ScheduleManagementPage = lazy(() =>
 const ScheduleEditorPage = lazy(() =>
   import("./pages/ScheduleEditorPage").then((module) => ({ default: module.ScheduleEditorPage }))
 );
+const SystemSettingsPage = lazy(() =>
+  import("./pages/SystemSettingsPage").then((module) => ({ default: module.SystemSettingsPage }))
+);
 const ConfigValueManagementPage = lazy(() =>
   import("./pages/ConfigValueManagementPage").then((module) => ({ default: module.ConfigValueManagementPage }))
 );
@@ -75,6 +83,52 @@ function useSystemColorMode(): ColorMode {
   return colorMode;
 }
 
+function resolveSelectedNavKey(pathname: string): string {
+  if (pathname.startsWith("/plugins")) {
+    return "plugins";
+  }
+  if (pathname.startsWith("/schedules")) {
+    return "schedules";
+  }
+  if (pathname.startsWith("/settings")) {
+    return "settings";
+  }
+  if (pathname.startsWith("/config-values")) {
+    return "config-values";
+  }
+  if (pathname.startsWith("/repositories")) {
+    return "repositories";
+  }
+  if (pathname.startsWith("/discover")) {
+    return "discover";
+  }
+  if (pathname.startsWith("/tools") || pathname.startsWith("/scripts")) {
+    return "tools";
+  }
+  return "";
+}
+
+function resolveTitle(selectedNavKey: string): string {
+  switch (selectedNavKey) {
+    case "discover":
+      return "发现工具";
+    case "tools":
+      return "工具库";
+    case "repositories":
+      return "工具仓库";
+    case "plugins":
+      return "插件管理";
+    case "settings":
+      return "系统配置";
+    case "schedules":
+      return "定时任务";
+    case "config-values":
+      return "配置值管理";
+    default:
+      return "工具库";
+  }
+}
+
 function AdminShell() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -83,33 +137,8 @@ function AdminShell() {
   const colorMode = useColorMode();
   const isDark = colorMode === "dark";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const selectedNavKey = location.pathname.startsWith("/plugins")
-    ? "plugins"
-    : location.pathname.startsWith("/schedules")
-      ? "schedules"
-      : location.pathname.startsWith("/config-values")
-        ? "config-values"
-        : location.pathname.startsWith("/repositories")
-          ? "repositories"
-          : location.pathname.startsWith("/discover")
-            ? "discover"
-            : location.pathname.startsWith("/tools") || location.pathname.startsWith("/scripts")
-              ? "tools"
-              : "";
-  const title =
-    selectedNavKey === "discover"
-      ? "发现工具"
-      : selectedNavKey === "tools"
-        ? "工具库"
-        : selectedNavKey === "repositories"
-          ? "工具仓库"
-          : selectedNavKey === "plugins"
-            ? "插件管理"
-      : selectedNavKey === "schedules"
-        ? "定时任务"
-        : selectedNavKey === "config-values"
-          ? "本机配置"
-          : "工具库";
+  const selectedNavKey = resolveSelectedNavKey(location.pathname);
+  const title = resolveTitle(selectedNavKey);
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
 
@@ -150,8 +179,13 @@ function AdminShell() {
             onClick: () => navigate("/schedules")
           },
           {
+            key: "settings",
+            label: "系统配置",
+            onClick: () => navigate(`/settings${buildSystemSettingsSearch("api-key")}`)
+          },
+          {
             key: "config-values",
-            label: "本机配置",
+            label: "配置值管理",
             onClick: () => navigate("/config-values")
           }
         ]}
@@ -199,6 +233,8 @@ function AdminShell() {
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
+              <Route path="/settings" element={<SystemSettingsPage />} />
+              <Route path="/settings/api-key" element={<LegacyApiKeySettingsRedirect />} />
               <Route path="/config-values" element={<ConfigValueManagementPage />} />
               <Route
                 path="/plugins/:pluginId"
@@ -230,15 +266,48 @@ function AdminShell() {
   );
 }
 
+function LegacyApiKeySettingsRedirect() {
+  const location = useLocation();
+
+  return (
+    <Navigate
+      to={{
+        pathname: "/settings",
+        search: buildSystemSettingsSearch("api-key")
+      }}
+      replace
+      state={location.state}
+    />
+  );
+}
+
 export function App() {
   const colorMode = useSystemColorMode();
   const isDark = colorMode === "dark";
+  const navigate = useNavigate();
+  const location = useLocation();
   const accentColor = isDark ? "#8ab4ff" : "#2357d5";
   const primaryColor = isDark ? "#2f6fd6" : "#2357d5";
 
   useEffect(() => {
     document.documentElement.dataset.theme = colorMode;
   }, [colorMode]);
+
+  useEffect(
+    () =>
+      onAuthRequired(() => {
+        if (isApiKeySettingsRoute(location.pathname, location.search)) {
+          return;
+        }
+
+        navigate(`/settings${buildSystemSettingsSearch("api-key")}`, {
+          state: {
+            from: `${location.pathname}${location.search}${location.hash}`
+          }
+        });
+      }),
+    [location.hash, location.pathname, location.search, navigate]
+  );
 
   return (
     <ConfigProvider
@@ -273,7 +342,7 @@ export function App() {
           margin: 12,
           marginSM: 8,
           marginLG: 16
-        },
+        } as Record<string, unknown>,
         components: {
           Layout: {
             bodyBg: "transparent",

@@ -11,6 +11,7 @@ const { useBreakpoint } = Grid;
 interface ScriptCommandsTabProps {
   currentScriptId: string;
   origin: string;
+  apiKey?: string;
   executionMode: string;
   commandInput: ResolvedCommandInput;
   detailCommandPresets: CommandPreset[];
@@ -24,6 +25,7 @@ interface ScriptCommandsTabProps {
 
 export function ScriptCommandsTab({
   origin,
+  apiKey,
   executionMode,
   commandInput,
   detailCommandPresets,
@@ -41,7 +43,11 @@ export function ScriptCommandsTab({
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <InfoHint
         label="可直接执行的 REST API / CLI 命令"
-        content={`命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`}
+        content={
+          apiKey
+            ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
+            : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
+        }
       />
 
       <Collapse

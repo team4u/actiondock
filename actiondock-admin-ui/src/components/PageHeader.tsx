@@ -1,5 +1,6 @@
 import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Col, Row, Space, Typography } from "antd";
+import { Button, Row, Space, Typography } from "antd";
+import { Col } from "./SafeCol";
 import type { ReactNode } from "react";
 
 const { Title, Text } = Typography;
