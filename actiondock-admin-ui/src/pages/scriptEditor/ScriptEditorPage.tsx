@@ -78,7 +78,6 @@ import { ScriptCommandsTab } from "./ScriptCommandsTab";
 import { ScriptExecutionTab } from "./ScriptExecutionTab";
 import type { ScriptEditorFormValues } from "./types";
 import type { ScriptEditorPageProps } from "./types";
-import { parseJsonText } from "../../utils";
 import type { ScriptType } from "../../types";
 
 const { Text } = Typography;

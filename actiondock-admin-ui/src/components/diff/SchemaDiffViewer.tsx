@@ -100,7 +100,7 @@ export function SchemaDiffViewer({ title, diff }: SchemaDiffViewerProps) {
                 <Table
                   size="small"
                   pagination={false}
-                  rowKey={(record) => `${field.name}-${record.property}`}
+                  rowKey={(record: any) => `${field.name}-${record.property}`}
                   columns={[
                     { title: "属性", dataIndex: "property", key: "property", width: 120 },
                     { title: "旧值", dataIndex: "before", key: "before", render: renderValue },

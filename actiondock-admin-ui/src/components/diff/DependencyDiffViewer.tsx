@@ -98,7 +98,7 @@ export function DependencyDiffViewer({ diff }: DependencyDiffViewerProps) {
                 <Table
                   size="small"
                   pagination={false}
-                  rowKey={(record) => `${item.pluginId}-${record.field}`}
+                  rowKey={(record: any) => `${item.pluginId}-${record.field}`}
                   columns={[
                     { title: "属性", dataIndex: "field", key: "field", width: 140 },
                     { title: "旧值", dataIndex: "before", key: "before", render: renderValue },

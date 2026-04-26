@@ -620,7 +620,7 @@ function diffSource(
   let removedLines = 0;
   const matchedKeywords = new Set<string>();
 
-  diffLines(original, modified).forEach((part) => {
+  diffLines(original, modified).forEach((part: any) => {
     const lineCount = countLines(part.value);
     if (part.added) {
       addedLines += lineCount;
