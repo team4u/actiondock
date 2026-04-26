@@ -336,19 +336,19 @@ export function ScriptRunPage() {
         ) : null}
 
         <Tabs
-          defaultActiveKey=”single”
+          defaultActiveKey="single"
           items={[
             {
-              key: “single”,
-              label: “单次运行”,
+              key: "single",
+              label: "单次运行",
               children: (
-                <div className=”run-page__layout”>
+                <div className="run-page__layout">
                   <Card
-                    className=”run-panel run-panel--input”
-                    title=”输入”
+                    className="run-panel run-panel--input"
+                    title="输入"
                     extra={
                       <Button
-                        type=”primary”
+                        type="primary"
                         icon={<PlayCircleOutlined />}
                         loading={executing}
                         disabled={!canExecute}
