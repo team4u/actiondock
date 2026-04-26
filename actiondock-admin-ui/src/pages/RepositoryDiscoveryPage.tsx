@@ -34,12 +34,14 @@ import {
   updateRepositoryTool
 } from "../api";
 import { CodeEditor } from "../components/CodeEditor";
+import { DevelopmentSyncTag, getDevelopmentActionLabel } from "../components/domain/DevelopmentSyncTag";
+import { RiskLevelTag } from "../components/domain/RiskLevelTag";
+import { TrustLevelTag } from "../components/domain/TrustLevelTag";
+import { getScriptTypeLabel } from "../components/domain/typeLabels";
 import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import type {
-  DevelopmentSyncState,
-  PluginDependency,
   RepositoryDefinition,
   RepositoryToolDescriptor,
   RepositoryToolDetail
@@ -50,53 +52,6 @@ import { useColorMode } from "../contexts/ColorModeContext";
 const { Text } = Typography;
 
 type InstallAction = "install" | "update";
-
-function getRiskTag(riskLevel?: string) {
-  if (!riskLevel) {
-    return <Tag>未声明</Tag>;
-  }
-  const normalized = riskLevel.toUpperCase();
-  const color = normalized === "HIGH" ? "red" : normalized === "MEDIUM" ? "gold" : "green";
-  return <Tag color={color}>{normalized}</Tag>;
-}
-
-function getTrustTag(trusted: boolean) {
-  return trusted ? <Tag color="green">可信仓库</Tag> : <Tag color="gold">未信任</Tag>;
-}
-
-function getTypeLabel(type: RepositoryToolDescriptor["type"]): string {
-  return type === "PYTHON" ? "Python" : "Groovy";
-}
-
-function getDevelopmentSyncTag(state?: DevelopmentSyncState) {
-  switch (state) {
-    case "LOCAL_CHANGES":
-      return <Tag color="orange">本地有修改</Tag>;
-    case "REMOTE_CHANGES":
-      return <Tag color="processing">远端有更新</Tag>;
-    case "DIVERGED":
-      return <Tag color="red">有冲突</Tag>;
-    case "SYNCED":
-      return <Tag color="purple">已同步</Tag>;
-    default:
-      return <Tag color="purple">开发同步</Tag>;
-  }
-}
-
-function getDevelopmentActionLabel(state?: DevelopmentSyncState) {
-  switch (state) {
-    case "LOCAL_CHANGES":
-      return "本地有修改";
-    case "REMOTE_CHANGES":
-      return "远端有更新";
-    case "DIVERGED":
-      return "有冲突";
-    case "SYNCED":
-      return "已同步";
-    default:
-      return "打开开发脚本";
-  }
-}
 
 function renderPluginDependencies(dependencies: PluginDependency[]) {
   if (dependencies.length === 0) {
@@ -347,7 +302,7 @@ export function RepositoryDiscoveryPage() {
         <Space size={[4, 4]}>
           <Text>{record.repositoryId}</Text>
           {record.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : null}
-          {getTrustTag(record.trusted)}
+          <TrustLevelTag level={record.trusted ? "TRUSTED" : "UNTRUSTED"} />
         </Space>
       )
     },
@@ -542,13 +497,13 @@ export function RepositoryDiscoveryPage() {
                 { key: "tool", label: "工具 ID", children: <Text code>{detail.descriptor.installedScriptId}</Text> },
                 { key: "repo", label: "来源仓库", children: detail.descriptor.repositoryId },
                 { key: "usage", label: "仓库用途", children: detail.descriptor.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag>分发仓库</Tag> },
-                { key: "type", label: "类型", children: getTypeLabel(detail.descriptor.type) },
+                { key: "type", label: "类型", children: getScriptTypeLabel(detail.descriptor.type) },
                 { key: "version", label: "远端版本", children: detail.descriptor.version },
                 { key: "installedVersion", label: "本机版本", children: detail.descriptor.installedVersion || "-" },
                 { key: "owner", label: "维护人", children: detail.descriptor.owner || "-" },
-                { key: "risk", label: "风险等级", children: getRiskTag(detail.descriptor.riskLevel) },
-                { key: "trust", label: "仓库信任", children: getTrustTag(detail.descriptor.trusted) },
-                { key: "syncState", label: "开发同步", children: detail.descriptor.developmentScriptId ? getDevelopmentSyncTag(detail.descriptor.developmentSyncState) : <Text type="secondary">-</Text> }
+                { key: "risk", label: "风险等级", children: <RiskLevelTag level={detail.descriptor.riskLevel} /> },
+                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={detail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
+                { key: "syncState", label: "开发同步", children: detail.descriptor.developmentScriptId ? <DevelopmentSyncTag state={detail.descriptor.developmentSyncState} /> : <Text type="secondary">-</Text> }
               ]}
             />
 

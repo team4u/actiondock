@@ -177,6 +177,7 @@ function AdminShell() {
               />
             ) : null}
             <div className="app-header__title">
+              <Title level={5} style={{ margin: 0 }}>{title}</Title>
             </div>
           </div>
         </Header>

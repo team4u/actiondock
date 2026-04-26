@@ -1,5 +1,6 @@
-import { Alert, Button, Card, Col, Empty, Popconfirm, Radio, Row, Space, Spin, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, Col, Empty, Radio, Row, Space, Spin, Table, Tag, Typography } from "antd";
 import { DeleteOutlined, PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../../components/ExecutionResultCard";
 import { SchemaObjectEditor } from "../../components/SchemaObjectEditor";
 import type { ColumnsType } from "antd/es/table";
@@ -131,11 +132,10 @@ export function ScriptExecutionTab({
       key: "actions",
       width: 120,
       render: (_: unknown, record) => (
-        <Popconfirm
+        <ConfirmDangerAction
           title="确认删除这条执行记录？"
-          okText="删除"
-          cancelText="取消"
           onConfirm={() => void onDeleteExecution(record)}
+          loading={deletingExecutionId === record.id}
           disabled={isExecutionActive(record.status)}
         >
           <Button
@@ -143,13 +143,12 @@ export function ScriptExecutionTab({
             danger
             size="small"
             icon={<DeleteOutlined />}
-            loading={deletingExecutionId === record.id}
             disabled={isExecutionActive(record.status)}
             onClick={(event) => event.stopPropagation()}
           >
             删除
           </Button>
-        </Popconfirm>
+        </ConfirmDangerAction>
       )
     }
   ];
@@ -273,23 +272,22 @@ export function ScriptExecutionTab({
             >
               刷新记录
             </Button>
-            <Popconfirm
+            <ConfirmDangerAction
               title="确认清空当前脚本的历史执行结果？"
               okText="清空"
-              cancelText="取消"
               onConfirm={() => void onClearExecutionHistory()}
+              loading={clearingExecutionHistory}
               disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
             >
               <Button
                 danger
                 icon={<DeleteOutlined />}
-                loading={clearingExecutionHistory}
                 disabled={executionHistory.length === 0 || hasActiveExecutionHistory}
                 onClick={(event) => event.stopPropagation()}
               >
                 全部删除
               </Button>
-            </Popconfirm>
+            </ConfirmDangerAction>
           </Space>
         }
       >

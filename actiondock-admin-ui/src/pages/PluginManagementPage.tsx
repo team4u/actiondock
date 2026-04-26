@@ -572,7 +572,7 @@ export function PluginManagementPage() {
             ) : drawerActions.length > 0 ? (
               <div>
                 <Text strong style={{ display: "block", marginBottom: 12 }}>动作与字段</Text>
-                <PluginActionsOverview description={drawerDescription} actions={drawerActions} />
+                <PluginActionsOverview messageApi={messageApi} description={drawerDescription} actions={drawerActions} />
               </div>
             ) : !drawerDescriptor.installed ? (
               <Text type="secondary">插件未安装，无法查看动作和字段信息。安装后即可查看。</Text>

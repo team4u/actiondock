@@ -16,7 +16,6 @@ import {
   Input,
   List,
   Modal,
-  Popconfirm,
   Space,
   Table,
   Tag,
@@ -44,7 +43,9 @@ import {
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import type { ConfigValue, ConfigValueRequest } from "../types";
-import { copyText, formatDateTime, getErrorMessage } from "../utils";
+import { formatDateTime, getErrorMessage } from "../utils";
+import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
+import { useCopyMessage } from "../hooks/useCopyMessage";
 
 const { Paragraph, Text } = Typography;
 
@@ -201,11 +202,9 @@ export function ConfigValueManagementPage() {
       width: 180,
       render: (_: unknown, record) => (
         <Space wrap>
-          <Popconfirm
+          <ConfirmDangerAction
             title="确认删除这个配置值？"
             description="删除后，运行时引用该 key 的配置会在解析时报错。"
-            okText="删除"
-            cancelText="取消"
             onConfirm={async () => {
               setDeletingKey(record.key);
               try {
@@ -218,11 +217,12 @@ export function ConfigValueManagementPage() {
                 setDeletingKey(null);
               }
             }}
+            loading={deletingKey === record.key}
           >
-            <Button size="small" danger icon={<DeleteOutlined />} loading={deletingKey === record.key}>
+            <Button size="small" danger icon={<DeleteOutlined />}>
               删除
             </Button>
-          </Popconfirm>
+          </ConfirmDangerAction>
         </Space>
       )
     }
@@ -254,14 +254,7 @@ export function ConfigValueManagementPage() {
       ]
     : [];
 
-  const handleCopy = async (value: string) => {
-    try {
-      await copyText(value);
-      messageApi.success("已复制");
-    } catch {
-      messageApi.error("复制失败");
-    }
-  };
+  const handleCopy = useCopyMessage(messageApi);
 
   const exportConfigValues = (targetItems: ConfigValue[], successMessage: string) => {
     try {

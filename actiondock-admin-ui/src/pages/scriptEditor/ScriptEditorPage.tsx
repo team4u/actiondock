@@ -33,7 +33,7 @@ import type { MenuProps } from "antd";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ScopeTag } from "../../components/ScopeTag";
-import { buildStandardCommandPresets } from "../../components/CommandTabsPanel";
+import { buildStandardCommandPresets } from "../../commands";
 import {
   buildExecuteCliCommand,
   buildExecuteCmdCliCommand,
@@ -52,7 +52,9 @@ import {
   buildToolDetailPowerShellCommand,
   resolveExecutionCommandInput
 } from "../../commands";
-import { copyText, formatDateTime } from "../../utils";
+import { formatDateTime } from "../../utils";
+import { useCopyMessage } from "../../hooks/useCopyMessage";
+import { DevelopmentSyncTag } from "../../components/domain/DevelopmentSyncTag";
 import { useScriptEditor } from "./useScriptEditor";
 import { useScriptExecution } from "./useScriptExecution";
 import { useScriptPublishToRepo } from "./useScriptPublishToRepo";
@@ -60,7 +62,7 @@ import { useScriptFork } from "./useScriptFork";
 import { useScriptReferences } from "./useScriptReferences";
 import { GeneratedScriptImportModal } from "./GeneratedScriptImportModal";
 import { PublishToRepositoryModal } from "./PublishToRepositoryModal";
-import { ForkScriptModal } from "./ForkScriptModal";
+import { ForkScriptModal } from "../../components/ForkScriptModal";
 import { ScriptReferenceModal } from "./ScriptReferenceModal";
 import { PluginReferenceModal } from "./PluginReferenceModal";
 import { ScriptDefinitionTab } from "./ScriptDefinitionTab";
@@ -70,21 +72,6 @@ import type { ScriptEditorFormValues } from "./types";
 import type { ScriptEditorPageProps } from "./types";
 
 const { Text } = Typography;
-
-function getDevelopmentSyncTag(state?: string) {
-  switch (state) {
-    case "LOCAL_CHANGES":
-      return <Tag color="orange">本地有修改</Tag>;
-    case "REMOTE_CHANGES":
-      return <Tag color="processing">远端有更新</Tag>;
-    case "DIVERGED":
-      return <Tag color="red">双方都有修改</Tag>;
-    case "SYNCED":
-      return <Tag color="green">已同步</Tag>;
-    default:
-      return <Tag>未检查</Tag>;
-  }
-}
 
 export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const navigate = useNavigate();
@@ -142,44 +129,43 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   // --- Command presets ---
   const origin = window.location.origin;
-  const apiKey = undefined;
 
   const detailCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
     return buildStandardCommandPresets({
       keyPrefix: "detail",
-      httpBash: buildScriptDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildScriptDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliBash: buildScriptDetailCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildScriptDetailPowerShellCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliCmd: buildScriptDetailCmdCliCommand({ apiKey, origin, scriptId: editor.currentScript.id })
+      httpBash: buildScriptDetailCurlCommand({ origin, scriptId: editor.currentScript.id }),
+      httpPowerShell: buildScriptDetailPowerShellCommand({ origin, scriptId: editor.currentScript.id }),
+      cliBash: buildScriptDetailCliCommand({ origin, scriptId: editor.currentScript.id }),
+      cliPowerShell: buildScriptDetailPowerShellCliCommand({ origin, scriptId: editor.currentScript.id }),
+      cliCmd: buildScriptDetailCmdCliCommand({ origin, scriptId: editor.currentScript.id })
     });
-  }, [editor.currentScript, apiKey, origin]);
+  }, [editor.currentScript, origin]);
 
   const executeCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
     return buildStandardCommandPresets({
       keyPrefix: "execute",
-      httpBash: buildExecuteCurlCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      cliBash: buildExecuteCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildExecutePowerShellCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      httpBash: buildExecuteCurlCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      httpPowerShell: buildExecutePowerShellCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      cliBash: buildExecuteCliCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+      cliPowerShell: buildExecutePowerShellCliCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
       cliPowerShellEnvironment: "PowerShell stdin",
-      cliCmd: buildExecuteCmdCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
+      cliCmd: buildExecuteCmdCliCommand({ input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
     });
-  }, [editor.currentScript, apiKey, origin, commandInput, execution.executionMode]);
+  }, [editor.currentScript, origin, commandInput, execution.executionMode]);
 
   const schemaCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
     return buildStandardCommandPresets({
       keyPrefix: "schema",
-      httpBash: buildToolDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildToolDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliBash: buildToolDetailCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildToolDetailPowerShellCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliCmd: buildToolDetailCmdCliCommand({ apiKey, origin, scriptId: editor.currentScript.id })
+      httpBash: buildToolDetailCurlCommand({ origin, scriptId: editor.currentScript.id }),
+      httpPowerShell: buildToolDetailPowerShellCommand({ origin, scriptId: editor.currentScript.id }),
+      cliBash: buildToolDetailCliCommand({ origin, scriptId: editor.currentScript.id }),
+      cliPowerShell: buildToolDetailPowerShellCliCommand({ origin, scriptId: editor.currentScript.id }),
+      cliCmd: buildToolDetailCmdCliCommand({ origin, scriptId: editor.currentScript.id })
     });
-  }, [editor.currentScript, apiKey, origin]);
+  }, [editor.currentScript, origin]);
 
   const toolContractResponseExample = editor.currentScript
     ? {
@@ -253,14 +239,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     setSearchParams(nextParams, { replace: true });
   };
 
-  const handleCopyCommand = async (command: string) => {
-    try {
-      await copyText(command);
-      messageApi.success("命令已复制");
-    } catch {
-      messageApi.error("复制命令失败");
-    }
-  };
+  const handleCopyCommand = useCopyMessage(messageApi, "命令已复制", "复制命令失败");
 
   const requestedTab = searchParams.get("tab");
   const activeTab =
@@ -330,12 +309,14 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         script={references.referenceScript}
         onClose={() => references.setReferenceScriptId(null)}
         selectedScriptType={editor.selectedScriptType}
+        messageApi={messageApi}
       />
 
       <PluginReferenceModal
         plugin={references.referencePlugin}
         onClose={() => references.setReferencePluginId(null)}
         selectedScriptType={editor.selectedScriptType}
+        messageApi={messageApi}
       />
 
       <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
@@ -466,7 +447,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   <Descriptions.Item label="开发路径">{editor.currentScript.sourcePath || "-"}</Descriptions.Item>
                   <Descriptions.Item label="同步状态">
                     <Space size={8} wrap>
-                      {getDevelopmentSyncTag(editor.developmentStatus?.syncState)}
+                      <DevelopmentSyncTag state={editor.developmentStatus?.syncState} defaultLabel="未检查" defaultColor="default" divergedLabel="双方都有修改" />
                       {editor.currentScript.sourceSyncedAt ? <Text type="secondary">{formatDateTime(editor.currentScript.sourceSyncedAt)}</Text> : null}
                     </Space>
                   </Descriptions.Item>
@@ -532,7 +513,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                         <ScriptCommandsTab
                           currentScriptId={editor.currentScript.id}
                           origin={origin}
-                          apiKey={apiKey}
                           executionMode={execution.executionMode}
                           commandInput={commandInput}
                           detailCommandPresets={detailCommandPresets}

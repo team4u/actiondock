@@ -34,10 +34,7 @@ export interface PublishToRepositoryFormValues {
   scheduleIds?: string[];
 }
 
-export interface ForkFormValues {
-  id: string;
-  name: string;
-}
+export type { ForkFormValues } from "../../types";
 
 export type ExecutionInputMode = "SCHEMA" | "JSON";
 

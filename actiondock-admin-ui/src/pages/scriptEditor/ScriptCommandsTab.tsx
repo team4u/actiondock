@@ -1,6 +1,6 @@
 import { Alert, Collapse, Descriptions, Space, Typography } from "antd";
 import { Grid } from "antd";
-import { CommandTabsPanel, type CommandPreset } from "../../components/CommandTabsPanel";
+import { CommandPanel, type CommandPreset } from "../../components/CommandPanel";
 import { InfoHint } from "../../components/InfoHint";
 import { JsonPreview } from "../../components/JsonPreview";
 import { getCommandInputSourceLabel, type ResolvedCommandInput } from "../../commands";
@@ -11,7 +11,6 @@ const { useBreakpoint } = Grid;
 interface ScriptCommandsTabProps {
   currentScriptId: string;
   origin: string;
-  apiKey: string | undefined;
   executionMode: string;
   commandInput: ResolvedCommandInput;
   detailCommandPresets: CommandPreset[];
@@ -25,7 +24,6 @@ interface ScriptCommandsTabProps {
 
 export function ScriptCommandsTab({
   origin,
-  apiKey,
   executionMode,
   commandInput,
   detailCommandPresets,
@@ -43,11 +41,7 @@ export function ScriptCommandsTab({
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <InfoHint
         label="可直接执行的 REST API / CLI 命令"
-        content={
-          apiKey
-            ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
-            : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
-        }
+        content={`命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`}
       />
 
       <Collapse
@@ -73,7 +67,7 @@ export function ScriptCommandsTab({
                     {getCommandInputSourceLabel(commandInput.source)}
                   </Descriptions.Item>
                 </Descriptions>
-                <CommandTabsPanel
+                <CommandPanel
                   title="执行脚本命令"
                   presets={executeCommandPresets}
                   onCopy={onCopy}
@@ -87,7 +81,7 @@ export function ScriptCommandsTab({
             children: (
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <Text type="secondary">使用当前脚本 ID 生成，可用于查询脚本定义详情。</Text>
-                <CommandTabsPanel
+                <CommandPanel
                   title="详情查询命令"
                   presets={detailCommandPresets}
                   onCopy={onCopy}
@@ -103,7 +97,7 @@ export function ScriptCommandsTab({
                   children: (
                     <Space direction="vertical" size={16} style={{ width: "100%" }}>
                       <Text type="secondary">供模型与调用方查看输入输出定义。</Text>
-                      <CommandTabsPanel
+                      <CommandPanel
                         title="获取 Schema 命令"
                         presets={schemaCommandPresets}
                         onCopy={onCopy}

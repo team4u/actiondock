@@ -16,7 +16,6 @@ import {
   Card,
   Checkbox,
   Empty,
-  Form,
   Input,
   Modal,
   Popconfirm,
@@ -35,7 +34,6 @@ import { useNavigate } from "react-router-dom";
 import {
   ApiError,
   createScript,
-  forkRepositoryTool,
   getRepositoryTool,
   listPlugins,
   listRepositories,
@@ -58,8 +56,11 @@ import {
   formatScriptExportFileName,
   parseScriptImportBundle
 } from "../scriptTransfer";
-import type { DevelopmentSyncState, PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
+import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
+import { DevelopmentSyncTag } from "../components/domain/DevelopmentSyncTag";
+import { ForkScriptModal } from "../components/ForkScriptModal";
+import { useForkScript } from "../hooks/useForkScript";
 
 const { Text } = Typography;
 
@@ -67,10 +68,6 @@ type SourceFilter = "ALL" | Exclude<ScriptScope, undefined>;
 type StatusFilter = "ALL" | ScriptStatus | "UPDATE_AVAILABLE" | "REMOTE_CHANGES" | "DIVERGED" | "READ_ONLY";
 type TypeFilter = "ALL" | ScriptType;
 
-interface ForkFormValues {
-  id: string;
-  name: string;
-}
 
 
 function isEditableAsset(script: ScriptDefinition): boolean {
@@ -99,24 +96,10 @@ function renderPluginDependencies(dependencies: PluginDependency[]) {
   );
 }
 
-function getDevelopmentSyncTag(state?: DevelopmentSyncState) {
-  switch (state) {
-    case "LOCAL_CHANGES":
-      return <Tag color="orange">本地有修改</Tag>;
-    case "REMOTE_CHANGES":
-      return <Tag color="processing">远端有更新</Tag>;
-    case "DIVERGED":
-      return <Tag color="red">有冲突</Tag>;
-    case "SYNCED":
-      return <Tag color="purple">已同步</Tag>;
-    default:
-      return <Tag color="purple">开发同步</Tag>;
-  }
-}
+
 
 export function ToolLibraryPage() {
   const navigate = useNavigate();
-  const [forkForm] = Form.useForm<ForkFormValues>();
   const [loading, setLoading] = useState(true);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -129,9 +112,9 @@ export function ToolLibraryPage() {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
-  const [forkTarget, setForkTarget] = useState<ScriptDefinition | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
+  const fork = useForkScript({ messageApi });
   const [modal, modalContextHolder] = Modal.useModal();
 
   const loadData = async () => {
@@ -342,38 +325,9 @@ export function ToolLibraryPage() {
     await handleImportFile(file);
   };
 
-  const openForkModal = (tool: ScriptDefinition) => {
-    forkForm.setFieldsValue({
-      id: `${tool.repositoryToolId ?? tool.id}-fork`,
-      name: `${tool.name} Fork`
-    });
-    setForkTarget(tool);
-  };
 
-  const handleFork = async () => {
-    if (!forkTarget) {
-      return;
-    }
-    try {
-      const values = await forkForm.validateFields();
-      setActionKey(`fork:${forkTarget.id}`);
-      const created = await forkRepositoryTool(forkTarget.id, {
-        id: values.id.trim(),
-        name: values.name.trim()
-      });
-      setForkTarget(null);
-      forkForm.resetFields();
-      messageApi.success("Fork 已创建");
-      navigate(`/scripts/${created.id}`);
-    } catch (error) {
-      if (typeof error === "object" && error !== null && "errorFields" in error) {
-        return;
-      }
-      messageApi.error(getErrorMessage(error, "创建 Fork 失败"));
-    } finally {
-      setActionKey(null);
-    }
-  };
+
+
 
   const handleUpdate = async (tool: ScriptDefinition) => {
     if (bulkUpdating) {
@@ -557,7 +511,7 @@ export function ToolLibraryPage() {
               </Tag>
             )}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-            {record.scope === "DEVELOPMENT" ? getDevelopmentSyncTag(descriptor?.developmentSyncState) : null}
+            {record.scope === "DEVELOPMENT" ? <DevelopmentSyncTag state={descriptor?.developmentSyncState} /> : null}
             {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
@@ -738,38 +692,15 @@ export function ToolLibraryPage() {
         </Card>
       </Space>
 
-      <Modal
-        title={forkTarget ? `Fork ${forkTarget.name}` : "创建 Fork"}
-        open={Boolean(forkTarget)}
-        onCancel={() => {
-          setForkTarget(null);
-          forkForm.resetFields();
-        }}
-        onOk={() => void handleFork()}
+      <ForkScriptModal
+        title={fork.forkModalOpen ? "创建 Fork" : undefined}
         okText="创建 Fork"
-        cancelText="取消"
-        confirmLoading={Boolean(forkTarget && actionKey === `fork:${forkTarget.id}`)}
-        destroyOnHidden
-      >
-        <Text type="secondary">
-          Fork 会复制脚本和定时任务；复制出的定时任务默认停用，配置值继续共享现有全局 Key。
-        </Text>
-        <Form form={forkForm} layout="vertical">
-          <Form.Item
-            label="新工具 ID"
-            name="id"
-            rules={[
-              { required: true, message: "请输入新的工具 ID" },
-              { pattern: /^[A-Za-z0-9._-]+$/, message: "仅支持字母、数字、点、中横线和下划线" }
-            ]}
-          >
-            <Input placeholder="例如 clear-cache-fork" />
-          </Form.Item>
-          <Form.Item label="名称" name="name" rules={[{ required: true, message: "请输入名称" }]}>
-            <Input placeholder="例如 清理缓存 Fork" />
-          </Form.Item>
-        </Form>
-      </Modal>
+        open={fork.forkModalOpen}
+        onCancel={() => fork.setForkModalOpen(false)}
+        onOk={() => void fork.handleFork()}
+        confirmLoading={Boolean(fork.forkingId)}
+        form={fork.forkForm}
+      />
     </>
   );
 }

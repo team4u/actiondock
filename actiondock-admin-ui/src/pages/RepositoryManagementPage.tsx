@@ -11,7 +11,6 @@ import {
   Empty,
   Form,
   Input,
-  Popconfirm,
   Select,
   Space,
   Switch,
@@ -32,6 +31,10 @@ import {
 } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
+import { TrustLevelTag } from "../components/domain/TrustLevelTag";
+import { UsageTag } from "../components/domain/UsageTag";
+import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
+import { getRepositoryTypeLabel } from "../components/domain/typeLabels";
 import type { RepositoryDefinition } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
@@ -56,24 +59,6 @@ interface RepositoryFormValues {
   description?: string;
 }
 
-function getTypeLabel(type: RepositoryDefinition["type"]): string {
-  switch (type) {
-    case "LOCAL_DIR":
-      return "本地目录";
-    case "HTTP":
-      return "HTTP";
-    default:
-      return "Git";
-  }
-}
-
-function getTrustTag(level: RepositoryDefinition["trustLevel"]) {
-  return level === "TRUSTED" ? <Tag color="green">可信</Tag> : <Tag color="gold">未信任</Tag>;
-}
-
-function getUsageTag(usage?: RepositoryDefinition["usage"]) {
-  return usage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag color="blue">普通分发</Tag>;
-}
 
 export function RepositoryManagementPage() {
   const [form] = Form.useForm<RepositoryFormValues>();
@@ -202,7 +187,7 @@ export function RepositoryManagementPage() {
           <Space wrap size={[8, 8]}>
             <TableLinkCell onClick={() => openEdit(record)}>{record.name}</TableLinkCell>
             {record.enabled ? <Tag color="blue">已启用</Tag> : <Tag>已禁用</Tag>}
-            {getUsageTag(record.usage)}
+            <UsageTag usage={record.usage} />
           </Space>
           <Text type="secondary">{record.description || record.url}</Text>
         </Space>
@@ -213,14 +198,14 @@ export function RepositoryManagementPage() {
       dataIndex: "type",
       key: "type",
       width: 120,
-      render: (value: RepositoryDefinition["type"]) => getTypeLabel(value)
+      render: (value: RepositoryDefinition["type"]) => getRepositoryTypeLabel(value)
     },
     {
       title: "信任",
       dataIndex: "trustLevel",
       key: "trustLevel",
       width: 120,
-      render: (value: RepositoryDefinition["trustLevel"]) => getTrustTag(value)
+      render: (value: RepositoryDefinition["trustLevel"]) => <TrustLevelTag level={value} />
     },
     {
       title: "最近同步",
@@ -243,11 +228,9 @@ export function RepositoryManagementPage() {
           >
             同步
           </Button>
-          <Popconfirm
+          <ConfirmDangerAction
             title="确认删除这个仓库？"
             description="删除后不会卸载已安装工具，但将无法继续从该仓库同步或发布。"
-            okText="删除"
-            cancelText="取消"
             onConfirm={async () => {
               setDeletingId(record.id);
               try {
@@ -260,11 +243,12 @@ export function RepositoryManagementPage() {
                 setDeletingId(null);
               }
             }}
+            loading={deletingId === record.id}
           >
-            <Button danger size="small" icon={<DeleteOutlined />} loading={deletingId === record.id}>
+            <Button danger size="small" icon={<DeleteOutlined />}>
               删除
             </Button>
-          </Popconfirm>
+          </ConfirmDangerAction>
         </Space>
       )
     }

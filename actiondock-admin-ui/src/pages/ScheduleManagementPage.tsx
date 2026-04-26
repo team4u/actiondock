@@ -7,7 +7,7 @@ import {
   ReloadOutlined,
   UploadOutlined
 } from "@ant-design/icons";
-import { Button, Card, Empty, Modal, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Empty, Modal, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import type { ChangeEvent, Key } from "react";
@@ -22,6 +22,7 @@ import {
   listSchedules,
   updateSchedule
 } from "../api";
+import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
@@ -291,10 +292,8 @@ export function ScheduleManagementPage() {
               启用
             </Button>
           )}
-          <Popconfirm
+          <ConfirmDangerAction
             title="确认删除这个定时任务？"
-            okText="删除"
-            cancelText="取消"
             onConfirm={() =>
               withAction(record.id, async () => {
                 await deleteSchedule(record.id);
@@ -302,11 +301,12 @@ export function ScheduleManagementPage() {
                 messageApi.success("定时任务已删除");
               })
             }
+            loading={actionId === record.id}
           >
-            <Button size="small" danger icon={<DeleteOutlined />} loading={actionId === record.id}>
+            <Button size="small" danger icon={<DeleteOutlined />}>
               删除
             </Button>
-          </Popconfirm>
+          </ConfirmDangerAction>
         </Space>
       )
     }

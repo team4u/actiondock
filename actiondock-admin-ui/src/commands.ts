@@ -1,5 +1,6 @@
 import type { SchemaFieldDefinition } from "./schema";
 import { buildSchemaExecutionInput, buildSchemaFieldExampleValues } from "./schemaExecution";
+import type { CommandPreset } from "./components/CommandPanel";
 import type { ExecutionResponseView, SubmitMode } from "./types";
 
 export type ObjectInputMode = "SCHEMA" | "JSON";
@@ -789,5 +790,27 @@ export function buildPluginInvokePowerShellCliCommand({
       "  Remove-Item $scriptInputPath -ErrorAction SilentlyContinue",
       "}"
     ].join("\n")
+  ]);
+}
+
+export function buildCommandPresets(presets: CommandPreset[]): CommandPreset[] {
+  return presets.filter((item) => item.command.trim().length > 0);
+}
+
+export function buildStandardCommandPresets(params: {
+  keyPrefix: string;
+  httpBash: string;
+  httpPowerShell: string;
+  cliBash: string;
+  cliPowerShell: string;
+  cliPowerShellEnvironment?: string;
+  cliCmd: string;
+}): CommandPreset[] {
+  return buildCommandPresets([
+    { key: `${params.keyPrefix}-http-bash`, family: "HTTP", environment: "bash/zsh", command: params.httpBash },
+    { key: `${params.keyPrefix}-http-powershell`, family: "HTTP", environment: "PowerShell", command: params.httpPowerShell },
+    { key: `${params.keyPrefix}-cli-bash`, family: "CLI", environment: "bash/zsh", command: params.cliBash },
+    { key: `${params.keyPrefix}-cli-powershell`, family: "CLI", environment: params.cliPowerShellEnvironment ?? "PowerShell", command: params.cliPowerShell },
+    { key: `${params.keyPrefix}-cli-cmd`, family: "CLI", environment: "cmd", command: params.cliCmd }
   ]);
 }

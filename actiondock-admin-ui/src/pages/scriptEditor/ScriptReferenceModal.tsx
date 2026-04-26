@@ -1,10 +1,11 @@
 import { Button, Col, Descriptions, Modal, Row, Space, Tag, Typography } from "antd";
+import type { MessageInstance } from "antd/es/message/interface";
 import { CopyOutlined } from "@ant-design/icons";
 import { SchemaFieldList } from "../../components/SchemaFieldList";
 import { buildSchemaFieldExampleValues, buildSchemaFieldInitialState } from "../../schemaExecution";
 import { resolveSchemaFields } from "../../schema";
 import { buildScriptInvokeSnippet } from "../../scriptInvocationSnippets";
-import { copyText } from "../../utils";
+import { useCopyMessage } from "../../hooks/useCopyMessage";
 import type { ScriptDefinition, ScriptType } from "../../types";
 
 const { Text } = Typography;
@@ -13,27 +14,23 @@ interface ScriptReferenceModalProps {
   script: ScriptDefinition | null;
   onClose: () => void;
   selectedScriptType: ScriptType;
+  messageApi: MessageInstance;
 }
 
 export function ScriptReferenceModal({
   script,
   onClose,
-  selectedScriptType
+  selectedScriptType,
+  messageApi
 }: ScriptReferenceModalProps) {
+  const handleCopy = useCopyMessage(messageApi, "调用已复制", "复制失败");
+
   if (!script?.publishedSnapshot) return null;
 
   const args = buildSchemaFieldExampleValues(
     resolveSchemaFields(script.publishedSnapshot.inputSchema).supportedFields
   );
   const snippet = buildScriptInvokeSnippet(selectedScriptType, script.id, args);
-
-  const handleCopy = async () => {
-    try {
-      await copyText(snippet);
-    } catch {
-      // ignore
-    }
-  };
 
   return (
     <Modal
@@ -90,7 +87,7 @@ export function ScriptReferenceModal({
         <Space direction="vertical" size={8} style={{ width: "100%" }}>
           <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
             <Text strong>调用示例</Text>
-            <Button size="small" icon={<CopyOutlined />} onClick={handleCopy}>
+            <Button size="small" icon={<CopyOutlined />} onClick={() => void handleCopy(snippet)}>
               复制调用
             </Button>
           </Space>

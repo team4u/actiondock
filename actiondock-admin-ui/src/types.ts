@@ -11,6 +11,11 @@ export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
 export type RepositoryUsage = "DISTRIBUTION" | "DEVELOPMENT";
 export type DevelopmentSyncState = "SYNCED" | "LOCAL_CHANGES" | "REMOTE_CHANGES" | "DIVERGED";
 
+export interface ForkFormValues {
+  id: string;
+  name: string;
+}
+
 export interface PublishedScriptSnapshot {
   name: string;
   type: ScriptType;

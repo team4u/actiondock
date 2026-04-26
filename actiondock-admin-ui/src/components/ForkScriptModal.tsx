@@ -1,16 +1,21 @@
 import { Form, Input, Modal, Typography } from "antd";
+import type { ForkFormValues } from "../types";
 
 const { Text } = Typography;
 
 interface ForkScriptModalProps {
+  title?: string;
+  okText?: string;
   open: boolean;
   onCancel: () => void;
   onOk: () => void;
   confirmLoading: boolean;
-  form: ReturnType<typeof Form.useForm<{ id: string; name: string }>>[0];
+  form: ReturnType<typeof Form.useForm<ForkFormValues>>[0];
 }
 
 export function ForkScriptModal({
+  title = "创建可编辑 Fork",
+  okText = "确认 Fork",
   open,
   onCancel,
   onOk,
@@ -19,11 +24,11 @@ export function ForkScriptModal({
 }: ForkScriptModalProps) {
   return (
     <Modal
-      title="创建可编辑 Fork"
+      title={title}
       open={open}
       onCancel={onCancel}
       onOk={onOk}
-      okText="确认 Fork"
+      okText={okText}
       cancelText="取消"
       confirmLoading={confirmLoading}
       destroyOnHidden

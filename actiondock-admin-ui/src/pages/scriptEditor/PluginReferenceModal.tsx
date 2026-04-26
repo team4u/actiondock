@@ -1,4 +1,5 @@
 import { Modal, Space, Typography } from "antd";
+import type { MessageInstance } from "antd/es/message/interface";
 import { PluginActionsOverview } from "../../components/PluginActionsOverview";
 import type { PluginView, ScriptType } from "../../types";
 
@@ -8,12 +9,14 @@ interface PluginReferenceModalProps {
   plugin: PluginView | null;
   onClose: () => void;
   selectedScriptType: ScriptType;
+  messageApi: MessageInstance;
 }
 
 export function PluginReferenceModal({
   plugin,
   onClose,
-  selectedScriptType
+  selectedScriptType,
+  messageApi
 }: PluginReferenceModalProps) {
   if (!plugin) return null;
 
@@ -33,6 +36,7 @@ export function PluginReferenceModal({
             .join(" · ")}
         </Text>
         <PluginActionsOverview
+          messageApi={messageApi}
           description={plugin.description}
           actions={plugin.actions}
           mode="collapse"

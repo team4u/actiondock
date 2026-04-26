@@ -1,10 +1,11 @@
 import { CopyOutlined } from "@ant-design/icons";
 import { Button, Col, Collapse, Empty, Row, Space, Tabs, Typography } from "antd";
+import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useState } from "react";
 import { MarkdownDescription } from "./MarkdownDescription";
 import { SchemaFieldList } from "./SchemaFieldList";
 import { buildPluginInvokeSnippet } from "../scriptInvocationSnippets";
-import { copyText } from "../utils";
+import { useCopyMessage } from "../hooks/useCopyMessage";
 import type { PluginAction, ScriptType } from "../types";
 
 const { Text } = Typography;
@@ -14,6 +15,7 @@ function getActionLabel(action: PluginAction): string {
 }
 
 interface PluginActionsOverviewProps {
+  messageApi: MessageInstance;
   description?: string;
   actions: PluginAction[];
   /** 默认 "tabs"：插件详情页用折叠面板模式；"collapse"：插件参考用折叠面板 */
@@ -59,12 +61,14 @@ function ActionDetail({ action, snippet }: {
 }
 
 export function PluginActionsOverview({
+  messageApi,
   description,
   actions,
   mode = "collapse",
   snippetContext
 }: PluginActionsOverviewProps) {
   const [selectedActionName, setSelectedActionName] = useState<string>("");
+  const handleCopy = useCopyMessage(messageApi, "调用已复制", "复制失败");
 
   useEffect(() => {
     if (!actions.length) {
@@ -139,7 +143,7 @@ export function PluginActionsOverview({
                 icon={<CopyOutlined />}
                 onClick={(event) => {
                   event.stopPropagation();
-                  void copyText(snippet);
+                  void handleCopy(snippet);
                 }}
               >
                 复制调用

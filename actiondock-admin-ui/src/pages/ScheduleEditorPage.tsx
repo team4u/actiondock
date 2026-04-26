@@ -11,7 +11,6 @@ import {
   Empty,
   Form,
   Input,
-  Popconfirm,
   Radio,
   Row,
   Select,
@@ -33,6 +32,7 @@ import {
   updateSchedule
 } from "../api";
 import { buildExecutionInputFromValues, type ObjectInputMode } from "../commands";
+import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { usePollingExecution } from "../hooks/usePollingExecution";
 import { InfoHint } from "../components/InfoHint";
@@ -535,18 +535,16 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
             <Col>
               <Space className="page-card-actions" wrap>
                 {mode === "edit" && currentSchedule ? (
-                  <Popconfirm
+                  <ConfirmDangerAction
                     title="确认删除这个定时任务？"
                     description="删除后不可恢复。"
-                    okText="删除"
-                    cancelText="取消"
-                    okButtonProps={{ danger: true, loading: deleting }}
                     onConfirm={() => void handleDelete()}
+                    loading={deleting}
                   >
-                    <Button danger icon={<DeleteOutlined />} loading={deleting}>
+                    <Button danger icon={<DeleteOutlined />}>
                       删除
                     </Button>
-                  </Popconfirm>
+                  </ConfirmDangerAction>
                 ) : null}
                 <Button onClick={handleReset}>重置</Button>
                 <Button type="primary" loading={saving} onClick={() => void handleSave()}>

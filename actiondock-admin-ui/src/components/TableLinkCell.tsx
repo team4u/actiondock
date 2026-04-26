@@ -41,7 +41,22 @@ export function TableLinkCell({
   };
 
   if (onClick) {
-    return <span style={style} onClick={onClick}>{inner}</span>;
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          ...style,
+          background: "none",
+          border: "none",
+          padding: 0,
+          font: "inherit",
+          color: "inherit"
+        }}
+      >
+        {inner}
+      </button>
+    );
   }
 
   return (

@@ -16,7 +16,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Popconfirm,
   Row,
   Select,
   Space,
@@ -41,8 +40,10 @@ import {
   updatePluginConfig,
   upgradePlugin
 } from "../api";
+import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { CodeEditor } from "../components/CodeEditor";
-import { buildStandardCommandPresets, CommandTabsPanel } from "../components/CommandTabsPanel";
+import { buildStandardCommandPresets } from "../commands";
+import { CommandPanel } from "../components/CommandPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
 import { PluginActionsOverview } from "../components/PluginActionsOverview";
@@ -65,7 +66,8 @@ import {
 import { resolveSchemaFields } from "../schema";
 import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
-import { copyText, getErrorMessage, parseJsonText, prettyJson } from "../utils";
+import { getErrorMessage, parseJsonText, prettyJson } from "../utils";
+import { useCopyMessage } from "../hooks/useCopyMessage";
 
 const { Text, Title } = Typography;
 
@@ -192,7 +194,6 @@ export function PluginDetailPage() {
     () => resolvePluginScriptInputCommandInput(scriptInputText),
     [scriptInputText]
   );
-  const apiKey = undefined;
   const origin = window.location.origin;
 
   const loadPlugin = async () => {
@@ -293,14 +294,7 @@ export function PluginDetailPage() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  const handleCopyCommand = async (command: string) => {
-    try {
-      await copyText(command);
-      messageApi.success("命令已复制");
-    } catch {
-      messageApi.error("复制命令失败");
-    }
-  };
+  const handleCopyCommand = useCopyMessage(messageApi, "命令已复制", "复制命令失败");
 
   const handleConfigModeChange = (nextMode: string) => {
     if (!currentConfig) {
@@ -515,14 +509,14 @@ export function PluginDetailPage() {
     if (!plugin || !currentAction) return [];
     return buildStandardCommandPresets({
       keyPrefix: "invoke",
-      httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      cliBash: buildPluginInvokeCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      cliPowerShell: buildPluginInvokePowerShellCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      httpBash: buildPluginInvokeCurlCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      httpPowerShell: buildPluginInvokePowerShellCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliBash: buildPluginInvokeCliCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+      cliPowerShell: buildPluginInvokePowerShellCliCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
       cliPowerShellEnvironment: "PowerShell temp file",
-      cliCmd: buildPluginInvokeCmdCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
+      cliCmd: buildPluginInvokeCmdCliCommand({ origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
     });
-  }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);
+  }, [plugin, currentAction, origin, commandArgsInput, commandScriptInput]);
   if (loading && !plugin) {
     return (
       <div className="page-loading">
@@ -624,11 +618,10 @@ export function PluginDetailPage() {
                     启动
                   </Button>
                 )}
-                <Popconfirm
+                <ConfirmDangerAction
                   title="确认卸载这个插件？"
                   description="会删除数据库记录、插件文件与保存的配置。"
                   okText="卸载"
-                  cancelText="取消"
                   onConfirm={() =>
                     withPluginAction("delete", async () => {
                       await uninstallPlugin(pluginId);
@@ -636,11 +629,12 @@ export function PluginDetailPage() {
                       navigate("/plugins");
                     })
                   }
+                  loading={actionLoading === "delete"}
                 >
-                  <Button danger icon={<DeleteOutlined />} loading={actionLoading === "delete"}>
+                  <Button danger icon={<DeleteOutlined />}>
                     卸载
                   </Button>
-                </Popconfirm>
+                </ConfirmDangerAction>
               </Space>
             </Col>
           </Row>
@@ -653,7 +647,7 @@ export function PluginDetailPage() {
                 key: "overview",
                 label: "概览",
                 children: plugin ? (
-                  <PluginActionsOverview description={plugin.description} actions={plugin.actions} snippetContext={{ pluginId: plugin.pluginId, scriptType: "GROOVY" }} />
+                  <PluginActionsOverview messageApi={messageApi} description={plugin.description} actions={plugin.actions} snippetContext={{ pluginId: plugin.pluginId, scriptType: "GROOVY" }} />
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="插件详情不存在或加载失败。" />
                 )
@@ -794,11 +788,7 @@ export function PluginDetailPage() {
 	                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
 	                    <InfoHint
 	                      label="调用命令会跟随当前动作和调试入参变化"
-	                      content={
-	                        apiKey
-	                          ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
-	                          : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`
-	                      }
+	                      content={`命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 API Key，因此不会附带 Authorization 头或 --token。`}
 	                    />
 	                    {commandArgsInput.note ? <Alert type="info" showIcon message={commandArgsInput.note} /> : null}
 	                    {commandScriptInput.note ? <Alert type="warning" showIcon message={commandScriptInput.note} /> : null}
@@ -815,7 +805,7 @@ export function PluginDetailPage() {
 	                        脚本输入来源：{commandScriptInput.source === "current-json" ? "当前 JSON 输入" : "空对象"}
 	                      </Text>
 	                    </Space>
-	                    <CommandTabsPanel
+	                    <CommandPanel
 	                      title="调用动作命令"
 	                      presets={invokeCommandPresets}
 	                      onCopy={(command) => void handleCopyCommand(command)}
