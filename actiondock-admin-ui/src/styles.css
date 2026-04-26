@@ -1316,3 +1316,16 @@ a {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.execution-preset-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.execution-preset-bar__select {
+  min-width: 200px;
+  flex: 1;
+  max-width: 320px;
+}

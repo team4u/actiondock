@@ -13,6 +13,7 @@ import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../../components/ExecutionResultCard";
 import { SchemaObjectEditor } from "../../components/SchemaObjectEditor";
 import { BatchRunPanel } from "../../components/BatchRunPanel";
+import type { ReactNode } from "react";
 import type { SchemaFieldDefinition } from "../../schema";
 import { formatDateTime, getExecutionStatusColor, isExecutionActive } from "../../utils";
 import type {
@@ -65,6 +66,7 @@ interface ScriptExecutionTabProps {
   submitBatchExecution: BatchExecutionSubmitter;
   fetchBatchExecution: BatchExecutionFetcher;
   onBatchSessionFinished?: () => void | Promise<void>;
+  presetBar: ReactNode;
 }
 
 export function ScriptExecutionTab({
@@ -100,7 +102,8 @@ export function ScriptExecutionTab({
   messageApi,
   submitBatchExecution,
   fetchBatchExecution,
-  onBatchSessionFinished
+  onBatchSessionFinished,
+  presetBar
 }: ScriptExecutionTabProps) {
   const historyColumns: ColumnsType<ExecutionRecord> = [
     {
@@ -344,6 +347,51 @@ export function ScriptExecutionTab({
                   }
                 />
               </Card>
+
+              )}
+
+              <div className="script-editor-page__execution-toolbar">
+                <Radio.Group
+                  value={executionMode}
+                  optionType="button"
+                  buttonStyle="solid"
+                  onChange={(event) => onExecutionModeChange(event.target.value as SubmitMode)}
+                  options={[
+                    { label: "同步执行", value: "SYNC" },
+                    { label: "异步执行", value: "ASYNC" }
+                  ]}
+                />
+
+                <Space size={12} wrap className="script-editor-page__execution-actions">
+                  <Button icon={<ReloadOutlined />} onClick={onResetExecutionInput}>
+                    重置
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => void onExecute()}
+                    loading={executing}
+                  >
+                    执行
+                  </Button>
+                </Space>
+              </div>
+
+              {presetBar}
+
+              <SchemaObjectEditor
+                form={executionForm}
+                supportedFields={supportedFields}
+                unsupportedFields={unsupportedFields}
+                inputMode={executionInputMode}
+                onInputModeChange={onExecutionInputModeChange}
+                jsonText={executionJsonInput}
+                onJsonTextChange={onExecutionJsonInputChange}
+                jsonLabel="执行入参 JSON"
+                jsonExtra="直接输入 JSON 对象执行，不依赖 inputSchema。"
+                noSchemaExtra="当前脚本没有可渲染的 inputSchema，请直接输入 JSON 对象。"
+                editorTheme={editorTheme}
+              />
             </Space>
           )
         },

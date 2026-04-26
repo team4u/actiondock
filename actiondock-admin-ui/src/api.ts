@@ -17,6 +17,8 @@ import type {
   RepositoryToolDescriptor,
   RepositoryToolDetail,
   ExecuteRequest,
+  ExecutionPreset,
+  ExecutionPresetUpsertRequest,
   ExecutionResponse,
   ExecutionRecord,
   PluginConfigView,
@@ -486,5 +488,31 @@ export function publishRepositoryPlugin(repositoryId: string, payload: Repositor
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
+  });
+}
+
+export function listPresets(scriptId: string): Promise<ExecutionPreset[]> {
+  return request<ExecutionPreset[]>(`/api/scripts/${encodeURIComponent(scriptId)}/presets`);
+}
+
+export function createPreset(scriptId: string, payload: ExecutionPresetUpsertRequest): Promise<ExecutionPreset> {
+  return request<ExecutionPreset>(`/api/scripts/${encodeURIComponent(scriptId)}/presets`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updatePreset(scriptId: string, presetId: string, payload: ExecutionPresetUpsertRequest): Promise<ExecutionPreset> {
+  return request<ExecutionPreset>(`/api/scripts/${encodeURIComponent(scriptId)}/presets/${encodeURIComponent(presetId)}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deletePreset(scriptId: string, presetId: string): Promise<void> {
+  return request<void>(`/api/scripts/${encodeURIComponent(scriptId)}/presets/${encodeURIComponent(presetId)}`, {
+    method: "DELETE"
   });
 }
