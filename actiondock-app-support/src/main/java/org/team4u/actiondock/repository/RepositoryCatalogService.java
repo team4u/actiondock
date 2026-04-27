@@ -617,7 +617,7 @@ public class RepositoryCatalogService {
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())
                 .setUpdatedAt(now);
         scriptRepository.save(definition);
-        syncConfigTemplates(repositoryId, detail.descriptor().toolId(), detail.configTemplate());
+        syncConfigTemplates(repositoryId, detail.descriptor().toolId(), detail.descriptor().version(), detail.configTemplate());
         if (installSchedules) {
             syncScheduleTemplates(definition, detail.scheduleTemplate());
         }
@@ -870,7 +870,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void syncConfigTemplates(String repositoryId, String toolId, List<ConfigTemplateItem> templates) {
+    private void syncConfigTemplates(String repositoryId, String toolId, String repositoryVersion, List<ConfigTemplateItem> templates) {
         for (ConfigTemplateItem template : templates) {
             ConfigValue existing = configValueRepository.findByKey(template.key()).orElse(null);
             String publishMode = (template.secret() || template.defaultValue() == null || template.defaultValue().isBlank())
@@ -881,9 +881,10 @@ public class RepositoryCatalogService {
                         .setKey(template.key())
                         .setValue(publishMode.equals(ConfigPublishMode.INLINE.name()) ? template.defaultValue() : "")
                         .setDescription(normalizeNullable(template.label()))
+                        .setSecret(template.secret())
                         .setRepositoryId(repositoryId)
                         .setRepositoryToolId(toolId)
-                        .setRepositoryVersion(null)
+                        .setRepositoryVersion(repositoryVersion)
                         .setPublishMode(publishMode)
                         .setManaged(true)
                         .setOverridden(false)
@@ -893,12 +894,16 @@ public class RepositoryCatalogService {
             }
             boolean sameSource = Objects.equals(existing.getRepositoryId(), repositoryId)
                     && Objects.equals(existing.getRepositoryToolId(), toolId);
-            if (sameSource && !existing.isOverridden()) {
+            if (sameSource) {
                 existing.setDescription(normalizeNullable(template.label()))
+                        .setSecret(template.secret())
+                        .setRepositoryVersion(repositoryVersion)
                         .setPublishMode(publishMode)
                         .setManaged(true)
-                        .setValue(publishMode.equals(ConfigPublishMode.INLINE.name()) ? template.defaultValue() : "")
                         .setUpdatedAt(LocalDateTime.now());
+                if (!existing.isOverridden()) {
+                    existing.setValue(publishMode.equals(ConfigPublishMode.INLINE.name()) ? template.defaultValue() : "");
+                }
                 configValueRepository.save(existing);
             }
         }

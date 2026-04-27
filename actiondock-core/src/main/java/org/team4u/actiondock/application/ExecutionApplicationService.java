@@ -227,6 +227,20 @@ public class ExecutionApplicationService {
     }
 
     /**
+     * 查询指定调度的所有执行记录。
+     *
+     * @param scheduleId 调度 ID
+     * @return 执行记录列表
+     * @throws IllegalArgumentException 如果 scheduleId 为空
+     */
+    public List<ExecutionRecord> listByScheduleId(String scheduleId) {
+        if (scheduleId == null || scheduleId.isBlank()) {
+            throw new IllegalArgumentException("scheduleId 不能为空");
+        }
+        return executionRepository.findByScheduleId(scheduleId);
+    }
+
+    /**
      * 删除执行记录。
      * <p>
      * 仅允许删除已完成（SUCCESS 或 FAILED）的执行记录，进行中的记录无法删除。

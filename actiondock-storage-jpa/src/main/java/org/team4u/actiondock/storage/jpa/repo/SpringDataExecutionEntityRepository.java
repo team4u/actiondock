@@ -17,6 +17,8 @@ import java.util.List;
 public interface SpringDataExecutionEntityRepository extends JpaRepository<ExecutionEntity, String> {
     List<ExecutionEntity> findByScriptIdOrderByCreatedAtDesc(String scriptId);
 
+    List<ExecutionEntity> findByScheduleIdOrderByCreatedAtDesc(String scheduleId);
+
     @Modifying
     @Transactional
     @Query("delete from ExecutionEntity e where e.scriptId = :scriptId")

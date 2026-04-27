@@ -7,7 +7,7 @@ import {
   ReloadOutlined,
   UploadOutlined
 } from "@ant-design/icons";
-import { Button, Card, Empty, Modal, Space, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Drawer, Empty, Modal, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import type { ChangeEvent, Key } from "react";
@@ -19,10 +19,12 @@ import {
   deleteSchedule,
   disableSchedule,
   enableSchedule,
+  getExecution,
   listSchedules,
   updateSchedule
 } from "../api";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
+import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
@@ -33,7 +35,7 @@ import {
   formatScheduleExportFileName,
   parseScheduleImportBundle
 } from "../scriptTransfer";
-import type { ScriptSchedule } from "../types";
+import type { ExecutionRecord, ScriptSchedule } from "../types";
 import { formatDateTime, getExecutionStatusColor, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
@@ -48,6 +50,23 @@ export function ScheduleManagementPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [modal, modalContextHolder] = Modal.useModal();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerExecution, setDrawerExecution] = useState<ExecutionRecord | null>(null);
+
+  const openExecutionDrawer = async (executionId: string) => {
+    setDrawerOpen(true);
+    setDrawerLoading(true);
+    try {
+      const record = await getExecution(executionId);
+      setDrawerExecution(record);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载执行详情失败"));
+      setDrawerOpen(false);
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -249,9 +268,9 @@ export function ScheduleManagementPage() {
             <Tag color={getExecutionStatusColor(record.lastExecutionStatus)}>
               {record.lastExecutionStatus ?? "UNKNOWN"}
             </Tag>
-            <Text type="secondary" code>
+            <Typography.Link onClick={() => void openExecutionDrawer(record.lastExecutionId!)}>
               {record.lastExecutionId}
-            </Text>
+            </Typography.Link>
           </Space>
         ) : (
           <Text type="secondary">暂无</Text>
@@ -376,6 +395,21 @@ export function ScheduleManagementPage() {
 
         </Card>
       </Space>
+      <Drawer
+        title="执行详情"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        width={720}
+        loading={drawerLoading}
+      >
+        {drawerExecution ? (
+          <ExecutionResultCard
+            execution={drawerExecution}
+            title="执行记录"
+            showTriggerSource
+          />
+        ) : null}
+      </Drawer>
     </>
   );
 }

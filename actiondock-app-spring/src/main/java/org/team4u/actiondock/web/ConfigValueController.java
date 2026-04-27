@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
+import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
 import org.team4u.actiondock.domain.model.ConfigValue;
 
 import java.util.List;
@@ -22,9 +23,12 @@ import java.util.List;
 @RequestMapping("/api/config-values")
 public class ConfigValueController {
     private final ConfigValueApplicationService configValueApplicationService;
+    private final ConfigValueUsageAnalysisService configValueUsageAnalysisService;
 
-    public ConfigValueController(ConfigValueApplicationService configValueApplicationService) {
+    public ConfigValueController(ConfigValueApplicationService configValueApplicationService,
+                                 ConfigValueUsageAnalysisService configValueUsageAnalysisService) {
         this.configValueApplicationService = configValueApplicationService;
+        this.configValueUsageAnalysisService = configValueUsageAnalysisService;
     }
 
     /**
@@ -44,8 +48,8 @@ public class ConfigValueController {
      * @return API 响应，包含配置值
      */
     @GetMapping("/{key}")
-    public ApiResponse<ConfigValueView> detail(@PathVariable String key) {
-        return ApiResponse.success(toView(configValueApplicationService.get(key)));
+    public ApiResponse<ConfigValueDetailView> detail(@PathVariable String key) {
+        return ApiResponse.success(toDetailView(configValueUsageAnalysisService.analyze(key)));
     }
 
     /**
@@ -77,6 +81,38 @@ public class ConfigValueController {
         );
     }
 
+    @PostMapping("/{key}/copy-local-override")
+    public ApiResponse<ConfigValueDetailView> copyLocalOverride(@PathVariable String key) {
+        configValueApplicationService.copyAsLocalOverride(key);
+        return ApiResponse.success(
+                toDetailView(configValueUsageAnalysisService.analyze(key)),
+                "已复制为本地覆盖值"
+        );
+    }
+
+    @PostMapping("/{key}/restore-repository-default")
+    public ApiResponse<ConfigValueDetailView> restoreRepositoryDefault(@PathVariable String key) {
+        ConfigValueUsageAnalysisService.ManagedTemplate template = configValueUsageAnalysisService.resolveManagedTemplate(key);
+        configValueApplicationService.restoreManagedValue(
+                key,
+                new ConfigValue()
+                        .setKey(template.key())
+                        .setValue(template.value())
+                        .setDescription(template.label())
+                        .setSecret(template.secret())
+                        .setRepositoryId(template.repositoryId())
+                        .setRepositoryToolId(template.toolId())
+                        .setRepositoryVersion(template.version())
+                        .setPublishMode(template.publishMode())
+                        .setManaged(true)
+                        .setOverridden(false)
+        );
+        return ApiResponse.success(
+                toDetailView(configValueUsageAnalysisService.analyze(key)),
+                "已恢复仓库默认值"
+        );
+    }
+
     /**
      * 删除指定键的配置值。
      *
@@ -100,10 +136,11 @@ public class ConfigValueController {
 
     private ConfigValueView toView(ConfigValue value) {
         boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
+        boolean masked = value.isSecret() || "PLACEHOLDER".equalsIgnoreCase(value.getPublishMode());
         return new ConfigValueView()
                 .setKey(value.getKey())
-                .setValue(value.isSecret() ? null : value.getValue())
-                .setValueMasked(value.isSecret() && hasValue ? "********" : null)
+                .setValue(masked ? null : value.getValue())
+                .setValueMasked(masked && hasValue ? "********" : null)
                 .setHasValue(hasValue)
                 .setDescription(value.getDescription())
                 .setSecret(value.isSecret())
@@ -115,5 +152,91 @@ public class ConfigValueController {
                 .setOverridden(value.isOverridden())
                 .setCreatedAt(value.getCreatedAt())
                 .setUpdatedAt(value.getUpdatedAt());
+    }
+
+    private ConfigValueDetailView toDetailView(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        ConfigValue value = insight.configValue();
+        boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
+        return new ConfigValueDetailView(
+                value.getKey(),
+                value.isSecret() ? null : value.getValue(),
+                (value.isSecret() || "PLACEHOLDER".equalsIgnoreCase(value.getPublishMode())) && hasValue ? "********" : null,
+                hasValue,
+                value.getDescription(),
+                value.isSecret(),
+                value.getRepositoryId(),
+                value.getRepositoryToolId(),
+                value.getRepositoryVersion(),
+                value.getPublishMode(),
+                value.isManaged(),
+                value.isOverridden(),
+                value.getCreatedAt(),
+                value.getUpdatedAt(),
+                new ConfigValueDetailView.Usage(
+                        insight.configReferences().stream()
+                                .map(item -> new ConfigValueDetailView.ConfigReference(item.key(), item.description()))
+                                .toList(),
+                        insight.scriptReferences().stream()
+                                .map(item -> new ConfigValueDetailView.ScriptReference(
+                                        item.scriptId(),
+                                        item.scriptName(),
+                                        item.scope(),
+                                        item.repositoryId(),
+                                        item.repositoryToolId(),
+                                        item.repositoryVersion()
+                                ))
+                                .toList(),
+                        insight.scheduleReferences().stream()
+                                .map(item -> new ConfigValueDetailView.ScheduleReference(
+                                        item.scheduleId(),
+                                        item.scheduleName(),
+                                        item.scriptId(),
+                                        item.scriptName()
+                                ))
+                                .toList(),
+                        insight.pluginConfigReferences().stream()
+                                .map(item -> new ConfigValueDetailView.PluginConfigReference(
+                                        item.pluginId(),
+                                        item.pluginName(),
+                                        item.dependentScriptCount()
+                                ))
+                                .toList(),
+                        insight.templateDeclarations().stream()
+                                .map(item -> new ConfigValueDetailView.TemplateDeclaration(
+                                        item.repositoryId(),
+                                        item.repositoryName(),
+                                        item.toolId(),
+                                        item.toolName(),
+                                        item.version(),
+                                        item.label(),
+                                        item.secret(),
+                                        item.publishMode(),
+                                        item.defaultValue()
+                                ))
+                                .toList()
+                ),
+                insight.impactedScripts().stream()
+                        .map(item -> new ConfigValueDetailView.ImpactScript(
+                                item.scriptId(),
+                                item.scriptName(),
+                                item.scope(),
+                                item.repositoryId(),
+                                item.repositoryToolId(),
+                                item.repositoryVersion(),
+                                item.reasons()
+                        ))
+                        .toList(),
+                insight.origin() == null ? null : new ConfigValueDetailView.Origin(
+                        insight.origin().repositoryId(),
+                        insight.origin().repositoryName(),
+                        insight.origin().toolId(),
+                        insight.origin().toolName(),
+                        insight.origin().version()
+                ),
+                new ConfigValueDetailView.AvailableActions(
+                        insight.availableActions().canCopyAsLocalOverride(),
+                        insight.availableActions().canRestoreRepositoryDefault()
+                )
+        );
     }
 }

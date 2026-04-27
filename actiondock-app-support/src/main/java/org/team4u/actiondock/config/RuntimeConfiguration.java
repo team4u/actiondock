@@ -12,6 +12,7 @@ import org.team4u.actiondock.application.ExecutionPresetApplicationService;
 import org.team4u.actiondock.application.ScheduleApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.application.ScriptInvocationService;
+import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
@@ -161,6 +162,26 @@ public class RuntimeConfiguration {
                 jsonCodec,
                 properties,
                 pluginArtifactResolverRegistry
+        );
+    }
+
+    @Bean
+    public ConfigValueUsageAnalysisService configValueUsageAnalysisService(ConfigValueRepository configValueRepository,
+                                                                          ScriptRepository scriptRepository,
+                                                                          ScriptScheduleRepository scriptScheduleRepository,
+                                                                          PluginRegistryRepository pluginRegistryRepository,
+                                                                          PluginRuntimeService pluginRuntimeService,
+                                                                          RepositoryCatalogService repositoryCatalogService) {
+        return new ConfigValueUsageAnalysisService(
+                configValueRepository,
+                scriptRepository,
+                scriptScheduleRepository,
+                pluginRegistryRepository,
+                pluginId -> pluginRuntimeService.getConfig(pluginId).getConfig(),
+                repositoryCatalogService::listRepositories,
+                repositoryCatalogService::listRepositoryTools,
+                repositoryCatalogService::listAllRepositoryTools,
+                repositoryCatalogService::getRepositoryTool
         );
     }
 }

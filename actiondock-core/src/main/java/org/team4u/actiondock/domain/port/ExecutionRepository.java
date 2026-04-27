@@ -55,6 +55,16 @@ public interface ExecutionRepository {
     void deleteById(String id);
 
     /**
+     * 根据调度标识查询其所有执行记录。
+     * <p>
+     * 返回结果按时间倒序排列，最新的执行记录排在前面。
+     *
+     * @param scheduleId 调度标识
+     * @return 该调度关联的所有执行记录列表
+     */
+    List<ExecutionRecord> findByScheduleId(String scheduleId);
+
+    /**
      * 删除指定脚本定义的所有执行记录。
      * <p>
      * 通常在删除脚本定义时级联清理其历史执行数据。

@@ -243,6 +243,83 @@ export interface ConfigValue {
   updatedAt?: string;
 }
 
+export interface ConfigValueDetail extends ConfigValue {
+  usage: ConfigValueUsage;
+  impactedScripts: ConfigValueImpactScript[];
+  origin?: ConfigValueOrigin | null;
+  availableActions: ConfigValueAvailableActions;
+}
+
+export interface ConfigValueUsage {
+  configReferences: ConfigValueReference[];
+  scriptReferences: ConfigValueScriptReference[];
+  scheduleReferences: ConfigValueScheduleReference[];
+  pluginConfigReferences: ConfigValuePluginConfigReference[];
+  templateDeclarations: ConfigValueTemplateDeclaration[];
+}
+
+export interface ConfigValueReference {
+  key: string;
+  description?: string | null;
+}
+
+export interface ConfigValueScriptReference {
+  scriptId: string;
+  scriptName: string;
+  scope?: string | null;
+  repositoryId?: string | null;
+  repositoryToolId?: string | null;
+  repositoryVersion?: string | null;
+}
+
+export interface ConfigValueScheduleReference {
+  scheduleId: string;
+  scheduleName: string;
+  scriptId: string;
+  scriptName: string;
+}
+
+export interface ConfigValuePluginConfigReference {
+  pluginId: string;
+  pluginName: string;
+  dependentScriptCount: number;
+}
+
+export interface ConfigValueTemplateDeclaration {
+  repositoryId: string;
+  repositoryName?: string | null;
+  toolId: string;
+  toolName: string;
+  version?: string | null;
+  label?: string | null;
+  secret: boolean;
+  publishMode: string;
+  defaultValue?: string | null;
+}
+
+export interface ConfigValueImpactScript {
+  scriptId: string;
+  scriptName: string;
+  scope?: string | null;
+  repositoryId?: string | null;
+  repositoryToolId?: string | null;
+  repositoryVersion?: string | null;
+  reasons: string[];
+}
+
+export interface ConfigValueOrigin {
+  repositoryId?: string | null;
+  repositoryName?: string | null;
+  toolId?: string | null;
+  toolName?: string | null;
+  version?: string | null;
+}
+
+export interface ConfigValueAvailableActions {
+  canCopyAsLocalOverride: boolean;
+  canRestoreRepositoryDefault: boolean;
+}
+
 export interface ConfigValueRequest {
   key: string;
   value: string;

@@ -122,6 +122,9 @@ public class ConfigValueApplicationService {
         ensureEnabled();
         String normalizedKey = normalizeKey(key);
         ConfigValue existing = requireExisting(normalizedKey);
+        if (existing.isManaged() && !existing.isOverridden()) {
+            throw new IllegalArgumentException("托管配置值需先复制为本地覆盖值后再修改");
+        }
         ConfigValue normalized = normalizeForUpdate(normalizedKey, configValue, preserveValue, existing);
         normalized.setCreatedAt(existing.getCreatedAt())
                 .setUpdatedAt(LocalDateTime.now())
@@ -146,6 +149,33 @@ public class ConfigValueApplicationService {
         String normalizedKey = normalizeKey(key);
         requireExisting(normalizedKey);
         configValueRepository.deleteByKey(normalizedKey);
+    }
+
+    public ConfigValue copyAsLocalOverride(String key) {
+        ensureEnabled();
+        ConfigValue existing = requireExisting(normalizeKey(key));
+        if (!existing.isManaged()) {
+            throw new IllegalArgumentException("仅托管配置值支持复制为本地覆盖值");
+        }
+        if (existing.isOverridden()) {
+            return copy(existing);
+        }
+        existing.setOverridden(true)
+                .setUpdatedAt(LocalDateTime.now());
+        return copy(configValueRepository.save(existing));
+    }
+
+    public ConfigValue restoreManagedValue(String key, ConfigValue restoredValue) {
+        ensureEnabled();
+        String normalizedKey = normalizeKey(key);
+        ConfigValue existing = requireExisting(normalizedKey);
+        if (!existing.isManaged()) {
+            throw new IllegalArgumentException("仅托管配置值支持恢复仓库默认值");
+        }
+        ConfigValue normalized = normalizeForRestore(normalizedKey, restoredValue, existing);
+        normalized.setCreatedAt(existing.getCreatedAt())
+                .setUpdatedAt(LocalDateTime.now());
+        return copy(configValueRepository.save(normalized));
     }
 
     /**
@@ -312,6 +342,26 @@ public class ConfigValueApplicationService {
                 .setPublishMode(configValue.getPublishMode())
                 .setManaged(configValue.isManaged())
                 .setOverridden(configValue.isOverridden());
+    }
+
+    private ConfigValue normalizeForRestore(String key, ConfigValue restoredValue, ConfigValue existing) {
+        if (restoredValue == null) {
+            throw new IllegalArgumentException("恢复默认值缺少来源模板");
+        }
+        if (restoredValue.getKey() != null && !restoredValue.getKey().isBlank() && !key.equals(normalizeKey(restoredValue.getKey()))) {
+            throw new IllegalArgumentException("恢复默认值的 key 不匹配");
+        }
+        return new ConfigValue()
+                .setKey(key)
+                .setValue(restoredValue.getValue())
+                .setDescription(normalizeDescription(restoredValue.getDescription()))
+                .setSecret(restoredValue.isSecret())
+                .setRepositoryId(restoredValue.getRepositoryId() == null ? existing.getRepositoryId() : restoredValue.getRepositoryId())
+                .setRepositoryToolId(restoredValue.getRepositoryToolId() == null ? existing.getRepositoryToolId() : restoredValue.getRepositoryToolId())
+                .setRepositoryVersion(restoredValue.getRepositoryVersion() == null ? existing.getRepositoryVersion() : restoredValue.getRepositoryVersion())
+                .setPublishMode(restoredValue.getPublishMode() == null ? existing.getPublishMode() : restoredValue.getPublishMode())
+                .setManaged(true)
+                .setOverridden(false);
     }
 
     private String normalizeKey(String key) {

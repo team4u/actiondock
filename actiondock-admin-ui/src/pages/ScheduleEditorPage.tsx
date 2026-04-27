@@ -8,6 +8,7 @@ import {
   Alert,
   Button,
   Card,
+  Drawer,
   Empty,
   Form,
   Input,
@@ -16,11 +17,13 @@ import {
   Select,
   Space,
   Switch,
+  Table,
   Tag,
   Tooltip,
   Typography,
   message
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -29,6 +32,7 @@ import {
   deleteSchedule,
   executePublishedScript,
   getSchedule,
+  listExecutionsByScheduleId,
   listScripts,
   updateSchedule
 } from "../api";
@@ -48,13 +52,14 @@ import {
 import type {
   ExecutionRecord,
   ExecutionResponse,
+  ExecutionStatus,
   ScriptDefinition,
   ScriptSchedule,
   ScriptScheduleUpsertRequest,
   SubmitMode,
   ValidationErrorData
 } from "../types";
-import { formatDateTime, getExecutionStatusColor, isExecutionActive, parseJsonText, prettyJson } from "../utils";
+import { formatDateTime, getErrorMessage, getExecutionStatusColor, isExecutionActive, parseJsonText, prettyJson } from "../utils";
 
 const { Text } = Typography;
 
@@ -124,6 +129,10 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
   const [scheduleInputMode, setScheduleInputMode] = useState<ObjectInputMode>("JSON");
   const [scheduleInputJson, setScheduleInputJson] = useState("{}");
   const debugPanelRef = useRef<HTMLDivElement | null>(null);
+  const [historyRecords, setHistoryRecords] = useState<ExecutionRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyDetailRecord, setHistoryDetailRecord] = useState<ExecutionRecord | null>(null);
+  const [historyDetailOpen, setHistoryDetailOpen] = useState(false);
   const { pollingExecutionId, startPolling, clearPolling } = usePollingExecution({
     onPollResult: (record) => setDebugResult(record),
     onCompleted: () => messageApi.success("调试执行完成"),
@@ -248,6 +257,19 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
     setScheduleInputJson(prettyJson(schedule.input));
     setScheduleInputMode(supportedFields.length > 0 ? "SCHEMA" : "JSON");
     clearDebugState();
+    void loadExecutionHistory(schedule.id);
+  };
+
+  const loadExecutionHistory = async (scheduleId: string) => {
+    setHistoryLoading(true);
+    try {
+      const records = await listExecutionsByScheduleId(scheduleId);
+      setHistoryRecords(records);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载执行历史失败"));
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -336,6 +358,9 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
+      if (selectedScript?.hasUnpublishedChanges) {
+        messageApi.warning("定时任务仍会运行已发布版本，脚本有未发布的变更");
+      }
       const payload: ScriptScheduleUpsertRequest = {
         scriptId: values.scriptId,
         name: values.name.trim(),
@@ -666,19 +691,22 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                       title={
                         <Space size={6}>
                           <span>手工调试</span>
-                          <InfoHint content="使用固定输入直接执行，不影响定时任务。" />
+                          <InfoHint content="使用固定输入直接执行已发布版本，不影响定时任务。" />
                         </Space>
                       }
                       extra={
-                        <Button
-                          type="primary"
-                          icon={<PlayCircleOutlined />}
-                          loading={executingDebug}
-                          disabled={!selectedPublishedScript?.id}
-                          onClick={() => void handleDebugExecute()}
-                        >
-                          执行调试
-                        </Button>
+                        <>
+                          <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>使用已发布版本</Text>
+                          <Button
+                            type="primary"
+                            icon={<PlayCircleOutlined />}
+                            loading={executingDebug}
+                            disabled={!selectedPublishedScript?.id}
+                            onClick={() => void handleDebugExecute()}
+                          >
+                            执行调试
+                          </Button>
+                        </>
                       }
                     >
                       <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -723,10 +751,74 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                   </div>
                 </Col>
               </Row>
+
+              {mode === "edit" && currentSchedule ? (
+                <Card type="inner" title="执行历史">
+                  {historyRecords.length === 0 && !historyLoading ? (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无执行记录" />
+                  ) : (
+                    <Table
+                      rowKey="id"
+                      size="small"
+                      loading={historyLoading}
+                      columns={[
+                        {
+                          title: "状态",
+                          dataIndex: "status",
+                          key: "status",
+                          width: 100,
+                          render: (status: ExecutionStatus) => (
+                            <Tag color={getExecutionStatusColor(status)}>{status}</Tag>
+                          )
+                        },
+                        {
+                          title: "提交时间",
+                          dataIndex: "createdAt",
+                          key: "createdAt",
+                          width: 170,
+                          render: (value?: string) => formatDateTime(value)
+                        },
+                        {
+                          title: "完成时间",
+                          dataIndex: "finishedAt",
+                          key: "finishedAt",
+                          width: 170,
+                          render: (value?: string) => formatDateTime(value)
+                        }
+                      ]}
+                      dataSource={historyRecords}
+                      pagination={{ pageSize: 5, responsive: true }}
+                      onRow={(record: ExecutionRecord) => ({
+                        onClick: () => {
+                          setHistoryDetailRecord(record);
+                          setHistoryDetailOpen(true);
+                        },
+                        style: { cursor: "pointer" }
+                      })}
+                    />
+                  )}
+                </Card>
+              ) : null}
             </Space>
           </Card>
         )}
       </Space>
+      <Drawer
+        title="执行详情"
+        open={historyDetailOpen}
+        onClose={() => setHistoryDetailOpen(false)}
+        width={720}
+      >
+        {historyDetailRecord ? (
+          <ExecutionResultCard
+            execution={historyDetailRecord}
+            inputSchema={selectedScript?.inputSchema}
+            outputSchema={selectedScript?.outputSchema}
+            title="执行记录"
+            showTriggerSource
+          />
+        ) : null}
+      </Drawer>
     </>
   );
 }

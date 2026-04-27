@@ -517,6 +517,14 @@ class ExecutionApplicationServiceTest {
         }
 
         @Override
+        public List<ExecutionRecord> findByScheduleId(String scheduleId) {
+            return store.values().stream()
+                    .filter(record -> scheduleId.equals(record.getScheduleId()))
+                    .map(RecordingExecutionRepository::copy)
+                    .toList();
+        }
+
+        @Override
         public void deleteById(String id) {
             store.remove(id);
         }

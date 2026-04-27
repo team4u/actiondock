@@ -44,6 +44,11 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
     }
 
     @Override
+    public List<ExecutionRecord> findByScheduleId(String scheduleId) {
+        return repository.findByScheduleIdOrderByCreatedAtDesc(scheduleId).stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public List<ExecutionRecord> findAll() {
         return repository.findAll().stream().map(this::toDomain).toList();
     }

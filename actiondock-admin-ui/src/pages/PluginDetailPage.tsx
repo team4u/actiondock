@@ -223,6 +223,14 @@ export function PluginDetailPage() {
     }
   }, [pluginId, messageApi]);
 
+  const loadPlugin = useCallback(async () => {
+    await loadAll();
+  }, [loadAll]);
+
+  const loadConfig = useCallback(async () => {
+    await loadAll();
+  }, [loadAll]);
+
   useEffect(() => {
     const controller = new AbortController();
     void loadAll(controller.signal);

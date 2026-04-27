@@ -5,6 +5,7 @@ import type {
   ApiErrorPayload,
   ApiResponse,
   ConfigValue,
+  ConfigValueDetail,
   ConfigValueRequest,
   RepositoryDefinition,
   DevelopmentStatus,
@@ -160,6 +161,11 @@ export function listExecutions(scriptId: string): Promise<ExecutionRecord[]> {
   return request<ExecutionRecord[]>(`/api/executions?${params.toString()}`);
 }
 
+export function listExecutionsByScheduleId(scheduleId: string): Promise<ExecutionRecord[]> {
+  const params = new URLSearchParams({ scheduleId });
+  return request<ExecutionRecord[]>(`/api/executions?${params.toString()}`);
+}
+
 export function deleteExecution(id: string): Promise<void> {
   return request<void>(`/api/executions/${id}`, {
     method: "DELETE"
@@ -287,8 +293,8 @@ export function listConfigValues(): Promise<ConfigValue[]> {
   return request<ConfigValue[]>("/api/config-values");
 }
 
-export function getConfigValue(key: string): Promise<ConfigValue> {
-  return request<ConfigValue>(`/api/config-values/${encodeURIComponent(key)}`);
+export function getConfigValue(key: string): Promise<ConfigValueDetail> {
+  return request<ConfigValueDetail>(`/api/config-values/${encodeURIComponent(key)}`);
 }
 
 export function createConfigValue(payload: ConfigValueRequest): Promise<ConfigValue> {
@@ -310,6 +316,18 @@ export function updateConfigValue(key: string, payload: ConfigValueRequest): Pro
 export function deleteConfigValue(key: string): Promise<void> {
   return request<void>(`/api/config-values/${encodeURIComponent(key)}`, {
     method: "DELETE"
+  });
+}
+
+export function copyConfigValueAsLocalOverride(key: string): Promise<ConfigValueDetail> {
+  return request<ConfigValueDetail>(`/api/config-values/${encodeURIComponent(key)}/copy-local-override`, {
+    method: "POST"
+  });
+}
+
+export function restoreConfigValueRepositoryDefault(key: string): Promise<ConfigValueDetail> {
+  return request<ConfigValueDetail>(`/api/config-values/${encodeURIComponent(key)}/restore-repository-default`, {
+    method: "POST"
   });
 }
 

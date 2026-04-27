@@ -81,6 +81,55 @@ class ConfigValueApplicationServiceTest {
         assertThat(updated.getDescription()).isEqualTo("Updated");
     }
 
+    @Test
+    void managedValueMustBeOverriddenBeforeUpdate() {
+        service.create(new ConfigValue()
+                .setKey("managed.key")
+                .setValue("default")
+                .setManaged(true));
+
+        assertThatThrownBy(() -> service.update("managed.key", new ConfigValue()
+                .setKey("managed.key")
+                .setValue("custom"), false))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("托管配置值需先复制为本地覆盖值后再修改");
+    }
+
+    @Test
+    void canCopyManagedValueAsLocalOverrideAndRestoreTemplateDefault() {
+        service.create(new ConfigValue()
+                .setKey("managed.key")
+                .setValue("default")
+                .setDescription("Default")
+                .setSecret(false)
+                .setRepositoryId("repo-1")
+                .setRepositoryToolId("tool-a")
+                .setRepositoryVersion("1.0.0")
+                .setPublishMode("INLINE")
+                .setManaged(true)
+                .setOverridden(false));
+
+        ConfigValue overridden = service.copyAsLocalOverride("managed.key");
+        assertThat(overridden.isManaged()).isTrue();
+        assertThat(overridden.isOverridden()).isTrue();
+        assertThat(overridden.getValue()).isEqualTo("default");
+
+        ConfigValue restored = service.restoreManagedValue("managed.key", new ConfigValue()
+                .setKey("managed.key")
+                .setValue("template-default")
+                .setDescription("Template")
+                .setRepositoryId("repo-1")
+                .setRepositoryToolId("tool-a")
+                .setRepositoryVersion("1.1.0")
+                .setPublishMode("INLINE")
+                .setManaged(true)
+                .setOverridden(false));
+        assertThat(restored.isManaged()).isTrue();
+        assertThat(restored.isOverridden()).isFalse();
+        assertThat(restored.getValue()).isEqualTo("template-default");
+        assertThat(restored.getRepositoryVersion()).isEqualTo("1.1.0");
+    }
+
     private static final class InMemoryConfigValueRepository implements ConfigValueRepository {
         private final Map<String, ConfigValue> values = new LinkedHashMap<>();
 
@@ -116,6 +165,12 @@ class ConfigValueApplicationServiceTest {
                     .setValue(source.getValue())
                     .setDescription(source.getDescription())
                     .setSecret(source.isSecret())
+                    .setRepositoryId(source.getRepositoryId())
+                    .setRepositoryToolId(source.getRepositoryToolId())
+                    .setRepositoryVersion(source.getRepositoryVersion())
+                    .setPublishMode(source.getPublishMode())
+                    .setManaged(source.isManaged())
+                    .setOverridden(source.isOverridden())
                     .setCreatedAt(source.getCreatedAt())
                     .setUpdatedAt(source.getUpdatedAt());
         }

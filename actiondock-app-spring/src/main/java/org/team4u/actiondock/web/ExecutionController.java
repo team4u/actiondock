@@ -61,13 +61,24 @@ public class ExecutionController {
     }
 
     /**
-     * 查询指定脚本的执行记录列表。
+     * 查询执行记录列表。
+     * <p>
+     * 支持 scriptId 或 scheduleId 筛选，两者必须提供其一。
      *
-     * @param scriptId 脚本 ID
+     * @param scriptId    脚本 ID（可选）
+     * @param scheduleId  调度 ID（可选）
      * @return API 响应，包含执行记录列表
      */
     @GetMapping
-    public ApiResponse<List<ExecutionRecord>> list(@RequestParam String scriptId) {
+    public ApiResponse<List<ExecutionRecord>> list(
+            @RequestParam(required = false) String scriptId,
+            @RequestParam(required = false) String scheduleId) {
+        if (scheduleId != null && !scheduleId.isBlank()) {
+            return ApiResponse.success(executionApplicationService.listByScheduleId(scheduleId));
+        }
+        if (scriptId == null || scriptId.isBlank()) {
+            throw new IllegalArgumentException("scriptId 或 scheduleId 必须提供其一");
+        }
         return ApiResponse.success(executionApplicationService.list(scriptId));
     }
 
