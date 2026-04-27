@@ -607,7 +607,7 @@ function deserializeArrayItemsDraft(
     };
   }
 
-  if (itemsMeta.kind && itemsMeta.kind !== "object" && itemsMeta.kind !== "array") {
+  if (itemsMeta.kind && itemsMeta.kind !== "array") {
     return {
       id: createDraftId(),
       name: "items",

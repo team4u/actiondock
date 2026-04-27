@@ -13,7 +13,14 @@ import {
   Typography,
   message
 } from "antd";
-import { CopyOutlined, ExperimentOutlined, ImportOutlined, PlayCircleOutlined } from "@ant-design/icons";
+import {
+  CopyOutlined,
+  EyeOutlined,
+  ExperimentOutlined,
+  FileTextOutlined,
+  ImportOutlined,
+  PlayCircleOutlined
+} from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -29,18 +36,38 @@ import {
 } from "../../api";
 import {
   WORKBENCH_TASKS,
+  buildWorkbenchExecutionPrefill,
+  buildWorkbenchReleaseNotesDraft,
+  buildWorkbenchSchemaPatchApplication,
+  buildWorkbenchScriptPatchApplication,
   buildGeneratedScriptImportText,
   normalizeWorkbenchTask,
   workbenchResultCopyText,
   type WorkbenchTaskKey
 } from "../../aiWorkbench";
 import { CodeEditor } from "../../components/CodeEditor";
+import { ScriptDiffDrawer } from "../../components/diff/ScriptDiffDrawer";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
 import { TableLinkCell } from "../../components/TableLinkCell";
 import { useColorMode } from "../../contexts/ColorModeContext";
-import type { AiAgentProfile, AiWorkbenchCommand, AiWorkbenchResult, ExecutionRecord, ScriptDefinition } from "../../types";
+import { buildScriptDiff, toDiffTarget } from "../../scriptDiff";
+import type {
+  AiAgentProfile,
+  AiWorkbenchCommand,
+  AiWorkbenchResult,
+  ExecutionRecord,
+  ScriptDefinition,
+  ScriptType
+} from "../../types";
 import { copyText, prettyJson } from "../../utils";
+import {
+  applyJsonMergePatch,
+  saveWorkbenchExecutionPrefill,
+  saveWorkbenchReleaseNotesDraft,
+  saveWorkbenchSchemaPatchApplication,
+  saveWorkbenchScriptPatchApplication
+} from "../../workbenchSession";
 
 const { Text, Title } = Typography;
 
@@ -50,6 +77,13 @@ interface WorkbenchFormValues {
   agentProfile?: string;
   objective?: string;
   instructions?: string;
+}
+
+interface DiffPreviewState {
+  diff: ReturnType<typeof buildScriptDiff>;
+  scriptId: string;
+  targetType?: ScriptType;
+  title: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -93,6 +127,17 @@ export function AiWorkbenchResultPanel({
         <JsonPreview title="inputSchema" value={asRecord(payload.inputSchema)} emptyDescription="无输入 Schema" />
         <JsonPreview title="outputSchema" value={asRecord(payload.outputSchema)} emptyDescription="无输出 Schema" />
         <Button icon={<ImportOutlined />} disabled={result.status !== "SUCCESS"} onClick={onImportGenerated}>导入生成脚本</Button>
+      </Space>
+    );
+  }
+  if (taskKey === "improve") {
+    return (
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+        {typeof payload.updatedSource === "string" && payload.updatedSource.trim() ? (
+          <CodeEditor value={payload.updatedSource} language="groovy" theme={editorTheme} height="240px" onChange={() => undefined} readOnly />
+        ) : null}
+        <pre className="json-preview">{fieldText(payload.patch ?? payload.suggestion ?? payload)}</pre>
+        {payload.rationale ? <Text>{fieldText(payload.rationale)}</Text> : null}
       </Space>
     );
   }
@@ -150,10 +195,12 @@ export function AiWorkbenchPage() {
   const [agents, setAgents] = useState<AiAgentProfile[]>([]);
   const [result, setResult] = useState<AiWorkbenchResult | null>(null);
   const [running, setRunning] = useState(false);
+  const [diffPreview, setDiffPreview] = useState<DiffPreviewState | null>(null);
 
   const activeTaskKey = normalizeWorkbenchTask(searchParams.get("task"));
   const activeTask = WORKBENCH_TASKS.find((task) => task.key === activeTaskKey) ?? WORKBENCH_TASKS[0];
   const selectedScriptId = Form.useWatch("scriptId", form);
+  const selectedExecutionId = Form.useWatch("executionId", form);
 
   useEffect(() => {
     void Promise.all([listScripts(), listAiAgents()]).then(([nextScripts, nextAgents]) => {
@@ -165,7 +212,9 @@ export function AiWorkbenchPage() {
   useEffect(() => {
     if (selectedScriptId) {
       void listExecutions(selectedScriptId).then(setExecutions).catch(() => setExecutions([]));
+      return;
     }
+    setExecutions([]);
   }, [selectedScriptId]);
 
   useEffect(() => {
@@ -188,50 +237,94 @@ export function AiWorkbenchPage() {
     () => agents.map((agent) => ({ value: agent.id, label: `${agent.name || agent.id} (${agent.id})` })),
     [agents]
   );
+  const selectedScript = useMemo(
+    () => scripts.find((script) => script.id === selectedScriptId) ?? null,
+    [scripts, selectedScriptId]
+  );
+  const selectedExecution = useMemo(
+    () => executions.find((execution) => execution.id === selectedExecutionId) ?? null,
+    [executions, selectedExecutionId]
+  );
+  const canApplyToDraft = Boolean(selectedScript && selectedScript.editable !== false);
 
   const switchTask = (key: WorkbenchTaskKey) => {
     const next = new URLSearchParams(searchParams);
     next.set("task", key);
     setSearchParams(next);
+    setDiffPreview(null);
     setResult(null);
   };
 
-  const buildPayload = (values: WorkbenchFormValues): AiWorkbenchCommand => ({
+  const buildPayload = (values: WorkbenchFormValues, context: Record<string, unknown> = {}): AiWorkbenchCommand => ({
     objective: values.objective,
     instructions: values.instructions,
     agentProfile: values.agentProfile,
     scriptId: values.scriptId,
     executionId: values.executionId,
-    context: {}
+    context
   });
 
-  const runTask = async () => {
+  const validateTaskValues = (taskKey: WorkbenchTaskKey, values: WorkbenchFormValues) => {
+    if (taskKey === "generate" && !values.objective?.trim()) {
+      throw new Error("请填写目标");
+    }
+    if (["improve", "schema", "review", "releaseNotes"].includes(taskKey) && !values.scriptId) {
+      throw new Error("请选择脚本");
+    }
+    if (taskKey === "diagnose" && !values.executionId) {
+      throw new Error("请选择执行记录");
+    }
+  };
+
+  const executeTask = async (
+    taskKey: WorkbenchTaskKey,
+    overrides: Partial<WorkbenchFormValues> = {},
+    context: Record<string, unknown> = {}
+  ) => {
     setRunning(true);
     setResult(null);
     try {
-      const values = await form.validateFields();
-      const payload = buildPayload(values);
+      const values = { ...(form.getFieldsValue(true) as WorkbenchFormValues), ...overrides };
+      validateTaskValues(taskKey, values);
+      form.setFieldsValue(values);
+      const payload = buildPayload(values, context);
       const response =
-        activeTask.key === "generate"
+        taskKey === "generate"
           ? await generateWorkbenchScript(payload)
-          : activeTask.key === "improve"
+          : taskKey === "improve"
             ? await improveWorkbenchScript(payload)
-            : activeTask.key === "schema"
+            : taskKey === "schema"
               ? await improveWorkbenchSchema(payload)
-              : activeTask.key === "diagnose"
+              : taskKey === "diagnose"
                 ? await diagnoseWorkbenchExecution(values.executionId || "", payload)
-                : activeTask.key === "review"
+                : taskKey === "review"
                   ? await reviewWorkbenchPublish(values.scriptId || "", payload)
                   : await generateWorkbenchReleaseNotes(values.scriptId || "", payload);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("task", taskKey);
+      if (values.scriptId) {
+        nextParams.set("scriptId", values.scriptId);
+      }
+      if (values.executionId) {
+        nextParams.set("executionId", values.executionId);
+      }
+      setSearchParams(nextParams, { replace: true });
       setResult(response);
       if (response.status === "FAILED") {
         messageApi.warning(response.errorMessage || "Agent 输出未通过结构化校验");
       }
+      return response;
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "Workbench 任务失败");
+      return null;
     } finally {
       setRunning(false);
     }
+  };
+
+  const runTask = async () => {
+    const values = await form.validateFields();
+    void executeTask(activeTask.key, values);
   };
 
   const openGeneratedImport = () => {
@@ -240,9 +333,201 @@ export function AiWorkbenchPage() {
     navigate("/scripts/new?importGenerated=1");
   };
 
+  const openScriptPatchDiff = () => {
+    const patch = buildWorkbenchScriptPatchApplication(result);
+    if (!selectedScript || !patch) {
+      messageApi.warning("当前结果缺少可预览的脚本 patch");
+      return;
+    }
+    setDiffPreview({
+      scriptId: selectedScript.id,
+      targetType: selectedScript.type,
+      title: "AI 脚本 patch Diff",
+      diff: buildScriptDiff(
+        toDiffTarget(selectedScript),
+        {
+          ...toDiffTarget(selectedScript),
+          source: patch.updatedSource
+        },
+        { context: "import" }
+      )
+    });
+  };
+
+  const openSchemaPatchDiff = () => {
+    const patch = buildWorkbenchSchemaPatchApplication(selectedScript?.id, result);
+    if (!selectedScript || !patch) {
+      messageApi.warning("当前结果缺少可预览的 Schema patch");
+      return;
+    }
+    const nextInputSchema = patch.inputSchemaPatch
+      ? applyJsonMergePatch(selectedScript.inputSchema, patch.inputSchemaPatch)
+      : selectedScript.inputSchema;
+    const nextOutputSchema = patch.outputSchemaPatch
+      ? applyJsonMergePatch(selectedScript.outputSchema, patch.outputSchemaPatch)
+      : selectedScript.outputSchema;
+    setDiffPreview({
+      scriptId: selectedScript.id,
+      targetType: selectedScript.type,
+      title: "AI Schema Patch Diff",
+      diff: buildScriptDiff(
+        {
+          ...toDiffTarget(selectedScript),
+          rawInputSchemaText: prettyJson(selectedScript.inputSchema),
+          rawOutputSchemaText: prettyJson(selectedScript.outputSchema)
+        },
+        {
+          ...toDiffTarget(selectedScript),
+          inputSchema: nextInputSchema,
+          outputSchema: nextOutputSchema,
+          rawInputSchemaText: prettyJson(nextInputSchema),
+          rawOutputSchemaText: prettyJson(nextOutputSchema)
+        },
+        { context: "import" }
+      )
+    });
+  };
+
+  const applyScriptPatch = (goToExecution: boolean) => {
+    const patch = buildWorkbenchScriptPatchApplication(result);
+    if (!selectedScript || !patch) {
+      messageApi.warning("当前结果缺少可应用的脚本 patch");
+      return;
+    }
+    if (!canApplyToDraft) {
+      messageApi.warning("当前脚本不可直接应用 AI 修改，请先 Fork");
+      return;
+    }
+    saveWorkbenchScriptPatchApplication(patch);
+    const nextParams = new URLSearchParams();
+    nextParams.set("workbenchApply", "scriptPatch");
+    if (goToExecution) {
+      nextParams.set("tab", "execution");
+      nextParams.set("workbenchAutoSave", "1");
+      const prefill = buildWorkbenchExecutionPrefill(selectedScript.id, selectedExecution?.input, "失败执行输入");
+      if (prefill) {
+        saveWorkbenchExecutionPrefill(prefill);
+        nextParams.set("workbenchPrefill", "1");
+      }
+    }
+    navigate(`/scripts/${encodeURIComponent(selectedScript.id)}?${nextParams.toString()}`);
+  };
+
+  const applySchemaPatch = (goToExecution: boolean) => {
+    const patch = buildWorkbenchSchemaPatchApplication(selectedScript?.id, result);
+    if (!selectedScript || !patch) {
+      messageApi.warning("当前结果缺少可应用的 Schema patch");
+      return;
+    }
+    if (!canApplyToDraft) {
+      messageApi.warning("当前脚本不可直接应用 AI 修改，请先 Fork");
+      return;
+    }
+    saveWorkbenchSchemaPatchApplication(patch);
+    const nextParams = new URLSearchParams();
+    nextParams.set("workbenchApply", "schemaPatch");
+    if (goToExecution) {
+      nextParams.set("tab", "execution");
+      nextParams.set("workbenchAutoSave", "1");
+      const prefill = buildWorkbenchExecutionPrefill(selectedScript.id, selectedExecution?.input, "失败执行输入");
+      if (prefill) {
+        saveWorkbenchExecutionPrefill(prefill);
+        nextParams.set("workbenchPrefill", "1");
+      }
+    }
+    navigate(`/scripts/${encodeURIComponent(selectedScript.id)}?${nextParams.toString()}`);
+  };
+
+  const applyReleaseNotes = () => {
+    const releaseNotes = buildWorkbenchReleaseNotesDraft(selectedScript?.id, result);
+    if (!selectedScript || !releaseNotes) {
+      messageApi.warning("当前结果缺少可写入的发布日志");
+      return;
+    }
+    saveWorkbenchReleaseNotesDraft(releaseNotes);
+    navigate(`/scripts/${encodeURIComponent(selectedScript.id)}?workbenchReleaseNotes=1`);
+  };
+
+  const renderResultActions = () => {
+    if (!result) {
+      return null;
+    }
+    if (activeTask.key === "diagnose") {
+      return (
+        <Button
+          icon={<PlayCircleOutlined />}
+          disabled={result.status !== "SUCCESS"}
+          onClick={() => void executeTask("improve", {}, { executionDiagnosis: result.result })}
+        >
+          生成修复 Patch
+        </Button>
+      );
+    }
+    if (activeTask.key === "improve") {
+      return (
+        <>
+          <Button icon={<EyeOutlined />} disabled={result.status !== "SUCCESS"} onClick={openScriptPatchDiff}>
+            预览 Diff
+          </Button>
+          <Button icon={<ImportOutlined />} disabled={result.status !== "SUCCESS" || !canApplyToDraft} onClick={() => applyScriptPatch(false)}>
+            应用到草稿
+          </Button>
+          <Button type="primary" icon={<PlayCircleOutlined />} disabled={result.status !== "SUCCESS" || !canApplyToDraft} onClick={() => applyScriptPatch(true)}>
+            应用并去执行调试
+          </Button>
+        </>
+      );
+    }
+    if (activeTask.key === "schema") {
+      return (
+        <>
+          <Button icon={<EyeOutlined />} disabled={result.status !== "SUCCESS"} onClick={openSchemaPatchDiff}>
+            预览 Schema 变更
+          </Button>
+          <Button icon={<ImportOutlined />} disabled={result.status !== "SUCCESS" || !canApplyToDraft} onClick={() => applySchemaPatch(false)}>
+            应用到草稿
+          </Button>
+          <Button type="primary" icon={<PlayCircleOutlined />} disabled={result.status !== "SUCCESS" || !canApplyToDraft} onClick={() => applySchemaPatch(true)}>
+            应用并去执行调试
+          </Button>
+        </>
+      );
+    }
+    if (activeTask.key === "review") {
+      return (
+        <Button
+          icon={<FileTextOutlined />}
+          disabled={result.status !== "SUCCESS"}
+          onClick={() => void executeTask("releaseNotes", {}, { publishReview: result.result })}
+        >
+          生成 Release Notes
+        </Button>
+      );
+    }
+    if (activeTask.key === "releaseNotes") {
+      return (
+        <Button icon={<ImportOutlined />} disabled={result.status !== "SUCCESS"} onClick={applyReleaseNotes}>
+          写入发布日志
+        </Button>
+      );
+    }
+    return null;
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
+      {diffPreview ? (
+        <ScriptDiffDrawer
+          open={true}
+          onClose={() => setDiffPreview(null)}
+          diff={diffPreview.diff}
+          scriptId={diffPreview.scriptId}
+          title={diffPreview.title}
+          theme={colorMode === "dark" ? "vs-dark" : "vs-light"}
+          targetType={diffPreview.targetType}
+        />
+      ) : null}
       <PageHeader
         title="AI Workbench"
         meta="任务型脚本开发工作台，只生成草稿和提案"
@@ -320,6 +605,7 @@ export function AiWorkbenchPage() {
                 <Button icon={<CopyOutlined />} onClick={() => void copyText(workbenchResultCopyText(activeTask.key, result)).then(() => messageApi.success("结果已复制"))}>
                   复制结果
                 </Button>
+                {renderResultActions()}
               </Space>
               <Divider />
               <JsonPreview title="结构化结果" value={result.result} emptyDescription="无结构化结果" />

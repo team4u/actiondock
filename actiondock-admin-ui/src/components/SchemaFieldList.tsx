@@ -19,7 +19,7 @@ function SchemaFieldListItem({ field, depth }: { field: SchemaFieldDefinition; d
   const supplement = formatSchemaFieldSupplement(field);
   const indent = depth > 0 ? { marginLeft: depth * 20 } : {};
 
-  let typeLabel = field.kind;
+  let typeLabel: string = field.kind;
   if (field.kind === "array" && field.items) {
     typeLabel = `array<${field.items.kind}${field.items.kind === "object" && field.items.children ? ` (${field.items.children.length} 字段)` : ""}>`;
   } else if (field.kind === "object" && field.children) {

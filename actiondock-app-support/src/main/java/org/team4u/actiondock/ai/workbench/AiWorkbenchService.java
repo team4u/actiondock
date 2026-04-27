@@ -51,12 +51,14 @@ public class AiWorkbenchService {
 
     public AiWorkbenchResult improveScript(AiWorkbenchCommand command) {
         ScriptDefinition script = requireScript(resolveScriptId(command));
-        return run(AiWorkbenchTaskType.IMPROVE_SCRIPT, withScriptId(command, script.getId()), script, null);
+        ExecutionRecord execution = optionalExecutionForScript(script.getId(), command);
+        return run(AiWorkbenchTaskType.IMPROVE_SCRIPT, withScriptId(command, script.getId()), script, execution);
     }
 
     public AiWorkbenchResult improveSchema(AiWorkbenchCommand command) {
         ScriptDefinition script = requireScript(resolveScriptId(command));
-        return run(AiWorkbenchTaskType.IMPROVE_SCHEMA, withScriptId(command, script.getId()), script, null);
+        ExecutionRecord execution = optionalExecutionForScript(script.getId(), command);
+        return run(AiWorkbenchTaskType.IMPROVE_SCHEMA, withScriptId(command, script.getId()), script, execution);
     }
 
     public AiWorkbenchResult diagnoseExecution(String executionId, AiWorkbenchCommand command) {
@@ -67,12 +69,14 @@ public class AiWorkbenchService {
 
     public AiWorkbenchResult reviewBeforePublish(String scriptId, AiWorkbenchCommand command) {
         ScriptDefinition script = requireScript(scriptId);
-        return run(AiWorkbenchTaskType.REVIEW_BEFORE_PUBLISH, withScriptId(command, script.getId()), script, null);
+        ExecutionRecord execution = optionalExecutionForScript(script.getId(), command);
+        return run(AiWorkbenchTaskType.REVIEW_BEFORE_PUBLISH, withScriptId(command, script.getId()), script, execution);
     }
 
     public AiWorkbenchResult generateReleaseNotes(String scriptId, AiWorkbenchCommand command) {
         ScriptDefinition script = requireScript(scriptId);
-        return run(AiWorkbenchTaskType.GENERATE_RELEASE_NOTES, withScriptId(command, script.getId()), script, null);
+        ExecutionRecord execution = optionalExecutionForScript(script.getId(), command);
+        return run(AiWorkbenchTaskType.GENERATE_RELEASE_NOTES, withScriptId(command, script.getId()), script, execution);
     }
 
     private AiWorkbenchResult run(AiWorkbenchTaskType taskType,
@@ -94,7 +98,7 @@ public class AiWorkbenchService {
     }
 
     private AiWorkbenchResult toWorkbenchResult(AiWorkbenchTaskType taskType, AiAgentRunResult runResult) {
-        Map<String, Object> rawOutput = runResult.output() == null ? Map.of() : runResult.output();
+        Map<String, Object> rawOutput = runResult.data() == null ? Map.of() : runResult.data();
         String resultKey = RESULT_KEYS.get(taskType);
         Map<String, Object> structured = resultParser.extract(resultKey, rawOutput, runResult);
         AiRunStatus status = runResult.status() == null ? AiRunStatus.SUCCESS : runResult.status();
@@ -171,6 +175,18 @@ public class AiWorkbenchService {
         }
         return executionRepository.findById(executionId)
                 .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + executionId));
+    }
+
+    private ExecutionRecord optionalExecutionForScript(String scriptId, AiWorkbenchCommand command) {
+        String executionId = command == null ? null : command.executionId();
+        if (executionId == null || executionId.isBlank()) {
+            return null;
+        }
+        ExecutionRecord execution = requireExecution(executionId);
+        if (!scriptId.equals(execution.getScriptId())) {
+            throw new IllegalArgumentException("执行记录不属于脚本: " + executionId);
+        }
+        return execution;
     }
 
     private String resolveScriptId(AiWorkbenchCommand command) {

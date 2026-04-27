@@ -6,7 +6,7 @@ import java.util.Map;
 public record AiAgentRunResult(
         String runId,
         AiRunStatus status,
-        Map<String, Object> output,
+        Map<String, Object> data,
         List<AiAgentStep> steps,
         AiUsage usage,
         String errorMessage

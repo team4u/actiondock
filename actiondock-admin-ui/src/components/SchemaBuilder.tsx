@@ -6,6 +6,7 @@ import {
 } from "@ant-design/icons";
 import { Alert, Button, Empty, Input, InputNumber, Select, Space, Switch, Tabs, Typography } from "antd";
 import { useEffect, useState } from "react";
+import type { ChangeEvent } from "react";
 import { CodeEditor } from "./CodeEditor";
 import { InfoHint } from "./InfoHint";
 import type { SchemaEditorState, SchemaFieldDraft, SchemaFieldKind } from "../schema";
@@ -391,7 +392,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                   status={fieldErrors.name ? "error" : ""}
                                   placeholder="例如 message"
                                   disabled={disabled}
-                                  onChange={(event) => setField(field.id, { name: event.target.value })}
+                                  onChange={(event: ChangeEvent<HTMLInputElement>) => setField(field.id, { name: event.target.value })}
                                 />
                                 {fieldErrors.name && <Text type="danger">{fieldErrors.name}</Text>}
                               </div>
@@ -402,7 +403,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                   value={field.title}
                                   placeholder="例如 Message"
                                   disabled={disabled}
-                                  onChange={(event) => setField(field.id, { title: event.target.value })}
+                                  onChange={(event: ChangeEvent<HTMLInputElement>) => setField(field.id, { title: event.target.value })}
                                 />
                               </div>
 
@@ -538,7 +539,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                       status={fieldErrors.defaultValue ? "error" : ""}
                                       placeholder="默认值"
                                       disabled={disabled}
-                                      onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
+                                      onChange={(event: ChangeEvent<HTMLInputElement>) => setField(field.id, { defaultValue: event.target.value })}
                                     />
                                   )}
                                 </div>
@@ -552,7 +553,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                     status={fieldErrors.enumText ? "error" : ""}
                                     placeholder="success, failed, pending"
                                     disabled={disabled}
-                                    onChange={(event) => setField(field.id, { enumText: event.target.value })}
+                                    onChange={(event: ChangeEvent<HTMLInputElement>) => setField(field.id, { enumText: event.target.value })}
                                   />
                                 </div>
                               )}
@@ -601,7 +602,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                               status={childErrors.name ? "error" : ""}
                                               placeholder="例如 city"
                                               disabled={disabled}
-                                              onChange={(event) => setChildField(field.id, child.id, { name: event.target.value })}
+                                              onChange={(event: ChangeEvent<HTMLInputElement>) => setChildField(field.id, child.id, { name: event.target.value })}
                                             />
                                             {childErrors.name && <Text type="danger">{childErrors.name}</Text>}
                                           </div>
@@ -631,7 +632,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                               autoSize={{ minRows: 1, maxRows: 2 }}
                                               placeholder="字段说明"
                                               disabled={disabled}
-                                              onChange={(event) => setChildField(field.id, child.id, { description: event.target.value })}
+                                              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setChildField(field.id, child.id, { description: event.target.value })}
                                             />
                                           </div>
                                           {child.type === "enum" && (
@@ -642,7 +643,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                                 status={childErrors.enumText ? "error" : ""}
                                                 placeholder="success, failed, pending"
                                                 disabled={disabled}
-                                                onChange={(event) => setChildField(field.id, child.id, { enumText: event.target.value })}
+                                                onChange={(event: ChangeEvent<HTMLInputElement>) => setChildField(field.id, child.id, { enumText: event.target.value })}
                                               />
                                             </div>
                                           )}
@@ -710,7 +711,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                                   status={childErrors.name ? "error" : ""}
                                                   placeholder="例如 city"
                                                   disabled={disabled}
-                                                  onChange={(event) => setArrayItemsChildField(field.id, child.id, { name: event.target.value })}
+                                                  onChange={(event: ChangeEvent<HTMLInputElement>) => setArrayItemsChildField(field.id, child.id, { name: event.target.value })}
                                                 />
                                                 {childErrors.name && <Text type="danger">{childErrors.name}</Text>}
                                               </div>
@@ -740,7 +741,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                                   autoSize={{ minRows: 1, maxRows: 2 }}
                                                   placeholder="字段说明"
                                                   disabled={disabled}
-                                                  onChange={(event) => setArrayItemsChildField(field.id, child.id, { description: event.target.value })}
+                                                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setArrayItemsChildField(field.id, child.id, { description: event.target.value })}
                                                 />
                                               </div>
                                               {child.type === "enum" && (
@@ -751,7 +752,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                                     status={childErrors.enumText ? "error" : ""}
                                                     placeholder="success, failed, pending"
                                                     disabled={disabled}
-                                                    onChange={(event) => setArrayItemsChildField(field.id, child.id, { enumText: event.target.value })}
+                                                    onChange={(event: ChangeEvent<HTMLInputElement>) => setArrayItemsChildField(field.id, child.id, { enumText: event.target.value })}
                                                   />
                                                 </div>
                                               )}
@@ -771,7 +772,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                         value={field.items.enumText}
                                         placeholder="success, failed, pending"
                                         disabled={disabled}
-                                        onChange={(event) => setArrayItemsEnumText(field.id, event.target.value)}
+                                        onChange={(event: ChangeEvent<HTMLInputElement>) => setArrayItemsEnumText(field.id, event.target.value)}
                                       />
                                     </div>
                                   </div>

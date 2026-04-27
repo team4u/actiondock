@@ -24,6 +24,7 @@ import { extractPluginDependenciesFromSource } from "../../pluginDependencies";
 import { extractAiDependenciesFromSource } from "../../aiDependencies";
 import { parseGeneratedScriptText } from "../../generatedScript";
 import { buildScriptEditorHeaderActionModel } from "../scriptEditorHeaderActions";
+import { applyJsonMergePatch } from "../../workbenchSession";
 import type { DevelopmentStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../types";
 import type { SchemaEditorState } from "../../schema";
 import {
@@ -522,6 +523,33 @@ export function useScriptEditor({
     }
   };
 
+  const applyWorkbenchScriptPatch = (updatedSource: string) => {
+    setSourceText(updatedSource);
+    messageApi.success("已将 AI 修复结果应用到未保存草稿");
+  };
+
+  const applyWorkbenchSchemaPatch = (
+    inputSchemaPatch?: Record<string, unknown>,
+    outputSchemaPatch?: Record<string, unknown>
+  ) => {
+    try {
+      if (inputSchemaPatch && Object.keys(inputSchemaPatch).length > 0) {
+        const currentInputSchema = serializeSchemaEditorState(inputSchemaState, "输入结构");
+        const nextInputSchema = applyJsonMergePatch(currentInputSchema, inputSchemaPatch);
+        setInputSchemaState(deserializeSchema(nextInputSchema));
+      }
+      if (outputSchemaPatch && Object.keys(outputSchemaPatch).length > 0) {
+        const currentOutputSchema = serializeSchemaEditorState(outputSchemaState, "输出结构");
+        const nextOutputSchema = applyJsonMergePatch(currentOutputSchema, outputSchemaPatch);
+        setOutputSchemaState(deserializeSchema(nextOutputSchema));
+      }
+      messageApi.success("已将 AI Schema patch 应用到未保存草稿");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "应用 Schema patch 失败";
+      messageApi.error(detail);
+    }
+  };
+
   const handleScriptTypeChange = (nextType: ScriptType) => {
     const currentType = selectedScriptType;
     if (
@@ -607,6 +635,8 @@ export function useScriptEditor({
     handlePullDevelopment,
     handleScriptTypeChange,
     handleImportGeneratedScript,
+    applyWorkbenchScriptPatch,
+    applyWorkbenchSchemaPatch,
     ensureCurrentScriptPublished,
     loadScriptReferences,
     publishMenuItems,

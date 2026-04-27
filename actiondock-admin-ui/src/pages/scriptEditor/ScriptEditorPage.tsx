@@ -80,6 +80,16 @@ import { ScriptExecutionTab } from "./ScriptExecutionTab";
 import type { ScriptEditorFormValues } from "./types";
 import type { ScriptEditorPageProps } from "./types";
 import type { ScriptType } from "../../types";
+import {
+  clearWorkbenchExecutionPrefill,
+  clearWorkbenchReleaseNotesDraft,
+  clearWorkbenchSchemaPatchApplication,
+  clearWorkbenchScriptPatchApplication,
+  readWorkbenchExecutionPrefill,
+  readWorkbenchReleaseNotesDraft,
+  readWorkbenchSchemaPatchApplication,
+  readWorkbenchScriptPatchApplication
+} from "../../workbenchSession";
 
 const { Text } = Typography;
 
@@ -280,6 +290,86 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     setGeneratedScriptModalOpen(true);
     sessionStorage.removeItem("actiondock.workbench.generatedScript");
   }, [mode, searchParams]);
+
+  useEffect(() => {
+    if (mode !== "edit" || !editor.currentScript?.id) {
+      return;
+    }
+
+    const applyKind = searchParams.get("workbenchApply");
+    const shouldPrefill = searchParams.get("workbenchPrefill") === "1";
+    const shouldOpenReleaseNotes = searchParams.get("workbenchReleaseNotes") === "1";
+    const shouldAutoSave = searchParams.get("workbenchAutoSave") === "1";
+
+    if (!applyKind && !shouldPrefill && !shouldOpenReleaseNotes && !shouldAutoSave) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("workbenchApply");
+    nextParams.delete("workbenchPrefill");
+    nextParams.delete("workbenchReleaseNotes");
+    nextParams.delete("workbenchAutoSave");
+    setSearchParams(nextParams, { replace: true });
+
+    void (async () => {
+      let appliedWorkbenchChange = false;
+
+      if (applyKind === "scriptPatch") {
+        const payload = readWorkbenchScriptPatchApplication();
+        clearWorkbenchScriptPatchApplication();
+        if (payload && payload.scriptId === editor.currentScript?.id) {
+          if (editor.isReadOnlyScript) {
+            messageApi.warning("当前脚本不可直接应用 AI 修改，请先 Fork");
+          } else {
+            editor.applyWorkbenchScriptPatch(payload.updatedSource);
+            appliedWorkbenchChange = true;
+          }
+        }
+      }
+
+      if (applyKind === "schemaPatch") {
+        const payload = readWorkbenchSchemaPatchApplication();
+        clearWorkbenchSchemaPatchApplication();
+        if (payload && payload.scriptId === editor.currentScript?.id) {
+          if (editor.isReadOnlyScript) {
+            messageApi.warning("当前脚本不可直接应用 AI 修改，请先 Fork");
+          } else {
+            editor.applyWorkbenchSchemaPatch(payload.inputSchemaPatch, payload.outputSchemaPatch);
+            appliedWorkbenchChange = true;
+          }
+        }
+      }
+
+      if (shouldPrefill) {
+        const payload = readWorkbenchExecutionPrefill();
+        clearWorkbenchExecutionPrefill();
+        if (payload && payload.scriptId === editor.currentScript?.id) {
+          execution.handleLoadPreset(payload.input);
+        }
+      }
+
+      if (shouldOpenReleaseNotes) {
+        const payload = readWorkbenchReleaseNotesDraft();
+        clearWorkbenchReleaseNotesDraft();
+        if (payload && payload.scriptId === editor.currentScript?.id) {
+          await publishToRepo.openPublishToRepositoryModal({ releaseNotes: payload.notes });
+        }
+      }
+
+      if (shouldAutoSave && appliedWorkbenchChange && !editor.isReadOnlyScript) {
+        await editor.handleSave();
+      }
+    })();
+  }, [
+    editor,
+    execution,
+    messageApi,
+    mode,
+    publishToRepo,
+    searchParams,
+    setSearchParams
+  ]);
 
   const openPublishConfirm = () => {
     if (!publishDiff.hasChanges && publishDiff.comparisonMode !== "INITIAL") {

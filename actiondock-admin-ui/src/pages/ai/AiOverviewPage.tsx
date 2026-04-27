@@ -3,10 +3,8 @@ import {
   ApiOutlined,
   ExperimentOutlined,
   FunctionOutlined,
-  HistoryOutlined,
   PlusOutlined,
-  RobotOutlined,
-  SettingOutlined
+  RobotOutlined
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -86,7 +84,6 @@ export function AiOverviewPage() {
   const missingModelAgents = agents.filter((agent) => !modelIds.has(agent.modelProfileId));
   const missingToolsetAgents = agents.filter((agent) => agent.toolsetIds.some((toolsetId) => !toolsetIds.has(toolsetId)));
   const modelsMissingApiKey = models.filter((model) => model.enabled && model.modelProvider !== "OLLAMA" && !model.apiKeyConfigKey);
-  const failedRuns = runs.filter((run) => run.status === "FAILED").length;
   const recentRuns = useMemo(
     () => [...runs].sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? "")).slice(0, 8),
     [runs]
@@ -107,7 +104,6 @@ export function AiOverviewPage() {
         meta="模型 Profile、Agent Profile、工具集和运行记录"
         actions={(
           <>
-            <Button icon={<HistoryOutlined />} onClick={() => navigate("/ai/runs")}>运行记录</Button>
             <Button type="primary" icon={<ExperimentOutlined />} onClick={() => navigate("/ai/workbench")}>Workbench</Button>
           </>
         )}
@@ -144,15 +140,6 @@ export function AiOverviewPage() {
             warning={missingToolsetAgents.length > 0 ? `${missingToolsetAgents.length} 个 Agent 引用缺失工具集` : undefined}
             onManage={() => navigate("/ai/toolsets")}
             onCreate={() => navigate("/ai/toolsets/new")}
-          />
-        </Col>
-        <Col xs={24} lg={12} xl={6}>
-          <AiManagementCard
-            title="运行治理"
-            value={runs.length}
-            meta={`${failedRuns} 个失败 Run`}
-            icon={<SettingOutlined />}
-            onManage={() => navigate("/ai/runs")}
           />
         </Col>
       </Row>

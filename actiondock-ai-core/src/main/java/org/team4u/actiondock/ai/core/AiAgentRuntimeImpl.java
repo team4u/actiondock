@@ -225,7 +225,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
         }
 
         AiRunStatus status = result == null || result.status() == null ? AiRunStatus.SUCCESS : result.status();
-        Map<String, Object> output = result == null || result.output() == null ? Map.of() : result.output();
+        Map<String, Object> output = result == null || result.data() == null ? Map.of() : result.data();
         runRepository.save(current
                 .setStatus(status)
                 .setOutputSummary(output)

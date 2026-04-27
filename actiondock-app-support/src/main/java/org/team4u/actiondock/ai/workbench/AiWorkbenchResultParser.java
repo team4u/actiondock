@@ -19,6 +19,13 @@ class AiWorkbenchResultParser {
         if (!direct.isEmpty()) {
             return direct;
         }
+        direct = objectValue(rawOutput == null ? null : rawOutput.get("data"));
+        if (!direct.isEmpty()) {
+            Map<String, Object> wrapped = objectValue(direct.get(resultKey));
+            if (!wrapped.isEmpty()) {
+                return wrapped;
+            }
+        }
         Map<String, Object> fromText = parseJsonObject(rawOutput == null ? null : rawOutput.get("text"));
         direct = objectValue(fromText.get(resultKey));
         if (!direct.isEmpty()) {

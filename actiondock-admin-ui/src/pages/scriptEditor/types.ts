@@ -156,6 +156,11 @@ export interface ScriptEditorContext {
   handleValidate: () => Promise<void>;
   handleScriptTypeChange: (type: ScriptType) => void;
   handleImportGeneratedScript: (text: string) => void;
+  applyWorkbenchScriptPatch: (updatedSource: string) => void;
+  applyWorkbenchSchemaPatch: (
+    inputSchemaPatch?: Record<string, unknown>,
+    outputSchemaPatch?: Record<string, unknown>
+  ) => void;
   ensureCurrentScriptPublished: (successMessage?: string) => Promise<ScriptDefinition>;
   loadScriptReferences: () => Promise<void>;
   publishMenuItems: MenuProps["items"];

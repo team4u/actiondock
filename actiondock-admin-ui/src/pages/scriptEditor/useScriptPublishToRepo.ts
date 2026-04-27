@@ -45,7 +45,7 @@ export interface ScriptPublishToRepoContext {
   publishConfigModes: Record<string, "INLINE" | "PLACEHOLDER">;
   setPublishConfigModes: React.Dispatch<React.SetStateAction<Record<string, "INLINE" | "PLACEHOLDER">>>;
   handlePublishFormValuesChange: (changedValues: Partial<PublishToRepositoryFormValues>) => void;
-  openPublishToRepositoryModal: () => Promise<void>;
+  openPublishToRepositoryModal: (initialValues?: Partial<PublishToRepositoryFormValues>) => Promise<void>;
   handlePublishToRepository: () => Promise<void>;
 }
 
@@ -70,7 +70,10 @@ export function useScriptPublishToRepo({
   const selectedRepositoryId = Form.useWatch("repositoryId", publishForm);
   const selectedToolId = Form.useWatch("toolId", publishForm);
 
-  const loadPublishMetadata = async (script: ScriptDefinition): Promise<RepositoryDefinition[]> => {
+  const loadPublishMetadata = async (
+    script: ScriptDefinition,
+    initialValues?: Partial<PublishToRepositoryFormValues>
+  ): Promise<RepositoryDefinition[]> => {
     setPublishMetadataLoading(true);
     try {
       const [repositories, schedules, configValues] = await Promise.all([
@@ -105,6 +108,9 @@ export function useScriptPublishToRepo({
         tags: toTagOptions(script.tags),
         scheduleIds: []
       });
+      if (initialValues) {
+        publishForm.setFieldsValue(initialValues);
+      }
       return publishableRepositories;
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载发布信息失败"));
@@ -180,7 +186,7 @@ export function useScriptPublishToRepo({
     }
   };
 
-  const openPublishToRepositoryModal = async () => {
+  const openPublishToRepositoryModal = async (initialValues?: Partial<PublishToRepositoryFormValues>) => {
     if (isReadOnlyScript) {
       messageApi.warning("仓库工具为只读版本，请先 Fork 再发布");
       return;
@@ -191,7 +197,7 @@ export function useScriptPublishToRepo({
     }
 
     try {
-      const repositories = await loadPublishMetadata(currentScript);
+      const repositories = await loadPublishMetadata(currentScript, initialValues);
       if (repositories.length === 0) {
         messageApi.warning("当前没有可发布的仓库，请先添加一个 Git 或本地目录仓库");
         return;

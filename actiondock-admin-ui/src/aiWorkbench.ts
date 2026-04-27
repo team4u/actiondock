@@ -1,5 +1,11 @@
 import type { AiWorkbenchResult, AiWorkbenchTaskType } from "./types";
 import { prettyJson } from "./utils";
+import type {
+  WorkbenchExecutionPrefill,
+  WorkbenchReleaseNotesDraft,
+  WorkbenchSchemaPatchApplication,
+  WorkbenchScriptPatchApplication
+} from "./workbenchSession";
 
 export type WorkbenchTaskKey = "generate" | "improve" | "schema" | "diagnose" | "review" | "releaseNotes";
 
@@ -48,6 +54,75 @@ export function buildGeneratedScriptImportText(result: Record<string, unknown>):
     JSON.stringify(result.outputSchema ?? {}, null, 2),
     "```"
   ].join("\n");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function buildWorkbenchScriptPatchApplication(result?: AiWorkbenchResult | null): WorkbenchScriptPatchApplication | null {
+  if (!result) {
+    return null;
+  }
+  const scriptId = typeof result.result.scriptId === "string" ? result.result.scriptId : "";
+  const updatedSource = typeof result.result.updatedSource === "string" ? result.result.updatedSource : "";
+  if (!scriptId || !updatedSource) {
+    return null;
+  }
+  return {
+    scriptId,
+    updatedSource,
+    patch: typeof result.result.patch === "string" ? result.result.patch : undefined,
+    rationale: typeof result.result.rationale === "string" ? result.result.rationale : undefined
+  };
+}
+
+export function buildWorkbenchSchemaPatchApplication(
+  scriptId: string | undefined,
+  result?: AiWorkbenchResult | null
+): WorkbenchSchemaPatchApplication | null {
+  if (!result || !scriptId) {
+    return null;
+  }
+  const inputSchemaPatch = isRecord(result.result.inputSchemaPatch) ? result.result.inputSchemaPatch : undefined;
+  const outputSchemaPatch = isRecord(result.result.outputSchemaPatch) ? result.result.outputSchemaPatch : undefined;
+  if (!inputSchemaPatch && !outputSchemaPatch) {
+    return null;
+  }
+  return {
+    scriptId,
+    inputSchemaPatch,
+    outputSchemaPatch,
+    rationale: typeof result.result.rationale === "string" ? result.result.rationale : undefined
+  };
+}
+
+export function buildWorkbenchReleaseNotesDraft(
+  scriptId: string | undefined,
+  result?: AiWorkbenchResult | null
+): WorkbenchReleaseNotesDraft | null {
+  if (!result || !scriptId || typeof result.result.notes !== "string" || !result.result.notes.trim()) {
+    return null;
+  }
+  return {
+    scriptId,
+    notes: result.result.notes
+  };
+}
+
+export function buildWorkbenchExecutionPrefill(
+  scriptId: string | undefined,
+  input: unknown,
+  sourceLabel?: string
+): WorkbenchExecutionPrefill | null {
+  if (!scriptId || !isRecord(input)) {
+    return null;
+  }
+  return {
+    scriptId,
+    input,
+    sourceLabel
+  };
 }
 
 export function workbenchResultCopyText(task: WorkbenchTaskKey, result?: AiWorkbenchResult | null): string {

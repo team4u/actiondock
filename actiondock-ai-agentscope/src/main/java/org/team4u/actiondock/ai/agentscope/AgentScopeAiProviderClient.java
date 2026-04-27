@@ -1,7 +1,6 @@
 package org.team4u.actiondock.ai.agentscope;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.ReActAgent;
@@ -29,6 +28,7 @@ import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.GeminiChatModel;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.model.OllamaChatModel;
+import io.agentscope.core.model.StructuredOutputReminder;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.Toolkit;
@@ -73,8 +73,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AgentScopeAiProviderClient implements AiProviderClient {
     private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
 
     private final AiSecretResolver secretResolver;
 
@@ -101,14 +99,22 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
 
     @Override
     public AiStructuredResponse structured(AiModelProfile profile, AiStructuredRequest request, AiCallContext context) {
-        AiChatRequest chatRequest = new AiChatRequest(
-                request == null ? null : request.modelProfile(),
-                withStructuredInstruction(request == null ? null : request.messages(), request == null ? null : request.outputSchema()),
-                request == null ? null : request.options()
+        Map<String, Object> requestOptions = request == null ? null : request.options();
+        ReActAgent agent = buildStructuredAgent(profile, requestOptions);
+        Msg result = block(
+                agent.call(
+                        toMessages(request == null ? null : request.messages()),
+                        structuredOutputSchema(request == null ? null : request.outputSchema())
+                ),
+                modelCallTimeout(profile, requestOptions)
         );
-        AiChatResponse response = chat(profile, chatRequest, context);
-        Map<String, Object> value = parseStructuredValue(response.text());
-        return new AiStructuredResponse(value, response.text(), response.usage(), response.raw());
+        Map<String, Object> data = structuredData(result);
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("provider", "AGENTSCOPE");
+        raw.put("modelProvider", String.valueOf(profile.getModelProvider()));
+        raw.put("model", profile.getModelName());
+        raw.put("structuredOutputReminder", structuredOutputReminder(mergedOptions(profile.getDefaultOptions(), requestOptions)).name());
+        return new AiStructuredResponse(data, toUsage(result == null ? null : result.getChatUsage()), raw);
     }
 
     @Override
@@ -375,6 +381,20 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         };
     }
 
+    private ReActAgent buildStructuredAgent(AiModelProfile profile, Map<String, Object> requestOptions) {
+        Map<String, Object> options = mergedOptions(profile.getDefaultOptions(), requestOptions);
+        return ReActAgent.builder()
+                .name("actiondock-structured")
+                .description("ActionDock structured output helper")
+                .sysPrompt("Return structured output that matches the requested schema.")
+                .model(buildChatModel(profile, false))
+                .toolkit(new Toolkit())
+                .structuredOutputReminder(structuredOutputReminder(options))
+                .maxIters(1)
+                .generateOptions(buildGenerateOptions(profile, requestOptions, false))
+                .build();
+    }
+
     private EmbeddingModel buildEmbeddingModel(AiModelProfile profile, Map<String, Object> requestOptions) {
         AiModelProvider modelProvider = requireModelProvider(profile);
         String apiKey = resolveApiKey(profile);
@@ -513,45 +533,40 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         };
     }
 
-    private List<AiMessage> withStructuredInstruction(List<AiMessage> messages, Map<String, Object> outputSchema) {
-        List<AiMessage> result = new ArrayList<>(messages == null ? List.of() : messages);
-        result.add(new AiMessage("user", "Return only one valid JSON object. Do not wrap it in Markdown. JSON Schema: "
-                + toJson(outputSchema == null ? Map.of() : outputSchema)));
-        return result;
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> structuredData(Msg message) {
+        if (message == null || !message.hasStructuredData()) {
+            throw new IllegalStateException("AI structured 输出缺少结构化数据");
+        }
+        Map<String, Object> data = message.getStructuredData(true);
+        if (data == null || data.isEmpty()) {
+            throw new IllegalStateException("AI structured 输出为空");
+        }
+        return data;
     }
 
-    private Map<String, Object> parseStructuredValue(String text) {
-        String json = extractJson(text == null ? "" : text.trim());
+    private JsonNode structuredOutputSchema(Map<String, Object> outputSchema) {
         try {
-            JsonNode node = OBJECT_MAPPER.readTree(json);
-            if (node.isObject()) {
-                return OBJECT_MAPPER.convertValue(node, MAP_TYPE);
-            }
-            return Map.of("value", OBJECT_MAPPER.convertValue(node, Object.class));
-        } catch (Exception exception) {
-            throw new IllegalStateException("AI structured 输出不是有效 JSON: " + exception.getMessage(), exception);
+            return OBJECT_MAPPER.valueToTree(
+                    outputSchema == null || outputSchema.isEmpty()
+                            ? Map.of("type", "object")
+                            : outputSchema
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("AI structured 输出 Schema 无法转换: " + exception.getMessage(), exception);
         }
     }
 
-    private String extractJson(String text) {
-        if (text.startsWith("```")) {
-            int firstLineEnd = text.indexOf('\n');
-            int closing = text.lastIndexOf("```");
-            if (firstLineEnd >= 0 && closing > firstLineEnd) {
-                return text.substring(firstLineEnd + 1, closing).trim();
-            }
+    private StructuredOutputReminder structuredOutputReminder(Map<String, Object> options) {
+        String reminder = stringOption(options, "structuredOutputReminder");
+        if (reminder == null) {
+            return StructuredOutputReminder.TOOL_CHOICE;
         }
-        int objectStart = text.indexOf('{');
-        int objectEnd = text.lastIndexOf('}');
-        if (objectStart >= 0 && objectEnd > objectStart) {
-            return text.substring(objectStart, objectEnd + 1);
-        }
-        int arrayStart = text.indexOf('[');
-        int arrayEnd = text.lastIndexOf(']');
-        if (arrayStart >= 0 && arrayEnd > arrayStart) {
-            return text.substring(arrayStart, arrayEnd + 1);
-        }
-        return text;
+        return switch (reminder.trim().toUpperCase()) {
+            case "TOOL_CHOICE" -> StructuredOutputReminder.TOOL_CHOICE;
+            case "PROMPT" -> StructuredOutputReminder.PROMPT;
+            default -> throw new IllegalArgumentException("Unsupported structuredOutputReminder: " + reminder);
+        };
     }
 
     private String text(ChatResponse response) {

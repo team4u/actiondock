@@ -153,7 +153,7 @@ export interface AiChatRequest {
 }
 
 export interface AiChatResponse {
-  text: string;
+  data: string;
   usage?: AiUsage;
   raw?: Record<string, unknown>;
 }
@@ -168,7 +168,7 @@ export interface AiAgentRunRequest {
 export interface AiAgentRunResult {
   runId: string;
   status: AiRunStatus;
-  output: Record<string, unknown>;
+  data: Record<string, unknown>;
   steps: AiAgentStep[];
   usage?: AiUsage;
   errorMessage?: string;

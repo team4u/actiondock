@@ -38,9 +38,9 @@
       "outputSchema": {
         "type": "object",
         "properties": {
-          "text": {
+          "data": {
             "type": "string",
-            "title": "Text"
+            "title": "Data"
           },
           "usage": {
             "type": "object",
@@ -166,9 +166,9 @@
       "outputSchema": {
         "type": "object",
         "properties": {
-          "embeddings": {
+          "data": {
             "type": "array",
-            "title": "Embeddings"
+            "title": "Data"
           },
           "usage": {
             "type": "object",
@@ -220,9 +220,9 @@
             "type": "string",
             "title": "Status"
           },
-          "output": {
+          "data": {
             "type": "object",
-            "title": "Output"
+            "title": "Data"
           },
           "steps": {
             "type": "array",

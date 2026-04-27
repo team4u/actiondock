@@ -438,7 +438,7 @@ class AiRuntimePolicyTest {
         );
 
         assertThat(result.status()).isEqualTo(AiRunStatus.FAILED);
-        assertThat(result.output())
+        assertThat(result.data())
                 .containsEntry("text", "partial answer")
                 .containsEntry("errorMessage", "provider boom");
         assertThat(runs.findById(result.runId()).orElseThrow().getOutputSummary())
@@ -464,8 +464,15 @@ class AiRuntimePolicyTest {
     }
 
     @Test
-    void workbenchParsesTextJsonToolOutputAndProposalPayload() {
+    void workbenchParsesDataTextJsonToolOutputAndProposalPayload() {
         Map<String, Object> draft = Map.of("id", "from-text", "source", "return [ok: true]");
+        AiWorkbenchResult dataResult = new AiWorkbenchService(
+                workbenchRuntime(new StructuredProviderClient(Map.of("data", Map.of("scriptDraft", Map.of("id", "from-data"))))),
+                new InMemoryScriptRepository(),
+                new InMemoryExecutionRepository(),
+                new ObjectMapper()
+        ).generateScript(new AiWorkbenchCommand("build", null, null, null, null, Map.of()));
+
         AiWorkbenchResult textResult = new AiWorkbenchService(
                 workbenchRuntime(new StructuredProviderClient(Map.of("text", "{\"scriptDraft\":{\"id\":\"from-text\",\"source\":\"return [ok: true]\"}}"))),
                 new InMemoryScriptRepository(),
@@ -487,9 +494,37 @@ class AiRuntimePolicyTest {
                 new ObjectMapper()
         ).generateScript(new AiWorkbenchCommand("build", null, null, null, null, Map.of()));
 
+        assertThat(dataResult.result()).containsEntry("id", "from-data");
         assertThat(textResult.result()).containsEntry("id", draft.get("id"));
         assertThat(toolResult.result()).containsEntry("id", "from-tool");
         assertThat(proposalResult.result()).containsEntry("id", "from-proposal");
+    }
+
+    @Test
+    void workbenchParsesScriptPatchWithUpdatedSourceFromProposalPayload() {
+        InMemoryScriptRepository scripts = new InMemoryScriptRepository();
+        scripts.save(new ScriptDefinition().setId("script-1").setName("Script").setSource("return [:]"));
+
+        AiWorkbenchResult result = new AiWorkbenchService(
+                workbenchRuntime(new StepOutputProviderClient(
+                        "propose_script_patch",
+                        Map.of("proposal", Map.of(
+                                "resultKey", "scriptPatch",
+                                "payload", Map.of(
+                                        "scriptId", "script-1",
+                                        "patch", "@@ -1 +1 @@",
+                                        "updatedSource", "return [patched: true]"
+                                )
+                        ))
+                )),
+                scripts,
+                new InMemoryExecutionRepository(),
+                new ObjectMapper()
+        ).improveScript(new AiWorkbenchCommand("fix", null, null, "script-1", null, Map.of()));
+
+        assertThat(result.result())
+                .containsEntry("scriptId", "script-1")
+                .containsEntry("updatedSource", "return [patched: true]");
     }
 
     @Test
@@ -516,6 +551,67 @@ class AiRuntimePolicyTest {
         assertThat(providerClient.context.callerType()).isEqualTo(AiCallerType.WORKBENCH);
         assertThat(providerClient.context.scriptId()).isEqualTo("script-1");
         assertThat(providerClient.context.executionId()).isEqualTo("exec-1");
+    }
+
+    @Test
+    void workbenchIncludesOptionalExecutionContextForReviewAndReleaseNotesTasks() {
+        InMemoryScriptRepository scripts = new InMemoryScriptRepository();
+        scripts.save(new ScriptDefinition().setId("script-1").setName("Script").setSource("return [:]"));
+        InMemoryExecutionRepository executions = new InMemoryExecutionRepository();
+        executions.save(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("script-1")
+                .setInput(Map.of("name", "Alice"))
+                .setErrorMessage("boom"));
+
+        StructuredProviderClient reviewProviderClient = new StructuredProviderClient(Map.of(
+                "publishReview", Map.of("recommendation", "approve")
+        ));
+        AiWorkbenchResult review = new AiWorkbenchService(
+                workbenchRuntime(reviewProviderClient),
+                scripts,
+                executions,
+                new ObjectMapper()
+        ).reviewBeforePublish("script-1", new AiWorkbenchCommand("review", null, null, null, "exec-1", Map.of()));
+
+        assertThat(review.status()).isEqualTo(AiRunStatus.SUCCESS);
+        assertThat(reviewProviderClient.request.input()).containsKey("execution");
+        assertThat(reviewProviderClient.context.executionId()).isEqualTo("exec-1");
+
+        StructuredProviderClient releaseProviderClient = new StructuredProviderClient(Map.of(
+                "releaseNotes", Map.of("notes", "Ship it")
+        ));
+        AiWorkbenchResult release = new AiWorkbenchService(
+                workbenchRuntime(releaseProviderClient),
+                scripts,
+                executions,
+                new ObjectMapper()
+        ).generateReleaseNotes("script-1", new AiWorkbenchCommand("release", null, null, null, "exec-1", Map.of()));
+
+        assertThat(release.status()).isEqualTo(AiRunStatus.SUCCESS);
+        assertThat(releaseProviderClient.request.input()).containsKey("execution");
+        assertThat(releaseProviderClient.context.executionId()).isEqualTo("exec-1");
+    }
+
+    @Test
+    void workbenchRejectsMismatchedOptionalExecutionContext() {
+        InMemoryScriptRepository scripts = new InMemoryScriptRepository();
+        scripts.save(new ScriptDefinition().setId("script-1").setName("Script").setSource("return [:]"));
+        InMemoryExecutionRepository executions = new InMemoryExecutionRepository();
+        executions.save(new ExecutionRecord().setId("exec-2").setScriptId("script-2"));
+
+        AiWorkbenchService service = new AiWorkbenchService(
+                workbenchRuntime(new StructuredProviderClient(Map.of(
+                        "publishReview", Map.of("recommendation", "approve")
+                ))),
+                scripts,
+                executions,
+                new ObjectMapper()
+        );
+
+        assertThatThrownBy(() -> service.reviewBeforePublish("script-1", new AiWorkbenchCommand("review", null, null, null, "exec-2", Map.of())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("执行记录不属于脚本");
     }
 
     private AiAgentRuntime workbenchRuntime(CapturingProviderClient providerClient) {
@@ -580,7 +676,7 @@ class AiRuntimePolicyTest {
 
         @Override
         public AiStructuredResponse structured(AiModelProfile profile, AiStructuredRequest request, AiCallContext context) {
-            return new AiStructuredResponse(Map.of("ok", true), "{\"ok\":true}", AiUsage.empty(), Map.of());
+            return new AiStructuredResponse(Map.of("ok", true), AiUsage.empty(), Map.of());
         }
 
         @Override
@@ -634,9 +730,15 @@ class AiRuntimePolicyTest {
     }
 
     private static final class StepOutputProviderClient extends CapturingProviderClient {
+        private final String toolName;
         private final Map<String, Object> toolOutput;
 
         private StepOutputProviderClient(Map<String, Object> toolOutput) {
+            this("propose_script_draft", toolOutput);
+        }
+
+        private StepOutputProviderClient(String toolName, Map<String, Object> toolOutput) {
+            this.toolName = toolName;
             this.toolOutput = toolOutput;
         }
 
@@ -652,7 +754,7 @@ class AiRuntimePolicyTest {
                     null,
                     AiRunStatus.SUCCESS,
                     Map.of("text", "used tool"),
-                    List.of(new AiAgentStep("step-1", null, 1, AiStepType.TOOL_CALL, modelProfile.getId(), "propose_script_draft", AiToolPermission.PROPOSE_CHANGE, Map.of(), toolOutput, "SUCCESS", 1L, null, LocalDateTime.now())),
+                    List.of(new AiAgentStep("step-1", null, 1, AiStepType.TOOL_CALL, modelProfile.getId(), toolName, AiToolPermission.PROPOSE_CHANGE, Map.of(), toolOutput, "SUCCESS", 1L, null, LocalDateTime.now())),
                     AiUsage.empty(),
                     null
             );

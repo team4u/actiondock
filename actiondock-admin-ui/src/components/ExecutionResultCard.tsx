@@ -33,6 +33,8 @@ export interface ExecutionResultCardProps {
   errorTitle?: string;
   aiDiagnoseTo?: string;
   onAiDiagnose?: () => void;
+  aiReviewTo?: string;
+  onAiReview?: () => void;
 }
 
 function getTriggerSourceLabel(source: string): string {
@@ -73,7 +75,9 @@ export function ExecutionResultCard({
   pollingExecutionId,
   errorTitle = "执行失败",
   aiDiagnoseTo,
-  onAiDiagnose
+  onAiDiagnose,
+  aiReviewTo,
+  onAiReview
 }: ExecutionResultCardProps) {
   const inputValue = inputOverride ?? (hasInput(execution) ? execution.input : undefined);
   const hasOutputSchema = Boolean(outputSchema && Object.keys(outputSchema).length > 0);
@@ -146,6 +150,16 @@ export function ExecutionResultCard({
             </Link>
           ) : (
             <Button icon={<RobotOutlined />} onClick={onAiDiagnose}>AI 诊断</Button>
+          )
+        ) : null}
+
+        {execution.status === "SUCCESS" && (aiReviewTo || onAiReview) ? (
+          aiReviewTo ? (
+            <Link to={aiReviewTo}>
+              <Button icon={<RobotOutlined />}>AI 发布前 Review</Button>
+            </Link>
+          ) : (
+            <Button icon={<RobotOutlined />} onClick={onAiReview}>AI 发布前 Review</Button>
           )
         ) : null}
 

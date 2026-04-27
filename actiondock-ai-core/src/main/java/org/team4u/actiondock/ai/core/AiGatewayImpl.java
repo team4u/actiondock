@@ -44,7 +44,7 @@ public class AiGatewayImpl implements AiGateway {
         try {
             AiChatResponse response = providerClient.chat(profile, request, context);
             audit(context, AiCallAction.CHAT, profile, "SUCCESS", response.usage(), System.currentTimeMillis() - started, null, null,
-                    summarizeMessages(request == null ? null : request.messages()), Map.of("textLength", response.text() == null ? 0 : response.text().length()));
+                    summarizeMessages(request == null ? null : request.messages()), Map.of("dataLength", response.data() == null ? 0 : response.data().length()));
             return response;
         } catch (RuntimeException exception) {
             audit(context, AiCallAction.CHAT, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,
@@ -60,7 +60,7 @@ public class AiGatewayImpl implements AiGateway {
         try {
             AiStructuredResponse response = providerClient.structured(profile, request, context);
             audit(context, AiCallAction.STRUCTURED, profile, "SUCCESS", response.usage(), System.currentTimeMillis() - started, null, null,
-                    summarizeMessages(request == null ? null : request.messages()), Map.of("textLength", response.text() == null ? 0 : response.text().length()));
+                    summarizeMessages(request == null ? null : request.messages()), Map.of("fieldCount", response.data() == null ? 0 : response.data().size()));
             return response;
         } catch (RuntimeException exception) {
             audit(context, AiCallAction.STRUCTURED, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,
@@ -77,7 +77,7 @@ public class AiGatewayImpl implements AiGateway {
             AiEmbeddingResponse response = providerClient.embed(profile, request, context);
             audit(context, AiCallAction.EMBED, profile, "SUCCESS", response.usage(), System.currentTimeMillis() - started, null, null,
                     Map.of("inputCount", request == null || request.input() == null ? 0 : request.input().size()),
-                    Map.of("embeddingCount", response.embeddings() == null ? 0 : response.embeddings().size()));
+                    Map.of("embeddingCount", response.data() == null ? 0 : response.data().size()));
             return response;
         } catch (RuntimeException exception) {
             audit(context, AiCallAction.EMBED, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,

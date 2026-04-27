@@ -60,4 +60,22 @@ describe("AiWorkbenchResultPanel", () => {
     expect(html).toContain("Validate name");
     expect(html).toContain("patch script");
   });
+
+  it("renders script patch results with updated source", () => {
+    const html = renderToStaticMarkup(
+      <AiWorkbenchResultPanel
+        taskKey="improve"
+        result={result("IMPROVE_SCRIPT", {
+          patch: "@@ -1 +1 @@",
+          updatedSource: "return [patched: true]",
+          rationale: "Handle null input"
+        })}
+        editorTheme="vs-light"
+        onImportGenerated={() => undefined}
+      />
+    );
+
+    expect(html).toContain("return [patched: true]");
+    expect(html).toContain("Handle null input");
+  });
 });
