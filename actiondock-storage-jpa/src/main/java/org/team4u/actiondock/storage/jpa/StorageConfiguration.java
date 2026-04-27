@@ -3,6 +3,12 @@ package org.team4u.actiondock.storage.jpa;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
+import org.team4u.actiondock.ai.api.AiAgentRunRepository;
+import org.team4u.actiondock.ai.api.AiAgentStepRepository;
+import org.team4u.actiondock.ai.api.AiCallLogRepository;
+import org.team4u.actiondock.ai.api.AiModelProfileRepository;
+import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
@@ -17,6 +23,12 @@ import org.team4u.actiondock.storage.jpa.adapter.JpaConfigValueRepositoryAdapter
 import org.team4u.actiondock.storage.jpa.adapter.JpaExecutionPresetRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaExecutionRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaApiAccessTokenRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaAiAgentProfileRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaAiAgentRunRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaAiAgentStepRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaAiCallLogRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaAiModelProfileRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaAiToolsetRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaPluginRegistryRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryDefinitionRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaScriptRepositoryAdapter;
@@ -27,6 +39,12 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataConfigValueRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionPresetEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataApiAccessTokenRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentProfileRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentRunRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentStepRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataAiCallLogRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataAiModelProfileRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataAiToolsetRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataPluginRegistrationRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryDefinitionRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
@@ -147,5 +165,35 @@ public class StorageConfiguration {
     @Bean
     public ExecutionPresetRepository executionPresetRepository(SpringDataExecutionPresetEntityRepository repository, JsonCodec jsonCodec) {
         return new JpaExecutionPresetRepositoryAdapter(repository, jsonCodec);
+    }
+
+    @Bean
+    public AiModelProfileRepository aiModelProfileRepository(SpringDataAiModelProfileRepository repository, JsonCodec jsonCodec) {
+        return new JpaAiModelProfileRepositoryAdapter(repository, jsonCodec);
+    }
+
+    @Bean
+    public AiAgentProfileRepository aiAgentProfileRepository(SpringDataAiAgentProfileRepository repository, JsonCodec jsonCodec) {
+        return new JpaAiAgentProfileRepositoryAdapter(repository, jsonCodec);
+    }
+
+    @Bean
+    public AiToolsetRepository aiToolsetRepository(SpringDataAiToolsetRepository repository, JsonCodec jsonCodec) {
+        return new JpaAiToolsetRepositoryAdapter(repository, jsonCodec);
+    }
+
+    @Bean
+    public AiCallLogRepository aiCallLogRepository(SpringDataAiCallLogRepository repository, JsonCodec jsonCodec) {
+        return new JpaAiCallLogRepositoryAdapter(repository, jsonCodec);
+    }
+
+    @Bean
+    public AiAgentRunRepository aiAgentRunRepository(SpringDataAiAgentRunRepository repository, JsonCodec jsonCodec) {
+        return new JpaAiAgentRunRepositoryAdapter(repository, jsonCodec);
+    }
+
+    @Bean
+    public AiAgentStepRepository aiAgentStepRepository(SpringDataAiAgentStepRepository repository, JsonCodec jsonCodec) {
+        return new JpaAiAgentStepRepositoryAdapter(repository, jsonCodec);
     }
 }

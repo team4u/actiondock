@@ -37,6 +37,7 @@ public class ScriptDefinition {
     private String description;
     private List<String> tags = new ArrayList<>();
     private List<PluginDependency> pluginDependencies = new ArrayList<>();
+    private List<AiDependency> aiDependencies = new ArrayList<>();
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -251,6 +252,27 @@ public class ScriptDefinition {
         return this;
     }
 
+    public List<AiDependency> getAiDependencies() {
+        return aiDependencies.stream()
+                .map(dependency -> new AiDependency()
+                        .setCapability(dependency.getCapability())
+                        .setProfile(dependency.getProfile())
+                        .setAgentProfile(dependency.getAgentProfile())
+                        .setRequired(dependency.isRequired()))
+                .toList();
+    }
+
+    public ScriptDefinition setAiDependencies(List<AiDependency> aiDependencies) {
+        this.aiDependencies = aiDependencies == null ? new ArrayList<>() : aiDependencies.stream()
+                .map(dependency -> new AiDependency()
+                        .setCapability(dependency.getCapability())
+                        .setProfile(dependency.getProfile())
+                        .setAgentProfile(dependency.getAgentProfile())
+                        .setRequired(dependency.isRequired()))
+                .toList();
+        return this;
+    }
+
     /**
      * 获取已发布快照的副本。
      * <p>
@@ -292,7 +314,8 @@ public class ScriptDefinition {
                 .setType(type)
                 .setSource(source)
                 .setInputSchema(inputSchema)
-                .setOutputSchema(outputSchema);
+                .setOutputSchema(outputSchema)
+                .setAiDependencies(aiDependencies);
     }
 
     /**
@@ -346,6 +369,7 @@ public class ScriptDefinition {
                 .setDescription(description)
                 .setTags(tags)
                 .setPluginDependencies(pluginDependencies)
+                .setAiDependencies(aiDependencies)
                 .setCreatedAt(createdAt)
                 .setUpdatedAt(updatedAt);
     }

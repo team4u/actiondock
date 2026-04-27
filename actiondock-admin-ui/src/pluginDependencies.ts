@@ -14,6 +14,9 @@ export function extractPluginDependenciesFromSource(source: string, plugins: Plu
   while ((match = PLUGIN_INVOKE_PATTERN.exec(source)) !== null) {
     const pluginId = match[2].trim();
     const action = match[4].trim();
+    if (pluginId === "actiondock-ai") {
+      continue;
+    }
     if (!pluginId || !action) {
       continue;
     }

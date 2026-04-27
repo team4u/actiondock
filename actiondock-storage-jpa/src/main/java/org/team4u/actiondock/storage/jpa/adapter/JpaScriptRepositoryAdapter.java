@@ -1,6 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.ScriptScope;
@@ -70,6 +71,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setPublishedSource(publishedSnapshot == null ? null : publishedSnapshot.getSource());
         entity.setPublishedInputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getInputSchema()));
         entity.setPublishedOutputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getOutputSchema()));
+        entity.setPublishedAiDependenciesJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getAiDependencies()));
         entity.setStatus(definition.getStatus().name());
         entity.setVersionValue(definition.getVersion());
         entity.setScope(definition.getScope().name());
@@ -86,6 +88,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setDescription(definition.getDescription());
         entity.setTagsJson(jsonCodec.write(definition.getTags()));
         entity.setPluginDependenciesJson(jsonCodec.write(definition.getPluginDependencies()));
+        entity.setAiDependenciesJson(jsonCodec.write(definition.getAiDependencies()));
         entity.setCreatedAt(definition.getCreatedAt());
         entity.setUpdatedAt(definition.getUpdatedAt());
         return entity;
@@ -124,6 +127,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setDescription(entity.getDescription())
                 .setTags(jsonCodec.readList(entity.getTagsJson(), String.class))
                 .setPluginDependencies(jsonCodec.readList(entity.getPluginDependenciesJson(), PluginDependency.class))
+                .setAiDependencies(jsonCodec.readList(entity.getAiDependenciesJson(), AiDependency.class))
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
     }
@@ -145,6 +149,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setType(entity.getPublishedType() == null ? ScriptType.GROOVY : ScriptType.valueOf(entity.getPublishedType()))
                 .setSource(entity.getPublishedSource())
                 .setInputSchema(jsonCodec.readMap(entity.getPublishedInputSchemaJson()))
-                .setOutputSchema(jsonCodec.readMap(entity.getPublishedOutputSchemaJson()));
+                .setOutputSchema(jsonCodec.readMap(entity.getPublishedOutputSchemaJson()))
+                .setAiDependencies(jsonCodec.readList(entity.getPublishedAiDependenciesJson(), AiDependency.class));
     }
 }

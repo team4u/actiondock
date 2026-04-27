@@ -20,6 +20,7 @@ import {
 import { buildDuplicatedScriptDefinition } from "../../scriptDuplication";
 import { createEmptySchemaEditorState, deserializeSchema, deserializeSchemaJsonText, serializeSchemaEditorState } from "../../schema";
 import { extractPluginDependenciesFromSource } from "../../pluginDependencies";
+import { extractAiDependenciesFromSource } from "../../aiDependencies";
 import { parseGeneratedScriptText } from "../../generatedScript";
 import { buildScriptEditorHeaderActionModel } from "../scriptEditorHeaderActions";
 import type { DevelopmentStatus, PluginView, ScriptDefinition, ScriptType } from "../../types";
@@ -81,6 +82,10 @@ export function useScriptEditor({
   const detectedPluginDependencies = useMemo(
     () => selectedScriptType === "GROOVY" ? extractPluginDependenciesFromSource(sourceText, availablePlugins) : [],
     [availablePlugins, selectedScriptType, sourceText]
+  );
+  const detectedAiDependencies = useMemo(
+    () => selectedScriptType === "GROOVY" ? extractAiDependenciesFromSource(sourceText) : [],
+    [selectedScriptType, sourceText]
   );
 
   const headerActionModel = useMemo(
@@ -276,6 +281,7 @@ export function useScriptEditor({
       version: currentScript?.version ?? 1,
       description: values.description?.trim() || undefined,
       pluginDependencies: selectedScriptType === "GROOVY" ? detectedPluginDependencies : [],
+      aiDependencies: selectedScriptType === "GROOVY" ? detectedAiDependencies : [],
       publishedSnapshot: currentScript?.publishedSnapshot,
       createdAt: currentScript?.createdAt,
       updatedAt: currentScript?.updatedAt
@@ -584,6 +590,7 @@ export function useScriptEditor({
     discardingDraft,
     validating,
     detectedPluginDependencies,
+    detectedAiDependencies,
     developmentStatus,
     developmentPulling,
     handleSave,

@@ -23,6 +23,7 @@ import {
   Typography,
   message
 } from "antd";
+import type { RadioChangeEvent } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -723,7 +724,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                           value={executionMode}
                           optionType="button"
                           buttonStyle="solid"
-                          onChange={(event: React.ChangeEvent<HTMLInputElement>) => setExecutionMode(event.target.value as SubmitMode)}
+                          onChange={(event: RadioChangeEvent) => setExecutionMode(event.target.value as SubmitMode)}
                           options={[
                             { label: "同步执行", value: "SYNC" },
                             { label: "异步执行", value: "ASYNC" }

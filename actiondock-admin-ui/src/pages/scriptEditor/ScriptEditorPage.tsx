@@ -578,6 +578,20 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   </Space>
                 </Descriptions.Item>
               ) : null}
+              {editor.detectedAiDependencies.length > 0 ? (
+                <Descriptions.Item label="AI 依赖">
+                  <Space size={[4, 4]} wrap>
+                    {editor.detectedAiDependencies.map((dep) => (
+                      <Tooltip
+                        key={`${dep.capability}:${dep.profile ?? dep.agentProfile ?? ""}`}
+                        title={dep.profile || dep.agentProfile || "未指定 Profile"}
+                      >
+                        <Tag color="cyan">{dep.capability}</Tag>
+                      </Tooltip>
+                    ))}
+                  </Space>
+                </Descriptions.Item>
+              ) : null}
               {editor.currentScript.scope === "DEVELOPMENT" ? (
                 <Descriptions.Item label="本地发布号">{editor.currentScript.version}</Descriptions.Item>
               ) : (

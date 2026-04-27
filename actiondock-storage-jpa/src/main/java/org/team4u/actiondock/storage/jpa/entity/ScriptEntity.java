@@ -49,6 +49,8 @@ public class ScriptEntity {
 
     @Lob
     private String publishedOutputSchemaJson;
+    @Lob
+    private String publishedAiDependenciesJson;
 
     private String status;
     private Integer versionValue;
@@ -69,6 +71,8 @@ public class ScriptEntity {
     private String tagsJson;
     @Lob
     private String pluginDependenciesJson;
+    @Lob
+    private String aiDependenciesJson;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -94,6 +98,8 @@ public class ScriptEntity {
     public void setPublishedInputSchemaJson(String publishedInputSchemaJson) { this.publishedInputSchemaJson = publishedInputSchemaJson; }
     public String getPublishedOutputSchemaJson() { return publishedOutputSchemaJson; }
     public void setPublishedOutputSchemaJson(String publishedOutputSchemaJson) { this.publishedOutputSchemaJson = publishedOutputSchemaJson; }
+    public String getPublishedAiDependenciesJson() { return publishedAiDependenciesJson; }
+    public void setPublishedAiDependenciesJson(String publishedAiDependenciesJson) { this.publishedAiDependenciesJson = publishedAiDependenciesJson; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Integer getVersionValue() { return versionValue; }
@@ -126,6 +132,8 @@ public class ScriptEntity {
     public void setTagsJson(String tagsJson) { this.tagsJson = tagsJson; }
     public String getPluginDependenciesJson() { return pluginDependenciesJson; }
     public void setPluginDependenciesJson(String pluginDependenciesJson) { this.pluginDependenciesJson = pluginDependenciesJson; }
+    public String getAiDependenciesJson() { return aiDependenciesJson; }
+    public void setAiDependenciesJson(String aiDependenciesJson) { this.aiDependenciesJson = aiDependenciesJson; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

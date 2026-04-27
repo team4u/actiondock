@@ -54,6 +54,33 @@ const ScheduleEditorPage = lazy(() =>
 const SystemSettingsPage = lazy(() =>
   import("./pages/SystemSettingsPage").then((module) => ({ default: module.SystemSettingsPage }))
 );
+const AiOverviewPage = lazy(() =>
+  import("./pages/ai/AiOverviewPage").then((module) => ({ default: module.AiOverviewPage }))
+);
+const AiModelProfileListPage = lazy(() =>
+  import("./pages/ai/AiModelProfileListPage").then((module) => ({ default: module.AiModelProfileListPage }))
+);
+const AiAgentProfileListPage = lazy(() =>
+  import("./pages/ai/AiAgentProfileListPage").then((module) => ({ default: module.AiAgentProfileListPage }))
+);
+const AiToolsetListPage = lazy(() =>
+  import("./pages/ai/AiToolsetListPage").then((module) => ({ default: module.AiToolsetListPage }))
+);
+const AiToolsetDetailPage = lazy(() =>
+  import("./pages/ai/AiToolsetDetailPage").then((module) => ({ default: module.AiToolsetDetailPage }))
+);
+const AiRunListPage = lazy(() =>
+  import("./pages/ai/AiRunListPage").then((module) => ({ default: module.AiRunListPage }))
+);
+const AiRunDetailPage = lazy(() =>
+  import("./pages/ai/AiRunDetailPage").then((module) => ({ default: module.AiRunDetailPage }))
+);
+const AiModelProfileDetailPage = lazy(() =>
+  import("./pages/ai/AiProfileDetailPage").then((module) => ({ default: module.AiModelProfileDetailPage }))
+);
+const AiAgentProfileDetailPage = lazy(() =>
+  import("./pages/ai/AiProfileDetailPage").then((module) => ({ default: module.AiAgentProfileDetailPage }))
+);
 
 function getSystemColorMode(): ColorMode {
   if (typeof window === "undefined") {
@@ -90,6 +117,9 @@ function resolveSelectedNavKey(pathname: string): string {
   if (pathname.startsWith("/settings")) {
     return "settings";
   }
+  if (pathname.startsWith("/ai")) {
+    return "ai";
+  }
   if (pathname.startsWith("/repositories")) {
     return "repositories";
   }
@@ -114,6 +144,8 @@ function resolveTitle(selectedNavKey: string): string {
       return "插件管理";
     case "settings":
       return "系统配置";
+    case "ai":
+      return "AI 能力";
     case "schedules":
       return "定时任务";
     default:
@@ -171,6 +203,11 @@ function AdminShell() {
             onClick: () => navigate("/schedules")
           },
           {
+            key: "ai",
+            label: "AI 能力",
+            onClick: () => navigate("/ai")
+          },
+          {
             key: "settings",
             label: "系统配置",
             onClick: () => navigate(`/settings${buildSystemSettingsSearch("config-values")}`)
@@ -220,6 +257,18 @@ function AdminShell() {
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
+              <Route path="/ai" element={<AiOverviewPage />} />
+              <Route path="/ai/models" element={<AiModelProfileListPage />} />
+              <Route path="/ai/models/new" element={<AiModelProfileDetailPage />} />
+              <Route path="/ai/models/:id" element={<AiModelProfileDetailPage />} />
+              <Route path="/ai/agents" element={<AiAgentProfileListPage />} />
+              <Route path="/ai/agents/new" element={<AiAgentProfileDetailPage />} />
+              <Route path="/ai/agents/:id" element={<AiAgentProfileDetailPage />} />
+              <Route path="/ai/toolsets" element={<AiToolsetListPage />} />
+              <Route path="/ai/toolsets/new" element={<AiToolsetDetailPage />} />
+              <Route path="/ai/toolsets/:id" element={<AiToolsetDetailPage />} />
+              <Route path="/ai/runs" element={<AiRunListPage />} />
+              <Route path="/ai/runs/:runId" element={<AiRunDetailPage />} />
               <Route path="/settings" element={<SystemSettingsPage />} />
               <Route
                 path="/plugins/:pluginId"

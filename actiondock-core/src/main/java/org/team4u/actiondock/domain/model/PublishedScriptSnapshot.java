@@ -1,7 +1,9 @@
 package org.team4u.actiondock.domain.model;
 
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -19,6 +21,7 @@ public class PublishedScriptSnapshot {
     private String source;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
     private Map<String, Object> outputSchema = new LinkedHashMap<>();
+    private List<AiDependency> aiDependencies = new ArrayList<>();
 
     public PublishedScriptSnapshot() {
     }
@@ -37,6 +40,7 @@ public class PublishedScriptSnapshot {
         this.source = other.getSource();
         this.inputSchema = SchemaValueCopier.copyMap(other.getInputSchema());
         this.outputSchema = SchemaValueCopier.copyMap(other.getOutputSchema());
+        this.aiDependencies = other.getAiDependencies();
     }
 
     public String getName() {
@@ -94,6 +98,27 @@ public class PublishedScriptSnapshot {
         return this;
     }
 
+    public List<AiDependency> getAiDependencies() {
+        return aiDependencies.stream()
+                .map(dependency -> new AiDependency()
+                        .setCapability(dependency.getCapability())
+                        .setProfile(dependency.getProfile())
+                        .setAgentProfile(dependency.getAgentProfile())
+                        .setRequired(dependency.isRequired()))
+                .toList();
+    }
+
+    public PublishedScriptSnapshot setAiDependencies(List<AiDependency> aiDependencies) {
+        this.aiDependencies = aiDependencies == null ? new ArrayList<>() : aiDependencies.stream()
+                .map(dependency -> new AiDependency()
+                        .setCapability(dependency.getCapability())
+                        .setProfile(dependency.getProfile())
+                        .setAgentProfile(dependency.getAgentProfile())
+                        .setRequired(dependency.isRequired()))
+                .toList();
+        return this;
+    }
+
     /**
      * 创建当前快照的深拷贝。
      *
@@ -115,11 +140,12 @@ public class PublishedScriptSnapshot {
                 && type == other.type
                 && Objects.equals(source, other.source)
                 && Objects.equals(inputSchema, other.inputSchema)
-                && Objects.equals(outputSchema, other.outputSchema);
+                && Objects.equals(outputSchema, other.outputSchema)
+                && Objects.equals(aiDependencies, other.aiDependencies);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, type, source, inputSchema, outputSchema);
+        return Objects.hash(name, type, source, inputSchema, outputSchema, aiDependencies);
     }
 }

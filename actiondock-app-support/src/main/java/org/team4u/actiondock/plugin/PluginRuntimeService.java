@@ -45,6 +45,7 @@ public class PluginRuntimeService {
     private final Path pluginsRoot;
     private final Path configRoot;
     private final DefaultPluginManager pluginManager;
+    private final Map<String, ActionDockPlugin> systemPlugins;
     private final Map<String, PluginManifest> manifestCache;
     private final ExecutionOutputProjector executionOutputProjector;
     private final ConfigValueApplicationService configValueApplicationService;
@@ -56,6 +57,7 @@ public class PluginRuntimeService {
         this.pluginsRoot = null;
         this.configRoot = null;
         this.pluginManager = null;
+        this.systemPlugins = Map.of();
         this.manifestCache = Map.of();
         this.executionOutputProjector = null;
         this.configValueApplicationService = ConfigValueApplicationService.disabled();
@@ -72,6 +74,14 @@ public class PluginRuntimeService {
                                 PluginRegistryRepository pluginRegistryRepository,
                                 AppProperties.Plugins properties,
                                 ConfigValueApplicationService configValueApplicationService) {
+        this(jsonCodec, pluginRegistryRepository, properties, configValueApplicationService, List.of());
+    }
+
+    public PluginRuntimeService(JsonCodec jsonCodec,
+                                PluginRegistryRepository pluginRegistryRepository,
+                                AppProperties.Plugins properties,
+                                ConfigValueApplicationService configValueApplicationService,
+                                List<ActionDockPlugin> systemPlugins) {
         this.jsonCodec = jsonCodec;
         this.pluginRegistryRepository = pluginRegistryRepository;
         this.pluginsRoot = Path.of(properties == null || properties.getDir() == null || properties.getDir().isBlank()
@@ -79,6 +89,8 @@ public class PluginRuntimeService {
                 : properties.getDir()).toAbsolutePath().normalize();
         this.configRoot = this.pluginsRoot.resolve(".actiondock-config");
         this.pluginManager = new DefaultPluginManager(this.pluginsRoot);
+        this.systemPlugins = systemPlugins == null ? Map.of() : systemPlugins.stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(ActionDockPlugin::id, plugin -> plugin));
         this.manifestCache = new HashMap<>();
         this.executionOutputProjector = new ExecutionOutputProjector();
         this.configValueApplicationService = configValueApplicationService == null
@@ -418,6 +430,9 @@ public class PluginRuntimeService {
      * @throws IllegalArgumentException 如果插件未启动或动作不存在
      */
     public synchronized void assertActionAvailable(String pluginId, String action) {
+        if (systemPlugins.containsKey(pluginId)) {
+            return;
+        }
         PluginRegistration registration = requireRegistration(pluginId);
         if (!registration.isEnabled() || !isLoadedAndStarted(pluginId)) {
             throw new IllegalArgumentException("插件未启动: " + pluginId);
@@ -453,6 +468,20 @@ public class PluginRuntimeService {
                                       Map<String, Object> input,
                                       Map<String, Object> args) {
         assertActionAvailable(pluginId, action);
+        ActionDockPlugin systemPlugin = systemPlugins.get(pluginId);
+        if (systemPlugin != null) {
+            return systemPlugin.invoke(
+                    action,
+                    new ScriptPluginContext()
+                            .setScriptId(definition == null ? null : definition.getId())
+                            .setScriptName(definition == null ? null : definition.getName())
+                            .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
+                            .setSubmitMode(resolveSubmitMode(executionContext))
+                            .setScriptInput(input)
+                            .setPluginConfig(Map.of()),
+                    args == null ? Map.of() : new LinkedHashMap<>(args)
+            );
+        }
         PluginRegistration registration = requireRegistration(pluginId);
         ActionDockPlugin plugin = requireLoadedExtension(pluginId);
         try {

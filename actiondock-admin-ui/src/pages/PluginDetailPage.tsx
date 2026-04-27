@@ -254,7 +254,7 @@ export function PluginDetailPage() {
       setConfigInputMode("JSON");
       return;
     }
-    configForm.setFieldsValue(currentConfig.config);
+    configForm.setFieldsValue(currentConfig.config as Parameters<typeof configForm.setFieldsValue>[0]);
     setConfigText(prettyJson(currentConfig.config));
     setConfigInputMode(configSupportedFields.length > 0 ? "SCHEMA" : "JSON");
   }, [configForm, configSupportedFields.length, currentConfig]);
@@ -266,7 +266,7 @@ export function PluginDetailPage() {
       setActionArgsInputMode("JSON");
       return;
     }
-    argsForm.setFieldsValue(currentAction.exampleArgs);
+    argsForm.setFieldsValue(currentAction.exampleArgs as Parameters<typeof argsForm.setFieldsValue>[0]);
     setActionArgsText(prettyJson(currentAction.exampleArgs));
     setActionArgsInputMode(actionSupportedFields.length > 0 ? "SCHEMA" : "JSON");
     setDebugResult(null);
@@ -308,7 +308,7 @@ export function PluginDetailPage() {
 
     try {
       const parsed = parseSchemaObjectEditorJsonText(configText, "插件配置");
-      configForm.setFieldsValue(parsed);
+      configForm.setFieldsValue(parsed as Parameters<typeof configForm.setFieldsValue>[0]);
       setConfigInputMode("SCHEMA");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "当前 JSON 不是合法配置";
@@ -334,7 +334,7 @@ export function PluginDetailPage() {
 
     try {
       const parsed = parseSchemaObjectEditorJsonText(actionArgsText, "动作参数");
-      argsForm.setFieldsValue(parsed);
+      argsForm.setFieldsValue(parsed as Parameters<typeof argsForm.setFieldsValue>[0]);
       setActionArgsInputMode("SCHEMA");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "当前 JSON 不是合法动作参数";
@@ -362,7 +362,7 @@ export function PluginDetailPage() {
           : parseJsonText(configText, "插件配置");
       const saved = await updatePluginConfig(currentConfig.pluginId, nextConfig);
       setCurrentConfig(saved);
-      configForm.setFieldsValue(saved.config);
+      configForm.setFieldsValue(saved.config as Parameters<typeof configForm.setFieldsValue>[0]);
       setConfigText(prettyJson(saved.config));
       messageApi.success("插件配置已保存");
       await loadPlugin();

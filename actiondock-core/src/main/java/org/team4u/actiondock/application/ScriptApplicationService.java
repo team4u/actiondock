@@ -260,6 +260,7 @@ public class ScriptApplicationService {
                 .setOwner(source.getOwner())
                 .setDescription(source.getDescription())
                 .setTags(source.getTags())
+                .setAiDependencies(source.getAiDependencies())
                 .setCreatedAt(source.getCreatedAt())
                 .setUpdatedAt(source.getUpdatedAt());
     }

@@ -6,6 +6,13 @@ export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
 export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED";
 export type ExecutionLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+export type AiCapability = "CHAT" | "STRUCTURED_OUTPUT" | "EMBEDDING" | "AGENT_RUN";
+export type AiProvider = "AGENTSCOPE";
+export type AiModelProvider = "DASHSCOPE" | "OPENAI" | "OPENAI_COMPATIBLE" | "ANTHROPIC" | "GEMINI" | "OLLAMA";
+export type AiToolPermission = "READ_ONLY" | "PROPOSE_CHANGE" | "CONTROLLED_ACTION" | "DANGEROUS_ACTION";
+export type AiRunStatus = "RUNNING" | "SUCCESS" | "FAILED" | "WAITING_APPROVAL" | "CANCELLED" | "INTERRUPTED";
+export type AiCallerType = "SCRIPT" | "PLUGIN" | "WORKBENCH" | "ADMIN_TEST" | "AGENT";
+export type AiStepType = "MODEL_REASONING" | "TOOL_CALL" | "TOOL_RESULT" | "APPROVAL" | "INTERRUPT";
 export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
 export type RepositoryUsage = "DISTRIBUTION" | "DEVELOPMENT";
@@ -22,6 +29,7 @@ export interface PublishedScriptSnapshot {
   source: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
+  aiDependencies?: AiDependency[];
 }
 
 export interface ScriptDefinition {
@@ -47,6 +55,7 @@ export interface ScriptDefinition {
   description?: string;
   tags?: string[];
   pluginDependencies?: PluginDependency[];
+  aiDependencies?: AiDependency[];
   publishedSnapshot?: PublishedScriptSnapshot;
   hasUnpublishedChanges?: boolean;
   createdAt?: string;
@@ -57,6 +66,146 @@ export interface PluginDependency {
   pluginId: string;
   versionRange?: string;
   requiredActions: string[];
+}
+
+export interface AiDependency {
+  capability: AiCapability;
+  profile?: string;
+  agentProfile?: string;
+  required: boolean;
+}
+
+export interface AiMessage {
+  role: string;
+  content: string;
+}
+
+export interface AiUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface AiModelProfile {
+  id: string;
+  name: string;
+  provider: AiProvider;
+  modelProvider: AiModelProvider;
+  modelName: string;
+  baseUrl?: string;
+  apiKeyConfigKey?: string;
+  defaultOptions: Record<string, unknown>;
+  limits: Record<string, unknown>;
+  capabilities: AiCapability[];
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AiAgentProfile {
+  id: string;
+  name: string;
+  provider: AiProvider;
+  modelProfileId: string;
+  systemPrompt?: string;
+  toolsetIds: string[];
+  options: Record<string, unknown>;
+  policy: Record<string, unknown>;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AiToolset {
+  id: string;
+  name: string;
+  description?: string;
+  toolNames: string[];
+  maxPermission: AiToolPermission;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AiTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  permission: AiToolPermission;
+}
+
+export interface AiToolExecutionResult {
+  success: boolean;
+  output: Record<string, unknown>;
+  errorMessage?: string;
+  latencyMs?: number;
+}
+
+export interface AiChatRequest {
+  modelProfile: string;
+  messages: AiMessage[];
+  options?: Record<string, unknown>;
+}
+
+export interface AiChatResponse {
+  text: string;
+  usage?: AiUsage;
+  raw?: Record<string, unknown>;
+}
+
+export interface AiAgentRunRequest {
+  agentProfile: string;
+  messages: AiMessage[];
+  input?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+}
+
+export interface AiAgentRunResult {
+  runId: string;
+  status: AiRunStatus;
+  output: Record<string, unknown>;
+  steps: AiAgentStep[];
+  usage?: AiUsage;
+  errorMessage?: string;
+}
+
+export interface AiAgentStep {
+  id: string;
+  runId: string;
+  stepIndex: number;
+  stepType: AiStepType;
+  modelProfile?: string;
+  toolName?: string;
+  toolPermission?: AiToolPermission;
+  toolInput?: Record<string, unknown>;
+  toolOutput?: Record<string, unknown>;
+  status?: string;
+  latencyMs?: number;
+  errorMessage?: string;
+  createdAt?: string;
+}
+
+export interface AiAgentRunRecord {
+  id: string;
+  agentProfile: string;
+  status: AiRunStatus;
+  callerType?: AiCallerType;
+  scriptId?: string;
+  executionId?: string;
+  userId?: string;
+  inputSummary: Record<string, unknown>;
+  outputSummary: Record<string, unknown>;
+  totalModelCalls?: number;
+  totalToolCalls?: number;
+  totalTokens?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  errorMessage?: string;
+}
+
+export interface AiAgentRunSnapshot extends AiAgentRunRecord {
+  steps: AiAgentStep[];
 }
 
 export interface ExecutionRecord {
@@ -377,6 +526,7 @@ export interface RepositoryToolDescriptor {
   digest?: string;
   riskLevel?: string;
   pluginDependencies: PluginDependency[];
+  aiDependencies?: AiDependency[];
   installed: boolean;
   installedVersion?: string;
   updateAvailable: boolean;

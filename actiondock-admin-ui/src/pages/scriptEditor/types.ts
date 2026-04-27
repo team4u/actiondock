@@ -2,6 +2,7 @@ import type { FormInstance } from "antd";
 import type { MenuProps } from "antd";
 import type {
   PluginDependency,
+  AiDependency,
   PluginView,
   DevelopmentStatus,
   RepositoryToolDescriptor,
@@ -163,6 +164,7 @@ export interface ScriptEditorContext {
   discardingDraft: boolean;
   validating: boolean;
   detectedPluginDependencies: PluginDependency[];
+  detectedAiDependencies: AiDependency[];
   developmentStatus: DevelopmentStatus | null;
   developmentPulling: boolean;
   handlePullDevelopment: () => Promise<void>;

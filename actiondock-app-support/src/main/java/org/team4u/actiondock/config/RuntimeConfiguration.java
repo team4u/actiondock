@@ -5,6 +5,25 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.team4u.actiondock.ai.agentscope.AgentScopeAiProviderClient;
+import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
+import org.team4u.actiondock.ai.api.AiAgentRunRepository;
+import org.team4u.actiondock.ai.api.AiAgentStepRepository;
+import org.team4u.actiondock.ai.api.AiCallLogRepository;
+import org.team4u.actiondock.ai.api.AiGateway;
+import org.team4u.actiondock.ai.api.AiModelProfileRepository;
+import org.team4u.actiondock.ai.api.AiProviderClient;
+import org.team4u.actiondock.ai.api.AiSecretResolver;
+import org.team4u.actiondock.ai.api.AiTool;
+import org.team4u.actiondock.ai.api.AiToolsetRepository;
+import org.team4u.actiondock.ai.core.AiAgentProfileService;
+import org.team4u.actiondock.ai.core.AiAgentRuntimeImpl;
+import org.team4u.actiondock.ai.core.AiGatewayImpl;
+import org.team4u.actiondock.ai.core.AiModelProfileService;
+import org.team4u.actiondock.ai.core.AiToolRegistryImpl;
+import org.team4u.actiondock.ai.core.AiToolsetService;
+import org.team4u.actiondock.ai.plugin.ActionDockAiSystemPlugin;
+import org.team4u.actiondock.ai.tool.ActionDockAiTools;
 import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
@@ -26,6 +45,7 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.repository.HttpPluginArtifactResolver;
 import org.team4u.actiondock.repository.LocalPluginArtifactResolver;
 import org.team4u.actiondock.repository.PluginArtifactResolver;
@@ -66,8 +86,70 @@ public class RuntimeConfiguration {
     public PluginRuntimeService pluginRuntimeService(JsonCodec jsonCodec,
                                                      PluginRegistryRepository pluginRegistryRepository,
                                                      ConfigValueApplicationService configValueApplicationService,
-                                                     AppProperties properties) {
-        return new PluginRuntimeService(jsonCodec, pluginRegistryRepository, properties.getPlugins(), configValueApplicationService);
+                                                     AppProperties properties,
+                                                     List<ActionDockPlugin> systemPlugins) {
+        return new PluginRuntimeService(jsonCodec, pluginRegistryRepository, properties.getPlugins(), configValueApplicationService, systemPlugins);
+    }
+
+    @Bean
+    public AiSecretResolver aiSecretResolver(ConfigValueApplicationService configValueApplicationService) {
+        return key -> key == null || key.isBlank() ? null : configValueApplicationService.snapshot().get(key);
+    }
+
+    @Bean
+    public AiProviderClient aiProviderClient(AiSecretResolver secretResolver) {
+        return new AgentScopeAiProviderClient(secretResolver);
+    }
+
+    @Bean
+    public AiModelProfileService aiModelProfileService(AiModelProfileRepository repository) {
+        return new AiModelProfileService(repository);
+    }
+
+    @Bean
+    public AiAgentProfileService aiAgentProfileService(AiAgentProfileRepository repository,
+                                                       AiModelProfileRepository modelProfileRepository) {
+        return new AiAgentProfileService(repository, modelProfileRepository);
+    }
+
+    @Bean
+    public AiToolsetService aiToolsetService(AiToolsetRepository repository) {
+        return new AiToolsetService(repository);
+    }
+
+    @Bean
+    public AiToolRegistryImpl aiToolRegistry(AiToolsetRepository toolsetRepository, ObjectProvider<List<AiTool>> toolsProvider) {
+        List<AiTool> tools = toolsProvider.getIfAvailable(List::of);
+        return new AiToolRegistryImpl(toolsetRepository, tools);
+    }
+
+    @Bean
+    public List<AiTool> actionDockAiTools(ScriptRepository scriptRepository,
+                                          ExecutionRepository executionRepository,
+                                          PluginRegistryRepository pluginRegistryRepository) {
+        return ActionDockAiTools.create(scriptRepository, executionRepository, pluginRegistryRepository);
+    }
+
+    @Bean
+    public AiGateway aiGateway(AiModelProfileService modelProfileService,
+                               AiProviderClient providerClient,
+                               AiCallLogRepository callLogRepository) {
+        return new AiGatewayImpl(modelProfileService, providerClient, callLogRepository);
+    }
+
+    @Bean
+    public AiAgentRuntimeImpl aiAgentRuntime(AiAgentProfileService agentProfileService,
+                                             AiModelProfileRepository modelProfileRepository,
+                                             AiAgentRunRepository runRepository,
+                                             AiAgentStepRepository stepRepository,
+                                             AiProviderClient providerClient,
+                                             AiToolRegistryImpl toolRegistry) {
+        return new AiAgentRuntimeImpl(agentProfileService, modelProfileRepository, runRepository, stepRepository, providerClient, toolRegistry);
+    }
+
+    @Bean
+    public ActionDockPlugin actionDockAiSystemPlugin(AiGateway aiGateway, AiAgentRuntimeImpl aiAgentRuntime) {
+        return new ActionDockAiSystemPlugin(aiGateway, aiAgentRuntime);
     }
 
     @Bean
