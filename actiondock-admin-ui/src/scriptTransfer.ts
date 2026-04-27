@@ -145,7 +145,7 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
   };
 }
 
-function parseScriptDefinition(value: unknown, index: number): ScriptDefinition {
+export function parseScriptDefinition(value: unknown, index: number): ScriptDefinition {
   if (!isRecord(value)) {
     throw new Error(`第 ${index + 1} 条脚本不是对象`);
   }
@@ -198,7 +198,7 @@ function parseScriptDefinition(value: unknown, index: number): ScriptDefinition 
   };
 }
 
-function parseScriptSchedule(value: unknown, index: number): ScriptSchedule {
+export function parseScriptSchedule(value: unknown, index: number): ScriptSchedule {
   if (!isRecord(value)) {
     throw new Error(`第 ${index + 1} 条定时任务不是对象`);
   }
@@ -237,7 +237,7 @@ function parseScriptSchedule(value: unknown, index: number): ScriptSchedule {
   };
 }
 
-function parseConfigValue(value: unknown, index: number): ConfigValue {
+export function parseConfigValue(value: unknown, index: number): ConfigValue {
   if (!isRecord(value)) {
     throw new Error(`第 ${index + 1} 条配置值不是对象`);
   }
@@ -291,7 +291,7 @@ export function formatConfigValueExportFileName(now = new Date()): string {
   return `actiondock-config-values-${stamp}.json`;
 }
 
-function formatExportStamp(now: Date): string {
+export function formatExportStamp(now: Date): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
