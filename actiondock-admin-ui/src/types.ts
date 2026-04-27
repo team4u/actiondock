@@ -121,6 +121,7 @@ export interface AiToolset {
   name: string;
   description?: string;
   toolNames: string[];
+  toolOptions?: Record<string, Record<string, unknown>>;
   maxPermission: AiToolPermission;
   enabled: boolean;
   createdAt?: string;
@@ -133,6 +134,9 @@ export interface AiTool {
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
   permission: AiToolPermission;
+  configurable?: boolean;
+  configHelp?: string;
+  configExample?: Record<string, unknown>;
 }
 
 export interface AiToolExecutionResult {
@@ -168,6 +172,13 @@ export interface AiAgentRunResult {
   steps: AiAgentStep[];
   usage?: AiUsage;
   errorMessage?: string;
+}
+
+export interface AiAgentRunSubmission {
+  runId: string;
+  status: AiRunStatus;
+  agentProfile: string;
+  startedAt?: string;
 }
 
 export interface AiAgentStep {
@@ -363,6 +374,8 @@ export interface PluginAction {
   exampleArgs: Record<string, unknown>;
 }
 
+export type PluginReferenceSourceType = "INSTALLED" | "SYSTEM";
+
 export interface PluginView {
   pluginId: string;
   name: string;
@@ -375,6 +388,16 @@ export interface PluginView {
   started: boolean;
   configurable: boolean;
   fileName?: string;
+  actions: PluginAction[];
+}
+
+export interface PluginReferenceView {
+  pluginId: string;
+  name: string;
+  description: string;
+  version?: string;
+  sourceType: PluginReferenceSourceType;
+  started: boolean;
   actions: PluginAction[];
 }
 

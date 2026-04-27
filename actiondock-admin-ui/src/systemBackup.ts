@@ -4,7 +4,10 @@ import type {
   RepositoryDefinition,
   ScriptDefinition,
   ScriptSchedule,
-  PluginView
+  PluginView,
+  AiModelProfile,
+  AiAgentProfile,
+  AiToolset
 } from "./types";
 import {
   parseScriptDefinition,
@@ -38,6 +41,9 @@ export interface SystemBackupBundleV1 {
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
     plugins: PluginBackupEntry[];
+    aiModels: AiModelProfile[];
+    aiAgents: AiAgentProfile[];
+    aiToolsets: AiToolset[];
   };
 }
 
@@ -48,6 +54,9 @@ export interface BackupAnalysis {
   executionPresets: { total: number; create: number; overwrite: number };
   repositories: { total: number; create: number; overwrite: number };
   plugins: { total: number; create: number; overwrite: number };
+  aiModels: { total: number; create: number; overwrite: number };
+  aiAgents: { total: number; create: number; overwrite: number };
+  aiToolsets: { total: number; create: number; overwrite: number };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,6 +72,9 @@ export function buildBackupJson(
     repositories: RepositoryDefinition[];
     plugins: PluginView[];
     pluginConfigs: Map<string, Record<string, unknown>>;
+    aiModels: AiModelProfile[];
+    aiAgents: AiAgentProfile[];
+    aiToolsets: AiToolset[];
   },
   options?: { includeSecretValues?: boolean }
 ): SystemBackupBundleV1 {
@@ -96,7 +108,10 @@ export function buildBackupJson(
         })),
       executionPresets: [...data.executionPresets].sort((a, b) => a.id.localeCompare(b.id)),
       repositories: [...data.repositories].sort((a, b) => a.id.localeCompare(b.id)),
-      plugins: pluginEntries.sort((a, b) => a.pluginId.localeCompare(b.pluginId))
+      plugins: pluginEntries.sort((a, b) => a.pluginId.localeCompare(b.pluginId)),
+      aiModels: [...data.aiModels].sort((a, b) => a.id.localeCompare(b.id)),
+      aiAgents: [...data.aiAgents].sort((a, b) => a.id.localeCompare(b.id)),
+      aiToolsets: [...data.aiToolsets].sort((a, b) => a.id.localeCompare(b.id))
     }
   };
 }
@@ -146,12 +161,21 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
   const plugins = Array.isArray(data.plugins)
     ? (data.plugins as PluginBackupEntry[])
     : [];
+  const aiModels = Array.isArray(data.aiModels)
+    ? (data.aiModels as AiModelProfile[])
+    : [];
+  const aiAgents = Array.isArray(data.aiAgents)
+    ? (data.aiAgents as AiAgentProfile[])
+    : [];
+  const aiToolsets = Array.isArray(data.aiToolsets)
+    ? (data.aiToolsets as AiToolset[])
+    : [];
 
   return {
     version: 1,
     type: "actiondock-system-backup",
     exportedAt: parsed.exportedAt as string,
-    data: { scripts, schedules, configValues, executionPresets, repositories, plugins }
+    data: { scripts, schedules, configValues, executionPresets, repositories, plugins, aiModels, aiAgents, aiToolsets }
   };
 }
 
@@ -164,6 +188,9 @@ export function analyzeBackupBundle(
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
     plugins: PluginView[];
+    aiModels: AiModelProfile[];
+    aiAgents: AiAgentProfile[];
+    aiToolsets: AiToolset[];
   }
 ): BackupAnalysis {
   const analyze = <T extends { id: string }>(
@@ -211,7 +238,10 @@ export function analyzeBackupBundle(
     configValues: { total: bundle.data.configValues.length, create: cvCreate, overwrite: cvOverwrite },
     executionPresets: analyze(bundle.data.executionPresets, current.executionPresets),
     repositories: analyze(bundle.data.repositories, current.repositories),
-    plugins: { total: bundle.data.plugins.length, create: pluginCreate, overwrite: pluginOverwrite }
+    plugins: { total: bundle.data.plugins.length, create: pluginCreate, overwrite: pluginOverwrite },
+    aiModels: analyze(bundle.data.aiModels, current.aiModels),
+    aiAgents: analyze(bundle.data.aiAgents, current.aiAgents),
+    aiToolsets: analyze(bundle.data.aiToolsets, current.aiToolsets)
   };
 }
 

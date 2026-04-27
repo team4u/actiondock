@@ -23,12 +23,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * 插件运行时服务，管理插件的完整生命周期。
@@ -39,6 +42,7 @@ import java.util.Objects;
  */
 public class PluginRuntimeService {
     private static final PluginRuntimeService DISABLED = new PluginRuntimeService();
+    private static final Logger LOGGER = Logger.getLogger(PluginRuntimeService.class.getName());
 
     private final JsonCodec jsonCodec;
     private final PluginRegistryRepository pluginRegistryRepository;
@@ -126,6 +130,34 @@ public class PluginRuntimeService {
         return pluginRegistryRepository.findAll().stream()
                 .sorted(Comparator.comparing(PluginRegistration::getPluginId))
                 .map(this::toPluginView)
+                .toList();
+    }
+
+    /**
+     * 获取脚本编辑器可展示的插件参考。
+     * <p>
+     * 仅返回已启动的标准插件，以及带有文档清单的系统插件。
+     *
+     * @return 插件参考视图列表
+     */
+    public synchronized List<PluginReferenceView> listPluginReferences() {
+        if (!enabled) {
+            return List.of();
+        }
+
+        List<PluginReferenceView> references = new ArrayList<>();
+        pluginRegistryRepository.findAll().stream()
+                .filter(registration -> isLoadedAndStarted(registration.getPluginId()))
+                .sorted(Comparator.comparing(PluginRegistration::getPluginId))
+                .map(this::toInstalledPluginReferenceView)
+                .forEach(references::add);
+        systemPlugins.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> toSystemPluginReferenceView(entry.getKey(), entry.getValue()))
+                .filter(Objects::nonNull)
+                .forEach(references::add);
+        return references.stream()
+                .sorted(Comparator.comparing(PluginReferenceView::getPluginId))
                 .toList();
     }
 
@@ -741,6 +773,45 @@ public class PluginRuntimeService {
                 .setFileName(registration.getFileName())
                 .setActions(registration.getActions().stream()
                         .map(this::toActionView)
+                        .toList());
+    }
+
+    private PluginReferenceView toInstalledPluginReferenceView(PluginRegistration registration) {
+        return new PluginReferenceView()
+                .setPluginId(registration.getPluginId())
+                .setName(registration.getName())
+                .setDescription(registration.getDescription())
+                .setVersion(registration.getVersion())
+                .setSourceType(PluginReferenceSourceType.INSTALLED)
+                .setStarted(true)
+                .setActions(registration.getActions().stream()
+                        .map(this::toActionView)
+                        .toList());
+    }
+
+    private PluginReferenceView toSystemPluginReferenceView(String pluginId, ActionDockPlugin plugin) {
+        PluginManifest manifest;
+        try {
+            manifest = PluginManifestLoader.load(plugin.getClass(), pluginId);
+        } catch (IllegalArgumentException exception) {
+            LOGGER.log(Level.WARNING, "System plugin reference manifest missing: {0}", pluginId);
+            return null;
+        }
+        return new PluginReferenceView()
+                .setPluginId(pluginId)
+                .setName(manifest.getName() == null || manifest.getName().isBlank() ? pluginId : manifest.getName())
+                .setDescription(manifest.getDescription())
+                .setVersion(manifest.getVersion())
+                .setSourceType(PluginReferenceSourceType.SYSTEM)
+                .setStarted(true)
+                .setActions(manifest.getActions().stream()
+                        .map(action -> new PluginActionView()
+                                .setAction(action.getAction())
+                                .setTitle(action.getTitle())
+                                .setDescription(action.getDescription())
+                                .setInputSchema(action.getInputSchema())
+                                .setOutputSchema(action.getOutputSchema())
+                                .setExampleArgs(action.getExampleArgs()))
                         .toList());
     }
 

@@ -60,6 +60,27 @@
   background: rgba(35, 87, 213, 0.10);
 }
 
+.ai-management-card {
+  height: 100%;
+}
+
+.ai-management-card > .ant-card-body {
+  height: 100%;
+}
+
+.ai-management-card__icon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  border-radius: 8px;
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
+  font-size: 18px;
+}
+
 html[data-theme="dark"] .ai-workbench-nav__item--active {
   background: rgba(138, 180, 255, 0.14);
 }
@@ -1614,4 +1635,50 @@ a {
   .execution-preset-drawer .ant-collapse-extra {
     margin-inline-start: 0 !important;
   }
+}
+
+/* AI Step Trace 列表 */
+.ai-step-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-step-trace__card {
+  padding: 10px 14px;
+  border: 1px solid var(--app-code-border);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
+}
+
+.ai-step-trace__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  flex-wrap: wrap;
+}
+
+.ai-step-trace__index {
+  min-width: 16px;
+  font-size: 12px;
+}
+
+.ai-step-trace__spacer {
+  flex: 1;
+}
+
+.ai-step-trace__body {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--app-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-step-trace__body .json-preview {
+  max-height: 400px;
+  overflow: auto;
 }

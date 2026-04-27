@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.team4u.actiondock.ai.agentscope.AgentScopeAiProviderClient;
+import org.team4u.actiondock.ai.agentscope.AgentScopeBuiltinAiTools;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiAgentRunRepository;
 import org.team4u.actiondock.ai.api.AiAgentStepRepository;
@@ -106,19 +107,22 @@ public class RuntimeConfiguration {
     }
 
     @Bean
-    public AiModelProfileService aiModelProfileService(AiModelProfileRepository repository) {
-        return new AiModelProfileService(repository);
+    public AiModelProfileService aiModelProfileService(AiModelProfileRepository repository,
+                                                       AiAgentProfileRepository agentProfileRepository) {
+        return new AiModelProfileService(repository, agentProfileRepository);
     }
 
     @Bean
     public AiAgentProfileService aiAgentProfileService(AiAgentProfileRepository repository,
-                                                       AiModelProfileRepository modelProfileRepository) {
-        return new AiAgentProfileService(repository, modelProfileRepository);
+                                                       AiModelProfileRepository modelProfileRepository,
+                                                       AiToolsetRepository toolsetRepository) {
+        return new AiAgentProfileService(repository, modelProfileRepository, toolsetRepository);
     }
 
     @Bean
-    public AiToolsetService aiToolsetService(AiToolsetRepository repository) {
-        return new AiToolsetService(repository);
+    public AiToolsetService aiToolsetService(AiToolsetRepository repository,
+                                             AiAgentProfileRepository agentProfileRepository) {
+        return new AiToolsetService(repository, agentProfileRepository);
     }
 
     @Bean
@@ -130,8 +134,11 @@ public class RuntimeConfiguration {
     @Bean
     public List<AiTool> actionDockAiTools(ScriptRepository scriptRepository,
                                           ExecutionRepository executionRepository,
-                                          PluginRegistryRepository pluginRegistryRepository) {
-        return ActionDockAiTools.create(scriptRepository, executionRepository, pluginRegistryRepository);
+                                          PluginRegistryRepository pluginRegistryRepository,
+                                          AiSecretResolver secretResolver) {
+        java.util.ArrayList<AiTool> tools = new java.util.ArrayList<>(ActionDockAiTools.create(scriptRepository, executionRepository, pluginRegistryRepository));
+        tools.addAll(AgentScopeBuiltinAiTools.create(secretResolver));
+        return tools;
     }
 
     @Bean
@@ -147,8 +154,9 @@ public class RuntimeConfiguration {
                                              AiAgentRunRepository runRepository,
                                              AiAgentStepRepository stepRepository,
                                              AiProviderClient providerClient,
-                                             AiToolRegistryImpl toolRegistry) {
-        return new AiAgentRuntimeImpl(agentProfileService, modelProfileRepository, runRepository, stepRepository, providerClient, toolRegistry);
+                                             AiToolRegistryImpl toolRegistry,
+                                             Executor executionExecutor) {
+        return new AiAgentRuntimeImpl(agentProfileService, modelProfileRepository, runRepository, stepRepository, providerClient, toolRegistry, executionExecutor);
     }
 
     @Bean

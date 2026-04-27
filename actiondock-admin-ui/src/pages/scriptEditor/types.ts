@@ -3,6 +3,7 @@ import type { MenuProps } from "antd";
 import type {
   PluginDependency,
   AiDependency,
+  PluginReferenceView,
   PluginView,
   DevelopmentStatus,
   RepositoryToolDescriptor,
@@ -144,6 +145,7 @@ export interface ScriptEditorContext {
   availableScripts: ScriptDefinition[];
   scriptsLoading: boolean;
   availablePlugins: PluginView[];
+  availablePluginReferences: PluginReferenceView[];
   pluginsLoading: boolean;
   headerActionModel: ScriptEditorHeaderActionModel;
   loading: boolean;

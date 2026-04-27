@@ -39,7 +39,14 @@ import {
   uninstallPlugin,
   updatePluginConfig,
   createPreset,
-  updatePreset
+  updatePreset,
+  listAiModels,
+  saveAiModel,
+  listAiAgents,
+  saveAiAgent,
+  listAiToolsets,
+  createAiToolset,
+  updateAiToolset
 } from "../api";
 import type {
   ScriptDefinition,
@@ -47,7 +54,10 @@ import type {
   ConfigValue,
   ExecutionPreset,
   RepositoryDefinition,
-  PluginView
+  PluginView,
+  AiModelProfile,
+  AiAgentProfile,
+  AiToolset
 } from "../types";
 import {
   buildBackupJson,
@@ -78,6 +88,9 @@ export function DataBackupPanel() {
     presets: number;
     repositories: number;
     plugins: number;
+    aiModels: number;
+    aiAgents: number;
+    aiToolsets: number;
   } | null>(null);
   const [analysis, setAnalysis] = useState<BackupAnalysis | null>(null);
   const [pendingBundle, setPendingBundle] = useState<SystemBackupBundleV1 | null>(null);
@@ -87,12 +100,15 @@ export function DataBackupPanel() {
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDataCounts = useCallback(async () => {
-    const [scripts, schedules, configValues, repositories, plugins] = await Promise.all([
+    const [scripts, schedules, configValues, repositories, plugins, aiModels, aiAgents, aiToolsets] = await Promise.all([
       listScripts(),
       listSchedules(),
       listConfigValues(),
       listRepositories(),
-      listPlugins()
+      listPlugins(),
+      listAiModels(),
+      listAiAgents(),
+      listAiToolsets()
     ]);
     let presetCount = 0;
     for (const script of scripts) {
@@ -109,19 +125,25 @@ export function DataBackupPanel() {
       configValues: configValues.length,
       presets: presetCount,
       repositories: repositories.length,
-      plugins: plugins.length
+      plugins: plugins.length,
+      aiModels: aiModels.length,
+      aiAgents: aiAgents.length,
+      aiToolsets: aiToolsets.length
     });
   }, []);
 
   const handleBackup = useCallback(async () => {
     setBackupLoading(true);
     try {
-      const [scripts, schedules, configValues, repositories, plugins] = await Promise.all([
+      const [scripts, schedules, configValues, repositories, plugins, aiModels, aiAgents, aiToolsets] = await Promise.all([
         listScripts(),
         listSchedules(),
         listConfigValues(),
         listRepositories(),
-        listPlugins()
+        listPlugins(),
+        listAiModels(),
+        listAiAgents(),
+        listAiToolsets()
       ]);
 
       const allPresets: ExecutionPreset[] = [];
@@ -151,7 +173,7 @@ export function DataBackupPanel() {
       );
 
       const backupJson = buildBackupJson(
-        { scripts, schedules, configValues, executionPresets: allPresets, repositories, plugins, pluginConfigs },
+        { scripts, schedules, configValues, executionPresets: allPresets, repositories, plugins, pluginConfigs, aiModels, aiAgents, aiToolsets },
         { includeSecretValues: includeSecrets }
       );
 
@@ -226,12 +248,15 @@ export function DataBackupPanel() {
         pluginFiles.set(path, blob);
       }
 
-      const [scripts, schedules, configValues, repositories, plugins] = await Promise.all([
+      const [scripts, schedules, configValues, repositories, plugins, aiModels, aiAgents, aiToolsets] = await Promise.all([
         listScripts(),
         listSchedules(),
         listConfigValues(),
         listRepositories(),
-        listPlugins()
+        listPlugins(),
+        listAiModels(),
+        listAiAgents(),
+        listAiToolsets()
       ]);
 
       const allPresets: ExecutionPreset[] = [];
@@ -252,7 +277,10 @@ export function DataBackupPanel() {
         configValues,
         executionPresets: allPresets,
         repositories,
-        plugins
+        plugins,
+        aiModels,
+        aiAgents,
+        aiToolsets
       });
 
       setPendingBundle(bundle);
@@ -275,12 +303,15 @@ export function DataBackupPanel() {
     const bundle = pendingBundle;
     const pluginFiles = pendingPluginFiles ?? new Map<string, Blob>();
 
-    const [currentScripts, currentSchedules, currentConfigValues, currentRepositories, currentPlugins] = await Promise.all([
+    const [currentScripts, currentSchedules, currentConfigValues, currentRepositories, currentPlugins, currentAiModels, currentAiAgents, currentAiToolsets] = await Promise.all([
       listScripts(),
       listSchedules(),
       listConfigValues(),
       listRepositories(),
-      listPlugins()
+      listPlugins(),
+      listAiModels(),
+      listAiAgents(),
+      listAiToolsets()
     ]);
 
     const currentScriptIds = new Set(currentScripts.map(s => s.id));
@@ -299,6 +330,10 @@ export function DataBackupPanel() {
       })
     );
     const currentPresetIds = new Set(currentPresets.map(p => p.id));
+
+    const currentAiModelIds = new Set(currentAiModels.map(m => m.id));
+    const currentAiAgentIds = new Set(currentAiAgents.map(a => a.id));
+    const currentAiToolsetIds = new Set(currentAiToolsets.map(t => t.id));
 
     // 1. Config Values
     {
@@ -450,6 +485,58 @@ export function DataBackupPanel() {
       results.push({ type: "插件", succeeded, failed: errors.length, errors });
     }
 
+    // 7. AI Models
+    {
+      let succeeded = 0;
+      const errors: string[] = [];
+      for (const model of bundle.data.aiModels) {
+        try {
+          const { createdAt, updatedAt, ...payload } = model;
+          await saveAiModel({ ...payload, id: currentAiModelIds.has(model.id) ? model.id : "" });
+          succeeded++;
+        } catch (e) {
+          errors.push(`${model.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+        }
+      }
+      results.push({ type: "AI 模型", succeeded, failed: errors.length, errors });
+    }
+
+    // 8. AI Agents
+    {
+      let succeeded = 0;
+      const errors: string[] = [];
+      for (const agent of bundle.data.aiAgents) {
+        try {
+          const { createdAt, updatedAt, ...payload } = agent;
+          await saveAiAgent({ ...payload, id: currentAiAgentIds.has(agent.id) ? agent.id : "" });
+          succeeded++;
+        } catch (e) {
+          errors.push(`${agent.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+        }
+      }
+      results.push({ type: "AI Agent", succeeded, failed: errors.length, errors });
+    }
+
+    // 9. AI Toolsets
+    {
+      let succeeded = 0;
+      const errors: string[] = [];
+      for (const toolset of bundle.data.aiToolsets) {
+        try {
+          const { createdAt, updatedAt, ...payload } = toolset;
+          if (currentAiToolsetIds.has(toolset.id)) {
+            await updateAiToolset(toolset.id, payload);
+          } else {
+            await createAiToolset(payload);
+          }
+          succeeded++;
+        } catch (e) {
+          errors.push(`${toolset.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+        }
+      }
+      results.push({ type: "AI 工具集", succeeded, failed: errors.length, errors });
+    }
+
     setPendingBundle(null);
     setPendingPluginFiles(null);
     setRestoreResults(results);
@@ -474,6 +561,9 @@ export function DataBackupPanel() {
               <Descriptions.Item label="执行预设">{dataCounts.presets}</Descriptions.Item>
               <Descriptions.Item label="仓库">{dataCounts.repositories}</Descriptions.Item>
               <Descriptions.Item label="插件">{dataCounts.plugins}</Descriptions.Item>
+              <Descriptions.Item label="AI 模型">{dataCounts.aiModels}</Descriptions.Item>
+              <Descriptions.Item label="AI Agent">{dataCounts.aiAgents}</Descriptions.Item>
+              <Descriptions.Item label="AI 工具集">{dataCounts.aiToolsets}</Descriptions.Item>
             </Descriptions>
           )}
 
@@ -622,6 +712,27 @@ export function DataBackupPanel() {
                 <Text type="success">新建 {analysis.plugins.create}</Text>
                 {" / "}
                 <Text type="warning">覆盖 {analysis.plugins.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="AI 模型">
+                <Text>共 {analysis.aiModels.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.aiModels.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.aiModels.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="AI Agent">
+                <Text>共 {analysis.aiAgents.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.aiAgents.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.aiAgents.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="AI 工具集">
+                <Text>共 {analysis.aiToolsets.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.aiToolsets.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.aiToolsets.overwrite}</Text>
               </Descriptions.Item>
             </Descriptions>
           </Space>

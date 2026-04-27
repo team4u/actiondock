@@ -7,6 +7,7 @@ import type {
   AiAgentRunRequest,
   AiAgentRunResult,
   AiAgentRunSnapshot,
+  AiAgentRunSubmission,
   AiWorkbenchCommand,
   AiWorkbenchResult,
   AiChatRequest,
@@ -38,6 +39,7 @@ import type {
   PluginConfigView,
   PluginInvokeRequest,
   PluginInvokeResponse,
+  PluginReferenceView,
   PluginView,
   ScriptSchedule,
   ScriptScheduleUpsertRequest,
@@ -225,6 +227,12 @@ export function updateAiModel(id: string, profile: AiModelProfile): Promise<AiMo
   });
 }
 
+export function deleteAiModel(id: string): Promise<void> {
+  return request<void>(`/api/ai/models/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
 export function testAiModel(id: string, payload: AiChatRequest): Promise<AiChatResponse> {
   return request<AiChatResponse>(`/api/ai/models/${encodeURIComponent(id)}/test`, {
     method: "POST",
@@ -266,8 +274,22 @@ export function updateAiAgent(id: string, profile: AiAgentProfile): Promise<AiAg
   });
 }
 
+export function deleteAiAgent(id: string): Promise<void> {
+  return request<void>(`/api/ai/agents/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
 export function testAiAgent(id: string, payload: AiAgentRunRequest): Promise<AiAgentRunResult> {
   return request<AiAgentRunResult>(`/api/ai/agents/${encodeURIComponent(id)}/test`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function startAiAgentRun(payload: AiAgentRunRequest): Promise<AiAgentRunSubmission> {
+  return request<AiAgentRunSubmission>("/api/ai/agents/runs", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -295,6 +317,12 @@ export function updateAiToolset(id: string, toolset: AiToolset): Promise<AiTools
     method: "PUT",
     headers: JSON_HEADERS,
     body: JSON.stringify(toolset)
+  });
+}
+
+export function deleteAiToolset(id: string): Promise<void> {
+  return request<void>(`/api/ai/toolsets/${encodeURIComponent(id)}`, {
+    method: "DELETE"
   });
 }
 
@@ -424,6 +452,10 @@ export function deleteSchedule(id: string): Promise<void> {
 
 export function listPlugins(): Promise<PluginView[]> {
   return request<PluginView[]>("/api/plugins");
+}
+
+export function listPluginReferences(): Promise<PluginReferenceView[]> {
+  return request<PluginReferenceView[]>("/api/plugins/references");
 }
 
 export function getPlugin(pluginId: string): Promise<PluginView> {

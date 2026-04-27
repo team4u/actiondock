@@ -10,6 +10,7 @@ import org.team4u.actiondock.ai.api.AiAgentRunRepository;
 import org.team4u.actiondock.ai.api.AiAgentRunRequest;
 import org.team4u.actiondock.ai.api.AiAgentRunResult;
 import org.team4u.actiondock.ai.api.AiAgentRunSnapshot;
+import org.team4u.actiondock.ai.api.AiAgentRunSubmission;
 import org.team4u.actiondock.ai.api.AiAgentStep;
 import org.team4u.actiondock.ai.api.AiAgentStepRepository;
 import org.team4u.actiondock.ai.api.AiAgentRuntime;
@@ -24,6 +25,7 @@ import org.team4u.actiondock.ai.api.AiMessage;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProvider;
+import org.team4u.actiondock.ai.api.AiAgentRunObserver;
 import org.team4u.actiondock.ai.api.AiProviderClient;
 import org.team4u.actiondock.ai.api.AiRunStatus;
 import org.team4u.actiondock.ai.api.AiStepType;
@@ -59,11 +61,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AiRuntimePolicyTest {
+    private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
+
     @Test
     void builtInToolsExposeCurrentScriptWithoutMutatingStorage() {
         InMemoryScriptRepository scripts = new InMemoryScriptRepository();
@@ -100,7 +105,7 @@ class AiRuntimePolicyTest {
     }
 
     @Test
-    void scriptAgentRunRejectsControlledToolsByDefault() {
+    void scriptAgentRunAllowsDangerousToolsByDefault() {
         InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
         models.save(new AiModelProfile()
                 .setId("model")
@@ -118,24 +123,26 @@ class AiRuntimePolicyTest {
         toolsets.save(new AiToolset()
                 .setId("controlled-tools")
                 .setName("Controlled Tools")
-                .setMaxPermission(AiToolPermission.CONTROLLED_ACTION)
+                .setMaxPermission(AiToolPermission.DANGEROUS_ACTION)
                 .setToolNames(List.of("run_script")));
-        AiToolRegistryImpl registry = new AiToolRegistryImpl(toolsets, List.of(new TestTool("run_script", AiToolPermission.CONTROLLED_ACTION)));
+        AiToolRegistryImpl registry = new AiToolRegistryImpl(toolsets, List.of(new TestTool("run_script", AiToolPermission.DANGEROUS_ACTION)));
+        CapturingProviderClient providerClient = new CapturingProviderClient();
         AiAgentRuntime runtime = new AiAgentRuntimeImpl(
                 new AiAgentProfileService(agents, models),
                 models,
                 new InMemoryAiAgentRunRepository(),
                 new InMemoryAiAgentStepRepository(),
-                new CapturingProviderClient(),
+                providerClient,
                 registry
         );
 
-        assertThatThrownBy(() -> runtime.run(
+        AiAgentRunResult result = runtime.run(
                 new AiAgentRunRequest("agent", List.of(new AiMessage("user", "run it")), Map.of(), Map.of()),
                 new AiAgentRunContext(AiCallerType.SCRIPT, "script-1", "exec-1", null, Map.of())
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("权限上限");
+        );
+
+        assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
+        assertThat(providerClient.context.metadata()).containsEntry("maxToolPermission", "DANGEROUS_ACTION");
     }
 
     @Test
@@ -318,6 +325,125 @@ class AiRuntimePolicyTest {
         assertThat(result.runId()).isNotBlank();
         assertThat(result.errorMessage()).isEqualTo("missing api key");
         assertThat(runs.findById(result.runId()).orElseThrow().getStatus()).isEqualTo(AiRunStatus.FAILED);
+    }
+
+    @Test
+    void submitCreatesRunningRunBeforeBackgroundExecutionFinishes() {
+        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
+        models.save(new AiModelProfile()
+                .setId("model")
+                .setName("Model")
+                .setModelProvider(AiModelProvider.OPENAI)
+                .setModelName("gpt-test")
+                .setCapabilities(java.util.Set.of(AiCapability.CHAT)));
+        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
+        agents.save(new AiAgentProfile()
+                .setId("agent")
+                .setName("Agent")
+                .setModelProfileId("model")
+                .setToolsetIds(List.of()));
+        InMemoryAiAgentRunRepository runs = new InMemoryAiAgentRunRepository();
+        RecordingExecutor executor = new RecordingExecutor();
+        ObserverAwareProviderClient providerClient = new ObserverAwareProviderClient();
+        AiAgentRuntimeImpl runtime = new AiAgentRuntimeImpl(
+                new AiAgentProfileService(agents, models),
+                models,
+                runs,
+                new InMemoryAiAgentStepRepository(),
+                providerClient,
+                new AiToolRegistryImpl(new InMemoryAiToolsetRepository(), List.of()),
+                executor
+        );
+
+        AiAgentRunSubmission submission = runtime.submit(
+                new AiAgentRunRequest("agent", List.of(new AiMessage("user", "run")), Map.of(), Map.of()),
+                AiAgentRunContext.adminTest()
+        );
+
+        assertThat(submission.status()).isEqualTo(AiRunStatus.RUNNING);
+        assertThat(runs.findById(submission.runId()).orElseThrow().getStatus()).isEqualTo(AiRunStatus.RUNNING);
+
+        executor.runNext();
+
+        AiAgentRunSnapshot snapshot = runtime.getRun(submission.runId());
+        assertThat(snapshot.status()).isEqualTo(AiRunStatus.SUCCESS);
+        assertThat(snapshot.outputSummary()).containsEntry("text", "done");
+        assertThat(providerClient.context.metadata())
+                .containsEntry(DISABLE_OUTER_TIMEOUT_METADATA_KEY, true);
+    }
+
+    @Test
+    void synchronousRunKeepsOuterTimeoutEnabled() {
+        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
+        models.save(new AiModelProfile()
+                .setId("model")
+                .setName("Model")
+                .setModelProvider(AiModelProvider.OPENAI)
+                .setModelName("gpt-test")
+                .setCapabilities(java.util.Set.of(AiCapability.CHAT)));
+        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
+        agents.save(new AiAgentProfile()
+                .setId("agent")
+                .setName("Agent")
+                .setModelProfileId("model")
+                .setToolsetIds(List.of()));
+        CapturingProviderClient providerClient = new CapturingProviderClient();
+        AiAgentRuntime runtime = new AiAgentRuntimeImpl(
+                new AiAgentProfileService(agents, models),
+                models,
+                new InMemoryAiAgentRunRepository(),
+                new InMemoryAiAgentStepRepository(),
+                providerClient,
+                new AiToolRegistryImpl(new InMemoryAiToolsetRepository(), List.of())
+        );
+
+        AiAgentRunResult result = runtime.run(
+                new AiAgentRunRequest("agent", List.of(new AiMessage("user", "run")), Map.of(), Map.of()),
+                AiAgentRunContext.adminTest()
+        );
+
+        assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
+        assertThat(providerClient.context.metadata())
+                .containsEntry(DISABLE_OUTER_TIMEOUT_METADATA_KEY, false);
+    }
+
+    @Test
+    void failedProviderPreservesPartialTextFromObserver() {
+        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
+        models.save(new AiModelProfile()
+                .setId("model")
+                .setName("Model")
+                .setModelProvider(AiModelProvider.OPENAI)
+                .setModelName("gpt-test")
+                .setCapabilities(java.util.Set.of(AiCapability.CHAT)));
+        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
+        agents.save(new AiAgentProfile()
+                .setId("agent")
+                .setName("Agent")
+                .setModelProfileId("model")
+                .setToolsetIds(List.of()));
+        InMemoryAiAgentRunRepository runs = new InMemoryAiAgentRunRepository();
+        AiAgentRuntime runtime = new AiAgentRuntimeImpl(
+                new AiAgentProfileService(agents, models),
+                models,
+                runs,
+                new InMemoryAiAgentStepRepository(),
+                new ObserverThrowingProviderClient("partial answer", "provider boom"),
+                new AiToolRegistryImpl(new InMemoryAiToolsetRepository(), List.of())
+        );
+
+        AiAgentRunResult result = runtime.run(
+                new AiAgentRunRequest("agent", List.of(new AiMessage("user", "run")), Map.of(), Map.of()),
+                AiAgentRunContext.adminTest()
+        );
+
+        assertThat(result.status()).isEqualTo(AiRunStatus.FAILED);
+        assertThat(result.output())
+                .containsEntry("text", "partial answer")
+                .containsEntry("errorMessage", "provider boom");
+        assertThat(runs.findById(result.runId()).orElseThrow().getOutputSummary())
+                .containsEntry("text", "partial answer")
+                .containsEntry("errorMessage", "provider boom");
     }
 
     @Test
@@ -552,6 +678,51 @@ class AiRuntimePolicyTest {
         }
     }
 
+    private static final class ObserverAwareProviderClient extends CapturingProviderClient {
+        @Override
+        public AiAgentRunResult runAgent(AiAgentProfile agentProfile,
+                                         AiModelProfile modelProfile,
+                                         AiAgentRunRequest request,
+                                         AiAgentRunContext context,
+                                         AiToolRegistry toolRegistry,
+                                         AiAgentRunObserver observer) {
+            super.context = context;
+            super.request = request;
+            observer.onTextDelta("done", "done");
+            return new AiAgentRunResult(
+                    null,
+                    AiRunStatus.SUCCESS,
+                    Map.of("text", "done"),
+                    List.of(),
+                    AiUsage.empty(),
+                    null
+            );
+        }
+    }
+
+    private static final class ObserverThrowingProviderClient extends CapturingProviderClient {
+        private final String partialText;
+        private final String message;
+
+        private ObserverThrowingProviderClient(String partialText, String message) {
+            this.partialText = partialText;
+            this.message = message;
+        }
+
+        @Override
+        public AiAgentRunResult runAgent(AiAgentProfile agentProfile,
+                                         AiModelProfile modelProfile,
+                                         AiAgentRunRequest request,
+                                         AiAgentRunContext context,
+                                         AiToolRegistry toolRegistry,
+                                         AiAgentRunObserver observer) {
+            super.context = context;
+            super.request = request;
+            observer.onTextDelta(partialText, partialText);
+            throw new IllegalStateException(message);
+        }
+    }
+
     private static final class InMemoryAiModelProfileRepository implements AiModelProfileRepository {
         private final Map<String, AiModelProfile> values = new LinkedHashMap<>();
         public AiModelProfile save(AiModelProfile profile) { values.put(profile.getId(), profile); return profile; }
@@ -584,9 +755,23 @@ class AiRuntimePolicyTest {
     }
 
     private static final class InMemoryAiAgentStepRepository implements AiAgentStepRepository {
-        private final List<AiAgentStep> values = new ArrayList<>();
-        public AiAgentStep save(AiAgentStep step) { values.add(step); return step; }
-        public List<AiAgentStep> findByRunId(String runId) { return values.stream().filter(step -> runId.equals(step.runId())).toList(); }
+        private final Map<String, AiAgentStep> values = new LinkedHashMap<>();
+        public AiAgentStep save(AiAgentStep step) { values.put(step.id(), step); return step; }
+        public List<AiAgentStep> findByRunId(String runId) { return values.values().stream().filter(step -> runId.equals(step.runId())).toList(); }
+    }
+
+    private static final class RecordingExecutor implements Executor {
+        private final List<Runnable> tasks = new ArrayList<>();
+
+        @Override
+        public void execute(Runnable command) {
+            tasks.add(command);
+        }
+
+        private void runNext() {
+            Runnable next = tasks.remove(0);
+            next.run();
+        }
     }
 
     private static final class InMemoryScriptRepository implements ScriptRepository {

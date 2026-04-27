@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.team4u.actiondock.plugin.PluginConfigView;
 import org.team4u.actiondock.plugin.PluginInvokeView;
+import org.team4u.actiondock.plugin.PluginReferenceView;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -48,6 +49,16 @@ public class PluginController {
     @GetMapping
     public ApiResponse<List<PluginView>> list() {
         return ApiResponse.success(pluginRuntimeService.list());
+    }
+
+    /**
+     * 查询脚本编辑器可用的插件参考。
+     *
+     * @return API 响应，包含可展示和复制示例的插件参考列表
+     */
+    @GetMapping("/references")
+    public ApiResponse<List<PluginReferenceView>> listReferences() {
+        return ApiResponse.success(pluginRuntimeService.listPluginReferences());
     }
 
     /**

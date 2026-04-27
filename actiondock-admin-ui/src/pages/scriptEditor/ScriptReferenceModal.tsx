@@ -1,4 +1,4 @@
-import { Button, Descriptions, Modal, Row, Space, Tag, Typography } from "antd";
+import { Button, Descriptions, Drawer, Row, Space, Tag, Typography } from "antd";
 import { Col } from "../../components/SafeCol";
 import type { MessageInstance } from "antd/es/message/interface";
 import { CopyOutlined } from "@ant-design/icons";
@@ -34,12 +34,11 @@ export function ScriptReferenceModal({
   const snippet = buildScriptInvokeSnippet(selectedScriptType, script.id, args);
 
   return (
-    <Modal
+    <Drawer
       title={script.name || script.id}
       open={Boolean(script)}
-      onCancel={onClose}
-      footer={null}
-      width={860}
+      onClose={onClose}
+      width={640}
       destroyOnHidden
     >
       <Space direction="vertical" size={14} style={{ width: "100%" }}>
@@ -95,6 +94,6 @@ export function ScriptReferenceModal({
           <pre className="json-preview">{snippet}</pre>
         </Space>
       </Space>
-    </Modal>
+    </Drawer>
   );
 }

@@ -39,4 +39,26 @@ describe("script invocation snippets", () => {
       `plugins.invoke("demo-plugin", "ping")`
     );
   });
+
+  it("formats ActionDock AI plugin invocation with nested Groovy literals", () => {
+    expect(
+      buildPluginInvokeSnippet("GROOVY", "actiondock-ai", "chat", {
+        modelProfile: "default-chat",
+        messages: [
+          {
+            role: "user",
+            content: "hello"
+          }
+        ]
+      })
+    ).toBe(`plugins.invoke("actiondock-ai", "chat", [
+  "modelProfile": "default-chat",
+  "messages": [
+    [
+      "role": "user",
+      "content": "hello"
+    ]
+  ]
+])`);
+  });
 });

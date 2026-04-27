@@ -4,6 +4,7 @@
 
 - Web 模式：Spring MVC + 管理台
 - 当前管理台支持创建和编辑 `GROOVY` / `PYTHON` 两类脚本
+- `GROOVY` 脚本可通过内置系统插件 `actiondock-ai` 使用 Chat、Structured Output、Embedding 和 Agent Run 能力
 
 示例：
 
@@ -14,6 +15,7 @@ mvn -pl actiondock-app-spring -am spring-boot:run
 该命令会只启动 `actiondock-app-spring`。
 
 如果会执行 `PYTHON` 类型脚本，请先确认宿主机上存在 `python3`，并且脚本依赖的第三方包已经预装。
+如果要在脚本中使用 AI 能力，还需要先在管理台配置可用的 `modelProfile` / `agentProfile`；脚本编辑页的“插件参考”会展示 `actiondock-ai` 的可复制调用示例。
 
 开发阶段建议前后端分开启动：
 

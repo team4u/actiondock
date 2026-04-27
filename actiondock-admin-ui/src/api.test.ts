@@ -122,4 +122,46 @@ describe("api request auth handling", () => {
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toEqual({ objective: "build", agentProfile: "agent-1" });
   });
+
+  it("loads plugin references from the dedicated stable endpoint", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 0, msg: "ok", data: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { listPluginReferences } = await import("./api");
+    await listPluginReferences();
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/plugins/references");
+  });
+
+  it("deletes AI management resources through stable endpoints", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ status: 0, msg: "ok", data: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { deleteAiModel, deleteAiAgent, deleteAiToolset } = await import("./api");
+    await deleteAiModel("model/one");
+    await deleteAiAgent("agent/one");
+    await deleteAiToolset("tools/one");
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/ai/models/model%2Fone",
+      "/api/ai/agents/agent%2Fone",
+      "/api/ai/toolsets/tools%2Fone"
+    ]);
+    fetchMock.mock.calls.forEach((call) => {
+      const init = call[1] as RequestInit | undefined;
+      expect(init?.method).toBe("DELETE");
+    });
+  });
 });

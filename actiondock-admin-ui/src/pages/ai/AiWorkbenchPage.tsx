@@ -246,6 +246,7 @@ export function AiWorkbenchPage() {
       <PageHeader
         title="AI Workbench"
         meta="任务型脚本开发工作台，只生成草稿和提案"
+        onBack={() => navigate("/ai")}
         actions={<Button icon={<ExperimentOutlined />} onClick={() => navigate("/ai/runs")}>Agent Run</Button>}
       />
       <div className="ai-workbench-layout">

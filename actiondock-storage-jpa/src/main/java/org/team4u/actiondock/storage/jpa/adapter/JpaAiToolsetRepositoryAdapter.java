@@ -8,6 +8,8 @@ import org.team4u.actiondock.storage.jpa.entity.AiToolsetEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiToolsetRepository;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 public class JpaAiToolsetRepositoryAdapter implements AiToolsetRepository {
@@ -45,6 +47,7 @@ public class JpaAiToolsetRepositoryAdapter implements AiToolsetRepository {
         entity.setName(toolset.getName());
         entity.setDescription(toolset.getDescription());
         entity.setToolNamesJson(jsonCodec.write(toolset.getToolNames()));
+        entity.setToolOptionsJson(jsonCodec.write(toolset.getToolOptions()));
         entity.setMaxPermission(toolset.getMaxPermission().name());
         entity.setEnabled(toolset.isEnabled());
         entity.setCreatedAt(toolset.getCreatedAt());
@@ -58,9 +61,21 @@ public class JpaAiToolsetRepositoryAdapter implements AiToolsetRepository {
                 .setName(entity.getName())
                 .setDescription(entity.getDescription())
                 .setToolNames(jsonCodec.readList(entity.getToolNamesJson(), String.class))
+                .setToolOptions(readToolOptions(entity.getToolOptionsJson()))
                 .setMaxPermission(entity.getMaxPermission() == null ? AiToolPermission.READ_ONLY : AiToolPermission.valueOf(entity.getMaxPermission()))
                 .setEnabled(entity.isEnabled())
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Map<String, Object>> readToolOptions(String json) {
+        Map<String, Map<String, Object>> options = new LinkedHashMap<>();
+        jsonCodec.readMap(json).forEach((key, value) -> {
+            if (value instanceof Map<?, ?> map) {
+                options.put(key, new LinkedHashMap<>((Map<String, Object>) map));
+            }
+        });
+        return options;
     }
 }

@@ -108,11 +108,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   // --- Core editor hook (also manages plugins) ---
   const editor = useScriptEditor({ mode, form: scriptForm, messageApi });
 
-  // --- References hook (uses editor's availablePlugins and availableScripts) ---
+  // --- References hook (uses editor's plugin references and available scripts) ---
   const references = useScriptReferences({
     currentScript: editor.currentScript,
     availableScripts: editor.availableScripts,
-    availablePlugins: editor.availablePlugins
+    availablePlugins: editor.availablePluginReferences
   });
 
   // --- Execution hook ---
@@ -708,7 +708,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                     onScriptReferencePageSizeChange={references.setScriptReferencePageSize}
                     onScriptReferenceClick={references.setReferenceScriptId}
                     scriptsLoading={editor.scriptsLoading}
-                    availablePlugins={editor.availablePlugins}
                     filteredPluginReferences={references.filteredPluginReferences}
                     pluginReferenceQuery={references.pluginReferenceQuery}
                     onPluginReferenceQueryChange={references.setPluginReferenceQuery}

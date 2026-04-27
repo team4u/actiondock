@@ -1,12 +1,16 @@
-import { Modal, Space, Typography } from "antd";
+import { Drawer, Space, Typography } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import { PluginActionsOverview } from "../../components/PluginActionsOverview";
-import type { PluginView, ScriptType } from "../../types";
+import type { PluginReferenceView, ScriptType } from "../../types";
 
 const { Text } = Typography;
 
+function getPluginReferenceSourceLabel(sourceType: PluginReferenceView["sourceType"]): string {
+  return sourceType === "SYSTEM" ? "系统" : "插件";
+}
+
 interface PluginReferenceModalProps {
-  plugin: PluginView | null;
+  plugin: PluginReferenceView | null;
   onClose: () => void;
   selectedScriptType: ScriptType;
   messageApi: MessageInstance;
@@ -21,17 +25,21 @@ export function PluginReferenceModal({
   if (!plugin) return null;
 
   return (
-    <Modal
+    <Drawer
       title={plugin.name || plugin.pluginId}
       open={Boolean(plugin)}
-      onCancel={onClose}
-      footer={null}
-      width={860}
+      onClose={onClose}
+      width={640}
       destroyOnHidden
     >
       <Space direction="vertical" size={14} style={{ width: "100%" }}>
         <Text type="secondary">
-          {[plugin.pluginId, `${plugin.actions.length} 个方法`, plugin.version ? `v${plugin.version}` : ""]
+          {[
+            getPluginReferenceSourceLabel(plugin.sourceType),
+            plugin.pluginId,
+            `${plugin.actions.length} 个方法`,
+            plugin.version ? `v${plugin.version}` : ""
+          ]
             .filter(Boolean)
             .join(" · ")}
         </Text>
@@ -43,6 +51,6 @@ export function PluginReferenceModal({
           snippetContext={{ pluginId: plugin.pluginId, scriptType: selectedScriptType }}
         />
       </Space>
-    </Modal>
+    </Drawer>
   );
 }

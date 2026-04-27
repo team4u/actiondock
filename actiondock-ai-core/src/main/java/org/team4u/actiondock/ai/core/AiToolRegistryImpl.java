@@ -6,6 +6,7 @@ import org.team4u.actiondock.ai.api.AiToolExecutionResult;
 import org.team4u.actiondock.ai.api.AiToolPermission;
 import org.team4u.actiondock.ai.api.AiToolRegistry;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
+import org.team4u.actiondock.ai.api.ConfigurableAiTool;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,9 +33,17 @@ public class AiToolRegistryImpl implements AiToolRegistry {
                 .filter(toolset -> toolset.isEnabled())
                 .map(toolset -> toolset.getToolNames().stream()
                         .map(this::getTool)
+                        .map(tool -> configureTool(tool, toolset.getToolOptions().get(tool.name())))
                         .peek(tool -> ensureAllowed(tool, toolset.getMaxPermission(), "AI 工具集权限上限"))
                         .toList())
                 .orElse(List.of());
+    }
+
+    private AiTool configureTool(AiTool tool, Map<String, Object> options) {
+        if (tool instanceof ConfigurableAiTool configurable) {
+            return configurable.configure(options == null ? Map.of() : options);
+        }
+        return tool;
     }
 
     @Override

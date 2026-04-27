@@ -12,6 +12,8 @@ import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.plugin.PluginConfigView;
 import org.team4u.actiondock.plugin.PluginInvokeDebugView;
 import org.team4u.actiondock.plugin.PluginInvokeView;
+import org.team4u.actiondock.plugin.PluginReferenceSourceType;
+import org.team4u.actiondock.plugin.PluginReferenceView;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginView;
 
@@ -86,6 +88,23 @@ class PluginControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
                 .andExpect(jsonPath("$.data.version").value("1.0.0"));
+    }
+
+    @Test
+    void listReferencesReturnsPluginReferences() throws Exception {
+        when(pluginRuntimeService.listPluginReferences()).thenReturn(List.of(
+                new PluginReferenceView()
+                        .setPluginId("actiondock-ai")
+                        .setName("ActionDock AI")
+                        .setSourceType(PluginReferenceSourceType.SYSTEM)
+                        .setStarted(true)
+        ));
+
+        mockMvc.perform(get("/api/plugins/references"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].pluginId").value("actiondock-ai"))
+                .andExpect(jsonPath("$.data[0].sourceType").value("SYSTEM"))
+                .andExpect(jsonPath("$.data[0].started").value(true));
     }
 
     @Test

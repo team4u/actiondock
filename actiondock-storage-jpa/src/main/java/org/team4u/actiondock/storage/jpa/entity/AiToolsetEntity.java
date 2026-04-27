@@ -20,6 +20,8 @@ public class AiToolsetEntity {
     @Lob
     @Column(nullable = false)
     private String toolNamesJson;
+    @Lob
+    private String toolOptionsJson;
     @Column(nullable = false)
     private String maxPermission;
     private boolean enabled = true;
@@ -34,6 +36,8 @@ public class AiToolsetEntity {
     public void setDescription(String description) { this.description = description; }
     public String getToolNamesJson() { return toolNamesJson; }
     public void setToolNamesJson(String toolNamesJson) { this.toolNamesJson = toolNamesJson; }
+    public String getToolOptionsJson() { return toolOptionsJson; }
+    public void setToolOptionsJson(String toolOptionsJson) { this.toolOptionsJson = toolOptionsJson; }
     public String getMaxPermission() { return maxPermission; }
     public void setMaxPermission(String maxPermission) { this.maxPermission = maxPermission; }
     public boolean isEnabled() { return enabled; }

@@ -10,6 +10,7 @@ import {
   deleteScript,
   getScript,
   getDevelopmentStatus,
+  listPluginReferences,
   listPlugins,
   listScripts,
   pullDevelopmentScript,
@@ -23,7 +24,7 @@ import { extractPluginDependenciesFromSource } from "../../pluginDependencies";
 import { extractAiDependenciesFromSource } from "../../aiDependencies";
 import { parseGeneratedScriptText } from "../../generatedScript";
 import { buildScriptEditorHeaderActionModel } from "../scriptEditorHeaderActions";
-import type { DevelopmentStatus, PluginView, ScriptDefinition, ScriptType } from "../../types";
+import type { DevelopmentStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../types";
 import type { SchemaEditorState } from "../../schema";
 import {
   type ScriptEditorFormValues,
@@ -66,6 +67,7 @@ export function useScriptEditor({
   const [availableScripts, setAvailableScripts] = useState<ScriptDefinition[]>([]);
   const [scriptsLoading, setScriptsLoading] = useState(false);
   const [availablePlugins, setAvailablePlugins] = useState<PluginView[]>([]);
+  const [availablePluginReferences, setAvailablePluginReferences] = useState<PluginReferenceView[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(false);
   const [developmentStatus, setDevelopmentStatus] = useState<DevelopmentStatus | null>(null);
   const [developmentPulling, setDevelopmentPulling] = useState(false);
@@ -188,12 +190,17 @@ export function useScriptEditor({
   useEffect(() => {
     if (selectedScriptType !== "GROOVY") {
       setAvailablePlugins([]);
+      setAvailablePluginReferences([]);
       return;
     }
     let cancelled = false;
     setPluginsLoading(true);
-    void listPlugins()
-      .then((plugins) => { if (!cancelled) setAvailablePlugins(plugins); })
+    void Promise.all([listPlugins(), listPluginReferences()])
+      .then(([plugins, references]) => {
+        if (cancelled) return;
+        setAvailablePlugins(plugins);
+        setAvailablePluginReferences(references);
+      })
       .catch((error) => {
         if (!cancelled) {
           const detail = error instanceof ApiError ? error.message : "加载插件信息失败";
@@ -581,6 +588,7 @@ export function useScriptEditor({
     availableScripts,
     scriptsLoading,
     availablePlugins,
+    availablePluginReferences,
     pluginsLoading,
     headerActionModel,
     loading,

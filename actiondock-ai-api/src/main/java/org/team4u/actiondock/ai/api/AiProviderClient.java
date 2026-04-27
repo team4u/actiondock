@@ -12,4 +12,13 @@ public interface AiProviderClient {
                               AiAgentRunRequest request,
                               AiAgentRunContext context,
                               AiToolRegistry toolRegistry);
+
+    default AiAgentRunResult runAgent(AiAgentProfile agentProfile,
+                                      AiModelProfile modelProfile,
+                                      AiAgentRunRequest request,
+                                      AiAgentRunContext context,
+                                      AiToolRegistry toolRegistry,
+                                      AiAgentRunObserver observer) {
+        return runAgent(agentProfile, modelProfile, request, context, toolRegistry);
+    }
 }

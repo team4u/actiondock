@@ -5,6 +5,21 @@ import org.pf4j.Plugin;
 import org.pf4j.PluginWrapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.team4u.actiondock.ai.api.AiAgentResumeCommand;
+import org.team4u.actiondock.ai.api.AiAgentRunContext;
+import org.team4u.actiondock.ai.api.AiAgentRunRequest;
+import org.team4u.actiondock.ai.api.AiAgentRunResult;
+import org.team4u.actiondock.ai.api.AiAgentRunSnapshot;
+import org.team4u.actiondock.ai.api.AiAgentRunSubmission;
+import org.team4u.actiondock.ai.api.AiCallContext;
+import org.team4u.actiondock.ai.api.AiChatRequest;
+import org.team4u.actiondock.ai.api.AiChatResponse;
+import org.team4u.actiondock.ai.api.AiEmbeddingRequest;
+import org.team4u.actiondock.ai.api.AiEmbeddingResponse;
+import org.team4u.actiondock.ai.api.AiGateway;
+import org.team4u.actiondock.ai.api.AiStructuredRequest;
+import org.team4u.actiondock.ai.api.AiStructuredResponse;
+import org.team4u.actiondock.ai.plugin.ActionDockAiSystemPlugin;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ConfigValue;
@@ -291,6 +306,58 @@ class PluginRuntimeServiceTest {
         assertThat(debug.getDebug().getScriptInput()).containsEntry("name", "Alice");
     }
 
+    @Test
+    void listPluginReferencesIncludesStartedPluginsAndDocumentedSystemPlugins() throws IOException {
+        Path pluginJar = buildPluginJar(
+                Files.createTempFile("actiondock-plugin-upload-", ".jar"),
+                demoPluginManifestJson("0.2.0", "ActionDock Demo Plugin")
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                repository,
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(documentedAiSystemPlugin())
+        );
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+
+        List<PluginReferenceView> references = service.listPluginReferences();
+
+        assertThat(references).extracting(PluginReferenceView::getPluginId)
+                .containsExactly("actiondock-ai", "actiondock-demo-plugin");
+        assertThat(references).filteredOn(reference -> "actiondock-ai".equals(reference.getPluginId()))
+                .singleElement()
+                .satisfies(reference -> {
+                    assertThat(reference.getSourceType()).isEqualTo(PluginReferenceSourceType.SYSTEM);
+                    assertThat(reference.isStarted()).isTrue();
+                    assertThat(reference.getActions()).extracting(PluginActionView::getAction)
+                            .containsExactly("chat", "structured", "embed", "agentRun");
+                });
+        assertThat(references).filteredOn(reference -> "actiondock-demo-plugin".equals(reference.getPluginId()))
+                .singleElement()
+                .satisfies(reference -> assertThat(reference.getSourceType()).isEqualTo(PluginReferenceSourceType.INSTALLED));
+    }
+
+    @Test
+    void listPluginReferencesSkipsUndocumentedSystemPlugins() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                repository,
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new UndocumentedSystemPlugin())
+        );
+
+        assertThat(service.listPluginReferences()).isEmpty();
+    }
+
     private Path buildPluginJar(Path destination, String manifestJson) throws IOException {
         return buildPluginJar(
                 destination,
@@ -446,6 +513,52 @@ class PluginRuntimeServiceTest {
                 """;
     }
 
+    private ActionDockAiSystemPlugin documentedAiSystemPlugin() {
+        AiGateway gateway = new AiGateway() {
+            @Override
+            public AiChatResponse chat(AiChatRequest request, AiCallContext context) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+
+            @Override
+            public AiStructuredResponse structured(AiStructuredRequest request, AiCallContext context) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+
+            @Override
+            public AiEmbeddingResponse embed(AiEmbeddingRequest request, AiCallContext context) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+        };
+        org.team4u.actiondock.ai.api.AiAgentRuntime runtime = new org.team4u.actiondock.ai.api.AiAgentRuntime() {
+            @Override
+            public AiAgentRunSubmission submit(AiAgentRunRequest request, AiAgentRunContext context) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+
+            @Override
+            public AiAgentRunResult run(AiAgentRunRequest request, AiAgentRunContext context) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+
+            @Override
+            public AiAgentRunResult resume(String runId, AiAgentResumeCommand command) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+
+            @Override
+            public void cancel(String runId) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+
+            @Override
+            public AiAgentRunSnapshot getRun(String runId) {
+                throw new UnsupportedOperationException("Not needed for this test");
+            }
+        };
+        return new ActionDockAiSystemPlugin(gateway, runtime);
+    }
+
     private static final class TestJsonCodec implements JsonCodec {
         private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -499,6 +612,18 @@ class PluginRuntimeServiceTest {
             } catch (Exception e) {
                 throw new IllegalStateException("Cannot deserialize map", e);
             }
+        }
+    }
+
+    private static final class UndocumentedSystemPlugin implements ActionDockPlugin {
+        @Override
+        public String id() {
+            return "undocumented-system-plugin";
+        }
+
+        @Override
+        public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
+            throw new UnsupportedOperationException("Not needed for this test");
         }
     }
 

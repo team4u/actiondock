@@ -4,7 +4,7 @@ import { Col } from "../../components/SafeCol";
 import { CodeEditor } from "../../components/CodeEditor";
 import { SchemaBuilder } from "../../components/SchemaBuilder";
 import type { FormInstance } from "antd";
-import type { PluginView, ScriptDefinition, ScriptType } from "../../types";
+import type { PluginReferenceView, ScriptDefinition, ScriptType } from "../../types";
 import type { SchemaEditorState } from "../../schema";
 import {
   getSourceFileName,
@@ -15,6 +15,10 @@ import {
 } from "./types";
 
 const { Text } = Typography;
+
+function getPluginReferenceSourceLabel(sourceType: PluginReferenceView["sourceType"]): string {
+  return sourceType === "SYSTEM" ? "系统" : "插件";
+}
 
 interface ScriptDefinitionTabProps {
   form: FormInstance<ScriptEditorFormValues>;
@@ -39,8 +43,7 @@ interface ScriptDefinitionTabProps {
   onScriptReferencePageSizeChange: (size: number) => void;
   onScriptReferenceClick: (id: string) => void;
   scriptsLoading: boolean;
-  availablePlugins: PluginView[];
-  filteredPluginReferences: PluginView[];
+  filteredPluginReferences: PluginReferenceView[];
   pluginReferenceQuery: string;
   onPluginReferenceQueryChange: (query: string) => void;
   pluginReferencePage: number;
@@ -280,7 +283,7 @@ export function ScriptDefinitionTab({
               {filteredPluginReferences.length === 0 ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="当前没有已启动插件，可前往插件管理页安装并启动。"
+                  description="当前没有可用插件参考。"
                 />
               ) : (
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -290,7 +293,7 @@ export function ScriptDefinitionTab({
                     onChange={(event: React.ChangeEvent<HTMLInputElement>) => onPluginReferenceQueryChange(event.target.value)}
                     placeholder="搜索插件名称或 pluginId"
                   />
-                  <Table<PluginView>
+                  <Table<PluginReferenceView>
                     size="small"
                     rowKey="pluginId"
                     showHeader={false}
@@ -298,7 +301,14 @@ export function ScriptDefinitionTab({
                       {
                         key: "name",
                         dataIndex: "name",
-                        render: (_value: string, plugin: PluginView) => plugin.name || plugin.pluginId
+                        render: (_value: string, plugin: PluginReferenceView) => (
+                          <Space wrap size={[8, 8]}>
+                            <Text>{plugin.name || plugin.pluginId}</Text>
+                            <Tag color={plugin.sourceType === "SYSTEM" ? "processing" : "default"}>
+                              {getPluginReferenceSourceLabel(plugin.sourceType)}
+                            </Tag>
+                          </Space>
+                        )
                       }
                     ]}
                     dataSource={filteredPluginReferences}
@@ -307,14 +317,14 @@ export function ScriptDefinitionTab({
                       pageSize: pluginReferencePageSize,
                       showSizeChanger: true,
                       pageSizeOptions: [10, 20, 50],
-                      showTotal: (total: number) => `共 ${total} 个插件`,
+                      showTotal: (total: number) => `共 ${total} 个插件参考`,
                       onChange: (page: number, pageSize: number) => {
                         onPluginReferencePageChange(page);
                         onPluginReferencePageSizeChange(pageSize);
                       }
                     }}
-                    locale={{ emptyText: "没有匹配的插件" }}
-                    onRow={(plugin: PluginView) => ({
+                    locale={{ emptyText: "没有匹配的插件参考" }}
+                    onRow={(plugin: PluginReferenceView) => ({
                       onClick: () => onPluginReferenceClick(plugin.pluginId)
                     })}
                   />

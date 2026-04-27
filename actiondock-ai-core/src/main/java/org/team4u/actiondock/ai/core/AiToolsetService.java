@@ -1,5 +1,6 @@
 package org.team4u.actiondock.ai.core;
 
+import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 
@@ -8,9 +9,15 @@ import java.util.List;
 
 public class AiToolsetService {
     private final AiToolsetRepository repository;
+    private final AiAgentProfileRepository agentProfileRepository;
 
     public AiToolsetService(AiToolsetRepository repository) {
+        this(repository, null);
+    }
+
+    public AiToolsetService(AiToolsetRepository repository, AiAgentProfileRepository agentProfileRepository) {
         this.repository = repository;
+        this.agentProfileRepository = agentProfileRepository;
     }
 
     public List<AiToolset> list() {
@@ -36,6 +43,14 @@ public class AiToolsetService {
     }
 
     public void delete(String id) {
+        if (agentProfileRepository != null) {
+            agentProfileRepository.findAll().stream()
+                    .filter(agent -> agent.getToolsetIds().contains(id))
+                    .findFirst()
+                    .ifPresent(agent -> {
+                        throw new IllegalArgumentException("AI 工具集已被 Agent 引用，不能删除: " + agent.getId());
+                    });
+        }
         repository.deleteById(id);
     }
 

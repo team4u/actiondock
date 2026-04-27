@@ -1,10 +1,10 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import type { PluginView, ScriptDefinition } from "../../types";
+import type { PluginReferenceView, ScriptDefinition } from "../../types";
 
 export interface UseScriptReferencesParams {
   currentScript: ScriptDefinition | null;
   availableScripts: ScriptDefinition[];
-  availablePlugins: PluginView[];
+  availablePlugins: PluginReferenceView[];
 }
 
 export interface ScriptReferencesContext {
@@ -24,11 +24,11 @@ export interface ScriptReferencesContext {
   setScriptReferencePage: (page: number) => void;
   scriptReferencePageSize: number;
   setScriptReferencePageSize: (size: number) => void;
-  pluginReferences: PluginView[];
+  pluginReferences: PluginReferenceView[];
   scriptReferences: ScriptDefinition[];
-  filteredPluginReferences: PluginView[];
+  filteredPluginReferences: PluginReferenceView[];
   filteredScriptReferences: ScriptDefinition[];
-  referencePlugin: PluginView | null;
+  referencePlugin: PluginReferenceView | null;
   referenceScript: ScriptDefinition | null;
 }
 
@@ -50,7 +50,7 @@ export function useScriptReferences({
   const deferredScriptReferenceQuery = useDeferredValue(scriptReferenceQuery);
 
   const pluginReferences = useMemo(
-    () => availablePlugins.filter((plugin) => plugin.started),
+    () => availablePlugins,
     [availablePlugins]
   );
   const scriptReferences = useMemo(

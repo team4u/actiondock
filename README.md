@@ -20,6 +20,7 @@
 - **多脚本类型**：当前支持 `GROOVY` 与 `PYTHON`
 - **脚本互调**：脚本之间可以通过统一门面相互调用，便于组合复用
 - **插件扩展机制**：基于 PF4J 动态加载插件，支持安装、启动、停止、卸载和配置管理
+- **脚本 AI 能力**：Groovy 脚本可通过内置系统插件直接调用 Chat、Structured Output、Embedding 和 Agent Run
 - **Schema 驱动**：通过 JSON Schema 定义输入/输出结构，自动完成校验、投影和接入约束
 - **变更 Diff**：发布前和导入覆盖前可查看源码、Schema、元信息和插件依赖差异，并给出风险提示
 - **自动生成正式页**：已发布脚本自动生成专属执行页面，Schema 直接渲染为表单和结果展示，无需额外开发
@@ -194,6 +195,7 @@ actiondock
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/plugins` | 获取插件列表 |
+| GET | `/api/plugins/references` | 获取脚本编辑器中的插件参考目录，聚合已启动插件与系统插件 |
 | GET | `/api/plugins/{pluginId}` | 获取单个插件详情 |
 | POST | `/api/plugins/install` | 上传并安装插件包；若 `pluginId` 已存在则拒绝 |
 | POST | `/api/plugins/{pluginId}/upgrade` | 升级指定插件包，保留配置与启用状态 |
@@ -503,6 +505,53 @@ return [
 - 第三个参数必须是 `Map<String, Object>` 风格的 Groovy Map；省略时按空 Map 处理
 - 保存/校验 Groovy 脚本时，只做 Groovy 语法与编译校验，不检查引用的插件和动作
 - 插件调用异常会直接中断脚本；如果要降级处理，请在脚本里自行 `try/catch`
+
+如果要在脚本里直接使用 AI 能力，推荐调用内置系统插件 `actiondock-ai`。它和普通插件一样走 `plugins.invoke(...)`，但不需要安装 JAR：
+
+```groovy
+def chat = plugins.invoke("actiondock-ai", "chat", [
+  modelProfile: "default-chat",
+  messages: [
+    [role: "system", content: "你是一个脚本助手"],
+    [role: "user", content: "请总结 input.text"]
+  ],
+  options: [
+    temperature: 0.2
+  ]
+])
+
+return [
+  summary: chat.text
+]
+```
+
+也可以直接发起 Agent Run：
+
+```groovy
+def run = plugins.invoke("actiondock-ai", "agentRun", [
+  agentProfile: "workbench-script-dev-agent",
+  messages: [
+    [role: "user", content: "分析当前脚本并给出改进建议"]
+  ],
+  input: [
+    goal: "review script",
+    scriptId: "hello-groovy"
+  ]
+])
+
+return [
+  agentRunId: run.runId,
+  status: run.status,
+  output: run.output
+]
+```
+
+脚本 AI 能力约定：
+
+- `chat`、`structured`、`embed` 使用 `modelProfile`
+- `agentRun` 使用 `agentProfile`
+- `actiondock-ai` 不计入普通 `pluginDependencies`，但会自动提取为 `aiDependencies`
+- 当前只有 `GROOVY` 运行时支持通过 `plugins.invoke(...)` 使用 AI；`PYTHON` 仍不支持插件门面
 
 Groovy / Python 脚本运行时还会注入只读 `config` 变量，内容来自平台维护的“配置值管理”：
 
@@ -939,12 +988,38 @@ return [result: value]
 - 运行时仍然要求目标插件已启用且已加载，且动作存在
 - 插件动作返回非对象时，平台会包装成 `{ "result": ... }`
 
-脚本编辑页里的“插件参考”面板只展示已启动插件，支持：
+内置 AI 系统插件 `actiondock-ai` 也走同一入口：
+
+```groovy
+def answer = plugins.invoke("actiondock-ai", "chat", [
+  modelProfile: "default-chat",
+  messages: [
+    [role: "user", content: "请改写 input.text"]
+  ]
+])
+
+return [text: answer.text]
+```
+
+支持的 AI 动作：
+
+- `chat`：文本对话，返回 `text`
+- `structured`：按 `outputSchema` 约束结构化输出
+- `embed`：文本向量化
+- `agentRun`：执行 Agent Profile，返回 `runId`、`status`、`output`、`steps`
+
+脚本编辑页里的“插件参考”面板展示两类能力：
+
+- 已启动的标准插件
+- 带清单文档的系统插件，例如 `actiondock-ai`
+
+参考面板支持：
 
 - 名称 / `pluginId` 模糊查询
 - 分页查看
 - 点击插件名称弹出参考详情
 - 按动作查看输入字段、输出字段和复制调用片段
+- 系统插件会显示“系统”标记，普通插件显示“插件”标记
 
 ### 7. 脚本之间相互调用
 
@@ -1088,11 +1163,15 @@ curl -X POST http://localhost:8080/api/executions \
 
 不建议，也没有作为平台约定支持。当前稳定方式是通过宿主注入的 `plugins.invoke(...)` 门面进行跨类加载器调用。
 
-**7. 反复上传同一个插件 jar 会自动覆盖吗？**
+**7. 为什么脚本编辑页能看到 `actiondock-ai`，但插件管理页没有？**
+
+因为 `actiondock-ai` 是系统插件，不属于可安装/可升级/可卸载的 JAR 插件。它会出现在脚本编辑页的“插件参考”里，但不会进入插件管理列表。
+
+**8. 反复上传同一个插件 jar 会自动覆盖吗？**
 
 不会。顶部“上传安装”只处理新增插件；如果数据库里已经有相同 `pluginId`，安装会失败。需要在对应插件行点击“升级”。
 
-**8. 升级插件后会丢失配置吗？**
+**9. 升级插件后会丢失配置吗？**
 
 不会。升级会保留 `${app.plugins.dir}/.actiondock-config/{pluginId}.json` 中的现有配置，并保留原先启用/停用状态。
 

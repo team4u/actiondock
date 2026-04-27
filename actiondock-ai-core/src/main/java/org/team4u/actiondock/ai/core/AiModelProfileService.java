@@ -2,15 +2,22 @@ package org.team4u.actiondock.ai.core;
 
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
+import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 public class AiModelProfileService {
     private final AiModelProfileRepository repository;
+    private final AiAgentProfileRepository agentProfileRepository;
 
     public AiModelProfileService(AiModelProfileRepository repository) {
+        this(repository, null);
+    }
+
+    public AiModelProfileService(AiModelProfileRepository repository, AiAgentProfileRepository agentProfileRepository) {
         this.repository = repository;
+        this.agentProfileRepository = agentProfileRepository;
     }
 
     public List<AiModelProfile> list() {
@@ -36,6 +43,14 @@ public class AiModelProfileService {
     }
 
     public void delete(String id) {
+        if (agentProfileRepository != null) {
+            agentProfileRepository.findAll().stream()
+                    .filter(agent -> id != null && id.equals(agent.getModelProfileId()))
+                    .findFirst()
+                    .ifPresent(agent -> {
+                        throw new IllegalArgumentException("模型 Profile 已被 Agent 引用，不能删除: " + agent.getId());
+                    });
+        }
         repository.deleteById(id);
     }
 

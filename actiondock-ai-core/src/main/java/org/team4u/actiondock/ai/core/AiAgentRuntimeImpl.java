@@ -1,38 +1,44 @@
 package org.team4u.actiondock.ai.core;
 
 import org.team4u.actiondock.ai.api.AiAgentProfile;
+import org.team4u.actiondock.ai.api.AiAgentResumeCommand;
 import org.team4u.actiondock.ai.api.AiAgentRunContext;
+import org.team4u.actiondock.ai.api.AiAgentRunObserver;
 import org.team4u.actiondock.ai.api.AiAgentRunRecord;
 import org.team4u.actiondock.ai.api.AiAgentRunRepository;
 import org.team4u.actiondock.ai.api.AiAgentRunRequest;
 import org.team4u.actiondock.ai.api.AiAgentRunResult;
 import org.team4u.actiondock.ai.api.AiAgentRunSnapshot;
+import org.team4u.actiondock.ai.api.AiAgentRunSubmission;
 import org.team4u.actiondock.ai.api.AiAgentRuntime;
 import org.team4u.actiondock.ai.api.AiAgentStep;
 import org.team4u.actiondock.ai.api.AiAgentStepRepository;
 import org.team4u.actiondock.ai.api.AiCallerType;
-import org.team4u.actiondock.ai.api.AiStepType;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiProviderClient;
 import org.team4u.actiondock.ai.api.AiRunStatus;
+import org.team4u.actiondock.ai.api.AiStepType;
 import org.team4u.actiondock.ai.api.AiToolPermission;
 import org.team4u.actiondock.ai.api.AiUsage;
-import org.team4u.actiondock.ai.api.AiAgentResumeCommand;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 public class AiAgentRuntimeImpl implements AiAgentRuntime {
+    static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
+
     private final AiAgentProfileService agentProfileService;
     private final AiModelProfileRepository modelProfileRepository;
     private final AiAgentRunRepository runRepository;
     private final AiAgentStepRepository stepRepository;
     private final AiProviderClient providerClient;
     private final AiToolRegistryImpl toolRegistry;
+    private final Executor executionExecutor;
 
     public AiAgentRuntimeImpl(AiAgentProfileService agentProfileService,
                               AiModelProfileRepository modelProfileRepository,
@@ -40,74 +46,40 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
                               AiAgentStepRepository stepRepository,
                               AiProviderClient providerClient,
                               AiToolRegistryImpl toolRegistry) {
+        this(agentProfileService, modelProfileRepository, runRepository, stepRepository, providerClient, toolRegistry, Runnable::run);
+    }
+
+    public AiAgentRuntimeImpl(AiAgentProfileService agentProfileService,
+                              AiModelProfileRepository modelProfileRepository,
+                              AiAgentRunRepository runRepository,
+                              AiAgentStepRepository stepRepository,
+                              AiProviderClient providerClient,
+                              AiToolRegistryImpl toolRegistry,
+                              Executor executionExecutor) {
         this.agentProfileService = agentProfileService;
         this.modelProfileRepository = modelProfileRepository;
         this.runRepository = runRepository;
         this.stepRepository = stepRepository;
         this.providerClient = providerClient;
         this.toolRegistry = toolRegistry;
+        this.executionExecutor = executionExecutor;
+    }
+
+    @Override
+    public AiAgentRunSubmission submit(AiAgentRunRequest request, AiAgentRunContext context) {
+        PreparedRun prepared = prepareRun(request, context, true);
+        executionExecutor.execute(() -> executePreparedRun(prepared));
+        return new AiAgentRunSubmission(
+                prepared.runId(),
+                AiRunStatus.RUNNING,
+                prepared.agentProfile().getId(),
+                prepared.run().getStartedAt()
+        );
     }
 
     @Override
     public AiAgentRunResult run(AiAgentRunRequest request, AiAgentRunContext context) {
-        if (request == null || request.agentProfile() == null || request.agentProfile().isBlank()) {
-            throw new IllegalArgumentException("AI Agent Profile 不能为空");
-        }
-        AiAgentProfile agentProfile = agentProfileService.get(request.agentProfile());
-        if (!agentProfile.isEnabled()) {
-            throw new IllegalArgumentException("AI Agent Profile 已禁用: " + agentProfile.getId());
-        }
-        AiModelProfile modelProfile = modelProfileRepository.findById(agentProfile.getModelProfileId())
-                .orElseThrow(() -> new IllegalArgumentException("模型 Profile 不存在: " + agentProfile.getModelProfileId()));
-        String runId = UUID.randomUUID().toString();
-        AiAgentRunContext effectiveContext = withEffectivePolicy(agentProfile, context, runId);
-        AiToolPermission maxToolPermission = AiToolPermission.from(effectiveContext.metadata().get("maxToolPermission"), AiToolPermission.READ_ONLY);
-        toolRegistry.assertToolsetsAllowed(agentProfile.getToolsetIds(), maxToolPermission);
-
-        AiAgentRunRecord run = new AiAgentRunRecord()
-                .setId(runId)
-                .setAgentProfile(agentProfile.getId())
-                .setStatus(AiRunStatus.RUNNING)
-                .setCallerType(effectiveContext.callerType())
-                .setScriptId(effectiveContext.scriptId())
-                .setExecutionId(effectiveContext.executionId())
-                .setUserId(effectiveContext.userId())
-                .setInputSummary(Map.of("messageCount", request.messages() == null ? 0 : request.messages().size()))
-                .setStartedAt(LocalDateTime.now());
-        runRepository.save(run);
-
-        try {
-            AiAgentRunResult result = providerClient.runAgent(agentProfile, modelProfile, request, effectiveContext, toolRegistry);
-            List<AiAgentStep> steps = result.steps() == null ? List.of() : result.steps().stream()
-                    .map(step -> new AiAgentStep(step.id(), runId, step.stepIndex(), step.stepType(), step.modelProfile(),
-                            step.toolName(), step.toolPermission(), step.toolInput(), step.toolOutput(), step.status(),
-                            step.latencyMs(), step.errorMessage(), step.createdAt()))
-                    .toList();
-            steps.forEach(stepRepository::save);
-            AiUsage usage = result.usage() == null ? AiUsage.empty() : result.usage();
-            int modelCalls = (int) steps.stream().filter(step -> step.stepType() == AiStepType.MODEL_REASONING).count();
-            int toolCalls = (int) steps.stream().filter(step -> step.stepType() == AiStepType.TOOL_CALL).count();
-            runRepository.save(run
-                    .setStatus(result.status() == null ? AiRunStatus.SUCCESS : result.status())
-                    .setOutputSummary(result.output())
-                    .setTotalModelCalls(modelCalls)
-                    .setTotalToolCalls(toolCalls)
-                    .setTotalTokens(usage.totalTokens())
-                    .setFinishedAt(LocalDateTime.now())
-                    .setErrorMessage(result.errorMessage()));
-            return new AiAgentRunResult(runId, result.status() == null ? AiRunStatus.SUCCESS : result.status(), result.output(), steps, usage, result.errorMessage());
-        } catch (RuntimeException exception) {
-            Map<String, Object> output = Map.of("errorMessage", exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage());
-            runRepository.save(run
-                    .setStatus(AiRunStatus.FAILED)
-                    .setOutputSummary(output)
-                    .setTotalModelCalls(0)
-                    .setTotalToolCalls(0)
-                    .setTotalTokens(0)
-                    .setFinishedAt(LocalDateTime.now())
-                    .setErrorMessage(exception.getMessage()));
-            return new AiAgentRunResult(runId, AiRunStatus.FAILED, output, stepRepository.findByRunId(runId), AiUsage.empty(), exception.getMessage());
-        }
+        return executePreparedRun(prepareRun(request, context, false));
     }
 
     @Override
@@ -128,7 +100,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
     public void cancel(String runId) {
         AiAgentRunRecord run = runRepository.findById(runId)
                 .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
-        if (run.getStatus() == AiRunStatus.SUCCESS || run.getStatus() == AiRunStatus.FAILED || run.getStatus() == AiRunStatus.CANCELLED) {
+        if (isTerminalStatus(run.getStatus())) {
             return;
         }
         runRepository.save(run
@@ -165,24 +137,188 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
         return runRepository.findAll();
     }
 
-    private AiAgentRunContext withEffectivePolicy(AiAgentProfile agentProfile, AiAgentRunContext context, String runId) {
+    private PreparedRun prepareRun(AiAgentRunRequest request, AiAgentRunContext context, boolean asyncSubmission) {
+        if (request == null || request.agentProfile() == null || request.agentProfile().isBlank()) {
+            throw new IllegalArgumentException("AI Agent Profile 不能为空");
+        }
+        AiAgentProfile agentProfile = agentProfileService.get(request.agentProfile());
+        if (!agentProfile.isEnabled()) {
+            throw new IllegalArgumentException("AI Agent Profile 已禁用: " + agentProfile.getId());
+        }
+        AiModelProfile modelProfile = modelProfileRepository.findById(agentProfile.getModelProfileId())
+                .orElseThrow(() -> new IllegalArgumentException("模型 Profile 不存在: " + agentProfile.getModelProfileId()));
+        String runId = UUID.randomUUID().toString();
+        AiAgentRunContext effectiveContext = withEffectivePolicy(agentProfile, context, runId, asyncSubmission);
+        AiToolPermission maxToolPermission = AiToolPermission.from(effectiveContext.metadata().get("maxToolPermission"), AiToolPermission.READ_ONLY);
+        toolRegistry.assertToolsetsAllowed(agentProfile.getToolsetIds(), maxToolPermission);
+
+        AiAgentRunRecord run = new AiAgentRunRecord()
+                .setId(runId)
+                .setAgentProfile(agentProfile.getId())
+                .setStatus(AiRunStatus.RUNNING)
+                .setCallerType(effectiveContext.callerType())
+                .setScriptId(effectiveContext.scriptId())
+                .setExecutionId(effectiveContext.executionId())
+                .setUserId(effectiveContext.userId())
+                .setInputSummary(Map.of("messageCount", request.messages() == null ? 0 : request.messages().size()))
+                .setStartedAt(LocalDateTime.now());
+        runRepository.save(run);
+        return new PreparedRun(request, agentProfile, modelProfile, effectiveContext, run);
+    }
+
+    private AiAgentRunResult executePreparedRun(PreparedRun prepared) {
+        return executePreparedRun(prepared, persistenceObserver(prepared.runId()));
+    }
+
+    private AiAgentRunResult executePreparedRun(PreparedRun prepared, AiAgentRunObserver observer) {
+        try {
+            AiAgentRunResult result = providerClient.runAgent(
+                    prepared.agentProfile(),
+                    prepared.modelProfile(),
+                    prepared.request(),
+                    prepared.context(),
+                    toolRegistry,
+                    observer == null ? AiAgentRunObserver.NOOP : observer
+            );
+            return finalizeSuccess(prepared, result);
+        } catch (RuntimeException exception) {
+            return finalizeFailure(prepared, exception);
+        }
+    }
+
+    private AiAgentRunObserver persistenceObserver(String runId) {
+        return new AiAgentRunObserver() {
+            @Override
+            public void onTextDelta(String delta, String accumulatedText) {
+                AiAgentRunRecord current = runRepository.findById(runId).orElse(null);
+                if (current == null || isTerminalStatus(current.getStatus())) {
+                    return;
+                }
+                Map<String, Object> outputSummary = new LinkedHashMap<>(current.getOutputSummary());
+                if (accumulatedText == null || accumulatedText.isBlank()) {
+                    outputSummary.remove("text");
+                } else {
+                    outputSummary.put("text", accumulatedText);
+                }
+                runRepository.save(current.setOutputSummary(outputSummary));
+            }
+
+            @Override
+            public void onStep(AiAgentStep step) {
+                if (step == null) {
+                    return;
+                }
+                stepRepository.save(withRunId(step, runId));
+            }
+        };
+    }
+
+    private AiAgentRunResult finalizeSuccess(PreparedRun prepared, AiAgentRunResult result) {
+        String runId = prepared.runId();
+        List<AiAgentStep> steps = normalizeSteps(runId, result == null ? List.of() : result.steps());
+        steps.forEach(stepRepository::save);
+        List<AiAgentStep> persistedSteps = stepRepository.findByRunId(runId);
+        AiUsage usage = result == null || result.usage() == null ? AiUsage.empty() : result.usage();
+        AiAgentRunRecord current = runRepository.findById(runId).orElse(prepared.run());
+        if (current.getStatus() == AiRunStatus.CANCELLED) {
+            return new AiAgentRunResult(runId, AiRunStatus.CANCELLED, current.getOutputSummary(), persistedSteps, usage, current.getErrorMessage());
+        }
+
+        AiRunStatus status = result == null || result.status() == null ? AiRunStatus.SUCCESS : result.status();
+        Map<String, Object> output = result == null || result.output() == null ? Map.of() : result.output();
+        runRepository.save(current
+                .setStatus(status)
+                .setOutputSummary(output)
+                .setTotalModelCalls(countSteps(persistedSteps, AiStepType.MODEL_REASONING))
+                .setTotalToolCalls(countSteps(persistedSteps, AiStepType.TOOL_CALL))
+                .setTotalTokens(usage.totalTokens())
+                .setFinishedAt(LocalDateTime.now())
+                .setErrorMessage(result == null ? null : result.errorMessage()));
+        return new AiAgentRunResult(runId, status, output, persistedSteps, usage, result == null ? null : result.errorMessage());
+    }
+
+    private AiAgentRunResult finalizeFailure(PreparedRun prepared, RuntimeException exception) {
+        String runId = prepared.runId();
+        AiAgentRunRecord current = runRepository.findById(runId).orElse(prepared.run());
+        List<AiAgentStep> persistedSteps = stepRepository.findByRunId(runId);
+        if (current.getStatus() == AiRunStatus.CANCELLED) {
+            return new AiAgentRunResult(runId, AiRunStatus.CANCELLED, current.getOutputSummary(), persistedSteps, AiUsage.empty(), current.getErrorMessage());
+        }
+
+        String message = exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage();
+        Map<String, Object> output = new LinkedHashMap<>(current.getOutputSummary());
+        output.put("errorMessage", message);
+        runRepository.save(current
+                .setStatus(AiRunStatus.FAILED)
+                .setOutputSummary(output)
+                .setTotalModelCalls(countSteps(persistedSteps, AiStepType.MODEL_REASONING))
+                .setTotalToolCalls(countSteps(persistedSteps, AiStepType.TOOL_CALL))
+                .setTotalTokens(0)
+                .setFinishedAt(LocalDateTime.now())
+                .setErrorMessage(message));
+        return new AiAgentRunResult(runId, AiRunStatus.FAILED, output, persistedSteps, AiUsage.empty(), message);
+    }
+
+    private List<AiAgentStep> normalizeSteps(String runId, List<AiAgentStep> steps) {
+        if (steps == null || steps.isEmpty()) {
+            return List.of();
+        }
+        return steps.stream().map(step -> withRunId(step, runId)).toList();
+    }
+
+    private AiAgentStep withRunId(AiAgentStep step, String runId) {
+        return new AiAgentStep(
+                step.id(),
+                step.runId() == null ? runId : step.runId(),
+                step.stepIndex(),
+                step.stepType(),
+                step.modelProfile(),
+                step.toolName(),
+                step.toolPermission(),
+                step.toolInput(),
+                step.toolOutput(),
+                step.status(),
+                step.latencyMs(),
+                step.errorMessage(),
+                step.createdAt()
+        );
+    }
+
+    private int countSteps(List<AiAgentStep> steps, AiStepType stepType) {
+        return (int) steps.stream().filter(step -> step.stepType() == stepType).count();
+    }
+
+    private boolean isTerminalStatus(AiRunStatus status) {
+        return status == AiRunStatus.SUCCESS
+                || status == AiRunStatus.FAILED
+                || status == AiRunStatus.CANCELLED
+                || status == AiRunStatus.INTERRUPTED;
+    }
+
+    private AiAgentRunContext withEffectivePolicy(AiAgentProfile agentProfile,
+                                                  AiAgentRunContext context,
+                                                  String runId,
+                                                  boolean asyncSubmission) {
         AiCallerType callerType = context == null || context.callerType() == null ? AiCallerType.ADMIN_TEST : context.callerType();
         Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
-        AiToolPermission defaultMax = callerType == AiCallerType.SCRIPT || callerType == AiCallerType.WORKBENCH
-                ? AiToolPermission.PROPOSE_CHANGE
-                : AiToolPermission.CONTROLLED_ACTION;
+        AiToolPermission defaultMax = switch (callerType) {
+            case SCRIPT -> AiToolPermission.DANGEROUS_ACTION;
+            case WORKBENCH -> AiToolPermission.PROPOSE_CHANGE;
+            default -> AiToolPermission.CONTROLLED_ACTION;
+        };
         Map<String, Object> policy = agentProfile.getPolicy();
         AiToolPermission profileMax = AiToolPermission.from(policy.get("maxToolPermission"), defaultMax);
         AiToolPermission effectiveMax = min(defaultMax, profileMax);
         if (Boolean.TRUE.equals(policy.get("allowDangerousActions")) && callerType != AiCallerType.SCRIPT) {
             effectiveMax = profileMax == AiToolPermission.DANGEROUS_ACTION ? AiToolPermission.DANGEROUS_ACTION : effectiveMax;
         }
-        if (effectiveMax == AiToolPermission.DANGEROUS_ACTION && (callerType == AiCallerType.SCRIPT || callerType == AiCallerType.WORKBENCH)) {
+        if (effectiveMax == AiToolPermission.DANGEROUS_ACTION && callerType == AiCallerType.WORKBENCH) {
             effectiveMax = AiToolPermission.PROPOSE_CHANGE;
         }
         metadata.put("maxToolPermission", effectiveMax.name());
         metadata.putIfAbsent("dangerousActionsAllowed", effectiveMax == AiToolPermission.DANGEROUS_ACTION);
         metadata.put("agentRunId", runId);
+        metadata.put(DISABLE_OUTER_TIMEOUT_METADATA_KEY, asyncSubmission);
         return new AiAgentRunContext(
                 callerType,
                 context == null ? null : context.scriptId(),
@@ -200,5 +336,17 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
             return first;
         }
         return first.ordinal() <= second.ordinal() ? first : second;
+    }
+
+    private record PreparedRun(
+            AiAgentRunRequest request,
+            AiAgentProfile agentProfile,
+            AiModelProfile modelProfile,
+            AiAgentRunContext context,
+            AiAgentRunRecord run
+    ) {
+        private String runId() {
+            return run.getId();
+        }
     }
 }

@@ -9,6 +9,11 @@ import io.agentscope.core.embedding.EmbeddingModel;
 import io.agentscope.core.embedding.dashscope.DashScopeTextEmbedding;
 import io.agentscope.core.embedding.ollama.OllamaTextEmbedding;
 import io.agentscope.core.embedding.openai.OpenAITextEmbedding;
+import io.agentscope.core.hook.Hook;
+import io.agentscope.core.hook.HookEvent;
+import io.agentscope.core.hook.PostCallEvent;
+import io.agentscope.core.hook.ReasoningChunkEvent;
+import io.agentscope.core.hook.SummaryChunkEvent;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
@@ -27,6 +32,7 @@ import io.agentscope.core.model.OllamaChatModel;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.Toolkit;
+import org.team4u.actiondock.ai.api.AiAgentRunObserver;
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiAgentRunContext;
 import org.team4u.actiondock.ai.api.AiAgentRunRequest;
@@ -65,6 +71,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class AgentScopeAiProviderClient implements AiProviderClient {
+    private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -77,10 +84,10 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
 
     @Override
     public AiChatResponse chat(AiModelProfile profile, AiChatRequest request, AiCallContext context) {
-        ChatModelBase model = buildChatModel(profile);
-        GenerateOptions options = buildGenerateOptions(profile, request == null ? null : request.options());
+        ChatModelBase model = buildChatModel(profile, false);
+        GenerateOptions options = buildGenerateOptions(profile, request == null ? null : request.options(), false);
         List<ChatResponse> responses = block(model.stream(toMessages(request == null ? null : request.messages()), List.of(), options)
-                .collectList(), timeout(profile, request == null ? null : request.options()));
+                .collectList(), modelCallTimeout(profile, request == null ? null : request.options()));
         String text = responses.stream().map(this::text).reduce("", String::concat);
         ChatUsage usage = lastUsage(responses);
         Map<String, Object> raw = new LinkedHashMap<>();
@@ -110,7 +117,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         List<List<Double>> embeddings = new ArrayList<>();
         for (String input : request == null || request.input() == null ? List.<String>of() : request.input()) {
             double[] vector = block(model.embed(TextBlock.builder().text(input == null ? "" : input).build()),
-                    timeout(profile, request == null ? null : request.options()));
+                    modelCallTimeout(profile, request == null ? null : request.options()));
             List<Double> values = new ArrayList<>(vector.length);
             for (double item : vector) {
                 values.add(item);
@@ -131,28 +138,40 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                                      AiAgentRunRequest request,
                                      AiAgentRunContext context,
                                      AiToolRegistry toolRegistry) {
-        ChatModelBase model = buildChatModel(modelProfile);
+        return runAgent(agentProfile, modelProfile, request, context, toolRegistry, AiAgentRunObserver.NOOP);
+    }
+
+    @Override
+    public AiAgentRunResult runAgent(AiAgentProfile agentProfile,
+                                     AiModelProfile modelProfile,
+                                     AiAgentRunRequest request,
+                                     AiAgentRunContext context,
+                                     AiToolRegistry toolRegistry,
+                                     AiAgentRunObserver observer) {
+        ChatModelBase model = buildChatModel(modelProfile, true);
         Map<String, Object> options = mergedOptions(agentProfile.getOptions(), request == null ? null : request.options());
         AtomicInteger stepIndex = new AtomicInteger();
         List<AiAgentStep> steps = Collections.synchronizedList(new ArrayList<>());
-        Toolkit toolkit = buildToolkit(agentProfile, request, context, toolRegistry, stepIndex, steps);
+        Toolkit toolkit = buildToolkit(agentProfile, request, context, toolRegistry, stepIndex, steps, observer == null ? AiAgentRunObserver.NOOP : observer);
         ReActAgent agent = ReActAgent.builder()
                 .name(agentProfile.getId())
                 .description(agentProfile.getName())
                 .sysPrompt(agentProfile.getSystemPrompt())
                 .model(model)
                 .toolkit(toolkit)
+                .hook(new ProgressHook(observer == null ? AiAgentRunObserver.NOOP : observer))
                 .maxIters(intOption(options, "maxIters", 6))
-                .generateOptions(buildGenerateOptions(modelProfile, options))
+                .generateOptions(buildGenerateOptions(modelProfile, options, true))
                 .build();
 
         long started = System.currentTimeMillis();
-        Msg result = block(agent.call(toMessages(request == null ? null : request.messages())), timeout(modelProfile, options));
+        Msg result = block(agent.call(toMessages(request == null ? null : request.messages())),
+                outerAgentTimeout(modelProfile, options, context));
         String text = result == null ? "" : result.getTextContent();
         AiUsage usage = result == null ? AiUsage.empty() : toUsage(result.getChatUsage());
         AiAgentStep step = new AiAgentStep(
                 UUID.randomUUID().toString(),
-                null,
+                runId(context),
                 stepIndex.incrementAndGet(),
                 AiStepType.MODEL_REASONING,
                 modelProfile.getId(),
@@ -166,6 +185,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 LocalDateTime.now()
         );
         steps.add(step);
+        observer.onTextDelta(text, text);
         return new AiAgentRunResult(null, AiRunStatus.SUCCESS, Map.of("text", text), steps, usage, null);
     }
 
@@ -174,7 +194,8 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                                  AiAgentRunContext context,
                                  AiToolRegistry toolRegistry,
                                  AtomicInteger stepIndex,
-                                 List<AiAgentStep> steps) {
+                                 List<AiAgentStep> steps,
+                                 AiAgentRunObserver observer) {
         Toolkit toolkit = new Toolkit();
         Map<String, AiTool> tools = new LinkedHashMap<>();
         for (String toolsetId : agentProfile.getToolsetIds()) {
@@ -188,7 +209,8 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 context,
                 toolRegistry,
                 stepIndex,
-                steps
+                steps,
+                observer
         )));
         return toolkit;
     }
@@ -200,19 +222,22 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         private final AiToolRegistry toolRegistry;
         private final AtomicInteger stepIndex;
         private final List<AiAgentStep> steps;
+        private final AiAgentRunObserver observer;
 
         private ActionDockAgentTool(AiTool tool,
                                     AiAgentRunRequest request,
                                     AiAgentRunContext context,
                                     AiToolRegistry toolRegistry,
                                     AtomicInteger stepIndex,
-                                    List<AiAgentStep> steps) {
+                                    List<AiAgentStep> steps,
+                                    AiAgentRunObserver observer) {
             this.tool = tool;
             this.request = request;
             this.context = context;
             this.toolRegistry = toolRegistry;
             this.stepIndex = stepIndex;
             this.steps = steps;
+            this.observer = observer;
         }
 
         @Override
@@ -234,9 +259,9 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
             String stepId = UUID.randomUUID().toString();
             Map<String, Object> input = param == null || param.getInput() == null ? Map.of() : param.getInput();
-            steps.add(new AiAgentStep(
+            AiAgentStep startStep = new AiAgentStep(
                     stepId,
-                    null,
+                    runId(context),
                     stepIndex.incrementAndGet(),
                     AiStepType.TOOL_CALL,
                     null,
@@ -248,7 +273,9 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                     null,
                     null,
                     LocalDateTime.now()
-            ));
+            );
+            steps.add(startStep);
+            observer.onStep(startStep);
             AiToolExecutionResult result = toolRegistry.invoke(tool.name(), input, new AiToolExecutionContext(
                     context == null || context.metadata() == null ? null : stringValue(context.metadata().get("agentRunId")),
                     stepId,
@@ -260,9 +287,9 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
             ));
             String resultStepId = UUID.randomUUID().toString();
             Map<String, Object> output = result.output() == null ? Map.of() : result.output();
-            steps.add(new AiAgentStep(
+            AiAgentStep resultStep = new AiAgentStep(
                     resultStepId,
-                    null,
+                    runId(context),
                     stepIndex.incrementAndGet(),
                     AiStepType.TOOL_RESULT,
                     null,
@@ -274,7 +301,9 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                     result.latencyMs(),
                     result.errorMessage(),
                     LocalDateTime.now()
-            ));
+            );
+            steps.add(resultStep);
+            observer.onStep(resultStep);
             String text = result.success() ? toJson(output) : result.errorMessage();
             ToolResultBlock block = result.success()
                     ? ToolResultBlock.of(TextBlock.builder().text(text == null ? "" : text).build())
@@ -293,14 +322,14 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         return metadata;
     }
 
-    private ChatModelBase buildChatModel(AiModelProfile profile) {
+    private ChatModelBase buildChatModel(AiModelProfile profile, boolean streaming) {
         AiModelProvider modelProvider = requireModelProvider(profile);
         String apiKey = resolveApiKey(profile);
         String modelName = requireText(profile.getModelName(), "AI 模型名不能为空");
         String baseUrl = blankToNull(profile.getBaseUrl());
         return switch (modelProvider) {
             case DASHSCOPE -> {
-                DashScopeChatModel.Builder builder = DashScopeChatModel.builder().modelName(modelName).stream(false);
+                DashScopeChatModel.Builder builder = DashScopeChatModel.builder().modelName(modelName).stream(streaming);
                 if (apiKey != null) {
                     builder.apiKey(apiKey);
                 }
@@ -310,7 +339,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 yield builder.build();
             }
             case OPENAI, OPENAI_COMPATIBLE -> {
-                OpenAIChatModel.Builder builder = OpenAIChatModel.builder().modelName(modelName).stream(false);
+                OpenAIChatModel.Builder builder = OpenAIChatModel.builder().modelName(modelName).stream(streaming);
                 if (apiKey != null) {
                     builder.apiKey(apiKey);
                 }
@@ -320,7 +349,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 yield builder.build();
             }
             case ANTHROPIC -> {
-                AnthropicChatModel.Builder builder = AnthropicChatModel.builder().modelName(modelName).stream(false);
+                AnthropicChatModel.Builder builder = AnthropicChatModel.builder().modelName(modelName).stream(streaming);
                 if (apiKey != null) {
                     builder.apiKey(apiKey);
                 }
@@ -330,7 +359,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 yield builder.build();
             }
             case GEMINI -> {
-                GeminiChatModel.Builder builder = GeminiChatModel.builder().modelName(modelName).streamEnabled(false);
+                GeminiChatModel.Builder builder = GeminiChatModel.builder().modelName(modelName).streamEnabled(streaming);
                 if (apiKey != null) {
                     builder.apiKey(apiKey);
                 }
@@ -391,11 +420,11 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         };
     }
 
-    private GenerateOptions buildGenerateOptions(AiModelProfile profile, Map<String, Object> requestOptions) {
+    private GenerateOptions buildGenerateOptions(AiModelProfile profile, Map<String, Object> requestOptions, boolean streaming) {
         Map<String, Object> options = mergedOptions(profile.getDefaultOptions(), requestOptions);
         GenerateOptions.Builder builder = GenerateOptions.builder()
                 .modelName(profile.getModelName())
-                .stream(false)
+                .stream(streaming)
                 .temperature(doubleOption(options, "temperature"))
                 .topP(doubleOption(options, "topP"))
                 .maxTokens(intOption(options, "maxTokens"))
@@ -423,6 +452,41 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
             map.forEach((key, value) -> builder.additionalBodyParam(String.valueOf(key), value));
         }
         return builder.build();
+    }
+
+    private String runId(AiAgentRunContext context) {
+        return context == null || context.metadata() == null ? null : stringValue(context.metadata().get("agentRunId"));
+    }
+
+    private final class ProgressHook implements Hook {
+        private final AiAgentRunObserver observer;
+
+        private ProgressHook(AiAgentRunObserver observer) {
+            this.observer = observer;
+        }
+
+        @Override
+        public <T extends HookEvent> Mono<T> onEvent(T event) {
+            if (event instanceof ReasoningChunkEvent reasoningChunkEvent) {
+                observer.onTextDelta(
+                        textValue(reasoningChunkEvent.getIncrementalChunk()),
+                        textValue(reasoningChunkEvent.getAccumulated())
+                );
+            } else if (event instanceof SummaryChunkEvent summaryChunkEvent) {
+                observer.onTextDelta(
+                        textValue(summaryChunkEvent.getIncrementalChunk()),
+                        textValue(summaryChunkEvent.getAccumulated())
+                );
+            } else if (event instanceof PostCallEvent postCallEvent) {
+                String text = textValue(postCallEvent.getFinalMessage());
+                observer.onTextDelta(text, text);
+            }
+            return Mono.just(event);
+        }
+    }
+
+    private String textValue(Msg message) {
+        return message == null ? "" : message.getTextContent();
     }
 
     private List<Msg> toMessages(List<AiMessage> messages) {
@@ -554,9 +618,20 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         return merged;
     }
 
-    private Duration timeout(AiModelProfile profile, Map<String, Object> requestOptions) {
+    private Duration modelCallTimeout(AiModelProfile profile, Map<String, Object> requestOptions) {
         Integer timeoutSeconds = intOption(mergedOptions(profile.getDefaultOptions(), requestOptions), "timeoutSeconds");
         return timeoutSeconds == null || timeoutSeconds <= 0 ? null : Duration.ofSeconds(timeoutSeconds);
+    }
+
+    private Duration outerAgentTimeout(AiModelProfile profile, Map<String, Object> requestOptions, AiAgentRunContext context) {
+        return disableOuterTimeout(context) ? null : modelCallTimeout(profile, requestOptions);
+    }
+
+    private boolean disableOuterTimeout(AiAgentRunContext context) {
+        if (context == null || context.metadata() == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(context.metadata().get(DISABLE_OUTER_TIMEOUT_METADATA_KEY));
     }
 
     private <T> T block(reactor.core.publisher.Mono<T> mono, Duration timeout) {

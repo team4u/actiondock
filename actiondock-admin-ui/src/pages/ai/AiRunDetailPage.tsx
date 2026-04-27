@@ -1,9 +1,10 @@
-import { Button, Card, Descriptions, Space, Timeline, Typography, message } from "antd";
+import { Button, Card, Descriptions, Space, Typography, message } from "antd";
 import { StopOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ApiError, cancelAiRun, getAiRun, resumeAiRun } from "../../api";
-import { AiRunStatusTag, AiToolPermissionTag } from "../../components/ai/AiTags";
+import { AiRunStatusTag } from "../../components/ai/AiTags";
+import { AiStepTracePanel } from "../../components/ai/AiStepTracePanel";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
 import type { AiAgentRunSnapshot } from "../../types";
@@ -11,13 +12,43 @@ import { formatDateTime } from "../../utils";
 
 export function AiRunDetailPage() {
   const { runId } = useParams<{ runId: string }>();
+  const navigate = useNavigate();
   const [run, setRun] = useState<AiAgentRunSnapshot | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [actionLoading, setActionLoading] = useState<"cancel" | "resume" | null>(null);
   const loadRun = async () => {
-    if (runId) setRun(await getAiRun(runId));
+    if (!runId) return null;
+    const next = await getAiRun(runId);
+    setRun(next);
+    return next;
   };
-  useEffect(() => { void loadRun(); }, [runId]);
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+
+    const poll = async () => {
+      if (!runId) return;
+      try {
+        const next = await getAiRun(runId);
+        if (!active) return;
+        setRun(next);
+        if (next.status === "RUNNING" || next.status === "WAITING_APPROVAL") {
+          timer = window.setTimeout(() => void poll(), 1500);
+        }
+      } catch (error) {
+        if (active) {
+          messageApi.error(error instanceof ApiError ? error.message : "加载 Run 失败");
+        }
+      }
+    };
+
+    void poll();
+    return () => {
+      active = false;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [messageApi, runId]);
   const handleCancel = async () => {
     if (!runId) return;
     setActionLoading("cancel");
@@ -49,12 +80,14 @@ export function AiRunDetailPage() {
   }
   const canCancel = run.status === "RUNNING" || run.status === "WAITING_APPROVAL";
   const canResume = run.status === "WAITING_APPROVAL" || run.status === "INTERRUPTED";
+  const outputText = typeof run.outputSummary?.text === "string" ? run.outputSummary.text as string : "";
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
       <PageHeader
         title="Agent Run"
         meta={run.id}
+        onBack={() => navigate("/ai/runs")}
         actions={
           <>
             <Button icon={<ReloadOutlined />} disabled={!canResume} loading={actionLoading === "resume"} onClick={() => void handleResume()}>恢复</Button>
@@ -75,28 +108,16 @@ export function AiRunDetailPage() {
         </Descriptions>
       </Card>
       <Card title="Step Trace">
-        <Timeline
-          items={run.steps.map((step) => ({
-            children: (
-              <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                <Space wrap>
-                  <Typography.Text strong>{step.stepIndex}. {step.stepType}</Typography.Text>
-                  {step.toolName ? <Typography.Text code>{step.toolName}</Typography.Text> : null}
-                  {step.toolPermission ? <AiToolPermissionTag permission={step.toolPermission} /> : null}
-                </Space>
-                {step.errorMessage ? <Typography.Text type="danger">{step.errorMessage}</Typography.Text> : null}
-                {step.toolInput ? <JsonPreview title="工具输入" value={step.toolInput} emptyDescription="无工具输入" /> : null}
-                {step.toolOutput ? <JsonPreview title="工具输出" value={step.toolOutput} emptyDescription="无工具输出" /> : null}
-              </Space>
-            )
-          }))}
-        />
+        <AiStepTracePanel steps={run.steps} />
       </Card>
       <Card title="输出摘要">
-        <JsonPreview title="Output" value={run.outputSummary} emptyDescription="无输出" />
-      </Card>
-      <Card title="Raw JSON">
-        <JsonPreview title="Run JSON" value={run as unknown as Record<string, unknown>} emptyDescription="无数据" />
+        {outputText ? (
+          <Typography.Paragraph ellipsis={{ rows: 3, expandable: true, symbol: "展开" }} style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+            {outputText}
+          </Typography.Paragraph>
+        ) : (
+          <JsonPreview title="Output" value={run.outputSummary} emptyDescription="无输出" />
+        )}
       </Card>
     </Space>
   );

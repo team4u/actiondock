@@ -32,7 +32,7 @@ public class JpaAiAgentRunRepositoryAdapter implements AiAgentRunRepository {
 
     @Override
     public List<AiAgentRunRecord> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
+        return repository.findAllByOrderByStartedAtDesc().stream().map(this::toDomain).toList();
     }
 
     private AiAgentRunEntity toEntity(AiAgentRunRecord run) {

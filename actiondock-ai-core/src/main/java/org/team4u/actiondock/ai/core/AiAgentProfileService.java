@@ -3,6 +3,7 @@ package org.team4u.actiondock.ai.core;
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
+import org.team4u.actiondock.ai.api.AiToolsetRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -10,10 +11,18 @@ import java.util.List;
 public class AiAgentProfileService {
     private final AiAgentProfileRepository repository;
     private final AiModelProfileRepository modelProfileRepository;
+    private final AiToolsetRepository toolsetRepository;
 
     public AiAgentProfileService(AiAgentProfileRepository repository, AiModelProfileRepository modelProfileRepository) {
+        this(repository, modelProfileRepository, null);
+    }
+
+    public AiAgentProfileService(AiAgentProfileRepository repository,
+                                 AiModelProfileRepository modelProfileRepository,
+                                 AiToolsetRepository toolsetRepository) {
         this.repository = repository;
         this.modelProfileRepository = modelProfileRepository;
+        this.toolsetRepository = toolsetRepository;
     }
 
     public List<AiAgentProfile> list() {
@@ -57,6 +66,16 @@ public class AiAgentProfileService {
         }
         if (modelProfileRepository.findById(profile.getModelProfileId()).isEmpty()) {
             throw new IllegalArgumentException("模型 Profile 不存在: " + profile.getModelProfileId());
+        }
+        if (toolsetRepository != null) {
+            for (String toolsetId : profile.getToolsetIds()) {
+                if (toolsetId == null || toolsetId.isBlank()) {
+                    throw new IllegalArgumentException("工具集 ID 不能为空");
+                }
+                if (toolsetRepository.findById(toolsetId).isEmpty()) {
+                    throw new IllegalArgumentException("AI 工具集不存在: " + toolsetId);
+                }
+            }
         }
     }
 }

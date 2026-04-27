@@ -14,6 +14,7 @@ import org.team4u.actiondock.ai.api.AiAgentRunRecord;
 import org.team4u.actiondock.ai.api.AiAgentRunRequest;
 import org.team4u.actiondock.ai.api.AiAgentRunResult;
 import org.team4u.actiondock.ai.api.AiAgentRunSnapshot;
+import org.team4u.actiondock.ai.api.AiAgentRunSubmission;
 import org.team4u.actiondock.ai.api.AiAgentResumeCommand;
 import org.team4u.actiondock.ai.api.AiCallContext;
 import org.team4u.actiondock.ai.api.AiCallerType;
@@ -27,7 +28,7 @@ import org.team4u.actiondock.ai.api.AiGateway;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiStructuredRequest;
 import org.team4u.actiondock.ai.api.AiStructuredResponse;
-import org.team4u.actiondock.ai.api.AiTool;
+import org.team4u.actiondock.ai.api.AiToolDescriptor;
 import org.team4u.actiondock.ai.api.AiToolExecutionContext;
 import org.team4u.actiondock.ai.api.AiToolExecutionResult;
 import org.team4u.actiondock.ai.api.AiToolset;
@@ -160,13 +161,13 @@ public class AiController {
     }
 
     @GetMapping("/tools")
-    public ApiResponse<List<AiTool>> listTools() {
-        return ApiResponse.success(toolRegistry.listTools(null));
+    public ApiResponse<List<AiToolDescriptor>> listTools() {
+        return ApiResponse.success(toolRegistry.listTools(null).stream().map(AiToolDescriptor::from).toList());
     }
 
     @GetMapping("/tools/{name}")
-    public ApiResponse<AiTool> getTool(@PathVariable String name) {
-        return ApiResponse.success(toolRegistry.getTool(name));
+    public ApiResponse<AiToolDescriptor> getTool(@PathVariable String name) {
+        return ApiResponse.success(AiToolDescriptor.from(toolRegistry.getTool(name)));
     }
 
     @PostMapping("/tools/{name}/test")
@@ -200,6 +201,11 @@ public class AiController {
     @PostMapping("/agents/run")
     public ApiResponse<AiAgentRunResult> runAgent(@RequestBody AiAgentRunRequest request) {
         return ApiResponse.success(aiAgentRuntime.run(request, AiAgentRunContext.adminTest()));
+    }
+
+    @PostMapping("/agents/runs")
+    public ApiResponse<AiAgentRunSubmission> submitRun(@RequestBody AiAgentRunRequest request) {
+        return ApiResponse.success(aiAgentRuntime.submit(request, AiAgentRunContext.adminTest()));
     }
 
     @GetMapping("/agents/runs")
