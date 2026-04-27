@@ -1,5 +1,6 @@
 import { Alert, Segmented, Space, Typography } from "antd";
 import { useState } from "react";
+import type { SchemaFieldDefinition } from "../schema";
 import { resolveSchemaFields } from "../schema";
 import { formatSchemaFieldSupplement } from "../schemaExecution";
 import { prettyJson } from "../utils";
@@ -12,6 +13,61 @@ interface SchemaFieldListProps {
   schema?: Record<string, unknown>;
   title: string;
   emptyDescription: string;
+}
+
+function SchemaFieldListItem({ field, depth }: { field: SchemaFieldDefinition; depth: number }) {
+  const supplement = formatSchemaFieldSupplement(field);
+  const indent = depth > 0 ? { marginLeft: depth * 20 } : {};
+
+  let typeLabel = field.kind;
+  if (field.kind === "array" && field.items) {
+    typeLabel = `array<${field.items.kind}${field.items.kind === "object" && field.items.children ? ` (${field.items.children.length} 字段)` : ""}>`;
+  } else if (field.kind === "object" && field.children) {
+    typeLabel = `object (${field.children.length} 字段)`;
+  }
+
+  return (
+    <div className="schema-field-list__item" style={indent}>
+      <Space direction="vertical" size={6} style={{ width: "100%" }}>
+        <Space wrap size={[8, 6]}>
+          <Text strong>{field.label}</Text>
+          <Text type="secondary">{field.name}</Text>
+        </Space>
+
+        <Text type="secondary">
+          {[typeLabel, field.required ? "required" : "optional", field.widget === "textarea" ? "textarea" : ""]
+            .filter(Boolean)
+            .join(" · ")}
+        </Text>
+
+        {supplement ? <Text type="secondary">{supplement}</Text> : null}
+
+        {field.enumValues && field.enumValues.length > 0 ? (
+          <Text type="secondary">可选值：{field.enumValues.join(" / ")}</Text>
+        ) : null}
+
+        {field.kind === "object" && field.children && field.children.length > 0 && (
+          <div style={{ marginLeft: 16, marginTop: 4 }}>
+            {field.children.map((child) => (
+              <SchemaFieldListItem key={child.name} field={child} depth={depth + 1} />
+            ))}
+          </div>
+        )}
+
+        {field.kind === "array" && field.items?.kind === "object" && field.items.children && field.items.children.length > 0 && (
+          <div style={{ marginLeft: 16, marginTop: 4 }}>
+            {field.items.children.map((child) => (
+              <SchemaFieldListItem key={child.name} field={child} depth={depth + 1} />
+            ))}
+          </div>
+        )}
+
+        {field.kind === "array" && field.items?.kind === "enum" && field.items.enumValues && field.items.enumValues.length > 0 && (
+          <Text type="secondary" style={{ marginLeft: 16 }}>元素可选值：{field.items.enumValues.join(" / ")}</Text>
+        )}
+      </Space>
+    </div>
+  );
 }
 
 export function SchemaFieldList({ schema, title, emptyDescription }: SchemaFieldListProps) {
@@ -56,32 +112,7 @@ export function SchemaFieldList({ schema, title, emptyDescription }: SchemaField
           ) : (
             <div className="schema-field-list">
               {supportedFields.map((field) => (
-                <div key={field.name} className="schema-field-list__item">
-                  {(() => {
-                    const supplement = formatSchemaFieldSupplement(field);
-
-                    return (
-                      <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                        <Space wrap size={[8, 6]}>
-                          <Text strong>{field.label}</Text>
-                          <Text type="secondary">{field.name}</Text>
-                        </Space>
-
-                        <Text type="secondary">
-                          {[field.kind, field.required ? "required" : "optional", field.widget === "textarea" ? "textarea" : ""]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </Text>
-
-                        {supplement ? <Text type="secondary">{supplement}</Text> : null}
-
-                        {field.enumValues && field.enumValues.length > 0 ? (
-                          <Text type="secondary">可选值：{field.enumValues.join(" / ")}</Text>
-                        ) : null}
-                      </Space>
-                    );
-                  })()}
-                </div>
+                <SchemaFieldListItem key={field.name} field={field} depth={0} />
               ))}
             </div>
           )}

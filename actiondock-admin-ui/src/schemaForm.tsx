@@ -26,6 +26,15 @@ export function buildSchemaFieldRules(field: SchemaFieldDefinition): Rule[] | un
     ];
   }
 
+  if (field.kind === "object" || field.kind === "array") {
+    return [
+      {
+        required: true,
+        message: `请输入${field.label}`
+      }
+    ];
+  }
+
   return [
     {
       required: true,
@@ -70,6 +79,15 @@ export function renderSchemaFieldInput(
         style={{ width: "100%" }}
         placeholder={`请输入${field.label}`}
         precision={field.kind === "integer" ? 0 : undefined}
+      />
+    );
+  }
+
+  if (field.kind === "object" || field.kind === "array") {
+    return (
+      <Input.TextArea
+        placeholder={field.kind === "object" ? `请输入 JSON 对象` : `请输入 JSON 数组`}
+        autoSize={{ minRows: 2, maxRows: 12 }}
       />
     );
   }

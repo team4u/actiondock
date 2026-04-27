@@ -22,6 +22,10 @@ function isMatchingSchemaFieldValue(field: SchemaFieldDefinition, value: unknown
       return typeof value === "string" && Boolean(field.enumValues?.includes(value));
     case "string":
       return typeof value === "string";
+    case "object":
+      return typeof value === "object" && value !== null && !Array.isArray(value);
+    case "array":
+      return Array.isArray(value);
     default:
       return false;
   }
@@ -137,6 +141,10 @@ function buildSchemaFieldPlaceholderValue(field: SchemaFieldDefinition): unknown
     case "integer":
     case "number":
       return 1;
+    case "object":
+      return {};
+    case "array":
+      return [];
     case "string":
     default:
       return `${field.name}-example`;
@@ -147,6 +155,20 @@ export function buildSchemaFieldExampleValues(
   fields: SchemaFieldDefinition[]
 ): Record<string, unknown> {
   return fields.reduce<Record<string, unknown>>((result, field) => {
+    if (field.kind === "object" && field.children) {
+      result[field.name] = buildSchemaFieldExampleValues(field.children);
+      return result;
+    }
+
+    if (field.kind === "array" && field.items) {
+      if (field.items.kind === "object" && field.items.children) {
+        result[field.name] = [buildSchemaFieldExampleValues(field.items.children)];
+      } else {
+        result[field.name] = [buildSchemaFieldPlaceholderValue(field.items)];
+      }
+      return result;
+    }
+
     const exampleValue = field.examples?.find((item) => isMatchingSchemaFieldValue(field, item));
     if (exampleValue !== undefined) {
       result[field.name] = exampleValue;

@@ -314,6 +314,14 @@ a {
   margin-bottom: 8px;
 }
 
+.schema-field-nested {
+  padding: 8px 12px;
+  margin-top: 8px;
+  border: 1px dashed var(--app-border-subtle);
+  border-radius: var(--app-radius-sm);
+  background: linear-gradient(180deg, var(--app-panel-start), var(--app-panel-end));
+}
+
 .batch-run-panel__mapping-row {
   display: flex;
   align-items: center;

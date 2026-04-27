@@ -11,6 +11,8 @@ import { InfoHint } from "./InfoHint";
 import type { SchemaEditorState, SchemaFieldDraft, SchemaFieldKind } from "../schema";
 import {
   createSchemaFieldDraft,
+  createSchemaFieldDraftForObject,
+  createSchemaFieldDraftForArray,
   deserializeSchemaJsonText,
   formatSchemaEditorState,
   validateSchemaFields
@@ -23,8 +25,12 @@ const FIELD_TYPE_OPTIONS: Array<{ value: SchemaFieldKind; label: string }> = [
   { value: "number", label: "number" },
   { value: "integer", label: "integer" },
   { value: "boolean", label: "boolean" },
-  { value: "enum", label: "enum" }
+  { value: "enum", label: "enum" },
+  { value: "object", label: "object" },
+  { value: "array", label: "array" }
 ];
+
+const ARRAY_ITEMS_TYPE_OPTIONS = FIELD_TYPE_OPTIONS.filter((opt) => opt.value !== "array");
 
 const STRING_WIDGET_OPTIONS = [
   { value: "input", label: "单行输入" },
@@ -87,11 +93,21 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
   const builderErrors = value.mode === "builder" ? validateSchemaFields(value.fields) : {};
   const jsonText = formatSchemaEditorState(value);
 
-  const buildTypePatch = (field: SchemaFieldDraft, nextType: SchemaFieldKind): Partial<SchemaFieldDraft> => ({
-    type: nextType,
-    widget: nextType === "string" ? field.widget : "input",
-    defaultValue: undefined
-  });
+  const buildTypePatch = (field: SchemaFieldDraft, nextType: SchemaFieldKind): Partial<SchemaFieldDraft> => {
+    const base: Partial<SchemaFieldDraft> = {
+      type: nextType,
+      widget: nextType === "string" ? field.widget : "input",
+      defaultValue: undefined,
+      children: undefined,
+      items: undefined
+    };
+    if (nextType === "object") {
+      base.children = [];
+    } else if (nextType === "array") {
+      base.items = null;
+    }
+    return base;
+  };
 
   const setField = (fieldId: string, patch: Partial<SchemaFieldDraft>) => {
     updateBuilderFields(value, onChange, (fields) =>
@@ -120,6 +136,137 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
 
   const addField = () => {
     updateBuilderFields(value, onChange, (fields) => [...fields, createSchemaFieldDraft()]);
+  };
+
+  const setNestedField = (
+    updater: (fields: SchemaFieldDraft[]) => SchemaFieldDraft[]
+  ) => {
+    updateBuilderFields(value, onChange, updater);
+  };
+
+  const addChildField = (parentId: string) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === parentId) {
+          return {
+            ...field,
+            children: [...(field.children ?? []), createSchemaFieldDraft()]
+          };
+        }
+        return field;
+      })
+    );
+  };
+
+  const setChildField = (parentId: string, childId: string, patch: Partial<SchemaFieldDraft>) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === parentId) {
+          return {
+            ...field,
+            children: field.children?.map((child) =>
+              child.id === childId ? { ...child, ...patch } : child
+            )
+          };
+        }
+        return field;
+      })
+    );
+  };
+
+  const removeChildField = (parentId: string, childId: string) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === parentId) {
+          return {
+            ...field,
+            children: field.children?.filter((child) => child.id !== childId)
+          };
+        }
+        return field;
+      })
+    );
+  };
+
+  const setArrayItems = (fieldId: string, itemsType: SchemaFieldKind) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === fieldId) {
+          const itemsDraft: SchemaFieldDraft = {
+            ...createSchemaFieldDraft(),
+            name: "items",
+            type: itemsType,
+            ...(itemsType === "object" ? { children: [] } : {})
+          };
+          return { ...field, items: itemsDraft };
+        }
+        return field;
+      })
+    );
+  };
+
+  const setArrayItemsChildField = (fieldId: string, childId: string, patch: Partial<SchemaFieldDraft>) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === fieldId && field.items) {
+          return {
+            ...field,
+            items: {
+              ...field.items,
+              children: field.items.children?.map((child) =>
+                child.id === childId ? { ...child, ...patch } : child
+              )
+            }
+          };
+        }
+        return field;
+      })
+    );
+  };
+
+  const addArrayItemChildField = (fieldId: string) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === fieldId && field.items) {
+          return {
+            ...field,
+            items: {
+              ...field.items,
+              children: [...(field.items.children ?? []), createSchemaFieldDraft()]
+            }
+          };
+        }
+        return field;
+      })
+    );
+  };
+
+  const removeArrayItemChildField = (fieldId: string, childId: string) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === fieldId && field.items) {
+          return {
+            ...field,
+            items: {
+              ...field.items,
+              children: field.items.children?.filter((child) => child.id !== childId)
+            }
+          };
+        }
+        return field;
+      })
+    );
+  };
+
+  const setArrayItemsEnumText = (fieldId: string, enumText: string) => {
+    setNestedField((fields) =>
+      fields.map((field) => {
+        if (field.id === fieldId && field.items) {
+          return { ...field, items: { ...field.items, enumText } };
+        }
+        return field;
+      })
+    );
   };
 
   const handleJsonChange = (nextValue: string) => {
@@ -332,68 +479,70 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                 />
                               </div>
 
-                              <div className="schema-field-grid__item schema-field-grid__item--default-value">
-                                <Text type="secondary">默认值</Text>
-                                {field.type === "boolean" ? (
-                                  <Select
-                                    value={typeof field.defaultValue === "boolean" ? field.defaultValue : undefined}
-                                    status={fieldErrors.defaultValue ? "error" : ""}
-                                    placeholder="选择"
-                                    allowClear
-                                    disabled={disabled}
-                                    options={BOOLEAN_DEFAULT_OPTIONS}
-                                    onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
-                                  />
-                                ) : field.type === "number" || field.type === "integer" ? (
-                                  <InputNumber
-                                    value={typeof field.defaultValue === "number" ? field.defaultValue : null}
-                                    status={fieldErrors.defaultValue ? "error" : ""}
-                                    style={{ width: "100%" }}
-                                    precision={field.type === "integer" ? 0 : undefined}
-                                    placeholder={field.type === "integer" ? "例如 1" : "例如 1.5"}
-                                    disabled={disabled}
-                                    onChange={(nextValue) =>
-                                      setField(field.id, {
-                                        defaultValue: typeof nextValue === "number" ? nextValue : undefined
-                                      })
-                                    }
-                                  />
-                                ) : field.type === "enum" ? (
-                                  <Select
-                                    value={typeof field.defaultValue === "string" ? field.defaultValue : undefined}
-                                    status={fieldErrors.defaultValue ? "error" : ""}
-                                    placeholder="选择"
-                                    allowClear
-                                    disabled={disabled}
-                                    options={field.enumText
-                                      .split(",")
-                                      .map((item) => item.trim())
-                                      .filter(Boolean)
-                                      .map((item) => ({
-                                        value: item,
-                                        label: item
-                                      }))}
-                                    onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
-                                  />
-                                ) : field.widget === "textarea" ? (
-                                  <Input.TextArea
-                                    value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
-                                    status={fieldErrors.defaultValue ? "error" : ""}
-                                    autoSize={{ minRows: 1, maxRows: 3 }}
-                                    placeholder="默认值"
-                                    disabled={disabled}
-                                    onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setField(field.id, { defaultValue: event.target.value })}
-                                  />
-                                ) : (
-                                  <Input
-                                    value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
-                                    status={fieldErrors.defaultValue ? "error" : ""}
-                                    placeholder="默认值"
-                                    disabled={disabled}
-                                    onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
-                                  />
-                                )}
-                              </div>
+                              {field.type !== "object" && field.type !== "array" && (
+                                <div className="schema-field-grid__item schema-field-grid__item--default-value">
+                                  <Text type="secondary">默认值</Text>
+                                  {field.type === "boolean" ? (
+                                    <Select
+                                      value={typeof field.defaultValue === "boolean" ? field.defaultValue : undefined}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      placeholder="选择"
+                                      allowClear
+                                      disabled={disabled}
+                                      options={BOOLEAN_DEFAULT_OPTIONS}
+                                      onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
+                                    />
+                                  ) : field.type === "number" || field.type === "integer" ? (
+                                    <InputNumber
+                                      value={typeof field.defaultValue === "number" ? field.defaultValue : null}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      style={{ width: "100%" }}
+                                      precision={field.type === "integer" ? 0 : undefined}
+                                      placeholder={field.type === "integer" ? "例如 1" : "例如 1.5"}
+                                      disabled={disabled}
+                                      onChange={(nextValue) =>
+                                        setField(field.id, {
+                                          defaultValue: typeof nextValue === "number" ? nextValue : undefined
+                                        })
+                                      }
+                                    />
+                                  ) : field.type === "enum" ? (
+                                    <Select
+                                      value={typeof field.defaultValue === "string" ? field.defaultValue : undefined}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      placeholder="选择"
+                                      allowClear
+                                      disabled={disabled}
+                                      options={field.enumText
+                                        .split(",")
+                                        .map((item) => item.trim())
+                                        .filter(Boolean)
+                                        .map((item) => ({
+                                          value: item,
+                                          label: item
+                                        }))}
+                                      onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
+                                    />
+                                  ) : field.widget === "textarea" ? (
+                                    <Input.TextArea
+                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      autoSize={{ minRows: 1, maxRows: 3 }}
+                                      placeholder="默认值"
+                                      disabled={disabled}
+                                      onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setField(field.id, { defaultValue: event.target.value })}
+                                    />
+                                  ) : (
+                                    <Input
+                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      placeholder="默认值"
+                                      disabled={disabled}
+                                      onChange={(event) => setField(field.id, { defaultValue: event.target.value })}
+                                    />
+                                  )}
+                                </div>
+                              )}
 
                               {field.type === "enum" && (
                                 <div className="schema-field-grid__item schema-field-grid__item--full">
@@ -408,6 +557,227 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                 </div>
                               )}
                             </div>
+
+                            {field.type === "object" && (
+                              <div className="schema-field-nested">
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                  <Text type="secondary">子字段 ({field.children?.length ?? 0})</Text>
+                                  <Button
+                                    type="dashed"
+                                    size="small"
+                                    icon={<PlusOutlined />}
+                                    disabled={disabled}
+                                    onClick={() => addChildField(field.id)}
+                                  >
+                                    添加子字段
+                                  </Button>
+                                </div>
+                                <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                                  {(field.children ?? []).map((child, childIndex) => {
+                                    const childErrors = builderErrors[child.id] ?? {};
+                                    return (
+                                      <div className="schema-field-card" key={child.id}>
+                                        <div className="schema-field-card__header">
+                                          <Space size={8}>
+                                            <Text type="secondary">{childIndex + 1}</Text>
+                                            <div>
+                                              <Text strong>{child.name.trim() || `子字段 ${childIndex + 1}`}</Text>
+                                              <div><Text type="secondary">{child.type}</Text></div>
+                                            </div>
+                                          </Space>
+                                          <Button
+                                            danger
+                                            size="small"
+                                            icon={<DeleteOutlined />}
+                                            disabled={disabled}
+                                            onClick={() => removeChildField(field.id, child.id)}
+                                          />
+                                        </div>
+                                        <div className="schema-field-grid">
+                                          <div className="schema-field-grid__item">
+                                            <Text type="secondary">字段名</Text>
+                                            <Input
+                                              value={child.name}
+                                              status={childErrors.name ? "error" : ""}
+                                              placeholder="例如 city"
+                                              disabled={disabled}
+                                              onChange={(event) => setChildField(field.id, child.id, { name: event.target.value })}
+                                            />
+                                            {childErrors.name && <Text type="danger">{childErrors.name}</Text>}
+                                          </div>
+                                          <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                            <Text type="secondary">类型</Text>
+                                            <Select
+                                              value={child.type}
+                                              disabled={disabled}
+                                              options={FIELD_TYPE_OPTIONS}
+                                              onChange={(nextValue) => setChildField(field.id, child.id, buildTypePatch(child, nextValue))}
+                                            />
+                                          </div>
+                                          <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                            <Text type="secondary">必填</Text>
+                                            <Switch
+                                              checked={child.required}
+                                              checkedChildren="是"
+                                              unCheckedChildren="否"
+                                              disabled={disabled}
+                                              onChange={(checked) => setChildField(field.id, child.id, { required: checked })}
+                                            />
+                                          </div>
+                                          <div className="schema-field-grid__item schema-field-grid__item--description">
+                                            <Text type="secondary">描述</Text>
+                                            <Input.TextArea
+                                              value={child.description}
+                                              autoSize={{ minRows: 1, maxRows: 2 }}
+                                              placeholder="字段说明"
+                                              disabled={disabled}
+                                              onChange={(event) => setChildField(field.id, child.id, { description: event.target.value })}
+                                            />
+                                          </div>
+                                          {child.type === "enum" && (
+                                            <div className="schema-field-grid__item schema-field-grid__item--full">
+                                              <Text type="secondary">枚举值</Text>
+                                              <Input
+                                                value={child.enumText}
+                                                status={childErrors.enumText ? "error" : ""}
+                                                placeholder="success, failed, pending"
+                                                disabled={disabled}
+                                                onChange={(event) => setChildField(field.id, child.id, { enumText: event.target.value })}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </Space>
+                              </div>
+                            )}
+
+                            {field.type === "array" && (
+                              <div className="schema-field-nested">
+                                <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                  <Text type="secondary">数组元素类型</Text>
+                                  <Select
+                                    value={field.items?.type ?? undefined}
+                                    placeholder="选择元素类型"
+                                    disabled={disabled}
+                                    options={ARRAY_ITEMS_TYPE_OPTIONS}
+                                    onChange={(itemsType) => setArrayItems(field.id, itemsType)}
+                                  />
+                                </div>
+
+                                {field.items?.type === "object" && (
+                                  <div style={{ marginTop: 8 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                      <Text type="secondary">元素子字段 ({field.items.children?.length ?? 0})</Text>
+                                      <Button
+                                        type="dashed"
+                                        size="small"
+                                        icon={<PlusOutlined />}
+                                        disabled={disabled}
+                                        onClick={() => addArrayItemChildField(field.id)}
+                                      >
+                                        添加子字段
+                                      </Button>
+                                    </div>
+                                    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                                      {(field.items.children ?? []).map((child, childIndex) => {
+                                        const childErrors = builderErrors[child.id] ?? {};
+                                        return (
+                                          <div className="schema-field-card" key={child.id}>
+                                            <div className="schema-field-card__header">
+                                              <Space size={8}>
+                                                <Text type="secondary">{childIndex + 1}</Text>
+                                                <div>
+                                                  <Text strong>{child.name.trim() || `子字段 ${childIndex + 1}`}</Text>
+                                                  <div><Text type="secondary">{child.type}</Text></div>
+                                                </div>
+                                              </Space>
+                                              <Button
+                                                danger
+                                                size="small"
+                                                icon={<DeleteOutlined />}
+                                                disabled={disabled}
+                                                onClick={() => removeArrayItemChildField(field.id, child.id)}
+                                              />
+                                            </div>
+                                            <div className="schema-field-grid">
+                                              <div className="schema-field-grid__item">
+                                                <Text type="secondary">字段名</Text>
+                                                <Input
+                                                  value={child.name}
+                                                  status={childErrors.name ? "error" : ""}
+                                                  placeholder="例如 city"
+                                                  disabled={disabled}
+                                                  onChange={(event) => setArrayItemsChildField(field.id, child.id, { name: event.target.value })}
+                                                />
+                                                {childErrors.name && <Text type="danger">{childErrors.name}</Text>}
+                                              </div>
+                                              <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                                <Text type="secondary">类型</Text>
+                                                <Select
+                                                  value={child.type}
+                                                  disabled={disabled}
+                                                  options={FIELD_TYPE_OPTIONS}
+                                                  onChange={(nextValue) => setArrayItemsChildField(field.id, child.id, buildTypePatch(child, nextValue))}
+                                                />
+                                              </div>
+                                              <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                                <Text type="secondary">必填</Text>
+                                                <Switch
+                                                  checked={child.required}
+                                                  checkedChildren="是"
+                                                  unCheckedChildren="否"
+                                                  disabled={disabled}
+                                                  onChange={(checked) => setArrayItemsChildField(field.id, child.id, { required: checked })}
+                                                />
+                                              </div>
+                                              <div className="schema-field-grid__item schema-field-grid__item--description">
+                                                <Text type="secondary">描述</Text>
+                                                <Input.TextArea
+                                                  value={child.description}
+                                                  autoSize={{ minRows: 1, maxRows: 2 }}
+                                                  placeholder="字段说明"
+                                                  disabled={disabled}
+                                                  onChange={(event) => setArrayItemsChildField(field.id, child.id, { description: event.target.value })}
+                                                />
+                                              </div>
+                                              {child.type === "enum" && (
+                                                <div className="schema-field-grid__item schema-field-grid__item--full">
+                                                  <Text type="secondary">枚举值</Text>
+                                                  <Input
+                                                    value={child.enumText}
+                                                    status={childErrors.enumText ? "error" : ""}
+                                                    placeholder="success, failed, pending"
+                                                    disabled={disabled}
+                                                    onChange={(event) => setArrayItemsChildField(field.id, child.id, { enumText: event.target.value })}
+                                                  />
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </Space>
+                                  </div>
+                                )}
+
+                                {field.items?.type === "enum" && (
+                                  <div style={{ marginTop: 8 }}>
+                                    <div className="schema-field-grid__item schema-field-grid__item--full">
+                                      <Text type="secondary">元素枚举值</Text>
+                                      <Input
+                                        value={field.items.enumText}
+                                        placeholder="success, failed, pending"
+                                        disabled={disabled}
+                                        onChange={(event) => setArrayItemsEnumText(field.id, event.target.value)}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}

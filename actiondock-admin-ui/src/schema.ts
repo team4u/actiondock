@@ -1,6 +1,6 @@
 import { parseJsonText, prettyJson } from "./utils";
 
-export type SchemaFieldKind = "string" | "number" | "integer" | "boolean" | "enum";
+export type SchemaFieldKind = "string" | "number" | "integer" | "boolean" | "enum" | "object" | "array";
 export type SchemaFieldWidget = "input" | "textarea";
 
 export interface SchemaFieldDraft {
@@ -14,6 +14,8 @@ export interface SchemaFieldDraft {
   enumText: string;
   widget: SchemaFieldWidget;
   rows: number;
+  children?: SchemaFieldDraft[];
+  items?: SchemaFieldDraft | null;
 }
 
 export interface SchemaFieldDefinition {
@@ -27,6 +29,9 @@ export interface SchemaFieldDefinition {
   widget?: SchemaFieldWidget;
   rows?: number;
   enumValues?: string[];
+  children?: SchemaFieldDefinition[];
+  childRequiredFields?: string[];
+  items?: SchemaFieldDefinition | null;
 }
 
 export interface SchemaFieldValidationErrors {
@@ -49,6 +54,9 @@ interface ResolvedFieldMeta {
   defaultValue?: unknown;
   examples?: unknown[];
   ui: ResolvedFieldUiConfig;
+  childProperties?: Record<string, unknown>;
+  childRequired?: string[];
+  itemsSchema?: Record<string, unknown>;
 }
 
 export type SchemaEditorState =
@@ -64,9 +72,10 @@ export type SchemaEditorState =
 
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 const ROOT_KEYS = new Set(["type", "properties", "required"]);
-const FIELD_KEYS = new Set(["type", "title", "description", "default", "enum", "x-ui"]);
+const FIELD_KEYS = new Set(["type", "title", "description", "default", "enum", "x-ui", "properties", "items", "required"]);
 const UI_KEYS = new Set(["widget", "rows"]);
 const DEFAULT_TEXTAREA_ROWS = 6;
+const MAX_SCHEMA_DEPTH = 3;
 
 let schemaFieldSequence = 0;
 
@@ -113,6 +122,24 @@ export function createSchemaFieldDraft(): SchemaFieldDraft {
     enumText: "",
     widget: "input",
     rows: DEFAULT_TEXTAREA_ROWS
+  };
+}
+
+export function createSchemaFieldDraftForObject(): SchemaFieldDraft {
+  return {
+    ...createSchemaFieldDraft(),
+    type: "object",
+    defaultValue: undefined,
+    children: []
+  };
+}
+
+export function createSchemaFieldDraftForArray(): SchemaFieldDraft {
+  return {
+    ...createSchemaFieldDraft(),
+    type: "array",
+    defaultValue: undefined,
+    items: null
   };
 }
 
@@ -179,11 +206,24 @@ export function validateSchemaFields(
       fieldErrors.enumText = "请输入至少一个枚举值";
     }
 
+    if (field.type === "object" && (!field.children || field.children.length === 0)) {
+      fieldErrors.name = fieldErrors.name
+        ? `${fieldErrors.name}；object 类型必须包含至少一个子字段`
+        : "object 类型必须包含至少一个子字段";
+    }
+
+    if (field.type === "array" && !field.items) {
+      fieldErrors.name = fieldErrors.name
+        ? `${fieldErrors.name}；array 类型必须定义 items 类型`
+        : "array 类型必须定义 items 类型";
+    }
+
     if (field.widget === "textarea" && (!Number.isInteger(field.rows) || field.rows <= 0)) {
       fieldErrors.rows = "请输入大于 0 的整数行数";
     }
 
-    if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "") {
+    if (field.type !== "object" && field.type !== "array"
+      && field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "") {
       if (field.type === "boolean") {
         if (typeof field.defaultValue !== "boolean") {
           fieldErrors.defaultValue = "布尔默认值必须是 true 或 false";
@@ -211,6 +251,18 @@ export function validateSchemaFields(
         ...errors[field.id],
         ...fieldErrors
       };
+    }
+
+    if (field.type === "object" && field.children) {
+      const childErrors = validateSchemaFields(field.children);
+      Object.assign(errors, childErrors);
+    }
+
+    if (field.type === "array" && field.items) {
+      if (field.items.type === "object" && field.items.children) {
+        const itemChildErrors = validateSchemaFields(field.items.children);
+        Object.assign(errors, itemChildErrors);
+      }
     }
   });
 
@@ -376,9 +428,13 @@ function resolveFieldMeta(
   if (enumValues && enumValues.length > 0) {
     kind = "enum";
   } else {
-    const type = typeof meta.type === "string" ? meta.type : "string";
+    const type = typeof meta.type === "string" ? meta.type : null;
     if (type === "string" || type === "number" || type === "integer" || type === "boolean") {
       kind = type;
+    } else if (type === "object" && isRecord(meta.properties)) {
+      kind = "object";
+    } else if (type === "array" && isRecord(meta.items)) {
+      kind = "array";
     }
   }
 
@@ -392,8 +448,184 @@ function resolveFieldMeta(
     ui: parseFieldUi(meta, name, {
       strict: options.strictUi,
       kind
-    })
+    }),
+    childProperties: kind === "object" && isRecord(meta.properties) ? (meta.properties as Record<string, unknown>) : undefined,
+    childRequired: kind === "object" && Array.isArray(meta.required)
+      ? meta.required.filter((item): item is string => typeof item === "string")
+      : undefined,
+    itemsSchema: kind === "array" && isRecord(meta.items) ? (meta.items as Record<string, unknown>) : undefined
   };
+}
+
+function deserializeFieldDraftsFromProperties(
+  properties: Record<string, unknown>,
+  requiredSet: Set<string>,
+  schema: Record<string, unknown>,
+  jsonText: string | undefined,
+  depth: number
+): SchemaFieldDraft[] | null {
+  const fields: SchemaFieldDraft[] = [];
+
+  for (const [name, metaValue] of Object.entries(properties)) {
+    if (!isRecord(metaValue)) {
+      return null;
+    }
+    if (hasUnsupportedKeys(metaValue, FIELD_KEYS)) {
+      return null;
+    }
+
+    const fieldMeta = resolveFieldMeta(name, metaValue, { strictUi: true });
+
+    if (fieldMeta.kind === "object") {
+      if (depth >= MAX_SCHEMA_DEPTH) {
+        return null;
+      }
+      const childProps = fieldMeta.childProperties!;
+      const childRequired = new Set(fieldMeta.childRequired ?? []);
+      const childFields = deserializeFieldDraftsFromProperties(
+        childProps, childRequired, schema, jsonText, depth + 1
+      );
+      if (childFields === null) {
+        return null;
+      }
+      fields.push({
+        id: createDraftId(),
+        name,
+        title: fieldMeta.label === name ? "" : fieldMeta.label,
+        type: "object",
+        required: requiredSet.has(name),
+        description: fieldMeta.description ?? "",
+        defaultValue: undefined,
+        enumText: "",
+        widget: "input",
+        rows: DEFAULT_TEXTAREA_ROWS,
+        children: childFields
+      });
+    } else if (fieldMeta.kind === "array") {
+      if (depth >= MAX_SCHEMA_DEPTH) {
+        return null;
+      }
+      const itemsDraft = deserializeArrayItemsDraft(
+        fieldMeta.itemsSchema!, schema, jsonText, depth + 1
+      );
+      if (itemsDraft === null) {
+        return null;
+      }
+      fields.push({
+        id: createDraftId(),
+        name,
+        title: fieldMeta.label === name ? "" : fieldMeta.label,
+        type: "array",
+        required: requiredSet.has(name),
+        description: fieldMeta.description ?? "",
+        defaultValue: undefined,
+        enumText: "",
+        widget: "input",
+        rows: DEFAULT_TEXTAREA_ROWS,
+        items: itemsDraft
+      });
+    } else if (fieldMeta.kind === "enum") {
+      if (!Array.isArray(metaValue.enum) || metaValue.enum.some((item) => typeof item !== "string")) {
+        return null;
+      }
+      if ("type" in metaValue && metaValue.type !== "string") {
+        return null;
+      }
+      const defaultState = parseFieldDefaultValue(metaValue, name, {
+        strict: true,
+        kind: "enum",
+        enumValues: fieldMeta.enumValues
+      });
+      fields.push({
+        id: createDraftId(),
+        name,
+        title: fieldMeta.label === name ? "" : fieldMeta.label,
+        type: "enum",
+        required: requiredSet.has(name),
+        description: fieldMeta.description ?? "",
+        defaultValue: defaultState.hasDefaultValue ? defaultState.defaultValue : undefined,
+        enumText: metaValue.enum.join(", "),
+        widget: "input",
+        rows: DEFAULT_TEXTAREA_ROWS
+      });
+    } else {
+      if (!fieldMeta.kind) {
+        return null;
+      }
+      const defaultState = parseFieldDefaultValue(metaValue, name, {
+        strict: true,
+        kind: fieldMeta.kind,
+        enumValues: fieldMeta.enumValues
+      });
+      fields.push({
+        id: createDraftId(),
+        name,
+        title: fieldMeta.label === name ? "" : fieldMeta.label,
+        type: fieldMeta.kind,
+        required: requiredSet.has(name),
+        description: fieldMeta.description ?? "",
+        defaultValue: defaultState.hasDefaultValue ? defaultState.defaultValue : undefined,
+        enumText: "",
+        widget: fieldMeta.ui.widget ?? "input",
+        rows: fieldMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS
+      });
+    }
+  }
+
+  return fields;
+}
+
+function deserializeArrayItemsDraft(
+  itemsSchema: Record<string, unknown>,
+  schema: Record<string, unknown>,
+  jsonText: string | undefined,
+  depth: number
+): SchemaFieldDraft | null {
+  const itemsMeta = resolveFieldMeta("items", itemsSchema, { strictUi: true });
+
+  if (itemsMeta.kind === "object") {
+    const childProps = itemsMeta.childProperties!;
+    const childRequired = new Set(itemsMeta.childRequired ?? []);
+    const childFields = deserializeFieldDraftsFromProperties(
+      childProps, childRequired, schema, jsonText, depth
+    );
+    if (childFields === null) {
+      return null;
+    }
+    return {
+      id: createDraftId(),
+      name: "items",
+      title: "",
+      type: "object",
+      required: false,
+      description: itemsMeta.description ?? "",
+      defaultValue: undefined,
+      enumText: "",
+      widget: "input",
+      rows: DEFAULT_TEXTAREA_ROWS,
+      children: childFields
+    };
+  }
+
+  if (itemsMeta.kind && itemsMeta.kind !== "object" && itemsMeta.kind !== "array") {
+    return {
+      id: createDraftId(),
+      name: "items",
+      title: "",
+      type: itemsMeta.kind,
+      required: false,
+      description: itemsMeta.description ?? "",
+      defaultValue: undefined,
+      enumText: itemsMeta.kind === "enum" ? (itemsMeta.enumValues?.join(", ") ?? "") : "",
+      widget: itemsMeta.ui.widget ?? "input",
+      rows: itemsMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS,
+      ...(itemsMeta.kind === "enum" && itemsMeta.enumValues
+        ? { enumText: itemsMeta.enumValues.join(", ") }
+        : {})
+    };
+  }
+
+  return null;
 }
 
 export function deserializeSchema(
@@ -432,64 +664,12 @@ export function deserializeSchema(
       ? schema.required.filter((item): item is string => typeof item === "string")
       : []
   );
-  const fields: SchemaFieldDraft[] = [];
 
-  for (const [name, metaValue] of Object.entries(properties)) {
-    if (!isRecord(metaValue)) {
-      return failJson(`字段 ${name} 的定义不是对象`, schema, jsonText);
-    }
-    if (hasUnsupportedKeys(metaValue, FIELD_KEYS)) {
-      return failJson(`字段 ${name} 含有 builder 不支持的扩展配置`, schema, jsonText);
-    }
-    if ("properties" in metaValue || "items" in metaValue) {
-      return failJson(`字段 ${name} 使用了嵌套结构`, schema, jsonText);
-    }
-
-    const fieldMeta = resolveFieldMeta(name, metaValue, { strictUi: true });
-    const defaultState = parseFieldDefaultValue(metaValue, name, {
-      strict: true,
-      kind: fieldMeta.kind,
-      enumValues: fieldMeta.enumValues
-    });
-
-    if ("enum" in metaValue) {
-      if (!Array.isArray(metaValue.enum) || metaValue.enum.some((item) => typeof item !== "string")) {
-        return failJson(`字段 ${name} 的 enum 必须是字符串数组`, schema, jsonText);
-      }
-      if ("type" in metaValue && metaValue.type !== "string") {
-        return failJson(`字段 ${name} 的 enum 仅支持 string 类型`, schema, jsonText);
-      }
-      fields.push({
-        id: createDraftId(),
-        name,
-        title: fieldMeta.label === name ? "" : fieldMeta.label,
-        type: "enum",
-        required: requiredSet.has(name),
-        description: fieldMeta.description ?? "",
-        defaultValue: defaultState.hasDefaultValue ? defaultState.defaultValue : undefined,
-        enumText: metaValue.enum.join(", "),
-        widget: "input",
-        rows: DEFAULT_TEXTAREA_ROWS
-      });
-      continue;
-    }
-
-    if (!fieldMeta.kind || fieldMeta.kind === "enum") {
-      return failJson(`字段 ${name} 的类型不在 builder 支持范围内`, schema, jsonText);
-    }
-
-    fields.push({
-      id: createDraftId(),
-      name,
-      title: fieldMeta.label === name ? "" : fieldMeta.label,
-      type: fieldMeta.kind,
-      required: requiredSet.has(name),
-      description: fieldMeta.description ?? "",
-      defaultValue: defaultState.hasDefaultValue ? defaultState.defaultValue : undefined,
-      enumText: "",
-      widget: fieldMeta.ui.widget ?? "input",
-      rows: fieldMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS
-    });
+  const fields = deserializeFieldDraftsFromProperties(
+    properties, requiredSet, schema, jsonText, 0
+  );
+  if (fields === null) {
+    return failJson("Schema 包含 builder 不支持的复杂嵌套结构", schema, jsonText);
   }
 
   return {
@@ -506,6 +686,83 @@ export function deserializeSchemaJsonText(
   return deserializeSchema(schema, jsonText);
 }
 
+function buildPropertyFromDraft(field: SchemaFieldDraft): Record<string, unknown> | null {
+  const name = field.name.trim();
+  if (!name) return null;
+
+  const title = field.title.trim();
+  const description = field.description.trim();
+
+  if (field.type === "object") {
+    if (!field.children || field.children.length === 0) return null;
+    const childResult = buildSchemaFromDrafts(field.children);
+    if (!childResult) return null;
+    const property: Record<string, unknown> = {
+      type: "object",
+      properties: childResult.properties
+    };
+    if (childResult.required.length > 0) {
+      property.required = childResult.required;
+    }
+    if (title) property.title = title;
+    if (description) property.description = description;
+    return property;
+  }
+
+  if (field.type === "array") {
+    if (!field.items) return null;
+    const itemsProperty = buildPropertyFromDraft(field.items);
+    if (!itemsProperty) return null;
+    const property: Record<string, unknown> = {
+      type: "array",
+      items: itemsProperty
+    };
+    if (title) property.title = title;
+    if (description) property.description = description;
+    return property;
+  }
+
+  const property: Record<string, unknown> = {
+    type: field.type === "enum" ? "string" : field.type
+  };
+  if (title) property.title = title;
+  if (description) property.description = description;
+  if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "") {
+    property.default = field.defaultValue;
+  }
+  if (field.type === "enum") {
+    const enumValues = parseEnumValues(field.enumText);
+    if (enumValues.length > 0) {
+      property.enum = enumValues;
+    }
+  }
+  if (field.type === "string" && field.widget === "textarea") {
+    const ui: Record<string, unknown> = { widget: "textarea" };
+    if (field.rows !== DEFAULT_TEXTAREA_ROWS) {
+      ui.rows = field.rows;
+    }
+    property["x-ui"] = ui;
+  }
+  return property;
+}
+
+function buildSchemaFromDrafts(fields: SchemaFieldDraft[]): {
+  properties: Record<string, unknown>;
+  required: string[];
+} | null {
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  for (const field of fields) {
+    const prop = buildPropertyFromDraft(field);
+    if (!prop) continue;
+    const name = field.name.trim();
+    properties[name] = prop;
+    if (field.required) required.push(name);
+  }
+  return { properties, required };
+}
+
 function buildSchemaFromFields(
   fields: SchemaFieldDraft[],
   options: {
@@ -520,60 +777,14 @@ function buildSchemaFromFields(
     }
   }
 
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-
-  fields.forEach((field) => {
-    const name = field.name.trim();
-    if (!name) {
-      return;
-    }
-    const title = field.title.trim();
-    const description = field.description.trim();
-    const property: Record<string, unknown> = {
-      type: field.type === "enum" ? "string" : field.type
-    };
-
-    if (title) {
-      property.title = title;
-    }
-    if (description) {
-      property.description = description;
-    }
-    if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== "") {
-      property.default = field.defaultValue;
-    }
-    if (field.type === "enum") {
-      const enumValues = parseEnumValues(field.enumText);
-      if (enumValues.length > 0) {
-        property.enum = enumValues;
-      }
-    }
-    if (field.type === "string" && field.widget === "textarea") {
-      const ui: Record<string, unknown> = {
-        widget: "textarea"
-      };
-      if (field.rows !== DEFAULT_TEXTAREA_ROWS) {
-        ui.rows = field.rows;
-      }
-      property["x-ui"] = ui;
-    }
-
-    properties[name] = property;
-    if (field.required) {
-      required.push(name);
-    }
-  });
-
+  const result = buildSchemaFromDrafts(fields);
   const schema: Record<string, unknown> = {
     type: "object",
-    properties
+    properties: result?.properties ?? {}
   };
-
-  if (required.length > 0) {
-    schema.required = required;
+  if (result && result.required.length > 0) {
+    schema.required = result.required;
   }
-
   return schema;
 }
 
@@ -594,25 +805,88 @@ export function serializeSchemaEditorState(
   return buildSchemaFromFields(state.fields, { fieldName, validate: true });
 }
 
-export function resolveSchemaFields(schema?: Record<string, unknown>): {
+function resolveSchemaFieldsRecursive(
+  properties: Record<string, unknown>,
+  requiredFields: Set<string>
+): {
   supportedFields: SchemaFieldDefinition[];
   unsupportedFields: string[];
 } {
-  if (!isRecord(schema)) {
-    return { supportedFields: [], unsupportedFields: [] };
-  }
-
-  const requiredFields = Array.isArray(schema.required)
-    ? new Set(schema.required.filter((item): item is string => typeof item === "string"))
-    : new Set<string>();
-
-  const properties = isRecord(schema.properties) ? schema.properties : {};
   const supportedFields: SchemaFieldDefinition[] = [];
   const unsupportedFields: string[] = [];
 
   Object.entries(properties).forEach(([name, value]) => {
     const meta = isRecord(value) ? value : {};
     const fieldMeta = resolveFieldMeta(name, meta, { strictUi: false });
+
+    if (fieldMeta.kind === "object") {
+      const childProps = fieldMeta.childProperties ?? {};
+      const childRequiredSet = new Set(fieldMeta.childRequired ?? []);
+      const childResult = resolveSchemaFieldsRecursive(childProps, childRequiredSet);
+      supportedFields.push({
+        name,
+        label: fieldMeta.label,
+        kind: "object",
+        required: requiredFields.has(name),
+        description: fieldMeta.description,
+        children: childResult.supportedFields,
+        childRequiredFields: [...childRequiredSet]
+      });
+      unsupportedFields.push(...childResult.unsupportedFields);
+      return;
+    }
+
+    if (fieldMeta.kind === "array") {
+      const itemsSchema = fieldMeta.itemsSchema ?? {};
+      const itemsMeta = resolveFieldMeta("items", itemsSchema, { strictUi: false });
+
+      if (itemsMeta.kind === "object") {
+        const childProps = isRecord(itemsSchema.properties) ? itemsSchema.properties : {};
+        const childRequiredSet = new Set(
+          Array.isArray(itemsSchema.required)
+            ? itemsSchema.required.filter((item): item is string => typeof item === "string")
+            : []
+        );
+        const childResult = resolveSchemaFieldsRecursive(childProps, childRequiredSet);
+        supportedFields.push({
+          name,
+          label: fieldMeta.label,
+          kind: "array",
+          required: requiredFields.has(name),
+          description: fieldMeta.description,
+          items: {
+            name: "items",
+            label: "items",
+            kind: "object",
+            required: false,
+            children: childResult.supportedFields,
+            childRequiredFields: [...childRequiredSet]
+          }
+        });
+        unsupportedFields.push(...childResult.unsupportedFields);
+      } else if (itemsMeta.kind) {
+        supportedFields.push({
+          name,
+          label: fieldMeta.label,
+          kind: "array",
+          required: requiredFields.has(name),
+          description: fieldMeta.description,
+          items: {
+            name: "items",
+            label: itemsMeta.label,
+            kind: itemsMeta.kind,
+            required: false,
+            description: itemsMeta.description,
+            enumValues: itemsMeta.enumValues,
+            widget: itemsMeta.ui.widget,
+            rows: itemsMeta.ui.rows
+          }
+        });
+      } else {
+        unsupportedFields.push(fieldMeta.label);
+      }
+      return;
+    }
 
     if (fieldMeta.kind === "enum") {
       supportedFields.push({
@@ -647,4 +921,20 @@ export function resolveSchemaFields(schema?: Record<string, unknown>): {
   });
 
   return { supportedFields, unsupportedFields };
+}
+
+export function resolveSchemaFields(schema?: Record<string, unknown>): {
+  supportedFields: SchemaFieldDefinition[];
+  unsupportedFields: string[];
+} {
+  if (!isRecord(schema)) {
+    return { supportedFields: [], unsupportedFields: [] };
+  }
+
+  const requiredFields = Array.isArray(schema.required)
+    ? new Set(schema.required.filter((item): item is string => typeof item === "string"))
+    : new Set<string>();
+
+  const properties = isRecord(schema.properties) ? schema.properties : {};
+  return resolveSchemaFieldsRecursive(properties, requiredFields);
 }
