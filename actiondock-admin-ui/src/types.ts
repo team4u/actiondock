@@ -374,6 +374,7 @@ export interface PluginView {
   state: string;
   started: boolean;
   configurable: boolean;
+  fileName?: string;
   actions: PluginAction[];
 }
 

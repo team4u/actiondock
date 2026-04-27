@@ -460,9 +460,22 @@ export function stopPlugin(pluginId: string): Promise<PluginView> {
   });
 }
 
-export function uninstallPlugin(pluginId: string): Promise<void> {
-  return request<void>(`/api/plugins/${pluginId}`, {
+export function uninstallPlugin(pluginId: string, force = false): Promise<void> {
+  return request<void>(`/api/plugins/${pluginId}${force ? "?force=true" : ""}`, {
     method: "DELETE"
+  });
+}
+
+export function downloadPluginJar(pluginId: string): Promise<Blob> {
+  return fetch(`/api/plugins/${encodeURIComponent(pluginId)}/download`, {
+    headers: {
+      ...(getApiKey() ? { Authorization: `Bearer ${getApiKey()}` } : {})
+    }
+  }).then(response => {
+    if (!response.ok) {
+      throw new Error("下载插件文件失败");
+    }
+    return response.blob();
   });
 }
 

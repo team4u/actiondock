@@ -5,6 +5,7 @@ import { PageHeader } from "../components/PageHeader";
 import { AccessTokenManagementPage } from "./AccessTokenManagementPage";
 import { ApiKeySettingsPanel } from "./ApiKeyManagementPage";
 import { ConfigValueManagementPage } from "./ConfigValueManagementPage";
+import { DataBackupPanel } from "./DataBackupPanel";
 import {
   buildSystemSettingsSearch,
   resolveSystemSettingsTab,
@@ -44,6 +45,11 @@ export function SystemSettingsPage() {
             key: "console-token",
             label: "控制台凭证",
             children: <ApiKeySettingsPanel />
+          },
+          {
+            key: "data-backup",
+            label: "数据备份",
+            children: <DataBackupPanel />
           }
         ]}
       />

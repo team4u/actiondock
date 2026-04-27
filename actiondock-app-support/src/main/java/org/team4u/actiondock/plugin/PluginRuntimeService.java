@@ -738,6 +738,7 @@ public class PluginRuntimeService {
                 .setState(state)
                 .setStarted(wrapper != null && wrapper.getPluginState().isStarted())
                 .setConfigurable(!registration.getConfigSchema().isEmpty() || !registration.getDefaultConfig().isEmpty())
+                .setFileName(registration.getFileName())
                 .setActions(registration.getActions().stream()
                         .map(this::toActionView)
                         .toList());

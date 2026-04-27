@@ -19,6 +19,7 @@ public class PluginView {
     private String state;
     private boolean started;
     private boolean configurable;
+    private String fileName;
     private List<PluginActionView> actions = new ArrayList<>();
 
     public String getPluginId() {
@@ -117,6 +118,15 @@ public class PluginView {
 
     public PluginView setActions(List<PluginActionView> actions) {
         this.actions = actions == null ? new ArrayList<>() : new ArrayList<>(actions);
+        return this;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public PluginView setFileName(String fileName) {
+        this.fileName = fileName;
         return this;
     }
 }

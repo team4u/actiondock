@@ -1,5 +1,10 @@
 package org.team4u.actiondock.web;
 
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -54,6 +59,17 @@ public class PluginController {
     @GetMapping("/{pluginId}")
     public ApiResponse<PluginView> get(@PathVariable String pluginId) {
         return ApiResponse.success(pluginRuntimeService.get(pluginId));
+    }
+
+    @GetMapping("/{pluginId}/download")
+    public ResponseEntity<Resource> download(@PathVariable String pluginId) {
+        PluginView plugin = pluginRuntimeService.get(pluginId);
+        byte[] content = pluginRuntimeService.readPluginFile(pluginId);
+        String fileName = plugin.getFileName() != null ? plugin.getFileName() : pluginId + ".jar";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/java-archive"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .body(new ByteArrayResource(content));
     }
 
     /**
@@ -169,14 +185,17 @@ public class PluginController {
      * @return API 响应，无数据
      */
     @DeleteMapping("/{pluginId}")
-    public ApiResponse<Void> uninstall(@PathVariable String pluginId) {
-        List<String> dependentScripts = scriptRepository.findAll().stream()
-                .filter(script -> script.getPluginDependencies().stream()
-                        .anyMatch(dependency -> pluginId.equals(dependency.getPluginId())))
-                .map(script -> script.getId())
-                .toList();
-        if (!dependentScripts.isEmpty()) {
-            throw new IllegalArgumentException("插件仍被工具依赖，不能卸载: " + String.join(", ", dependentScripts));
+    public ApiResponse<Void> uninstall(@PathVariable String pluginId,
+                                       @RequestParam(defaultValue = "false") boolean force) {
+        if (!force) {
+            List<String> dependentScripts = scriptRepository.findAll().stream()
+                    .filter(script -> script.getPluginDependencies().stream()
+                            .anyMatch(dependency -> pluginId.equals(dependency.getPluginId())))
+                    .map(script -> script.getId())
+                    .toList();
+            if (!dependentScripts.isEmpty()) {
+                throw new IllegalArgumentException("插件仍被工具依赖，不能卸载: " + String.join(", ", dependentScripts));
+            }
         }
         pluginRuntimeService.uninstall(pluginId);
         return ApiResponse.success(null, "插件已卸载");
