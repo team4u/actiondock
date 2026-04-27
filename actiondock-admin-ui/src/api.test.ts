@@ -92,4 +92,34 @@ describe("api request auth handling", () => {
     expect(headers.has("Content-Type")).toBe(false);
     expect(headers.get("Authorization")).toBe("Bearer secret-token");
   });
+
+  it("posts Workbench task payloads to the stable endpoint", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        status: 0,
+        msg: "ok",
+        data: {
+          taskType: "GENERATE_SCRIPT",
+          status: "SUCCESS",
+          result: { id: "hello-ai" },
+          agentRunId: "run-1",
+          steps: [],
+          rawOutput: { scriptDraft: { id: "hello-ai" } }
+        }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { generateWorkbenchScript } = await import("./api");
+    await generateWorkbenchScript({ objective: "build", agentProfile: "agent-1" });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/ai/workbench/scripts/generate");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ objective: "build", agentProfile: "agent-1" });
+  });
 });

@@ -7,6 +7,7 @@ import {
   ForkOutlined,
   ImportOutlined,
   MoreOutlined,
+  RobotOutlined,
   RollbackOutlined,
   RocketOutlined,
   SaveOutlined,
@@ -30,7 +31,7 @@ import {
   message
 } from "antd";
 import type { MenuProps } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { executeScript, getExecution } from "../../api";
 import { getApiKey } from "../../auth";
@@ -267,6 +268,19 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     && Boolean(editor.currentScript?.publishedSnapshot)
     && publishDiff.hasChanges;
 
+  useEffect(() => {
+    if (mode !== "create" || searchParams.get("importGenerated") !== "1") {
+      return;
+    }
+    const generated = sessionStorage.getItem("actiondock.workbench.generatedScript");
+    if (!generated) {
+      return;
+    }
+    setGeneratedScriptText(generated);
+    setGeneratedScriptModalOpen(true);
+    sessionStorage.removeItem("actiondock.workbench.generatedScript");
+  }, [mode, searchParams]);
+
   const openPublishConfirm = () => {
     if (!publishDiff.hasChanges && publishDiff.comparisonMode !== "INITIAL") {
       void editor.handlePublish();
@@ -290,6 +304,41 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   const dangerousMoreActionKeys = new Set(["discard-draft", "delete"]);
   const moreMenuItems: MenuProps["items"] = [
+    {
+      key: "ai-generate",
+      icon: <RobotOutlined />,
+      label: "AI 生成脚本",
+      onClick: () => navigate("/ai/workbench?task=generate")
+    },
+    ...(editor.currentScript?.id
+      ? [
+          {
+            key: "ai-improve",
+            icon: <RobotOutlined />,
+            label: "AI 修复脚本",
+            onClick: () => navigate(`/ai/workbench?task=improve&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
+          },
+          {
+            key: "ai-schema",
+            icon: <RobotOutlined />,
+            label: "AI 补全 Schema",
+            onClick: () => navigate(`/ai/workbench?task=schema&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
+          },
+          {
+            key: "ai-review",
+            icon: <RobotOutlined />,
+            label: "AI 发布前 Review",
+            onClick: () => navigate(`/ai/workbench?task=review&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
+          },
+          {
+            key: "ai-release-notes",
+            icon: <RobotOutlined />,
+            label: "AI Release Notes",
+            onClick: () => navigate(`/ai/workbench?task=releaseNotes&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
+          },
+          { type: "divider" as const }
+        ]
+      : [{ type: "divider" as const }]),
     ...(editor.currentScript?.scope === "DEVELOPMENT"
       ? [{
           key: "pull-development",
@@ -462,9 +511,17 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
           <Col className="page-card-actions">
             <Space className="page-card-actions script-editor-page__header-actions" wrap>
               {editor.headerActionModel.showForkOnly && editor.currentScript?.scope === "REPOSITORY" ? (
-                <Button icon={<ForkOutlined />} type="primary" onClick={fork.openForkModal} loading={fork.forkingRepositoryTool}>
-                  创建 Fork
-                </Button>
+                <>
+                  <Dropdown
+                    trigger={["click"]}
+                    menu={{ items: moreMenuItems.filter((item) => String(item?.key ?? "").startsWith("ai-")) }}
+                  >
+                    <Button icon={<RobotOutlined />}>AI Workbench</Button>
+                  </Dropdown>
+                  <Button icon={<ForkOutlined />} type="primary" onClick={fork.openForkModal} loading={fork.forkingRepositoryTool}>
+                    创建 Fork
+                  </Button>
+                </>
               ) : (
                 <>
                   {editor.headerActionModel.showSave ? (

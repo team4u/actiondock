@@ -407,6 +407,7 @@ export function ScheduleManagementPage() {
             execution={drawerExecution}
             title="执行记录"
             showTriggerSource
+            aiDiagnoseTo={`/ai/workbench?task=diagnose&scriptId=${encodeURIComponent(drawerExecution.scriptId)}&executionId=${encodeURIComponent(drawerExecution.id)}`}
           />
         ) : null}
       </Drawer>

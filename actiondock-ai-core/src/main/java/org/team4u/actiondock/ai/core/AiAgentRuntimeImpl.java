@@ -95,13 +95,18 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
                     .setTotalTokens(usage.totalTokens())
                     .setFinishedAt(LocalDateTime.now())
                     .setErrorMessage(result.errorMessage()));
-            return new AiAgentRunResult(runId, result.status(), result.output(), steps, usage, result.errorMessage());
+            return new AiAgentRunResult(runId, result.status() == null ? AiRunStatus.SUCCESS : result.status(), result.output(), steps, usage, result.errorMessage());
         } catch (RuntimeException exception) {
+            Map<String, Object> output = Map.of("errorMessage", exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage());
             runRepository.save(run
                     .setStatus(AiRunStatus.FAILED)
+                    .setOutputSummary(output)
+                    .setTotalModelCalls(0)
+                    .setTotalToolCalls(0)
+                    .setTotalTokens(0)
                     .setFinishedAt(LocalDateTime.now())
                     .setErrorMessage(exception.getMessage()));
-            throw exception;
+            return new AiAgentRunResult(runId, AiRunStatus.FAILED, output, stepRepository.findByRunId(runId), AiUsage.empty(), exception.getMessage());
         }
     }
 
@@ -163,7 +168,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
     private AiAgentRunContext withEffectivePolicy(AiAgentProfile agentProfile, AiAgentRunContext context, String runId) {
         AiCallerType callerType = context == null || context.callerType() == null ? AiCallerType.ADMIN_TEST : context.callerType();
         Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
-        AiToolPermission defaultMax = callerType == AiCallerType.SCRIPT
+        AiToolPermission defaultMax = callerType == AiCallerType.SCRIPT || callerType == AiCallerType.WORKBENCH
                 ? AiToolPermission.PROPOSE_CHANGE
                 : AiToolPermission.CONTROLLED_ACTION;
         Map<String, Object> policy = agentProfile.getPolicy();
@@ -172,7 +177,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
         if (Boolean.TRUE.equals(policy.get("allowDangerousActions")) && callerType != AiCallerType.SCRIPT) {
             effectiveMax = profileMax == AiToolPermission.DANGEROUS_ACTION ? AiToolPermission.DANGEROUS_ACTION : effectiveMax;
         }
-        if (effectiveMax == AiToolPermission.DANGEROUS_ACTION && callerType == AiCallerType.SCRIPT) {
+        if (effectiveMax == AiToolPermission.DANGEROUS_ACTION && (callerType == AiCallerType.SCRIPT || callerType == AiCallerType.WORKBENCH)) {
             effectiveMax = AiToolPermission.PROPOSE_CHANGE;
         }
         metadata.put("maxToolPermission", effectiveMax.name());

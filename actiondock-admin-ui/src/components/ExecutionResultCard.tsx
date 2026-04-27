@@ -1,4 +1,6 @@
+import { RobotOutlined } from "@ant-design/icons";
 import {
+  Button,
   Card,
   Space,
   Tabs,
@@ -6,6 +8,7 @@ import {
   Typography
 } from "antd";
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { ErrorDetailPanel } from "./ErrorDetailPanel";
 import { ExecutionLogPanel } from "./ExecutionLogPanel";
 import { SchemaObjectResultView } from "./SchemaObjectResultView";
@@ -28,6 +31,8 @@ export interface ExecutionResultCardProps {
   pollingExecutionId?: string | null;
   emptyDescription?: string;
   errorTitle?: string;
+  aiDiagnoseTo?: string;
+  onAiDiagnose?: () => void;
 }
 
 function getTriggerSourceLabel(source: string): string {
@@ -66,7 +71,9 @@ export function ExecutionResultCard({
   titleExtra,
   showTriggerSource = false,
   pollingExecutionId,
-  errorTitle = "执行失败"
+  errorTitle = "执行失败",
+  aiDiagnoseTo,
+  onAiDiagnose
 }: ExecutionResultCardProps) {
   const inputValue = inputOverride ?? (hasInput(execution) ? execution.input : undefined);
   const hasOutputSchema = Boolean(outputSchema && Object.keys(outputSchema).length > 0);
@@ -131,6 +138,16 @@ export function ExecutionResultCard({
           message={execution.errorMessage}
           detail={execution.errorDetail}
         />
+
+        {execution.status === "FAILED" && (aiDiagnoseTo || onAiDiagnose) ? (
+          aiDiagnoseTo ? (
+            <Link to={aiDiagnoseTo}>
+              <Button icon={<RobotOutlined />}>AI 诊断</Button>
+            </Link>
+          ) : (
+            <Button icon={<RobotOutlined />} onClick={onAiDiagnose}>AI 诊断</Button>
+          )
+        ) : null}
 
         <Tabs
           defaultActiveKey="output"

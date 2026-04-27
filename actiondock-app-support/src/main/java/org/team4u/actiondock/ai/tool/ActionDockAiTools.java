@@ -60,26 +60,38 @@ public final class ActionDockAiTools {
                         objectSchema(Map.of("scriptId", stringSchema())),
                         objectSchema(Map.of("publishedSnapshot", Map.of("type", "object"))),
                         (input, context) -> publishedSnapshot(scriptRepository, string(input.get("scriptId")))),
+                tool("propose_script_draft", "生成新脚本草稿提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
+                        objectSchema(Map.of("id", stringSchema(), "name", stringSchema(), "type", stringSchema(), "source", stringSchema(), "inputSchema", Map.of("type", "object"), "outputSchema", Map.of("type", "object"), "rationale", stringSchema())),
+                        objectSchema(Map.of("scriptDraft", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
+                        (input, context) -> proposal("SCRIPT_DRAFT", "scriptDraft", input)),
                 tool("propose_script_patch", "生成脚本源码修改提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
                         objectSchema(Map.of("scriptId", stringSchema(), "patch", stringSchema(), "rationale", stringSchema())),
-                        objectSchema(Map.of("proposal", Map.of("type", "object"))),
-                        (input, context) -> proposal("SCRIPT_PATCH", input)),
+                        objectSchema(Map.of("scriptPatch", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
+                        (input, context) -> proposal("SCRIPT_PATCH", "scriptPatch", input)),
                 tool("propose_schema_patch", "生成 Schema 修改提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
                         objectSchema(Map.of("scriptId", stringSchema(), "inputSchemaPatch", Map.of("type", "object"), "outputSchemaPatch", Map.of("type", "object"), "rationale", stringSchema())),
-                        objectSchema(Map.of("proposal", Map.of("type", "object"))),
-                        (input, context) -> proposal("SCHEMA_PATCH", input)),
+                        objectSchema(Map.of("schemaPatch", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
+                        (input, context) -> proposal("SCHEMA_PATCH", "schemaPatch", input)),
+                tool("propose_execution_diagnosis", "生成执行失败诊断提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
+                        objectSchema(Map.of("executionId", stringSchema(), "rootCause", stringSchema(), "evidence", Map.of("type", "array"), "suggestedFix", stringSchema(), "risk", stringSchema(), "nextSteps", Map.of("type", "array"))),
+                        objectSchema(Map.of("executionDiagnosis", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
+                        (input, context) -> proposal("EXECUTION_DIAGNOSIS", "executionDiagnosis", input)),
                 tool("propose_execution_fix", "生成执行失败修复建议，不直接保存", AiToolPermission.PROPOSE_CHANGE,
                         objectSchema(Map.of("executionId", stringSchema(), "suggestion", stringSchema(), "rationale", stringSchema())),
-                        objectSchema(Map.of("proposal", Map.of("type", "object"))),
-                        (input, context) -> proposal("EXECUTION_FIX", input)),
+                        objectSchema(Map.of("executionDiagnosis", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
+                        (input, context) -> proposal("EXECUTION_FIX", "executionDiagnosis", input)),
+                tool("propose_publish_review", "生成发布前 Review 提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
+                        objectSchema(Map.of("scriptId", stringSchema(), "summary", stringSchema(), "findings", Map.of("type", "array"), "riskLevel", stringSchema(), "recommendation", stringSchema())),
+                        objectSchema(Map.of("publishReview", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
+                        (input, context) -> proposal("PUBLISH_REVIEW", "publishReview", input)),
                 tool("propose_release_notes", "生成发布说明提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
                         objectSchema(Map.of("scriptId", stringSchema(), "notes", stringSchema())),
-                        objectSchema(Map.of("proposal", Map.of("type", "object"))),
-                        (input, context) -> proposal("RELEASE_NOTES", input)),
+                        objectSchema(Map.of("releaseNotes", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
+                        (input, context) -> proposal("RELEASE_NOTES", "releaseNotes", input)),
                 tool("propose_input_example", "生成输入样例提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
                         objectSchema(Map.of("scriptId", stringSchema(), "example", Map.of("type", "object"), "rationale", stringSchema())),
                         objectSchema(Map.of("proposal", Map.of("type", "object"))),
-                        (input, context) -> proposal("INPUT_EXAMPLE", input))
+                        (input, context) -> proposal("INPUT_EXAMPLE", "inputExample", input))
         );
     }
 
@@ -158,15 +170,20 @@ public final class ActionDockAiTools {
         return values;
     }
 
-    private static Map<String, Object> proposal(String type, Map<String, Object> input) {
-        return Map.of(
-                "proposal", Map.of(
-                        "type", type,
-                        "payload", input,
-                        "createdAt", LocalDateTime.now().toString(),
-                        "applied", false
-                )
+    private static Map<String, Object> proposal(String type, String resultKey, Map<String, Object> input) {
+        Map<String, Object> payload = input == null ? Map.of() : new java.util.LinkedHashMap<>(input);
+        Map<String, Object> proposal = Map.of(
+                "type", type,
+                "payload", payload,
+                "resultKey", resultKey,
+                resultKey, payload,
+                "createdAt", LocalDateTime.now().toString(),
+                "applied", false
         );
+        Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put(resultKey, payload);
+        values.put("proposal", proposal);
+        return values;
     }
 
     private static ScriptDefinition requireScript(ScriptRepository repository, String scriptId) {

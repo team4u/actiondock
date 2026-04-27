@@ -269,6 +269,7 @@ export function ScriptExecutionTab({
                       inputSchema={currentScript?.inputSchema}
                       outputSchema={currentScript?.outputSchema}
                       showTriggerSource={true}
+                      aiDiagnoseTo={`/ai/workbench?task=diagnose&scriptId=${encodeURIComponent(currentExecution.scriptId)}&executionId=${encodeURIComponent(currentExecution.id)}`}
                       headerActions={
                         <Button
                           icon={<HistoryOutlined />}

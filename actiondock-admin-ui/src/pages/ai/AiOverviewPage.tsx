@@ -1,5 +1,7 @@
-import { Card, Col, Row, Space, Statistic, Table, Typography } from "antd";
+import { Button, Card, Col, Row, Space, Statistic, Table, Typography } from "antd";
+import { ExperimentOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { listAiAgents, listAiModels, listAiRuns, listAiTools } from "../../api";
 import { PageHeader } from "../../components/PageHeader";
 import { AiRunStatusTag } from "../../components/ai/AiTags";
@@ -7,6 +9,7 @@ import type { AiAgentProfile, AiAgentRunRecord, AiModelProfile, AiTool } from ".
 import { formatDateTime } from "../../utils";
 
 export function AiOverviewPage() {
+  const navigate = useNavigate();
   const [models, setModels] = useState<AiModelProfile[]>([]);
   const [agents, setAgents] = useState<AiAgentProfile[]>([]);
   const [tools, setTools] = useState<AiTool[]>([]);
@@ -23,7 +26,11 @@ export function AiOverviewPage() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <PageHeader title="AI 能力" meta="模型 Profile、Agent Profile、工具集和运行记录" />
+      <PageHeader
+        title="AI 能力"
+        meta="模型 Profile、Agent Profile、工具集和运行记录"
+        actions={<Button type="primary" icon={<ExperimentOutlined />} onClick={() => navigate("/ai/workbench")}>Workbench</Button>}
+      />
       <Row gutter={[12, 12]}>
         <Col xs={12} md={6}><Card><Statistic title="启用模型" value={models.filter((item) => item.enabled).length} /></Card></Col>
         <Col xs={12} md={6}><Card><Statistic title="启用 Agent" value={agents.filter((item) => item.enabled).length} /></Card></Col>
