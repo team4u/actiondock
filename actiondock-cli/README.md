@@ -13,6 +13,30 @@ ActionDock 官方薄封装 CLI：
 mvn -pl actiondock-cli -am package
 ```
 
+## jDeploy 打包与发布
+
+在 `actiondock-cli/` 模块目录执行：
+
+```bash
+cd actiondock-cli
+mvn -DskipTests package
+npx jdeploy package
+npm pack --dry-run
+```
+
+首次上传前需要先登录 npm：
+
+```bash
+npm login
+npx jdeploy publish
+```
+
+发布后的全局命令名为：
+
+```bash
+actiondock --help
+```
+
 ## 连接配置
 
 配置优先级（高到低）：命令行 flag > 环境变量 > 本地 profile
@@ -27,8 +51,8 @@ mvn -pl actiondock-cli -am package
 
 ## 命令总览
 
-```
-actiondock-cli <command> <subcommand> [options]
+```bash
+actiondock <command> <subcommand> [options]
 ```
 
 | 命令 | 说明 |
@@ -39,7 +63,10 @@ actiondock-cli <command> <subcommand> [options]
 | [schedules](#schedules-定时任务) | 定时任务的查询和维护 |
 | [plugins](#plugins-插件管理) | 插件的安装、生命周期和调用 |
 | [config-values](#config-values-全局配置值) | 服务端全局配置值管理 |
+| [access-tokens](#access-tokens-访问令牌) | 访问令牌的创建、启停和删除 |
 | [repositories](#repositories-仓库和工具库) | 仓库、仓库工具和仓库插件管理 |
+| [presets](#presets-执行参数预设) | 脚本执行参数预设管理 |
+| [ai](#ai-ai-工作台和运行) | 模型、Agent、Toolset、AI Tool、Run 和 Workbench |
 | [discover](#discover-agent-发现入口) | 输出机器可读的 CLI 能力树和推荐 Agent 流程 |
 
 ---
@@ -146,7 +173,7 @@ java -jar actiondock-cli.jar scripts schema --help-json
 
 两者互斥，同时使用会返回 `status=2` 和 `error.code=MUTUALLY_EXCLUSIVE_OPTIONS`。
 
-该能力覆盖 `scripts`、`executions`、`schedules`、`plugins`、`config-values`、`repositories` 下的 REST 写操作；`config profile set/delete` 是本地配置文件写入，不属于 REST 写操作。
+该能力覆盖 `scripts`、`executions`、`schedules`、`plugins`、`config-values`、`repositories`、`access-tokens`、`ai` 下的 REST 写操作；`config profile set/delete` 是本地配置文件写入，不属于 REST 写操作。
 
 示例：
 
@@ -186,6 +213,7 @@ java -jar actiondock-cli.jar executions submit \
 ```
 
 Multipart 命令（如 `plugins install --jar`）的 dry-run 只输出文件名和大小，不输出文件内容。
+下载命令（如 `plugins download --output demo.jar`）的 dry-run 只输出请求信息和目标文件路径，不会写本地文件。
 
 ### discover Agent 发现入口
 
@@ -747,6 +775,13 @@ java -jar actiondock-cli.jar config-values delete openai.api_key
 java -jar actiondock-cli.jar config-values delete openai.api_key --dry-run
 ```
 
+### config-values copy-local-override / restore-repository-default
+
+```bash
+java -jar actiondock-cli.jar config-values copy-local-override managed.key
+java -jar actiondock-cli.jar config-values restore-repository-default managed.key
+```
+
 配置值 JSON 示例：
 
 ```json
@@ -890,6 +925,14 @@ java -jar actiondock-cli.jar repositories plugins publish repo-main --file publi
 
 ## plugins 插件管理
 
+### plugins references / download
+
+```bash
+java -jar actiondock-cli.jar plugins references
+java -jar actiondock-cli.jar plugins download <pluginId> --output demo-plugin.jar
+java -jar actiondock-cli.jar plugins download <pluginId> --output demo-plugin.jar --dry-run
+```
+
 ### plugins list
 
 列出已安装插件。
@@ -951,6 +994,7 @@ java -jar actiondock-cli.jar plugins stop <pluginId> --dry-run
 
 ```bash
 java -jar actiondock-cli.jar plugins delete <pluginId>
+java -jar actiondock-cli.jar plugins delete <pluginId> --force
 java -jar actiondock-cli.jar plugins delete <pluginId> --dry-run
 ```
 
@@ -1080,6 +1124,46 @@ java -jar actiondock-cli.jar plugins config set <pluginId> --file config.json --
     "settingKey": "settingValue"
   }
 }
+```
+
+---
+
+## access-tokens 访问令牌
+
+```bash
+java -jar actiondock-cli.jar access-tokens list
+java -jar actiondock-cli.jar access-tokens create --name "CI token"
+java -jar actiondock-cli.jar access-tokens rename <tokenId> --name "Bot token"
+java -jar actiondock-cli.jar access-tokens enable <tokenId>
+java -jar actiondock-cli.jar access-tokens disable <tokenId>
+java -jar actiondock-cli.jar access-tokens delete <tokenId>
+```
+
+---
+
+## presets 执行参数预设
+
+```bash
+java -jar actiondock-cli.jar presets list <scriptId>
+java -jar actiondock-cli.jar presets create <scriptId> --file preset.json
+java -jar actiondock-cli.jar presets update <scriptId> <presetId> --file preset.json
+java -jar actiondock-cli.jar presets delete <scriptId> <presetId>
+```
+
+---
+
+## ai AI 工作台和运行
+
+```bash
+java -jar actiondock-cli.jar ai models list
+java -jar actiondock-cli.jar ai models test <modelId> --file chat-request.json
+java -jar actiondock-cli.jar ai agents run --file run-request.json
+java -jar actiondock-cli.jar ai runs submit --file run-request.json --wait
+java -jar actiondock-cli.jar ai tools test <toolName> --file tool-input.json
+java -jar actiondock-cli.jar ai workbench generate-script --file workbench.json
+java -jar actiondock-cli.jar ai chat --file chat-request.json
+java -jar actiondock-cli.jar ai structured --file structured-request.json
+java -jar actiondock-cli.jar ai embed --file embed-request.json
 ```
 
 ---

@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -59,6 +60,46 @@ class ActionDockCommandIntegrationTest {
         assertThat(requestRef.get().headers().getFirst("Authorization")).isEqualTo("Bearer test-token");
         assertThat(result.stderr()).isBlank();
         assertThat(parseJson(result.stdout()).path("data")).hasSize(1);
+    }
+
+    @Test
+    void updateNoticePrintsToStderrWithoutChangingJsonStdout() throws Exception {
+        server = new TestServer();
+        server.register("GET", "/api/scripts", request -> Response.json(200, """
+                {"status":0,"msg":"Success","data":[{"id":"hello"}]}
+                """));
+
+        ExecutionResult result = execute(
+                Optional.of("A newer ActionDock CLI is available: 0.2.1 (current 0.2.0). Run: npm i -g actiondock-cli@latest"),
+                "scripts", "list"
+        );
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(parseJson(result.stdout()).path("data")).hasSize(1);
+        assertThat(result.stderr()).contains("A newer ActionDock CLI is available");
+    }
+
+    @Test
+    void helpJsonDoesNotPrintUpdateNotice() throws Exception {
+        ExecutionResult result = execute(
+                Optional.of("A newer ActionDock CLI is available"),
+                "scripts", "list", "--help-json"
+        );
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(parseJson(result.stdout()).path("status").asInt()).isEqualTo(0);
+        assertThat(result.stderr()).isBlank();
+    }
+
+    @Test
+    void validationErrorsDoNotPrintUpdateNotice() throws Exception {
+        ExecutionResult result = execute(
+                Optional.of("A newer ActionDock CLI is available"),
+                "executions", "submit"
+        );
+
+        assertThat(result.exitCode()).isEqualTo(CliException.EXIT_VALIDATION);
+        assertThat(result.stderr()).doesNotContain("A newer ActionDock CLI is available");
     }
 
     @Test
@@ -353,6 +394,71 @@ class ActionDockCommandIntegrationTest {
     }
 
     @Test
+    void accessTokensCreateUsesExpectedEndpoint() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> requestRef = new AtomicReference<>();
+        server.register("POST", "/api/access-tokens", request -> {
+            requestRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"created","data":{"id":"token-1","name":"CI token"}}
+                    """);
+        });
+
+        ExecutionResult result = execute("access-tokens", "create", "--name", "CI token");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(parseJson(requestRef.get().body()).path("name").asText()).isEqualTo("CI token");
+    }
+
+    @Test
+    void aiRunsSubmitWaitPollsUntilRunLeavesRunningState() throws Exception {
+        server = new TestServer();
+        AtomicReference<CapturedRequest> submitRef = new AtomicReference<>();
+        AtomicInteger pollCount = new AtomicInteger();
+        server.register("POST", "/api/ai/agents/runs", request -> {
+            submitRef.set(request);
+            return Response.json(200, """
+                    {"status":0,"msg":"Accepted","data":{"runId":"run-1","status":"RUNNING"}}
+                    """);
+        });
+        server.register("GET", "/api/ai/agents/runs/run-1", request -> {
+            int current = pollCount.incrementAndGet();
+            if (current == 1) {
+                return Response.json(200, """
+                        {"status":0,"msg":"Success","data":{"id":"run-1","status":"RUNNING"}}
+                        """);
+            }
+            return Response.json(200, """
+                    {"status":0,"msg":"Success","data":{"id":"run-1","status":"WAITING_APPROVAL","outputSummary":{"next":"approve"}}}
+                    """);
+        });
+        Path requestFile = tempHome.resolve("run-request.json");
+        Files.writeString(requestFile, """
+                {"agentProfile":"support-agent","messages":[{"role":"user","content":"summarize"}],"input":{},"options":{}}
+                """);
+
+        ExecutionResult result = execute("ai", "runs", "submit", "--file", requestFile.toString(), "--wait", "--poll-interval-ms", "0");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(parseJson(submitRef.get().body()).path("agentProfile").asText()).isEqualTo("support-agent");
+        assertThat(parseJson(result.stdout()).path("data").path("status").asText()).isEqualTo("WAITING_APPROVAL");
+        assertThat(pollCount.get()).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void pluginsDownloadWritesResponseBodyToOutputFile() throws Exception {
+        server = new TestServer();
+        server.register("GET", "/api/plugins/demo/download", request -> new Response(200, "application/java-archive", "jar-binary"));
+        Path outputFile = tempHome.resolve("downloads/demo.jar");
+
+        ExecutionResult result = execute("plugins", "download", "demo", "--output", outputFile.toString());
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(Files.readString(outputFile)).isEqualTo("jar-binary");
+        assertThat(parseJson(result.stdout()).path("data").path("path").asText()).isEqualTo(outputFile.toString());
+    }
+
+    @Test
     void pluginsRepositoryCompatibilityEntryIsNotRegistered() throws Exception {
         ExecutionResult result = execute("plugins", "repository", "get", "repo-main", "demo-plugin");
 
@@ -536,8 +642,11 @@ class ActionDockCommandIntegrationTest {
         assertThat(data.path("schemaVersion").asText()).isEqualTo("actiondock.cli.discover.v1");
         assertThat(data.path("agentFeatures").toString()).contains("--help-json");
         assertThat(data.path("commands").toString()).contains("executions");
+        assertThat(data.path("commands").toString()).contains("access-tokens");
+        assertThat(data.path("commands").toString()).contains("ai");
         assertThat(data.path("commands").toString()).doesNotContain("plugins repository");
         assertThat(data.path("recommendedFlows").toString()).contains("execute script safely");
+        assertThat(data.path("recommendedFlows").toString()).contains("submit agent run safely");
     }
 
     @Test
@@ -553,6 +662,19 @@ class ActionDockCommandIntegrationTest {
         assertThat(data.path("constraints").toString()).contains("--file is mutually exclusive");
         assertThat(data.path("inputShapes").path("file").path("scriptId").asText()).isEqualTo("hello");
         assertThat(data.path("exitCodes").path("2").asText()).isEqualTo("validation error");
+    }
+
+    @Test
+    void helpJsonIncludesAiRunContractDetails() throws Exception {
+        ExecutionResult result = execute("ai", "runs", "submit", "--help-json");
+
+        assertThat(result.exitCode()).isEqualTo(0);
+        JsonNode data = parseJson(result.stdout()).path("data");
+        assertThat(data.path("command").asText()).isEqualTo("actiondock ai runs submit");
+        assertThat(data.path("constraints").toString()).contains("RUNNING state");
+        assertThat(data.path("options").toString()).contains("--wait");
+        assertThat(data.path("inputShapes").path("file").path("agentProfile").asText()).isEqualTo("support-agent");
+        assertThat(data.path("supports").path("dryRun").asBoolean()).isTrue();
     }
 
     @Test
@@ -625,6 +747,10 @@ class ActionDockCommandIntegrationTest {
     }
 
     private ExecutionResult execute(String... args) throws Exception {
+        return execute(Optional.empty(), args);
+    }
+
+    private ExecutionResult execute(Optional<String> updateNotice, String... args) throws Exception {
         ByteArrayOutputStream stdoutBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream stderrBytes = new ByteArrayOutputStream();
         PrintStream stdout = new PrintStream(stdoutBytes, true, StandardCharsets.UTF_8);
@@ -638,7 +764,13 @@ class ActionDockCommandIntegrationTest {
                 stderr,
                 millis -> {
                 },
-                ActionDockApiClient::new
+                ActionDockApiClient::new,
+                () -> updateNotice.map(message -> new org.team4u.actiondock.update.UpdateNotificationService.UpdateNotification(
+                        "ActionDock CLI",
+                        "0.2.0",
+                        "0.2.1",
+                        "npm i -g actiondock-cli@latest"
+                ))
         );
         ActionDockCommand root = new ActionDockCommand(services);
         writeDefaultProfile(tempHome, server == null ? "http://localhost:8080" : server.baseUrl());

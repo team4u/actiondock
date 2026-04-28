@@ -20,6 +20,8 @@ import java.util.concurrent.Callable;
         ConfigValuesCommands.GetConfigValue.class,
         ConfigValuesCommands.CreateConfigValue.class,
         ConfigValuesCommands.UpdateConfigValue.class,
+        ConfigValuesCommands.CopyLocalOverride.class,
+        ConfigValuesCommands.RestoreRepositoryDefault.class,
         ConfigValuesCommands.DeleteConfigValue.class
 })
 class ConfigValuesCommands implements Runnable {
@@ -158,6 +160,54 @@ class ConfigValuesCommands implements Runnable {
             return parent.root().submitRequest(
                     CliRequest.delete("/api/config-values/" + parent.root().encodePath(key), Map.of()),
                     AgentExecutionOptions.of(dryRun, validateOnly, "actiondock config-values delete")
+            );
+        }
+    }
+
+    @Command(name = "copy-local-override", mixinStandardHelpOptions = true, description = "Copy a managed config value into a local override.")
+    static class CopyLocalOverride implements Callable<Integer> {
+        @ParentCommand
+        ConfigValuesCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<key>", description = "Config key.")
+        String key;
+
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without copying.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            return root.submitRequest(
+                    CliRequest.postJson("/api/config-values/" + root.encodePath(key) + "/copy-local-override", Map.of(), "{}"),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock config-values copy-local-override")
+            );
+        }
+    }
+
+    @Command(name = "restore-repository-default", mixinStandardHelpOptions = true, description = "Restore a managed config value back to its repository default.")
+    static class RestoreRepositoryDefault implements Callable<Integer> {
+        @ParentCommand
+        ConfigValuesCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<key>", description = "Config key.")
+        String key;
+
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without restoring.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            return root.submitRequest(
+                    CliRequest.postJson("/api/config-values/" + root.encodePath(key) + "/restore-repository-default", Map.of(), "{}"),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock config-values restore-repository-default")
             );
         }
     }

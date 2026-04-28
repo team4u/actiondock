@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -100,6 +101,33 @@ public final class ActionDockApiClient {
         LinkedMultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add(fieldName, new NamedByteArrayResource(file.getFileName().toString(), content));
         return exchange(HttpMethod.POST, path, queryParams, null, body);
+    }
+
+    public void downloadToFile(String path, Map<String, ?> queryParams, Path outputFile) {
+        try {
+            BinaryResponse response = download(path, queryParams);
+            if (response.httpStatus() >= 200 && response.httpStatus() < 300) {
+                Path parent = outputFile.getParent();
+                if (parent != null) {
+                    Files.createDirectories(parent);
+                }
+                Files.write(outputFile, response.body());
+                return;
+            }
+            JsonNode parsed = parse(new String(response.body(), StandardCharsets.UTF_8));
+            if (parsed != null) {
+                throw CliException.fromServer(CliException.EXIT_BUSINESS, "Server returned an error", parsed);
+            }
+            throw CliException.transport(
+                    output,
+                    "HTTP request failed",
+                    objectMapper.valueToTree(Map.of("httpStatus", response.httpStatus()))
+            );
+        } catch (CliException exception) {
+            throw exception;
+        } catch (IOException | RestClientException exception) {
+            throw CliException.transport(output, "Failed to download file: " + exception.getMessage());
+        }
     }
 
     private RestClient createClient(CliConfigService.ResolvedConnectionConfig config) {
@@ -195,6 +223,18 @@ public final class ActionDockApiClient {
         ));
     }
 
+    private BinaryResponse download(String path, Map<String, ?> queryParams) {
+        RestClient.RequestHeadersSpec<?> requestSpec = restClient.get().uri(uriBuilder -> {
+            uriBuilder.path(path);
+            applyQueryParams(uriBuilder, queryParams);
+            return uriBuilder.build();
+        });
+        return requestSpec.exchange((request, response) -> new BinaryResponse(
+                response.getStatusCode().value(),
+                response.getBody() == null ? new byte[0] : StreamUtils.copyToByteArray(response.getBody())
+        ));
+    }
+
     private void applyQueryParams(org.springframework.web.util.UriBuilder uriBuilder, Map<String, ?> queryParams) {
         if (queryParams == null) {
             return;
@@ -225,6 +265,9 @@ public final class ActionDockApiClient {
     }
 
     private record ResponsePayload(int httpStatus, String body) {
+    }
+
+    private record BinaryResponse(int httpStatus, byte[] body) {
     }
 
     private static final class NamedByteArrayResource extends ByteArrayResource {

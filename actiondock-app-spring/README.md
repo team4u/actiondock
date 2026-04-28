@@ -51,6 +51,8 @@ npm run dev
 | `/api/access-tokens` | 访问令牌管理 |
 | `/api/ai` | 模型、Agent、Toolset、AI Tool、Agent Run 和调用日志 |
 | `/api/ai/workbench` | 脚本生成、改进、诊断、评审等工作台能力 |
+| `/api/schema` | 脚本输入/输出 Schema 摘要 |
+| `/api/installed-tools` | 已安装仓库工具卸载入口 |
 
 ## 管理台与静态资源
 

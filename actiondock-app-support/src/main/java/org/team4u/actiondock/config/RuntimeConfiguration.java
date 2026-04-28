@@ -301,7 +301,8 @@ public class RuntimeConfiguration {
                                                                           ScriptScheduleRepository scriptScheduleRepository,
                                                                           PluginRegistryRepository pluginRegistryRepository,
                                                                           PluginRuntimeService pluginRuntimeService,
-                                                                          RepositoryCatalogService repositoryCatalogService) {
+                                                                          RepositoryCatalogService repositoryCatalogService,
+                                                                          AiModelProfileRepository aiModelProfileRepository) {
         return new ConfigValueUsageAnalysisService(
                 configValueRepository,
                 scriptRepository,
@@ -311,7 +312,8 @@ public class RuntimeConfiguration {
                 repositoryCatalogService::listRepositories,
                 repositoryCatalogService::listRepositoryTools,
                 repositoryCatalogService::listAllRepositoryTools,
-                repositoryCatalogService::getRepositoryTool
+                repositoryCatalogService::getRepositoryTool,
+                aiModelProfileRepository::findAll
         );
     }
 }

@@ -36,6 +36,12 @@ final class CliRequestPreview {
         node.put("method", request.method());
         node.put("path", request.path());
         node.set("query", objectMapper.valueToTree(request.query() == null ? Map.of() : request.query()));
+        if (request.downloadTarget() != null) {
+            node.put("contentType", "application/octet-stream");
+            node.putNull("body");
+            node.set("download", objectMapper.valueToTree(Map.of("outputFile", request.downloadTarget().outputFile().toString())));
+            return node;
+        }
         if (request.multipartBody() != null) {
             node.put("contentType", "multipart/form-data");
             Map<String, Object> multipart = new LinkedHashMap<>();

@@ -9,8 +9,10 @@ import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -18,7 +20,7 @@ import java.util.concurrent.Callable;
 /**
  * CLI 根命令，提供全局连接配置和通用工具方法。
  * <p>
- * 包含 scripts、executions、plugins、schedules、config、config-values、repositories 等子命令组。
+ * 包含 scripts、executions、plugins、schedules、config、config-values、repositories、access-tokens、ai 等子命令组。
  *
  * @author jay.wu
  */
@@ -40,7 +42,9 @@ import java.util.concurrent.Callable;
                 SchedulesCommands.class,
                 ConfigValuesCommands.class,
                 RepositoriesCommands.class,
-                PresetsCommands.class
+                PresetsCommands.class,
+                AccessTokenCommands.class,
+                AiCommands.class
         }
 )
 public class ActionDockCommand implements Runnable {
@@ -220,6 +224,10 @@ public class ActionDockCommand implements Runnable {
 
     JsonNode executeRequest(CliRequest request) {
         ActionDockApiClient client = apiClient();
+        if (request.downloadTarget() != null) {
+            client.downloadToFile(request.path(), request.query(), request.downloadTarget().outputFile());
+            return output.success(objectMapper().valueToTree(Map.of("path", request.downloadTarget().outputFile().toString())), "Downloaded");
+        }
         return switch (request.method()) {
             case "GET" -> client.get(request.path(), request.query());
             case "DELETE" -> client.delete(request.path(), request.query());
@@ -319,8 +327,72 @@ public class ActionDockCommand implements Runnable {
         );
     }
 
+    JsonNode waitForAgentRun(ActionDockApiClient client,
+                             JsonNode initialEnvelope,
+                             long waitTimeoutSeconds,
+                             long pollIntervalMs) {
+        JsonNode initialData = initialEnvelope.path("data");
+        String runId = textValue(initialData.path("runId"));
+        if (runId == null) {
+            runId = textValue(initialData.path("id"));
+        }
+        if (runId == null) {
+            throw CliException.business(output, "Server response did not include runId");
+        }
+        String currentStatus = textValue(initialData.path("status"));
+        if (isAgentRunWaitStopStatus(currentStatus)) {
+            return initialEnvelope;
+        }
+
+        long deadline = System.nanoTime() + Duration.ofSeconds(waitTimeoutSeconds).toNanos();
+        JsonNode lastEnvelope = initialEnvelope;
+        while (System.nanoTime() <= deadline) {
+            try {
+                services.sleeper().sleep(pollIntervalMs);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw CliException.transport(output, "Interrupted while waiting for agent run result");
+            }
+            lastEnvelope = client.get("/api/ai/agents/runs/" + encodePath(runId), Map.of());
+            currentStatus = textValue(lastEnvelope.path("data").path("status"));
+            if (isAgentRunWaitStopStatus(currentStatus)) {
+                return lastEnvelope;
+            }
+        }
+
+        throw CliException.timeout(
+                output,
+                "Timed out while waiting for agent run result",
+                objectMapper().valueToTree(Map.of(
+                        "runId", runId,
+                        "lastStatus", currentStatus,
+                        "timeoutSeconds", waitTimeoutSeconds
+                )),
+                CliErrorDetails.timeout(output, "actiondock ai runs submit", java.util.List.of(
+                        "actiondock ai runs get " + runId,
+                        "actiondock ai runs submit --file request.json --wait --wait-timeout-seconds " + Math.max(waitTimeoutSeconds * 2, waitTimeoutSeconds + 1)
+                ))
+        );
+    }
+
+    int downloadRequest(CliRequest request, Path outputFile, AgentExecutionOptions options) {
+        options.validate(output);
+        if (options.validateOnly()) {
+            return emitLocalSuccess(CliRequestPreview.validation(objectMapper(), options.command()), "Validation passed");
+        }
+        if (options.dryRun()) {
+            return emitLocalSuccess(CliRequestPreview.dryRun(objectMapper(), request, Map.of("outputFile", outputFile.toString())), "Dry run");
+        }
+        JsonNode response = executeRequest(request);
+        return emit(response);
+    }
+
     private boolean isTerminalStatus(String status) {
         return status == null || (!"PENDING".equals(status) && !"RUNNING".equals(status));
+    }
+
+    private boolean isAgentRunWaitStopStatus(String status) {
+        return status == null || !"RUNNING".equals(status);
     }
 
     private String textValue(JsonNode node) {

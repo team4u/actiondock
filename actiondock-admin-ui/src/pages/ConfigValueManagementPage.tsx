@@ -561,7 +561,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
       width: 260,
       render: (value: string, record) => (
         <TableLinkCell onClick={() => void openDetail(record.key)}>
-          <Text code>{value}</Text>
+          {value}
         </TableLinkCell>
       )
     },
@@ -903,7 +903,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
               )}
             </Card>
 
-            <Card size="small" title={`其他使用方 (${detail.usage.scheduleReferences.length + detail.usage.pluginConfigReferences.length + detail.usage.configReferences.length})`}>
+            <Card size="small" title={`其他使用方 (${detail.usage.scheduleReferences.length + detail.usage.pluginConfigReferences.length + detail.usage.configReferences.length + detail.usage.modelReferences.length})`}>
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
                 <div>
                   <Text strong>定时任务 ({detail.usage.scheduleReferences.length})</Text>
@@ -951,6 +951,26 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                           <Space direction="vertical" size={2}>
                             <Text code>{item.key}</Text>
                             {item.description ? <Text type="secondary">{item.description}</Text> : null}
+                          </Space>
+                        </List.Item>
+                      )}
+                    />
+                  )}
+                </div>
+                <div>
+                  <Text strong>模型引用 ({detail.usage.modelReferences.length})</Text>
+                  {detail.usage.modelReferences.length === 0 ? (
+                    <div><Text type="secondary">无</Text></div>
+                  ) : (
+                    <List
+                      size="small"
+                      dataSource={detail.usage.modelReferences}
+                      renderItem={(item) => (
+                        <List.Item>
+                          <Space>
+                            <Text>{item.modelName}</Text>
+                            {item.modelProvider ? <Tag>{item.modelProvider}</Tag> : null}
+                            <Tag color="blue">{item.referenceType === "apiKeyConfigKey" ? "API Key" : "默认选项"}</Tag>
                           </Space>
                         </List.Item>
                       )}

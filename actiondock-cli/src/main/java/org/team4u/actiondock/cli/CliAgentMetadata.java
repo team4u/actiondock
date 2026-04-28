@@ -58,6 +58,23 @@ final class CliAgentMetadata {
                 "actiondock repositories tools install <repositoryId> <toolId> --dry-run",
                 "actiondock repositories tools install <repositoryId> <toolId>"
         ));
+        appendFlow(flows, "test model safely", List.of(
+                "actiondock ai models get <modelId>",
+                "actiondock ai models test <modelId> --file chat-request.json --validate-only",
+                "actiondock ai models test <modelId> --file chat-request.json --dry-run",
+                "actiondock ai models test <modelId> --file chat-request.json"
+        ));
+        appendFlow(flows, "submit agent run safely", List.of(
+                "actiondock ai agents get <agentId>",
+                "actiondock ai runs submit --file run-request.json --validate-only",
+                "actiondock ai runs submit --file run-request.json --dry-run",
+                "actiondock ai runs submit --file run-request.json --wait"
+        ));
+        appendFlow(flows, "generate script with workbench", List.of(
+                "actiondock ai workbench generate-script --file workbench.json --validate-only",
+                "actiondock ai workbench generate-script --file workbench.json --dry-run",
+                "actiondock ai workbench generate-script --file workbench.json"
+        ));
         return data;
     }
 
@@ -235,6 +252,56 @@ final class CliAgentMetadata {
                 List.of(Map.of("description", "Get schema and examples", "command", "actiondock scripts schema hello --example")),
                 Map.of("helpJson", true),
                 Map.of()
+        ));
+        result.put("actiondock ai runs submit", new CommandContract(
+                "Submit an AI agent run asynchronously.",
+                List.of(
+                        "--file is required",
+                        "--wait polls /api/ai/agents/runs/{runId} until the run leaves RUNNING state"
+                ),
+                Map.of("waitTimeoutSeconds", 30, "pollIntervalMs", 1000),
+                Map.of(
+                        "file", Map.of(
+                                "agentProfile", "support-agent",
+                                "messages", List.of(Map.of("role", "user", "content", "Summarize this incident")),
+                                "input", Map.of(),
+                                "options", Map.of()
+                        )
+                ),
+                Map.of("envelope", Map.of("status", 0, "msg", "Success", "data", Map.of("runId", "run-1", "status", "RUNNING"))),
+                List.of(
+                        Map.of("description", "Submit an agent run", "command", "actiondock ai runs submit --file run-request.json"),
+                        Map.of("description", "Submit and wait", "command", "actiondock ai runs submit --file run-request.json --wait")
+                ),
+                Map.of("helpJson", true, "dryRun", true, "validateOnly", true),
+                Map.of(
+                        "--file", Map.of("example", Map.of(
+                                "agentProfile", "support-agent",
+                                "messages", List.of(Map.of("role", "user", "content", "Summarize this incident")),
+                                "input", Map.of(),
+                                "options", Map.of()
+                        ))
+                )
+        ));
+        result.put("actiondock ai models test", new CommandContract(
+                "Test an AI model profile with a chat request JSON file.",
+                List.of("--file is required"),
+                Map.of(),
+                Map.of(
+                        "file", Map.of(
+                                "messages", List.of(Map.of("role", "user", "content", "Hello")),
+                                "options", Map.of()
+                        )
+                ),
+                Map.of("envelope", Map.of("status", 0, "msg", "Success", "data", Map.of("message", Map.of("role", "assistant", "content", "Hi")))),
+                List.of(Map.of("description", "Test a model", "command", "actiondock ai models test demo-model --file chat-request.json")),
+                Map.of("helpJson", true, "dryRun", true, "validateOnly", true),
+                Map.of(
+                        "--file", Map.of("example", Map.of(
+                                "messages", List.of(Map.of("role", "user", "content", "Hello")),
+                                "options", Map.of()
+                        ))
+                )
         ));
         return result;
     }

@@ -466,6 +466,7 @@ export interface ConfigValueUsage {
   scheduleReferences: ConfigValueScheduleReference[];
   pluginConfigReferences: ConfigValuePluginConfigReference[];
   templateDeclarations: ConfigValueTemplateDeclaration[];
+  modelReferences: ConfigValueModelReference[];
 }
 
 export interface ConfigValueReference {
@@ -493,6 +494,13 @@ export interface ConfigValuePluginConfigReference {
   pluginId: string;
   pluginName: string;
   dependentScriptCount: number;
+}
+
+export interface ConfigValueModelReference {
+  modelId: string;
+  modelName: string;
+  modelProvider?: string | null;
+  referenceType: string;
 }
 
 export interface ConfigValueTemplateDeclaration {

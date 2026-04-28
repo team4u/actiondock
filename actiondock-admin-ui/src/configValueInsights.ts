@@ -12,7 +12,8 @@ export function buildImpactSummary(detail: ConfigValueDetail): string[] {
     `定时任务引用 ${usage.scheduleReferences.length} 个`,
     `插件配置引用 ${usage.pluginConfigReferences.length} 个`,
     `配置值依赖 ${usage.configReferences.length} 个`,
-    `模板声明 ${usage.templateDeclarations.length} 个`
+    `模板声明 ${usage.templateDeclarations.length} 个`,
+    `模型引用 ${usage.modelReferences.length} 个`
   ];
 }
 

@@ -1,5 +1,6 @@
 package org.team4u.actiondock.configvalue;
 
+import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.PluginRegistration;
@@ -44,6 +45,7 @@ public class ConfigValueUsageAnalysisService {
     private final Function<String, List<RepositoryCatalogService.RepositoryToolDescriptor>> listRepositoryTools;
     private final Supplier<List<RepositoryCatalogService.RepositoryToolDescriptor>> listAllRepositoryTools;
     private final BiFunction<String, String, RepositoryCatalogService.RepositoryToolDetail> getRepositoryTool;
+    private final Supplier<List<AiModelProfile>> listModelProfiles;
 
     public ConfigValueUsageAnalysisService(ConfigValueRepository configValueRepository,
                                            ScriptRepository scriptRepository,
@@ -53,7 +55,8 @@ public class ConfigValueUsageAnalysisService {
                                            Supplier<List<RepositoryDefinition>> listRepositories,
                                            Function<String, List<RepositoryCatalogService.RepositoryToolDescriptor>> listRepositoryTools,
                                            Supplier<List<RepositoryCatalogService.RepositoryToolDescriptor>> listAllRepositoryTools,
-                                           BiFunction<String, String, RepositoryCatalogService.RepositoryToolDetail> getRepositoryTool) {
+                                           BiFunction<String, String, RepositoryCatalogService.RepositoryToolDetail> getRepositoryTool,
+                                           Supplier<List<AiModelProfile>> listModelProfiles) {
         this.configValueRepository = configValueRepository;
         this.scriptRepository = scriptRepository;
         this.scriptScheduleRepository = scriptScheduleRepository;
@@ -63,6 +66,7 @@ public class ConfigValueUsageAnalysisService {
         this.listRepositoryTools = listRepositoryTools;
         this.listAllRepositoryTools = listAllRepositoryTools;
         this.getRepositoryTool = getRepositoryTool;
+        this.listModelProfiles = listModelProfiles;
     }
 
     public ConfigValueInsight analyze(String key) {
@@ -139,6 +143,31 @@ public class ConfigValueUsageAnalysisService {
         ManagedTemplate managedTemplate = resolveManagedTemplate(target).orElse(null);
         ConfigValueOrigin origin = resolveOrigin(target, managedTemplate, templateDeclarations);
 
+        List<ModelReference> modelReferences = new ArrayList<>();
+        for (AiModelProfile model : listModelProfiles.get()) {
+            if (key.equals(model.getApiKeyConfigKey()) || cascadingConfigKeys.contains(model.getApiKeyConfigKey())) {
+                modelReferences.add(new ModelReference(
+                        model.getId(),
+                        model.getName(),
+                        model.getModelProvider() == null ? null : model.getModelProvider().name(),
+                        "apiKeyConfigKey"
+                ));
+                continue;
+            }
+            Set<String> optionsMatches = filterPlaceholderKeys(model.getDefaultOptions(), cascadingConfigKeys);
+            if (!optionsMatches.isEmpty()) {
+                modelReferences.add(new ModelReference(
+                        model.getId(),
+                        model.getName(),
+                        model.getModelProvider() == null ? null : model.getModelProvider().name(),
+                        "defaultOptions"
+                ));
+            }
+        }
+        modelReferences = modelReferences.stream()
+                .sorted(Comparator.comparing(ModelReference::modelId))
+                .toList();
+
         Map<String, ImpactScriptAccumulator> impacts = new LinkedHashMap<>();
         for (ScriptDefinition script : scripts) {
             Set<String> matchedKeys = filterScriptKeys(script.getSource(), cascadingConfigKeys);
@@ -194,6 +223,7 @@ public class ConfigValueUsageAnalysisService {
                 scheduleReferences,
                 pluginReferences,
                 templateDeclarations,
+                modelReferences,
                 impactedScripts,
                 origin,
                 new AvailableActions(target.isManaged() && !target.isOverridden(), target.isManaged() && target.isOverridden())
@@ -483,10 +513,14 @@ public class ConfigValueUsageAnalysisService {
             List<ScheduleReference> scheduleReferences,
             List<PluginConfigReference> pluginConfigReferences,
             List<TemplateDeclaration> templateDeclarations,
+            List<ModelReference> modelReferences,
             List<ImpactScript> impactedScripts,
             ConfigValueOrigin origin,
             AvailableActions availableActions
     ) {
+    }
+
+    public record ModelReference(String modelId, String modelName, String modelProvider, String referenceType) {
     }
 
     public record ConfigReference(String key, String description) {

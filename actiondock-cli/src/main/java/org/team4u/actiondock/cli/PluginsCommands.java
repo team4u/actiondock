@@ -18,7 +18,7 @@ import java.util.concurrent.Callable;
  * @author jay.wu
  */
 @Command(name = "plugins", mixinStandardHelpOptions = true, description = "Commands for plugin installation, lifecycle operations, invocation, and config.", subcommands = {
-        PluginsCommands.ListPlugins.class, PluginsCommands.GetPlugin.class, PluginsCommands.InstallPlugin.class, PluginsCommands.UpgradePlugin.class,
+        PluginsCommands.ListPlugins.class, PluginsCommands.ListPluginReferences.class, PluginsCommands.GetPlugin.class, PluginsCommands.DownloadPlugin.class, PluginsCommands.InstallPlugin.class, PluginsCommands.UpgradePlugin.class,
         PluginsCommands.StartPlugin.class, PluginsCommands.StopPlugin.class, PluginsCommands.DeletePlugin.class, PluginsCommands.InvokePlugin.class, PluginsCommands.PluginConfigCommands.class
 })
 class PluginsCommands implements Runnable {
@@ -51,6 +51,17 @@ class PluginsCommands implements Runnable {
         }
     }
 
+    @Command(name = "references", mixinStandardHelpOptions = true, description = "List plugin references available to the script editor.")
+    static class ListPluginReferences implements Callable<Integer> {
+        @ParentCommand
+        PluginsCommands parent;
+
+        @Override
+        public Integer call() {
+            return parent.root().emit(parent.root().apiClient().get("/api/plugins/references", Map.of()));
+        }
+    }
+
     @Command(name = "get", mixinStandardHelpOptions = true, description = "Get details for a single plugin.")
     static class GetPlugin implements Callable<Integer> {
         @ParentCommand
@@ -65,6 +76,34 @@ class PluginsCommands implements Runnable {
         @Override
         public Integer call() {
             return parent.root().emit(parent.root().apiClient().get("/api/plugins/" + parent.root().encodePath(pluginId), Map.of()));
+        }
+    }
+
+    @Command(name = "download", mixinStandardHelpOptions = true, description = "Download a plugin JAR to a local file.")
+    static class DownloadPlugin implements Callable<Integer> {
+        @ParentCommand
+        PluginsCommands parent;
+
+        @Parameters(index = "0", paramLabel = "<pluginId>", description = "Plugin ID.")
+        String pluginId;
+
+        @Option(names = "--output", required = true, description = "Output file path for the downloaded plugin JAR.")
+        String outputPath;
+
+        @Option(names = "--dry-run", description = "Validate local input and print the final HTTP request preview without downloading.")
+        boolean dryRun;
+
+        @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
+        boolean validateOnly;
+
+        @Override
+        public Integer call() {
+            ActionDockCommand root = parent.root();
+            return root.downloadRequest(
+                    CliRequest.download("/api/plugins/" + root.encodePath(pluginId) + "/download", Map.of(), Path.of(outputPath)),
+                    Path.of(outputPath),
+                    AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins download")
+            );
         }
     }
 
@@ -193,13 +232,17 @@ class PluginsCommands implements Runnable {
         @Option(names = "--validate-only", description = "Validate local CLI arguments without creating an HTTP client.")
         boolean validateOnly;
 
+        @Option(names = "--force", description = "Force deletion even when repository tools still depend on the plugin.")
+        boolean force;
+
         /**
          * 删除指定插件。
          */
         @Override
         public Integer call() {
+            Map<String, Object> query = force ? Map.of("force", true) : Map.of();
             return parent.root().submitRequest(
-                    CliRequest.delete("/api/plugins/" + parent.root().encodePath(pluginId), Map.of()),
+                    CliRequest.delete("/api/plugins/" + parent.root().encodePath(pluginId), query),
                     AgentExecutionOptions.of(dryRun, validateOnly, "actiondock plugins delete")
             );
         }

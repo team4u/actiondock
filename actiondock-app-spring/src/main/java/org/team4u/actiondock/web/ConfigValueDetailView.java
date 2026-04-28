@@ -28,8 +28,12 @@ public record ConfigValueDetailView(
             List<ScriptReference> scriptReferences,
             List<ScheduleReference> scheduleReferences,
             List<PluginConfigReference> pluginConfigReferences,
-            List<TemplateDeclaration> templateDeclarations
+            List<TemplateDeclaration> templateDeclarations,
+            List<ModelReference> modelReferences
     ) {
+    }
+
+    public record ModelReference(String modelId, String modelName, String modelProvider, String referenceType) {
     }
 
     public record ConfigReference(String key, String description) {

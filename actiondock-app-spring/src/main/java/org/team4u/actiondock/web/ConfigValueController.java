@@ -213,6 +213,14 @@ public class ConfigValueController {
                                         item.publishMode(),
                                         item.defaultValue()
                                 ))
+                                .toList(),
+                        insight.modelReferences().stream()
+                                .map(item -> new ConfigValueDetailView.ModelReference(
+                                        item.modelId(),
+                                        item.modelName(),
+                                        item.modelProvider(),
+                                        item.referenceType()
+                                ))
                                 .toList()
                 ),
                 insight.impactedScripts().stream()
