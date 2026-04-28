@@ -11,6 +11,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.team4u</groupId>
+            <artifactId>actiondock-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
         </dependency>

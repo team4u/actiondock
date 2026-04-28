@@ -34,6 +34,13 @@ mvn -pl actiondock-app-spring -am spring-boot:run
 mvn -pl actiondock-cli -am package
 ```
 
+## 分发形态
+
+- `actiondock-server`：独立发布的服务端，推荐 `npm i -g actiondock-server` 后执行 `actiondock-server`
+- `actiondock-cli`：独立发布的命令行客户端，推荐 `npm i -g actiondock-cli` 后执行 `actiondock`
+
+两者都会低频检查 npm 最新版本，并输出手动升级提示；可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
+
 ### 前端开发
 
 ```bash

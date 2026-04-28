@@ -37,6 +37,14 @@ npx jdeploy publish
 actiondock --help
 ```
 
+手动升级：
+
+```bash
+npm i -g actiondock-cli@latest
+```
+
+CLI 会低频检查 npm 上是否有新版本；若发现更新，只会在 `stderr` 输出提醒，不影响 JSON `stdout` 协议。可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
+
 ## 连接配置
 
 配置优先级（高到低）：命令行 flag > 环境变量 > 本地 profile

@@ -1,11 +1,16 @@
 package org.team4u.actiondock.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.team4u.actiondock.update.ApplicationVersionResolver;
+import org.team4u.actiondock.update.UpdateNotificationService;
+import org.team4u.actiondock.update.UpdateNotificationService.UpdateNotification;
+import org.team4u.actiondock.update.UpdateNotificationService.UpdateNotificationRequest;
 
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * CLI 基础服务容器，提供 JSON 序列化、IO 流、环境变量和 API 客户端工厂等依赖。
@@ -23,6 +28,11 @@ public final class CliServices {
         ActionDockApiClient create(CliConfigService.ResolvedConnectionConfig config, ObjectMapper objectMapper, CliOutput output);
     }
 
+    @FunctionalInterface
+    public interface UpdateNoticeProvider {
+        Optional<UpdateNotification> get();
+    }
+
     private final ObjectMapper objectMapper;
     private final Map<String, String> environment;
     private final Path homeDirectory;
@@ -30,6 +40,7 @@ public final class CliServices {
     private final PrintStream stderr;
     private final Sleeper sleeper;
     private final ApiClientFactory apiClientFactory;
+    private final UpdateNoticeProvider updateNoticeProvider;
 
     /**
      * 创建默认的 CLI 服务容器。
@@ -47,7 +58,8 @@ public final class CliServices {
                 System.out,
                 System.err,
                 Thread::sleep,
-                ActionDockApiClient::new
+                ActionDockApiClient::new,
+                defaultUpdateNoticeProvider()
         );
     }
 
@@ -57,7 +69,8 @@ public final class CliServices {
                        PrintStream stdout,
                        PrintStream stderr,
                        Sleeper sleeper,
-                       ApiClientFactory apiClientFactory) {
+                       ApiClientFactory apiClientFactory,
+                       UpdateNoticeProvider updateNoticeProvider) {
         this.objectMapper = objectMapper;
         this.environment = environment;
         this.homeDirectory = homeDirectory;
@@ -65,6 +78,7 @@ public final class CliServices {
         this.stderr = stderr;
         this.sleeper = sleeper;
         this.apiClientFactory = apiClientFactory;
+        this.updateNoticeProvider = updateNoticeProvider;
     }
 
     public ObjectMapper objectMapper() {
@@ -93,5 +107,23 @@ public final class CliServices {
 
     public ApiClientFactory apiClientFactory() {
         return apiClientFactory;
+    }
+
+    public UpdateNoticeProvider updateNoticeProvider() {
+        return updateNoticeProvider;
+    }
+
+    private static UpdateNoticeProvider defaultUpdateNoticeProvider() {
+        UpdateNotificationService updateNotificationService = new UpdateNotificationService();
+        String currentVersion = ApplicationVersionResolver.resolve(CliServices.class, "org.team4u", "actiondock-cli");
+        return () -> updateNotificationService.checkForUpdate(new UpdateNotificationRequest(
+                "cli",
+                "actiondock-cli",
+                "ActionDock CLI",
+                currentVersion,
+                "npm i -g actiondock-cli@latest",
+                Paths.get(System.getProperty("user.home")),
+                System.getenv()
+        ));
     }
 }

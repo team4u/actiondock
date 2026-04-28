@@ -42,7 +42,9 @@ public final class ActionDockCliApplication {
                 root.emitLocalSuccess(CliAgentMetadata.help(root.objectMapper(), target.getCommandSpec()));
                 return 0;
             }
-            return new CommandLine.RunLast().execute(parseResult);
+            int exitCode = new CommandLine.RunLast().execute(parseResult);
+            CliUpdateNotifier.maybeNotify(root, parseResult, exitCode);
+            return exitCode;
         });
         commandLine.setExecutionExceptionHandler((exception, cmd, parseResult) -> {
             CliOutput output = root.output();

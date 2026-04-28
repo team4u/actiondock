@@ -62,13 +62,14 @@ public final class UpdateNotificationService {
 
         UpdateCheckCache cache = readCache(request.cacheFile()).orElse(null);
         Instant now = clock.instant();
-        if (cache != null && cache.lastCheckedAt() != null && cache.lastCheckedAt().plus(checkInterval).isAfter(now)) {
+        if (cache != null && cache.lastCheckedAtEpochMillis() != null
+                && Instant.ofEpochMilli(cache.lastCheckedAtEpochMillis()).plus(checkInterval).isAfter(now)) {
             return buildNotification(request, cache.latestVersion());
         }
 
         Optional<String> latestVersion = fetchLatestVersion(request.packageName());
         if (latestVersion.isPresent()) {
-            writeCache(request.cacheFile(), new UpdateCheckCache(now, latestVersion.get()));
+            writeCache(request.cacheFile(), new UpdateCheckCache(now.toEpochMilli(), latestVersion.get()));
             return buildNotification(request, latestVersion.get());
         }
         return cache == null ? Optional.empty() : buildNotification(request, cache.latestVersion());
@@ -168,11 +169,11 @@ public final class UpdateNotificationService {
         Optional<String> fetchLatestVersion(String packageName) throws IOException, InterruptedException;
     }
 
-    private record UpdateCheckCache(Instant lastCheckedAt, String latestVersion) {
+    static record UpdateCheckCache(Long lastCheckedAtEpochMillis, String latestVersion) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record LatestVersionPayload(String version) {
+    static record LatestVersionPayload(String version) {
     }
 
     private static final class HttpLatestVersionFetcher implements LatestVersionFetcher {

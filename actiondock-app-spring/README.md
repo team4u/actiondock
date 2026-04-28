@@ -22,6 +22,23 @@ mvn -pl actiondock-app-spring -am package
 java -jar target/actiondock-app-spring.jar
 ```
 
+## npm / jDeploy 分发
+
+对外发布名为 `actiondock-server`，推荐安装方式：
+
+```bash
+npm i -g actiondock-server
+actiondock-server
+```
+
+手动升级：
+
+```bash
+npm i -g actiondock-server@latest
+```
+
+启动后会低频检查 npm 上是否有新版本，并在日志里输出升级提示。可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
+
 ## 前后端开发
 
 ```bash
