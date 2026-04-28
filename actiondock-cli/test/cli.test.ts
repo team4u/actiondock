@@ -963,9 +963,61 @@ describe("CLI integration", () => {
       })
     );
   });
+
+  it("shows the self-update command in dry-run mode", async () => {
+    const result = await runCli(["self-update", "--dry-run", "--json"]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      packageName: "@actiondock/cli",
+      currentVersion: "0.1.4",
+      target: "latest",
+      command: "npm install -g @actiondock/cli@latest",
+      executable: "npm",
+      args: ["install", "-g", "@actiondock/cli@latest"],
+      dryRun: true,
+    });
+  });
+
+  it("supports self-update to a specific version in dry-run mode", async () => {
+    const result = await runCli(["self-update", "0.1.4", "--dry-run", "--json"]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(
+      expect.objectContaining({
+        target: "0.1.4",
+        command: "npm install -g @actiondock/cli@0.1.4",
+      }),
+    );
+  });
+
+  it("keeps command output stable when version checks are disabled explicitly", async () => {
+    const result = await runCli(
+      ["tool", "list", "--server", baseUrl, "--json"],
+      undefined,
+      { ACTIONDOCK_SKIP_NEW_VERSION_CHECK: "1" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual([
+      {
+        id: "published-tool",
+        name: "Published Tool",
+        type: "GROOVY",
+        status: undefined,
+        description: undefined,
+        owner: undefined,
+        tags: [],
+        publishedSnapshot: {
+          inputSchema: {}
+        }
+      }
+    ]);
+  });
 });
 
-async function runCli(args: string[], homeDir?: string): Promise<{
+async function runCli(args: string[], homeDir?: string, envOverrides?: NodeJS.ProcessEnv): Promise<{
   status: number | null;
   signal: NodeJS.Signals | null;
   stdout: string;
@@ -976,6 +1028,7 @@ async function runCli(args: string[], homeDir?: string): Promise<{
       cwd: cliDir,
       env: {
         ...process.env,
+        ...envOverrides,
         HOME: homeDir ?? process.env.HOME,
         XDG_CONFIG_HOME: homeDir ? path.join(homeDir, ".config-root") : process.env.XDG_CONFIG_HOME,
         NODE_OPTIONS: "--import tsx"

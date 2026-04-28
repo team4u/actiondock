@@ -21,6 +21,26 @@ actiondock --help
 
 安装后可执行文件名仍然是 `actiondock`。
 
+CLI 会异步检查 npm 上是否有新版本；这不会阻塞当前命令，但提示通常会出现在后一次运行里。升级时直接执行：
+
+```bash
+npm install -g @actiondock/cli@latest
+actiondock self-update
+```
+
+如果你不想看到版本提示，可以临时关闭：
+
+```bash
+ACTIONDOCK_SKIP_NEW_VERSION_CHECK=1 actiondock --help
+```
+
+如果你只想看 CLI 将执行什么升级命令，可以先 dry run：
+
+```bash
+actiondock self-update --dry-run
+actiondock self-update 0.1.4 --dry-run
+```
+
 ## 快速开始
 
 如果你的 ActionDock 服务运行在本机，CLI 默认会连接 `http://127.0.0.1:5177`，不需要显式传 `--server`。
@@ -162,6 +182,28 @@ actiondock autocomplete
 ```
 
 按提示为当前 shell 安装补全脚本即可。新增子命令和 flags 后，会自动进入补全体系。
+
+如果升级 CLI 后，新命令没有立刻出现在补全里，先刷新补全缓存，再重新加载当前 shell：
+
+```bash
+actiondock autocomplete --refresh-cache
+exec zsh
+```
+
+PowerShell 对应的是：
+
+```powershell
+actiondock autocomplete --refresh-cache
+. $PROFILE
+```
+
+如果当前 PowerShell 会话还没安装过补全脚本，先执行：
+
+```powershell
+New-Item -Type Directory -Path (Split-Path -Parent $PROFILE) -ErrorAction SilentlyContinue
+Add-Content -Path $PROFILE -Value (Invoke-Expression -Command "actiondock autocomplete script powershell")
+. $PROFILE
+```
 
 ## 开发与发布
 

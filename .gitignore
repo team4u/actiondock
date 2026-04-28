@@ -1,6 +1,8 @@
 HELP.md
 target/
 bin
+!actiondock-cli/bin/
+!actiondock-cli/bin/**
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**
 !**/src/test/**
