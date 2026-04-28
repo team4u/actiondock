@@ -21,14 +21,16 @@ import type {
   ConfigValue,
   ConfigValueDetail,
   ConfigValueRequest,
-  RepositoryDefinition,
   DevelopmentStatus,
+  RepositoryDefinition,
   RepositoryInstallRequest,
-  RepositoryPublishRequest,
   RepositoryPluginDescriptor,
   RepositoryPluginInstallRequest,
   RepositoryPluginInstallResult,
   RepositoryPluginPublishRequest,
+  RepositoryPublishConfigPreview,
+  RepositoryPublishConfigPreviewRequest,
+  RepositoryPublishRequest,
   RepositoryToolDescriptor,
   RepositoryToolDetail,
   ExecuteRequest,
@@ -741,6 +743,16 @@ export function forkRepositoryTool(scriptId: string, payload: { id: string; name
 
 export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryToolDescriptor> {
   return request<RepositoryToolDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function previewRepositoryPublishConfig(
+  payload: RepositoryPublishConfigPreviewRequest
+): Promise<RepositoryPublishConfigPreview> {
+  return request<RepositoryPublishConfigPreview>("/api/repositories/publish-config-preview", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)

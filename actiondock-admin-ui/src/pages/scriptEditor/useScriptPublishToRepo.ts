@@ -3,16 +3,16 @@ import type { FormInstance } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useRef, useState } from "react";
 import {
-  listConfigValues,
   listRepositories,
   listSchedules,
   listToolsByRepository,
+  previewRepositoryPublishConfig,
   publishRepositoryTool,
   syncRepository
 } from "../../api";
 import type {
-  ConfigValue,
   RepositoryDefinition,
+  RepositoryPublishConfigPreview,
   ScriptDefinition,
   ScriptSchedule
 } from "../../types";
@@ -27,6 +27,7 @@ import type { RepositoryPublishVersionSuggestion } from "./types";
 
 export interface UseScriptPublishToRepoParams {
   currentScript: ScriptDefinition | null;
+  sourceText: string;
   isReadOnlyScript: boolean;
   ensureCurrentScriptPublished: (successMessage?: string) => Promise<ScriptDefinition>;
   messageApi: MessageInstance;
@@ -39,8 +40,9 @@ export interface ScriptPublishToRepoContext {
   publishingToRepository: boolean;
   publishRepositories: RepositoryDefinition[];
   publishSchedules: ScriptSchedule[];
-  publishConfigValues: ConfigValue[];
   publishMetadataLoading: boolean;
+  publishConfigPreview: RepositoryPublishConfigPreview | null;
+  publishConfigPreviewLoading: boolean;
   publishVersionSuggestion: RepositoryPublishVersionSuggestion;
   publishConfigModes: Record<string, "INLINE" | "PLACEHOLDER">;
   setPublishConfigModes: React.Dispatch<React.SetStateAction<Record<string, "INLINE" | "PLACEHOLDER">>>;
@@ -51,6 +53,7 @@ export interface ScriptPublishToRepoContext {
 
 export function useScriptPublishToRepo({
   currentScript,
+  sourceText,
   isReadOnlyScript,
   ensureCurrentScriptPublished,
   messageApi
@@ -60,15 +63,18 @@ export function useScriptPublishToRepo({
   const [publishingToRepository, setPublishingToRepository] = useState(false);
   const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
   const [publishSchedules, setPublishSchedules] = useState<ScriptSchedule[]>([]);
-  const [publishConfigValues, setPublishConfigValues] = useState<ConfigValue[]>([]);
   const [publishMetadataLoading, setPublishMetadataLoading] = useState(false);
+  const [publishConfigPreview, setPublishConfigPreview] = useState<RepositoryPublishConfigPreview | null>(null);
+  const [publishConfigPreviewLoading, setPublishConfigPreviewLoading] = useState(false);
   const [publishVersionSuggestion, setPublishVersionSuggestion] = useState<RepositoryPublishVersionSuggestion>({ status: "IDLE" });
   const [publishConfigModes, setPublishConfigModes] = useState<Record<string, "INLINE" | "PLACEHOLDER">>({});
   const syncedRepositoryIdsRef = useRef<Set<string>>(new Set());
   const versionSuggestionRequestRef = useRef(0);
+  const configPreviewRequestRef = useRef(0);
   const versionManuallyEditedRef = useRef(false);
   const selectedRepositoryId = Form.useWatch("repositoryId", publishForm);
   const selectedToolId = Form.useWatch("toolId", publishForm);
+  const selectedScheduleIds = Form.useWatch("scheduleIds", publishForm);
 
   const loadPublishMetadata = async (
     script: ScriptDefinition,
@@ -76,10 +82,9 @@ export function useScriptPublishToRepo({
   ): Promise<RepositoryDefinition[]> => {
     setPublishMetadataLoading(true);
     try {
-      const [repositories, schedules, configValues] = await Promise.all([
+      const [repositories, schedules] = await Promise.all([
         listRepositories(),
-        listSchedules(),
-        listConfigValues()
+        listSchedules()
       ]);
       const publishableRepositories = repositories
         .filter((item) => item.enabled && item.type !== "HTTP")
@@ -87,14 +92,14 @@ export function useScriptPublishToRepo({
       const relatedSchedules = schedules
         .filter((item) => item.scriptId === script.id)
         .sort((left, right) => left.name.localeCompare(right.name));
-      const sortedConfigValues = [...configValues].sort((left, right) => left.key.localeCompare(right.key));
 
       setPublishRepositories(publishableRepositories);
       setPublishSchedules(relatedSchedules);
-      setPublishConfigValues(sortedConfigValues);
+      setPublishConfigPreview(null);
       setPublishConfigModes({});
       setPublishVersionSuggestion({ status: "IDLE" });
       syncedRepositoryIdsRef.current = new Set();
+      configPreviewRequestRef.current += 1;
       versionManuallyEditedRef.current = false;
       publishForm.setFieldsValue({
         repositoryId: script.scope === "DEVELOPMENT" && script.repositoryId
@@ -180,6 +185,55 @@ export function useScriptPublishToRepo({
     };
   }, [publishForm, publishToRepositoryOpen, selectedRepositoryId, selectedToolId]);
 
+  useEffect(() => {
+    if (!publishToRepositoryOpen || !currentScript?.id) {
+      configPreviewRequestRef.current += 1;
+      setPublishConfigPreview(null);
+      setPublishConfigPreviewLoading(false);
+      return;
+    }
+    const requestId = configPreviewRequestRef.current + 1;
+    configPreviewRequestRef.current = requestId;
+    setPublishConfigPreviewLoading(true);
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const preview = await previewRepositoryPublishConfig({
+            scriptId: currentScript.id,
+            source: sourceText,
+            scheduleIds: selectedScheduleIds ?? []
+          });
+          if (configPreviewRequestRef.current !== requestId) {
+            return;
+          }
+          setPublishConfigPreview(preview);
+          setPublishConfigModes((previous) => {
+            const next: Record<string, "INLINE" | "PLACEHOLDER"> = {};
+            for (const item of preview.items) {
+              next[item.key] = item.secret ? "PLACEHOLDER" : (previous[item.key] ?? "PLACEHOLDER");
+            }
+            return next;
+          });
+        } catch (error) {
+          if (configPreviewRequestRef.current !== requestId) {
+            return;
+          }
+          setPublishConfigPreview(null);
+          messageApi.error(getErrorMessage(error, "加载配置依赖失败"));
+        } finally {
+          if (configPreviewRequestRef.current === requestId) {
+            setPublishConfigPreviewLoading(false);
+          }
+        }
+      })();
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [currentScript?.id, messageApi, publishToRepositoryOpen, selectedScheduleIds, sourceText]);
+
   const handlePublishFormValuesChange = (changedValues: Partial<PublishToRepositoryFormValues>) => {
     if (Object.prototype.hasOwnProperty.call(changedValues, "version")) {
       versionManuallyEditedRef.current = true;
@@ -212,11 +266,19 @@ export function useScriptPublishToRepo({
     let retry: { repositoryId: string; payload: Parameters<typeof publishRepositoryTool>[1] } | null = null;
     try {
       const values = await publishForm.validateFields();
+      if (publishConfigPreviewLoading) {
+        messageApi.warning("正在分析配置依赖，请稍后再试");
+        return;
+      }
+      if (publishConfigPreview?.missingKeys.length) {
+        messageApi.error(`缺少发布依赖的配置值: ${publishConfigPreview.missingKeys.join(", ")}`);
+        return;
+      }
       setPublishingToRepository(true);
       const publishedScript = await ensureCurrentScriptPublished();
-      const configItems = Object.entries(publishConfigModes).map(([key, publishMode]) => ({
-        key,
-        publishMode
+      const configItems = (publishConfigPreview?.items ?? []).map((item) => ({
+        key: item.key,
+        publishMode: publishConfigModes[item.key] ?? "PLACEHOLDER"
       }));
       const payload = {
         scriptId: publishedScript.id,
@@ -276,8 +338,9 @@ export function useScriptPublishToRepo({
     publishingToRepository,
     publishRepositories,
     publishSchedules,
-    publishConfigValues,
     publishMetadataLoading,
+    publishConfigPreview,
+    publishConfigPreviewLoading,
     publishVersionSuggestion,
     publishConfigModes,
     setPublishConfigModes,

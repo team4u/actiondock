@@ -126,6 +126,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   // --- Publish to repository hook ---
   const publishToRepo = useScriptPublishToRepo({
     currentScript: editor.currentScript,
+    sourceText: editor.sourceText,
     isReadOnlyScript: editor.isReadOnlyScript,
     ensureCurrentScriptPublished: editor.ensureCurrentScriptPublished,
     messageApi
@@ -512,7 +513,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         versionSuggestion={publishToRepo.publishVersionSuggestion}
         repositories={publishToRepo.publishRepositories}
         schedules={publishToRepo.publishSchedules}
-        configValues={publishToRepo.publishConfigValues}
+        configPreview={publishToRepo.publishConfigPreview}
+        configPreviewLoading={publishToRepo.publishConfigPreviewLoading}
         configModes={publishToRepo.publishConfigModes}
         onConfigModesChange={publishToRepo.setPublishConfigModes}
         onValuesChange={publishToRepo.handlePublishFormValuesChange}

@@ -509,6 +509,22 @@ public class RepositoryCatalogService {
         return scriptApplicationService.createFork(installedScriptId, newId, newName);
     }
 
+    public RepositoryPublishConfigPreview previewPublishConfig(RepositoryPublishConfigPreviewRequest request) {
+        String scriptId = normalize(request == null ? null : request.scriptId(), "scriptId 不能为空");
+        List<ScriptSchedule> schedules = resolvePublishSchedules(scriptId, request == null ? null : request.scheduleIds());
+        RepositoryPublishConfigResolver.PublishConfigResolution resolution = RepositoryPublishConfigResolver.resolve(
+                request == null ? null : request.source(),
+                schedules.stream().map(ScriptSchedule::getInput).toList(),
+                configValueRepository.findAll()
+        );
+        return new RepositoryPublishConfigPreview(
+                resolution.items().stream()
+                        .map(item -> new RepositoryPublishConfigCandidate(item.key(), item.label(), item.secret()))
+                        .toList(),
+                resolution.missingKeys()
+        );
+    }
+
     public RepositoryToolDescriptor publishTool(String repositoryId, RepositoryPublishRequest request) {
         RepositoryDefinition repository = getRepository(repositoryId);
         if ("HTTP".equals(repository.getType())) {
@@ -529,11 +545,20 @@ public class RepositoryCatalogService {
         ScriptDefinition script = scriptApplicationService.getPublished(sourceScript.getId());
         String toolId = normalize(request.toolId(), "toolId 不能为空");
         String version = normalize(request.version(), "version 不能为空");
+        List<ScriptSchedule> selectedSchedules = resolvePublishSchedules(script.getId(), request.scheduleIds());
+        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
+        RepositoryPublishConfigResolver.PublishConfigResolution configResolution = RepositoryPublishConfigResolver.resolve(
+                snapshot == null ? script.getSource() : snapshot.getSource(),
+                selectedSchedules.stream().map(ScriptSchedule::getInput).toList(),
+                configValueRepository.findAll()
+        );
+        List<ConfigTemplateItem> configTemplates = buildConfigTemplate(configResolution, request.configItems());
+        List<ScheduleTemplateItem> scheduleTemplates = buildScheduleTemplate(selectedSchedules);
         Path root = resolveRepositoryRoot(repository);
         RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
         assertToolVersionAvailable(repositoryId, current, toolId, version);
         Path toolDir = root.resolve("tools").resolve(toolId);
-        writeToolFiles(toolDir, toolId, script, request);
+        writeToolFiles(toolDir, toolId, script, request, configTemplates, scheduleTemplates);
         updateRepositoryIndex(root, repository, toolId, script, request);
 
         if ("GIT".equals(repository.getType())) {
@@ -940,20 +965,20 @@ public class RepositoryCatalogService {
     private void writeToolFiles(Path toolDir,
                                 String toolId,
                                 ScriptDefinition script,
-                                RepositoryPublishRequest request) {
+                                RepositoryPublishRequest request,
+                                List<ConfigTemplateItem> configTemplates,
+                                List<ScheduleTemplateItem> scheduleTemplates) {
         try {
             Files.createDirectories(toolDir);
             String sourceFileName = script.getType() == ScriptType.PYTHON ? "source.py" : "source.groovy";
             Files.writeString(toolDir.resolve(sourceFileName), script.getPublishedSnapshot().getSource(), StandardCharsets.UTF_8);
-            writeJson(toolDir.resolve("tool.json"), buildToolFile(script, request, sourceFileName));
+            writeJson(toolDir.resolve("tool.json"), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates));
             writeJson(toolDir.resolve("input.schema.json"), script.getPublishedSnapshot().getInputSchema());
             writeJson(toolDir.resolve("output.schema.json"), script.getPublishedSnapshot().getOutputSchema());
 
-            List<ConfigTemplateItem> configTemplates = buildConfigTemplate(request);
             if (!configTemplates.isEmpty()) {
                 writeJson(toolDir.resolve("config.template.json"), configTemplates);
             }
-            List<ScheduleTemplateItem> scheduleTemplates = buildScheduleTemplate(request);
             if (!scheduleTemplates.isEmpty()) {
                 writeJson(toolDir.resolve("schedules.template.json"), scheduleTemplates);
             }
@@ -989,7 +1014,9 @@ public class RepositoryCatalogService {
 
     private ToolFile buildToolFile(ScriptDefinition script,
                                    RepositoryPublishRequest request,
-                                   String sourceFileName) {
+                                   String sourceFileName,
+                                   List<ConfigTemplateItem> configTemplates,
+                                   List<ScheduleTemplateItem> scheduleTemplates) {
         return new ToolFile(
                 1,
                 normalize(request.toolId(), "toolId 不能为空"),
@@ -1003,8 +1030,8 @@ public class RepositoryCatalogService {
                 sourceFileName,
                 "input.schema.json",
                 "output.schema.json",
-                request.configItems() == null || request.configItems().isEmpty() ? null : "config.template.json",
-                request.scheduleIds() == null || request.scheduleIds().isEmpty() ? null : "schedules.template.json",
+                configTemplates.isEmpty() ? null : "config.template.json",
+                scheduleTemplates.isEmpty() ? null : "schedules.template.json",
                 null,
                 null,
                 resolveToolPluginDependencies(script)
@@ -1071,21 +1098,9 @@ public class RepositoryCatalogService {
         }
     }
 
-    private List<ConfigTemplateItem> buildConfigTemplate(RepositoryPublishRequest request) {
-        List<ConfigTemplateItem> templates = new ArrayList<>();
-        for (RepositoryPublishConfigItem item : request.configItems() == null ? List.<RepositoryPublishConfigItem>of() : request.configItems()) {
-            ConfigValue value = configValueApplicationService.get(item.key());
-            boolean inline = !value.isSecret() && "INLINE".equalsIgnoreCase(item.publishMode());
-            templates.add(new ConfigTemplateItem(
-                    value.getKey(),
-                    value.getDescription(),
-                    "string",
-                    false,
-                    value.isSecret() || !inline,
-                    inline ? value.getValue() : null
-            ));
-        }
-        return templates;
+    private List<ConfigTemplateItem> buildConfigTemplate(RepositoryPublishConfigResolver.PublishConfigResolution resolution,
+                                                         List<RepositoryPublishConfigItem> configItems) {
+        return RepositoryPublishConfigResolver.buildTemplates(resolution, configItems);
     }
 
     private PluginArtifactRef completePluginArtifactRef(String pluginId,
@@ -1175,15 +1190,26 @@ public class RepositoryCatalogService {
         );
     }
 
-    private List<ScheduleTemplateItem> buildScheduleTemplate(RepositoryPublishRequest request) {
+    private List<ScheduleTemplateItem> buildScheduleTemplate(List<ScriptSchedule> schedules) {
         List<ScheduleTemplateItem> templates = new ArrayList<>();
-        List<String> targetIds = request.scheduleIds() == null ? List.of() : request.scheduleIds();
-        for (String scheduleId : targetIds) {
-            ScriptSchedule schedule = scriptScheduleRepository.findById(scheduleId)
-                    .orElseThrow(() -> new IllegalArgumentException("定时任务不存在: " + scheduleId));
+        for (ScriptSchedule schedule : schedules == null ? List.<ScriptSchedule>of() : schedules) {
             templates.add(new ScheduleTemplateItem(schedule.getId(), schedule.getName(), schedule.getCronExpression(), schedule.getInput(), false));
         }
         return templates;
+    }
+
+    private List<ScriptSchedule> resolvePublishSchedules(String scriptId, List<String> scheduleIds) {
+        List<ScriptSchedule> schedules = new ArrayList<>();
+        for (String scheduleId : scheduleIds == null ? List.<String>of() : scheduleIds) {
+            String normalizedScheduleId = normalize(scheduleId, "定时任务 ID 不能为空");
+            ScriptSchedule schedule = scriptScheduleRepository.findById(normalizedScheduleId)
+                    .orElseThrow(() -> new IllegalArgumentException("定时任务不存在: " + normalizedScheduleId));
+            if (!Objects.equals(scriptId, schedule.getScriptId())) {
+                throw new IllegalArgumentException("定时任务不属于当前脚本: " + normalizedScheduleId);
+            }
+            schedules.add(schedule);
+        }
+        return schedules;
     }
 
     private void updateRepositoryIndex(Path root,
@@ -1781,6 +1807,26 @@ public class RepositoryCatalogService {
             List<String> scheduleIds,
             List<RepositoryPublishConfigItem> configItems,
             boolean force
+    ) {
+    }
+
+    public record RepositoryPublishConfigPreviewRequest(
+            String scriptId,
+            String source,
+            List<String> scheduleIds
+    ) {
+    }
+
+    public record RepositoryPublishConfigPreview(
+            List<RepositoryPublishConfigCandidate> items,
+            List<String> missingKeys
+    ) {
+    }
+
+    public record RepositoryPublishConfigCandidate(
+            String key,
+            String label,
+            boolean secret
     ) {
     }
 

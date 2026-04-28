@@ -699,6 +699,23 @@ export interface RepositoryPublishConfigItem {
   publishMode: "INLINE" | "PLACEHOLDER";
 }
 
+export interface RepositoryPublishConfigPreviewRequest {
+  scriptId: string;
+  source: string;
+  scheduleIds?: string[];
+}
+
+export interface RepositoryPublishConfigCandidate {
+  key: string;
+  label?: string;
+  secret: boolean;
+}
+
+export interface RepositoryPublishConfigPreview {
+  items: RepositoryPublishConfigCandidate[];
+  missingKeys: string[];
+}
+
 export interface RepositoryPublishRequest {
   scriptId: string;
   toolId: string;

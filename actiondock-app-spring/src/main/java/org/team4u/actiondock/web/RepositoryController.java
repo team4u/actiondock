@@ -220,6 +220,12 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.publishTool(id, request), "发布完成");
     }
 
+    @PostMapping("/publish-config-preview")
+    public ApiResponse<RepositoryCatalogService.RepositoryPublishConfigPreview> previewPublishConfig(
+            @RequestBody RepositoryCatalogService.RepositoryPublishConfigPreviewRequest request) {
+        return ApiResponse.success(repositoryCatalogService.previewPublishConfig(request));
+    }
+
     @PostMapping("/{id}/publish-plugin")
     public ApiResponse<RepositoryCatalogService.RepositoryPluginDescriptor> publishPlugin(@PathVariable String id,
                                                                                          @RequestBody RepositoryCatalogService.RepositoryPluginPublishRequest request) {

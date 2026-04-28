@@ -1,7 +1,6 @@
 import {
   Alert,
   Card,
-  Checkbox,
   Empty,
   Form,
   Input,
@@ -13,7 +12,12 @@ import {
   Typography
 } from "antd";
 import type { FormInstance } from "antd";
-import type { ConfigValue, PluginDependency, RepositoryDefinition, ScriptSchedule } from "../../types";
+import type {
+  PluginDependency,
+  RepositoryDefinition,
+  RepositoryPublishConfigPreview,
+  ScriptSchedule
+} from "../../types";
 import type { PublishToRepositoryFormValues, RepositoryPublishVersionSuggestion } from "./types";
 
 const { Text } = Typography;
@@ -56,7 +60,8 @@ interface PublishToRepositoryModalProps {
   versionSuggestion: RepositoryPublishVersionSuggestion;
   repositories: RepositoryDefinition[];
   schedules: ScriptSchedule[];
-  configValues: ConfigValue[];
+  configPreview: RepositoryPublishConfigPreview | null;
+  configPreviewLoading: boolean;
   configModes: Record<string, "INLINE" | "PLACEHOLDER">;
   onConfigModesChange: React.Dispatch<React.SetStateAction<Record<string, "INLINE" | "PLACEHOLDER">>>;
   onValuesChange: (changedValues: Partial<PublishToRepositoryFormValues>) => void;
@@ -102,12 +107,16 @@ export function PublishToRepositoryModal({
   versionSuggestion,
   repositories,
   schedules,
-  configValues,
+  configPreview,
+  configPreviewLoading,
   configModes,
   onConfigModesChange,
   onValuesChange,
   pluginDependencies
 }: PublishToRepositoryModalProps) {
+  const hasMissingConfigKeys = Boolean(configPreview?.missingKeys.length);
+  const detectedConfigItems = configPreview?.items ?? [];
+
   return (
     <Modal
       title="发布到仓库"
@@ -117,6 +126,7 @@ export function PublishToRepositoryModal({
       okText="发布"
       cancelText="取消"
       confirmLoading={confirmLoading}
+      okButtonProps={{ disabled: metadataLoading || configPreviewLoading || hasMissingConfigKeys }}
       width={760}
       destroyOnHidden
     >
@@ -205,59 +215,53 @@ export function PublishToRepositoryModal({
             ) : null}
           </Card>
 
-          <Card type="inner" title={`配置模板 (${configValues.length})`}>
-            {configValues.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可选配置值" />
+          <Card type="inner" title={`配置模板 (${detectedConfigItems.length})`}>
+            {configPreviewLoading ? (
+              <div className="page-loading"><Spin size="large" /></div>
             ) : (
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                {configValues.map((item) => {
-                  const selectedMode = configModes[item.key];
-                  const forcedPlaceholder = Boolean(item.secret);
-                  return (
-                    <div key={item.key} className="repository-config-publish-row">
-                      <Checkbox
-                        checked={Boolean(selectedMode)}
-                        onChange={(event) => {
-                          if (!event.target.checked) {
-                            onConfigModesChange((previous) => {
-                              const next = { ...previous };
-                              delete next[item.key];
-                              return next;
-                            });
-                            return;
-                          }
-                          onConfigModesChange((previous) => ({
-                            ...previous,
-                            [item.key]: forcedPlaceholder ? "PLACEHOLDER" : (previous[item.key] ?? "PLACEHOLDER")
-                          }));
-                        }}
-                      >
+                {hasMissingConfigKeys ? (
+                  <Alert
+                    type="error"
+                    showIcon
+                    message="检测到缺失的配置依赖"
+                    description={configPreview?.missingKeys.join(", ")}
+                  />
+                ) : null}
+                {detectedConfigItems.length === 0 ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前源码和已选定时任务没有检测到配置引用" />
+                ) : (
+                  detectedConfigItems.map((item) => {
+                    const forcedPlaceholder = Boolean(item.secret);
+                    const selectedMode = forcedPlaceholder ? "PLACEHOLDER" : (configModes[item.key] ?? "PLACEHOLDER");
+                    return (
+                      <div key={item.key} className="repository-config-publish-row">
                         <Space direction="vertical" size={2}>
                           <Space wrap size={[8, 8]}>
                             <Text code>{item.key}</Text>
                             {item.secret ? <Tag color="gold">SECRET</Tag> : null}
                           </Space>
-                          <Text type="secondary">{item.description || "未填写说明"}</Text>
+                          <Text type="secondary">{item.label || "未填写说明"}</Text>
                         </Space>
-                      </Checkbox>
-                      <Select
-                        value={forcedPlaceholder && selectedMode ? "PLACEHOLDER" : selectedMode}
-                        disabled={!selectedMode || forcedPlaceholder}
-                        style={{ width: 160 }}
-                        options={[
-                          { value: "PLACEHOLDER", label: "PLACEHOLDER" },
-                          ...(forcedPlaceholder ? [] : [{ value: "INLINE", label: "INLINE" }])
-                        ]}
-                        onChange={(nextValue) =>
-                          onConfigModesChange((previous) => ({
-                            ...previous,
-                            [item.key]: nextValue
-                          }))
-                        }
-                      />
-                    </div>
-                  );
-                })}
+                        <Select
+                          value={selectedMode}
+                          disabled={forcedPlaceholder}
+                          style={{ width: 160 }}
+                          options={[
+                            { value: "PLACEHOLDER", label: "PLACEHOLDER" },
+                            ...(forcedPlaceholder ? [] : [{ value: "INLINE", label: "INLINE" }])
+                          ]}
+                          onChange={(nextValue) =>
+                            onConfigModesChange((previous) => ({
+                              ...previous,
+                              [item.key]: nextValue
+                            }))
+                          }
+                        />
+                      </div>
+                    );
+                  })
+                )}
               </Space>
             )}
           </Card>
