@@ -6,6 +6,7 @@ import { AccessTokenManagementPage } from "./AccessTokenManagementPage";
 import { ApiKeySettingsPanel } from "./ApiKeyManagementPage";
 import { ConfigValueManagementPage } from "./ConfigValueManagementPage";
 import { DataBackupPanel } from "./DataBackupPanel";
+import { SharedStateManagementPage } from "./SharedStateManagementPage";
 import {
   buildSystemSettingsSearch,
   resolveSystemSettingsTab,
@@ -25,7 +26,7 @@ export function SystemSettingsPage() {
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <PageHeader
         title="系统配置"
-        meta="统一管理控制台凭证、服务端访问令牌和全局配置值。"
+        meta="统一管理控制台凭证、服务端访问令牌、全局配置值和脚本共享状态。"
       />
       <Tabs
         activeKey={activeTab}
@@ -35,6 +36,11 @@ export function SystemSettingsPage() {
             key: "config-values",
             label: "配置值",
             children: <ConfigValueManagementPage embedded />
+          },
+          {
+            key: "shared-state",
+            label: "共享状态",
+            children: <SharedStateManagementPage embedded />
           },
           {
             key: "access-tokens",

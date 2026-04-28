@@ -549,6 +549,40 @@ export interface ConfigValueRequest {
   preserveValue?: boolean;
 }
 
+export interface SharedStateSummary {
+  namespace: string;
+  key: string;
+  secret: boolean;
+  version?: number;
+  expiresAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lastWriterScriptId?: string | null;
+  lastWriterExecutionId?: string | null;
+}
+
+export interface SharedStateDetail extends SharedStateSummary {
+  value?: unknown;
+}
+
+export interface SharedStateRequest {
+  namespace: string;
+  key: string;
+  value: unknown;
+  secret?: boolean;
+  expiresAt?: string | null;
+}
+
+export interface SharedStateCompareAndSetRequest extends SharedStateRequest {
+  expectedVersion: number;
+}
+
+export interface SharedStateCompareAndSetResult {
+  updated: boolean;
+  entry?: SharedStateDetail | null;
+  current?: SharedStateDetail | null;
+}
+
 export interface AccessToken {
   id: string;
   name: string;

@@ -5,6 +5,7 @@ import groovy.lang.GroovyShell;
 import groovy.lang.Script;
 import org.codehaus.groovy.runtime.InvokerHelper;
 import org.team4u.actiondock.application.ScriptInvocationService;
+import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -27,30 +28,49 @@ public class GroovyScriptEngine implements ScriptEngine {
     private final CompiledGroovyScriptCache compiledScriptCache;
     private final PluginRuntimeService pluginRuntimeService;
     private final ScriptInvocationService scriptInvocationService;
+    private final SharedStateApplicationService sharedStateApplicationService;
 
     public GroovyScriptEngine() {
-        this(new AppProperties.Groovy(), PluginRuntimeService.disabled(), ScriptInvocationService.disabled());
+        this(new AppProperties.Groovy(), PluginRuntimeService.disabled(), ScriptInvocationService.disabled(), SharedStateApplicationService.disabled());
     }
 
     public GroovyScriptEngine(AppProperties.Groovy properties, PluginRuntimeService pluginRuntimeService) {
-        this(properties, pluginRuntimeService, ScriptInvocationService.disabled());
+        this(properties, pluginRuntimeService, ScriptInvocationService.disabled(), SharedStateApplicationService.disabled());
     }
 
     public GroovyScriptEngine(AppProperties.Groovy properties,
                               PluginRuntimeService pluginRuntimeService,
                               ScriptInvocationService scriptInvocationService) {
-        this(properties, Clock.systemUTC(), pluginRuntimeService, scriptInvocationService);
+        this(properties, pluginRuntimeService, scriptInvocationService, SharedStateApplicationService.disabled());
+    }
+
+    public GroovyScriptEngine(AppProperties.Groovy properties,
+                              PluginRuntimeService pluginRuntimeService,
+                              ScriptInvocationService scriptInvocationService,
+                              SharedStateApplicationService sharedStateApplicationService) {
+        this(properties, Clock.systemUTC(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService);
     }
 
     GroovyScriptEngine(AppProperties.Groovy properties,
                        Clock clock,
                        PluginRuntimeService pluginRuntimeService,
                        ScriptInvocationService scriptInvocationService) {
+        this(properties, clock, pluginRuntimeService, scriptInvocationService, SharedStateApplicationService.disabled());
+    }
+
+    GroovyScriptEngine(AppProperties.Groovy properties,
+                       Clock clock,
+                       PluginRuntimeService pluginRuntimeService,
+                       ScriptInvocationService scriptInvocationService,
+                       SharedStateApplicationService sharedStateApplicationService) {
         this.compiledScriptCache = new CompiledGroovyScriptCache(properties, clock, this::compileScriptClass);
         this.pluginRuntimeService = pluginRuntimeService == null ? PluginRuntimeService.disabled() : pluginRuntimeService;
         this.scriptInvocationService = scriptInvocationService == null
                 ? ScriptInvocationService.disabled()
                 : scriptInvocationService;
+        this.sharedStateApplicationService = sharedStateApplicationService == null
+                ? SharedStateApplicationService.disabled()
+                : sharedStateApplicationService;
     }
 
     /**
@@ -69,7 +89,7 @@ public class GroovyScriptEngine implements ScriptEngine {
     /**
      * 执行 Groovy 脚本。
      * <p>
-     * 从编译缓存获取或编译脚本类，创建绑定变量（input、config、log、plugins、scripts）后执行脚本。
+     * 从编译缓存获取或编译脚本类，创建绑定变量（input、config、log、plugins、scripts、state）后执行脚本。
      *
      * @param definition       脚本定义，包含源码和元信息
      * @param input            脚本输入数据，通过 {@code input} 绑定变量提供给脚本
@@ -103,6 +123,7 @@ public class GroovyScriptEngine implements ScriptEngine {
         binding.setVariable("log", new ScriptLogger(executionContext));
         binding.setVariable("plugins", new GroovyPlugins(pluginRuntimeService, definition, input, executionContext));
         binding.setVariable("scripts", new GroovyScripts(scriptInvocationService, definition, executionContext));
+        binding.setVariable("state", new ScriptStateBridge(sharedStateApplicationService, definition, executionContext));
         return binding;
     }
 

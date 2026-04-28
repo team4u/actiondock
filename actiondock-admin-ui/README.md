@@ -19,12 +19,31 @@ React + Vite 管理台模块，承载脚本平台和 AI 工作台的可视化操
 - `SystemSettingsPage`
 - `AccessTokenManagementPage`
 - `ConfigValueManagementPage`
+- `SharedStateManagementPage`
 
 AI 相关能力主要分布在：
 
 - `aiWorkbench.ts`
 - `aiAgentTools.ts`
 - `pages` 下的脚本编辑、运行和系统设置相关页面
+
+## 系统配置页包含的能力
+
+- 配置值管理
+- 共享状态管理
+- 访问令牌管理
+- 控制台凭证设置
+- 数据备份
+
+其中“共享状态”页支持：
+
+- 命名空间浏览与切换
+- 条目列表与过滤
+- JSON 值编辑
+- `secret` 标记
+- 过期时间设置
+- 删除与清理过期条目
+- 查看版本号和最后写入信息
 
 ## 本地开发
 

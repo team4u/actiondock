@@ -10,6 +10,29 @@
 - **AI 工具工作台**：管理模型、Agent、Toolset、AI 调用日志，以及脚本生成、诊断、评审等辅助能力
 - **统一工具抽象**：用 Schema、稳定执行入口、依赖与日志记录，把“脚本”升级为“可治理的工具资产”
 
+## 通用共享状态存储
+
+ActionDock 内置了一个通用共享状态存储，适合多个脚本或外部流程复用同一份运行时状态，而不需要自行落文件或额外接一套缓存。
+
+- 存储模型：`namespace + key + JSON value`
+- 支持 `secret` 标记
+- 支持 `expiresAt` 过期时间
+- 支持 `version` 与 CAS
+- 支持脚本侧直接访问，也支持 REST API 和管理台操作
+
+适合的典型场景：
+
+- OAuth / API Token 缓存与续期
+- 游标、断点、增量同步位置
+- 多步骤工作流的阶段性结果
+- 外部系统轮询的时间戳、水位线、批次号
+
+按职责查看细节：
+
+- REST API 与管理台入口见 [actiondock-app-spring](actiondock-app-spring/README.md)
+- 脚本内 `state` 用法见 [actiondock-app-support](actiondock-app-support/README.md)
+- 领域模型与持久化范围见 [actiondock-core](actiondock-core/README.md) 与 [actiondock-storage-jpa](actiondock-storage-jpa/README.md)
+
 ## 快速开始
 
 ### 前置要求

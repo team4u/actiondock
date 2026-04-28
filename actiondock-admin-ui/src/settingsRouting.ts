@@ -1,4 +1,4 @@
-export const SYSTEM_SETTINGS_TABS = ["config-values", "access-tokens", "console-token", "data-backup"] as const;
+export const SYSTEM_SETTINGS_TABS = ["config-values", "shared-state", "access-tokens", "console-token", "data-backup"] as const;
 
 export type SystemSettingsTab = (typeof SYSTEM_SETTINGS_TABS)[number];
 

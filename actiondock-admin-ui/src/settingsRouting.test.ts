@@ -15,6 +15,7 @@ describe("settings routing helpers", () => {
     expect(resolveSystemSettingsTab("?tab=console-token")).toBe("console-token");
     expect(resolveSystemSettingsTab(new URLSearchParams("tab=access-tokens"))).toBe("access-tokens");
     expect(resolveSystemSettingsTab("?tab=config-values")).toBe("config-values");
+    expect(resolveSystemSettingsTab("?tab=shared-state")).toBe("shared-state");
   });
 
   it("builds the canonical settings search string", () => {

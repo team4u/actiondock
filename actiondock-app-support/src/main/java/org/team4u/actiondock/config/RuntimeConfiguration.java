@@ -38,6 +38,7 @@ import org.team4u.actiondock.application.ExecutionPresetApplicationService;
 import org.team4u.actiondock.application.ScheduleApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.application.ScriptInvocationService;
+import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
@@ -52,6 +53,7 @@ import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
+import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.repository.HttpPluginArtifactResolver;
@@ -88,6 +90,11 @@ public class RuntimeConfiguration {
     @Bean
     public ApiAccessTokenApplicationService apiAccessTokenApplicationService(ApiAccessTokenRepository apiAccessTokenRepository) {
         return new ApiAccessTokenApplicationService(apiAccessTokenRepository);
+    }
+
+    @Bean
+    public SharedStateApplicationService sharedStateApplicationService(SharedStateRepository sharedStateRepository) {
+        return new SharedStateApplicationService(sharedStateRepository);
     }
 
     @Bean
@@ -211,10 +218,11 @@ public class RuntimeConfiguration {
     public ScriptEngine scriptEngine(JsonCodec jsonCodec,
                                      AppProperties properties,
                                      PluginRuntimeService pluginRuntimeService,
-                                     ScriptInvocationService scriptInvocationService) {
+                                     ScriptInvocationService scriptInvocationService,
+                                     SharedStateApplicationService sharedStateApplicationService) {
         return new RoutingScriptEngine(
-                new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService, scriptInvocationService),
-                new PythonScriptEngine(jsonCodec, properties.getExecution().getPython(), scriptInvocationService)
+                new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService),
+                new PythonScriptEngine(jsonCodec, properties.getExecution().getPython(), scriptInvocationService, sharedStateApplicationService)
         );
     }
 

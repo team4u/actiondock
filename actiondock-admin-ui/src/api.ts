@@ -49,6 +49,11 @@ import type {
   PluginInvokeResponse,
   PluginReferenceView,
   PluginView,
+  SharedStateCompareAndSetRequest,
+  SharedStateCompareAndSetResult,
+  SharedStateDetail,
+  SharedStateRequest,
+  SharedStateSummary,
   ScriptSchedule,
   ScriptScheduleUpsertRequest,
   ScriptDefinition
@@ -581,6 +586,62 @@ export function copyConfigValueAsLocalOverride(key: string): Promise<ConfigValue
 
 export function restoreConfigValueRepositoryDefault(key: string): Promise<ConfigValueDetail> {
   return request<ConfigValueDetail>(`/api/config-values/${encodeURIComponent(key)}/restore-repository-default`, {
+    method: "POST"
+  });
+}
+
+export function listSharedStateNamespaces(): Promise<string[]> {
+  return request<string[]>("/api/shared-state/namespaces");
+}
+
+export function listSharedState(namespace: string): Promise<SharedStateSummary[]> {
+  const params = new URLSearchParams({ namespace });
+  return request<SharedStateSummary[]>(`/api/shared-state?${params.toString()}`);
+}
+
+export function getSharedState(namespace: string, key: string): Promise<SharedStateDetail> {
+  const params = new URLSearchParams({ namespace, key });
+  return request<SharedStateDetail>(`/api/shared-state/detail?${params.toString()}`);
+}
+
+export function createSharedState(payload: SharedStateRequest): Promise<SharedStateDetail> {
+  return request<SharedStateDetail>("/api/shared-state", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateSharedState(payload: SharedStateRequest): Promise<SharedStateDetail> {
+  return request<SharedStateDetail>("/api/shared-state", {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function compareAndSetSharedState(payload: SharedStateCompareAndSetRequest): Promise<SharedStateCompareAndSetResult> {
+  return request<SharedStateCompareAndSetResult>("/api/shared-state/cas", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteSharedState(namespace: string, key: string): Promise<void> {
+  const params = new URLSearchParams({ namespace, key });
+  return request<void>(`/api/shared-state?${params.toString()}`, {
+    method: "DELETE"
+  });
+}
+
+export function purgeExpiredSharedState(namespace?: string): Promise<number> {
+  const params = new URLSearchParams();
+  if (namespace) {
+    params.set("namespace", namespace);
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return request<number>(`/api/shared-state/purge-expired${suffix}`, {
     method: "POST"
   });
 }

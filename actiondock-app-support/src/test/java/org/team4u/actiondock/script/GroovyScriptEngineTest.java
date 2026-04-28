@@ -3,14 +3,17 @@ package org.team4u.actiondock.script;
 import groovy.lang.Script;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.application.ScriptInvocationService;
+import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
+import org.team4u.actiondock.domain.model.SharedStateEntry;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
+import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 
 import java.time.Clock;
@@ -18,8 +21,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -228,6 +233,35 @@ class GroovyScriptEngineTest {
     }
 
     @Test
+    void executeExposesStateBinding() {
+        SharedStateApplicationService stateService = new SharedStateApplicationService(new InMemorySharedStateRepository());
+        GroovyScriptEngine stateEngine = new GroovyScriptEngine(
+                groovyProperties(),
+                PluginRuntimeService.disabled(),
+                ScriptInvocationService.disabled(),
+                stateService
+        );
+
+        Object result = stateEngine.execute(
+                new ScriptDefinition()
+                        .setId("state-script")
+                        .setSource("""
+                                def saved = state.put("oauth.github", "token", [accessToken: input.token], [secret: true, ttlSeconds: 60])
+                                def loaded = state.get("oauth.github", "token")
+                                return [savedVersion: saved.version, loadedValue: loaded.value.accessToken, secret: loaded.secret]
+                                """),
+                Map.of("token", "abc"),
+                new ScriptExecutionContext().setExecutionId("exec-1")
+        );
+
+        assertThat(result).isEqualTo(Map.of(
+                "savedVersion", 1L,
+                "loadedValue", "abc",
+                "secret", true
+        ));
+    }
+
+    @Test
     void executeCompilesSameSourceOnlyOnceUnderConcurrentFirstHit() throws Exception {
         BlockingGroovyScriptEngine countingEngine = new BlockingGroovyScriptEngine(groovyProperties(), new MutableClock());
         ScriptDefinition definition = new ScriptDefinition().setSource("return [message: 'Hello, ' + input.name]");
@@ -268,6 +302,79 @@ class GroovyScriptEngineTest {
 
         protected int compileCount() {
             return compileCount.get();
+        }
+    }
+
+    private static final class InMemorySharedStateRepository implements SharedStateRepository {
+        private final Map<String, SharedStateEntry> values = new LinkedHashMap<>();
+
+        @Override
+        public SharedStateEntry save(SharedStateEntry entry) {
+            SharedStateEntry copy = copy(entry);
+            values.put(id(entry.getNamespace(), entry.getKey()), copy);
+            return copy(copy);
+        }
+
+        @Override
+        public Optional<SharedStateEntry> findByNamespaceAndKey(String namespace, String key) {
+            return Optional.ofNullable(values.get(id(namespace, key))).map(InMemorySharedStateRepository::copy);
+        }
+
+        @Override
+        public List<SharedStateEntry> findByNamespace(String namespace) {
+            return values.values().stream()
+                    .filter(item -> namespace.equals(item.getNamespace()))
+                    .map(InMemorySharedStateRepository::copy)
+                    .toList();
+        }
+
+        @Override
+        public List<SharedStateEntry> findAll() {
+            return values.values().stream().map(InMemorySharedStateRepository::copy).toList();
+        }
+
+        @Override
+        public boolean compareAndSet(SharedStateEntry entry, Long expectedVersion) {
+            String id = id(entry.getNamespace(), entry.getKey());
+            SharedStateEntry current = values.get(id);
+            if (current == null || !Objects.equals(current.getVersion(), expectedVersion)) {
+                return false;
+            }
+            values.put(id, copy(entry));
+            return true;
+        }
+
+        @Override
+        public void deleteByNamespaceAndKey(String namespace, String key) {
+            values.remove(id(namespace, key));
+        }
+
+        @Override
+        public long deleteExpired(java.time.LocalDateTime now) {
+            return 0;
+        }
+
+        @Override
+        public long deleteExpired(String namespace, java.time.LocalDateTime now) {
+            return 0;
+        }
+
+        private static String id(String namespace, String key) {
+            return namespace + "\u0000" + key;
+        }
+
+        private static SharedStateEntry copy(SharedStateEntry source) {
+            return new SharedStateEntry()
+                    .setNamespace(source.getNamespace())
+                    .setKey(source.getKey())
+                    .setValue(source.getValue())
+                    .setSecret(source.isSecret())
+                    .setVersion(source.getVersion())
+                    .setExpiresAt(source.getExpiresAt())
+                    .setCreatedAt(source.getCreatedAt())
+                    .setUpdatedAt(source.getUpdatedAt())
+                    .setLastWriterScriptId(source.getLastWriterScriptId())
+                    .setLastWriterExecutionId(source.getLastWriterExecutionId());
         }
     }
 

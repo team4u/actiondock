@@ -20,6 +20,7 @@ import org.team4u.actiondock.domain.port.RepositoryAiPackageInstallationReposito
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
+import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.storage.jpa.adapter.JpaConfigValueRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaExecutionPresetRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaExecutionRepositoryAdapter;
@@ -36,6 +37,7 @@ import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryDefinitionReposito
 import org.team4u.actiondock.storage.jpa.adapter.JpaScriptRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaScriptScheduleRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryToolInstallationRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaSharedStateRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.json.JacksonJsonCodec;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataConfigValueRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionPresetEntityRepository;
@@ -53,6 +55,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryDefinitionRepo
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptScheduleEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryToolInstallationRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataSharedStateRepository;
 
 /**
  * JPA 存储层配置，注册仓储端口适配器和 JSON 编解码器 Bean。
@@ -81,6 +84,11 @@ public class StorageConfiguration {
     @Bean
     public ConfigValueRepository configValueRepository(SpringDataConfigValueRepository repository) {
         return new JpaConfigValueRepositoryAdapter(repository);
+    }
+
+    @Bean
+    public SharedStateRepository sharedStateRepository(SpringDataSharedStateRepository repository, JsonCodec jsonCodec) {
+        return new JpaSharedStateRepositoryAdapter(repository, jsonCodec);
     }
 
     @Bean

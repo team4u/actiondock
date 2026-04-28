@@ -25,6 +25,7 @@ import org.team4u.actiondock.storage.jpa.entity.RepositoryAiPackageInstallationE
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
 import org.team4u.actiondock.storage.jpa.entity.ScriptScheduleEntity;
 import org.team4u.actiondock.storage.jpa.entity.ConfigValueEntity;
+import org.team4u.actiondock.storage.jpa.entity.SharedStateEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataApiAccessTokenRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentProfileRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentApprovalRepository;
@@ -39,6 +40,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataPluginRegistrationReposi
 import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryAiPackageInstallationRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptScheduleEntityRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataSharedStateRepository;
 import org.team4u.actiondock.web.ScriptController;
 
 @SpringBootApplication(scanBasePackageClasses = {ScriptController.class, SampleDataInitializer.class})
@@ -56,7 +58,8 @@ import org.team4u.actiondock.web.ScriptController;
         AiCallLogEntity.class,
         AiAgentRunEntity.class,
         AiAgentStepEntity.class,
-        AiAgentApprovalEntity.class
+        AiAgentApprovalEntity.class,
+        SharedStateEntity.class
 })
 @EnableJpaRepositories(basePackageClasses = {
         SpringDataScriptEntityRepository.class,
@@ -72,7 +75,8 @@ import org.team4u.actiondock.web.ScriptController;
         SpringDataAiCallLogRepository.class,
         SpringDataAiAgentRunRepository.class,
         SpringDataAiAgentStepRepository.class,
-        SpringDataAiAgentApprovalRepository.class
+        SpringDataAiAgentApprovalRepository.class,
+        SpringDataSharedStateRepository.class
 })
 @Import({RuntimeConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class, ScheduleConfiguration.class})
 /**

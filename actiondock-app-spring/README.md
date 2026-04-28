@@ -65,16 +65,89 @@ npm run dev
 | `/api/schedules` | 全局定时任务管理 |
 | `/api/scripts/{scriptId}/schedules` | 脚本级定时任务管理 |
 | `/api/config-values` | 全局配置值管理 |
+| `/api/shared-state` | 通用共享状态管理 |
 | `/api/access-tokens` | 访问令牌管理 |
 | `/api/ai` | 模型、Agent、Toolset、AI Tool、Agent Run 和调用日志 |
 | `/api/ai/workbench` | 脚本生成、改进、诊断、评审等工作台能力 |
 | `/api/schema` | 脚本输入/输出 Schema 摘要 |
 | `/api/installed-tools` | 已安装仓库工具卸载入口 |
 
+## 共享状态 API
+
+共享状态用于多个脚本或外部客户端复用同一份运行时状态。它不是只面向 OAuth 的特化能力，而是通用的带命名空间状态存储。
+
+核心字段：
+
+- `namespace`：显式命名空间，例如 `oauth.github`
+- `key`：命名空间内唯一键，例如 `access-token`
+- `value`：任意 JSON 值
+- `secret`：是否按敏感值处理
+- `expiresAt`：过期时间，ISO 本地时间，例如 `2026-04-28T12:00:00`
+- `version`：版本号，可用于 CAS
+
+当前接口：
+
+- `GET /api/shared-state/namespaces`
+- `GET /api/shared-state?namespace=oauth.github`
+- `GET /api/shared-state/detail?namespace=oauth.github&key=access-token`
+- `POST /api/shared-state`
+- `PUT /api/shared-state`
+- `POST /api/shared-state/cas`
+- `DELETE /api/shared-state?namespace=oauth.github&key=access-token`
+- `POST /api/shared-state/purge-expired`
+- `POST /api/shared-state/purge-expired?namespace=oauth.github`
+
+写入示例：
+
+```bash
+curl -X POST http://localhost:8080/api/shared-state \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "namespace": "oauth.github",
+    "key": "access-token",
+    "value": {
+      "accessToken": "gho_xxx",
+      "tokenType": "Bearer"
+    },
+    "secret": true,
+    "expiresAt": "2026-04-28T12:00:00"
+  }'
+```
+
+CAS 示例：
+
+```bash
+curl -X POST http://localhost:8080/api/shared-state/cas \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "namespace": "cursor.sync",
+    "key": "users",
+    "expectedVersion": 3,
+    "value": {
+      "cursor": "next-page-token"
+    }
+  }'
+```
+
+语义说明：
+
+- 过期条目不会被 `get` / `list` / `namespaces` 返回
+- 对已过期条目再次 `put` 时，会按新条目重建，版本从 `1` 开始
+- `cas` 返回 `updated`、`entry`、`current`，便于处理并发更新失败
+- `secret` 只是管理和展示语义，不代表数据库加密；当前实现是数据库明文存储、UI 遮罩展示
+
 ## 管理台与静态资源
 
 - `/admin/*`：管理台入口
 - 打包时会自动构建 `actiondock-admin-ui` 并复制到 jar 静态资源目录
+
+系统配置页已包含：
+
+- 配置值
+- 共享状态
+- 访问令牌
+- 控制台凭证
+- 数据备份
 
 ## 使用提示
 

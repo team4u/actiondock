@@ -2,6 +2,7 @@ package org.team4u.actiondock.script;
 
 import org.team4u.actiondock.application.ErrorDetailSupport;
 import org.team4u.actiondock.application.ScriptInvocationService;
+import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -37,6 +38,7 @@ import java.util.function.Consumer;
 public class PythonScriptEngine implements ScriptEngine {
     private static final String LOG_PREFIX = "__ACTIONDOCK_LOG__";
     private static final String INVOKE_PREFIX = "__ACTIONDOCK_INVOKE__";
+    private static final String STATE_PREFIX = "__ACTIONDOCK_STATE__";
     private static final String VALIDATION_RUNNER = """
             import py_compile
             import sys
@@ -47,19 +49,30 @@ public class PythonScriptEngine implements ScriptEngine {
     private final JsonCodec jsonCodec;
     private final AppProperties.Python properties;
     private final ScriptInvocationService scriptInvocationService;
+    private final SharedStateApplicationService sharedStateApplicationService;
 
     public PythonScriptEngine(JsonCodec jsonCodec, AppProperties.Python properties) {
-        this(jsonCodec, properties, ScriptInvocationService.disabled());
+        this(jsonCodec, properties, ScriptInvocationService.disabled(), SharedStateApplicationService.disabled());
     }
 
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties.Python properties,
                               ScriptInvocationService scriptInvocationService) {
+        this(jsonCodec, properties, scriptInvocationService, SharedStateApplicationService.disabled());
+    }
+
+    public PythonScriptEngine(JsonCodec jsonCodec,
+                              AppProperties.Python properties,
+                              ScriptInvocationService scriptInvocationService,
+                              SharedStateApplicationService sharedStateApplicationService) {
         this.jsonCodec = Objects.requireNonNull(jsonCodec);
         this.properties = Objects.requireNonNull(properties);
         this.scriptInvocationService = scriptInvocationService == null
                 ? ScriptInvocationService.disabled()
                 : scriptInvocationService;
+        this.sharedStateApplicationService = sharedStateApplicationService == null
+                ? SharedStateApplicationService.disabled()
+                : sharedStateApplicationService;
     }
 
     /**
@@ -105,7 +118,7 @@ public class PythonScriptEngine implements ScriptEngine {
      * <p>
      * 将脚本源码包装为标准化的 Python 入口函数，写入临时文件后以子进程方式执行。
      * 通过 stdin 传入脚本输入（JSON），通过环境变量传入脚本配置。
-     * stderr 中的特殊前缀协议用于收集脚本日志和脚本互调请求，stdout 输出作为执行结果。
+     * stderr 中的特殊前缀协议用于收集脚本日志、脚本互调和共享状态请求，stdout 输出作为执行结果。
      *
      * @param definition       脚本定义，包含源码和元信息
      * @param input            脚本输入数据，通过 stdin 以 JSON 格式传入
@@ -127,7 +140,7 @@ public class PythonScriptEngine implements ScriptEngine {
                             executionContext.log(event.level(), event.message());
                         }
                     },
-                    new PythonInvocationBridge(definition, executionContext)
+                    new PythonBridge(definition, executionContext)
             );
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本执行超时");
@@ -150,7 +163,7 @@ public class PythonScriptEngine implements ScriptEngine {
                                      String stdin,
                                      String configJson,
                                      Consumer<LogEvent> logConsumer,
-                                     PythonInvocationBridge invocationBridge)
+                                     PythonBridge invocationBridge)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command);
@@ -258,6 +271,35 @@ public class PythonScriptEngine implements ScriptEngine {
         lines.add("");
         lines.add("scripts = __ActionDockScripts()");
         lines.add("");
+        lines.add("class __ActionDockState:");
+        lines.add("    def _request(self, payload):");
+        lines.add("        sys.stderr.write(\"" + STATE_PREFIX + "\" + json.dumps(payload, ensure_ascii=False) + \"\\n\")");
+        lines.add("        sys.stderr.flush()");
+        lines.add("        response_text = sys.stdin.readline()");
+        lines.add("        if not response_text:");
+        lines.add("            raise RuntimeError(\"State bridge closed\")");
+        lines.add("        response = json.loads(response_text)");
+        lines.add("        if response.get(\"ok\"):");
+        lines.add("            return response.get(\"result\")");
+        lines.add("        raise RuntimeError(response.get(\"error\") or \"State request failed\")");
+        lines.add("");
+        lines.add("    def get(self, namespace, key):");
+        lines.add("        return self._request({\"operation\": \"get\", \"namespace\": namespace, \"key\": key})");
+        lines.add("");
+        lines.add("    def put(self, namespace, key, value, options=None):");
+        lines.add("        return self._request({\"operation\": \"put\", \"namespace\": namespace, \"key\": key, \"value\": value, \"options\": {} if options is None else options})");
+        lines.add("");
+        lines.add("    def cas(self, namespace, key, expected_version, value, options=None):");
+        lines.add("        return self._request({\"operation\": \"cas\", \"namespace\": namespace, \"key\": key, \"expectedVersion\": expected_version, \"value\": value, \"options\": {} if options is None else options})");
+        lines.add("");
+        lines.add("    def delete(self, namespace, key):");
+        lines.add("        return self._request({\"operation\": \"delete\", \"namespace\": namespace, \"key\": key})");
+        lines.add("");
+        lines.add("    def list(self, namespace):");
+        lines.add("        return self._request({\"operation\": \"list\", \"namespace\": namespace})");
+        lines.add("");
+        lines.add("state = __ActionDockState()");
+        lines.add("");
         lines.add("def __actiondock_main(input):");
         lines.addAll(indent(normalizedSource));
         return String.join("\n", lines) + "\n";
@@ -283,7 +325,7 @@ public class PythonScriptEngine implements ScriptEngine {
     private String readErrorStream(InputStream stream,
                                    Consumer<LogEvent> logConsumer,
                                    OutputStream stdinStream,
-                                   PythonInvocationBridge invocationBridge) {
+                                   PythonBridge bridge) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             StringBuilder output = new StringBuilder();
             String line;
@@ -294,7 +336,11 @@ public class PythonScriptEngine implements ScriptEngine {
                     continue;
                 }
                 if (line.startsWith(INVOKE_PREFIX)) {
-                    handleInvocation(line.substring(INVOKE_PREFIX.length()), stdinStream, invocationBridge);
+                    handleInvocation(line.substring(INVOKE_PREFIX.length()), stdinStream, bridge);
+                    continue;
+                }
+                if (line.startsWith(STATE_PREFIX)) {
+                    handleState(line.substring(STATE_PREFIX.length()), stdinStream, bridge);
                     continue;
                 }
                 if (output.length() > 0) {
@@ -310,17 +356,33 @@ public class PythonScriptEngine implements ScriptEngine {
 
     private void handleInvocation(String payload,
                                   OutputStream stdinStream,
-                                  PythonInvocationBridge invocationBridge) {
-        if (invocationBridge == null) {
+                                  PythonBridge bridge) {
+        if (bridge == null) {
             throw new IllegalStateException("Python 脚本互调桥接未初始化");
         }
         PythonInvocationRequest request = parseInvocationRequest(payload);
-        String response = invocationBridge.respond(request);
+        String response = bridge.respondInvocation(request);
         try {
             stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
             stdinStream.flush();
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write Python invocation response", e);
+        }
+    }
+
+    private void handleState(String payload,
+                             OutputStream stdinStream,
+                             PythonBridge bridge) {
+        if (bridge == null) {
+            throw new IllegalStateException("Python 状态桥接未初始化");
+        }
+        PythonStateRequest request = parseStateRequest(payload);
+        String response = bridge.respondState(request);
+        try {
+            stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
+            stdinStream.flush();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to write Python state response", e);
         }
     }
 
@@ -334,10 +396,28 @@ public class PythonScriptEngine implements ScriptEngine {
         );
     }
 
+    private PythonStateRequest parseStateRequest(String payload) {
+        Map<String, Object> value = jsonCodec.readMap(payload);
+        Object expectedVersion = value.get("expectedVersion");
+        Object options = value.get("options");
+        return new PythonStateRequest(
+                stringValue(value.get("operation")),
+                stringValue(value.get("namespace")),
+                stringValue(value.get("key")),
+                expectedVersion instanceof Number number ? number.longValue() : null,
+                value.get("value"),
+                options instanceof Map<?, ?> map ? normalizeMap(map) : Map.of()
+        );
+    }
+
     private Map<String, Object> normalizeMap(Map<?, ?> value) {
         Map<String, Object> normalized = new LinkedHashMap<>();
         value.forEach((key, item) -> normalized.put(String.valueOf(key), item));
         return normalized;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private LogEvent parseLogEvent(String line) {
@@ -396,16 +476,26 @@ public class PythonScriptEngine implements ScriptEngine {
     record PythonInvocationRequest(String scriptId, Map<String, Object> args) {
     }
 
-    private final class PythonInvocationBridge {
+    record PythonStateRequest(String operation,
+                              String namespace,
+                              String key,
+                              Long expectedVersion,
+                              Object value,
+                              Map<String, Object> options) {
+    }
+
+    private final class PythonBridge {
         private final ScriptDefinition definition;
         private final ScriptExecutionContext executionContext;
+        private final ScriptStateBridge stateBridge;
 
-        private PythonInvocationBridge(ScriptDefinition definition, ScriptExecutionContext executionContext) {
+        private PythonBridge(ScriptDefinition definition, ScriptExecutionContext executionContext) {
             this.definition = definition;
             this.executionContext = executionContext;
+            this.stateBridge = new ScriptStateBridge(sharedStateApplicationService, definition, executionContext);
         }
 
-        private String respond(PythonInvocationRequest request) {
+        private String respondInvocation(PythonInvocationRequest request) {
             try {
                 Object result = scriptInvocationService.invokePublished(
                         request.scriptId(),
@@ -417,6 +507,31 @@ public class PythonScriptEngine implements ScriptEngine {
                         "ok", true,
                         "result", result
                 ));
+            } catch (Exception exception) {
+                return jsonCodec.write(Map.of(
+                        "ok", false,
+                        "error", ErrorDetailSupport.summarize(exception)
+                ));
+            }
+        }
+
+        private String respondState(PythonStateRequest request) {
+            try {
+                Object result = switch (request.operation()) {
+                    case "get" -> stateBridge.get(request.namespace(), request.key());
+                    case "put" -> stateBridge.put(request.namespace(), request.key(), request.value(), request.options());
+                    case "cas" -> stateBridge.cas(request.namespace(), request.key(), request.expectedVersion(), request.value(), request.options());
+                    case "delete" -> {
+                        stateBridge.delete(request.namespace(), request.key());
+                        yield null;
+                    }
+                    case "list" -> stateBridge.list(request.namespace());
+                    default -> throw new IllegalArgumentException("不支持的 state 操作: " + request.operation());
+                };
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("ok", true);
+                values.put("result", result);
+                return jsonCodec.write(values);
             } catch (Exception exception) {
                 return jsonCodec.write(Map.of(
                         "ok", false,

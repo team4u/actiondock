@@ -18,6 +18,7 @@
 - `PythonScriptEngine`
 - `RoutingScriptEngine`
 - `CompiledGroovyScriptCache`
+- `ScriptStateBridge`
 
 ### 插件运行时
 
@@ -49,6 +50,101 @@
 - 数据库：`~/.actiondock/data`
 - 插件：`~/.actiondock/plugins`
 - 仓库工作目录：`~/.actiondock/repositories`
+
+## 脚本内共享状态 `state`
+
+Groovy 和 Python 脚本现在都会注入内置对象 `state`，用于访问通用共享状态存储。
+
+支持的方法：
+
+- `state.get(namespace, key)`
+- `state.put(namespace, key, value)`
+- `state.put(namespace, key, value, options)`
+- `state.cas(namespace, key, expectedVersion, value)`
+- `state.cas(namespace, key, expectedVersion, value, options)`
+- `state.delete(namespace, key)`
+- `state.list(namespace)`
+
+`options` 当前支持：
+
+- `secret: true | false`
+- `ttlSeconds: number`
+
+返回语义：
+
+- `get`：返回完整条目，或 `null`
+- `put`：返回完整条目
+- `cas`：返回 `{ updated, entry, current }`
+- `list`：返回同命名空间下的条目摘要列表，不包含 `value`
+
+完整条目字段通常包括：
+
+- `namespace`
+- `key`
+- `value`
+- `secret`
+- `version`
+- `expiresAt`
+- `createdAt`
+- `updatedAt`
+- `lastWriterScriptId`
+- `lastWriterExecutionId`
+
+### Groovy 示例
+
+```groovy
+def tokenState = state.get("oauth.github", "access-token")
+if (tokenState && tokenState.value?.accessToken) {
+    return [token: tokenState.value.accessToken, reused: true]
+}
+
+def saved = state.put(
+    "oauth.github",
+    "access-token",
+    [accessToken: "gho_xxx", tokenType: "Bearer"],
+    [secret: true, ttlSeconds: 3600]
+)
+
+return [version: saved.version, expiresAt: saved.expiresAt]
+```
+
+### Python 示例
+
+```python
+token_state = state.get("oauth.github", "access-token")
+if token_state and token_state.get("value", {}).get("accessToken"):
+    return {"token": token_state["value"]["accessToken"], "reused": True}
+
+saved = state.put(
+    "oauth.github",
+    "access-token",
+    {"accessToken": "gho_xxx", "tokenType": "Bearer"},
+    {"secret": True, "ttlSeconds": 3600},
+)
+
+return {"version": saved["version"], "expiresAt": saved["expiresAt"]}
+```
+
+### CAS 示例
+
+适合更新游标、水位线、批次号这类有并发写入风险的状态：
+
+```groovy
+def current = state.get("cursor.sync", "users")
+def expectedVersion = current?.version ?: 0
+def result = state.cas("cursor.sync", "users", expectedVersion, [cursor: "next-token"])
+
+if (!result.updated) {
+    throw new IllegalStateException("共享状态版本冲突，请重试")
+}
+```
+
+运行时语义：
+
+- 过期条目对脚本不可见，`state.get(...)` 会返回 `null`
+- `ttlSeconds` 必须大于 `0`
+- 写入时会自动记录当前脚本 ID 和执行 ID
+- Python 脚本通过 stderr/stdin 桥接协议访问状态，Groovy 脚本通过本地对象直接访问
 
 ## 适合放在这里的能力
 
