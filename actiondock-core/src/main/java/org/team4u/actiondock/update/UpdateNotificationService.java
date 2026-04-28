@@ -20,7 +20,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 统一的更新检查服务，用于 CLI 和 Server 的 npm 版本提醒。
+ * 统一的更新检查服务，用于不同发行组件的 npm 版本提醒。
  */
 public final class UpdateNotificationService {
     public static final String DISABLE_ENV = "ACTIONDOCK_NO_UPDATE_NOTIFIER";

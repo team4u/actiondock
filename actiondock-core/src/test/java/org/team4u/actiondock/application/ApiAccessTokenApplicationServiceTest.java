@@ -17,7 +17,7 @@ class ApiAccessTokenApplicationServiceTest {
 
     @Test
     void createReturnsPlainTokenButStoresOnlyHash() {
-        ApiAccessTokenApplicationService.CreatedToken created = service.create("Local CLI");
+        ApiAccessTokenApplicationService.CreatedToken created = service.create("Local client");
 
         assertThat(created.token().getId()).isNotBlank();
         assertThat(created.tokenValue()).startsWith("adk_" + created.token().getId() + "_");
@@ -28,7 +28,7 @@ class ApiAccessTokenApplicationServiceTest {
 
     @Test
     void authenticateUpdatesLastUsedAtAndRejectsDisabledToken() {
-        ApiAccessTokenApplicationService.CreatedToken created = service.create("Local CLI");
+        ApiAccessTokenApplicationService.CreatedToken created = service.create("Local client");
 
         assertThat(service.authenticate(created.tokenValue())).isTrue();
         assertThat(repository.findById(created.token().getId()).orElseThrow().getLastUsedAt()).isNotNull();

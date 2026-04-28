@@ -2,9 +2,7 @@
 
 **ActionDock** 是一个面向团队协作的脚本平台，同时也是一个面向大模型接入的 AI 工具工作台。
 
-它把脚本、插件、仓库分发和 AI 调用能力统一纳入同一套运行体系，让同一个工具既能给人使用，也能稳定地给 API、CLI、Agent 和 SKILL 使用。
-
-当前 CLI 首轮已补齐 AI 与运维主链路，覆盖脚本平台、AI 工作台、访问令牌和大部分系统管理入口。
+它把脚本、插件、仓库分发和 AI 调用能力统一纳入同一套运行体系，让同一个工具既能给人使用，也能稳定地给 API、Agent 和 SKILL 使用。
 
 ## 核心定位
 
@@ -29,17 +27,13 @@ mvn clean package -DskipTests
 
 # 启动 Web 应用
 mvn -pl actiondock-app-spring -am spring-boot:run
-
-# 单独构建 CLI
-mvn -pl actiondock-cli -am package
 ```
 
 ## 分发形态
 
 - `actiondock-server`：独立发布的服务端，推荐 `npm i -g actiondock-server` 后执行 `actiondock-server`
-- `actiondock-cli`：独立发布的命令行客户端，推荐 `npm i -g actiondock-cli` 后执行 `actiondock`
 
-两者都会低频检查 npm 最新版本，并输出手动升级提示；可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
+服务端会低频检查 npm 最新版本，并输出手动升级提示；可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
 
 ### 前端开发
 
@@ -68,7 +62,6 @@ docker compose down
 |------|------|
 | [actiondock-app-spring](actiondock-app-spring/README.md) | Spring Boot Web 入口、REST API、管理台挂载方式 |
 | [actiondock-admin-ui](actiondock-admin-ui/README.md) | React 管理台、页面结构、前端开发方式 |
-| [actiondock-cli](actiondock-cli/README.md) | 官方 REST CLI、面向 Agent 的命令协议 |
 | [actiondock-core](actiondock-core/README.md) | 脚本平台核心领域模型、执行模型、仓库与发布规则 |
 | [actiondock-app-support](actiondock-app-support/README.md) | 运行时装配、脚本引擎、插件运行时、仓库解析与默认配置 |
 | [actiondock-plugin-api](actiondock-plugin-api/README.md) | PF4J 插件 SPI、Manifest 协议、脚本侧调用上下文 |
@@ -92,7 +85,6 @@ actiondock
 ├── actiondock-plugin-template
 ├── actiondock-storage-jpa
 ├── actiondock-app-support
-├── actiondock-cli
 ├── actiondock-app-spring
 └── actiondock-admin-ui
 ```

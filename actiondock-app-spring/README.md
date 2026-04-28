@@ -86,4 +86,3 @@ npm run dev
 
 - UI 见 [../actiondock-admin-ui/README.md](../actiondock-admin-ui/README.md)
 - 运行时装配见 [../actiondock-app-support/README.md](../actiondock-app-support/README.md)
-- CLI 见 [../actiondock-cli/README.md](../actiondock-cli/README.md)

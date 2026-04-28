@@ -1,2 +1,0 @@
-# Keep this file so npm packaging does not inherit the repo-level .gitignore,
-# which excludes the generated jdeploy-bundle directory.

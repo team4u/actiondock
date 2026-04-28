@@ -37,7 +37,7 @@ class UpdateNotificationServiceTest {
         assertThat(notification).isPresent();
         assertThat(notification.orElseThrow().message()).contains("0.2.10").contains("0.2.9");
         assertThat(fetchCount.get()).isEqualTo(1);
-        assertThat(tempHome.resolve(".actiondock/update-check/cli.json")).exists();
+        assertThat(tempHome.resolve(".actiondock/update-check/server.json")).exists();
     }
 
     @Test
@@ -93,11 +93,11 @@ class UpdateNotificationServiceTest {
 
     private UpdateNotificationService.UpdateNotificationRequest request(String currentVersion, Map<String, String> environment) {
         return new UpdateNotificationService.UpdateNotificationRequest(
-                "cli",
-                "actiondock-cli",
-                "ActionDock CLI",
+                "server",
+                "actiondock-server",
+                "ActionDock Server",
                 currentVersion,
-                "npm i -g actiondock-cli@latest",
+                "npm i -g actiondock-server@latest",
                 tempHome,
                 environment
         );

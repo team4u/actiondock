@@ -38,21 +38,12 @@ import { getApiKey } from "../../auth";
 import { ScopeTag } from "../../components/ScopeTag";
 import { Col } from "../../components/SafeCol";
 import { ExecutionPresetBar } from "../../components/ExecutionPresetBar";
-import { buildStandardCommandPresets, buildExecutionInputFromValues } from "../../commands";
+import { buildHttpCommandPresets, buildExecutionInputFromValues } from "../../commands";
 import {
-  buildExecuteCliCommand,
-  buildExecuteCmdCliCommand,
-  buildExecutePowerShellCliCommand,
   buildExecuteCurlCommand,
   buildExecutePowerShellCommand,
-  buildScriptDetailCliCommand,
-  buildScriptDetailCmdCliCommand,
-  buildScriptDetailPowerShellCliCommand,
   buildScriptDetailCurlCommand,
   buildScriptDetailPowerShellCommand,
-  buildToolDetailCliCommand,
-  buildToolDetailCmdCliCommand,
-  buildToolDetailPowerShellCliCommand,
   buildToolDetailCurlCommand,
   buildToolDetailPowerShellCommand,
   resolveExecutionCommandInput
@@ -189,38 +180,28 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   const detailCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
-    return buildStandardCommandPresets({
+    return buildHttpCommandPresets({
       keyPrefix: "detail",
       httpBash: buildScriptDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildScriptDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliBash: buildScriptDetailCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildScriptDetailPowerShellCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliCmd: buildScriptDetailCmdCliCommand({ apiKey, origin, scriptId: editor.currentScript.id })
+      httpPowerShell: buildScriptDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id })
     });
   }, [editor.currentScript, apiKey, origin]);
 
   const executeCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
-    return buildStandardCommandPresets({
+    return buildHttpCommandPresets({
       keyPrefix: "execute",
       httpBash: buildExecuteCurlCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      cliBash: buildExecuteCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildExecutePowerShellCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      cliPowerShellEnvironment: "PowerShell stdin",
-      cliCmd: buildExecuteCmdCliCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
+      httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
     });
   }, [editor.currentScript, apiKey, origin, commandInput, execution.executionMode]);
 
   const schemaCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
-    return buildStandardCommandPresets({
+    return buildHttpCommandPresets({
       keyPrefix: "schema",
       httpBash: buildToolDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildToolDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliBash: buildToolDetailCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliPowerShell: buildToolDetailPowerShellCliCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      cliCmd: buildToolDetailCmdCliCommand({ apiKey, origin, scriptId: editor.currentScript.id })
+      httpPowerShell: buildToolDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id })
     });
   }, [editor.currentScript, apiKey, origin]);
 

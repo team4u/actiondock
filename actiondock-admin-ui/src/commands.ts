@@ -21,23 +21,12 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function cmdQuote(value: string): string {
-  const escaped = value
-    .replace(/(\\*)"/g, "$1$1\\\"")
-    .replace(/(\\+)$/g, "$1$1");
-  return `"${escaped}"`;
-}
-
 function powerShellQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
 function joinCommandLines(lines: string[]): string {
   return lines.join(" \\\n");
-}
-
-function joinSingleLineCommand(parts: string[]): string {
-  return parts.join(" ");
 }
 
 function joinPowerShellScript(sections: string[]): string {
@@ -113,82 +102,6 @@ function buildPowerShellJsonRequestSection({
     "$json | ConvertFrom-Json | ConvertTo-Json -Depth 100"
   ].join("\n"));
   return joinPowerShellScript(sections);
-}
-
-function buildCliCommandPrefix({
-  apiKey,
-  origin
-}: {
-  apiKey?: string;
-  origin: string;
-}): string[] {
-  const lines = [
-    "actiondock",
-    `  --base-url ${shellQuote(origin)}`
-  ];
-  if (apiKey) {
-    lines.push(`  --token ${shellQuote(apiKey)}`);
-  }
-  return lines;
-}
-
-function buildCmdCliCommandPrefix({
-  apiKey,
-  origin
-}: {
-  apiKey?: string;
-  origin: string;
-}): string[] {
-  const parts = [
-    "actiondock",
-    `--base-url ${cmdQuote(origin)}`
-  ];
-  if (apiKey) {
-    parts.push(`--token ${cmdQuote(apiKey)}`);
-  }
-  return parts;
-}
-
-function buildPowerShellCliArgumentParts({
-  apiKey,
-  origin
-}: {
-  apiKey?: string;
-  origin: string;
-}): string[] {
-  const parts = [
-    "actiondock",
-    `--base-url ${powerShellQuote(origin)}`
-  ];
-  if (apiKey) {
-    parts.push(`--token ${powerShellQuote(apiKey)}`);
-  }
-  return parts;
-}
-
-function buildPowerShellCliCommand(parts: string[]): string {
-  const lines = [`${parts[0]} \``];
-  parts.slice(1).forEach((part, index) => {
-    lines.push(`  ${part}${index < parts.length - 2 ? " `" : ""}`);
-  });
-  return lines.join("\n");
-}
-
-function buildPowerShellCliHereStringPipeCommand(payload: Record<string, unknown>, parts: string[]): string {
-  return [
-    "@'",
-    JSON.stringify(payload, null, 2),
-    `'@ | ${parts[0]} \``,
-    ...parts.slice(1).map((part, index) => `  ${part}${index < parts.length - 2 ? " `" : ""}`)
-  ].join("\n");
-}
-
-function buildPowerShellCliJsonVariableSection(variableName: string, payload: Record<string, unknown>): string {
-  return [
-    `${variableName} = @'`,
-    JSON.stringify(payload, null, 2),
-    "'@"
-  ].join("\n");
 }
 
 export function buildExecutionInputFromValues(
@@ -379,48 +292,6 @@ export function buildScriptDetailPowerShellCommand({
   });
 }
 
-export function buildScriptDetailCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const lines = buildCliCommandPrefix({ apiKey, origin });
-  lines.push(`  scripts get ${shellQuote(scriptId)}`);
-  return joinCommandLines(lines);
-}
-
-export function buildScriptDetailCmdCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildCmdCliCommandPrefix({ apiKey, origin });
-  parts.push("scripts", "get", cmdQuote(scriptId));
-  return joinSingleLineCommand(parts);
-}
-
-export function buildScriptDetailPowerShellCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  parts.push(`scripts get ${powerShellQuote(scriptId)}`);
-  return buildPowerShellCliCommand(parts);
-}
-
 export function buildToolDetailCurlCommand({
   apiKey,
   origin,
@@ -452,48 +323,6 @@ export function buildToolDetailPowerShellCommand({
     method: "Get",
     url: `${origin}/api/schema/${scriptId}`
   });
-}
-
-export function buildToolDetailCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const lines = buildCliCommandPrefix({ apiKey, origin });
-  lines.push(`  scripts schema ${shellQuote(scriptId)}`);
-  return joinCommandLines(lines);
-}
-
-export function buildToolDetailCmdCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildCmdCliCommandPrefix({ apiKey, origin });
-  parts.push("scripts", "schema", cmdQuote(scriptId));
-  return joinSingleLineCommand(parts);
-}
-
-export function buildToolDetailPowerShellCliCommand({
-  apiKey,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  parts.push(`scripts schema ${powerShellQuote(scriptId)}`);
-  return buildPowerShellCliCommand(parts);
 }
 
 export function buildExecuteCurlCommand({
@@ -552,78 +381,6 @@ export function buildExecutePowerShellCommand({
     method: "Post",
     url: `${origin}/api/executions`
   });
-}
-
-export function buildExecuteCliCommand({
-  apiKey,
-  input,
-  mode,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  input: Record<string, unknown>;
-  mode: SubmitMode;
-  origin: string;
-  scriptId: string;
-}): string {
-  const lines = buildCliCommandPrefix({ apiKey, origin });
-  lines.push("  executions submit");
-  lines.push(`  --script-id ${shellQuote(scriptId)}`);
-  lines.push(`  --input ${shellQuote(JSON.stringify(input))}`);
-  lines.push(`  --mode ${mode}`);
-  return joinCommandLines(lines);
-}
-
-export function buildExecuteCmdCliCommand({
-  apiKey,
-  input,
-  mode,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  input: Record<string, unknown>;
-  mode: SubmitMode;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildCmdCliCommandPrefix({ apiKey, origin });
-  parts.push(
-    "executions",
-    "submit",
-    "--script-id",
-    cmdQuote(scriptId),
-    "--input",
-    cmdQuote(JSON.stringify(input)),
-    "--mode",
-    mode
-  );
-  return joinSingleLineCommand(parts);
-}
-
-export function buildExecutePowerShellCliCommand({
-  apiKey,
-  input,
-  mode,
-  origin,
-  scriptId
-}: {
-  apiKey?: string;
-  input: Record<string, unknown>;
-  mode: SubmitMode;
-  origin: string;
-  scriptId: string;
-}): string {
-  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  parts.push(
-    "executions submit",
-    `--script-id ${powerShellQuote(scriptId)}`,
-    "--input-file -",
-    `--mode ${mode}`,
-    "--response-view RESULT"
-  );
-  return buildPowerShellCliHereStringPipeCommand(input, parts);
 }
 
 export function buildPluginInvokeCurlCommand({
@@ -692,125 +449,17 @@ export function buildPluginInvokePowerShellCommand({
   });
 }
 
-export function buildPluginInvokeCliCommand({
-  action,
-  apiKey,
-  args,
-  origin,
-  pluginId,
-  responseView,
-  scriptInput
-}: {
-  action: string;
-  apiKey?: string;
-  args: Record<string, unknown>;
-  origin: string;
-  pluginId: string;
-  responseView?: ExecutionResponseView;
-  scriptInput: Record<string, unknown>;
-}): string {
-  const lines = buildCliCommandPrefix({ apiKey, origin });
-  lines.push(`  plugins invoke ${shellQuote(pluginId)} ${shellQuote(action)}`);
-  lines.push(`  --args ${shellQuote(JSON.stringify(args))}`);
-  lines.push(`  --script-input ${shellQuote(JSON.stringify(scriptInput))}`);
-  lines.push(`  --response-view ${responseView ?? "RESULT"}`);
-  return joinCommandLines(lines);
-}
-
-export function buildPluginInvokeCmdCliCommand({
-  action,
-  apiKey,
-  args,
-  origin,
-  pluginId,
-  responseView,
-  scriptInput
-}: {
-  action: string;
-  apiKey?: string;
-  args: Record<string, unknown>;
-  origin: string;
-  pluginId: string;
-  responseView?: ExecutionResponseView;
-  scriptInput: Record<string, unknown>;
-}): string {
-  const parts = buildCmdCliCommandPrefix({ apiKey, origin });
-  parts.push(
-    "plugins",
-    "invoke",
-    cmdQuote(pluginId),
-    cmdQuote(action),
-    "--args",
-    cmdQuote(JSON.stringify(args)),
-    "--script-input",
-    cmdQuote(JSON.stringify(scriptInput)),
-    "--response-view",
-    responseView ?? "RESULT"
-  );
-  return joinSingleLineCommand(parts);
-}
-
-export function buildPluginInvokePowerShellCliCommand({
-  action,
-  apiKey,
-  args,
-  origin,
-  pluginId,
-  responseView,
-  scriptInput
-}: {
-  action: string;
-  apiKey?: string;
-  args: Record<string, unknown>;
-  origin: string;
-  pluginId: string;
-  responseView?: ExecutionResponseView;
-  scriptInput: Record<string, unknown>;
-}): string {
-  const parts = buildPowerShellCliArgumentParts({ apiKey, origin });
-  parts.push(
-    `plugins invoke ${powerShellQuote(pluginId)} ${powerShellQuote(action)}`,
-    "--args-file $argsPath",
-    "--script-input-file $scriptInputPath",
-    `--response-view ${responseView ?? "RESULT"}`
-  );
-  return joinPowerShellScript([
-    buildPowerShellCliJsonVariableSection("$argsJson", args),
-    buildPowerShellCliJsonVariableSection("$scriptInputJson", scriptInput),
-    `$argsPath = Join-Path $env:TEMP ("actiondock-args-{0}.json" -f [guid]::NewGuid())`,
-    `$scriptInputPath = Join-Path $env:TEMP ("actiondock-script-input-{0}.json" -f [guid]::NewGuid())`,
-    [
-      "[System.IO.File]::WriteAllText($argsPath, $argsJson, [System.Text.UTF8Encoding]::new($false))",
-      "[System.IO.File]::WriteAllText($scriptInputPath, $scriptInputJson, [System.Text.UTF8Encoding]::new($false))",
-      "",
-      "try {",
-      buildPowerShellCliCommand(parts).split("\n").map((line) => `  ${line}`).join("\n"),
-      "} finally {",
-      "  Remove-Item $argsPath -ErrorAction SilentlyContinue",
-      "  Remove-Item $scriptInputPath -ErrorAction SilentlyContinue",
-      "}"
-    ].join("\n")
-  ]);
-}
-
 export function buildCommandPresets(presets: CommandPreset[]): CommandPreset[] {
   return presets.filter((item) => item.command.trim().length > 0);
 }
 
-export function buildStandardCommandPresets(params: {
+export function buildHttpCommandPresets(params: {
   keyPrefix: string;
   httpBash: string;
   httpPowerShell: string;
-  cliBash: string;
-  cliPowerShell: string;
-  cliPowerShellEnvironment?: string;
-  cliCmd: string;
 }): CommandPreset[] {
   return buildCommandPresets([
     { key: `${params.keyPrefix}-http-bash`, family: "HTTP", environment: "bash/zsh", command: params.httpBash },
-    { key: `${params.keyPrefix}-http-powershell`, family: "HTTP", environment: "PowerShell", command: params.httpPowerShell },
-    { key: `${params.keyPrefix}-cli-bash`, family: "CLI", environment: "bash/zsh", command: params.cliBash },
-    { key: `${params.keyPrefix}-cli-powershell`, family: "CLI", environment: params.cliPowerShellEnvironment ?? "PowerShell", command: params.cliPowerShell },
-    { key: `${params.keyPrefix}-cli-cmd`, family: "CLI", environment: "cmd", command: params.cliCmd }
+    { key: `${params.keyPrefix}-http-powershell`, family: "HTTP", environment: "PowerShell", command: params.httpPowerShell }
   ]);
 }

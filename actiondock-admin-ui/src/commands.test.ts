@@ -1,147 +1,61 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildExecuteCliCommand,
-  buildExecuteCmdCliCommand,
-  buildExecutePowerShellCliCommand,
+  buildHttpCommandPresets,
   buildExecutePowerShellCommand,
-  buildPluginInvokeCliCommand,
-  buildPluginInvokeCmdCliCommand,
-  buildPluginInvokePowerShellCliCommand,
   buildPluginInvokePowerShellCommand,
   buildExecutionInputExample,
   resolveExecutionCommandInput,
-  buildScriptDetailCliCommand,
-  buildScriptDetailCmdCliCommand,
-  buildScriptDetailPowerShellCliCommand,
+  buildScriptDetailCurlCommand,
   buildScriptDetailPowerShellCommand,
-  buildToolDetailCliCommand,
-  buildToolDetailCmdCliCommand,
-  buildToolDetailPowerShellCliCommand,
+  buildExecuteCurlCommand,
+  buildPluginInvokeCurlCommand,
+  buildToolDetailCurlCommand,
   buildToolDetailPowerShellCommand
 } from "./commands";
 import type { SchemaFieldDefinition } from "./schema";
 
-describe("CLI command builders", () => {
-  it("builds script detail and schema commands with connection flags", () => {
+describe("HTTP command helpers", () => {
+  it("builds script detail and schema curl commands with authorization headers", () => {
     expect(
-      buildScriptDetailCliCommand({
+      buildScriptDetailCurlCommand({
         apiKey: "local-dev-key",
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`actiondock \\
-  --base-url 'http://localhost:8080' \\
-  --token 'local-dev-key' \\
-  scripts get 'hello-groovy'`);
+    ).toBe(`curl -X GET \\
+  -H 'Authorization: Bearer local-dev-key' \\
+  'http://localhost:8080/api/scripts/hello-groovy'`);
 
     expect(
-      buildToolDetailCliCommand({
+      buildToolDetailCurlCommand({
         apiKey: "local-dev-key",
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`actiondock \\
-  --base-url 'http://localhost:8080' \\
-  --token 'local-dev-key' \\
-  scripts schema 'hello-groovy'`);
-
-    expect(
-      buildToolDetailCmdCliCommand({
-        apiKey: "local-dev-key",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(
-      'actiondock --base-url "http://localhost:8080" --token "local-dev-key" scripts schema "hello-groovy"'
-    );
-
-    expect(
-      buildScriptDetailCmdCliCommand({
-        apiKey: "local-dev-key",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(
-      'actiondock --base-url "http://localhost:8080" --token "local-dev-key" scripts get "hello-groovy"'
-    );
-
-    expect(
-      buildScriptDetailPowerShellCliCommand({
-        apiKey: "local-dev-key",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(`actiondock \`
-  --base-url 'http://localhost:8080' \`
-  --token 'local-dev-key' \`
-  scripts get 'hello-groovy'`);
-
-    expect(
-      buildToolDetailPowerShellCliCommand({
-        apiKey: "local-dev-key",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(`actiondock \`
-  --base-url 'http://localhost:8080' \`
-  --token 'local-dev-key' \`
-  scripts schema 'hello-groovy'`);
+    ).toBe(`curl -X GET \\
+  -H 'Authorization: Bearer local-dev-key' \\
+  'http://localhost:8080/api/schema/hello-groovy'`);
   });
 
-  it("builds execution command with inline input", () => {
+  it("builds execution curl commands with inline input", () => {
     expect(
-      buildExecuteCliCommand({
+      buildExecuteCurlCommand({
         apiKey: "secret-token",
         input: { name: "Alice" },
         mode: "ASYNC",
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`actiondock \\
-  --base-url 'http://localhost:8080' \\
-  --token 'secret-token' \\
-  executions submit \\
-  --script-id 'hello-groovy' \\
-  --input '{"name":"Alice"}' \\
-  --mode ASYNC`);
-
-    expect(
-      buildExecuteCmdCliCommand({
-        apiKey: "secret-token",
-        input: { name: 'Alice "Ops"' },
-        mode: "ASYNC",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(
-      'actiondock --base-url "http://localhost:8080" --token "secret-token" executions submit --script-id "hello-groovy" --input "{\\"name\\":\\"Alice \\\\\\"Ops\\\\\\"\\"}" --mode ASYNC'
-    );
-
-    expect(
-      buildExecutePowerShellCliCommand({
-        apiKey: "secret-token",
-        input: { name: 'Alice "Ops"' },
-        mode: "ASYNC",
-        origin: "http://localhost:8080",
-        scriptId: "hello-groovy"
-      })
-    ).toBe(`@'
-{
-  "name": "Alice \\"Ops\\""
-}
-'@ | actiondock \`
-  --base-url 'http://localhost:8080' \`
-  --token 'secret-token' \`
-  executions submit \`
-  --script-id 'hello-groovy' \`
-  --input-file - \`
-  --mode ASYNC \`
-  --response-view RESULT`);
+    ).toBe(`curl -X POST \\
+  -H 'Content-Type: application/json' \\
+  -H 'Authorization: Bearer secret-token' \\
+  -d '{"scriptId":"hello-groovy","input":{"name":"Alice"},"mode":"ASYNC"}' \\
+  'http://localhost:8080/api/executions'`);
   });
 
-  it("builds plugin invoke command with args and script input", () => {
+  it("builds plugin invoke curl commands with args and script input", () => {
     expect(
-      buildPluginInvokeCliCommand({
+      buildPluginInvokeCurlCommand({
         action: "summarize",
         args: { topic: "ops" },
         origin: "http://localhost:8080",
@@ -149,65 +63,33 @@ describe("CLI command builders", () => {
         responseView: "RESULT",
         scriptInput: { locale: "zh-CN" }
       })
-    ).toBe(`actiondock \\
-  --base-url 'http://localhost:8080' \\
-  plugins invoke 'plugin-a' 'summarize' \\
-  --args '{"topic":"ops"}' \\
-  --script-input '{"locale":"zh-CN"}' \\
-  --response-view RESULT`);
+    ).toBe(`curl -X POST \\
+  -H 'Content-Type: application/json' \\
+  -d '{"args":{"topic":"ops"},"scriptInput":{"locale":"zh-CN"},"responseView":"RESULT"}' \\
+  'http://localhost:8080/api/plugins/plugin-a/actions/summarize/invoke'`);
+  });
 
+  it("only returns HTTP presets", () => {
     expect(
-      buildPluginInvokeCmdCliCommand({
-        action: "summarize",
-        args: { topic: 'ops "night"' },
-        origin: "http://localhost:8080",
-        pluginId: "plugin-a",
-        responseView: "RESULT",
-        scriptInput: { locale: "zh-CN" }
+      buildHttpCommandPresets({
+        keyPrefix: "detail",
+        httpBash: "curl -X GET 'http://localhost:8080/api/scripts/hello-groovy'",
+        httpPowerShell: "Invoke-WebRequest -Uri 'http://localhost:8080/api/scripts/hello-groovy'"
       })
-    ).toBe(
-      'actiondock --base-url "http://localhost:8080" plugins invoke "plugin-a" "summarize" --args "{\\"topic\\":\\"ops \\\\\\"night\\\\\\"\\"}" --script-input "{\\"locale\\":\\"zh-CN\\"}" --response-view RESULT'
-    );
-
-    expect(
-      buildPluginInvokePowerShellCliCommand({
-        action: "summarize",
-        args: { topic: 'ops "night"' },
-        origin: "http://localhost:8080",
-        pluginId: "plugin-a",
-        responseView: "RESULT",
-        scriptInput: { locale: "zh-CN" }
-      })
-    ).toBe(`$argsJson = @'
-{
-  "topic": "ops \\"night\\""
-}
-'@
-
-$scriptInputJson = @'
-{
-  "locale": "zh-CN"
-}
-'@
-
-$argsPath = Join-Path $env:TEMP ("actiondock-args-{0}.json" -f [guid]::NewGuid())
-
-$scriptInputPath = Join-Path $env:TEMP ("actiondock-script-input-{0}.json" -f [guid]::NewGuid())
-
-[System.IO.File]::WriteAllText($argsPath, $argsJson, [System.Text.UTF8Encoding]::new($false))
-[System.IO.File]::WriteAllText($scriptInputPath, $scriptInputJson, [System.Text.UTF8Encoding]::new($false))
-
-try {
-  actiondock \`
-    --base-url 'http://localhost:8080' \`
-    plugins invoke 'plugin-a' 'summarize' \`
-    --args-file $argsPath \`
-    --script-input-file $scriptInputPath \`
-    --response-view RESULT
-} finally {
-  Remove-Item $argsPath -ErrorAction SilentlyContinue
-  Remove-Item $scriptInputPath -ErrorAction SilentlyContinue
-}`);
+    ).toEqual([
+      {
+        key: "detail-http-bash",
+        family: "HTTP",
+        environment: "bash/zsh",
+        command: "curl -X GET 'http://localhost:8080/api/scripts/hello-groovy'"
+      },
+      {
+        key: "detail-http-powershell",
+        family: "HTTP",
+        environment: "PowerShell",
+        command: "Invoke-WebRequest -Uri 'http://localhost:8080/api/scripts/hello-groovy'"
+      }
+    ]);
   });
 });
 

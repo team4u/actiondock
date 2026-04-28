@@ -303,9 +303,9 @@ export function AccessTokenManagementPage({ embedded = false }: AccessTokenManag
             label="名称"
             name="name"
             rules={[{ required: true, message: "请输入访问令牌名称" }]}
-            extra="用于区分不同客户端或环境，例如“本地开发 CLI”或“测试环境管理台”。"
+            extra="用于区分不同客户端或环境，例如“本地测试客户端”或“测试环境管理台”。"
           >
-            <Input placeholder="本地开发 CLI" />
+            <Input placeholder="本地测试客户端" />
           </Form.Item>
         </Form>
       </Drawer>

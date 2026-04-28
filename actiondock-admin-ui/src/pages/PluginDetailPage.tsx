@@ -45,7 +45,7 @@ import {
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { Col } from "../components/SafeCol";
 import { CodeEditor } from "../components/CodeEditor";
-import { buildStandardCommandPresets } from "../commands";
+import { buildHttpCommandPresets } from "../commands";
 import { CommandPanel } from "../components/CommandPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
@@ -54,9 +54,6 @@ import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/S
 import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecutionInputFromValues,
-  buildPluginInvokeCliCommand,
-  buildPluginInvokeCmdCliCommand,
-  buildPluginInvokePowerShellCliCommand,
   buildPluginInvokeCurlCommand,
   buildPluginInvokePowerShellCommand,
   getCommandInputSourceLabel,
@@ -496,14 +493,10 @@ export function PluginDetailPage() {
 
   const invokeCommandPresets = useMemo(() => {
     if (!plugin || !currentAction) return [];
-    return buildStandardCommandPresets({
+    return buildHttpCommandPresets({
       keyPrefix: "invoke",
       httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      cliBash: buildPluginInvokeCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      cliPowerShell: buildPluginInvokePowerShellCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      cliPowerShellEnvironment: "PowerShell temp file",
-      cliCmd: buildPluginInvokeCmdCliCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
+      httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
     });
   }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);
   if (loading && !plugin) {
@@ -769,8 +762,8 @@ export function PluginDetailPage() {
 	                      label="调用命令会跟随当前动作和调试入参变化"
 	                      content={
 	                        apiKey
-	                          ? `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头；CLI 会附带 --token。`
-	                          : `命令已使用当前页面 origin ${origin}；HTTP 的 bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 Bearer Token，因此不会附带 Authorization 头或 --token。`
+	                          ? `命令已使用当前页面 origin ${origin}；bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头。`
+	                          : `命令已使用当前页面 origin ${origin}；bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 Bearer Token，因此不会附带 Authorization 头。`
 	                      }
 	                    />
 	                    {commandArgsInput.note ? <Alert type="info" showIcon message={commandArgsInput.note} /> : null}

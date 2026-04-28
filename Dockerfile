@@ -7,7 +7,6 @@ COPY actiondock-core/pom.xml actiondock-core/
 COPY actiondock-plugin-api/pom.xml actiondock-plugin-api/
 COPY actiondock-storage-jpa/pom.xml actiondock-storage-jpa/
 COPY actiondock-app-support/pom.xml actiondock-app-support/
-COPY actiondock-cli/pom.xml actiondock-cli/
 COPY actiondock-app-spring/pom.xml actiondock-app-spring/
 COPY actiondock-plugin-template/pom.xml actiondock-plugin-template/
 
