@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.port.JsonCodec;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
@@ -18,9 +19,51 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RepositoryCatalogServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final JsonCodec jsonCodec = new TestJsonCodec();
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void ensureRepositoryWorkspaceCreatesMissingIndexAndDirectories() throws Exception {
+        Path root = tempDir.resolve("repo-root");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("repo-1")
+                .setName("Demo Repository")
+                .setDescription("Demo description");
+
+        RepositoryCatalogService.ensureRepositoryWorkspace(root, repository, jsonCodec);
+
+        assertThat(Files.isDirectory(root.resolve("tools"))).isTrue();
+        assertThat(Files.isDirectory(root.resolve("plugins"))).isTrue();
+        assertThat(Files.isRegularFile(root.resolve("actiondock.repository.json"))).isTrue();
+
+        RepositoryCatalogService.RepositoryIndexFile index = objectMapper.readValue(
+                Files.readString(root.resolve("actiondock.repository.json")),
+                RepositoryCatalogService.RepositoryIndexFile.class
+        );
+        assertThat(index.name()).isEqualTo("Demo Repository");
+        assertThat(index.description()).isEqualTo("Demo description");
+        assertThat(index.tools()).isEmpty();
+        assertThat(index.plugins()).isEmpty();
+    }
+
+    @Test
+    void ensureRepositoryWorkspaceFallsBackToRepositoryIdWhenNameMissing() throws Exception {
+        Path root = tempDir.resolve("repo-without-name");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("repo-2")
+                .setDescription("Only description");
+
+        RepositoryCatalogService.ensureRepositoryWorkspace(root, repository, jsonCodec);
+
+        RepositoryCatalogService.RepositoryIndexFile index = objectMapper.readValue(
+                Files.readString(root.resolve("actiondock.repository.json")),
+                RepositoryCatalogService.RepositoryIndexFile.class
+        );
+        assertThat(index.name()).isEqualTo("repo-2");
+        assertThat(index.description()).isEqualTo("Only description");
+    }
 
     @Test
     void extractsLiteralPluginDependenciesFromGroovySource() {
@@ -463,5 +506,61 @@ class RepositoryCatalogServiceTest {
         });
         server.start();
         return server;
+    }
+
+    private static final class TestJsonCodec implements JsonCodec {
+        private final ObjectMapper objectMapper = new ObjectMapper();
+
+        @Override
+        public String write(Object value) {
+            try {
+                return value == null ? null : objectMapper.writeValueAsString(value);
+            } catch (Exception e) {
+                throw new IllegalStateException("Cannot serialize value", e);
+            }
+        }
+
+        @Override
+        public <T> T read(String json, Class<T> type) {
+            try {
+                return json == null || json.isBlank() ? null : objectMapper.readValue(json, type);
+            } catch (Exception e) {
+                throw new IllegalStateException("Cannot deserialize value", e);
+            }
+        }
+
+        @Override
+        public Object readUntyped(String json) {
+            try {
+                return json == null || json.isBlank() ? null : objectMapper.readValue(json, Object.class);
+            } catch (Exception e) {
+                throw new IllegalStateException("Cannot deserialize value", e);
+            }
+        }
+
+        @Override
+        public <T> List<T> readList(String json, Class<T> elementType) {
+            try {
+                if (json == null || json.isBlank()) {
+                    return List.of();
+                }
+                return objectMapper.readValue(
+                        json,
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, elementType)
+                );
+            } catch (Exception e) {
+                throw new IllegalStateException("Cannot deserialize list", e);
+            }
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Map<String, Object> readMap(String json) {
+            try {
+                return json == null || json.isBlank() ? Map.of() : objectMapper.readValue(json, Map.class);
+            } catch (Exception e) {
+                throw new IllegalStateException("Cannot deserialize map", e);
+            }
+        }
     }
 }

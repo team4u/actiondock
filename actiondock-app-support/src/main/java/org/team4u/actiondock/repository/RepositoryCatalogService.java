@@ -193,6 +193,7 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         if ("GIT".equals(repository.getType())) {
             syncGitRepository(repository);
+            ensureRepositoryWorkspace(resolveRepositoryRoot(repository), repository, jsonCodec);
         } else if ("LOCAL_DIR".equals(repository.getType())) {
             ensureLocalDirRepository(repository);
         } else {
@@ -1411,22 +1412,7 @@ public class RepositoryCatalogService {
 
     private void ensureLocalDirRepository(RepositoryDefinition repository) {
         Path root = resolveRepositoryRoot(repository);
-        try {
-            Files.createDirectories(root);
-            Files.createDirectories(root.resolve("tools"));
-        } catch (IOException exception) {
-            throw new IllegalStateException("创建本地目录仓库失败: " + root, exception);
-        }
-        Path indexPath = root.resolve(REPOSITORY_INDEX_FILE);
-        if (!Files.exists(indexPath)) {
-            writeJson(indexPath, new RepositoryIndexFile(
-                    1,
-                    normalizeOrDefault(repository.getName(), repository.getId()),
-                    normalizeNullable(repository.getDescription()),
-                    new ArrayList<>(),
-                    new ArrayList<>()
-            ));
-        }
+        ensureRepositoryWorkspace(root, repository, jsonCodec);
     }
 
     private RepositoryIndexFile readRepositoryIndex(RepositoryDefinition repository) {
@@ -1439,6 +1425,9 @@ public class RepositoryCatalogService {
         }
         if ("GIT".equals(repository.getType()) && Files.notExists(root)) {
             syncGitRepository(repository);
+        }
+        if ("GIT".equals(repository.getType())) {
+            ensureRepositoryWorkspace(root, repository, jsonCodec);
         }
         return readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class);
     }
@@ -1588,6 +1577,41 @@ public class RepositoryCatalogService {
         } catch (IOException exception) {
             throw new IllegalStateException("写入 JSON 文件失败: " + path, exception);
         }
+    }
+
+    static void ensureRepositoryWorkspace(Path root, RepositoryDefinition repository, JsonCodec jsonCodec) {
+        try {
+            Files.createDirectories(root);
+            Files.createDirectories(root.resolve("tools"));
+            Files.createDirectories(root.resolve("plugins"));
+        } catch (IOException exception) {
+            throw new IllegalStateException("初始化仓库目录失败: " + root, exception);
+        }
+        Path indexPath = root.resolve(REPOSITORY_INDEX_FILE);
+        if (Files.exists(indexPath)) {
+            return;
+        }
+        try {
+            Files.writeString(indexPath, jsonCodec.write(emptyRepositoryIndex(repository)), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new IllegalStateException("初始化仓库索引失败: " + indexPath, exception);
+        }
+    }
+
+    static RepositoryIndexFile emptyRepositoryIndex(RepositoryDefinition repository) {
+        String repositoryName = trimToNull(repository == null ? null : repository.getName());
+        String repositoryId = trimToNull(repository == null ? null : repository.getId());
+        return new RepositoryIndexFile(
+                1,
+                repositoryName != null ? repositoryName : repositoryId,
+                trimToNull(repository == null ? null : repository.getDescription()),
+                new ArrayList<>(),
+                new ArrayList<>()
+        );
+    }
+
+    private static String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private void runGit(Path workdir, List<String> command) {
