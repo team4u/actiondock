@@ -206,7 +206,7 @@ public class MyActionDockPlugin implements ActionDockPlugin {
 mvn clean package
 
 # 通过 REST API 安装到 ActionDock
-curl -X POST http://localhost:8080/api/plugins/install \
+curl -X POST http://localhost:5177/api/plugins/install \
   -F "file=@target/my-plugin-1.0.0.jar"
 
 # 通过 actiondock CLI 安装

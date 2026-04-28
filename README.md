@@ -64,7 +64,7 @@ mvn -pl actiondock-app-spring -am spring-boot:run
 ```bash
 cd actiondock-cli
 npm install
-npm run dev -- tool list --server http://localhost:8080
+npm run dev -- tool list --server http://localhost:5177
 ```
 
 - CLI README：`actiondock-cli/README.md`
@@ -78,7 +78,7 @@ npm run dev
 ```
 
 - 管理台开发地址：`http://localhost:5173/admin/scripts`
-- 管理台生产地址：`http://localhost:8080/admin/scripts`
+- 管理台生产地址：`http://localhost:5177/admin/scripts`
 
 ### Docker
 

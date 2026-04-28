@@ -32,6 +32,6 @@ COPY --from=build /build/app.jar app.jar
 ENV APP_HOME_DIR=/app/data
 ENV JAVA_OPTS="-Xmx256m -Xms128m"
 
-EXPOSE 8080
+EXPOSE 5177
 
 ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar app.jar"]

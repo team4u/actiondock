@@ -137,7 +137,7 @@ function buildCliCommonFlags(params: {
   if (params.apiKey) {
     result.push(buildCliFlag("token", params.apiKey, params.environment));
   }
-  if (params.includeJson ?? true) {
+  if (params.includeJson ?? false) {
     result.push("--json");
   }
   return result;
@@ -359,7 +359,7 @@ export function buildScriptDetailCurlCommand({
   if (apiKey) {
     lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
   }
-  lines.push(`  ${shellQuote(`${origin}/api/scripts/${scriptId}`)}`);
+  lines.push(`  ${shellQuote(`${origin}/api/scripts/${scriptId}/published`)}`);
   return joinCommandLines(lines);
 }
 
@@ -375,7 +375,7 @@ export function buildScriptDetailPowerShellCommand({
   return buildPowerShellJsonRequestSection({
     apiKey,
     method: "Get",
-    url: `${origin}/api/scripts/${scriptId}`
+    url: `${origin}/api/scripts/${scriptId}/published`
   });
 }
 
@@ -475,13 +475,12 @@ export function buildExecuteCurlCommand({
   lines.push(
     `  -d ${shellQuote(
       JSON.stringify({
-        scriptId,
         input,
-        mode
+        ...(mode === "SYNC" ? {} : { mode })
       })
     )}`
   );
-  lines.push(`  ${shellQuote(`${origin}/api/executions`)}`);
+  lines.push(`  ${shellQuote(`${origin}/api/scripts/${scriptId}/published/execute`)}`);
   return joinCommandLines(lines);
 }
 
@@ -501,12 +500,11 @@ export function buildExecutePowerShellCommand({
   return buildPowerShellJsonRequestSection({
     apiKey,
     body: {
-      scriptId,
       input,
-      mode
+      ...(mode === "SYNC" ? {} : { mode })
     },
     method: "Post",
-    url: `${origin}/api/executions`
+    url: `${origin}/api/scripts/${scriptId}/published/execute`
   });
 }
 

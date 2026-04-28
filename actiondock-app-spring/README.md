@@ -52,7 +52,7 @@ npm run dev
 ```
 
 - 前端开发地址：`http://localhost:5173/admin/scripts`
-- 后端管理台地址：`http://localhost:8080/admin/scripts`
+- 后端管理台地址：`http://localhost:5177/admin/scripts`
 
 ## API 分组
 
@@ -100,7 +100,7 @@ npm run dev
 写入示例：
 
 ```bash
-curl -X POST http://localhost:8080/api/shared-state \
+curl -X POST http://localhost:5177/api/shared-state \
   -H 'Content-Type: application/json' \
   -d '{
     "namespace": "oauth.github",
@@ -127,7 +127,7 @@ actiondock state put oauth.github access-token \
 CAS 示例：
 
 ```bash
-curl -X POST http://localhost:8080/api/shared-state/cas \
+curl -X POST http://localhost:5177/api/shared-state/cas \
   -H 'Content-Type: application/json' \
   -d '{
     "namespace": "cursor.sync",

@@ -61,7 +61,7 @@ describe("SharedStateManagementPage helpers", () => {
     expect(snippets[8]).toEqual({
       family: "CLI",
       label: "actiondock state put",
-      value: "actiondock state put 'oauth.github' 'access-token' --token 'local-dev-key' --json --value-json '{\"accessToken\":\"gho_xxx\",\"scopes\":[\"repo\"],\"active\":true,\"ttl\":null}' --secret --expires-at '2026-04-28T12:00:00'"
+      value: "actiondock state put 'oauth.github' 'access-token' --token 'local-dev-key' --value-json '{\"accessToken\":\"gho_xxx\",\"scopes\":[\"repo\"],\"active\":true,\"ttl\":null}' --secret --expires-at '2026-04-28T12:00:00'"
     });
     expect(snippets[9]?.value).toContain("--expected-version");
     expect(snippets[9]?.value).toContain("'7'");

@@ -197,8 +197,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       }),
       ...buildCliCommandPresets({
         keyPrefix: "detail",
-        cliBash: buildScriptDetailCliCommand({ apiKey, draft: true, environment: "bash/zsh", origin, scriptId: editor.currentScript.id }),
-        cliPowerShell: buildScriptDetailCliCommand({ apiKey, draft: true, environment: "PowerShell", origin, scriptId: editor.currentScript.id })
+        cliBash: buildScriptDetailCliCommand({ apiKey, environment: "bash/zsh", origin, scriptId: editor.currentScript.id }),
+        cliPowerShell: buildScriptDetailCliCommand({ apiKey, environment: "PowerShell", origin, scriptId: editor.currentScript.id })
       })
     ]);
   }, [editor.currentScript, apiKey, origin]);
@@ -215,7 +215,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         keyPrefix: "execute",
         cliBash: buildExecuteCliCommand({
           apiKey,
-          draft: true,
           environment: "bash/zsh",
           input: commandInput.value,
           mode: execution.executionMode,
@@ -224,7 +223,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         }),
         cliPowerShell: buildExecuteCliCommand({
           apiKey,
-          draft: true,
           environment: "PowerShell",
           input: commandInput.value,
           mode: execution.executionMode,
@@ -245,8 +243,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       }),
       ...buildCliCommandPresets({
         keyPrefix: "schema",
-        cliBash: buildToolSchemaCliCommand({ apiKey, draft: true, environment: "bash/zsh", origin, scriptId: editor.currentScript.id }),
-        cliPowerShell: buildToolSchemaCliCommand({ apiKey, draft: true, environment: "PowerShell", origin, scriptId: editor.currentScript.id })
+        cliBash: buildToolSchemaCliCommand({ apiKey, environment: "bash/zsh", origin, scriptId: editor.currentScript.id }),
+        cliPowerShell: buildToolSchemaCliCommand({ apiKey, environment: "PowerShell", origin, scriptId: editor.currentScript.id })
       })
     ]);
   }, [editor.currentScript, apiKey, origin]);

@@ -1,4 +1,4 @@
-# actiondock-cli
+# @actiondock/cli
 
 ActionDock 的命令行客户端，用来把现有 JSON REST API 包装成更适合终端和 AI 调用的扁平命令参数。
 
@@ -23,7 +23,7 @@ actiondock --help
 
 ## 快速开始
 
-如果你的 ActionDock 服务运行在本机，CLI 默认会连接 `http://127.0.0.1:8080`，不需要显式传 `--server`。
+如果你的 ActionDock 服务运行在本机，CLI 默认会连接 `http://127.0.0.1:5177`，不需要显式传 `--server`。
 
 ```bash
 actiondock tool list
@@ -120,7 +120,7 @@ actiondock tool run hello-world --input-json '{"name":"alice","payload":{"x":1}}
 ### 本地配置
 
 ```bash
-actiondock config set server http://127.0.0.1:8080
+actiondock config set server http://127.0.0.1:5177
 actiondock config set token your-token
 actiondock config show
 actiondock config clear token
@@ -135,7 +135,7 @@ actiondock config clear token
 
 命令参数 > 环境变量 > 本地配置 > 默认值
 
-默认服务地址是 `http://127.0.0.1:8080`。`tool run` 默认同步执行，不需要额外指定同步模式。
+默认服务地址是 `http://127.0.0.1:5177`。`tool run` 默认同步执行，不需要额外指定同步模式。
 
 ## 自动补全
 

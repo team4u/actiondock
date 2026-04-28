@@ -1,6 +1,6 @@
 {
-  "name": "actiondock-cli",
-  "version": "0.1.0",
+  "name": "@actiondock/cli",
+  "version": "0.1.1",
   "description": "ActionDock command line interface",
   "license": "MIT",
   "type": "module",
@@ -12,6 +12,9 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18"
   },

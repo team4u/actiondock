@@ -5,7 +5,7 @@ import path from "node:path";
 import { ActionDockCliError, isRecord } from "./error.js";
 import type { ConfigFile } from "./types.js";
 
-const DEFAULT_SERVER_URL = "http://127.0.0.1:8080";
+const DEFAULT_SERVER_URL = "http://127.0.0.1:5177";
 
 function configDir(): string {
   if (process.platform === "win32") {

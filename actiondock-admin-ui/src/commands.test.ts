@@ -29,7 +29,7 @@ describe("HTTP command helpers", () => {
       })
     ).toBe(`curl -X GET \\
   -H 'Authorization: Bearer local-dev-key' \\
-  'http://localhost:8080/api/scripts/hello-groovy'`);
+  'http://localhost:8080/api/scripts/hello-groovy/published'`);
 
     expect(
       buildToolDetailCurlCommand({
@@ -54,8 +54,56 @@ describe("HTTP command helpers", () => {
     ).toBe(`curl -X POST \\
   -H 'Content-Type: application/json' \\
   -H 'Authorization: Bearer secret-token' \\
-  -d '{"scriptId":"hello-groovy","input":{"name":"Alice"},"mode":"ASYNC"}' \\
-  'http://localhost:8080/api/executions'`);
+  -d '{"input":{"name":"Alice"},"mode":"ASYNC"}' \\
+  'http://localhost:8080/api/scripts/hello-groovy/published/execute'`);
+  });
+
+  it("omits sync mode in HTTP execute commands because it is the server default", () => {
+    expect(
+      buildExecuteCurlCommand({
+        input: { message: "hi" },
+        mode: "SYNC",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(`curl -X POST \\
+  -H 'Content-Type: application/json' \\
+  -d '{"input":{"message":"hi"}}' \\
+  'http://localhost:8080/api/scripts/hello-groovy/published/execute'`);
+
+    expect(
+      buildExecutePowerShellCommand({
+        input: { message: "hi" },
+        mode: "SYNC",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe(`$body = @'
+{
+  "input": {
+    "message": "hi"
+  }
+}
+'@
+
+$response = Invoke-WebRequest \`
+  -Uri 'http://localhost:8080/api/scripts/hello-groovy/published/execute' \`
+  -Method Post \`
+  -UseBasicParsing \`
+  -ContentType 'application/json; charset=utf-8' \`
+  -Body $body
+
+$stream = $response.RawContentStream
+if ($stream.CanSeek) {
+  $stream.Position = 0
+}
+$reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+try {
+  $json = $reader.ReadToEnd()
+} finally {
+  $reader.Dispose()
+}
+$json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
   });
 
   it("builds plugin invoke curl commands with args and script input", () => {
@@ -78,21 +126,21 @@ describe("HTTP command helpers", () => {
     expect(
       buildHttpCommandPresets({
         keyPrefix: "detail",
-        httpBash: "curl -X GET 'http://localhost:8080/api/scripts/hello-groovy'",
-        httpPowerShell: "Invoke-WebRequest -Uri 'http://localhost:8080/api/scripts/hello-groovy'"
+        httpBash: "curl -X GET 'http://localhost:8080/api/scripts/hello-groovy/published'",
+        httpPowerShell: "Invoke-WebRequest -Uri 'http://localhost:8080/api/scripts/hello-groovy/published'"
       })
     ).toEqual([
       {
         key: "detail-http-bash",
         family: "HTTP",
         environment: "bash/zsh",
-        command: "curl -X GET 'http://localhost:8080/api/scripts/hello-groovy'"
+        command: "curl -X GET 'http://localhost:8080/api/scripts/hello-groovy/published'"
       },
       {
         key: "detail-http-powershell",
         family: "HTTP",
         environment: "PowerShell",
-        command: "Invoke-WebRequest -Uri 'http://localhost:8080/api/scripts/hello-groovy'"
+        command: "Invoke-WebRequest -Uri 'http://localhost:8080/api/scripts/hello-groovy/published'"
       }
     ]);
   });
@@ -111,7 +159,7 @@ describe("PowerShell HTTP command builders", () => {
 }
 
 $response = Invoke-WebRequest \`
-  -Uri 'http://localhost:8080/api/scripts/hello-groovy' \`
+  -Uri 'http://localhost:8080/api/scripts/hello-groovy/published' \`
   -Method Get \`
   -UseBasicParsing \`
   -Headers $headers
@@ -167,7 +215,6 @@ $json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
       })
     ).toBe(`$body = @'
 {
-  "scriptId": "hello-groovy",
   "input": {
     "name": "Alice \\"Ops\\"",
     "team": "O'Brien"
@@ -177,7 +224,7 @@ $json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
 '@
 
 $response = Invoke-WebRequest \`
-  -Uri 'http://localhost:8080/api/executions' \`
+  -Uri 'http://localhost:8080/api/scripts/hello-groovy/published/execute' \`
   -Method Post \`
   -UseBasicParsing \`
   -ContentType 'application/json; charset=utf-8' \`
@@ -247,7 +294,7 @@ $json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
 });
 
 describe("CLI command helpers", () => {
-  it("builds draft detail and schema commands", () => {
+  it("builds draft detail and schema commands when explicitly requested", () => {
     expect(
       buildScriptDetailCliCommand({
         apiKey: "local-dev-key",
@@ -256,7 +303,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool get 'hello-groovy' --draft --token 'local-dev-key' --json");
+    ).toBe("actiondock tool get 'hello-groovy' --draft --token 'local-dev-key'");
 
     expect(
       buildToolSchemaCliCommand({
@@ -266,7 +313,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool schema 'hello-groovy' --draft --token 'local-dev-key' --json");
+    ).toBe("actiondock tool schema 'hello-groovy' --draft --token 'local-dev-key'");
   });
 
   it("flattens scalar execute args and preserves nested data in input-json", () => {
@@ -280,7 +327,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool run 'hello-groovy' --draft --token 'secret-token' --json --mode 'async' --name 'Alice' --count '3' --enabled 'false' --input-json '{\"payload\":{\"source\":\"file\"}}'");
+    ).toBe("actiondock tool run 'hello-groovy' --draft --token 'secret-token' --mode 'async' --name 'Alice' --count '3' --enabled 'false' --input-json '{\"payload\":{\"source\":\"file\"}}'");
   });
 
   it("omits sync mode because it is the CLI default", () => {
@@ -292,7 +339,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool run 'hello-groovy' --json --message 'hi'");
+    ).toBe("actiondock tool run 'hello-groovy' --message 'hi'");
   });
 
   it("flattens plugin args but keeps scriptInput as json", () => {
@@ -307,7 +354,7 @@ describe("CLI command helpers", () => {
         responseView: "RESULT",
         scriptInput: { locale: "zh-CN" }
       })
-    ).toBe("actiondock plugin invoke 'plugin-a' 'summarize' --token 'secret''token' --json --topic 'ops \"night\"' --retries '2' --args-json '{\"payload\":{\"owner\":\"O''Brien\"}}' --script-input-json '{\"locale\":\"zh-CN\"}'");
+    ).toBe("actiondock plugin invoke 'plugin-a' 'summarize' --token 'secret''token' --topic 'ops \"night\"' --retries '2' --args-json '{\"payload\":{\"owner\":\"O''Brien\"}}' --script-input-json '{\"locale\":\"zh-CN\"}'");
   });
 
   it("builds CLI presets", () => {
