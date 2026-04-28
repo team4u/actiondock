@@ -144,11 +144,10 @@ class ActionDockDynamicAiToolProviderTest {
                 null,
                 null,
                 null,
-                Map.of("agentProfile", "parent-agent", "maxToolPermission", "DANGEROUS_ACTION")
+                Map.of("agentProfile", "parent-agent")
         ));
 
         assertThat(success.success()).isTrue();
-        assertThat(runtime.context.metadata()).containsEntry("maxToolPermission", "CONTROLLED_ACTION");
         assertThat(runtime.context.metadata().get("agentProfileChain"))
                 .isEqualTo(List.of("parent-agent", "child-agent"));
 

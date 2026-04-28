@@ -92,7 +92,7 @@ public class AiWorkbenchService {
                 safeCommand.scriptId(),
                 safeCommand.executionId(),
                 null,
-                Map.of("taskType", taskType.name(), "maxToolPermission", "PROPOSE_CHANGE")
+                Map.of("taskType", taskType.name())
         ));
         return toWorkbenchResult(taskType, runResult);
     }

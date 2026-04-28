@@ -6,9 +6,14 @@ import org.team4u.actiondock.ai.api.AiToolExecutionResult;
 import org.team4u.actiondock.ai.api.AiToolPermission;
 import org.team4u.actiondock.ai.api.AiToolProvider;
 import org.team4u.actiondock.ai.api.AiToolRegistry;
+import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.ai.api.ConfigurableAiTool;
+import org.team4u.actiondock.ai.api.AiAgentProfile;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +58,15 @@ public class AiToolRegistryImpl implements AiToolRegistry {
                 .orElse(List.of());
     }
 
+    @Override
+    public List<AiTool> listAgentTools(AiAgentProfile agentProfile) {
+        AgentToolResolution resolution = resolveAgentTools(agentProfile);
+        if (!resolution.conflicts().isEmpty()) {
+            throw conflictException(resolution.conflicts());
+        }
+        return resolution.tools().stream().map(ResolvedAgentTool::tool).toList();
+    }
+
     private AiTool configureTool(AiTool tool, Map<String, Object> options) {
         if (tool instanceof ConfigurableAiTool configurable) {
             return configurable.configure(options == null ? Map.of() : options);
@@ -92,14 +106,40 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         }
     }
 
-    public void assertToolsetsAllowed(List<String> toolsetIds, AiToolPermission maxPermission) {
-        if (toolsetIds == null || toolsetIds.isEmpty()) {
+    AgentToolResolution resolveAgentTools(AiAgentProfile agentProfile) {
+        if (agentProfile == null) {
+            return new AgentToolResolution(List.of(), List.of(), 0);
+        }
+        Map<String, ToolAccumulator> accumulators = new LinkedHashMap<>();
+        List<AgentToolConflict> conflicts = new ArrayList<>();
+        collectToolsetTools(agentProfile, accumulators, conflicts);
+        collectDirectTools(agentProfile, accumulators, conflicts);
+
+        List<ResolvedAgentTool> resolvedTools = new ArrayList<>();
+        int mergedToolCount = 0;
+        for (ToolAccumulator accumulator : accumulators.values()) {
+            if (accumulator.conflicting()) {
+                conflicts.add(new AgentToolConflict(accumulator.toolName(), List.copyOf(accumulator.sources()), "配置不一致"));
+                continue;
+            }
+            if (accumulator.sources().size() > 1) {
+                mergedToolCount++;
+            }
+            resolvedTools.add(new ResolvedAgentTool(
+                    accumulator.tool(),
+                    accumulator.options(),
+                    List.copyOf(accumulator.sources())
+            ));
+        }
+        return new AgentToolResolution(List.copyOf(resolvedTools), List.copyOf(conflicts), mergedToolCount);
+    }
+
+    public void assertToolsAllowed(Collection<AiTool> tools, AiToolPermission maxPermission) {
+        if (tools == null || tools.isEmpty()) {
             return;
         }
-        for (String toolsetId : toolsetIds) {
-            for (AiTool tool : listTools(toolsetId)) {
-                ensureAllowed(tool, maxPermission, "AI Agent 策略权限上限");
-            }
+        for (AiTool tool : tools) {
+            ensureAllowed(tool, maxPermission, "AI Agent 策略权限上限");
         }
     }
 
@@ -108,6 +148,178 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         AiToolPermission requested = tool == null ? null : tool.permission();
         if (!effectiveMax.allows(requested)) {
             throw new IllegalArgumentException(label + "不允许工具 " + tool.name() + " 使用权限 " + requested);
+        }
+    }
+
+    private void collectToolsetTools(AiAgentProfile agentProfile,
+                                     Map<String, ToolAccumulator> accumulators,
+                                     List<AgentToolConflict> conflicts) {
+        for (String toolsetId : agentProfile.getToolsetIds()) {
+            if (toolsetId == null || toolsetId.isBlank()) {
+                throw new IllegalArgumentException("工具集 ID 不能为空");
+            }
+            AiToolset toolset = toolsetRepository.findById(toolsetId)
+                    .orElseThrow(() -> new IllegalArgumentException("AI 工具集不存在: " + toolsetId));
+            if (!toolset.isEnabled()) {
+                continue;
+            }
+            for (String toolName : toolset.getToolNames()) {
+                if (toolName == null || toolName.isBlank()) {
+                    throw new IllegalArgumentException("AI 工具名不能为空");
+                }
+                Map<String, Object> options = normalizeOptions(toolset.getToolOptions().get(toolName));
+                AiTool configuredTool = configureTool(getTool(toolName), options);
+                ensureAllowed(configuredTool, toolset.getMaxPermission(), "AI 工具集权限上限");
+                addCandidate(accumulators, conflicts, configuredTool, options, new AgentToolSource("toolset", toolsetId, toolName));
+            }
+        }
+    }
+
+    private void collectDirectTools(AiAgentProfile agentProfile,
+                                    Map<String, ToolAccumulator> accumulators,
+                                    List<AgentToolConflict> conflicts) {
+        for (String toolName : new LinkedHashSet<>(agentProfile.getDirectToolNames())) {
+            if (toolName == null || toolName.isBlank()) {
+                throw new IllegalArgumentException("AI 直接工具名不能为空");
+            }
+            Map<String, Object> options = normalizeOptions(agentProfile.getDirectToolOptions().get(toolName));
+            AiTool configuredTool = configureTool(getTool(toolName), options);
+            addCandidate(accumulators, conflicts, configuredTool, options, new AgentToolSource("direct", "direct", toolName));
+        }
+    }
+
+    private void addCandidate(Map<String, ToolAccumulator> accumulators,
+                              List<AgentToolConflict> conflicts,
+                              AiTool tool,
+                              Map<String, Object> options,
+                              AgentToolSource source) {
+        ToolAccumulator accumulator = accumulators.get(tool.name());
+        if (accumulator == null) {
+            accumulators.put(tool.name(), new ToolAccumulator(tool.name(), tool, options, source));
+            return;
+        }
+        accumulator.add(tool, options, source);
+        if (accumulator.conflicting()) {
+            conflicts.removeIf(conflict -> conflict.toolName().equals(tool.name()));
+        }
+    }
+
+    private IllegalArgumentException conflictException(List<AgentToolConflict> conflicts) {
+        String detail = conflicts.stream()
+                .map(conflict -> conflict.toolName() + " 来源 [" + sourceLabels(conflict.sources()) + "] 配置不一致")
+                .reduce((left, right) -> left + "; " + right)
+                .orElse("存在工具配置冲突");
+        return new IllegalArgumentException("Agent 工具配置冲突: " + detail);
+    }
+
+    private String sourceLabels(List<AgentToolSource> sources) {
+        return sources.stream().map(this::sourceLabel).reduce((left, right) -> left + ", " + right).orElse("");
+    }
+
+    private String sourceLabel(AgentToolSource source) {
+        if (source == null) {
+            return "unknown";
+        }
+        if ("toolset".equals(source.sourceType())) {
+            return "toolset:" + source.sourceId();
+        }
+        return "direct";
+    }
+
+    private Map<String, Object> normalizeOptions(Map<String, Object> options) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        if (options != null) {
+            options.forEach((key, value) -> normalized.put(key, normalizeValue(value)));
+        }
+        return normalized;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object normalizeValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            map.forEach((key, item) -> normalized.put(String.valueOf(key), normalizeValue(item)));
+            return normalized;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(this::normalizeValue).toList();
+        }
+        return value;
+    }
+
+    public record AgentToolResolution(
+            List<ResolvedAgentTool> tools,
+            List<AgentToolConflict> conflicts,
+            int mergedToolCount
+    ) {
+    }
+
+    public record ResolvedAgentTool(
+            AiTool tool,
+            Map<String, Object> options,
+            List<AgentToolSource> sources
+    ) {
+    }
+
+    public record AgentToolConflict(
+            String toolName,
+            List<AgentToolSource> sources,
+            String reason
+    ) {
+    }
+
+    public record AgentToolSource(
+            String sourceType,
+            String sourceId,
+            String toolName
+    ) {
+    }
+
+    private static final class ToolAccumulator {
+        private final String toolName;
+        private AiTool tool;
+        private Map<String, Object> options;
+        private final List<AgentToolSource> sources = new ArrayList<>();
+        private boolean conflicting;
+
+        private ToolAccumulator(String toolName, AiTool tool, Map<String, Object> options, AgentToolSource source) {
+            this.toolName = toolName;
+            this.tool = tool;
+            this.options = options;
+            this.sources.add(source);
+        }
+
+        private void add(AiTool nextTool, Map<String, Object> nextOptions, AgentToolSource source) {
+            sources.add(source);
+            if (conflicting) {
+                return;
+            }
+            if (!options.equals(nextOptions)) {
+                conflicting = true;
+                return;
+            }
+            this.tool = nextTool;
+            this.options = nextOptions;
+        }
+
+        private String toolName() {
+            return toolName;
+        }
+
+        private AiTool tool() {
+            return tool;
+        }
+
+        private Map<String, Object> options() {
+            return options;
+        }
+
+        private List<AgentToolSource> sources() {
+            return sources;
+        }
+
+        private boolean conflicting() {
+            return conflicting;
         }
     }
 }

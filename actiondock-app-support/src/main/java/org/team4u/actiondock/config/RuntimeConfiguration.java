@@ -117,8 +117,9 @@ public class RuntimeConfiguration {
     @Bean
     public AiAgentProfileService aiAgentProfileService(AiAgentProfileRepository repository,
                                                        AiModelProfileRepository modelProfileRepository,
-                                                       AiToolsetRepository toolsetRepository) {
-        return new AiAgentProfileService(repository, modelProfileRepository, toolsetRepository);
+                                                       AiToolsetRepository toolsetRepository,
+                                                       AiToolRegistryImpl toolRegistry) {
+        return new AiAgentProfileService(repository, modelProfileRepository, toolsetRepository, toolRegistry);
     }
 
     @Bean

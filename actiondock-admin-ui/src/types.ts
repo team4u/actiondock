@@ -111,8 +111,9 @@ export interface AiAgentProfile {
   modelProfileId: string;
   systemPrompt?: string;
   toolsetIds: string[];
+  directToolNames: string[];
+  directToolOptions: Record<string, Record<string, unknown>>;
   options: Record<string, unknown>;
-  policy: Record<string, unknown>;
   enabled: boolean;
   createdAt?: string;
   updatedAt?: string;

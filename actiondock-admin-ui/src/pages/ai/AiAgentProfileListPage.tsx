@@ -3,11 +3,12 @@ import { DeleteOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined } from
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteAiAgent, listAiAgents, listAiModels } from "../../api";
+import { deleteAiAgent, listAiAgents, listAiModels, listAiTools, listAiToolsets } from "../../api";
+import { getAgentToolSummary } from "../../aiAgentTools";
 import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { PageHeader } from "../../components/PageHeader";
 import { TableLinkCell } from "../../components/TableLinkCell";
-import type { AiAgentProfile, AiModelProfile } from "../../types";
+import type { AiAgentProfile, AiModelProfile, AiTool, AiToolset } from "../../types";
 import { formatDateTime, getErrorMessage } from "../../utils";
 
 export function AiAgentProfileListPage() {
@@ -15,6 +16,8 @@ export function AiAgentProfileListPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const [agents, setAgents] = useState<AiAgentProfile[]>([]);
   const [models, setModels] = useState<AiModelProfile[]>([]);
+  const [toolsets, setToolsets] = useState<AiToolset[]>([]);
+  const [tools, setTools] = useState<AiTool[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
@@ -22,9 +25,11 @@ export function AiAgentProfileListPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [nextAgents, nextModels] = await Promise.all([listAiAgents(), listAiModels()]);
+      const [nextAgents, nextModels, nextToolsets, nextTools] = await Promise.all([listAiAgents(), listAiModels(), listAiToolsets(), listAiTools()]);
       setAgents(nextAgents);
       setModels(nextModels);
+      setToolsets(nextToolsets);
+      setTools(nextTools);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载 Agent Profile 失败"));
     } finally {
@@ -38,7 +43,7 @@ export function AiAgentProfileListPage() {
     const keyword = searchText.trim().toLowerCase();
     if (!keyword) return agents;
     return agents.filter((item) =>
-      [item.id, item.name, item.description ?? "", item.modelProfileId, item.systemPrompt ?? "", ...item.toolsetIds]
+      [item.id, item.name, item.description ?? "", item.modelProfileId, item.systemPrompt ?? "", ...item.toolsetIds, ...item.directToolNames]
         .some((field) => field.toLowerCase().includes(keyword))
     );
   }, [agents, searchText]);
@@ -77,7 +82,20 @@ export function AiAgentProfileListPage() {
         ? <TableLinkCell to={`/ai/models/${value}`}>{value}</TableLinkCell>
         : <Typography.Text type="danger">{value}（缺失）</Typography.Text>
     },
-    { title: "工具集", dataIndex: "toolsetIds", render: (items) => <Space size={[4, 4]} wrap>{items?.map((item: string) => <Tag key={item}>{item}</Tag>)}</Space> },
+    {
+      title: "工具",
+      render: (_, item) => {
+        const summary = getAgentToolSummary(item, toolsets, tools);
+        return (
+          <Space size={[4, 4]} wrap>
+            {item.toolsetIds.map((toolsetId) => <Tag key={`${item.id}-${toolsetId}`}>{toolsetId}</Tag>)}
+            {item.directToolNames.length > 0 ? <Tag color="blue">{item.directToolNames.length} 个直接工具</Tag> : null}
+            {summary.mergedToolCount > 0 ? <Tag color="green">{summary.mergedToolCount} 个自动合并</Tag> : null}
+            {summary.conflicts.length > 0 ? <Tag color="red">{summary.conflicts.length} 个冲突</Tag> : null}
+          </Space>
+        );
+      }
+    },
     { title: "状态", dataIndex: "enabled", render: (enabled) => <Tag color={enabled ? "green" : "default"}>{enabled ? "启用" : "禁用"}</Tag> },
     { title: "更新时间", dataIndex: "updatedAt", render: formatDateTime },
     {
@@ -105,7 +123,7 @@ export function AiAgentProfileListPage() {
       {contextHolder}
       <PageHeader
         title="Agent Profile"
-        meta="统一管理 Agent 的模型、工具集和策略"
+        meta="统一管理 Agent 的模型、工具集、直接工具和策略"
         onBack={() => navigate("/ai")}
         actions={(
           <>
@@ -116,7 +134,7 @@ export function AiAgentProfileListPage() {
       />
       <Input.Search
         allowClear
-        placeholder="搜索 ID、名称、说明、模型 Profile、工具集或 System Prompt"
+        placeholder="搜索 ID、名称、说明、模型 Profile、工具引用或 System Prompt"
         value={searchText}
         onChange={(event: ChangeEvent<HTMLInputElement>) => setSearchText(event.target.value)}
       />

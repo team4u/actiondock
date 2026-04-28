@@ -105,7 +105,7 @@ class AiRuntimePolicyTest {
     }
 
     @Test
-    void scriptAgentRunAllowsDangerousToolsByDefault() {
+    void scriptAgentRunDoesNotInjectPermissionLimit() {
         InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
         models.save(new AiModelProfile()
                 .setId("model")
@@ -142,11 +142,11 @@ class AiRuntimePolicyTest {
         );
 
         assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
-        assertThat(providerClient.context.metadata()).containsEntry("maxToolPermission", "DANGEROUS_ACTION");
+        assertThat(providerClient.context.metadata()).doesNotContainKey("maxToolPermission");
     }
 
     @Test
-    void adminAgentRunPassesEffectivePermissionToProviderTools() {
+    void adminAgentRunDoesNotInjectPermissionLimit() {
         InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
         models.save(new AiModelProfile()
                 .setId("model")
@@ -183,11 +183,32 @@ class AiRuntimePolicyTest {
         );
 
         assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
-        assertThat(providerClient.context.metadata()).containsEntry("maxToolPermission", "CONTROLLED_ACTION");
+        assertThat(providerClient.context.metadata()).doesNotContainKey("maxToolPermission");
     }
 
     @Test
-    void workbenchAgentRunRejectsControlledToolsByDefault() {
+    void agentToolRegistryMergesSameToolFromToolsetAndDirectSelection() {
+        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
+        toolsets.save(new AiToolset()
+                .setId("shared-tools")
+                .setName("Shared Tools")
+                .setMaxPermission(AiToolPermission.CONTROLLED_ACTION)
+                .setToolNames(List.of("run_script"))
+                .setToolOptions(Map.of("run_script", Map.of("baseDir", "/tmp"))));
+        AiToolRegistryImpl registry = new AiToolRegistryImpl(toolsets, List.of(new TestTool("run_script", AiToolPermission.CONTROLLED_ACTION)));
+
+        List<AiTool> tools = registry.listAgentTools(new AiAgentProfile()
+                .setId("agent")
+                .setName("Agent")
+                .setToolsetIds(List.of("shared-tools"))
+                .setDirectToolNames(List.of("run_script"))
+                .setDirectToolOptions(Map.of("run_script", Map.of("baseDir", "/tmp"))));
+
+        assertThat(tools).extracting(AiTool::name).containsExactly("run_script");
+    }
+
+    @Test
+    void workbenchAgentRunAllowsDangerousToolsWithoutAgentPermissionCap() {
         InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
         models.save(new AiModelProfile()
                 .setId("model")
@@ -205,24 +226,26 @@ class AiRuntimePolicyTest {
         toolsets.save(new AiToolset()
                 .setId("controlled-tools")
                 .setName("Controlled Tools")
-                .setMaxPermission(AiToolPermission.CONTROLLED_ACTION)
+                .setMaxPermission(AiToolPermission.DANGEROUS_ACTION)
                 .setToolNames(List.of("run_script")));
-        AiToolRegistryImpl registry = new AiToolRegistryImpl(toolsets, List.of(new TestTool("run_script", AiToolPermission.CONTROLLED_ACTION)));
+        AiToolRegistryImpl registry = new AiToolRegistryImpl(toolsets, List.of(new TestTool("run_script", AiToolPermission.DANGEROUS_ACTION)));
+        CapturingProviderClient providerClient = new CapturingProviderClient();
         AiAgentRuntime runtime = new AiAgentRuntimeImpl(
                 new AiAgentProfileService(agents, models),
                 models,
                 new InMemoryAiAgentRunRepository(),
                 new InMemoryAiAgentStepRepository(),
-                new CapturingProviderClient(),
+                providerClient,
                 registry
         );
 
-        assertThatThrownBy(() -> runtime.run(
+        AiAgentRunResult result = runtime.run(
                 new AiAgentRunRequest("agent", List.of(new AiMessage("user", "review")), Map.of(), Map.of()),
                 new AiAgentRunContext(AiCallerType.WORKBENCH, "script-1", null, null, Map.of())
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("权限上限");
+        );
+
+        assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
+        assertThat(providerClient.context.metadata()).doesNotContainKey("maxToolPermission");
     }
 
     @Test
@@ -288,7 +311,7 @@ class AiRuntimePolicyTest {
         assertThat(result.result()).containsEntry("id", "hello-ai");
         assertThat(result.agentRunId()).isNotBlank();
         assertThat(providerClient.context.callerType()).isEqualTo(AiCallerType.WORKBENCH);
-        assertThat(providerClient.context.metadata()).containsEntry("maxToolPermission", "PROPOSE_CHANGE");
+        assertThat(providerClient.context.metadata()).doesNotContainKey("maxToolPermission");
     }
 
     @Test

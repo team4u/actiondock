@@ -1,6 +1,7 @@
-import { Alert, Button, Card, Checkbox, Descriptions, Form, Input, Select, Space, Switch, Tabs, Typography, message } from "antd";
+import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import { SaveOutlined, PlayCircleOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import type { ColumnsType } from "antd/es/table";
+import { useEffect, useMemo, useState, type ChangeEvent, type Key } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ApiError,
@@ -11,18 +12,22 @@ import {
   getAiModel,
   listConfigValues,
   listAiModels,
+  listAiTools,
   listAiToolsets,
   startAiAgentRun,
+  testAiTool,
   testAiModel,
   updateAiAgent,
   updateAiModel
 } from "../../api";
+import { buildToolOptionsPayload, cloneToolConfigMap, resolveAgentToolSelection, type ResolvedAgentToolView, type ToolConfigMap } from "../../aiAgentTools";
 import { AiRunStatusTag } from "../../components/ai/AiTags";
 import { AiStepTracePanel } from "../../components/ai/AiStepTracePanel";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
+import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
 import { buildSystemSettingsSearch } from "../../settingsRouting";
-import type { AiAgentProfile, AiAgentRunSnapshot, AiCapability, AiMessage, AiModelProfile, AiModelProvider, AiToolset, ConfigValue } from "../../types";
+import type { AiAgentProfile, AiAgentRunSnapshot, AiCapability, AiMessage, AiModelProfile, AiModelProvider, AiTool, AiToolExecutionResult, AiToolset, ConfigValue } from "../../types";
 import { formatDateTime, parseJsonText, prettyJson } from "../../utils";
 
 const MODEL_PROVIDERS: AiModelProvider[] = ["DASHSCOPE", "OPENAI", "OPENAI_COMPATIBLE", "ANTHROPIC", "GEMINI", "OLLAMA"];
@@ -50,12 +55,11 @@ interface AgentFormValues {
   toolsetIds: string[];
   enabled: boolean;
   optionsJson: string;
-  policyJson: string;
 }
 
 export function AiModelProfileDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const isCreate = id === "new";
+  const isCreate = !id;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<ModelFormValues>();
@@ -229,25 +233,42 @@ export function AiModelProfileDetailPage() {
 
 export function AiAgentProfileDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const isCreate = id === "new";
+  const isCreate = !id;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<AgentFormValues>();
   const [messageApi, contextHolder] = message.useMessage();
   const [models, setModels] = useState<AiModelProfile[]>([]);
   const [toolsets, setToolsets] = useState<AiToolset[]>([]);
+  const [tools, setTools] = useState<AiTool[]>([]);
+  const [directToolNames, setDirectToolNames] = useState<string[]>([]);
+  const [directToolOptions, setDirectToolOptions] = useState<ToolConfigMap>({});
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [draftToolsetIds, setDraftToolsetIds] = useState<string[]>([]);
+  const [draftDirectToolNames, setDraftDirectToolNames] = useState<string[]>([]);
+  const [draftDirectToolOptions, setDraftDirectToolOptions] = useState<ToolConfigMap>({});
+  const [toolQuery, setToolQuery] = useState("");
+  const [configToolName, setConfigToolName] = useState<string | null>(null);
+  const [configDraftText, setConfigDraftText] = useState(prettyJson({}));
+  const [testingTool, setTestingTool] = useState<string | null>(null);
+  const [testInputByTool, setTestInputByTool] = useState<Record<string, string>>({});
+  const [testResultByTool, setTestResultByTool] = useState<Record<string, AiToolExecutionResult | null>>({});
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testPrompt, setTestPrompt] = useState("返回一句简短问候。");
   const [testRunId, setTestRunId] = useState<string | null>(null);
   const [testRun, setTestRun] = useState<AiAgentRunSnapshot | null>(null);
   const activeTab = searchParams.get("tab") === "test" ? "test" : "config";
+  const watchedToolsetIds = Form.useWatch("toolsetIds", form) ?? [];
 
   useEffect(() => {
-    void Promise.all([listAiModels(), listAiToolsets()]).then(([nextModels, nextToolsets]) => {
-      setModels(nextModels);
-      setToolsets(nextToolsets);
-    });
+    void Promise.all([listAiModels(), listAiToolsets(), listAiTools()])
+      .then(([nextModels, nextToolsets, nextTools]) => {
+        setModels(nextModels);
+        setToolsets(nextToolsets);
+        setTools(nextTools);
+      })
+      .catch((error) => messageApi.error(error instanceof ApiError ? error.message : "加载 Agent 配置元数据失败"));
   }, []);
 
   useEffect(() => {
@@ -259,9 +280,20 @@ export function AiAgentProfileDetailPage() {
         modelProfileId: "",
         toolsetIds: [],
         enabled: true,
-        optionsJson: prettyJson({ maxIters: 6, timeoutSeconds: 120 }),
-        policyJson: prettyJson({ maxToolPermission: "PROPOSE_CHANGE" })
+        optionsJson: prettyJson({ maxIters: 6, timeoutSeconds: 120 })
       });
+      setDirectToolNames([]);
+      setDirectToolOptions({});
+      setDraftToolsetIds([]);
+      setDraftDirectToolNames([]);
+      setDraftDirectToolOptions({});
+      setToolQuery("");
+      setConfigToolName(null);
+      setConfigDraftText(prettyJson({}));
+      setManagerOpen(false);
+      setTestInputByTool({});
+      setTestResultByTool({});
+      setTestingTool(null);
       setTestRunId(null);
       setTestRun(null);
       return;
@@ -276,9 +308,20 @@ export function AiAgentProfileDetailPage() {
         systemPrompt: profile.systemPrompt,
         toolsetIds: profile.toolsetIds,
         enabled: profile.enabled,
-        optionsJson: prettyJson(profile.options),
-        policyJson: prettyJson(profile.policy)
+        optionsJson: prettyJson(profile.options)
       });
+      setDirectToolNames(profile.directToolNames ?? []);
+      setDirectToolOptions(cloneToolConfigMap(profile.directToolOptions));
+      setDraftToolsetIds(profile.toolsetIds ?? []);
+      setDraftDirectToolNames(profile.directToolNames ?? []);
+      setDraftDirectToolOptions(cloneToolConfigMap(profile.directToolOptions));
+      setToolQuery("");
+      setConfigToolName(null);
+      setConfigDraftText(prettyJson({}));
+      setManagerOpen(false);
+      setTestInputByTool({});
+      setTestResultByTool({});
+      setTestingTool(null);
       setTestRunId(null);
       setTestRun(null);
     }).catch((error) => messageApi.error(error instanceof ApiError ? error.message : "加载 Agent Profile 失败"));
@@ -327,11 +370,156 @@ export function AiAgentProfileDetailPage() {
     })),
     [toolsets]
   );
+  const filteredTools = useMemo(() => filterAiToolsForPicker(tools, toolQuery), [toolQuery, tools]);
+  const resolution = useMemo(
+    () => resolveAgentToolSelection({
+      toolsetIds: watchedToolsetIds,
+      directToolNames,
+      directToolOptions
+    }, toolsets, tools),
+    [directToolNames, directToolOptions, toolsets, tools, watchedToolsetIds]
+  );
+  const configuredDirectToolCount = useMemo(
+    () => directToolNames.filter((name) => Object.keys(directToolOptions[name] ?? {}).length > 0).length,
+    [directToolNames, directToolOptions]
+  );
+  const draftResolution = useMemo(
+    () => resolveAgentToolSelection({
+      toolsetIds: draftToolsetIds,
+      directToolNames: draftDirectToolNames,
+      directToolOptions: draftDirectToolOptions
+    }, toolsets, tools),
+    [draftDirectToolNames, draftDirectToolOptions, draftToolsetIds, toolsets, tools]
+  );
+  const draftInvalidDirectToolNames = useMemo(
+    () => draftDirectToolNames.filter((name) => !tools.some((tool) => tool.name === name)),
+    [draftDirectToolNames, tools]
+  );
+  const draftConfiguredDirectToolCount = useMemo(
+    () => draftDirectToolNames.filter((name) => Object.keys(draftDirectToolOptions[name] ?? {}).length > 0).length,
+    [draftDirectToolNames, draftDirectToolOptions]
+  );
+  const draftSelectionDisabledByName = useMemo(
+    () => draftResolution.selectedToolsetToolNames.reduce<Record<string, string | undefined>>((result, toolName) => {
+      if (!draftDirectToolNames.includes(toolName)) {
+        result[toolName] = "已由工具集提供";
+      }
+      return result;
+    }, {}),
+    [draftDirectToolNames, draftResolution.selectedToolsetToolNames]
+  );
+  const configTool = useMemo(() => tools.find((tool) => tool.name === configToolName) ?? null, [configToolName, tools]);
+  const effectiveToolColumns: ColumnsType<ResolvedAgentToolView> = [
+    {
+      title: "工具",
+      dataIndex: "toolName",
+      render: (_, item) => (
+        <Space direction="vertical" size={2}>
+          <Space size={8} wrap>
+            <Typography.Text strong>{item.tool?.displayName ?? item.toolName}</Typography.Text>
+            {item.sources.length > 1 ? <Tag color="green">已合并</Tag> : null}
+          </Space>
+          {item.tool?.displayName !== item.toolName ? <Typography.Text code>{item.toolName}</Typography.Text> : null}
+          {item.tool?.description ? <Typography.Text type="secondary" style={{ fontSize: 12 }}>{item.tool.description}</Typography.Text> : null}
+        </Space>
+      )
+    },
+    {
+      title: "来源",
+      render: (_, item) => <Space size={[4, 4]} wrap>{item.sources.map((source) => <Tag key={`${item.toolName}-${source.label}`}>{source.label}</Tag>)}</Space>
+    },
+    {
+      title: "配置",
+      render: (_, item) => <Tag color={Object.keys(item.config).length > 0 ? "green" : "default"}>{Object.keys(item.config).length > 0 ? "已配置" : "默认"}</Tag>
+    }
+  ];
+
+  const openToolManager = () => {
+    setDraftToolsetIds(watchedToolsetIds);
+    setDraftDirectToolNames(directToolNames);
+    setDraftDirectToolOptions(cloneToolConfigMap(directToolOptions));
+    setToolQuery("");
+    setConfigToolName(null);
+    setConfigDraftText(prettyJson({}));
+    setTestInputByTool({});
+    setTestResultByTool({});
+    setTestingTool(null);
+    setManagerOpen(true);
+  };
+
+  const closeToolManager = () => {
+    setManagerOpen(false);
+  };
+
+  const openToolConfig = (toolName: string) => {
+    const tool = tools.find((item) => item.name === toolName) ?? null;
+    if (!tool) return;
+    setConfigToolName(toolName);
+    setConfigDraftText(prettyJson(draftDirectToolOptions[toolName]));
+  };
+
+  const applyToolConfig = () => {
+    if (!configTool) return;
+    try {
+      const config = parseJsonText(configDraftText, "工具配置");
+      setDraftDirectToolOptions((current) => {
+        const next = { ...current };
+        if (Object.keys(config).length === 0) {
+          delete next[configTool.name];
+        } else {
+          next[configTool.name] = config;
+        }
+        return next;
+      });
+      messageApi.success("直接工具配置已应用");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "工具配置不是合法 JSON");
+    }
+  };
+
+  const clearToolConfig = () => {
+    if (!configTool) return;
+    setDraftDirectToolOptions((current) => {
+      const next = { ...current };
+      delete next[configTool.name];
+      return next;
+    });
+    setConfigDraftText(prettyJson({}));
+    messageApi.success("直接工具配置已清空");
+  };
+
+  const handleDirectToolSelectionChange = (names: Key[]) => {
+    setDraftDirectToolNames([...draftInvalidDirectToolNames, ...names.map(String)]);
+  };
+
+  const handleToolTestInputChange = (toolName: string, value: string) => {
+    setTestInputByTool((current) => ({ ...current, [toolName]: value }));
+  };
+
+  const handleToolTest = async (toolName: string) => {
+    setTestingTool(toolName);
+    setTestResultByTool((current) => ({ ...current, [toolName]: null }));
+    try {
+      const input = parseJsonText(testInputByTool[toolName] ?? "{}", "测试输入");
+      const result = await testAiTool(toolName, input);
+      setTestResultByTool((current) => ({ ...current, [toolName]: result }));
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "工具测试失败");
+    } finally {
+      setTestingTool(null);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       const values = await form.validateFields();
+      if (resolution.missingToolsetIds.length > 0 || resolution.missingToolNames.length > 0) {
+        throw new Error("当前 Agent 工具引用不完整，请先处理缺失工具或工具集");
+      }
+      if (resolution.conflicts.length > 0) {
+        throw new Error("当前 Agent 工具存在冲突，请先处理后再保存");
+      }
       const profile: AiAgentProfile = {
         id: values.id.trim(),
         name: values.name.trim(),
@@ -340,9 +528,10 @@ export function AiAgentProfileDetailPage() {
         modelProfileId: values.modelProfileId,
         systemPrompt: values.systemPrompt,
         toolsetIds: values.toolsetIds ?? [],
+        directToolNames: Array.from(new Set(directToolNames)),
+        directToolOptions: buildToolOptionsPayload(Array.from(new Set(directToolNames)), directToolOptions),
         enabled: values.enabled,
-        options: parseJsonText(values.optionsJson, "运行参数"),
-        policy: parseJsonText(values.policyJson, "策略")
+        options: parseJsonText(values.optionsJson, "运行参数")
       };
       const saved = isCreate ? await createAiAgent(profile) : await updateAiAgent(values.id, profile);
       messageApi.success("Agent Profile 已保存");
@@ -386,14 +575,26 @@ export function AiAgentProfileDetailPage() {
   const testRunText = typeof testRun?.outputSummary?.text === "string" ? testRun.outputSummary.text : "";
   const testRunActive = testRun?.status === "RUNNING" || testRun?.status === "WAITING_APPROVAL";
 
+  const applyToolManager = () => {
+    form.setFieldValue("toolsetIds", draftToolsetIds);
+    setDirectToolNames(draftDirectToolNames);
+    setDirectToolOptions(buildToolOptionsPayload(draftDirectToolNames, draftDirectToolOptions));
+    setManagerOpen(false);
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
       <PageHeader
         title={isCreate ? "新建 Agent Profile" : "Agent Profile"}
-        meta={isCreate ? "配置模型、工具集和策略" : id}
+        meta={isCreate ? "配置模型、工具集、直接工具和策略" : id}
         onBack={() => navigate("/ai/agents")}
-        actions={<Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>保存</Button>}
+        actions={(
+          <Space>
+            <Button onClick={openToolManager}>管理工具</Button>
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>保存</Button>
+          </Space>
+        )}
       />
       <Tabs
         activeKey={activeTab}
@@ -403,19 +604,174 @@ export function AiAgentProfileDetailPage() {
             key: "config",
             label: "配置",
             children: (
-              <Card>
-                <Form form={form} layout="vertical">
-                  <Form.Item name="id" label="ID" rules={[{ required: true }]}><Input disabled={!isCreate} /></Form.Item>
-                  <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
-                  <Form.Item name="description" label="说明"><Input.TextArea rows={3} /></Form.Item>
-                  <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
-                  <Form.Item name="modelProfileId" label="模型 Profile" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={modelOptions} /></Form.Item>
-                  <Form.Item name="toolsetIds" label="工具集"><Select mode="multiple" optionFilterProp="label" options={toolsetOptions} /></Form.Item>
-                  <Form.Item name="systemPrompt" label="System Prompt"><Input.TextArea rows={6} /></Form.Item>
-                  <Form.Item name="optionsJson" label="运行参数 JSON"><Input.TextArea rows={5} /></Form.Item>
-                  <Form.Item name="policyJson" label="策略 JSON"><Input.TextArea rows={5} /></Form.Item>
-                </Form>
-              </Card>
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <Card>
+                  <Form form={form} layout="vertical">
+                    <Form.Item name="id" label="ID" rules={[{ required: true }]}><Input disabled={!isCreate} /></Form.Item>
+                    <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
+                    <Form.Item name="description" label="说明"><Input.TextArea rows={3} /></Form.Item>
+                    <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
+                    <Form.Item name="modelProfileId" label="模型 Profile" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={modelOptions} /></Form.Item>
+                    <Form.Item name="toolsetIds" hidden><Select mode="multiple" optionFilterProp="label" options={toolsetOptions} /></Form.Item>
+                    <Form.Item name="systemPrompt" label="System Prompt"><Input.TextArea rows={6} /></Form.Item>
+                    <Form.Item name="optionsJson" label="运行参数 JSON"><Input.TextArea rows={5} /></Form.Item>
+                  </Form>
+                </Card>
+                <Drawer
+                  title="管理工具"
+                  open={managerOpen}
+                  width={1080}
+                  onClose={closeToolManager}
+                  destroyOnClose={false}
+                  footer={(
+                    <Space style={{ justifyContent: "flex-end", width: "100%" }}>
+                      <Button onClick={closeToolManager}>取消</Button>
+                      <Button type="primary" onClick={applyToolManager}>应用</Button>
+                    </Space>
+                  )}
+                >
+                  <Tabs
+                    items={[
+                      {
+                        key: "summary",
+                        label: "摘要",
+                        children: (
+                          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                            <Descriptions size="small" column={{ xs: 1, md: 4 }} bordered>
+                              <Descriptions.Item label="工具集">{draftToolsetIds.length}</Descriptions.Item>
+                              <Descriptions.Item label="生效工具">{draftResolution.effectiveTools.length}</Descriptions.Item>
+                              <Descriptions.Item label="直接工具">{Array.from(new Set(draftDirectToolNames)).length}</Descriptions.Item>
+                              <Descriptions.Item label="已配置直选">{draftConfiguredDirectToolCount}</Descriptions.Item>
+                              <Descriptions.Item label="自动合并">{draftResolution.mergedToolCount}</Descriptions.Item>
+                            </Descriptions>
+                            {draftResolution.missingToolsetIds.length > 0 ? (
+                              <Alert
+                                type="warning"
+                                showIcon
+                                message="存在缺失工具集"
+                                description={<Space size={[8, 8]} wrap>{draftResolution.missingToolsetIds.map((toolsetId) => <Tag key={toolsetId}>{toolsetId}</Tag>)}</Space>}
+                              />
+                            ) : null}
+                            {draftResolution.missingToolNames.length > 0 ? (
+                              <Alert
+                                type="warning"
+                                showIcon
+                                message="存在缺失工具"
+                                description={<Space size={[8, 8]} wrap>{draftResolution.missingToolNames.map((toolName) => <Tag key={toolName}>{toolName}</Tag>)}</Space>}
+                              />
+                            ) : null}
+                            {draftResolution.conflicts.length > 0 ? (
+                              <Alert
+                                type="error"
+                                showIcon
+                                message="工具配置冲突会阻止保存和运行"
+                                description={(
+                                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                    {draftResolution.conflicts.map((conflict) => (
+                                      <div key={`${conflict.reason}-${conflict.toolName}`}>
+                                        <Typography.Text strong>{conflict.toolName}</Typography.Text>
+                                        <Space size={[6, 6]} wrap style={{ marginLeft: 8 }}>
+                                          {conflict.sources.map((source) => <Tag key={`${conflict.toolName}-${source.label}`}>{source.label}</Tag>)}
+                                        </Space>
+                                      </div>
+                                    ))}
+                                  </Space>
+                                )}
+                              />
+                            ) : null}
+                            <Table
+                              rowKey="toolName"
+                              size="small"
+                              pagination={false}
+                              dataSource={draftResolution.effectiveTools}
+                              columns={effectiveToolColumns}
+                              locale={{ emptyText: "当前没有生效工具" }}
+                            />
+                          </Space>
+                        )
+                      },
+                      {
+                        key: "selection",
+                        label: "选择/配置",
+                        children: (
+                          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                            <Alert type="info" showIcon message="工具集用于复用；直接工具用于补充单个工具。相同工具且配置一致会自动合并，配置不一致会报冲突。" />
+                            <div>
+                              <Typography.Text strong>工具集</Typography.Text>
+                              <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+                                这里选择会参与当前 Agent 的工具集来源。
+                              </Typography.Paragraph>
+                              <Select
+                                mode="multiple"
+                                allowClear
+                                style={{ width: "100%" }}
+                                optionFilterProp="label"
+                                placeholder="选择工具集"
+                                value={draftToolsetIds}
+                                options={toolsetOptions}
+                                onChange={setDraftToolsetIds}
+                              />
+                            </div>
+                            {draftInvalidDirectToolNames.length > 0 ? (
+                              <Alert
+                                type="warning"
+                                showIcon
+                                message="当前直接工具中包含已失效工具，请移除后再保存。"
+                                description={<Space size={[8, 8]} wrap>{draftInvalidDirectToolNames.map((toolName) => <Tag key={toolName}>{toolName}</Tag>)}</Space>}
+                              />
+                            ) : null}
+                            <Input.Search
+                              allowClear
+                              placeholder="搜索工具名、显示名、来源、说明或权限"
+                              value={toolQuery}
+                              onChange={(event: ChangeEvent<HTMLInputElement>) => setToolQuery(event.target.value)}
+                            />
+                            <AiToolPickerTable
+                              tools={filteredTools}
+                              selectedNames={draftDirectToolNames}
+                              toolOptionsByName={draftDirectToolOptions}
+                              selectionDisabledByName={draftSelectionDisabledByName}
+                              testingTool={testingTool}
+                              testInputByTool={testInputByTool}
+                              testResultByTool={testResultByTool}
+                              onSelectionChange={handleDirectToolSelectionChange}
+                              onOpenConfig={openToolConfig}
+                              onTestInputChange={handleToolTestInputChange}
+                              onTest={(toolName) => void handleToolTest(toolName)}
+                            />
+                            {configTool ? (
+                              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                                <Alert
+                                  type="info"
+                                  showIcon
+                                  message={draftResolution.selectedToolsetToolNames.includes(configTool.name) ? "该工具已被所选工具集覆盖；若保留直选，需与工具集配置完全一致。" : "这里编辑的是 Agent 级直接工具配置。"}
+                                />
+                                <ToolConfigWorkspace
+                                  tool={configTool}
+                                  selected={draftDirectToolNames.includes(configTool.name)}
+                                  configStatus={{
+                                    label: Object.keys(draftDirectToolOptions[configTool.name] ?? {}).length > 0 ? "已配置" : "未配置",
+                                    color: Object.keys(draftDirectToolOptions[configTool.name] ?? {}).length > 0 ? "green" : "gold"
+                                  }}
+                                  draftText={configDraftText}
+                                  testInputText={testInputByTool[configTool.name] ?? "{}"}
+                                  testResult={testResultByTool[configTool.name] ?? null}
+                                  testing={testingTool === configTool.name}
+                                  onDraftChange={setConfigDraftText}
+                                  onApply={applyToolConfig}
+                                  onClear={clearToolConfig}
+                                  onTestInputChange={handleToolTestInputChange}
+                                  onTest={(toolName) => void handleToolTest(toolName)}
+                                />
+                              </Space>
+                            ) : null}
+                          </Space>
+                        )
+                      }
+                    ]}
+                  />
+                </Drawer>
+              </Space>
             )
           },
           {

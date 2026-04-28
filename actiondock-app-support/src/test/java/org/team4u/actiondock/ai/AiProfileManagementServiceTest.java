@@ -15,6 +15,7 @@ import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.ai.core.AiAgentProfileService;
 import org.team4u.actiondock.ai.core.AiModelProfileService;
+import org.team4u.actiondock.ai.core.AiToolRegistryImpl;
 import org.team4u.actiondock.ai.core.AiToolsetService;
 
 import java.util.ArrayList;
@@ -68,6 +69,51 @@ class AiProfileManagementServiceTest {
         assertThatThrownBy(() -> service.save(agent("agent", "model", List.of("missing-tools"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("AI 工具集不存在: missing-tools");
+    }
+
+    @Test
+    void agentSaveAllowsMergedDirectToolWhenConfigMatchesToolset() {
+        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
+        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
+        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
+        models.save(model("model"));
+        toolsets.save(new AiToolset()
+                .setId("tools")
+                .setName("Tools")
+                .setToolNames(List.of("existing-tool"))
+                .setToolOptions(Map.of("existing-tool", Map.of("baseDir", "/tmp"))));
+        AiToolRegistryImpl toolRegistry = new AiToolRegistryImpl(toolsets, List.of(new TestTool()));
+
+        AiAgentProfileService service = new AiAgentProfileService(agents, models, toolsets, toolRegistry);
+
+        service.save(agent("agent", "model", List.of("tools"))
+                .setDirectToolNames(List.of("existing-tool"))
+                .setDirectToolOptions(Map.of("existing-tool", Map.of("baseDir", "/tmp"))));
+    }
+
+    @Test
+    void agentSaveRejectsDirectToolConflictWhenConfigDiffersFromToolset() {
+        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
+        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
+        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
+        models.save(model("model"));
+        toolsets.save(new AiToolset()
+                .setId("tools")
+                .setName("Tools")
+                .setToolNames(List.of("existing-tool"))
+                .setToolOptions(Map.of("existing-tool", Map.of("baseDir", "/tmp"))));
+        AiToolRegistryImpl toolRegistry = new AiToolRegistryImpl(toolsets, List.of(new TestTool()));
+
+        AiAgentProfileService service = new AiAgentProfileService(agents, models, toolsets, toolRegistry);
+
+        assertThatThrownBy(() -> service.save(agent("agent", "model", List.of("tools"))
+                .setDirectToolNames(List.of("existing-tool"))
+                .setDirectToolOptions(Map.of("existing-tool", Map.of("baseDir", "/srv")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Agent 工具配置冲突")
+                .hasMessageContaining("existing-tool")
+                .hasMessageContaining("toolset:tools")
+                .hasMessageContaining("direct");
     }
 
     @Test
@@ -133,6 +179,11 @@ class AiProfileManagementServiceTest {
     private static final class SingleToolRegistry implements AiToolRegistry {
         @Override
         public List<AiTool> listTools(String toolsetId) {
+            return List.of(new TestTool());
+        }
+
+        @Override
+        public List<AiTool> listAgentTools(AiAgentProfile agentProfile) {
             return List.of(new TestTool());
         }
 

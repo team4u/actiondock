@@ -1,10 +1,11 @@
-import { Alert, Button, Card, Descriptions, Drawer, Form, Input, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Descriptions, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import { EyeOutlined, PlayCircleOutlined, SaveOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useEffect, useMemo, useState, type ChangeEvent, type Key } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ApiError, createAiToolset, getAiToolset, listAiTools, testAiTool, updateAiToolset } from "../../api";
+import { buildToolOptionsPayload, cloneToolConfigMap, type ToolConfigMap } from "../../aiAgentTools";
 import { AiToolPermissionTag } from "../../components/ai/AiTags";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
@@ -12,8 +13,6 @@ import type { AiTool, AiToolExecutionResult, AiToolPermission, AiToolSourceType,
 import { parseJsonText, prettyJson } from "../../utils";
 
 const PERMISSIONS: AiToolPermission[] = ["READ_ONLY", "PROPOSE_CHANGE", "CONTROLLED_ACTION", "DANGEROUS_ACTION"];
-
-type ToolConfigMap = Record<string, Record<string, unknown>>;
 
 export interface ToolsetFormValues {
   id: string;
@@ -34,16 +33,6 @@ function getToolSourceLabel(sourceType: AiToolSourceType): string {
   }
 }
 
-function cloneToolConfigMap(source?: ToolConfigMap): ToolConfigMap {
-  const next: ToolConfigMap = {};
-  Object.entries(source ?? {}).forEach(([name, value]) => {
-    if (value && Object.keys(value).length > 0) {
-      next[name] = { ...value };
-    }
-  });
-  return next;
-}
-
 function hasToolConfig(toolName: string, toolOptionsByName: ToolConfigMap): boolean {
   return Object.keys(toolOptionsByName[toolName] ?? {}).length > 0;
 }
@@ -55,17 +44,6 @@ function getToolConfigStatus(tool: AiTool, toolOptionsByName: ToolConfigMap): { 
   return hasToolConfig(tool.name, toolOptionsByName)
     ? { label: "已配置", color: "green" }
     : { label: "未配置", color: "gold" };
-}
-
-function buildToolOptionsPayload(selectedNames: string[], toolOptionsByName: ToolConfigMap): ToolConfigMap {
-  const payload: ToolConfigMap = {};
-  selectedNames.forEach((name) => {
-    const value = toolOptionsByName[name];
-    if (value && Object.keys(value).length > 0) {
-      payload[name] = { ...value };
-    }
-  });
-  return payload;
 }
 
 export function filterAiToolsForPicker(tools: AiTool[], query: string): AiTool[] {
@@ -96,23 +74,6 @@ export function buildAiToolsetPayload(
     maxPermission: values.maxPermission,
     enabled: values.enabled
   };
-}
-
-interface ToolConfigDrawerProps {
-  tool: AiTool | null;
-  open: boolean;
-  selected: boolean;
-  configStatus: { label: string; color: string };
-  draftText: string;
-  testInputText: string;
-  testResult: AiToolExecutionResult | null;
-  testing: boolean;
-  onDraftChange: (value: string) => void;
-  onApply: () => void;
-  onClear: () => void;
-  onTestInputChange: (toolName: string, value: string) => void;
-  onTest: (toolName: string) => void;
-  onClose: () => void;
 }
 
 export function ToolConfigWorkspace({
@@ -187,58 +148,11 @@ export function ToolConfigWorkspace({
   );
 }
 
-function ToolConfigDrawer({
-  tool,
-  open,
-  selected,
-  configStatus,
-  draftText,
-  testInputText,
-  testResult,
-  testing,
-  onDraftChange,
-  onApply,
-  onClear,
-  onTestInputChange,
-  onTest,
-  onClose
-}: ToolConfigDrawerProps) {
-  return (
-    <Drawer
-      title={tool ? `查看工具：${tool.displayName}` : "查看工具"}
-      open={open}
-      width={640}
-      onClose={onClose}
-      destroyOnClose={false}
-      footer={<Space style={{ justifyContent: "flex-end", width: "100%" }}><Button onClick={onClose}>关闭</Button></Space>}
-    >
-      {tool ? (
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          {tool.configHelp ? <Alert type="info" showIcon message={tool.configHelp} /> : <Alert type="info" showIcon message="该工具使用下方 JSON 配置参数。" />}
-          <ToolConfigWorkspace
-            tool={tool}
-            selected={selected}
-            configStatus={configStatus}
-            draftText={draftText}
-            testInputText={testInputText}
-            testResult={testResult}
-            testing={testing}
-            onDraftChange={onDraftChange}
-            onApply={onApply}
-            onClear={onClear}
-            onTestInputChange={onTestInputChange}
-            onTest={onTest}
-          />
-        </Space>
-      ) : null}
-    </Drawer>
-  );
-}
-
 interface AiToolPickerTableProps {
   tools: AiTool[];
   selectedNames: string[];
   toolOptionsByName: ToolConfigMap;
+  selectionDisabledByName?: Record<string, string | undefined>;
   testingTool: string | null;
   testInputByTool: Record<string, string>;
   testResultByTool: Record<string, AiToolExecutionResult | null>;
@@ -252,6 +166,7 @@ export function AiToolPickerTable({
   tools,
   selectedNames,
   toolOptionsByName,
+  selectionDisabledByName,
   testingTool,
   testInputByTool,
   testResultByTool,
@@ -295,7 +210,11 @@ export function AiToolPickerTable({
   const rowSelection: TableRowSelection<AiTool> = {
     selectedRowKeys: selectedNames,
     preserveSelectedRowKeys: true,
-    onChange: onSelectionChange
+    onChange: onSelectionChange,
+    getCheckboxProps: (tool) => {
+      const disabledReason = selectionDisabledByName?.[tool.name];
+      return disabledReason ? { disabled: true, title: disabledReason } : {};
+    }
   };
 
   return (
@@ -310,9 +229,16 @@ export function AiToolPickerTable({
   );
 }
 
+interface SelectedToolSummaryRow {
+  key: string;
+  name: string;
+  tool?: AiTool;
+  configured: boolean;
+}
+
 export function AiToolsetDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const isCreate = id === "new";
+  const isCreate = !id;
   const navigate = useNavigate();
   const [form] = Form.useForm<ToolsetFormValues>();
   const [messageApi, contextHolder] = message.useMessage();
@@ -320,13 +246,15 @@ export function AiToolsetDetailPage() {
   const [saving, setSaving] = useState(false);
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
   const [toolOptionsByName, setToolOptionsByName] = useState<ToolConfigMap>({});
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [draftSelectedNames, setDraftSelectedNames] = useState<string[]>([]);
+  const [draftToolOptionsByName, setDraftToolOptionsByName] = useState<ToolConfigMap>({});
   const [toolQuery, setToolQuery] = useState("");
   const [testingTool, setTestingTool] = useState<string | null>(null);
   const [testInputByTool, setTestInputByTool] = useState<Record<string, string>>({});
   const [testResultByTool, setTestResultByTool] = useState<Record<string, AiToolExecutionResult | null>>({});
   const [configToolName, setConfigToolName] = useState<string | null>(null);
   const [configDraftText, setConfigDraftText] = useState(prettyJson({}));
-  const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
 
   useEffect(() => {
     void listAiTools()
@@ -339,11 +267,13 @@ export function AiToolsetDetailPage() {
       form.setFieldsValue({ id: "", name: "", description: "", maxPermission: "READ_ONLY", enabled: true });
       setSelectedNames([]);
       setToolOptionsByName({});
+      setDraftSelectedNames([]);
+      setDraftToolOptionsByName({});
       setTestInputByTool({});
       setTestResultByTool({});
       setConfigToolName(null);
       setConfigDraftText(prettyJson({}));
-      setConfigDrawerOpen(false);
+      setManagerOpen(false);
       return;
     }
     if (!id) return;
@@ -358,39 +288,76 @@ export function AiToolsetDetailPage() {
         });
         setSelectedNames(toolset.toolNames ?? []);
         setToolOptionsByName(cloneToolConfigMap(toolset.toolOptions));
+        setDraftSelectedNames(toolset.toolNames ?? []);
+        setDraftToolOptionsByName(cloneToolConfigMap(toolset.toolOptions));
         setTestInputByTool({});
         setTestResultByTool({});
         setConfigToolName(null);
         setConfigDraftText(prettyJson({}));
-        setConfigDrawerOpen(false);
+        setManagerOpen(false);
       })
       .catch((error) => messageApi.error(error instanceof ApiError ? error.message : "加载工具集失败"));
   }, [form, id, isCreate, messageApi]);
 
-  const filteredTools = useMemo(() => filterAiToolsForPicker(tools, toolQuery), [tools, toolQuery]);
-  const configTool = useMemo(() => tools.find((tool) => tool.name === configToolName) ?? null, [configToolName, tools]);
+  const configuredToolCount = useMemo(
+    () => selectedNames.filter((name) => Object.keys(toolOptionsByName[name] ?? {}).length > 0).length,
+    [selectedNames, toolOptionsByName]
+  );
   const invalidSelectedNames = useMemo(
     () => selectedNames.filter((name) => !tools.some((tool) => tool.name === name)),
     [selectedNames, tools]
   );
+  const filteredTools = useMemo(() => filterAiToolsForPicker(tools, toolQuery), [tools, toolQuery]);
+  const configTool = useMemo(() => tools.find((tool) => tool.name === configToolName) ?? null, [configToolName, tools]);
+  const draftInvalidSelectedNames = useMemo(
+    () => draftSelectedNames.filter((name) => !tools.some((tool) => tool.name === name)),
+    [draftSelectedNames, tools]
+  );
+  const draftConfiguredToolCount = useMemo(
+    () => draftSelectedNames.filter((name) => Object.keys(draftToolOptionsByName[name] ?? {}).length > 0).length,
+    [draftSelectedNames, draftToolOptionsByName]
+  );
+  const selectedToolSummaries = useMemo<SelectedToolSummaryRow[]>(
+    () => draftSelectedNames.map((name) => {
+      const tool = tools.find((item) => item.name === name);
+      return {
+        key: name,
+        name,
+        tool,
+        configured: Object.keys(draftToolOptionsByName[name] ?? {}).length > 0
+      };
+    }),
+    [draftSelectedNames, draftToolOptionsByName, tools]
+  );
+
+  const openToolManager = () => {
+    setDraftSelectedNames(selectedNames);
+    setDraftToolOptionsByName(cloneToolConfigMap(toolOptionsByName));
+    setToolQuery("");
+    setConfigToolName(null);
+    setConfigDraftText(prettyJson({}));
+    setTestInputByTool({});
+    setTestResultByTool({});
+    setTestingTool(null);
+    setManagerOpen(true);
+  };
+
+  const closeToolManager = () => {
+    setManagerOpen(false);
+  };
 
   const openToolConfig = (toolName: string) => {
     const tool = tools.find((item) => item.name === toolName) ?? null;
     if (!tool) return;
     setConfigToolName(toolName);
-    setConfigDraftText(prettyJson(toolOptionsByName[toolName]));
-    setConfigDrawerOpen(true);
-  };
-
-  const closeToolConfig = () => {
-    setConfigDrawerOpen(false);
+    setConfigDraftText(prettyJson(draftToolOptionsByName[toolName]));
   };
 
   const applyToolConfig = () => {
     if (!configTool) return;
     try {
       const config = parseJsonText(configDraftText, "工具配置");
-      setToolOptionsByName((current) => {
+      setDraftToolOptionsByName((current) => {
         const next = { ...current };
         if (Object.keys(config).length === 0) {
           delete next[configTool.name];
@@ -400,7 +367,6 @@ export function AiToolsetDetailPage() {
         return next;
       });
       messageApi.success("工具配置已应用");
-      setConfigDrawerOpen(false);
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "工具配置不是合法 JSON");
     }
@@ -408,7 +374,7 @@ export function AiToolsetDetailPage() {
 
   const clearToolConfig = () => {
     if (!configTool) return;
-    setToolOptionsByName((current) => {
+    setDraftToolOptionsByName((current) => {
       const next = { ...current };
       delete next[configTool.name];
       return next;
@@ -418,7 +384,7 @@ export function AiToolsetDetailPage() {
   };
 
   const handleSelectionChange = (names: Key[]) => {
-    setSelectedNames([...invalidSelectedNames, ...names.map(String)]);
+    setDraftSelectedNames([...draftInvalidSelectedNames, ...names.map(String)]);
   };
 
   const handleTestInputChange = (toolName: string, value: string) => {
@@ -454,14 +420,25 @@ export function AiToolsetDetailPage() {
     }
   };
 
+  const applyToolManager = () => {
+    setSelectedNames(draftSelectedNames);
+    setToolOptionsByName(buildToolOptionsPayload(draftSelectedNames, draftToolOptionsByName));
+    setManagerOpen(false);
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
       <PageHeader
         title={isCreate ? "新建工具集" : "工具集"}
-        meta={isCreate ? "选择 Agent 可用工具并为每个工具配置专属参数" : id}
+        meta={isCreate ? "配置工具集基本信息，工具选择在抽屉中管理" : id}
         onBack={() => navigate("/ai/toolsets")}
-        actions={<Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>保存</Button>}
+        actions={(
+          <Space>
+            <Button onClick={openToolManager}>管理工具</Button>
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>保存</Button>
+          </Space>
+        )}
       />
       <Card>
         <Form form={form} layout="vertical">
@@ -472,65 +449,119 @@ export function AiToolsetDetailPage() {
           <Form.Item name="maxPermission" label="权限上限" rules={[{ required: true }]}><Select options={PERMISSIONS.map((value) => ({ value, label: value }))} /></Form.Item>
         </Form>
       </Card>
-      <Card title="工具列表">
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Alert type="info" showIcon message="勾选决定工具集里启用哪些工具，工具详情请在行内点击“查看”打开。" />
-          {invalidSelectedNames.length > 0 ? (
-            <Alert
-              type="warning"
-              showIcon
-              message="当前工具集中包含已失效工具，请移除后再保存。"
-              description={
-                <Space size={[8, 8]} wrap>
-                  {invalidSelectedNames.map((name) => (
-                    <Tag
-                      key={name}
-                      closable
-                      onClose={() => setSelectedNames((current) => current.filter((item) => item !== name))}
-                    >
-                      {name}
-                    </Tag>
-                  ))}
+      <Drawer
+        title="管理工具"
+        open={managerOpen}
+        width={960}
+        onClose={closeToolManager}
+        destroyOnClose={false}
+        footer={(
+          <Space style={{ justifyContent: "flex-end", width: "100%" }}>
+            <Button onClick={closeToolManager}>取消</Button>
+            <Button type="primary" onClick={applyToolManager}>应用</Button>
+          </Space>
+        )}
+      >
+        <Tabs
+          items={[
+            {
+              key: "summary",
+              label: "摘要",
+              children: (
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Descriptions size="small" column={{ xs: 1, md: 3 }} bordered>
+                    <Descriptions.Item label="已选工具">{draftSelectedNames.length}</Descriptions.Item>
+                    <Descriptions.Item label="已配置">{draftConfiguredToolCount}</Descriptions.Item>
+                    <Descriptions.Item label="失效工具">{draftInvalidSelectedNames.length}</Descriptions.Item>
+                  </Descriptions>
+                  {draftInvalidSelectedNames.length > 0 ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="当前草稿中包含已失效工具"
+                      description={<Space size={[8, 8]} wrap>{draftInvalidSelectedNames.map((name) => <Tag key={name}>{name}</Tag>)}</Space>}
+                    />
+                  ) : null}
+                  <Table
+                      rowKey="key"
+                      size="small"
+                      pagination={false}
+                      dataSource={selectedToolSummaries}
+                      locale={{ emptyText: "当前没有选择工具" }}
+                      columns={[
+                        {
+                          title: "工具",
+                          dataIndex: "name",
+                          render: (_value: unknown, item: SelectedToolSummaryRow) => (
+                            <Space direction="vertical" size={2}>
+                              <Typography.Text strong>{item.tool?.displayName ?? item.name}</Typography.Text>
+                              <Typography.Text code>{item.name}</Typography.Text>
+                          </Space>
+                        )
+                      },
+                        {
+                          title: "状态",
+                          render: (_value: unknown, item: SelectedToolSummaryRow) => (
+                            <Space size={[4, 4]} wrap>
+                              <Tag color={item.tool ? "blue" : "red"}>{item.tool ? "有效" : "失效"}</Tag>
+                              <Tag color={item.configured ? "green" : "default"}>{item.configured ? "已配置" : "默认"}</Tag>
+                          </Space>
+                        )
+                      }
+                    ]}
+                  />
                 </Space>
-              }
-            />
-          ) : null}
-          <Input.Search
-            allowClear
-            placeholder="搜索工具名、显示名、来源、说明或权限"
-            value={toolQuery}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setToolQuery(event.target.value)}
-          />
-          <AiToolPickerTable
-            tools={filteredTools}
-            selectedNames={selectedNames}
-            toolOptionsByName={toolOptionsByName}
-            testingTool={testingTool}
-            testInputByTool={testInputByTool}
-            testResultByTool={testResultByTool}
-            onSelectionChange={handleSelectionChange}
-            onOpenConfig={openToolConfig}
-            onTestInputChange={handleTestInputChange}
-            onTest={(toolName) => void handleTest(toolName)}
-          />
-        </Space>
-      </Card>
-      <ToolConfigDrawer
-        tool={configTool}
-        open={configDrawerOpen}
-        selected={configTool ? selectedNames.includes(configTool.name) : false}
-        configStatus={configTool ? getToolConfigStatus(configTool, toolOptionsByName) : { label: "无需配置", color: "default" }}
-        draftText={configDraftText}
-        testInputText={configTool ? testInputByTool[configTool.name] ?? "{}" : "{}"}
-        testResult={configTool ? testResultByTool[configTool.name] ?? null : null}
-        testing={configTool ? testingTool === configTool.name : false}
-        onDraftChange={setConfigDraftText}
-        onApply={applyToolConfig}
-        onClear={clearToolConfig}
-        onTestInputChange={handleTestInputChange}
-        onTest={(toolName) => void handleTest(toolName)}
-        onClose={closeToolConfig}
-      />
+              )
+            },
+            {
+              key: "selection",
+              label: "选择/配置",
+              children: (
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  <Alert type="info" showIcon message="勾选决定工具集里启用哪些工具，选中工具后可在下方直接配置。" />
+                  <Input.Search
+                    allowClear
+                    placeholder="搜索工具名、显示名、来源、说明或权限"
+                    value={toolQuery}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => setToolQuery(event.target.value)}
+                  />
+                  <AiToolPickerTable
+                    tools={filteredTools}
+                    selectedNames={draftSelectedNames}
+                    toolOptionsByName={draftToolOptionsByName}
+                    testingTool={testingTool}
+                    testInputByTool={testInputByTool}
+                    testResultByTool={testResultByTool}
+                    onSelectionChange={handleSelectionChange}
+                    onOpenConfig={openToolConfig}
+                    onTestInputChange={handleTestInputChange}
+                    onTest={(toolName) => void handleTest(toolName)}
+                  />
+                  {configTool ? (
+                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                      {configTool.configHelp ? <Alert type="info" showIcon message={configTool.configHelp} /> : <Alert type="info" showIcon message="该工具使用下方 JSON 配置参数。" />}
+                      <ToolConfigWorkspace
+                        tool={configTool}
+                        selected={draftSelectedNames.includes(configTool.name)}
+                        configStatus={getToolConfigStatus(configTool, draftToolOptionsByName)}
+                        draftText={configDraftText}
+                        testInputText={testInputByTool[configTool.name] ?? "{}"}
+                        testResult={testResultByTool[configTool.name] ?? null}
+                        testing={testingTool === configTool.name}
+                        onDraftChange={setConfigDraftText}
+                        onApply={applyToolConfig}
+                        onClear={clearToolConfig}
+                        onTestInputChange={handleTestInputChange}
+                        onTest={(toolName) => void handleTest(toolName)}
+                      />
+                    </Space>
+                  ) : null}
+                </Space>
+              )
+            }
+          ]}
+        />
+      </Drawer>
     </Space>
   );
 }

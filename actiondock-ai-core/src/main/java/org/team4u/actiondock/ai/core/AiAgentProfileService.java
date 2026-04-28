@@ -12,17 +12,26 @@ public class AiAgentProfileService {
     private final AiAgentProfileRepository repository;
     private final AiModelProfileRepository modelProfileRepository;
     private final AiToolsetRepository toolsetRepository;
+    private final AiToolRegistryImpl toolRegistry;
 
     public AiAgentProfileService(AiAgentProfileRepository repository, AiModelProfileRepository modelProfileRepository) {
-        this(repository, modelProfileRepository, null);
+        this(repository, modelProfileRepository, null, null);
     }
 
     public AiAgentProfileService(AiAgentProfileRepository repository,
                                  AiModelProfileRepository modelProfileRepository,
                                  AiToolsetRepository toolsetRepository) {
+        this(repository, modelProfileRepository, toolsetRepository, null);
+    }
+
+    public AiAgentProfileService(AiAgentProfileRepository repository,
+                                 AiModelProfileRepository modelProfileRepository,
+                                 AiToolsetRepository toolsetRepository,
+                                 AiToolRegistryImpl toolRegistry) {
         this.repository = repository;
         this.modelProfileRepository = modelProfileRepository;
         this.toolsetRepository = toolsetRepository;
+        this.toolRegistry = toolRegistry;
     }
 
     public List<AiAgentProfile> list() {
@@ -67,7 +76,9 @@ public class AiAgentProfileService {
         if (modelProfileRepository.findById(profile.getModelProfileId()).isEmpty()) {
             throw new IllegalArgumentException("模型 Profile 不存在: " + profile.getModelProfileId());
         }
-        if (toolsetRepository != null) {
+        if (toolRegistry != null) {
+            toolRegistry.listAgentTools(profile);
+        } else if (toolsetRepository != null) {
             for (String toolsetId : profile.getToolsetIds()) {
                 if (toolsetId == null || toolsetId.isBlank()) {
                     throw new IllegalArgumentException("工具集 ID 不能为空");

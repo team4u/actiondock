@@ -7,7 +7,9 @@ import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.storage.jpa.entity.AiAgentProfileEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentProfileRepository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class JpaAiAgentProfileRepositoryAdapter implements AiAgentProfileRepository {
@@ -48,8 +50,9 @@ public class JpaAiAgentProfileRepositoryAdapter implements AiAgentProfileReposit
         entity.setModelProfileId(profile.getModelProfileId());
         entity.setSystemPrompt(profile.getSystemPrompt());
         entity.setToolsetIdsJson(jsonCodec.write(profile.getToolsetIds()));
+        entity.setDirectToolNamesJson(jsonCodec.write(profile.getDirectToolNames()));
+        entity.setDirectToolOptionsJson(jsonCodec.write(profile.getDirectToolOptions()));
         entity.setOptionsJson(jsonCodec.write(profile.getOptions()));
-        entity.setPolicyJson(jsonCodec.write(profile.getPolicy()));
         entity.setEnabled(profile.isEnabled());
         entity.setCreatedAt(profile.getCreatedAt());
         entity.setUpdatedAt(profile.getUpdatedAt());
@@ -65,10 +68,22 @@ public class JpaAiAgentProfileRepositoryAdapter implements AiAgentProfileReposit
                 .setModelProfileId(entity.getModelProfileId())
                 .setSystemPrompt(entity.getSystemPrompt())
                 .setToolsetIds(jsonCodec.readList(entity.getToolsetIdsJson(), String.class))
+                .setDirectToolNames(jsonCodec.readList(entity.getDirectToolNamesJson(), String.class))
+                .setDirectToolOptions(readToolOptions(entity.getDirectToolOptionsJson()))
                 .setOptions(jsonCodec.readMap(entity.getOptionsJson()))
-                .setPolicy(jsonCodec.readMap(entity.getPolicyJson()))
                 .setEnabled(entity.isEnabled())
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Map<String, Object>> readToolOptions(String json) {
+        Map<String, Map<String, Object>> options = new LinkedHashMap<>();
+        jsonCodec.readMap(json).forEach((key, value) -> {
+            if (value instanceof Map<?, ?> map) {
+                options.put(key, new LinkedHashMap<>((Map<String, Object>) map));
+            }
+        });
+        return options;
     }
 }

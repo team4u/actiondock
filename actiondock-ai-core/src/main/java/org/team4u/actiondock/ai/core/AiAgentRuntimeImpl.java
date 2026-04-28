@@ -19,7 +19,6 @@ import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiProviderClient;
 import org.team4u.actiondock.ai.api.AiRunStatus;
 import org.team4u.actiondock.ai.api.AiStepType;
-import org.team4u.actiondock.ai.api.AiToolPermission;
 import org.team4u.actiondock.ai.api.AiUsage;
 
 import java.time.LocalDateTime;
@@ -149,8 +148,6 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
                 .orElseThrow(() -> new IllegalArgumentException("模型 Profile 不存在: " + agentProfile.getModelProfileId()));
         String runId = UUID.randomUUID().toString();
         AiAgentRunContext effectiveContext = withEffectivePolicy(agentProfile, context, runId, asyncSubmission);
-        AiToolPermission maxToolPermission = AiToolPermission.from(effectiveContext.metadata().get("maxToolPermission"), AiToolPermission.READ_ONLY);
-        toolRegistry.assertToolsetsAllowed(agentProfile.getToolsetIds(), maxToolPermission);
 
         AiAgentRunRecord run = new AiAgentRunRecord()
                 .setId(runId)
@@ -301,22 +298,8 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
                                                   boolean asyncSubmission) {
         AiCallerType callerType = context == null || context.callerType() == null ? AiCallerType.ADMIN_TEST : context.callerType();
         Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
-        AiToolPermission defaultMax = switch (callerType) {
-            case SCRIPT -> AiToolPermission.DANGEROUS_ACTION;
-            case WORKBENCH -> AiToolPermission.PROPOSE_CHANGE;
-            default -> AiToolPermission.CONTROLLED_ACTION;
-        };
-        Map<String, Object> policy = agentProfile.getPolicy();
-        AiToolPermission profileMax = AiToolPermission.from(policy.get("maxToolPermission"), defaultMax);
-        AiToolPermission effectiveMax = min(defaultMax, profileMax);
-        if (Boolean.TRUE.equals(policy.get("allowDangerousActions")) && callerType != AiCallerType.SCRIPT) {
-            effectiveMax = profileMax == AiToolPermission.DANGEROUS_ACTION ? AiToolPermission.DANGEROUS_ACTION : effectiveMax;
-        }
-        if (effectiveMax == AiToolPermission.DANGEROUS_ACTION && callerType == AiCallerType.WORKBENCH) {
-            effectiveMax = AiToolPermission.PROPOSE_CHANGE;
-        }
-        metadata.put("maxToolPermission", effectiveMax.name());
-        metadata.putIfAbsent("dangerousActionsAllowed", effectiveMax == AiToolPermission.DANGEROUS_ACTION);
+        metadata.remove("maxToolPermission");
+        metadata.remove("dangerousActionsAllowed");
         metadata.put("agentRunId", runId);
         metadata.put(DISABLE_OUTER_TIMEOUT_METADATA_KEY, asyncSubmission);
         return new AiAgentRunContext(
@@ -326,16 +309,6 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
                 context == null ? null : context.userId(),
                 metadata
         );
-    }
-
-    private AiToolPermission min(AiToolPermission first, AiToolPermission second) {
-        if (first == null) {
-            return second == null ? AiToolPermission.READ_ONLY : second;
-        }
-        if (second == null) {
-            return first;
-        }
-        return first.ordinal() <= second.ordinal() ? first : second;
     }
 
     private record PreparedRun(

@@ -26,9 +26,11 @@ public class AiAgentProfileEntity {
     @Lob
     private String toolsetIdsJson;
     @Lob
-    private String optionsJson;
+    private String directToolNamesJson;
     @Lob
-    private String policyJson;
+    private String directToolOptionsJson;
+    @Lob
+    private String optionsJson;
     private boolean enabled = true;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -47,10 +49,12 @@ public class AiAgentProfileEntity {
     public void setSystemPrompt(String systemPrompt) { this.systemPrompt = systemPrompt; }
     public String getToolsetIdsJson() { return toolsetIdsJson; }
     public void setToolsetIdsJson(String toolsetIdsJson) { this.toolsetIdsJson = toolsetIdsJson; }
+    public String getDirectToolNamesJson() { return directToolNamesJson; }
+    public void setDirectToolNamesJson(String directToolNamesJson) { this.directToolNamesJson = directToolNamesJson; }
+    public String getDirectToolOptionsJson() { return directToolOptionsJson; }
+    public void setDirectToolOptionsJson(String directToolOptionsJson) { this.directToolOptionsJson = directToolOptionsJson; }
     public String getOptionsJson() { return optionsJson; }
     public void setOptionsJson(String optionsJson) { this.optionsJson = optionsJson; }
-    public String getPolicyJson() { return policyJson; }
-    public void setPolicyJson(String policyJson) { this.policyJson = policyJson; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public LocalDateTime getCreatedAt() { return createdAt; }

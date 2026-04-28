@@ -1,23 +1,28 @@
 # actiondock-app-spring
 
-这个模块是 Web 启动入口：
+Spring Boot Web 入口模块，负责把脚本平台和 AI 工作台以 REST API 与管理台页面的形式对外暴露。
 
-- Web 模式：Spring MVC + 管理台
-- 当前管理台支持创建和编辑 `GROOVY` / `PYTHON` 两类脚本
-- `GROOVY` 脚本可通过内置系统插件 `actiondock-ai` 使用 Chat、Structured Output、Embedding 和 Agent Run 能力
+## 提供什么
 
-示例：
+- REST API
+- 管理台静态资源挂载
+- Spring MVC / Validation / Actuator / OpenAPI
+- 与 `actiondock-app-support`、`actiondock-storage-jpa` 的整合启动
+
+## 启动方式
 
 ```bash
 mvn -pl actiondock-app-spring -am spring-boot:run
 ```
 
-该命令会只启动 `actiondock-app-spring`。
+生产打包：
 
-如果会执行 `PYTHON` 类型脚本，请先确认宿主机上存在 `python3`，并且脚本依赖的第三方包已经预装。
-如果要在脚本中使用 AI 能力，还需要先在管理台配置可用的 `modelProfile` / `agentProfile`；脚本编辑页的“插件参考”会展示 `actiondock-ai` 的可复制调用示例。
+```bash
+mvn -pl actiondock-app-spring -am package
+java -jar target/actiondock-app-spring.jar
+```
 
-开发阶段建议前后端分开启动：
+## 前后端开发
 
 ```bash
 # 后端
@@ -29,45 +34,37 @@ npm install
 npm run dev
 ```
 
-前端开发地址：
+- 前端开发地址：`http://localhost:5173/admin/scripts`
+- 后端管理台地址：`http://localhost:8080/admin/scripts`
 
-- `http://localhost:5173/admin/scripts`
+## API 分组
 
-如果需要把前端静态资源一起打进 jar，也可以：
+| 路径前缀 | 说明 |
+|----------|------|
+| `/api/scripts` | 脚本管理、发布、Fork、开发同步 |
+| `/api/executions` | 脚本执行与执行记录 |
+| `/api/plugins` | 插件管理、配置与动作调用 |
+| `/api/repositories` | 仓库、仓库工具和仓库插件管理 |
+| `/api/schedules` | 全局定时任务管理 |
+| `/api/scripts/{scriptId}/schedules` | 脚本级定时任务管理 |
+| `/api/config-values` | 全局配置值管理 |
+| `/api/access-tokens` | 访问令牌管理 |
+| `/api/ai` | 模型、Agent、Toolset、AI Tool、Agent Run 和调用日志 |
+| `/api/ai/workbench` | 脚本生成、改进、诊断、评审等工作台能力 |
 
-```bash
-mvn -pl actiondock-app-spring -am package
-java -jar target/actiondock-app-spring.jar
-```
+## 管理台与静态资源
 
-如果要配合官方 REST CLI 使用，可以在仓库根目录额外构建：
+- `/admin/*`：管理台入口
+- 打包时会自动构建 `actiondock-admin-ui` 并复制到 jar 静态资源目录
 
-```bash
-mvn -pl actiondock-cli -am package
-java -jar ../actiondock-cli/target/actiondock-cli.jar \
-  --base-url http://localhost:8080 \
-  --token local-dev-key \
-  scripts list
-```
+## 使用提示
 
-常用运行配置：
+- `PYTHON` 脚本要求宿主机存在 `python3`
+- Groovy 脚本可以通过系统插件 `actiondock-ai` 使用 AI 能力
+- 若系统存在访问令牌，则 `/api/*` 需要 `Authorization: Bearer <token>`
 
-```yaml
-app:
-  home-dir: ${user.home}/.actiondock
-  execution:
-    async-pool-size: 4
-    groovy:
-      enabled: true
-      cache-max-size: 128
-      cache-expire-after-access-minutes: 30
-    python:
-      executable: python3
-      timeout-seconds: 30
-```
+## 相关模块
 
-默认运行时目录：
-
-- 数据库：`~/.actiondock/data/dsl-runtime*`
-- 插件：`~/.actiondock/plugins`
-- 仓库缓存：`~/.actiondock/repositories`
+- UI 见 [../actiondock-admin-ui/README.md](../actiondock-admin-ui/README.md)
+- 运行时装配见 [../actiondock-app-support/README.md](../actiondock-app-support/README.md)
+- CLI 见 [../actiondock-cli/README.md](../actiondock-cli/README.md)

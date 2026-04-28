@@ -10,6 +10,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { listAiAgents, listAiModels, listAiRuns, listAiTools, listAiToolsets } from "../../api";
+import { getAgentToolSummary } from "../../aiAgentTools";
 import { Col } from "../../components/SafeCol";
 import { PageHeader } from "../../components/PageHeader";
 import { AiRunStatusTag } from "../../components/ai/AiTags";
@@ -83,7 +84,12 @@ export function AiOverviewPage() {
   const modelIds = useMemo(() => new Set(models.map((model) => model.id)), [models]);
   const toolsetIds = useMemo(() => new Set(toolsets.map((toolset) => toolset.id)), [toolsets]);
   const missingModelAgents = agents.filter((agent) => !modelIds.has(agent.modelProfileId));
-  const missingToolsetAgents = agents.filter((agent) => agent.toolsetIds.some((toolsetId) => !toolsetIds.has(toolsetId)));
+  const invalidToolAgents = agents.filter((agent) => {
+    const summary = getAgentToolSummary(agent, toolsets, tools);
+    return agent.toolsetIds.some((toolsetId) => !toolsetIds.has(toolsetId))
+      || summary.missingToolNames.length > 0
+      || summary.conflicts.length > 0;
+  });
   const modelsMissingApiKey = models.filter((model) => model.enabled && model.modelProvider !== "OLLAMA" && !model.apiKeyConfigKey);
   const recentRuns = useMemo(
     () => [...runs].sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? "")).slice(0, 8),
@@ -102,7 +108,7 @@ export function AiOverviewPage() {
       {contextHolder}
       <PageHeader
         title="AI 能力"
-        meta="模型 Profile、Agent Profile、工具集和运行记录"
+        meta="模型 Profile、Agent Profile、工具目录、工具集和运行记录"
         actions={(
           <>
             <Button type="primary" icon={<ExperimentOutlined />} onClick={() => navigate("/ai/workbench")}>Workbench</Button>
@@ -138,7 +144,7 @@ export function AiOverviewPage() {
             value={enabledToolsets.length}
             meta={`${tools.length} 个注册工具`}
             icon={<FunctionOutlined />}
-            warning={missingToolsetAgents.length > 0 ? `${missingToolsetAgents.length} 个 Agent 引用缺失工具集` : undefined}
+            warning={invalidToolAgents.length > 0 ? `${invalidToolAgents.length} 个 Agent 存在工具引用异常` : undefined}
             onManage={() => navigate("/ai/toolsets")}
             onCreate={() => navigate("/ai/toolsets/new")}
           />

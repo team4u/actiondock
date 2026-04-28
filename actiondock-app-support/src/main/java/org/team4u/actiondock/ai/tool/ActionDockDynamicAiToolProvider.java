@@ -249,8 +249,6 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
                     throw new IllegalStateException("检测到 Agent 工具递归调用链: " + String.join(" -> ", append(chain, agentProfile.getId())));
                 }
                 Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
-                metadata.put("maxToolPermission", AiToolPermission.CONTROLLED_ACTION.name());
-                metadata.put("dangerousActionsAllowed", false);
                 metadata.put(AGENT_PROFILE_CHAIN_METADATA_KEY, append(chain, agentProfile.getId()));
 
                 @SuppressWarnings("unchecked")

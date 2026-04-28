@@ -204,10 +204,8 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                                  AiAgentRunObserver observer) {
         Toolkit toolkit = new Toolkit();
         Map<String, AiTool> tools = new LinkedHashMap<>();
-        for (String toolsetId : agentProfile.getToolsetIds()) {
-            for (AiTool tool : toolRegistry.listTools(toolsetId)) {
-                tools.putIfAbsent(tool.name(), tool);
-            }
+        for (AiTool tool : toolRegistry.listAgentTools(agentProfile)) {
+            tools.putIfAbsent(tool.name(), tool);
         }
         tools.values().forEach(tool -> toolkit.registerAgentTool(new ActionDockAgentTool(
                 tool,
