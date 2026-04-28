@@ -39,13 +39,19 @@ actiondock-server service start
 actiondock-server service status
 ```
 
-手动升级：
+使用 jDeploy 自更新：
+
+```bash
+actiondock-server update
+```
+
+如需兜底，也可继续使用 npm 全局升级：
 
 ```bash
 npm i -g @actiondock/server@latest
 ```
 
-启动后会低频检查 npm 上是否有新版本，并在日志里输出升级提示。可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
+启动后会低频检查 npm 上是否有新版本，并在日志里输出升级提示。发现新版本后可执行 `actiondock-server update`。可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
 
 发布前可在本目录执行：
 

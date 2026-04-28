@@ -45,7 +45,8 @@
       "actiondock-server": {
         "description": "ActionDock official server",
         "implements": [
-          "service_controller"
+          "service_controller",
+          "updater"
         ]
       }
     }
