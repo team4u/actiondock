@@ -50,8 +50,7 @@ export function TableLinkCell({
           background: "none",
           border: "none",
           padding: 0,
-          font: "inherit",
-          color: "inherit"
+          font: "inherit"
         }}
       >
         {inner}

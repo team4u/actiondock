@@ -14,6 +14,7 @@ import { Col } from "../../components/SafeCol";
 import { PageHeader } from "../../components/PageHeader";
 import { AiRunStatusTag } from "../../components/ai/AiTags";
 import type { AiAgentProfile, AiAgentRunRecord, AiModelProfile, AiTool, AiToolset } from "../../types";
+import { TableLinkCell } from "../../components/TableLinkCell";
 import { formatDateTime, getErrorMessage } from "../../utils";
 
 const { Text, Title } = Typography;
@@ -89,7 +90,7 @@ export function AiOverviewPage() {
     [runs]
   );
   const runColumns: ColumnsType<AiAgentRunRecord> = [
-    { title: "Run ID", dataIndex: "id", render: (value) => <Typography.Text code>{String(value).slice(0, 8)}</Typography.Text> },
+    { title: "Run ID", dataIndex: "id", render: (id) => <TableLinkCell to={`/ai/runs/${id}`}>{String(id).slice(0, 8)}</TableLinkCell> },
     { title: "Agent", dataIndex: "agentProfile" },
     { title: "状态", dataIndex: "status", render: (status) => <AiRunStatusTag status={status} /> },
     { title: "调用方", dataIndex: "callerType", render: (value) => value ? <Tag>{value}</Tag> : "-" },
