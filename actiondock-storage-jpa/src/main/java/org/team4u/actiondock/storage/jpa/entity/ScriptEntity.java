@@ -26,7 +26,6 @@ public class ScriptEntity {
 
     @Column(nullable = false)
     private String type;
-    @Column(nullable = false)
     private String packaging;
 
     @Lob

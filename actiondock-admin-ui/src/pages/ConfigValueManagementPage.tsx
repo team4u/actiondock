@@ -2,7 +2,6 @@ import {
   CopyOutlined,
   DeleteOutlined,
   DownloadOutlined,
-  EditOutlined,
   PlusOutlined,
   ReloadOutlined,
   RollbackOutlined,
@@ -10,6 +9,7 @@ import {
   UploadOutlined
 } from "@ant-design/icons";
 import {
+  Alert,
   Button,
   Card,
   Checkbox,
@@ -22,6 +22,7 @@ import {
   Modal,
   Space,
   Table,
+  Tabs,
   Tag,
   Typography,
   message
@@ -56,11 +57,10 @@ import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Paragraph, Text } = Typography;
 
-type EditorMode = "create" | "edit";
+type DetailTabKey = "overview" | "impact" | "references";
 
-interface EditorState {
-  mode: EditorMode;
-  key?: string;
+interface ConfigValueFormValues extends ConfigValueRequest {
+  preserveValue?: boolean;
 }
 
 interface ConfigValueManagementPageProps {
@@ -84,6 +84,30 @@ function detailToSummary(detail: ConfigValueDetail): ConfigValue {
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt
   };
+}
+
+export function buildDetailFormValues(detail: ConfigValueDetail): ConfigValueFormValues {
+  return {
+    key: detail.key,
+    value: detail.secret ? "" : (detail.value ?? ""),
+    description: detail.description ?? "",
+    secret: detail.secret ?? false,
+    preserveValue: Boolean(detail.secret && detail.hasValue)
+  };
+}
+
+export function buildReferenceItems(key: string) {
+  const normalizedKey = key.trim();
+  if (!normalizedKey) {
+    return [];
+  }
+  return [
+    { label: "JSON 配置值", value: `\${config.${normalizedKey}}` },
+    { label: "Bearer / 前缀拼接", value: `Bearer \${config.${normalizedKey}}` },
+    { label: "Groovy 脚本", value: `config["${normalizedKey}"]` },
+    { label: "Python 脚本", value: `config.get("${normalizedKey}")` },
+    { label: "插件调用参数", value: `plugins.invoke("plugin-id", "action", [token: "\${config.${normalizedKey}}"])` }
+  ];
 }
 
 function renderConfigValue(item: Pick<ConfigValue, "secret" | "publishMode" | "hasValue" | "value" | "valueMasked">) {
@@ -112,21 +136,60 @@ function renderTags(item: Pick<ConfigValue, "managed" | "overridden" | "publishM
   );
 }
 
+function ConfigValueReferenceCard({
+  items,
+  onCopy
+}: {
+  items: Array<{ label: string; value: string }>;
+  onCopy: (value: string) => void;
+}) {
+  return (
+    <Card size="small" title="可复制引用">
+      {items.length === 0 ? (
+        <Text type="secondary">Key 已固定，可在这里复制不同场景的引用片段。</Text>
+      ) : (
+        <List
+          dataSource={items}
+          renderItem={(item) => (
+            <List.Item
+              actions={[
+                <Button key={item.label} size="small" icon={<CopyOutlined />} onClick={() => onCopy(item.value)}>
+                  复制
+                </Button>
+              ]}
+            >
+              <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                <Text strong>{item.label}</Text>
+                <Text code>{item.value}</Text>
+              </Space>
+            </List.Item>
+          )}
+        />
+      )}
+    </Card>
+  );
+}
+
 export function ConfigValueManagementPage({ embedded = false }: ConfigValueManagementPageProps) {
-  const [form] = Form.useForm<ConfigValueRequest>();
-  const watchedKey = Form.useWatch("key", form);
-  const watchedSecret = Form.useWatch("secret", form) ?? false;
+  const [createForm] = Form.useForm<ConfigValueFormValues>();
+  const [detailForm] = Form.useForm<ConfigValueFormValues>();
+  const watchedCreateKey = Form.useWatch("key", createForm);
+  const watchedCreateSecret = Form.useWatch("secret", createForm) ?? false;
+  const watchedDetailKey = Form.useWatch("key", detailForm);
+  const watchedDetailSecret = Form.useWatch("secret", detailForm) ?? false;
   const [items, setItems] = useState<ConfigValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
-  const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailActionKey, setDetailActionKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<ConfigValueDetail | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTabKey>("overview");
+  const [detailDirty, setDetailDirty] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [modal, modalContextHolder] = Modal.useModal();
@@ -140,6 +203,12 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
         : [...previous, nextItem];
       return [...next].sort((left, right) => left.key.localeCompare(right.key));
     });
+  };
+
+  const applyDetailToForm = (source: ConfigValueDetail) => {
+    detailForm.resetFields();
+    detailForm.setFieldsValue(buildDetailFormValues(source));
+    setDetailDirty(false);
   };
 
   const loadData = async () => {
@@ -161,6 +230,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     try {
       const data = await getConfigValue(key);
       setDetail(data);
+      applyDetailToForm(data);
       upsertItem(detailToSummary(data));
       return data;
     } finally {
@@ -189,61 +259,85 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     );
   }, [items, searchText]);
 
-  const normalizedKey = typeof watchedKey === "string" ? watchedKey.trim() : "";
-  const referenceItems = normalizedKey
-    ? [
-        { label: "JSON 配置值", value: `\${config.${normalizedKey}}` },
-        { label: "Bearer / 前缀拼接", value: `Bearer \${config.${normalizedKey}}` },
-        { label: "Groovy 脚本", value: `config["${normalizedKey}"]` },
-        { label: "Python 脚本", value: `config.get("${normalizedKey}")` },
-        { label: "插件调用参数", value: `plugins.invoke("plugin-id", "action", [token: "\${config.${normalizedKey}}"])` }
-      ]
-    : [];
+  const createReferenceItems = useMemo(
+    () => buildReferenceItems(typeof watchedCreateKey === "string" ? watchedCreateKey : ""),
+    [watchedCreateKey]
+  );
+  const detailReferenceItems = useMemo(
+    () => buildReferenceItems(typeof watchedDetailKey === "string" ? watchedDetailKey : ""),
+    [watchedDetailKey]
+  );
+  const detailEditable = Boolean(detail && (!detail.managed || detail.overridden));
+
+  const confirmDiscardDetailChanges = async (title: string, content: string): Promise<boolean> => {
+    if (!detailDirty) {
+      return true;
+    }
+    let confirmed = false;
+    await modal.confirm({
+      title,
+      okText: "放弃修改",
+      cancelText: "继续编辑",
+      content: <Text>{content}</Text>,
+      onOk: () => {
+        confirmed = true;
+      }
+    });
+    return confirmed;
+  };
 
   const openCreate = () => {
-    form.setFieldsValue({
+    createForm.setFieldsValue({
       key: "",
       value: "",
       description: "",
       secret: false,
       preserveValue: false
     });
-    setEditorState({ mode: "create" });
+    setCreateOpen(true);
   };
 
   const openDetail = async (key: string) => {
+    if (detailKey && detailKey !== key) {
+      const confirmed = await confirmDiscardDetailChanges(
+        "切换配置值会放弃当前未保存修改",
+        "当前详情中的表单修改不会保留。"
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     try {
+      setDetailTab("overview");
       await loadDetail(key);
     } catch (error) {
       setDetailKey(null);
+      setDetail(null);
+      detailForm.resetFields();
+      setDetailDirty(false);
       messageApi.error(getErrorMessage(error, "加载配置值详情失败"));
     }
   };
 
-  const openEdit = async (key: string, existingDetail?: ConfigValueDetail) => {
-    try {
-      const source = existingDetail ?? await loadDetail(key);
-      form.setFieldsValue({
-        key: source.key,
-        value: source.secret ? "" : (source.value ?? ""),
-        description: source.description ?? "",
-        secret: source.secret ?? false,
-        preserveValue: Boolean(source.secret && source.hasValue)
-      });
-      setEditorState({ mode: "edit", key: source.key });
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "加载配置值详情失败"));
+  const closeCreate = () => {
+    setCreateOpen(false);
+    createForm.resetFields();
+  };
+
+  const closeDetail = async () => {
+    const confirmed = await confirmDiscardDetailChanges(
+      "放弃当前未保存修改？",
+      "关闭详情后，当前修改不会保留。"
+    );
+    if (!confirmed) {
+      return;
     }
-  };
-
-  const closeEditor = () => {
-    setEditorState(null);
-    form.resetFields();
-  };
-
-  const closeDetail = () => {
     setDetailKey(null);
     setDetail(null);
+    setDetailTab("overview");
+    detailForm.resetFields();
+    setDetailDirty(false);
   };
 
   const confirmSaveImpact = async (targetDetail: ConfigValueDetail): Promise<boolean> => {
@@ -276,9 +370,9 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     return confirmed;
   };
 
-  const handleSubmit = async () => {
+  const handleCreateSubmit = async () => {
     try {
-      const values = await form.validateFields();
+      const values = await createForm.validateFields();
       const payload: ConfigValueRequest = {
         key: values.key.trim(),
         value: values.value ?? "",
@@ -286,31 +380,12 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
         secret: Boolean(values.secret),
         preserveValue: Boolean(values.preserveValue)
       };
-      if (editorState?.mode === "edit" && editorState.key) {
-        const currentDetail = detail?.key === editorState.key ? detail : await getConfigValue(editorState.key);
-        if (
-          currentDetail.impactedScripts.length > 0 ||
-          currentDetail.usage.scheduleReferences.length > 0 ||
-          currentDetail.usage.pluginConfigReferences.length > 0 ||
-          currentDetail.usage.configReferences.length > 0
-        ) {
-          const confirmed = await confirmSaveImpact(currentDetail);
-          if (!confirmed) {
-            return;
-          }
-        }
-      }
 
       setSaving(true);
-      const saved = editorState?.mode === "edit" && editorState.key
-        ? await updateConfigValue(editorState.key, payload)
-        : await createConfigValue(payload);
+      const saved = await createConfigValue(payload);
       upsertItem(saved);
-      closeEditor();
-      if (saved.key === detailKey) {
-        void loadDetail(saved.key);
-      }
-      messageApi.success(editorState?.mode === "edit" ? "配置值已更新" : "配置值已创建");
+      closeCreate();
+      messageApi.success("配置值已创建");
     } catch (error) {
       if (error instanceof ApiError) {
         messageApi.error(error.message);
@@ -322,6 +397,59 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDetailSubmit = async () => {
+    if (!detailKey || !detailEditable) {
+      return;
+    }
+
+    try {
+      const values = await detailForm.validateFields();
+      const payload: ConfigValueRequest = {
+        key: values.key?.trim() ?? detailKey,
+        value: values.value ?? "",
+        description: values.description?.trim() || undefined,
+        secret: Boolean(values.secret),
+        preserveValue: Boolean(values.preserveValue)
+      };
+
+      const currentDetail = detail?.key === detailKey ? detail : await getConfigValue(detailKey);
+      if (
+        currentDetail.impactedScripts.length > 0 ||
+        currentDetail.usage.scheduleReferences.length > 0 ||
+        currentDetail.usage.pluginConfigReferences.length > 0 ||
+        currentDetail.usage.configReferences.length > 0
+      ) {
+        const confirmed = await confirmSaveImpact(currentDetail);
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      setSaving(true);
+      const saved = await updateConfigValue(detailKey, payload);
+      upsertItem(saved);
+      messageApi.success("配置值已更新");
+      await loadDetail(saved.key);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        messageApi.error(error.message);
+      } else if (typeof error === "object" && error !== null && "errorFields" in error) {
+        return;
+      } else {
+        messageApi.error(getErrorMessage(error, "保存配置值失败"));
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetDetailDraft = () => {
+    if (!detail) {
+      return;
+    }
+    applyDetailToForm(detail);
   };
 
   const confirmDelete = async (key: string) => {
@@ -357,7 +485,11 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
           await deleteConfigValue(key);
           setItems((previous) => previous.filter((item) => item.key !== key));
           if (detailKey === key) {
-            closeDetail();
+            setDetailKey(null);
+            setDetail(null);
+            setDetailTab("overview");
+            detailForm.resetFields();
+            setDetailDirty(false);
           }
           messageApi.success("配置值已删除");
         }
@@ -373,11 +505,20 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     if (!detail) {
       return;
     }
+    const confirmed = await confirmDiscardDetailChanges(
+      "复制为本地覆盖值会刷新当前详情",
+      "当前未保存修改不会保留。"
+    );
+    if (!confirmed) {
+      return;
+    }
     setDetailActionKey(detail.key);
     try {
       const nextDetail = await copyConfigValueAsLocalOverride(detail.key);
       setDetail(nextDetail);
+      applyDetailToForm(nextDetail);
       upsertItem(detailToSummary(nextDetail));
+      setDetailTab("overview");
       messageApi.success("已复制为本地覆盖值");
     } catch (error) {
       messageApi.error(getErrorMessage(error, "复制为本地覆盖值失败"));
@@ -390,11 +531,20 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     if (!detail) {
       return;
     }
+    const confirmed = await confirmDiscardDetailChanges(
+      "恢复仓库默认值会刷新当前详情",
+      "当前未保存修改不会保留。"
+    );
+    if (!confirmed) {
+      return;
+    }
     setDetailActionKey(detail.key);
     try {
       const nextDetail = await restoreConfigValueRepositoryDefault(detail.key);
       setDetail(nextDetail);
+      applyDetailToForm(nextDetail);
       upsertItem(detailToSummary(nextDetail));
+      setDetailTab("overview");
       messageApi.success("已恢复仓库默认值");
     } catch (error) {
       messageApi.error(getErrorMessage(error, "恢复仓库默认值失败"));
@@ -678,21 +828,21 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
       </Space>
 
       <Drawer
-        title={editorState?.mode === "edit" ? "编辑配置值" : "新建配置值"}
+        title="新建配置值"
         width={560}
-        open={Boolean(editorState)}
-        onClose={closeEditor}
+        open={createOpen}
+        onClose={closeCreate}
         destroyOnClose
         extra={
           <Space>
-            <Button onClick={closeEditor}>取消</Button>
-            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSubmit()}>
+            <Button onClick={closeCreate}>取消</Button>
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleCreateSubmit()}>
               保存
             </Button>
           </Space>
         }
       >
-        <Form form={form} layout="vertical">
+        <Form form={createForm} layout="vertical">
           <Form.Item
             label="Key"
             name="key"
@@ -702,15 +852,15 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
             ]}
             extra="创建后不支持修改，引用格式为 ${config.key}。"
           >
-            <Input placeholder="openai.api_key" disabled={editorState?.mode === "edit"} />
+            <Input placeholder="openai.api_key" />
           </Form.Item>
           <Form.Item
             label="值"
             name="value"
             rules={[{
               validator: async (_, value) => {
-                const secret = Boolean(form.getFieldValue("secret"));
-                const preserveValue = Boolean(form.getFieldValue("preserveValue"));
+                const secret = Boolean(createForm.getFieldValue("secret"));
+                const preserveValue = Boolean(createForm.getFieldValue("preserveValue"));
                 if (secret && preserveValue) {
                   return;
                 }
@@ -727,16 +877,16 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
           <Form.Item label="高级选项" style={{ marginBottom: 12 }}>
             <Space direction="vertical" size={8}>
               <Form.Item name="secret" valuePropName="checked" noStyle>
-                <Checkbox onChange={(event) => { if (!event.target.checked) form.setFieldValue("preserveValue", false); }}>
+                <Checkbox onChange={(event) => { if (!event.target.checked) createForm.setFieldValue("preserveValue", false); }}>
                   作为 Secret 管理
                 </Checkbox>
               </Form.Item>
               <Text type="secondary">
                 Secret 值不会在列表和详情页中明文回显，但运行时仍可通过 {"${config.key}"} 引用。
               </Text>
-              {watchedSecret && editorState?.mode === "edit" ? (
+              {watchedCreateSecret ? (
                 <Form.Item name="preserveValue" valuePropName="checked" noStyle>
-                  <Checkbox>保留现值，不覆盖为当前输入</Checkbox>
+                  <Checkbox disabled>新建时无需保留现值</Checkbox>
                 </Form.Item>
               ) : null}
             </Space>
@@ -747,11 +897,11 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
         </Form>
 
         <Card size="small" title="可复制引用" style={{ marginTop: 16 }}>
-          {referenceItems.length === 0 ? (
+          {createReferenceItems.length === 0 ? (
             <Text type="secondary">先填写 Key，这里会自动生成不同场景可直接复制的引用片段。</Text>
           ) : (
             <List
-              dataSource={referenceItems}
+              dataSource={createReferenceItems}
               renderItem={(item) => (
                 <List.Item
                   actions={[
@@ -773,9 +923,9 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
 
       <Drawer
         title="配置值详情"
-        width={760}
+        width={860}
         open={Boolean(detailKey)}
-        onClose={closeDetail}
+        onClose={() => void closeDetail()}
         destroyOnClose
         extra={
           detail ? (
@@ -799,13 +949,6 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                 </Button>
               ) : null}
               <Button
-                icon={<EditOutlined />}
-                onClick={() => void openEdit(detail.key, detail)}
-                disabled={detail.managed && !detail.overridden}
-              >
-                编辑值
-              </Button>
-              <Button
                 danger
                 icon={<DeleteOutlined />}
                 loading={detailActionKey === detail.key}
@@ -820,189 +963,308 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
         {detailLoading || !detail ? (
           <Card loading={true} />
         ) : (
-          <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            <Card size="small" title={<Space><Text code>{detail.key}</Text>{renderTags(detail)}</Space>}>
-              <Descriptions column={1} size="small">
-                <Descriptions.Item label="当前值">{renderConfigValue(detail)}</Descriptions.Item>
-                <Descriptions.Item label="说明">
-                  {detail.description ? <Text>{detail.description}</Text> : <Text type="secondary">未填写</Text>}
-                </Descriptions.Item>
-                <Descriptions.Item label="来源">
-                  {detail.origin ? (
-                    <Space wrap>
-                      <Text>{detail.origin.repositoryName || detail.origin.repositoryId || "-"}</Text>
-                      <Text type="secondary">/</Text>
-                      <Text>{detail.origin.toolName || detail.origin.toolId || "-"}</Text>
-                      <Text type="secondary">/</Text>
-                      <Text>{detail.origin.version || detail.repositoryVersion || "-"}</Text>
-                    </Space>
-                  ) : (
-                    <Text type="secondary">本地配置值</Text>
-                  )}
-                </Descriptions.Item>
-                <Descriptions.Item label="更新时间">{formatDateTime(detail.updatedAt)}</Descriptions.Item>
-              </Descriptions>
-              {detail.managed && !detail.overridden ? (
-                <Text type="secondary">这是托管配置值。若要改值，请先执行“复制为本地覆盖值”。</Text>
-              ) : null}
-            </Card>
-
-            <Card size="small" title="影响范围">
-              <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                {buildImpactSummary(detail).map((line) => <Text key={line}>{line}</Text>)}
-              </Space>
-            </Card>
-
-            <Card size="small" title={`直接脚本引用 (${detail.usage.scriptReferences.length})`}>
-              {detail.usage.scriptReferences.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有脚本直接引用这个 key" />
-              ) : (
-                <List
-                  size="small"
-                  dataSource={detail.usage.scriptReferences}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <Space direction="vertical" size={2} style={{ width: "100%" }}>
+          <Tabs
+            activeKey={detailTab}
+            onChange={(key) => setDetailTab(key as DetailTabKey)}
+            items={[
+              {
+                key: "overview",
+                label: "概览",
+                children: (
+                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Card
+                      size="small"
+                      title={<Space wrap><Text code>{detail.key}</Text>{renderTags(detail)}</Space>}
+                      extra={detailEditable ? (
                         <Space wrap>
-                          <Text code>{item.scriptId}</Text>
-                          <Text>{item.scriptName}</Text>
-                          {item.scope ? <Tag>{item.scope}</Tag> : null}
+                          <Button onClick={handleResetDetailDraft} disabled={!detailDirty}>
+                            重置修改
+                          </Button>
+                          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleDetailSubmit()}>
+                            保存修改
+                          </Button>
                         </Space>
+                      ) : null}
+                    >
+                      <Descriptions column={1} size="small">
+                        <Descriptions.Item label="当前值">{renderConfigValue(detail)}</Descriptions.Item>
+                        <Descriptions.Item label="来源">
+                          {detail.origin ? (
+                            <Space wrap>
+                              <Text>{detail.origin.repositoryName || detail.origin.repositoryId || "-"}</Text>
+                              <Text type="secondary">/</Text>
+                              <Text>{detail.origin.toolName || detail.origin.toolId || "-"}</Text>
+                              <Text type="secondary">/</Text>
+                              <Text>{detail.origin.version || detail.repositoryVersion || "-"}</Text>
+                            </Space>
+                          ) : (
+                            <Text type="secondary">本地配置值</Text>
+                          )}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="更新时间">{formatDateTime(detail.updatedAt)}</Descriptions.Item>
+                      </Descriptions>
+                    </Card>
+
+                    {detail.managed && !detail.overridden ? (
+                      <Alert
+                        type="info"
+                        showIcon
+                        message="这是托管配置值"
+                        description="若要修改值，请先执行“复制为本地覆盖值”。当前概览页仍可查看影响和引用，但表单保持只读。"
+                      />
+                    ) : null}
+
+                    <Card size="small" title="影响摘要">
+                      <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                        {buildImpactSummary(detail).map((line) => <Text key={line}>{line}</Text>)}
                       </Space>
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
+                    </Card>
 
-            <Card size="small" title={`仓库模板声明 (${detail.usage.templateDeclarations.length})`}>
-              {detail.usage.templateDeclarations.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有仓库工具模板声明这个 key" />
-              ) : (
-                <List
-                  size="small"
-                  dataSource={detail.usage.templateDeclarations}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <Space direction="vertical" size={2} style={{ width: "100%" }}>
-                        <Space wrap>
-                          <Text>{item.repositoryName || item.repositoryId}</Text>
-                          <Text type="secondary">/</Text>
-                          <Text>{item.toolName}</Text>
-                          <Text type="secondary">{item.version || "-"}</Text>
-                        </Space>
-                        <Space wrap>
-                          {item.label ? <Text type="secondary">{item.label}</Text> : null}
-                          {item.secret ? <Tag color="gold">SECRET</Tag> : null}
-                          <Tag>{item.publishMode}</Tag>
-                        </Space>
-                      </Space>
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
-
-            <Card size="small" title={`其他使用方 (${detail.usage.scheduleReferences.length + detail.usage.pluginConfigReferences.length + detail.usage.configReferences.length + detail.usage.modelReferences.length})`}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <div>
-                  <Text strong>定时任务 ({detail.usage.scheduleReferences.length})</Text>
-                  {detail.usage.scheduleReferences.length === 0 ? (
-                    <div><Text type="secondary">无</Text></div>
-                  ) : (
-                    <List
-                      size="small"
-                      dataSource={detail.usage.scheduleReferences}
-                      renderItem={(item) => (
-                        <List.Item>
-                          <Text>{item.scheduleName} / {item.scriptName}</Text>
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </div>
-                <div>
-                  <Text strong>插件配置 ({detail.usage.pluginConfigReferences.length})</Text>
-                  {detail.usage.pluginConfigReferences.length === 0 ? (
-                    <div><Text type="secondary">无</Text></div>
-                  ) : (
-                    <List
-                      size="small"
-                      dataSource={detail.usage.pluginConfigReferences}
-                      renderItem={(item) => (
-                        <List.Item>
-                          <Text>{item.pluginName} ({item.pluginId})</Text>
-                          <Text type="secondary">依赖脚本 {item.dependentScriptCount} 个</Text>
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </div>
-                <div>
-                  <Text strong>配置值依赖 ({detail.usage.configReferences.length})</Text>
-                  {detail.usage.configReferences.length === 0 ? (
-                    <div><Text type="secondary">无</Text></div>
-                  ) : (
-                    <List
-                      size="small"
-                      dataSource={detail.usage.configReferences}
-                      renderItem={(item) => (
-                        <List.Item>
-                          <Space direction="vertical" size={2}>
-                            <Text code>{item.key}</Text>
-                            {item.description ? <Text type="secondary">{item.description}</Text> : null}
+                    <Card size="small" title="编辑配置">
+                      <Form
+                        form={detailForm}
+                        layout="vertical"
+                        onValuesChange={() => {
+                          if (!detailDirty) {
+                            setDetailDirty(true);
+                          }
+                        }}
+                      >
+                        <Form.Item
+                          label="Key"
+                          name="key"
+                          rules={[
+                            { required: true, message: "请输入 key" },
+                            { pattern: /^[A-Za-z][A-Za-z0-9_.-]*$/, message: "仅支持字母开头，后续可包含字母、数字、点、下划线和中划线" }
+                          ]}
+                          extra="已有配置值的 Key 不可修改。"
+                        >
+                          <Input disabled />
+                        </Form.Item>
+                        <Form.Item
+                          label="值"
+                          name="value"
+                          rules={[{
+                            validator: async (_, value) => {
+                              const secret = Boolean(detailForm.getFieldValue("secret"));
+                              const preserveValue = Boolean(detailForm.getFieldValue("preserveValue"));
+                              if (secret && preserveValue) {
+                                return;
+                              }
+                              if (typeof value === "string" && value.length > 0) {
+                                return;
+                              }
+                              throw new Error("请输入配置值");
+                            }
+                          }]}
+                          extra="支持在值内继续引用其他配置值，例如 https://host/${config.region}/v1。"
+                        >
+                          <Input.TextArea rows={6} placeholder="sk-..." disabled={!detailEditable} />
+                        </Form.Item>
+                        <Form.Item label="高级选项" style={{ marginBottom: 12 }}>
+                          <Space direction="vertical" size={8}>
+                            <Form.Item name="secret" valuePropName="checked" noStyle>
+                              <Checkbox
+                                disabled={!detailEditable}
+                                onChange={(event) => { if (!event.target.checked) detailForm.setFieldValue("preserveValue", false); }}
+                              >
+                                作为 Secret 管理
+                              </Checkbox>
+                            </Form.Item>
+                            <Text type="secondary">
+                              Secret 值不会在列表和详情页中明文回显，但运行时仍可通过 {"${config.key}"} 引用。
+                            </Text>
+                            {watchedDetailSecret && detail.secret && detail.hasValue ? (
+                              <Form.Item name="preserveValue" valuePropName="checked" noStyle>
+                                <Checkbox disabled={!detailEditable}>保留现值，不覆盖为当前输入</Checkbox>
+                              </Form.Item>
+                            ) : null}
                           </Space>
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </div>
-                <div>
-                  <Text strong>模型引用 ({detail.usage.modelReferences.length})</Text>
-                  {detail.usage.modelReferences.length === 0 ? (
-                    <div><Text type="secondary">无</Text></div>
-                  ) : (
-                    <List
-                      size="small"
-                      dataSource={detail.usage.modelReferences}
-                      renderItem={(item) => (
-                        <List.Item>
-                          <Space>
-                            <Text>{item.modelName}</Text>
-                            {item.modelProvider ? <Tag>{item.modelProvider}</Tag> : null}
-                            <Tag color="blue">{item.referenceType === "apiKeyConfigKey" ? "API Key" : "默认选项"}</Tag>
-                          </Space>
-                        </List.Item>
-                      )}
-                    />
-                  )}
-                </div>
-              </Space>
-            </Card>
+                        </Form.Item>
+                        <Form.Item label="说明" name="description">
+                          <Input.TextArea rows={3} placeholder="这个值会被哪些脚本或插件复用" disabled={!detailEditable} />
+                        </Form.Item>
+                      </Form>
+                    </Card>
 
-            <Card size="small" title={`受影响脚本 (${detail.impactedScripts.length})`}>
-              {detail.impactedScripts.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前未发现受影响脚本" />
-              ) : (
-                <List
-                  size="small"
-                  dataSource={detail.impactedScripts}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <Space direction="vertical" size={2} style={{ width: "100%" }}>
-                        <Space wrap>
-                          <Text code>{item.scriptId}</Text>
-                          <Text>{item.scriptName}</Text>
-                          {item.scope ? <Tag>{item.scope}</Tag> : null}
-                        </Space>
-                        <Text type="secondary">{item.reasons.join("；")}</Text>
+                    <ConfigValueReferenceCard
+                      items={detailReferenceItems}
+                      onCopy={(value) => {
+                        void handleCopy(value);
+                      }}
+                    />
+                  </Space>
+                )
+              },
+              {
+                key: "impact",
+                label: "影响范围",
+                children: (
+                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Card size="small" title="影响摘要">
+                      <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                        {buildImpactSummary(detail).map((line) => <Text key={line}>{line}</Text>)}
                       </Space>
-                    </List.Item>
-                  )}
-                />
-              )}
-            </Card>
-          </Space>
+                    </Card>
+
+                    <Card size="small" title={`受影响脚本 (${detail.impactedScripts.length})`}>
+                      {detail.impactedScripts.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前未发现受影响脚本" />
+                      ) : (
+                        <List
+                          size="small"
+                          dataSource={detail.impactedScripts}
+                          renderItem={(item) => (
+                            <List.Item>
+                              <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                                <Space wrap>
+                                  <Text code>{item.scriptId}</Text>
+                                  <Text>{item.scriptName}</Text>
+                                  {item.scope ? <Tag>{item.scope}</Tag> : null}
+                                </Space>
+                                <Text type="secondary">{item.reasons.join("；")}</Text>
+                              </Space>
+                            </List.Item>
+                          )}
+                        />
+                      )}
+                    </Card>
+
+                    <Card size="small" title={`直接脚本引用 (${detail.usage.scriptReferences.length})`}>
+                      {detail.usage.scriptReferences.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有脚本直接引用这个 key" />
+                      ) : (
+                        <List
+                          size="small"
+                          dataSource={detail.usage.scriptReferences}
+                          renderItem={(item) => (
+                            <List.Item>
+                              <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                                <Space wrap>
+                                  <Text code>{item.scriptId}</Text>
+                                  <Text>{item.scriptName}</Text>
+                                  {item.scope ? <Tag>{item.scope}</Tag> : null}
+                                </Space>
+                              </Space>
+                            </List.Item>
+                          )}
+                        />
+                      )}
+                    </Card>
+
+                    <Card size="small" title={`定时任务引用 (${detail.usage.scheduleReferences.length})`}>
+                      {detail.usage.scheduleReferences.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有定时任务引用这个 key" />
+                      ) : (
+                        <List
+                          size="small"
+                          dataSource={detail.usage.scheduleReferences}
+                          renderItem={(item) => (
+                            <List.Item>
+                              <Text>{item.scheduleName} / {item.scriptName}</Text>
+                            </List.Item>
+                          )}
+                        />
+                      )}
+                    </Card>
+                  </Space>
+                )
+              },
+              {
+                key: "references",
+                label: "引用明细",
+                children: (
+                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Card size="small" title={`仓库模板声明 (${detail.usage.templateDeclarations.length})`}>
+                      {detail.usage.templateDeclarations.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有仓库工具模板声明这个 key" />
+                      ) : (
+                        <List
+                          size="small"
+                          dataSource={detail.usage.templateDeclarations}
+                          renderItem={(item) => (
+                            <List.Item>
+                              <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                                <Space wrap>
+                                  <Text>{item.repositoryName || item.repositoryId}</Text>
+                                  <Text type="secondary">/</Text>
+                                  <Text>{item.toolName}</Text>
+                                  <Text type="secondary">{item.version || "-"}</Text>
+                                </Space>
+                                <Space wrap>
+                                  {item.label ? <Text type="secondary">{item.label}</Text> : null}
+                                  {item.secret ? <Tag color="gold">SECRET</Tag> : null}
+                                  <Tag>{item.publishMode}</Tag>
+                                </Space>
+                              </Space>
+                            </List.Item>
+                          )}
+                        />
+                      )}
+                    </Card>
+
+                    <Card size="small" title={`插件配置引用 (${detail.usage.pluginConfigReferences.length})`}>
+                      {detail.usage.pluginConfigReferences.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有插件配置引用这个 key" />
+                      ) : (
+                        <List
+                          size="small"
+                          dataSource={detail.usage.pluginConfigReferences}
+                          renderItem={(item) => (
+                            <List.Item>
+                              <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                                <Text>{item.pluginName} ({item.pluginId})</Text>
+                                <Text type="secondary">依赖脚本 {item.dependentScriptCount} 个</Text>
+                              </Space>
+                            </List.Item>
+                          )}
+                        />
+                      )}
+                    </Card>
+
+                    <Card size="small" title={`配置值依赖 (${detail.usage.configReferences.length})`}>
+                      {detail.usage.configReferences.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有其他配置值依赖这个 key" />
+                      ) : (
+                        <List
+                          size="small"
+                          dataSource={detail.usage.configReferences}
+                          renderItem={(item) => (
+                            <List.Item>
+                              <Space direction="vertical" size={2}>
+                                <Text code>{item.key}</Text>
+                                {item.description ? <Text type="secondary">{item.description}</Text> : null}
+                              </Space>
+                            </List.Item>
+                          )}
+                        />
+                      )}
+                    </Card>
+
+                    <Card size="small" title={`模型引用 (${detail.usage.modelReferences.length})`}>
+                      {detail.usage.modelReferences.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有模型引用这个 key" />
+                      ) : (
+                        <List
+                          size="small"
+                          dataSource={detail.usage.modelReferences}
+                          renderItem={(item) => (
+                            <List.Item>
+                              <Space>
+                                <Text>{item.modelName}</Text>
+                                {item.modelProvider ? <Tag>{item.modelProvider}</Tag> : null}
+                                <Tag color="blue">{item.referenceType === "apiKeyConfigKey" ? "API Key" : "默认选项"}</Tag>
+                              </Space>
+                            </List.Item>
+                          )}
+                        />
+                      )}
+                    </Card>
+                  </Space>
+                )
+              }
+            ]}
+          />
         )}
       </Drawer>
     </>

@@ -25,6 +25,8 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionEntityRepositor
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 
 import java.nio.file.Path;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,6 +70,26 @@ class SharedStorageIntegrationTest {
         }
     }
 
+    @Test
+    void startupAutomaticallyUpdatesLegacyScriptTableAndDefaultsPackaging() throws SQLException {
+        String dbUrl = "jdbc:h2:file:" + tempDir.resolve("legacy-runtime").toAbsolutePath().toString().replace("\\", "/") + ";AUTO_SERVER=TRUE";
+        createLegacyScriptSchemaWithoutPackaging(dbUrl);
+
+        try (ConfigurableApplicationContext context = new SpringApplicationBuilder(RuntimeApplication.class)
+                .web(WebApplicationType.NONE)
+                .properties(runtimeProperties(dbUrl, "none"))
+                .run()) {
+            ScriptApplicationService scriptApplicationService = context.getBean(ScriptApplicationService.class);
+            ScriptDefinition draft = scriptApplicationService.get("legacy-script");
+            ScriptDefinition published = scriptApplicationService.getPublished("legacy-script");
+
+            assertThat(draft.getPackaging().name()).isEqualTo("TOOL");
+            assertThat(published.getPackaging().name()).isEqualTo("TOOL");
+            assertThat(published.getPublishedSnapshot()).isNotNull();
+            assertThat(published.getPublishedSnapshot().getPackaging().name()).isEqualTo("TOOL");
+        }
+    }
+
     private static String[] runtimeProperties(String dbUrl, String webApplicationType) {
         return new String[] {
                 "spring.config.name=does-not-exist",
@@ -80,6 +102,60 @@ class SharedStorageIntegrationTest {
                 "spring.h2.console.enabled=false",
                 "app.execution.async-pool-size=1"
         };
+    }
+
+    private static void createLegacyScriptSchemaWithoutPackaging(String dbUrl) throws SQLException {
+        try (var connection = DriverManager.getConnection(dbUrl, "sa", "");
+             var statement = connection.createStatement()) {
+            statement.execute("""
+                    create table script_definition (
+                        id varchar(255) primary key,
+                        name varchar(255) not null,
+                        type varchar(255) not null,
+                        source clob not null,
+                        input_schema_json clob,
+                        output_schema_json clob,
+                        published_name varchar(255),
+                        published_type varchar(255),
+                        published_source clob,
+                        published_input_schema_json clob,
+                        published_output_schema_json clob,
+                        published_ai_dependencies_json clob,
+                        status varchar(255),
+                        version_value integer,
+                        scope varchar(255),
+                        repository_id varchar(255),
+                        repository_tool_id varchar(255),
+                        repository_version varchar(255),
+                        source_path varchar(255),
+                        source_commit varchar(255),
+                        source_digest varchar(255),
+                        source_synced_at timestamp,
+                        dirty boolean,
+                        editable boolean,
+                        owner varchar(255),
+                        description clob,
+                        tags_json clob,
+                        plugin_dependencies_json clob,
+                        ai_dependencies_json clob,
+                        created_at timestamp,
+                        updated_at timestamp
+                    )
+                    """);
+            statement.execute("""
+                    insert into script_definition (
+                        id, name, type, source,
+                        published_name, published_type, published_source,
+                        status, version_value, scope, dirty, editable,
+                        tags_json, plugin_dependencies_json, ai_dependencies_json
+                    ) values (
+                        'legacy-script', 'Legacy Script', 'GROOVY', 'return [message: "draft"]',
+                        'Legacy Script', 'GROOVY', 'return [message: "published"]',
+                        'PUBLISHED', 1, 'PERSONAL', false, true,
+                        '[]', '[]', '[]'
+                    )
+                    """);
+        }
     }
 
     @SpringBootConfiguration
