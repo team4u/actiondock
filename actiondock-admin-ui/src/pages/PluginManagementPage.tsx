@@ -26,6 +26,7 @@ import {
   upgradePlugin,
   uninstallPlugin
 } from "../api";
+import { getApiKey } from "../auth";
 import { PageHeader } from "../components/PageHeader";
 import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PluginActionsOverview } from "../components/PluginActionsOverview";
@@ -37,6 +38,8 @@ import { getErrorMessage } from "../utils";
 const { Text } = Typography;
 
 export function PluginManagementPage() {
+  const apiKey = getApiKey() || undefined;
+  const origin = window.location.origin;
   const [plugins, setPlugins] = useState<PluginView[]>([]);
   const [repositoryPlugins, setRepositoryPlugins] = useState<RepositoryPluginDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -572,7 +575,12 @@ export function PluginManagementPage() {
             ) : drawerActions.length > 0 ? (
               <div>
                 <Text strong style={{ display: "block", marginBottom: 12 }}>动作与字段</Text>
-                <PluginActionsOverview messageApi={messageApi} description={drawerDescription} actions={drawerActions} />
+                <PluginActionsOverview
+                  messageApi={messageApi}
+                  description={drawerDescription}
+                  actions={drawerActions}
+                  commandContext={drawerDescriptor ? { apiKey, origin, pluginId: drawerDescriptor.pluginId } : undefined}
+                />
               </div>
             ) : !drawerDescriptor.installed ? (
               <Text type="secondary">插件未安装，无法查看动作和字段信息。安装后即可查看。</Text>

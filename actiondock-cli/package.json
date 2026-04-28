@@ -1,0 +1,43 @@
+{
+  "name": "actiondock-cli",
+  "version": "0.1.0",
+  "description": "ActionDock command line interface",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "actiondock": "./bin/run.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "dev": "NODE_OPTIONS='--import tsx' node ./bin/dev.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@oclif/core": "^4.10.6",
+    "@oclif/plugin-autocomplete": "^3.2.46"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.3"
+  },
+  "oclif": {
+    "bin": "actiondock",
+    "dirname": "actiondock",
+    "commands": "./dist/commands",
+    "topicSeparator": " ",
+    "plugins": [
+      "@oclif/plugin-autocomplete"
+    ]
+  }
+}

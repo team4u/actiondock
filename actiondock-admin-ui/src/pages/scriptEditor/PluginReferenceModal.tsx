@@ -1,5 +1,6 @@
 import { Drawer, Space, Typography } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
+import { getApiKey } from "../../auth";
 import { PluginActionsOverview } from "../../components/PluginActionsOverview";
 import type { PluginReferenceView, ScriptType } from "../../types";
 
@@ -23,6 +24,8 @@ export function PluginReferenceModal({
   messageApi
 }: PluginReferenceModalProps) {
   if (!plugin) return null;
+  const apiKey = getApiKey() || undefined;
+  const origin = window.location.origin;
 
   return (
     <Drawer
@@ -49,6 +52,7 @@ export function PluginReferenceModal({
           actions={plugin.actions}
           mode="collapse"
           snippetContext={{ pluginId: plugin.pluginId, scriptType: selectedScriptType }}
+          commandContext={{ apiKey, origin, pluginId: plugin.pluginId }}
         />
       </Space>
     </Drawer>

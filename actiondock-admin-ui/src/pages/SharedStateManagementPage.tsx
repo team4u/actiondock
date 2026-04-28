@@ -1,4 +1,5 @@
 import {
+  CopyOutlined,
   DeleteOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -16,10 +17,12 @@ import {
   Empty,
   Form,
   Input,
+  List,
   Modal,
   Space,
   Table,
   Tag,
+  Tabs,
   Typography,
   message
 } from "antd";
@@ -37,11 +40,14 @@ import {
   purgeExpiredSharedState,
   updateSharedState
 } from "../api";
+import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useColorMode } from "../contexts/ColorModeContext";
+import { useCopyMessage } from "../hooks/useCopyMessage";
+import { buildSharedStateCasCliCommand, buildSharedStatePutCliCommand } from "../commands";
 import type { SharedStateDetail, SharedStateRequest, SharedStateSummary } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
@@ -62,6 +68,14 @@ interface SharedStateFormValues {
 type EditorState =
   | { mode: "create" }
   | { mode: "edit"; namespace: string; key: string };
+
+type SharedStateSnippetLanguage = "Groovy" | "Python" | "CLI";
+
+interface SharedStateSnippetItem {
+  family: SharedStateSnippetLanguage;
+  label: "state.get" | "state.put" | "state.cas" | "state.list" | "actiondock state put" | "actiondock state cas";
+  value: string;
+}
 
 function stringifySharedStateValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
@@ -104,8 +118,227 @@ function buildFormValues(detail: SharedStateDetail): SharedStateFormValues {
   };
 }
 
+function fallbackSharedStateValue(): Record<string, string> {
+  return { value: "..." };
+}
+
+function resolveSharedStateExampleValue(valueText: string, exposeValue: boolean): unknown {
+  if (!exposeValue) {
+    return fallbackSharedStateValue();
+  }
+  try {
+    return parseSharedStateValue(valueText);
+  } catch {
+    return fallbackSharedStateValue();
+  }
+}
+
+export function toGroovyLiteral(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => toGroovyLiteral(item)).join(", ")}]`;
+  }
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (value && typeof value === "object") {
+    return `[${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}: ${toGroovyLiteral(item)}`).join(", ")}]`;
+  }
+  return "null";
+}
+
+export function toPythonLiteral(value: unknown): string {
+  if (value === null) {
+    return "None";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => toPythonLiteral(item)).join(", ")}]`;
+  }
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "True" : "False";
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}: ${toPythonLiteral(item)}`).join(", ")}}`;
+  }
+  return "None";
+}
+
+export function buildSharedStateSnippetItems({
+  apiKey,
+  currentVersion,
+  expiresAt,
+  namespace,
+  key,
+  origin,
+  valueText,
+  secret,
+  exposeValue
+}: {
+  apiKey?: string;
+  currentVersion?: number;
+  expiresAt?: string | null;
+  namespace: string;
+  key: string;
+  origin: string;
+  valueText: string;
+  secret: boolean;
+  exposeValue: boolean;
+}): SharedStateSnippetItem[] {
+  const normalizedNamespace = namespace.trim();
+  const normalizedKey = key.trim();
+  if (!normalizedNamespace || !normalizedKey) {
+    return [];
+  }
+
+  const value = resolveSharedStateExampleValue(valueText, exposeValue);
+  const groovyValue = toGroovyLiteral(value);
+  const pythonValue = toPythonLiteral(value);
+  const groovyOptions = secret ? ",\n    [secret: true]" : "";
+  const pythonOptions = secret ? ',\n    {"secret": True}' : "";
+  const resolvedVersion = currentVersion && currentVersion > 0 ? currentVersion : 1;
+
+  return [
+    {
+      family: "Groovy",
+      label: "state.get",
+      value: `def entry = state.get(${JSON.stringify(normalizedNamespace)}, ${JSON.stringify(normalizedKey)})\nif (entry) {\n    return entry.value\n}\nreturn null`
+    },
+    {
+      family: "Groovy",
+      label: "state.put",
+      value: `def saved = state.put(\n    ${JSON.stringify(normalizedNamespace)},\n    ${JSON.stringify(normalizedKey)},\n    ${groovyValue}${groovyOptions}\n)\n\nreturn saved`
+    },
+    {
+      family: "Groovy",
+      label: "state.cas",
+      value: `def current = state.get(${JSON.stringify(normalizedNamespace)}, ${JSON.stringify(normalizedKey)})\ndef result = state.cas(\n    ${JSON.stringify(normalizedNamespace)},\n    ${JSON.stringify(normalizedKey)},\n    current?.version,\n    ${groovyValue}${groovyOptions}\n)\n\nif (!result.updated) {\n    throw new IllegalStateException("共享状态版本冲突，请重试")\n}\n\nreturn result.entry`
+    },
+    {
+      family: "Groovy",
+      label: "state.list",
+      value: `def entries = state.list(${JSON.stringify(normalizedNamespace)})\nreturn entries`
+    },
+    {
+      family: "Python",
+      label: "state.get",
+      value: `entry = state.get(${JSON.stringify(normalizedNamespace)}, ${JSON.stringify(normalizedKey)})\nif entry:\n    return entry["value"]\nreturn None`
+    },
+    {
+      family: "Python",
+      label: "state.put",
+      value: `saved = state.put(\n    ${JSON.stringify(normalizedNamespace)},\n    ${JSON.stringify(normalizedKey)},\n    ${pythonValue}${pythonOptions},\n)\n\nreturn saved`
+    },
+    {
+      family: "Python",
+      label: "state.cas",
+      value: `current = state.get(${JSON.stringify(normalizedNamespace)}, ${JSON.stringify(normalizedKey)})\nresult = state.cas(\n    ${JSON.stringify(normalizedNamespace)},\n    ${JSON.stringify(normalizedKey)},\n    current["version"] if current else None,\n    ${pythonValue}${pythonOptions},\n)\n\nif not result["updated"]:\n    raise RuntimeError("共享状态版本冲突，请重试")\n\nreturn result["entry"]`
+    },
+    {
+      family: "Python",
+      label: "state.list",
+      value: `entries = state.list(${JSON.stringify(normalizedNamespace)})\nreturn entries`
+    },
+    {
+      family: "CLI",
+      label: "actiondock state put",
+      value: buildSharedStatePutCliCommand({
+        apiKey,
+        environment: "bash/zsh",
+        expiresAt,
+        key: normalizedKey,
+        namespace: normalizedNamespace,
+        origin,
+        secret,
+        value
+      })
+    },
+    {
+      family: "CLI",
+      label: "actiondock state cas",
+      value: buildSharedStateCasCliCommand({
+        apiKey,
+        environment: "bash/zsh",
+        expectedVersion: resolvedVersion,
+        expiresAt,
+        key: normalizedKey,
+        namespace: normalizedNamespace,
+        origin,
+        secret,
+        value
+      })
+    }
+  ];
+}
+
+function SharedStateSnippetCard({
+  items,
+  onCopy
+}: {
+  items: SharedStateSnippetItem[];
+  onCopy: (value: string) => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <Card size="small" title="可复制示例">
+        <Text type="secondary">先填写命名空间和 Key，这里会自动生成脚本内调用示例，以及可直接执行的 CLI 写入示例。</Text>
+      </Card>
+    );
+  }
+
+  const families: SharedStateSnippetLanguage[] = ["Groovy", "Python", "CLI"];
+
+  return (
+    <Card size="small" title="可复制示例">
+      <Tabs
+        size="small"
+        items={families.map((family) => ({
+          key: family,
+          label: family,
+          children: (
+            <List
+              dataSource={items.filter((item) => item.family === family)}
+              renderItem={(item) => (
+                <List.Item
+                  actions={[
+                    <Button key={item.label} size="small" icon={<CopyOutlined />} onClick={() => onCopy(item.value)}>
+                      复制
+                    </Button>
+                  ]}
+                >
+                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                    <Text strong>{item.label}</Text>
+                    <pre className="json-preview">{item.value}</pre>
+                  </Space>
+                </List.Item>
+              )}
+            />
+          )
+        }))}
+      />
+    </Card>
+  );
+}
+
 export function SharedStateManagementPage({ embedded = false }: SharedStateManagementPageProps) {
+  const apiKey = getApiKey() || undefined;
+  const origin = window.location.origin;
   const [form] = Form.useForm<SharedStateFormValues>();
+  const watchedNamespace = Form.useWatch("namespace", form) ?? "";
+  const watchedKey = Form.useWatch("key", form) ?? "";
   const watchedSecret = Form.useWatch("secret", form) ?? false;
   const watchedValueText = Form.useWatch("valueText", form) ?? "";
   const colorMode = useColorMode();
@@ -126,12 +359,28 @@ export function SharedStateManagementPage({ embedded = false }: SharedStateManag
   const [searchText, setSearchText] = useState("");
   const [messageApi, contextHolder] = message.useMessage();
   const [modal, modalContextHolder] = Modal.useModal();
+  const handleCopy = useCopyMessage(messageApi, "示例已复制", "复制失败");
 
   useEffect(() => {
     if (!watchedSecret) {
       setSecretValueVisible(true);
     }
   }, [watchedSecret]);
+
+  const snippetItems = useMemo(
+    () => buildSharedStateSnippetItems({
+      apiKey,
+      currentVersion: detail?.version ?? undefined,
+      expiresAt: detail?.expiresAt ?? null,
+      namespace: typeof watchedNamespace === "string" ? watchedNamespace : "",
+      key: typeof watchedKey === "string" ? watchedKey : "",
+      origin,
+      valueText: typeof watchedValueText === "string" ? watchedValueText : "",
+      secret: watchedSecret,
+      exposeValue: !watchedSecret || secretValueVisible
+    }),
+    [apiKey, detail?.expiresAt, detail?.version, origin, secretValueVisible, watchedKey, watchedNamespace, watchedSecret, watchedValueText]
+  );
 
   const loadNamespaces = async (): Promise<string[]> => {
     setLoadingNamespaces(true);
@@ -656,6 +905,8 @@ export function SharedStateManagementPage({ embedded = false }: SharedStateManag
                 <DatePicker showTime style={{ width: "100%" }} placeholder="选择过期时间" />
               </Form.Item>
             </Form>
+
+            <SharedStateSnippetCard items={snippetItems} onCopy={(value) => void handleCopy(value)} />
 
             {editorState?.mode === "edit" && detail && (!detail.secret || secretValueVisible) ? (
               <Card size="small" title="当前值预览">

@@ -45,7 +45,7 @@ import {
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { Col } from "../components/SafeCol";
 import { CodeEditor } from "../components/CodeEditor";
-import { buildHttpCommandPresets } from "../commands";
+import { buildCliCommandPresets, buildCommandPresets, buildHttpCommandPresets } from "../commands";
 import { CommandPanel } from "../components/CommandPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
@@ -54,6 +54,7 @@ import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/S
 import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
   buildExecutionInputFromValues,
+  buildPluginInvokeCliCommand,
   buildPluginInvokeCurlCommand,
   buildPluginInvokePowerShellCommand,
   getCommandInputSourceLabel,
@@ -495,11 +496,36 @@ export function PluginDetailPage() {
 
   const invokeCommandPresets = useMemo(() => {
     if (!plugin || !currentAction) return [];
-    return buildHttpCommandPresets({
-      keyPrefix: "invoke",
-      httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-      httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
-    });
+    return buildCommandPresets([
+      ...buildHttpCommandPresets({
+        keyPrefix: "invoke",
+        httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
+        httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
+      }),
+      ...buildCliCommandPresets({
+        keyPrefix: "invoke",
+        cliBash: buildPluginInvokeCliCommand({
+          apiKey,
+          args: commandArgsInput.value,
+          environment: "bash/zsh",
+          origin,
+          pluginId: plugin.pluginId,
+          action: currentAction.action,
+          responseView: "RESULT",
+          scriptInput: commandScriptInput.value
+        }),
+        cliPowerShell: buildPluginInvokeCliCommand({
+          apiKey,
+          args: commandArgsInput.value,
+          environment: "PowerShell",
+          origin,
+          pluginId: plugin.pluginId,
+          action: currentAction.action,
+          responseView: "RESULT",
+          scriptInput: commandScriptInput.value
+        })
+      })
+    ]);
   }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);
   if (loading && !plugin) {
     return (
@@ -631,7 +657,13 @@ export function PluginDetailPage() {
                 key: "overview",
                 label: "概览",
                 children: plugin ? (
-                  <PluginActionsOverview messageApi={messageApi} description={plugin.description} actions={plugin.actions} snippetContext={{ pluginId: plugin.pluginId, scriptType: "GROOVY" }} />
+                  <PluginActionsOverview
+                    messageApi={messageApi}
+                    description={plugin.description}
+                    actions={plugin.actions}
+                    snippetContext={{ pluginId: plugin.pluginId, scriptType: "GROOVY" }}
+                    commandContext={{ apiKey, origin, pluginId: plugin.pluginId }}
+                  />
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="插件详情不存在或加载失败。" />
                 )
@@ -764,8 +796,8 @@ export function PluginDetailPage() {
 	                      label="调用命令会跟随当前动作和调试入参变化"
 	                      content={
 	                        apiKey
-	                          ? `命令已使用当前页面 origin ${origin}；bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头。`
-	                          : `命令已使用当前页面 origin ${origin}；bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 Bearer Token，因此不会附带 Authorization 头。`
+	                          ? `命令已使用当前页面 origin ${origin}；HTTP 变体提供 curl / Invoke-WebRequest，CLI 变体提供 actiondock，并会自动附带当前 Bearer Token。`
+	                          : `命令已使用当前页面 origin ${origin}；HTTP 变体提供 curl / Invoke-WebRequest，CLI 变体提供 actiondock；当前未设置 Bearer Token，因此不会附带 Authorization 头或 --token。`
 	                      }
 	                    />
 	                    {commandArgsInput.note ? <Alert type="info" showIcon message={commandArgsInput.note} /> : null}

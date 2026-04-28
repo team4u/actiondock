@@ -38,14 +38,22 @@ import { getApiKey } from "../../auth";
 import { ScopeTag } from "../../components/ScopeTag";
 import { Col } from "../../components/SafeCol";
 import { ExecutionPresetBar } from "../../components/ExecutionPresetBar";
-import { buildHttpCommandPresets, buildExecutionInputFromValues } from "../../commands";
 import {
+  buildCliCommandPresets,
+  buildCommandPresets,
+  buildHttpCommandPresets,
+  buildExecutionInputFromValues
+} from "../../commands";
+import {
+  buildExecuteCliCommand,
   buildExecuteCurlCommand,
   buildExecutePowerShellCommand,
+  buildScriptDetailCliCommand,
   buildScriptDetailCurlCommand,
   buildScriptDetailPowerShellCommand,
   buildToolDetailCurlCommand,
   buildToolDetailPowerShellCommand,
+  buildToolSchemaCliCommand,
   resolveExecutionCommandInput
 } from "../../commands";
 import { formatDateTime, parseJsonText } from "../../utils";
@@ -181,29 +189,66 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   const detailCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
-    return buildHttpCommandPresets({
-      keyPrefix: "detail",
-      httpBash: buildScriptDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildScriptDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id })
-    });
+    return buildCommandPresets([
+      ...buildHttpCommandPresets({
+        keyPrefix: "detail",
+        httpBash: buildScriptDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+        httpPowerShell: buildScriptDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id })
+      }),
+      ...buildCliCommandPresets({
+        keyPrefix: "detail",
+        cliBash: buildScriptDetailCliCommand({ apiKey, draft: true, environment: "bash/zsh", origin, scriptId: editor.currentScript.id }),
+        cliPowerShell: buildScriptDetailCliCommand({ apiKey, draft: true, environment: "PowerShell", origin, scriptId: editor.currentScript.id })
+      })
+    ]);
   }, [editor.currentScript, apiKey, origin]);
 
   const executeCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
-    return buildHttpCommandPresets({
-      keyPrefix: "execute",
-      httpBash: buildExecuteCurlCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
-    });
+    return buildCommandPresets([
+      ...buildHttpCommandPresets({
+        keyPrefix: "execute",
+        httpBash: buildExecuteCurlCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id }),
+        httpPowerShell: buildExecutePowerShellCommand({ apiKey, input: commandInput.value, mode: execution.executionMode, origin, scriptId: editor.currentScript.id })
+      }),
+      ...buildCliCommandPresets({
+        keyPrefix: "execute",
+        cliBash: buildExecuteCliCommand({
+          apiKey,
+          draft: true,
+          environment: "bash/zsh",
+          input: commandInput.value,
+          mode: execution.executionMode,
+          origin,
+          scriptId: editor.currentScript.id
+        }),
+        cliPowerShell: buildExecuteCliCommand({
+          apiKey,
+          draft: true,
+          environment: "PowerShell",
+          input: commandInput.value,
+          mode: execution.executionMode,
+          origin,
+          scriptId: editor.currentScript.id
+        })
+      })
+    ]);
   }, [editor.currentScript, apiKey, origin, commandInput, execution.executionMode]);
 
   const schemaCommandPresets = useMemo(() => {
     if (!editor.currentScript) return [];
-    return buildHttpCommandPresets({
-      keyPrefix: "schema",
-      httpBash: buildToolDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
-      httpPowerShell: buildToolDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id })
-    });
+    return buildCommandPresets([
+      ...buildHttpCommandPresets({
+        keyPrefix: "schema",
+        httpBash: buildToolDetailCurlCommand({ apiKey, origin, scriptId: editor.currentScript.id }),
+        httpPowerShell: buildToolDetailPowerShellCommand({ apiKey, origin, scriptId: editor.currentScript.id })
+      }),
+      ...buildCliCommandPresets({
+        keyPrefix: "schema",
+        cliBash: buildToolSchemaCliCommand({ apiKey, draft: true, environment: "bash/zsh", origin, scriptId: editor.currentScript.id }),
+        cliPowerShell: buildToolSchemaCliCommand({ apiKey, draft: true, environment: "PowerShell", origin, scriptId: editor.currentScript.id })
+      })
+    ]);
   }, [editor.currentScript, apiKey, origin]);
 
   const toolContractResponseExample = editor.currentScript

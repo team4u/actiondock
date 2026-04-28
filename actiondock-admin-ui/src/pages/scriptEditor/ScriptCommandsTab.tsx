@@ -42,11 +42,11 @@ export function ScriptCommandsTab({
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <InfoHint
-        label="可直接执行的 HTTP 调用命令"
+        label="可直接执行的 HTTP / CLI 调用命令"
         content={
           apiKey
-            ? `命令已使用当前页面 origin ${origin}；bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest，并会附带 Authorization 头。`
-            : `命令已使用当前页面 origin ${origin}；bash/zsh 变体使用 curl，PowerShell 变体使用 Invoke-WebRequest；当前未设置 Bearer Token，因此不会附带 Authorization 头。`
+            ? `命令已使用当前页面 origin ${origin}；HTTP 变体提供 curl / Invoke-WebRequest，CLI 变体提供 actiondock，并会自动附带当前 Bearer Token。`
+            : `命令已使用当前页面 origin ${origin}；HTTP 变体提供 curl / Invoke-WebRequest，CLI 变体提供 actiondock；当前未设置 Bearer Token，因此不会附带 Authorization 头或 --token。`
         }
       />
 

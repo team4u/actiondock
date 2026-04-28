@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCliCommandPresets,
   buildHttpCommandPresets,
+  buildExecuteCliCommand,
   buildExecutePowerShellCommand,
+  buildPluginInvokeCliCommand,
   buildPluginInvokePowerShellCommand,
   buildExecutionInputExample,
   resolveExecutionCommandInput,
+  buildScriptDetailCliCommand,
   buildScriptDetailCurlCommand,
   buildScriptDetailPowerShellCommand,
   buildExecuteCurlCommand,
   buildPluginInvokeCurlCommand,
   buildToolDetailCurlCommand,
-  buildToolDetailPowerShellCommand
+  buildToolDetailPowerShellCommand,
+  buildToolSchemaCliCommand
 } from "./commands";
 import type { SchemaFieldDefinition } from "./schema";
 
@@ -238,6 +243,94 @@ try {
   $reader.Dispose()
 }
 $json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
+  });
+});
+
+describe("CLI command helpers", () => {
+  it("builds draft detail and schema commands", () => {
+    expect(
+      buildScriptDetailCliCommand({
+        apiKey: "local-dev-key",
+        draft: true,
+        environment: "bash/zsh",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe("actiondock tool get 'hello-groovy' --draft --token 'local-dev-key' --json");
+
+    expect(
+      buildToolSchemaCliCommand({
+        apiKey: "local-dev-key",
+        draft: true,
+        environment: "PowerShell",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe("actiondock tool schema 'hello-groovy' --draft --token 'local-dev-key' --json");
+  });
+
+  it("flattens scalar execute args and preserves nested data in input-json", () => {
+    expect(
+      buildExecuteCliCommand({
+        apiKey: "secret-token",
+        draft: true,
+        environment: "bash/zsh",
+        input: { name: "Alice", count: 3, payload: { source: "file" }, enabled: false },
+        mode: "ASYNC",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe("actiondock tool run 'hello-groovy' --draft --token 'secret-token' --json --mode 'async' --name 'Alice' --count '3' --enabled 'false' --input-json '{\"payload\":{\"source\":\"file\"}}'");
+  });
+
+  it("omits sync mode because it is the CLI default", () => {
+    expect(
+      buildExecuteCliCommand({
+        environment: "bash/zsh",
+        input: { message: "hi" },
+        mode: "SYNC",
+        origin: "http://localhost:8080",
+        scriptId: "hello-groovy"
+      })
+    ).toBe("actiondock tool run 'hello-groovy' --json --message 'hi'");
+  });
+
+  it("flattens plugin args but keeps scriptInput as json", () => {
+    expect(
+      buildPluginInvokeCliCommand({
+        action: "summarize",
+        apiKey: "secret'token",
+        args: { topic: 'ops "night"', retries: 2, payload: { owner: "O'Brien" } },
+        environment: "PowerShell",
+        origin: "http://localhost:8080",
+        pluginId: "plugin-a",
+        responseView: "RESULT",
+        scriptInput: { locale: "zh-CN" }
+      })
+    ).toBe("actiondock plugin invoke 'plugin-a' 'summarize' --token 'secret''token' --json --topic 'ops \"night\"' --retries '2' --args-json '{\"payload\":{\"owner\":\"O''Brien\"}}' --script-input-json '{\"locale\":\"zh-CN\"}'");
+  });
+
+  it("builds CLI presets", () => {
+    expect(
+      buildCliCommandPresets({
+        keyPrefix: "invoke",
+        cliBash: "actiondock tool run 'hello-groovy'",
+        cliPowerShell: "actiondock tool run 'hello-groovy'"
+      })
+    ).toEqual([
+      {
+        key: "invoke-cli-bash",
+        family: "CLI",
+        environment: "bash/zsh",
+        command: "actiondock tool run 'hello-groovy'"
+      },
+      {
+        key: "invoke-cli-powershell",
+        family: "CLI",
+        environment: "PowerShell",
+        command: "actiondock tool run 'hello-groovy'"
+      }
+    ]);
   });
 });
 

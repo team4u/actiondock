@@ -2,8 +2,11 @@ import { Button, Descriptions, Drawer, Row, Space, Tag, Typography } from "antd"
 import { Col } from "../../components/SafeCol";
 import type { MessageInstance } from "antd/es/message/interface";
 import { CopyOutlined } from "@ant-design/icons";
+import { getApiKey } from "../../auth";
+import { CommandPanel } from "../../components/CommandPanel";
 import { SchemaFieldList } from "../../components/SchemaFieldList";
-import { buildSchemaFieldExampleValues, buildSchemaFieldInitialState } from "../../schemaExecution";
+import { buildCliCommandPresets, buildExecuteCliCommand } from "../../commands";
+import { buildSchemaFieldExampleValues } from "../../schemaExecution";
 import { resolveSchemaFields } from "../../schema";
 import { buildScriptInvokeSnippet } from "../../scriptInvocationSnippets";
 import { useCopyMessage } from "../../hooks/useCopyMessage";
@@ -27,11 +30,32 @@ export function ScriptReferenceModal({
   const handleCopy = useCopyMessage(messageApi, "调用已复制", "复制失败");
 
   if (!script?.publishedSnapshot) return null;
+  const apiKey = getApiKey() || undefined;
+  const origin = window.location.origin;
 
   const args = buildSchemaFieldExampleValues(
     resolveSchemaFields(script.publishedSnapshot.inputSchema).supportedFields
   );
   const snippet = buildScriptInvokeSnippet(selectedScriptType, script.id, args);
+  const cliPresets = buildCliCommandPresets({
+    keyPrefix: `script-reference-${script.id}`,
+    cliBash: buildExecuteCliCommand({
+      apiKey,
+      environment: "bash/zsh",
+      input: args,
+      mode: "SYNC",
+      origin,
+      scriptId: script.id
+    }),
+    cliPowerShell: buildExecuteCliCommand({
+      apiKey,
+      environment: "PowerShell",
+      input: args,
+      mode: "SYNC",
+      origin,
+      scriptId: script.id
+    })
+  });
 
   return (
     <Drawer
@@ -93,6 +117,11 @@ export function ScriptReferenceModal({
           </Space>
           <pre className="json-preview">{snippet}</pre>
         </Space>
+        <CommandPanel
+          title="CLI 调用"
+          presets={cliPresets}
+          onCopy={(command) => void handleCopy(command)}
+        />
       </Space>
     </Drawer>
   );

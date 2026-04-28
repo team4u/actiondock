@@ -1,0 +1,29 @@
+import { Flags } from "@oclif/core";
+
+import { BaseCommand } from "../../lib/command.js";
+import { buildConfigView, readConfig } from "../../lib/config.js";
+
+export default class ConfigShowCommand extends BaseCommand {
+  static description = "Show local CLI configuration";
+
+  static flags = {
+    ...BaseCommand.baseFlags,
+    help: Flags.help({ char: "h" })
+  };
+
+  async run(): Promise<void> {
+    const { flags } = await this.parse(ConfigShowCommand);
+    const view = buildConfigView(readConfig());
+
+    if (flags.json) {
+      this.printJson(view);
+      return;
+    }
+
+    this.log([
+      `Config file: ${view.path}`,
+      `Server: ${view.serverUrl ?? "<not set>"}`,
+      `Token: ${view.tokenConfigured ? "configured" : "<not set>"}`
+    ].join("\n"));
+  }
+}

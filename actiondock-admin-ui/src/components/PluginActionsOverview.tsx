@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { MarkdownDescription } from "./MarkdownDescription";
 import { SchemaFieldList } from "./SchemaFieldList";
 import { buildPluginInvokeSnippet } from "../scriptInvocationSnippets";
+import { CommandPanel } from "./CommandPanel";
+import { buildCliCommandPresets, buildPluginInvokeCliCommand } from "../commands";
 import { useCopyMessage } from "../hooks/useCopyMessage";
 import type { PluginAction, ScriptType } from "../types";
 
@@ -26,12 +28,54 @@ interface PluginActionsOverviewProps {
     pluginId: string;
     scriptType: ScriptType;
   };
+  commandContext?: {
+    apiKey?: string;
+    origin: string;
+    pluginId: string;
+  };
 }
 
-function ActionDetail({ action, snippet }: {
+function ActionDetail({
+  action,
+  commandContext,
+  onCopy,
+  snippet
+}: {
   action: PluginAction;
+  commandContext?: {
+    apiKey?: string;
+    origin: string;
+    pluginId: string;
+  };
+  onCopy: (value: string) => void;
   snippet?: string;
 }) {
+  const commandPresets = commandContext
+    ? buildCliCommandPresets({
+        keyPrefix: `${commandContext.pluginId}-${action.action}`,
+        cliBash: buildPluginInvokeCliCommand({
+          apiKey: commandContext.apiKey,
+          args: action.exampleArgs ?? {},
+          environment: "bash/zsh",
+          origin: commandContext.origin,
+          pluginId: commandContext.pluginId,
+          action: action.action,
+          responseView: "RESULT",
+          scriptInput: {}
+        }),
+        cliPowerShell: buildPluginInvokeCliCommand({
+          apiKey: commandContext.apiKey,
+          args: action.exampleArgs ?? {},
+          environment: "PowerShell",
+          origin: commandContext.origin,
+          pluginId: commandContext.pluginId,
+          action: action.action,
+          responseView: "RESULT",
+          scriptInput: {}
+        })
+      })
+    : [];
+
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
       {action.description ? <MarkdownDescription value={action.description} /> : null}
@@ -57,6 +101,13 @@ function ActionDetail({ action, snippet }: {
           <pre className="json-preview">{snippet}</pre>
         </>
       ) : null}
+      {commandPresets.length > 0 ? (
+        <CommandPanel
+          title="CLI 调用"
+          presets={commandPresets}
+          onCopy={onCopy}
+        />
+      ) : null}
     </Space>
   );
 }
@@ -66,7 +117,8 @@ export function PluginActionsOverview({
   description,
   actions,
   mode = "collapse",
-  snippetContext
+  snippetContext,
+  commandContext
 }: PluginActionsOverviewProps) {
   const [selectedActionName, setSelectedActionName] = useState<string>("");
   const handleCopy = useCopyMessage(messageApi, "调用已复制", "复制失败");
@@ -105,6 +157,8 @@ export function PluginActionsOverview({
             children: (
               <ActionDetail
                 action={action}
+                commandContext={commandContext}
+                onCopy={(value) => void handleCopy(value)}
                 snippet={
                   snippetContext
                     ? buildPluginInvokeSnippet(snippetContext.scriptType, snippetContext.pluginId, action.action, action.exampleArgs)
@@ -150,7 +204,14 @@ export function PluginActionsOverview({
                 复制调用
               </Button>
             ) : null,
-            children: <ActionDetail action={action} snippet={snippet} />
+            children: (
+              <ActionDetail
+                action={action}
+                commandContext={commandContext}
+                onCopy={(value) => void handleCopy(value)}
+                snippet={snippet}
+              />
+            )
           };
         })}
       />

@@ -6,6 +6,7 @@ import type { ExecutionResponseView, SubmitMode } from "./types";
 export type ObjectInputMode = "SCHEMA" | "JSON";
 
 type CommandInputSource = "current-json" | "current-form" | "sample" | "empty";
+type CliEnvironment = "bash/zsh" | "PowerShell";
 
 export interface ResolvedCommandInput {
   note?: string;
@@ -102,6 +103,92 @@ function buildPowerShellJsonRequestSection({
     "$json | ConvertFrom-Json | ConvertTo-Json -Depth 100"
   ].join("\n"));
   return joinPowerShellScript(sections);
+}
+
+function quoteCliValue(value: string, environment: CliEnvironment): string {
+  return environment === "PowerShell" ? powerShellQuote(value) : shellQuote(value);
+}
+
+function buildCliCommand(command: string, args: string[], environment: CliEnvironment): string {
+  const firstFlagIndex = args.findIndex((arg) => arg.startsWith("--"));
+  const positionalArgs = (firstFlagIndex < 0 ? args : args.slice(0, firstFlagIndex)).join(" ");
+  const flagArgs = firstFlagIndex < 0 ? [] : args.slice(firstFlagIndex);
+  const commandWithPositionals = positionalArgs ? `${command} ${positionalArgs}` : command;
+  return [commandWithPositionals, ...flagArgs].join(" ");
+}
+
+function buildCliFlag(
+  name: string,
+  value: string | number | boolean,
+  environment: CliEnvironment
+): string {
+  if (typeof value === "boolean") {
+    return value ? `--${name}` : `--${name} ${quoteCliValue("false", environment)}`;
+  }
+  return `--${name} ${quoteCliValue(String(value), environment)}`;
+}
+
+function buildCliCommonFlags(params: {
+  apiKey?: string;
+  environment: CliEnvironment;
+  includeJson?: boolean;
+}): string[] {
+  const result: string[] = [];
+  if (params.apiKey) {
+    result.push(buildCliFlag("token", params.apiKey, params.environment));
+  }
+  if (params.includeJson ?? true) {
+    result.push("--json");
+  }
+  return result;
+}
+
+function isFlatCliValue(value: unknown): value is string | number | boolean {
+  return typeof value === "string"
+    || typeof value === "boolean"
+    || (typeof value === "number" && Number.isFinite(value));
+}
+
+function splitCliInputObject(input: Record<string, unknown>): {
+  flatEntries: Array<[string, string | number | boolean]>;
+  jsonRemainder: Record<string, unknown>;
+} {
+  const flatEntries: Array<[string, string | number | boolean]> = [];
+  const jsonRemainder: Record<string, unknown> = {};
+
+  Object.entries(input).forEach(([key, value]) => {
+    if (isFlatCliValue(value)) {
+      flatEntries.push([key, value]);
+      return;
+    }
+    jsonRemainder[key] = value;
+  });
+
+  return { flatEntries, jsonRemainder };
+}
+
+function buildCliObjectInputFlags(params: {
+  input: Record<string, unknown>;
+  jsonFlagName: string;
+  environment: CliEnvironment;
+}): string[] {
+  const { input, jsonFlagName, environment } = params;
+  const { flatEntries, jsonRemainder } = splitCliInputObject(input);
+  const result = flatEntries.map(([name, value]) => buildCliFlag(name, value, environment));
+
+  if (Object.keys(jsonRemainder).length > 0) {
+    result.push(buildCliFlag(jsonFlagName, JSON.stringify(jsonRemainder), environment));
+  }
+
+  return result;
+}
+
+function buildCliJsonValueFlag(params: {
+  flagName: string;
+  value: unknown;
+  environment: CliEnvironment;
+}): string[] {
+  return [buildCliFlag(params.flagName, JSON.stringify(params.value), params.environment)];
 }
 
 export function buildExecutionInputFromValues(
@@ -292,6 +379,26 @@ export function buildScriptDetailPowerShellCommand({
   });
 }
 
+export function buildScriptDetailCliCommand({
+  apiKey,
+  draft = false,
+  environment,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  draft?: boolean;
+  environment: CliEnvironment;
+  origin: string;
+  scriptId: string;
+}): string {
+  return buildCliCommand("actiondock tool get", [
+    quoteCliValue(scriptId, environment),
+    ...(draft ? ["--draft"] : []),
+    ...buildCliCommonFlags({ apiKey, environment })
+  ], environment);
+}
+
 export function buildToolDetailCurlCommand({
   apiKey,
   origin,
@@ -323,6 +430,26 @@ export function buildToolDetailPowerShellCommand({
     method: "Get",
     url: `${origin}/api/schema/${scriptId}`
   });
+}
+
+export function buildToolSchemaCliCommand({
+  apiKey,
+  draft = false,
+  environment,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  draft?: boolean;
+  environment: CliEnvironment;
+  origin: string;
+  scriptId: string;
+}): string {
+  return buildCliCommand("actiondock tool schema", [
+    quoteCliValue(scriptId, environment),
+    ...(draft ? ["--draft"] : []),
+    ...buildCliCommonFlags({ apiKey, environment })
+  ], environment);
 }
 
 export function buildExecuteCurlCommand({
@@ -381,6 +508,36 @@ export function buildExecutePowerShellCommand({
     method: "Post",
     url: `${origin}/api/executions`
   });
+}
+
+export function buildExecuteCliCommand({
+  apiKey,
+  draft = false,
+  environment,
+  input,
+  mode,
+  origin,
+  scriptId
+}: {
+  apiKey?: string;
+  draft?: boolean;
+  environment: CliEnvironment;
+  input: Record<string, unknown>;
+  mode: SubmitMode;
+  origin: string;
+  scriptId: string;
+}): string {
+  return buildCliCommand("actiondock tool run", [
+    quoteCliValue(scriptId, environment),
+    ...(draft ? ["--draft"] : []),
+    ...buildCliCommonFlags({ apiKey, environment }),
+    ...(mode === "SYNC" ? [] : [buildCliFlag("mode", mode.toLowerCase(), environment)]),
+    ...buildCliObjectInputFlags({
+      input,
+      jsonFlagName: "input-json",
+      environment
+    })
+  ], environment);
 }
 
 export function buildPluginInvokeCurlCommand({
@@ -449,6 +606,116 @@ export function buildPluginInvokePowerShellCommand({
   });
 }
 
+export function buildPluginInvokeCliCommand({
+  action,
+  apiKey,
+  args,
+  environment,
+  origin,
+  pluginId,
+  responseView,
+  scriptInput
+}: {
+  action: string;
+  apiKey?: string;
+  args: Record<string, unknown>;
+  environment: CliEnvironment;
+  origin: string;
+  pluginId: string;
+  responseView?: ExecutionResponseView;
+  scriptInput: Record<string, unknown>;
+}): string {
+  return buildCliCommand("actiondock plugin invoke", [
+    quoteCliValue(pluginId, environment),
+    quoteCliValue(action, environment),
+    ...buildCliCommonFlags({ apiKey, environment }),
+    ...(responseView && responseView !== "RESULT"
+      ? [buildCliFlag("response-view", responseView.toLowerCase(), environment)]
+      : []),
+    ...buildCliObjectInputFlags({
+      input: args,
+      jsonFlagName: "args-json",
+      environment
+    }),
+    ...(Object.keys(scriptInput).length > 0
+      ? buildCliJsonValueFlag({
+          flagName: "script-input-json",
+          value: scriptInput,
+          environment
+        })
+      : [])
+  ], environment);
+}
+
+export function buildSharedStatePutCliCommand({
+  apiKey,
+  environment,
+  expiresAt,
+  key,
+  namespace,
+  origin,
+  secret,
+  value
+}: {
+  apiKey?: string;
+  environment: CliEnvironment;
+  expiresAt?: string | null;
+  key: string;
+  namespace: string;
+  origin: string;
+  secret: boolean;
+  value: unknown;
+}): string {
+  return buildCliCommand("actiondock state put", [
+    quoteCliValue(namespace, environment),
+    quoteCliValue(key, environment),
+    ...buildCliCommonFlags({ apiKey, environment }),
+    ...buildCliJsonValueFlag({
+      flagName: "value-json",
+      value,
+      environment
+    }),
+    ...(secret ? ["--secret"] : []),
+    ...(expiresAt ? [buildCliFlag("expires-at", expiresAt, environment)] : [])
+  ], environment);
+}
+
+export function buildSharedStateCasCliCommand({
+  apiKey,
+  environment,
+  expectedVersion,
+  expiresAt,
+  key,
+  namespace,
+  origin,
+  secret,
+  value
+}: {
+  apiKey?: string;
+  environment: CliEnvironment;
+  expectedVersion: number;
+  expiresAt?: string | null;
+  key: string;
+  namespace: string;
+  origin: string;
+  secret: boolean;
+  value: unknown;
+}): string {
+  return buildCliCommand("actiondock state cas", [
+    quoteCliValue(namespace, environment),
+    quoteCliValue(key, environment),
+    ...buildCliCommonFlags({ apiKey, environment }),
+    buildCliFlag("expected-version", expectedVersion, environment),
+    ...buildCliJsonValueFlag({
+      flagName: "value-json",
+      value,
+      environment
+    }),
+    ...(secret ? ["--secret"] : []),
+    ...(expiresAt ? [buildCliFlag("expires-at", expiresAt, environment)] : [])
+  ], environment);
+}
+
 export function buildCommandPresets(presets: CommandPreset[]): CommandPreset[] {
   return presets.filter((item) => item.command.trim().length > 0);
 }
@@ -461,5 +728,16 @@ export function buildHttpCommandPresets(params: {
   return buildCommandPresets([
     { key: `${params.keyPrefix}-http-bash`, family: "HTTP", environment: "bash/zsh", command: params.httpBash },
     { key: `${params.keyPrefix}-http-powershell`, family: "HTTP", environment: "PowerShell", command: params.httpPowerShell }
+  ]);
+}
+
+export function buildCliCommandPresets(params: {
+  keyPrefix: string;
+  cliBash: string;
+  cliPowerShell: string;
+}): CommandPreset[] {
+  return buildCommandPresets([
+    { key: `${params.keyPrefix}-cli-bash`, family: "CLI", environment: "bash/zsh", command: params.cliBash },
+    { key: `${params.keyPrefix}-cli-powershell`, family: "CLI", environment: "PowerShell", command: params.cliPowerShell }
   ]);
 }

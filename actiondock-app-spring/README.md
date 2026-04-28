@@ -114,6 +114,16 @@ curl -X POST http://localhost:8080/api/shared-state \
   }'
 ```
 
+等价 CLI：
+
+```bash
+actiondock state put oauth.github access-token \
+  --value-json '{"accessToken":"gho_xxx","tokenType":"Bearer"}' \
+  --secret \
+  --expires-at '2026-04-28T12:00:00' \
+  --json
+```
+
 CAS 示例：
 
 ```bash
@@ -127,6 +137,15 @@ curl -X POST http://localhost:8080/api/shared-state/cas \
       "cursor": "next-page-token"
     }
   }'
+```
+
+等价 CLI：
+
+```bash
+actiondock state cas cursor.sync users \
+  --expected-version 3 \
+  --value-json '{"cursor":"next-page-token"}' \
+  --json
 ```
 
 语义说明：

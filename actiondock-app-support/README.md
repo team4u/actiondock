@@ -131,8 +131,7 @@ return {"version": saved["version"], "expiresAt": saved["expiresAt"]}
 
 ```groovy
 def current = state.get("cursor.sync", "users")
-def expectedVersion = current?.version ?: 0
-def result = state.cas("cursor.sync", "users", expectedVersion, [cursor: "next-token"])
+def result = state.cas("cursor.sync", "users", current?.version, [cursor: "next-token"])
 
 if (!result.updated) {
     throw new IllegalStateException("共享状态版本冲突，请重试")
