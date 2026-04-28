@@ -40,7 +40,7 @@ public class SharedStateCleanupScheduler {
     public void onApplicationReady() {
         Duration interval = Duration.ofSeconds(purgeIntervalSeconds);
         scheduledFuture = taskScheduler.scheduleAtFixedRate(this::purge, Instant.now().plus(interval), interval);
-        log.info("共享状态过期清理任务已启动，清理间隔: {}秒", purgeIntervalSeconds);
+        log.info("Shared state cleanup task started, purge interval: {}s", purgeIntervalSeconds);
     }
 
     private void purge() {

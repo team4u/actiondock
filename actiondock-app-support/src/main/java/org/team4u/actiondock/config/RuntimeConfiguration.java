@@ -4,6 +4,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -252,7 +253,7 @@ public class RuntimeConfiguration {
     public ExecutionApplicationService executionApplicationService(ScriptRepository scriptRepository,
                                                                    ExecutionRepository executionRepository,
                                                                    ScriptEngine scriptEngine,
-                                                                   Executor executor,
+                                                                   @Qualifier("executionExecutor") Executor executor,
                                                                    ConfigValueApplicationService configValueApplicationService) {
         return new ExecutionApplicationService(scriptRepository, executionRepository, scriptEngine, executor, configValueApplicationService);
     }
