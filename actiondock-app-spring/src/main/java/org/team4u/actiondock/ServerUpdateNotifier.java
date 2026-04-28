@@ -36,10 +36,10 @@ class ServerUpdateNotifier {
     void checkAndLog() {
         updateNotificationService.checkForUpdate(new UpdateNotificationRequest(
                         "server",
-                        "actiondock-server",
+                        "@actiondock/server",
                         "ActionDock Server",
                         CURRENT_VERSION,
-                        "npm i -g actiondock-server@latest",
+                        "npm i -g @actiondock/server@latest",
                         Path.of(System.getProperty("user.home")),
                         System.getenv()
                 ))

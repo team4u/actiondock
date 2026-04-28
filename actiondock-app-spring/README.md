@@ -19,25 +19,42 @@ mvn -pl actiondock-app-spring -am spring-boot:run
 
 ```bash
 mvn -pl actiondock-app-spring -am package
-java -jar target/actiondock-app-spring.jar
+java -jar target/actiondock-app-spring-0.2.0.jar
 ```
 
 ## npm / jDeploy 分发
 
-对外发布名为 `actiondock-server`，推荐安装方式：
+对外发布名为 `@actiondock/server`，推荐安装方式：
 
 ```bash
-npm i -g actiondock-server
+npm i -g @actiondock/server
 actiondock-server
+```
+
+如果希望作为系统服务安装和托管，可使用 jDeploy 提供的 service 子命令：
+
+```bash
+actiondock-server service install
+actiondock-server service start
+actiondock-server service status
 ```
 
 手动升级：
 
 ```bash
-npm i -g actiondock-server@latest
+npm i -g @actiondock/server@latest
 ```
 
 启动后会低频检查 npm 上是否有新版本，并在日志里输出升级提示。可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
+
+发布前可在本目录执行：
+
+```bash
+npm install
+npm run pack:dry-run
+```
+
+`pack:dry-run` 会先构建 Spring Boot jar，再生成 `jdeploy-bundle/`，最后校验 npm 包内容。
 
 ## 前后端开发
 

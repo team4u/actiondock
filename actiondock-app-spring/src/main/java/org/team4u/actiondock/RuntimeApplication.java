@@ -86,6 +86,19 @@ import org.team4u.actiondock.web.ScriptController;
  */
 public class RuntimeApplication {
     public static void main(String[] args) {
+        if ("gui".equals(System.getProperty("jdeploy.mode", ""))) {
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                javax.swing.JOptionPane.showMessageDialog(
+                        null,
+                        "ActionDock Server\n\nThis application runs as a background service.\n"
+                                + "Use 'actiondock-server' in a terminal or the jDeploy service commands to manage it.",
+                        "About ActionDock Server",
+                        javax.swing.JOptionPane.INFORMATION_MESSAGE
+                );
+                System.exit(0);
+            });
+            return;
+        }
         SpringApplication.run(RuntimeApplication.class, args);
     }
 }
