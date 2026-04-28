@@ -2,12 +2,14 @@ import {
   CopyOutlined,
   DeleteOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   ReloadOutlined,
   SaveOutlined
 } from "@ant-design/icons";
 import {
   Alert,
   AutoComplete,
+  Tooltip,
   Button,
   Card,
   Checkbox,
@@ -29,6 +31,7 @@ import {
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
+import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
@@ -700,12 +703,12 @@ export function SharedStateManagementPage({ embedded = false }: SharedStateManag
 
         <Card title={embedded ? "共享状态" : undefined} extra={embedded ? actions : undefined}>
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            <Alert
-              type="info"
-              showIcon
-              message="建议按能力或系统拆分命名空间"
-              description='例如 "oauth.github"、"cache.user-sync"、"workflow.invoice"。脚本侧可通过内置 state 对象访问。'
-            />
+            <Space>
+              <Text strong>命名空间</Text>
+              <Tooltip title='建议按能力或系统拆分命名空间，例如 "oauth.github"、"cache.user-sync"、"workflow.invoice"。脚本侧可通过内置 state 对象访问。'>
+                <QuestionCircleOutlined style={{ color: "#999" }} />
+              </Tooltip>
+            </Space>
 
             <Space direction="vertical" size={12} style={{ width: "100%" }}>
               <Space wrap>
@@ -722,7 +725,19 @@ export function SharedStateManagementPage({ embedded = false }: SharedStateManag
                   <Input.Search
                     allowClear
                     placeholder="输入或选择命名空间"
-                    onSearch={() => void handleNamespaceSubmit()}
+                    onSearch={(value: string) => {
+                      if (value.trim()) {
+                        void loadEntries(value.trim());
+                      }
+                    }}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                      const next = e.target.value;
+                      setNamespaceInput(next);
+                      if (!next.trim()) {
+                        setSelectedNamespace(null);
+                        setItems([]);
+                      }
+                    }}
                   />
                 </AutoComplete>
                 <Input

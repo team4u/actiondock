@@ -19,6 +19,7 @@ public class AppProperties {
     private final Plugins plugins = new Plugins();
     private final Execution execution = new Execution();
     private final Schedules schedules = new Schedules();
+    private final SharedState sharedState = new SharedState();
 
     public String getHomeDir() {
         return homeDir;
@@ -38,6 +39,10 @@ public class AppProperties {
 
     public Schedules getSchedules() {
         return schedules;
+    }
+
+    public SharedState getSharedState() {
+        return sharedState;
     }
 
     public static String defaultHomeDir() {
@@ -142,6 +147,18 @@ public class AppProperties {
 
         public void setPoolSize(int poolSize) {
             this.poolSize = poolSize;
+        }
+    }
+
+    public static class SharedState {
+        private int purgeIntervalSeconds = 300;
+
+        public int getPurgeIntervalSeconds() {
+            return purgeIntervalSeconds;
+        }
+
+        public void setPurgeIntervalSeconds(int purgeIntervalSeconds) {
+            this.purgeIntervalSeconds = purgeIntervalSeconds;
         }
     }
 }

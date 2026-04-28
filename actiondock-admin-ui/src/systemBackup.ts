@@ -7,7 +7,10 @@ import type {
   PluginView,
   AiModelProfile,
   AiAgentProfile,
-  AiToolset
+  AiToolset,
+  SharedStateDetail,
+  SharedStateRequest,
+  SharedStateSummary
 } from "./types";
 import {
   parseScriptDefinition,
@@ -30,6 +33,15 @@ export interface PluginBackupEntry {
   config?: Record<string, unknown>;
 }
 
+export interface SharedStateBackupEntry {
+  namespace: string;
+  key: string;
+  secret: boolean;
+  expiresAt?: string | null;
+  valueIncluded: boolean;
+  value?: unknown;
+}
+
 export interface SystemBackupBundleV1 {
   version: 1;
   type: "actiondock-system-backup";
@@ -41,6 +53,7 @@ export interface SystemBackupBundleV1 {
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
     plugins: PluginBackupEntry[];
+    sharedStates: SharedStateBackupEntry[];
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
@@ -54,6 +67,7 @@ export interface BackupAnalysis {
   executionPresets: { total: number; create: number; overwrite: number };
   repositories: { total: number; create: number; overwrite: number };
   plugins: { total: number; create: number; overwrite: number };
+  sharedStates: { total: number; create: number; overwrite: number; skipped: number };
   aiModels: { total: number; create: number; overwrite: number };
   aiAgents: { total: number; create: number; overwrite: number };
   aiToolsets: { total: number; create: number; overwrite: number };
@@ -61,6 +75,100 @@ export interface BackupAnalysis {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function assertBoolean(value: unknown, fieldName: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${fieldName} 必须是布尔值`);
+  }
+  return value;
+}
+
+function assertOptionalNullableString(value: unknown, fieldName: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    throw new Error(`${fieldName} 必须是字符串`);
+  }
+  return value;
+}
+
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+export function buildSharedStateBackupKey(entry: Pick<SharedStateSummary, "namespace" | "key">): string {
+  return `${entry.namespace}/${entry.key}`;
+}
+
+export function shouldIncludeSharedStateValue(secret: boolean, includeSecretValues: boolean): boolean {
+  return !secret || includeSecretValues;
+}
+
+export function buildSharedStateBackupEntry(
+  entry: Pick<SharedStateSummary, "namespace" | "key" | "secret" | "expiresAt"> & Partial<Pick<SharedStateDetail, "value">>,
+  options?: { includeValue?: boolean }
+): SharedStateBackupEntry {
+  const includeValue = options?.includeValue ?? false;
+  return {
+    namespace: entry.namespace,
+    key: entry.key,
+    secret: entry.secret,
+    expiresAt: entry.expiresAt ?? null,
+    valueIncluded: includeValue,
+    ...(includeValue ? { value: entry.value } : {})
+  };
+}
+
+function parseSharedStateBackupEntry(value: unknown, index: number): SharedStateBackupEntry {
+  if (!isRecord(value)) {
+    throw new Error(`第 ${index + 1} 条共享状态不是对象`);
+  }
+  if (!isNonEmptyString(value.namespace)) {
+    throw new Error(`第 ${index + 1} 条共享状态缺少合法 namespace`);
+  }
+  if (!isNonEmptyString(value.key)) {
+    throw new Error(`第 ${index + 1} 条共享状态 ${String(value.namespace)} 缺少合法 key`);
+  }
+
+  const namespace = value.namespace.trim();
+  const key = value.key.trim();
+  const secret = assertBoolean(value.secret, `第 ${index + 1} 条共享状态 ${namespace}/${key} 的 secret`);
+  const valueIncluded = assertBoolean(value.valueIncluded, `第 ${index + 1} 条共享状态 ${namespace}/${key} 的 valueIncluded`);
+
+  if (valueIncluded && !hasOwn(value, "value")) {
+    throw new Error(`第 ${index + 1} 条共享状态 ${namespace}/${key} 缺少 value`);
+  }
+
+  return {
+    namespace,
+    key,
+    secret,
+    expiresAt: assertOptionalNullableString(value.expiresAt, `第 ${index + 1} 条共享状态 ${namespace}/${key} 的 expiresAt`) ?? null,
+    valueIncluded,
+    ...(valueIncluded ? { value: value.value } : {})
+  };
+}
+
+export function toSharedStateRestorePayload(entry: SharedStateBackupEntry): SharedStateRequest | null {
+  if (!entry.valueIncluded) {
+    return null;
+  }
+  return {
+    namespace: entry.namespace,
+    key: entry.key,
+    value: entry.value,
+    secret: entry.secret,
+    expiresAt: entry.expiresAt ?? null
+  };
 }
 
 export function buildBackupJson(
@@ -72,6 +180,7 @@ export function buildBackupJson(
     repositories: RepositoryDefinition[];
     plugins: PluginView[];
     pluginConfigs: Map<string, Record<string, unknown>>;
+    sharedStates: SharedStateBackupEntry[];
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
@@ -109,6 +218,9 @@ export function buildBackupJson(
       executionPresets: [...data.executionPresets].sort((a, b) => a.id.localeCompare(b.id)),
       repositories: [...data.repositories].sort((a, b) => a.id.localeCompare(b.id)),
       plugins: pluginEntries.sort((a, b) => a.pluginId.localeCompare(b.pluginId)),
+      sharedStates: [...data.sharedStates].sort((a, b) =>
+        a.namespace.localeCompare(b.namespace) || a.key.localeCompare(b.key)
+      ),
       aiModels: [...data.aiModels].sort((a, b) => a.id.localeCompare(b.id)),
       aiAgents: [...data.aiAgents].sort((a, b) => a.id.localeCompare(b.id)),
       aiToolsets: [...data.aiToolsets].sort((a, b) => a.id.localeCompare(b.id))
@@ -161,6 +273,9 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
   const plugins = Array.isArray(data.plugins)
     ? (data.plugins as PluginBackupEntry[])
     : [];
+  const sharedStates = Array.isArray(data.sharedStates)
+    ? (data.sharedStates as unknown[]).map((item, index) => parseSharedStateBackupEntry(item, index))
+    : [];
   const aiModels = Array.isArray(data.aiModels)
     ? (data.aiModels as AiModelProfile[])
     : [];
@@ -175,7 +290,7 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
     version: 1,
     type: "actiondock-system-backup",
     exportedAt: parsed.exportedAt as string,
-    data: { scripts, schedules, configValues, executionPresets, repositories, plugins, aiModels, aiAgents, aiToolsets }
+    data: { scripts, schedules, configValues, executionPresets, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets }
   };
 }
 
@@ -188,6 +303,7 @@ export function analyzeBackupBundle(
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
     plugins: PluginView[];
+    sharedStates: SharedStateSummary[];
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
@@ -232,6 +348,22 @@ export function analyzeBackupBundle(
     }
   }
 
+  const currentSharedStateKeys = new Set(current.sharedStates.map(item => buildSharedStateBackupKey(item)));
+  let sharedStateCreate = 0;
+  let sharedStateOverwrite = 0;
+  let sharedStateSkipped = 0;
+  for (const item of bundle.data.sharedStates) {
+    if (!item.valueIncluded) {
+      sharedStateSkipped++;
+      continue;
+    }
+    if (currentSharedStateKeys.has(buildSharedStateBackupKey(item))) {
+      sharedStateOverwrite++;
+    } else {
+      sharedStateCreate++;
+    }
+  }
+
   return {
     scripts: analyze(bundle.data.scripts, current.scripts),
     schedules: analyze(bundle.data.schedules, current.schedules),
@@ -239,6 +371,12 @@ export function analyzeBackupBundle(
     executionPresets: analyze(bundle.data.executionPresets, current.executionPresets),
     repositories: analyze(bundle.data.repositories, current.repositories),
     plugins: { total: bundle.data.plugins.length, create: pluginCreate, overwrite: pluginOverwrite },
+    sharedStates: {
+      total: bundle.data.sharedStates.length,
+      create: sharedStateCreate,
+      overwrite: sharedStateOverwrite,
+      skipped: sharedStateSkipped
+    },
     aiModels: analyze(bundle.data.aiModels, current.aiModels),
     aiAgents: analyze(bundle.data.aiAgents, current.aiAgents),
     aiToolsets: analyze(bundle.data.aiToolsets, current.aiToolsets)

@@ -22,6 +22,9 @@ import {
   listScripts,
   listSchedules,
   listConfigValues,
+  listSharedStateNamespaces,
+  listSharedState,
+  getSharedState,
   listRepositories,
   listPlugins,
   getPluginConfig,
@@ -33,6 +36,8 @@ import {
   updateSchedule,
   createConfigValue,
   updateConfigValue,
+  createSharedState,
+  updateSharedState,
   createRepository,
   updateRepository,
   installPlugin,
@@ -55,17 +60,23 @@ import type {
   ExecutionPreset,
   RepositoryDefinition,
   PluginView,
+  SharedStateSummary,
   AiModelProfile,
   AiAgentProfile,
   AiToolset
 } from "../types";
 import {
+  buildSharedStateBackupEntry,
+  buildSharedStateBackupKey,
   buildBackupJson,
   parseBackupJson,
   analyzeBackupBundle,
   formatBackupFileName,
+  shouldIncludeSharedStateValue,
+  toSharedStateRestorePayload,
   type SystemBackupBundleV1,
-  type BackupAnalysis
+  type BackupAnalysis,
+  type SharedStateBackupEntry
 } from "../systemBackup";
 
 const { Text } = Typography;
@@ -74,7 +85,30 @@ interface RestoreResult {
   type: string;
   succeeded: number;
   failed: number;
+  skipped?: number;
   errors: string[];
+}
+
+async function listAllSharedStateSummaries(): Promise<SharedStateSummary[]> {
+  const namespaces = await listSharedStateNamespaces();
+  const grouped = await Promise.all(namespaces.map(async namespace => listSharedState(namespace)));
+  return grouped
+    .flat()
+    .sort((left, right) => left.namespace.localeCompare(right.namespace) || left.key.localeCompare(right.key));
+}
+
+async function buildSharedStateBackupEntries(includeSecretValues: boolean): Promise<SharedStateBackupEntry[]> {
+  const summaries = await listAllSharedStateSummaries();
+  const entries = await Promise.all(
+    summaries.map(async item => {
+      if (!shouldIncludeSharedStateValue(item.secret, includeSecretValues)) {
+        return buildSharedStateBackupEntry(item);
+      }
+      const detail = await getSharedState(item.namespace, item.key);
+      return buildSharedStateBackupEntry(detail, { includeValue: true });
+    })
+  );
+  return entries.sort((left, right) => left.namespace.localeCompare(right.namespace) || left.key.localeCompare(right.key));
 }
 
 export function DataBackupPanel() {
@@ -88,6 +122,7 @@ export function DataBackupPanel() {
     presets: number;
     repositories: number;
     plugins: number;
+    sharedStates: number;
     aiModels: number;
     aiAgents: number;
     aiToolsets: number;
@@ -100,12 +135,13 @@ export function DataBackupPanel() {
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDataCounts = useCallback(async () => {
-    const [scripts, schedules, configValues, repositories, plugins, aiModels, aiAgents, aiToolsets] = await Promise.all([
+    const [scripts, schedules, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
       listScripts(),
       listSchedules(),
       listConfigValues(),
       listRepositories(),
       listPlugins(),
+      listAllSharedStateSummaries(),
       listAiModels(),
       listAiAgents(),
       listAiToolsets()
@@ -126,6 +162,7 @@ export function DataBackupPanel() {
       presets: presetCount,
       repositories: repositories.length,
       plugins: plugins.length,
+      sharedStates: sharedStates.length,
       aiModels: aiModels.length,
       aiAgents: aiAgents.length,
       aiToolsets: aiToolsets.length
@@ -135,12 +172,13 @@ export function DataBackupPanel() {
   const handleBackup = useCallback(async () => {
     setBackupLoading(true);
     try {
-      const [scripts, schedules, configValues, repositories, plugins, aiModels, aiAgents, aiToolsets] = await Promise.all([
+      const [scripts, schedules, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
         listScripts(),
         listSchedules(),
         listConfigValues(),
         listRepositories(),
         listPlugins(),
+        buildSharedStateBackupEntries(includeSecrets),
         listAiModels(),
         listAiAgents(),
         listAiToolsets()
@@ -173,7 +211,19 @@ export function DataBackupPanel() {
       );
 
       const backupJson = buildBackupJson(
-        { scripts, schedules, configValues, executionPresets: allPresets, repositories, plugins, pluginConfigs, aiModels, aiAgents, aiToolsets },
+        {
+          scripts,
+          schedules,
+          configValues,
+          executionPresets: allPresets,
+          repositories,
+          plugins,
+          pluginConfigs,
+          sharedStates,
+          aiModels,
+          aiAgents,
+          aiToolsets
+        },
         { includeSecretValues: includeSecrets }
       );
 
@@ -248,12 +298,13 @@ export function DataBackupPanel() {
         pluginFiles.set(path, blob);
       }
 
-      const [scripts, schedules, configValues, repositories, plugins, aiModels, aiAgents, aiToolsets] = await Promise.all([
+      const [scripts, schedules, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
         listScripts(),
         listSchedules(),
         listConfigValues(),
         listRepositories(),
         listPlugins(),
+        listAllSharedStateSummaries(),
         listAiModels(),
         listAiAgents(),
         listAiToolsets()
@@ -278,6 +329,7 @@ export function DataBackupPanel() {
         executionPresets: allPresets,
         repositories,
         plugins,
+        sharedStates,
         aiModels,
         aiAgents,
         aiToolsets
@@ -303,12 +355,13 @@ export function DataBackupPanel() {
     const bundle = pendingBundle;
     const pluginFiles = pendingPluginFiles ?? new Map<string, Blob>();
 
-    const [currentScripts, currentSchedules, currentConfigValues, currentRepositories, currentPlugins, currentAiModels, currentAiAgents, currentAiToolsets] = await Promise.all([
+    const [currentScripts, currentSchedules, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets] = await Promise.all([
       listScripts(),
       listSchedules(),
       listConfigValues(),
       listRepositories(),
       listPlugins(),
+      listAllSharedStateSummaries(),
       listAiModels(),
       listAiAgents(),
       listAiToolsets()
@@ -319,6 +372,7 @@ export function DataBackupPanel() {
     const currentConfigKeys = new Set(currentConfigValues.map(c => c.key));
     const currentRepoIds = new Set(currentRepositories.map(r => r.id));
     const currentPluginIds = new Set(currentPlugins.map(p => p.pluginId));
+    const currentSharedStateKeys = new Set(currentSharedStates.map(item => buildSharedStateBackupKey(item)));
 
     const currentPresets: ExecutionPreset[] = [];
     await Promise.all(
@@ -360,7 +414,32 @@ export function DataBackupPanel() {
       results.push({ type: "配置值", succeeded, failed: errors.length, errors });
     }
 
-    // 2. Repositories
+    // 2. Shared States
+    {
+      let succeeded = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+      for (const item of bundle.data.sharedStates) {
+        const payload = toSharedStateRestorePayload(item);
+        if (!payload) {
+          skipped++;
+          continue;
+        }
+        try {
+          if (currentSharedStateKeys.has(buildSharedStateBackupKey(item))) {
+            await updateSharedState(payload);
+          } else {
+            await createSharedState(payload);
+          }
+          succeeded++;
+        } catch (e) {
+          errors.push(`${item.namespace}/${item.key}: ${e instanceof Error ? e.message : "未知错误"}`);
+        }
+      }
+      results.push({ type: "共享状态", succeeded, failed: errors.length, skipped, errors });
+    }
+
+    // 3. Repositories
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -379,7 +458,7 @@ export function DataBackupPanel() {
       results.push({ type: "仓库", succeeded, failed: errors.length, errors });
     }
 
-    // 3. Scripts
+    // 4. Scripts
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -398,7 +477,7 @@ export function DataBackupPanel() {
       results.push({ type: "脚本", succeeded, failed: errors.length, errors });
     }
 
-    // 4. Execution Presets
+    // 5. Execution Presets
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -418,7 +497,7 @@ export function DataBackupPanel() {
       results.push({ type: "执行预设", succeeded, failed: errors.length, errors });
     }
 
-    // 5. Schedules
+    // 6. Schedules
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -444,7 +523,7 @@ export function DataBackupPanel() {
       results.push({ type: "定时任务", succeeded, failed: errors.length, errors });
     }
 
-    // 6. Plugins (uninstall then install)
+    // 7. Plugins (uninstall then install)
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -485,7 +564,7 @@ export function DataBackupPanel() {
       results.push({ type: "插件", succeeded, failed: errors.length, errors });
     }
 
-    // 7. AI Models
+    // 8. AI Models
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -501,7 +580,7 @@ export function DataBackupPanel() {
       results.push({ type: "AI 模型", succeeded, failed: errors.length, errors });
     }
 
-    // 8. AI Agents
+    // 9. AI Agents
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -517,7 +596,7 @@ export function DataBackupPanel() {
       results.push({ type: "AI Agent", succeeded, failed: errors.length, errors });
     }
 
-    // 9. AI Toolsets
+    // 10. AI Toolsets
     {
       let succeeded = 0;
       const errors: string[] = [];
@@ -542,7 +621,7 @@ export function DataBackupPanel() {
     setRestoreResults(results);
     setRestoreLoading(false);
     loadDataCounts();
-  }, [pendingBundle, pendingPluginFiles, analysis, messageApi, loadDataCounts]);
+  }, [pendingBundle, pendingPluginFiles, analysis, loadDataCounts]);
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -561,6 +640,7 @@ export function DataBackupPanel() {
               <Descriptions.Item label="执行预设">{dataCounts.presets}</Descriptions.Item>
               <Descriptions.Item label="仓库">{dataCounts.repositories}</Descriptions.Item>
               <Descriptions.Item label="插件">{dataCounts.plugins}</Descriptions.Item>
+              <Descriptions.Item label="共享状态">{dataCounts.sharedStates}</Descriptions.Item>
               <Descriptions.Item label="AI 模型">{dataCounts.aiModels}</Descriptions.Item>
               <Descriptions.Item label="AI Agent">{dataCounts.aiAgents}</Descriptions.Item>
               <Descriptions.Item label="AI 工具集">{dataCounts.aiToolsets}</Descriptions.Item>
@@ -571,7 +651,7 @@ export function DataBackupPanel() {
             checked={includeSecrets}
             onChange={e => setIncludeSecrets(e.target.checked)}
           >
-            包含 Secret 配置值的明文值
+            包含 Secret 配置值和共享状态的明文值
           </Checkbox>
 
           <Space>
@@ -631,6 +711,7 @@ export function DataBackupPanel() {
                   )}
                   <Text strong>{r.type}</Text>
                   <Text type="success">成功 {r.succeeded}</Text>
+                  {r.skipped ? <Text type="secondary">跳过 {r.skipped}</Text> : null}
                   {r.failed > 0 && <Text type="danger">失败 {r.failed}</Text>}
                 </Space>
                 {r.errors.length > 0 && (
@@ -712,6 +793,19 @@ export function DataBackupPanel() {
                 <Text type="success">新建 {analysis.plugins.create}</Text>
                 {" / "}
                 <Text type="warning">覆盖 {analysis.plugins.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="共享状态">
+                <Text>共 {analysis.sharedStates.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.sharedStates.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.sharedStates.overwrite}</Text>
+                {analysis.sharedStates.skipped > 0 ? (
+                  <>
+                    {" / "}
+                    <Text type="secondary">跳过 {analysis.sharedStates.skipped}</Text>
+                  </>
+                ) : null}
               </Descriptions.Item>
               <Descriptions.Item label="AI 模型">
                 <Text>共 {analysis.aiModels.total} 条</Text>

@@ -24,3 +24,5 @@ app:
       cache-expire-after-access-minutes: 30
   schedules:
     pool-size: 2
+  shared-state:
+    purge-interval-seconds: 300

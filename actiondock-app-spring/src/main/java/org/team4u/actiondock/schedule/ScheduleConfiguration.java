@@ -7,6 +7,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.support.CronExpression;
 import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.application.ScheduleApplicationService;
+import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;
@@ -73,5 +74,20 @@ public class ScheduleConfiguration {
                 executionRepository,
                 scriptRepository
         );
+    }
+
+    /**
+     * 创建共享状态过期自动清理调度器。
+     *
+     * @param taskScheduler 任务调度器
+     * @param sharedStateService 共享状态应用服务
+     * @param properties 应用配置属性
+     * @return 共享状态清理调度器
+     */
+    @Bean
+    public SharedStateCleanupScheduler sharedStateCleanupScheduler(TaskScheduler taskScheduler,
+                                                                    SharedStateApplicationService sharedStateService,
+                                                                    AppProperties properties) {
+        return new SharedStateCleanupScheduler(taskScheduler, sharedStateService, properties);
     }
 }
