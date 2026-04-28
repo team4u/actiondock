@@ -1,5 +1,6 @@
 export type ScriptStatus = "DRAFT" | "PUBLISHED";
 export type ScriptType = "GROOVY" | "PYTHON";
+export type ScriptPackaging = "TOOL" | "FLOW";
 export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "DEVELOPMENT" | "SAMPLE";
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
@@ -27,6 +28,7 @@ export interface ForkFormValues {
 export interface PublishedScriptSnapshot {
   name: string;
   type: ScriptType;
+  packaging: ScriptPackaging;
   source: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
@@ -37,6 +39,7 @@ export interface ScriptDefinition {
   id: string;
   name: string;
   type: ScriptType;
+  packaging: ScriptPackaging;
   source: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
@@ -587,6 +590,7 @@ export interface RepositoryToolDescriptor {
   owner?: string;
   tags: string[];
   type: ScriptType;
+  packaging: ScriptPackaging;
   sourcePath: string;
   inputSchemaPath?: string;
   outputSchemaPath?: string;
@@ -629,6 +633,156 @@ export interface RepositoryToolDetail {
   source: string;
   configTemplate: RepositoryConfigTemplateItem[];
   scheduleTemplate: RepositoryScheduleTemplateItem[];
+}
+
+export interface RepositoryAiPackageDependency {
+  assetType: "AI_PACKAGE" | "TOOL" | string;
+  repositoryId: string;
+  assetId: string;
+  version: string;
+}
+
+export interface RepositoryAiPackageDescriptor {
+  repositoryId: string;
+  packageId: string;
+  installationId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  packageEntryAgentId: string;
+  installedEntryAgentId?: string;
+  packagePath: string;
+  configTemplatePath?: string;
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
+  trusted: boolean;
+  repositoryUsage?: RepositoryUsage;
+}
+
+export interface RepositoryAiPackageModelFile {
+  id: string;
+  name: string;
+  provider?: AiProvider;
+  modelProvider?: AiModelProvider;
+  modelName: string;
+  baseUrl?: string;
+  apiKeyConfigKey?: string;
+  defaultOptions: Record<string, unknown>;
+  limits: Record<string, unknown>;
+  capabilities: AiCapability[];
+  enabled: boolean;
+}
+
+export interface RepositoryAiPackageToolsetFile {
+  id: string;
+  name: string;
+  description?: string;
+  toolNames: string[];
+  toolOptions?: Record<string, Record<string, unknown>>;
+  maxPermission?: AiToolPermission;
+  enabled: boolean;
+}
+
+export interface RepositoryAiPackageAgentFile {
+  id: string;
+  name: string;
+  description?: string;
+  provider?: AiProvider;
+  modelProfileId: string;
+  systemPrompt?: string;
+  toolsetIds: string[];
+  directToolNames: string[];
+  directToolOptions: Record<string, Record<string, unknown>>;
+  options: Record<string, unknown>;
+  enabled: boolean;
+}
+
+export interface RepositoryAiPackageScriptFile {
+  id: string;
+  name: string;
+  type: ScriptType;
+  packaging: ScriptPackaging;
+  description?: string;
+  tags: string[];
+  source: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  pluginDependencies: PluginDependency[];
+  aiDependencies: AiDependency[];
+}
+
+export interface RepositoryAiPackageFile {
+  packageFileVersion: number;
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  entryAgentId: string;
+  models: RepositoryAiPackageModelFile[];
+  toolsets: RepositoryAiPackageToolsetFile[];
+  agents: RepositoryAiPackageAgentFile[];
+  scripts: RepositoryAiPackageScriptFile[];
+  externalDependencies: RepositoryAiPackageDependency[];
+  configTemplatePath?: string;
+}
+
+export interface RepositoryAiPackageDetail {
+  descriptor: RepositoryAiPackageDescriptor;
+  configTemplate: RepositoryConfigTemplateItem[];
+  packageFile: RepositoryAiPackageFile;
+}
+
+export interface RepositoryAiPackagePublishPreviewRequest {
+  agentProfileId: string;
+  packageId: string;
+}
+
+export interface RepositoryAiPackagePublishPreview {
+  entryAgentId: string;
+  modelIds: string[];
+  toolsetIds: string[];
+  agentIds: string[];
+  scriptIds: string[];
+  configTemplate: RepositoryConfigTemplateItem[];
+  externalDependencies: RepositoryAiPackageDependency[];
+}
+
+export interface RepositoryAiPackagePublishRequest {
+  agentProfileId: string;
+  packageId: string;
+  displayName?: string;
+  version: string;
+  owner?: string;
+  releaseNotes?: string;
+  tags?: string[];
+}
+
+export interface RepositoryAiPackageInstallResult {
+  installation: {
+    installationId: string;
+    repositoryId: string;
+    packageId: string;
+    name: string;
+    version: string;
+    latestVersion?: string;
+    entryAgentId: string;
+    owner?: string;
+    description?: string;
+    modelIds: string[];
+    toolsetIds: string[];
+    agentIds: string[];
+    scriptIds: string[];
+    installedAt?: string;
+    updatedAt?: string;
+  };
+  resolvedDependencies: RepositoryAiPackageDependency[];
 }
 
 export interface RepositoryInstallRequest {

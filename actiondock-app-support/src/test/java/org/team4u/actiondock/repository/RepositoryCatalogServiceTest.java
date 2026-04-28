@@ -309,6 +309,7 @@ class RepositoryCatalogServiceTest {
                         null,
                         "tools/demo-tool/tool.json"
                 )),
+                List.of(),
                 List.of()
         );
 
@@ -339,6 +340,7 @@ class RepositoryCatalogServiceTest {
                         null,
                         "tools/demo-tool/tool.json"
                 )),
+                List.of(),
                 List.of()
         );
 
@@ -362,7 +364,8 @@ class RepositoryCatalogServiceTest {
                         null,
                         null,
                         "plugins/demo-plugin/plugin.json"
-                ))
+                )),
+                List.of()
         );
 
         assertThatThrownBy(() -> RepositoryCatalogService.assertPluginVersionAvailable(
@@ -391,7 +394,8 @@ class RepositoryCatalogServiceTest {
                         null,
                         null,
                         "plugins/demo-plugin/plugin.json"
-                ))
+                )),
+                List.of()
         );
 
         assertThatCode(() -> RepositoryCatalogService.assertPluginVersionAvailable("repo-1", index, "demo-plugin", "1.0.1"))

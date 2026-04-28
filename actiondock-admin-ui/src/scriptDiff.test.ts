@@ -7,6 +7,7 @@ function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
     id: "user-query",
     name: "User Query",
     type: "GROOVY",
+    packaging: "TOOL",
     source: "return [message: 'ok']",
     inputSchema: {
       type: "object",

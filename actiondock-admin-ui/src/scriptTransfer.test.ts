@@ -12,6 +12,7 @@ describe("parseScriptImportBundle", () => {
             id: "hello-groovy",
             name: "Hello Groovy",
             type: "GROOVY",
+            packaging: "FLOW",
             source: "return [message: 'hello']",
             inputSchema: { type: "object", properties: {} },
             outputSchema: { type: "object", properties: {} },
@@ -35,6 +36,7 @@ describe("parseScriptImportBundle", () => {
     expect(scripts).toEqual([
       expect.objectContaining({
         id: "hello-groovy",
+        packaging: "FLOW",
         owner: "platform-team",
         description: "demo script",
         tags: ["demo", "ops"],

@@ -99,7 +99,8 @@ export function ScriptDefinitionTab({
             initialValues={{
               id: "",
               name: "",
-              type: "GROOVY"
+              type: "GROOVY",
+              packaging: "TOOL"
             }}
           >
             <Row gutter={12}>
@@ -126,7 +127,7 @@ export function ScriptDefinitionTab({
                   <Input disabled={mode === "edit" || isReadOnlyScript} placeholder="例如 hello-groovy" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12} xl={16}>
+              <Col xs={24} md={12} xl={12}>
                 <Form.Item
                   label="名称"
                   name="name"
@@ -135,7 +136,7 @@ export function ScriptDefinitionTab({
                   <Input placeholder="例如 Hello Groovy" disabled={isReadOnlyScript} />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12} xl={8}>
+              <Col xs={24} md={12} xl={6}>
                 <Form.Item label="类型" name="type">
                   <Select
                     disabled={isReadOnlyScript}
@@ -143,6 +144,17 @@ export function ScriptDefinitionTab({
                     options={[
                       { value: "GROOVY", label: "GROOVY" },
                       { value: "PYTHON", label: "PYTHON" }
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={12} xl={6}>
+                <Form.Item label="打包属性" name="packaging">
+                  <Select
+                    disabled={isReadOnlyScript}
+                    options={[
+                      { value: "TOOL", label: "TOOL" },
+                      { value: "FLOW", label: "FLOW" }
                     ]}
                   />
                 </Form.Item>

@@ -1,6 +1,7 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptStatus;
@@ -55,6 +56,9 @@ public class ScriptApplicationService {
             if (definition.getStatus() == null) {
                 definition.setStatus(ScriptStatus.DRAFT);
             }
+            if (definition.getPackaging() == null) {
+                definition.setPackaging(ScriptPackaging.TOOL);
+            }
             if (definition.getScope() == null) {
                 definition.setScope(ScriptScope.PERSONAL);
             }
@@ -66,6 +70,9 @@ public class ScriptApplicationService {
             }
             if (definition.getOwner() == null) {
                 definition.setOwner(existing.getOwner());
+            }
+            if (definition.getPackaging() == null) {
+                definition.setPackaging(existing.getPackaging());
             }
             if (definition.getDescription() == null) {
                 definition.setDescription(existing.getDescription());
@@ -241,6 +248,7 @@ public class ScriptApplicationService {
                 .setId(source.getId())
                 .setName(source.getName())
                 .setType(source.getType())
+                .setPackaging(source.getPackaging())
                 .setSource(source.getSource())
                 .setInputSchema(source.getInputSchema())
                 .setOutputSchema(source.getOutputSchema())

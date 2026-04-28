@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import { SaveOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent, type Key } from "react";
@@ -14,6 +14,9 @@ import {
   listAiModels,
   listAiTools,
   listAiToolsets,
+  listRepositories,
+  previewRepositoryAiPackagePublish,
+  publishRepositoryAiPackage,
   startAiAgentRun,
   testAiTool,
   testAiModel,
@@ -27,7 +30,20 @@ import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
 import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
 import { buildSystemSettingsSearch } from "../../settingsRouting";
-import type { AiAgentProfile, AiAgentRunSnapshot, AiCapability, AiMessage, AiModelProfile, AiModelProvider, AiTool, AiToolExecutionResult, AiToolset, ConfigValue } from "../../types";
+import type {
+  AiAgentProfile,
+  AiAgentRunSnapshot,
+  AiCapability,
+  AiMessage,
+  AiModelProfile,
+  AiModelProvider,
+  AiTool,
+  AiToolExecutionResult,
+  AiToolset,
+  ConfigValue,
+  RepositoryAiPackagePublishPreview,
+  RepositoryDefinition
+} from "../../types";
 import { formatDateTime, parseJsonText, prettyJson } from "../../utils";
 
 const MODEL_PROVIDERS: AiModelProvider[] = ["DASHSCOPE", "OPENAI", "OPENAI_COMPATIBLE", "ANTHROPIC", "GEMINI", "OLLAMA"];
@@ -55,6 +71,16 @@ interface AgentFormValues {
   toolsetIds: string[];
   enabled: boolean;
   optionsJson: string;
+}
+
+interface AiPackagePublishFormValues {
+  repositoryId: string;
+  packageId: string;
+  displayName?: string;
+  version: string;
+  owner?: string;
+  releaseNotes?: string;
+  tagsText?: string;
 }
 
 export function AiModelProfileDetailPage() {
@@ -234,16 +260,23 @@ export function AiModelProfileDetailPage() {
 export function AiAgentProfileDetailPage() {
   const { id } = useParams<{ id: string }>();
   const isCreate = !id;
+  const isManagedAgent = Boolean(id && (id.startsWith("pkg.") || id.startsWith("cap.")));
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<AgentFormValues>();
+  const [publishForm] = Form.useForm<AiPackagePublishFormValues>();
   const [messageApi, contextHolder] = message.useMessage();
   const [models, setModels] = useState<AiModelProfile[]>([]);
   const [toolsets, setToolsets] = useState<AiToolset[]>([]);
   const [tools, setTools] = useState<AiTool[]>([]);
+  const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [directToolNames, setDirectToolNames] = useState<string[]>([]);
   const [directToolOptions, setDirectToolOptions] = useState<ToolConfigMap>({});
   const [managerOpen, setManagerOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishPreview, setPublishPreview] = useState<RepositoryAiPackagePublishPreview | null>(null);
+  const [previewingPublish, setPreviewingPublish] = useState(false);
+  const [publishingPackage, setPublishingPackage] = useState(false);
   const [draftToolsetIds, setDraftToolsetIds] = useState<string[]>([]);
   const [draftDirectToolNames, setDraftDirectToolNames] = useState<string[]>([]);
   const [draftDirectToolOptions, setDraftDirectToolOptions] = useState<ToolConfigMap>({});
@@ -262,14 +295,15 @@ export function AiAgentProfileDetailPage() {
   const watchedToolsetIds = Form.useWatch("toolsetIds", form) ?? [];
 
   useEffect(() => {
-    void Promise.all([listAiModels(), listAiToolsets(), listAiTools()])
-      .then(([nextModels, nextToolsets, nextTools]) => {
+    void Promise.all([listAiModels(), listAiToolsets(), listAiTools(), listRepositories()])
+      .then(([nextModels, nextToolsets, nextTools, nextRepositories]) => {
         setModels(nextModels);
         setToolsets(nextToolsets);
         setTools(nextTools);
+        setRepositories(nextRepositories.filter((repository) => repository.enabled && repository.type !== "HTTP"));
       })
       .catch((error) => messageApi.error(error instanceof ApiError ? error.message : "加载 Agent 配置元数据失败"));
-  }, []);
+  }, [messageApi]);
 
   useEffect(() => {
     if (isCreate) {
@@ -582,6 +616,72 @@ export function AiAgentProfileDetailPage() {
     setManagerOpen(false);
   };
 
+  const openPublishModal = () => {
+    if (!id) {
+      return;
+    }
+    const preferredRepository = repositories.find((repository) => repository.usage !== "DEVELOPMENT") ?? repositories[0];
+    publishForm.setFieldsValue({
+      repositoryId: preferredRepository?.id,
+      packageId: id.replace(/[^a-zA-Z0-9._-]/g, "-"),
+      displayName: form.getFieldValue("name"),
+      version: "1.0.0",
+      owner: "",
+      releaseNotes: "",
+      tagsText: ""
+    });
+    setPublishPreview(null);
+    setPublishOpen(true);
+  };
+
+  const handlePreviewPublish = async () => {
+    if (!id) {
+      return;
+    }
+    setPreviewingPublish(true);
+    try {
+      const values = await publishForm.validateFields(["repositoryId", "packageId"]);
+      const preview = await previewRepositoryAiPackagePublish(values.repositoryId, {
+        agentProfileId: id,
+        packageId: values.packageId.trim()
+      });
+      setPublishPreview(preview);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "AI 能力包预览失败");
+    } finally {
+      setPreviewingPublish(false);
+    }
+  };
+
+  const handlePublishAiPackage = async () => {
+    if (!id) {
+      return;
+    }
+    setPublishingPackage(true);
+    try {
+      const values = await publishForm.validateFields();
+      await publishRepositoryAiPackage(values.repositoryId, {
+        agentProfileId: id,
+        packageId: values.packageId.trim(),
+        displayName: values.displayName?.trim() || undefined,
+        version: values.version.trim(),
+        owner: values.owner?.trim() || undefined,
+        releaseNotes: values.releaseNotes?.trim() || undefined,
+        tags: values.tagsText
+          ?.split(/[\n,，]/)
+          .map((item: string) => item.trim())
+          .filter(Boolean)
+      });
+      messageApi.success("AI 能力包已发布");
+      setPublishOpen(false);
+      setPublishPreview(null);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "AI 能力包发布失败");
+    } finally {
+      setPublishingPackage(false);
+    }
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
@@ -591,6 +691,9 @@ export function AiAgentProfileDetailPage() {
         onBack={() => navigate("/ai/agents")}
         actions={(
           <Space>
+            {!isCreate && !isManagedAgent ? (
+              <Button onClick={openPublishModal}>发布 AI 能力包</Button>
+            ) : null}
             <Button onClick={openToolManager}>管理工具</Button>
             <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>保存</Button>
           </Space>
@@ -771,6 +874,111 @@ export function AiAgentProfileDetailPage() {
                     ]}
                   />
                 </Drawer>
+                <Modal
+                  title="发布 AI 能力包"
+                  open={publishOpen}
+                  width={820}
+                  onCancel={() => {
+                    setPublishOpen(false);
+                    setPublishPreview(null);
+                  }}
+                  footer={(
+                    <Space>
+                      <Button onClick={() => {
+                        setPublishOpen(false);
+                        setPublishPreview(null);
+                      }}
+                      >
+                        取消
+                      </Button>
+                      <Button loading={previewingPublish} onClick={() => void handlePreviewPublish()}>预览依赖</Button>
+                      <Button type="primary" loading={publishingPackage} onClick={() => void handlePublishAiPackage()}>确认发布</Button>
+                    </Space>
+                  )}
+                >
+                  <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Form form={publishForm} layout="vertical">
+                      <Form.Item name="repositoryId" label="目标仓库" rules={[{ required: true, message: "请选择目标仓库" }]}>
+                        <Select
+                          showSearch
+                          optionFilterProp="label"
+                          options={repositories.map((repository) => ({
+                            value: repository.id,
+                            label: `${repository.id} (${repository.name})`
+                          }))}
+                        />
+                      </Form.Item>
+                      <Form.Item name="packageId" label="能力包 ID" rules={[{ required: true, message: "请输入能力包 ID" }]}>
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name="displayName" label="展示名称">
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name="version" label="版本" rules={[{ required: true, message: "请输入版本号" }]}>
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name="owner" label="Owner">
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name="tagsText" label="标签">
+                        <Input placeholder="多个标签用逗号或换行分隔" />
+                      </Form.Item>
+                      <Form.Item name="releaseNotes" label="发布说明">
+                        <Input.TextArea rows={4} />
+                      </Form.Item>
+                    </Form>
+                    {publishPreview ? (
+                      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                        <Descriptions bordered size="small" column={{ xs: 1, md: 3 }}>
+                          <Descriptions.Item label="入口 Agent">{publishPreview.entryAgentId}</Descriptions.Item>
+                          <Descriptions.Item label="模型">{publishPreview.modelIds.length}</Descriptions.Item>
+                          <Descriptions.Item label="工具集">{publishPreview.toolsetIds.length}</Descriptions.Item>
+                          <Descriptions.Item label="Agent">{publishPreview.agentIds.length}</Descriptions.Item>
+                          <Descriptions.Item label="脚本">{publishPreview.scriptIds.length}</Descriptions.Item>
+                          <Descriptions.Item label="外部依赖">{publishPreview.externalDependencies.length}</Descriptions.Item>
+                        </Descriptions>
+                        <Card size="small" title="闭包摘要">
+                          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                            <Typography.Text>模型: {publishPreview.modelIds.join(", ") || "无"}</Typography.Text>
+                            <Typography.Text>工具集: {publishPreview.toolsetIds.join(", ") || "无"}</Typography.Text>
+                            <Typography.Text>Agent: {publishPreview.agentIds.join(", ") || "无"}</Typography.Text>
+                            <Typography.Text>脚本: {publishPreview.scriptIds.join(", ") || "无"}</Typography.Text>
+                          </Space>
+                        </Card>
+                        <Card size="small" title="配置模板">
+                          {publishPreview.configTemplate.length > 0 ? (
+                            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                              {publishPreview.configTemplate.map((item) => (
+                                <Typography.Text key={item.key}>
+                                  <Typography.Text code>{item.key}</Typography.Text>
+                                  {item.secret ? " · 密钥" : ""}
+                                  {item.label ? ` · ${item.label}` : ""}
+                                </Typography.Text>
+                              ))}
+                            </Space>
+                          ) : (
+                            <Typography.Text type="secondary">无额外配置项</Typography.Text>
+                          )}
+                        </Card>
+                        <Card size="small" title="外部依赖">
+                          {publishPreview.externalDependencies.length > 0 ? (
+                            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                              {publishPreview.externalDependencies.map((dependency) => (
+                                <Typography.Text key={`${dependency.assetType}:${dependency.repositoryId}:${dependency.assetId}`}>
+                                  {dependency.assetType} · {dependency.repositoryId}/{dependency.assetId}@{dependency.version}
+                                </Typography.Text>
+                              ))}
+                            </Space>
+                          ) : (
+                            <Typography.Text type="secondary">所有依赖均已本地闭包打包</Typography.Text>
+                          )}
+                        </Card>
+                      </Space>
+                    ) : (
+                      <Alert type="info" showIcon message="建议先做依赖预览，确认会被打包的模型、工具集、脚本和外部依赖。" />
+                    )}
+                  </Space>
+                </Modal>
               </Space>
             )
           },

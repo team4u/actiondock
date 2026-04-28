@@ -17,6 +17,7 @@ public class ScriptDefinition {
     private String id;
     private String name;
     private ScriptType type = ScriptType.GROOVY;
+    private ScriptPackaging packaging = ScriptPackaging.TOOL;
     private String source;
     private Map<String, Object> inputSchema = SchemaValueCopier.copyMap(null);
     private Map<String, Object> outputSchema = SchemaValueCopier.copyMap(null);
@@ -68,6 +69,15 @@ public class ScriptDefinition {
 
     public ScriptDefinition setType(ScriptType type) {
         this.type = type;
+        return this;
+    }
+
+    public ScriptPackaging getPackaging() {
+        return packaging;
+    }
+
+    public ScriptDefinition setPackaging(ScriptPackaging packaging) {
+        this.packaging = packaging == null ? ScriptPackaging.TOOL : packaging;
         return this;
     }
 
@@ -312,6 +322,7 @@ public class ScriptDefinition {
         return new PublishedScriptSnapshot()
                 .setName(name)
                 .setType(type)
+                .setPackaging(packaging)
                 .setSource(source)
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
@@ -349,6 +360,7 @@ public class ScriptDefinition {
                 .setId(id)
                 .setName(snapshot.getName())
                 .setType(snapshot.getType())
+                .setPackaging(snapshot.getPackaging())
                 .setSource(snapshot.getSource())
                 .setInputSchema(snapshot.getInputSchema())
                 .setOutputSchema(snapshot.getOutputSchema())
@@ -369,7 +381,7 @@ public class ScriptDefinition {
                 .setDescription(description)
                 .setTags(tags)
                 .setPluginDependencies(pluginDependencies)
-                .setAiDependencies(aiDependencies)
+                .setAiDependencies(snapshot.getAiDependencies())
                 .setCreatedAt(createdAt)
                 .setUpdatedAt(updatedAt);
     }

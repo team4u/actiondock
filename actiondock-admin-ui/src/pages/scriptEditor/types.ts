@@ -8,6 +8,7 @@ import type {
   DevelopmentStatus,
   RepositoryToolDescriptor,
   ScriptDefinition,
+  ScriptPackaging,
   ScriptType
 } from "../../types";
 import type { SchemaEditorState } from "../../schema";
@@ -22,6 +23,7 @@ export interface ScriptEditorFormValues {
   id: string;
   name: string;
   type: ScriptType;
+  packaging: ScriptPackaging;
   description?: string;
 }
 

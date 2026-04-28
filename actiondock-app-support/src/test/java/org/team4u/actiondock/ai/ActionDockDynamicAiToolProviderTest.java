@@ -20,6 +20,7 @@ import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
@@ -40,6 +41,7 @@ class ActionDockDynamicAiToolProviderTest {
     void listsPublishedScriptsAndEnabledAgentsAsTools() {
         InMemoryScriptRepository scripts = new InMemoryScriptRepository();
         scripts.save(publishedScript("published-script", "Published Script"));
+        scripts.save(publishedScript("flow-script", "Flow Script", ScriptPackaging.FLOW));
         scripts.save(new ScriptDefinition()
                 .setId("draft-script")
                 .setName("Draft Script")
@@ -60,7 +62,8 @@ class ActionDockDynamicAiToolProviderTest {
         List<String> toolNames = provider.listTools().stream().map(AiTool::name).toList();
 
         assertThat(toolNames).contains("script.published-script", "agent.enabled-agent");
-        assertThat(toolNames).doesNotContain("script.draft-script", "agent.disabled-agent");
+        assertThat(toolNames).doesNotContain("script.flow-script", "script.draft-script", "agent.disabled-agent");
+        assertThat(provider.findTool("script.flow-script")).isEmpty();
     }
 
     @Test
@@ -189,10 +192,15 @@ class ActionDockDynamicAiToolProviderTest {
     }
 
     private static ScriptDefinition publishedScript(String id, String name) {
+        return publishedScript(id, name, ScriptPackaging.TOOL);
+    }
+
+    private static ScriptDefinition publishedScript(String id, String name, ScriptPackaging packaging) {
         ScriptDefinition script = new ScriptDefinition()
                 .setId(id)
                 .setName(name)
                 .setType(ScriptType.GROOVY)
+                .setPackaging(packaging)
                 .setStatus(ScriptStatus.PUBLISHED)
                 .setSource("return [message: 'Hello ' + input.name]")
                 .setInputSchema(Map.of(

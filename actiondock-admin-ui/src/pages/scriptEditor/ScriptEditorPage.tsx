@@ -237,6 +237,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         id: "",
         name: target.name ?? "",
         type: previewScriptType,
+        packaging: (watchedScriptValues?.packaging as "TOOL" | "FLOW" | undefined) ?? "TOOL",
         source: editor.sourceText,
         inputSchema: target.inputSchema ?? {},
         outputSchema: target.outputSchema ?? {},

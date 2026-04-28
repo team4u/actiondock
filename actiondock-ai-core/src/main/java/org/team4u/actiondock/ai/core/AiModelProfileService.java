@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class AiModelProfileService {
+    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
+
     private final AiModelProfileRepository repository;
     private final AiAgentProfileRepository agentProfileRepository;
 
@@ -31,6 +33,7 @@ public class AiModelProfileService {
 
     public AiModelProfile save(AiModelProfile profile) {
         validate(profile);
+        assertMutable(profile.getId());
         LocalDateTime now = LocalDateTime.now();
         AiModelProfile existing = repository.findById(profile.getId()).orElse(null);
         if (existing == null) {
@@ -43,6 +46,7 @@ public class AiModelProfileService {
     }
 
     public void delete(String id) {
+        assertMutable(id);
         if (agentProfileRepository != null) {
             agentProfileRepository.findAll().stream()
                     .filter(agent -> id != null && id.equals(agent.getModelProfileId()))
@@ -69,6 +73,12 @@ public class AiModelProfileService {
         }
         if (profile.getModelName() == null || profile.getModelName().isBlank()) {
             throw new IllegalArgumentException("模型名称不能为空");
+        }
+    }
+
+    private void assertMutable(String id) {
+        if (id != null && id.startsWith(MANAGED_INTERNAL_PREFIX)) {
+            throw new IllegalArgumentException("AI 能力包托管模型不允许直接修改: " + id);
         }
     }
 }

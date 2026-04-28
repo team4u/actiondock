@@ -22,6 +22,12 @@ import type {
   ConfigValueDetail,
   ConfigValueRequest,
   DevelopmentStatus,
+  RepositoryAiPackageDescriptor,
+  RepositoryAiPackageDetail,
+  RepositoryAiPackageInstallResult,
+  RepositoryAiPackagePublishPreview,
+  RepositoryAiPackagePublishPreviewRequest,
+  RepositoryAiPackagePublishRequest,
   RepositoryDefinition,
   RepositoryInstallRequest,
   RepositoryPluginDescriptor,
@@ -653,6 +659,10 @@ export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
   return request<RepositoryToolDescriptor[]>("/api/repositories/tools");
 }
 
+export function listRepositoryAiPackages(): Promise<RepositoryAiPackageDescriptor[]> {
+  return request<RepositoryAiPackageDescriptor[]>("/api/repositories/ai-packages");
+}
+
 export function listRepositoryPlugins(): Promise<RepositoryPluginDescriptor[]> {
   return request<RepositoryPluginDescriptor[]>("/api/repositories/plugins");
 }
@@ -665,8 +675,16 @@ export function listPluginsByRepository(id: string): Promise<RepositoryPluginDes
   return request<RepositoryPluginDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/plugins`);
 }
 
+export function listAiPackagesByRepository(id: string): Promise<RepositoryAiPackageDescriptor[]> {
+  return request<RepositoryAiPackageDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/ai-packages`);
+}
+
 export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
   return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}`);
+}
+
+export function getRepositoryAiPackage(repositoryId: string, packageId: string): Promise<RepositoryAiPackageDetail> {
+  return request<RepositoryAiPackageDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}`);
 }
 
 export function installRepositoryTool(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<void> {
@@ -749,6 +767,28 @@ export function publishRepositoryTool(repositoryId: string, payload: RepositoryP
   });
 }
 
+export function previewRepositoryAiPackagePublish(
+  repositoryId: string,
+  payload: RepositoryAiPackagePublishPreviewRequest
+): Promise<RepositoryAiPackagePublishPreview> {
+  return request<RepositoryAiPackagePublishPreview>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-ai-package-preview`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function publishRepositoryAiPackage(
+  repositoryId: string,
+  payload: RepositoryAiPackagePublishRequest
+): Promise<RepositoryAiPackageDescriptor> {
+  return request<RepositoryAiPackageDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-ai-package`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
 export function previewRepositoryPublishConfig(
   payload: RepositoryPublishConfigPreviewRequest
 ): Promise<RepositoryPublishConfigPreview> {
@@ -764,6 +804,24 @@ export function publishRepositoryPlugin(repositoryId: string, payload: Repositor
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
+  });
+}
+
+export function installRepositoryAiPackage(repositoryId: string, packageId: string): Promise<RepositoryAiPackageInstallResult> {
+  return request<RepositoryAiPackageInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}/install`, {
+    method: "POST"
+  });
+}
+
+export function updateRepositoryAiPackage(repositoryId: string, packageId: string): Promise<RepositoryAiPackageInstallResult> {
+  return request<RepositoryAiPackageInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}/update`, {
+    method: "POST"
+  });
+}
+
+export function uninstallRepositoryAiPackage(repositoryId: string, packageId: string): Promise<void> {
+  return request<void>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}`, {
+    method: "DELETE"
   });
 }
 

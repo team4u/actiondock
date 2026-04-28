@@ -16,6 +16,7 @@ import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
+import org.team4u.actiondock.domain.port.RepositoryAiPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
@@ -30,6 +31,7 @@ import org.team4u.actiondock.storage.jpa.adapter.JpaAiCallLogRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaAiModelProfileRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaAiToolsetRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaPluginRegistryRepositoryAdapter;
+import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryAiPackageInstallationRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaRepositoryDefinitionRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaScriptRepositoryAdapter;
 import org.team4u.actiondock.storage.jpa.adapter.JpaScriptScheduleRepositoryAdapter;
@@ -46,6 +48,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataAiCallLogRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiModelProfileRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiToolsetRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataPluginRegistrationRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryAiPackageInstallationRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryDefinitionRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptScheduleEntityRepository;
@@ -153,6 +156,14 @@ public class StorageConfiguration {
     @Bean
     public RepositoryToolInstallationRepository repositoryToolInstallationRepository(SpringDataRepositoryToolInstallationRepository repository) {
         return new JpaRepositoryToolInstallationRepositoryAdapter(repository);
+    }
+
+    @Bean
+    public RepositoryAiPackageInstallationRepository repositoryAiPackageInstallationRepository(
+            SpringDataRepositoryAiPackageInstallationRepository repository,
+            JsonCodec jsonCodec
+    ) {
+        return new JpaRepositoryAiPackageInstallationRepositoryAdapter(repository, jsonCodec);
     }
 
     /**

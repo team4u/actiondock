@@ -110,6 +110,7 @@ export function useScriptEditor({
       id: script.id,
       name: script.name,
       type: script.type,
+      packaging: script.packaging,
       description: script.description ?? ""
     });
     setSourceText(script.source);
@@ -135,6 +136,7 @@ export function useScriptEditor({
       id: draft.id,
       name: draft.name,
       type: draft.type,
+      packaging: draft.packaging,
       description: draft.description ?? ""
     });
     form.setFields([{ name: "id", errors: [] }]);
@@ -149,6 +151,7 @@ export function useScriptEditor({
       id: "",
       name: "",
       type: "GROOVY",
+      packaging: "TOOL",
       source: getDefaultSource("GROOVY"),
       inputSchema: {},
       outputSchema: {},
@@ -282,6 +285,7 @@ export function useScriptEditor({
       id: values.id.trim(),
       name: values.name.trim(),
       type: values.type,
+      packaging: values.packaging,
       source: sourceText,
       inputSchema,
       outputSchema,

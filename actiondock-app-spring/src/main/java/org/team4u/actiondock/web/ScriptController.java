@@ -18,6 +18,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/scripts")
 public class ScriptController {
+    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
+
     private final ScriptApplicationService scriptApplicationService;
     private final ExecutionApplicationService executionApplicationService;
     private final ScriptScheduleDispatcher scriptScheduleDispatcher;
@@ -42,8 +44,10 @@ public class ScriptController {
      * @return API 响应，包含脚本定义列表
      */
     @GetMapping
-    public ApiResponse<List<ScriptDefinition>> list(@RequestParam(defaultValue = "false") boolean includeUiSchema) {
+    public ApiResponse<List<ScriptDefinition>> list(@RequestParam(defaultValue = "false") boolean includeUiSchema,
+                                                    @RequestParam(defaultValue = "false") boolean includeManaged) {
         return ApiResponse.success(scriptApplicationService.list().stream()
+                .filter(definition -> includeManaged || !definition.getId().startsWith(MANAGED_INTERNAL_PREFIX))
                 .map(definition -> toResponse(definition, includeUiSchema))
                 .toList());
     }

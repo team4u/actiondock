@@ -107,6 +107,22 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
     }
 
+    @GetMapping("/ai-packages")
+    public ApiResponse<List<RepositoryCatalogService.RepositoryAiPackageDescriptor>> listAllAiPackages() {
+        return ApiResponse.success(repositoryCatalogService.listAllRepositoryAiPackages());
+    }
+
+    @GetMapping("/{id}/ai-packages")
+    public ApiResponse<List<RepositoryCatalogService.RepositoryAiPackageDescriptor>> listRepositoryAiPackages(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listRepositoryAiPackages(id));
+    }
+
+    @GetMapping("/{id}/ai-packages/{packageId}")
+    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageDetail> aiPackageDetail(@PathVariable String id,
+                                                                                           @PathVariable String packageId) {
+        return ApiResponse.success(repositoryCatalogService.getRepositoryAiPackage(id, packageId));
+    }
+
     @GetMapping("/plugins")
     public ApiResponse<List<RepositoryCatalogService.RepositoryPluginDescriptor>> listAllPlugins() {
         return ApiResponse.success(repositoryCatalogService.listAllRepositoryPlugins());
@@ -220,6 +236,20 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.publishTool(id, request), "发布完成");
     }
 
+    @PostMapping("/{id}/publish-ai-package-preview")
+    public ApiResponse<RepositoryCatalogService.RepositoryAiPackagePublishPreview> previewPublishAiPackage(
+            @PathVariable String id,
+            @RequestBody RepositoryCatalogService.RepositoryAiPackagePublishPreviewRequest request) {
+        return ApiResponse.success(repositoryCatalogService.previewPublishAiPackage(id, request));
+    }
+
+    @PostMapping("/{id}/publish-ai-package")
+    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageDescriptor> publishAiPackage(
+            @PathVariable String id,
+            @RequestBody RepositoryCatalogService.RepositoryAiPackagePublishRequest request) {
+        return ApiResponse.success(repositoryCatalogService.publishAiPackage(id, request), "AI 能力包发布完成");
+    }
+
     @PostMapping("/publish-config-preview")
     public ApiResponse<RepositoryCatalogService.RepositoryPublishConfigPreview> previewPublishConfig(
             @RequestBody RepositoryCatalogService.RepositoryPublishConfigPreviewRequest request) {
@@ -230,5 +260,24 @@ public class RepositoryController {
     public ApiResponse<RepositoryCatalogService.RepositoryPluginDescriptor> publishPlugin(@PathVariable String id,
                                                                                          @RequestBody RepositoryCatalogService.RepositoryPluginPublishRequest request) {
         return ApiResponse.success(repositoryCatalogService.publishPlugin(id, request), "插件发布完成");
+    }
+
+    @PostMapping("/{id}/ai-packages/{packageId}/install")
+    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageInstallResult> installAiPackage(@PathVariable String id,
+                                                                                                   @PathVariable String packageId) {
+        return ApiResponse.success(repositoryCatalogService.installAiPackage(id, packageId), "AI 能力包安装完成");
+    }
+
+    @PostMapping("/{id}/ai-packages/{packageId}/update")
+    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageInstallResult> updateAiPackage(@PathVariable String id,
+                                                                                                  @PathVariable String packageId) {
+        return ApiResponse.success(repositoryCatalogService.updateAiPackage(id, packageId), "AI 能力包更新完成");
+    }
+
+    @DeleteMapping("/{id}/ai-packages/{packageId}")
+    public ApiResponse<Void> uninstallAiPackage(@PathVariable String id,
+                                                @PathVariable String packageId) {
+        repositoryCatalogService.uninstallAiPackage(id, packageId);
+        return ApiResponse.success(null, "AI 能力包已卸载");
     }
 }

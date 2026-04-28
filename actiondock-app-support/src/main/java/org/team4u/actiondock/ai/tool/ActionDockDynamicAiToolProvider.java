@@ -21,6 +21,7 @@ import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
@@ -36,6 +37,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
     static final String SCRIPT_TOOL_PREFIX = "script.";
     static final String AGENT_TOOL_PREFIX = "agent.";
     static final String AGENT_PROFILE_CHAIN_METADATA_KEY = "agentProfileChain";
+    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
 
     private final ScriptRepository scriptRepository;
     private final AiAgentProfileRepository agentProfileRepository;
@@ -57,12 +59,12 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
     public List<AiTool> listTools() {
         List<AiTool> tools = new ArrayList<>();
         scriptRepository.findAll().stream()
-                .filter(script -> script.getPublishedSnapshot() != null)
+                .filter(this::isPublishedToolScript)
                 .sorted(java.util.Comparator.comparing(ScriptDefinition::getId))
                 .map(PublishedScriptTool::new)
                 .forEach(tools::add);
         agentProfileRepository.findAll().stream()
-                .filter(AiAgentProfile::isEnabled)
+                .filter(this::isVisibleAgentTool)
                 .sorted(java.util.Comparator.comparing(AiAgentProfile::getId))
                 .map(AgentProfileTool::new)
                 .forEach(tools::add);
@@ -76,15 +78,29 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
         }
         if (name.startsWith(SCRIPT_TOOL_PREFIX)) {
             return scriptRepository.findById(name.substring(SCRIPT_TOOL_PREFIX.length()))
-                    .filter(script -> script.getPublishedSnapshot() != null)
+                    .filter(this::isPublishedToolScript)
                     .map(PublishedScriptTool::new);
         }
         if (name.startsWith(AGENT_TOOL_PREFIX)) {
             return agentProfileRepository.findById(name.substring(AGENT_TOOL_PREFIX.length()))
-                    .filter(AiAgentProfile::isEnabled)
+                    .filter(this::isVisibleAgentTool)
                     .map(AgentProfileTool::new);
         }
         return Optional.empty();
+    }
+
+    private boolean isPublishedToolScript(ScriptDefinition script) {
+        PublishedScriptSnapshot snapshot = script == null ? null : script.getPublishedSnapshot();
+        return script != null
+                && !script.getId().startsWith(MANAGED_INTERNAL_PREFIX)
+                && snapshot != null
+                && snapshot.getPackaging() == ScriptPackaging.TOOL;
+    }
+
+    private boolean isVisibleAgentTool(AiAgentProfile profile) {
+        return profile != null
+                && profile.isEnabled()
+                && !profile.getId().startsWith(MANAGED_INTERNAL_PREFIX);
     }
 
     private final class PublishedScriptTool implements AiTool {

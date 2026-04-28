@@ -30,6 +30,7 @@ export function buildDuplicatedScriptDefinition(
     id: suggestDuplicateScriptId(source.id, existingIds),
     name: `${baseName} 副本`,
     type: source.type,
+    packaging: source.packaging,
     source: source.source,
     inputSchema: cloneSchema(source.inputSchema),
     outputSchema: cloneSchema(source.outputSchema),

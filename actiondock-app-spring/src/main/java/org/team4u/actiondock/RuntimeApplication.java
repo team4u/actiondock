@@ -21,6 +21,7 @@ import org.team4u.actiondock.storage.jpa.entity.AiModelProfileEntity;
 import org.team4u.actiondock.storage.jpa.entity.AiToolsetEntity;
 import org.team4u.actiondock.storage.jpa.entity.ApiAccessTokenEntity;
 import org.team4u.actiondock.storage.jpa.entity.PluginRegistrationEntity;
+import org.team4u.actiondock.storage.jpa.entity.RepositoryAiPackageInstallationEntity;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
 import org.team4u.actiondock.storage.jpa.entity.ScriptScheduleEntity;
 import org.team4u.actiondock.storage.jpa.entity.ConfigValueEntity;
@@ -35,6 +36,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataAiToolsetRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataConfigValueRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataPluginRegistrationRepository;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryAiPackageInstallationRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptScheduleEntityRepository;
 import org.team4u.actiondock.web.ScriptController;
@@ -50,6 +52,7 @@ import org.team4u.actiondock.web.ScriptController;
         AiModelProfileEntity.class,
         AiAgentProfileEntity.class,
         AiToolsetEntity.class,
+        RepositoryAiPackageInstallationEntity.class,
         AiCallLogEntity.class,
         AiAgentRunEntity.class,
         AiAgentStepEntity.class,
@@ -65,6 +68,7 @@ import org.team4u.actiondock.web.ScriptController;
         SpringDataAiModelProfileRepository.class,
         SpringDataAiAgentProfileRepository.class,
         SpringDataAiToolsetRepository.class,
+        SpringDataRepositoryAiPackageInstallationRepository.class,
         SpringDataAiCallLogRepository.class,
         SpringDataAiAgentRunRepository.class,
         SpringDataAiAgentStepRepository.class,

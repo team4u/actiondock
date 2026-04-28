@@ -4,6 +4,7 @@ import type {
   PublishedScriptSnapshot,
   ScriptSchedule,
   ScriptDefinition,
+  ScriptPackaging,
   ScriptStatus,
   ScriptType
 } from "./types";
@@ -45,6 +46,7 @@ export interface ConfigValueImportAnalysis {
 }
 
 const SUPPORTED_SCRIPT_TYPES: ScriptType[] = ["GROOVY", "PYTHON"];
+const SUPPORTED_SCRIPT_PACKAGING: ScriptPackaging[] = ["TOOL", "FLOW"];
 const SUPPORTED_STATUSES: ScriptStatus[] = ["DRAFT", "PUBLISHED"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -124,6 +126,7 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
 
   const name = value.name;
   const type = value.type;
+  const packaging = value.packaging;
   const source = value.source;
 
   if (!isNonEmptyString(name)) {
@@ -132,6 +135,9 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
   if (!SUPPORTED_SCRIPT_TYPES.includes(type as ScriptType)) {
     throw new Error(`${fieldName}.type 仅支持 ${SUPPORTED_SCRIPT_TYPES.join(" / ")}`);
   }
+  if (packaging != null && !SUPPORTED_SCRIPT_PACKAGING.includes(packaging as ScriptPackaging)) {
+    throw new Error(`${fieldName}.packaging 仅支持 ${SUPPORTED_SCRIPT_PACKAGING.join(" / ")}`);
+  }
   if (!isNonEmptyString(source)) {
     throw new Error(`${fieldName}.source 缺少合法值`);
   }
@@ -139,6 +145,7 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
   return {
     name: name.trim(),
     type: type as ScriptType,
+    packaging: (packaging as ScriptPackaging | undefined) ?? "TOOL",
     source,
     inputSchema: assertSchemaObject(value.inputSchema, `${fieldName}.inputSchema`),
     outputSchema: assertSchemaObject(value.outputSchema, `${fieldName}.outputSchema`)
@@ -154,6 +161,7 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
   const name = value.name;
   const source = value.source;
   const type = value.type;
+  const packaging = value.packaging;
   const status = value.status;
   const version = value.version;
 
@@ -169,6 +177,9 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
   if (!SUPPORTED_SCRIPT_TYPES.includes(type as ScriptType)) {
     throw new Error(`第 ${index + 1} 条脚本 ${id} 的 type 仅支持 ${SUPPORTED_SCRIPT_TYPES.join(" / ")}`);
   }
+  if (packaging != null && !SUPPORTED_SCRIPT_PACKAGING.includes(packaging as ScriptPackaging)) {
+    throw new Error(`第 ${index + 1} 条脚本 ${id} 的 packaging 仅支持 ${SUPPORTED_SCRIPT_PACKAGING.join(" / ")}`);
+  }
   if (!SUPPORTED_STATUSES.includes(status as ScriptStatus)) {
     throw new Error(`第 ${index + 1} 条脚本 ${id} 的 status 不合法`);
   }
@@ -180,6 +191,7 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
     id: id.trim(),
     name: name.trim(),
     type: type as ScriptType,
+    packaging: (packaging as ScriptPackaging | undefined) ?? "TOOL",
     source,
     inputSchema: assertSchemaObject(value.inputSchema, `第 ${index + 1} 条脚本 ${id} 的 inputSchema`),
     outputSchema: assertSchemaObject(value.outputSchema, `第 ${index + 1} 条脚本 ${id} 的 outputSchema`),

@@ -43,6 +43,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/ai")
 public class AiController {
+    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
+    private static final String MANAGED_ENTRY_PREFIX = "cap.";
+
     private final AiModelProfileService modelProfileService;
     private final AiAgentProfileService agentProfileService;
     private final AiToolsetService toolsetService;
@@ -68,8 +71,10 @@ public class AiController {
     }
 
     @GetMapping("/models")
-    public ApiResponse<List<AiModelProfile>> listModels() {
-        return ApiResponse.success(modelProfileService.list());
+    public ApiResponse<List<AiModelProfile>> listModels(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean includeManaged) {
+        return ApiResponse.success(modelProfileService.list().stream()
+                .filter(profile -> includeManaged || !profile.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .toList());
     }
 
     @PostMapping("/models")
@@ -101,8 +106,10 @@ public class AiController {
     }
 
     @GetMapping("/agents")
-    public ApiResponse<List<AiAgentProfile>> listAgents() {
-        return ApiResponse.success(agentProfileService.list());
+    public ApiResponse<List<AiAgentProfile>> listAgents(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean includeManaged) {
+        return ApiResponse.success(agentProfileService.list().stream()
+                .filter(profile -> includeManaged || (!profile.getId().startsWith(MANAGED_INTERNAL_PREFIX) && !profile.getId().startsWith(MANAGED_ENTRY_PREFIX)))
+                .toList());
     }
 
     @PostMapping("/agents")
@@ -134,8 +141,10 @@ public class AiController {
     }
 
     @GetMapping("/toolsets")
-    public ApiResponse<List<AiToolset>> listToolsets() {
-        return ApiResponse.success(toolsetService.list());
+    public ApiResponse<List<AiToolset>> listToolsets(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean includeManaged) {
+        return ApiResponse.success(toolsetService.list().stream()
+                .filter(toolset -> includeManaged || !toolset.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .toList());
     }
 
     @PostMapping("/toolsets")

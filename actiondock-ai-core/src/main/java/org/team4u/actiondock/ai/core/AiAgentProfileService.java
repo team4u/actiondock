@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class AiAgentProfileService {
+    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
+    private static final String MANAGED_ENTRY_PREFIX = "cap.";
+
     private final AiAgentProfileRepository repository;
     private final AiModelProfileRepository modelProfileRepository;
     private final AiToolsetRepository toolsetRepository;
@@ -45,6 +48,7 @@ public class AiAgentProfileService {
 
     public AiAgentProfile save(AiAgentProfile profile) {
         validate(profile);
+        assertMutable(profile.getId());
         LocalDateTime now = LocalDateTime.now();
         AiAgentProfile existing = repository.findById(profile.getId()).orElse(null);
         if (existing == null) {
@@ -57,6 +61,7 @@ public class AiAgentProfileService {
     }
 
     public void delete(String id) {
+        assertMutable(id);
         repository.deleteById(id);
     }
 
@@ -87,6 +92,15 @@ public class AiAgentProfileService {
                     throw new IllegalArgumentException("AI 工具集不存在: " + toolsetId);
                 }
             }
+        }
+    }
+
+    private void assertMutable(String id) {
+        if (id == null) {
+            return;
+        }
+        if (id.startsWith(MANAGED_INTERNAL_PREFIX) || id.startsWith(MANAGED_ENTRY_PREFIX)) {
+            throw new IllegalArgumentException("AI 能力包托管 Agent 不允许直接修改: " + id);
         }
     }
 }

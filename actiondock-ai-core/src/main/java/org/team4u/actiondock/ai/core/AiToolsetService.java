@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class AiToolsetService {
+    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
+
     private final AiToolsetRepository repository;
     private final AiAgentProfileRepository agentProfileRepository;
     private final AiToolRegistry toolRegistry;
@@ -40,6 +42,7 @@ public class AiToolsetService {
 
     public AiToolset save(AiToolset toolset) {
         validate(toolset);
+        assertMutable(toolset.getId());
         LocalDateTime now = LocalDateTime.now();
         AiToolset existing = repository.findById(toolset.getId()).orElse(null);
         if (existing == null) {
@@ -52,6 +55,7 @@ public class AiToolsetService {
     }
 
     public void delete(String id) {
+        assertMutable(id);
         if (agentProfileRepository != null) {
             agentProfileRepository.findAll().stream()
                     .filter(agent -> agent.getToolsetIds().contains(id))
@@ -80,6 +84,12 @@ public class AiToolsetService {
                 }
                 toolRegistry.getTool(toolName);
             }
+        }
+    }
+
+    private void assertMutable(String id) {
+        if (id != null && id.startsWith(MANAGED_INTERNAL_PREFIX)) {
+            throw new IllegalArgumentException("AI 能力包托管工具集不允许直接修改: " + id);
         }
     }
 }

@@ -26,6 +26,8 @@ public class ScriptEntity {
 
     @Column(nullable = false)
     private String type;
+    @Column(nullable = false)
+    private String packaging;
 
     @Lob
     @Column(nullable = false)
@@ -40,6 +42,7 @@ public class ScriptEntity {
     private String publishedName;
 
     private String publishedType;
+    private String publishedPackaging;
 
     @Lob
     private String publishedSource;
@@ -82,6 +85,8 @@ public class ScriptEntity {
     public void setName(String name) { this.name = name; }
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
+    public String getPackaging() { return packaging; }
+    public void setPackaging(String packaging) { this.packaging = packaging; }
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
     public String getInputSchemaJson() { return inputSchemaJson; }
@@ -92,6 +97,8 @@ public class ScriptEntity {
     public void setPublishedName(String publishedName) { this.publishedName = publishedName; }
     public String getPublishedType() { return publishedType; }
     public void setPublishedType(String publishedType) { this.publishedType = publishedType; }
+    public String getPublishedPackaging() { return publishedPackaging; }
+    public void setPublishedPackaging(String publishedPackaging) { this.publishedPackaging = publishedPackaging; }
     public String getPublishedSource() { return publishedSource; }
     public void setPublishedSource(String publishedSource) { this.publishedSource = publishedSource; }
     public String getPublishedInputSchemaJson() { return publishedInputSchemaJson; }

@@ -3,6 +3,7 @@ package org.team4u.actiondock.application;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptStatus;
@@ -45,6 +46,7 @@ class ScriptApplicationServiceTest {
 
         assertThat(saved.getVersion()).isEqualTo(1);
         assertThat(saved.getStatus()).isEqualTo(ScriptStatus.DRAFT);
+        assertThat(saved.getPackaging()).isEqualTo(ScriptPackaging.TOOL);
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isEqualTo(saved.getCreatedAt());
@@ -139,6 +141,7 @@ class ScriptApplicationServiceTest {
                 .setId("script-1")
                 .setName("Draft")
                 .setType(ScriptType.GROOVY)
+                .setPackaging(ScriptPackaging.FLOW)
                 .setSource("return [message: 'draft']")
                 .setInputSchema(Map.of("type", "object"))
                 .setOutputSchema(Map.of("type", "object"))
@@ -151,6 +154,8 @@ class ScriptApplicationServiceTest {
         assertThat(published.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
         assertThat(published.getVersion()).isEqualTo(3);
         assertThat(published.getPublishedSnapshot()).isNotNull();
+        assertThat(published.getPackaging()).isEqualTo(ScriptPackaging.FLOW);
+        assertThat(published.getPublishedSnapshot().getPackaging()).isEqualTo(ScriptPackaging.FLOW);
         assertThat(published.getPublishedSnapshot().getSource()).isEqualTo("return [message: 'draft']");
         assertThat(published.getHasUnpublishedChanges()).isFalse();
         assertThat(published.getUpdatedAt()).isNotNull();
@@ -198,10 +203,12 @@ class ScriptApplicationServiceTest {
                 .setId("script-1")
                 .setName("Draft")
                 .setType(ScriptType.PYTHON)
+                .setPackaging(ScriptPackaging.TOOL)
                 .setSource("return {'message': 'draft'}")
                 .setPublishedSnapshot(new PublishedScriptSnapshot()
                         .setName("Live")
                         .setType(ScriptType.GROOVY)
+                        .setPackaging(ScriptPackaging.FLOW)
                         .setSource("return [message: 'live']")
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("properties", Map.of("message", Map.of("type", "string")))))
@@ -212,6 +219,7 @@ class ScriptApplicationServiceTest {
 
         assertThat(published.getName()).isEqualTo("Live");
         assertThat(published.getType()).isEqualTo(ScriptType.GROOVY);
+        assertThat(published.getPackaging()).isEqualTo(ScriptPackaging.FLOW);
         assertThat(published.getSource()).isEqualTo("return [message: 'live']");
         assertThat(published.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
         assertThat(published.getHasUnpublishedChanges()).isFalse();
@@ -223,10 +231,12 @@ class ScriptApplicationServiceTest {
                 .setId("script-1")
                 .setName("Draft")
                 .setType(ScriptType.PYTHON)
+                .setPackaging(ScriptPackaging.TOOL)
                 .setSource("return {'message': 'draft'}")
                 .setPublishedSnapshot(new PublishedScriptSnapshot()
                         .setName("Live")
                         .setType(ScriptType.GROOVY)
+                        .setPackaging(ScriptPackaging.FLOW)
                         .setSource("return [message: 'live']")
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("type", "object")))
@@ -238,6 +248,7 @@ class ScriptApplicationServiceTest {
 
         assertThat(discarded.getName()).isEqualTo("Live");
         assertThat(discarded.getType()).isEqualTo(ScriptType.GROOVY);
+        assertThat(discarded.getPackaging()).isEqualTo(ScriptPackaging.FLOW);
         assertThat(discarded.getSource()).isEqualTo("return [message: 'live']");
         assertThat(discarded.getVersion()).isEqualTo(5);
         assertThat(discarded.getHasUnpublishedChanges()).isFalse();

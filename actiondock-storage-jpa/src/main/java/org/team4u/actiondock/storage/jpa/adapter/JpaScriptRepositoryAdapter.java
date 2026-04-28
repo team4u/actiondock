@@ -7,6 +7,7 @@ import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
+import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
@@ -63,11 +64,13 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setId(definition.getId());
         entity.setName(definition.getName());
         entity.setType(definition.getType().name());
+        entity.setPackaging(definition.getPackaging().name());
         entity.setSource(definition.getSource());
         entity.setInputSchemaJson(jsonCodec.write(definition.getInputSchema()));
         entity.setOutputSchemaJson(jsonCodec.write(definition.getOutputSchema()));
         entity.setPublishedName(publishedSnapshot == null ? null : publishedSnapshot.getName());
         entity.setPublishedType(publishedSnapshot == null ? null : publishedSnapshot.getType().name());
+        entity.setPublishedPackaging(publishedSnapshot == null ? null : publishedSnapshot.getPackaging().name());
         entity.setPublishedSource(publishedSnapshot == null ? null : publishedSnapshot.getSource());
         entity.setPublishedInputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getInputSchema()));
         entity.setPublishedOutputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getOutputSchema()));
@@ -107,6 +110,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setId(entity.getId())
                 .setName(entity.getName())
                 .setType(ScriptType.valueOf(entity.getType()))
+                .setPackaging(entity.getPackaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(entity.getPackaging()))
                 .setSource(entity.getSource())
                 .setInputSchema(jsonCodec.readMap(entity.getInputSchemaJson()))
                 .setOutputSchema(jsonCodec.readMap(entity.getOutputSchemaJson()))
@@ -139,7 +143,8 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
      * @return 已发布快照，所有 published 字段为空时返回 null
      */
     private PublishedScriptSnapshot toSnapshot(ScriptEntity entity) {
-        if (entity.getPublishedType() == null && entity.getPublishedSource() == null && entity.getPublishedName() == null
+        if (entity.getPublishedType() == null && entity.getPublishedPackaging() == null
+                && entity.getPublishedSource() == null && entity.getPublishedName() == null
                 && entity.getPublishedInputSchemaJson() == null && entity.getPublishedOutputSchemaJson() == null) {
             return null;
         }
@@ -147,6 +152,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         return new PublishedScriptSnapshot()
                 .setName(entity.getPublishedName())
                 .setType(entity.getPublishedType() == null ? ScriptType.GROOVY : ScriptType.valueOf(entity.getPublishedType()))
+                .setPackaging(entity.getPublishedPackaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(entity.getPublishedPackaging()))
                 .setSource(entity.getPublishedSource())
                 .setInputSchema(jsonCodec.readMap(entity.getPublishedInputSchemaJson()))
                 .setOutputSchema(jsonCodec.readMap(entity.getPublishedOutputSchemaJson()))

@@ -46,6 +46,7 @@ import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
+import org.team4u.actiondock.domain.port.RepositoryAiPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -271,9 +272,13 @@ public class RuntimeConfiguration {
     @Bean
     public RepositoryCatalogService repositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                                              RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+                                                             RepositoryAiPackageInstallationRepository repositoryAiPackageInstallationRepository,
                                                              ScriptRepository scriptRepository,
                                                              ScriptScheduleRepository scriptScheduleRepository,
                                                              ConfigValueRepository configValueRepository,
+                                                             AiModelProfileRepository aiModelProfileRepository,
+                                                             AiAgentProfileRepository aiAgentProfileRepository,
+                                                             AiToolsetRepository aiToolsetRepository,
                                                              ScriptApplicationService scriptApplicationService,
                                                              ConfigValueApplicationService configValueApplicationService,
                                                              PluginRuntimeService pluginRuntimeService,
@@ -283,9 +288,13 @@ public class RuntimeConfiguration {
         return new RepositoryCatalogService(
                 repositoryDefinitionRepository,
                 repositoryToolInstallationRepository,
+                repositoryAiPackageInstallationRepository,
                 scriptRepository,
                 scriptScheduleRepository,
                 configValueRepository,
+                aiModelProfileRepository,
+                aiAgentProfileRepository,
+                aiToolsetRepository,
                 scriptApplicationService,
                 configValueApplicationService,
                 pluginRuntimeService,

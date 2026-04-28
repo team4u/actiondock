@@ -7,6 +7,7 @@ function buildScriptDefinition(): ScriptDefinition {
     id: "hello-groovy",
     name: "Hello Groovy",
     type: "GROOVY",
+    packaging: "FLOW",
     source: "return [message: 'hello']",
     inputSchema: {
       type: "object",
@@ -29,6 +30,7 @@ function buildScriptDefinition(): ScriptDefinition {
     publishedSnapshot: {
       name: "Hello Groovy Live",
       type: "GROOVY",
+      packaging: "FLOW",
       source: "return [message: 'live']",
       inputSchema: {
         type: "object",
@@ -64,6 +66,7 @@ describe("script duplication helpers", () => {
       id: "hello-groovy-copy",
       name: "Hello Groovy 副本",
       type: "GROOVY",
+      packaging: "FLOW",
       source: "return [message: 'hello']",
       inputSchema: {
         type: "object",

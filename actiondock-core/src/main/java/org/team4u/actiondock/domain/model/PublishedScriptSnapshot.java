@@ -18,6 +18,7 @@ import java.util.Objects;
 public class PublishedScriptSnapshot {
     private String name;
     private ScriptType type = ScriptType.GROOVY;
+    private ScriptPackaging packaging = ScriptPackaging.TOOL;
     private String source;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
     private Map<String, Object> outputSchema = new LinkedHashMap<>();
@@ -37,6 +38,7 @@ public class PublishedScriptSnapshot {
         }
         this.name = other.getName();
         this.type = other.getType();
+        this.packaging = other.getPackaging();
         this.source = other.getSource();
         this.inputSchema = SchemaValueCopier.copyMap(other.getInputSchema());
         this.outputSchema = SchemaValueCopier.copyMap(other.getOutputSchema());
@@ -58,6 +60,15 @@ public class PublishedScriptSnapshot {
 
     public PublishedScriptSnapshot setType(ScriptType type) {
         this.type = type == null ? ScriptType.GROOVY : type;
+        return this;
+    }
+
+    public ScriptPackaging getPackaging() {
+        return packaging;
+    }
+
+    public PublishedScriptSnapshot setPackaging(ScriptPackaging packaging) {
+        this.packaging = packaging == null ? ScriptPackaging.TOOL : packaging;
         return this;
     }
 
@@ -138,6 +149,7 @@ public class PublishedScriptSnapshot {
         }
         return Objects.equals(name, other.name)
                 && type == other.type
+                && packaging == other.packaging
                 && Objects.equals(source, other.source)
                 && Objects.equals(inputSchema, other.inputSchema)
                 && Objects.equals(outputSchema, other.outputSchema)
@@ -146,6 +158,6 @@ public class PublishedScriptSnapshot {
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, type, source, inputSchema, outputSchema, aiDependencies);
+        return Objects.hash(name, type, packaging, source, inputSchema, outputSchema, aiDependencies);
     }
 }
