@@ -123,7 +123,7 @@ function buildCliCommandPrefix({
   origin: string;
 }): string[] {
   const lines = [
-    "java -jar actiondock-cli.jar",
+    "actiondock",
     `  --base-url ${shellQuote(origin)}`
   ];
   if (apiKey) {
@@ -140,7 +140,7 @@ function buildCmdCliCommandPrefix({
   origin: string;
 }): string[] {
   const parts = [
-    "java -jar actiondock-cli.jar",
+    "actiondock",
     `--base-url ${cmdQuote(origin)}`
   ];
   if (apiKey) {
@@ -157,7 +157,7 @@ function buildPowerShellCliArgumentParts({
   origin: string;
 }): string[] {
   const parts = [
-    "java -jar actiondock-cli.jar",
+    "actiondock",
     `--base-url ${powerShellQuote(origin)}`
   ];
   if (apiKey) {

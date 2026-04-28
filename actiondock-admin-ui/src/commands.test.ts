@@ -29,7 +29,7 @@ describe("CLI command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`java -jar actiondock-cli.jar \\
+    ).toBe(`actiondock \\
   --base-url 'http://localhost:8080' \\
   --token 'local-dev-key' \\
   scripts get 'hello-groovy'`);
@@ -40,7 +40,7 @@ describe("CLI command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`java -jar actiondock-cli.jar \\
+    ).toBe(`actiondock \\
   --base-url 'http://localhost:8080' \\
   --token 'local-dev-key' \\
   scripts schema 'hello-groovy'`);
@@ -52,7 +52,7 @@ describe("CLI command builders", () => {
         scriptId: "hello-groovy"
       })
     ).toBe(
-      'java -jar actiondock-cli.jar --base-url "http://localhost:8080" --token "local-dev-key" scripts schema "hello-groovy"'
+      'actiondock --base-url "http://localhost:8080" --token "local-dev-key" scripts schema "hello-groovy"'
     );
 
     expect(
@@ -62,7 +62,7 @@ describe("CLI command builders", () => {
         scriptId: "hello-groovy"
       })
     ).toBe(
-      'java -jar actiondock-cli.jar --base-url "http://localhost:8080" --token "local-dev-key" scripts get "hello-groovy"'
+      'actiondock --base-url "http://localhost:8080" --token "local-dev-key" scripts get "hello-groovy"'
     );
 
     expect(
@@ -71,7 +71,7 @@ describe("CLI command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`java -jar actiondock-cli.jar \`
+    ).toBe(`actiondock \`
   --base-url 'http://localhost:8080' \`
   --token 'local-dev-key' \`
   scripts get 'hello-groovy'`);
@@ -82,7 +82,7 @@ describe("CLI command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`java -jar actiondock-cli.jar \`
+    ).toBe(`actiondock \`
   --base-url 'http://localhost:8080' \`
   --token 'local-dev-key' \`
   scripts schema 'hello-groovy'`);
@@ -97,7 +97,7 @@ describe("CLI command builders", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe(`java -jar actiondock-cli.jar \\
+    ).toBe(`actiondock \\
   --base-url 'http://localhost:8080' \\
   --token 'secret-token' \\
   executions submit \\
@@ -114,7 +114,7 @@ describe("CLI command builders", () => {
         scriptId: "hello-groovy"
       })
     ).toBe(
-      'java -jar actiondock-cli.jar --base-url "http://localhost:8080" --token "secret-token" executions submit --script-id "hello-groovy" --input "{\\"name\\":\\"Alice \\\\\\"Ops\\\\\\"\\"}" --mode ASYNC'
+      'actiondock --base-url "http://localhost:8080" --token "secret-token" executions submit --script-id "hello-groovy" --input "{\\"name\\":\\"Alice \\\\\\"Ops\\\\\\"\\"}" --mode ASYNC'
     );
 
     expect(
@@ -129,7 +129,7 @@ describe("CLI command builders", () => {
 {
   "name": "Alice \\"Ops\\""
 }
-'@ | java -jar actiondock-cli.jar \`
+'@ | actiondock \`
   --base-url 'http://localhost:8080' \`
   --token 'secret-token' \`
   executions submit \`
@@ -149,7 +149,7 @@ describe("CLI command builders", () => {
         responseView: "RESULT",
         scriptInput: { locale: "zh-CN" }
       })
-    ).toBe(`java -jar actiondock-cli.jar \\
+    ).toBe(`actiondock \\
   --base-url 'http://localhost:8080' \\
   plugins invoke 'plugin-a' 'summarize' \\
   --args '{"topic":"ops"}' \\
@@ -166,7 +166,7 @@ describe("CLI command builders", () => {
         scriptInput: { locale: "zh-CN" }
       })
     ).toBe(
-      'java -jar actiondock-cli.jar --base-url "http://localhost:8080" plugins invoke "plugin-a" "summarize" --args "{\\"topic\\":\\"ops \\\\\\"night\\\\\\"\\"}" --script-input "{\\"locale\\":\\"zh-CN\\"}" --response-view RESULT'
+      'actiondock --base-url "http://localhost:8080" plugins invoke "plugin-a" "summarize" --args "{\\"topic\\":\\"ops \\\\\\"night\\\\\\"\\"}" --script-input "{\\"locale\\":\\"zh-CN\\"}" --response-view RESULT'
     );
 
     expect(
@@ -198,7 +198,7 @@ $scriptInputPath = Join-Path $env:TEMP ("actiondock-script-input-{0}.json" -f [g
 [System.IO.File]::WriteAllText($scriptInputPath, $scriptInputJson, [System.Text.UTF8Encoding]::new($false))
 
 try {
-  java -jar actiondock-cli.jar \`
+  actiondock \`
     --base-url 'http://localhost:8080' \`
     plugins invoke 'plugin-a' 'summarize' \`
     --args-file $argsPath \`
