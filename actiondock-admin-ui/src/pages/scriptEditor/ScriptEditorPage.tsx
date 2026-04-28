@@ -432,13 +432,25 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             onClick: () => navigate(`/scripts/new?copyFrom=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
           };
         }
-        return {
-          key,
-          icon: <ImportOutlined />,
-          label: "粘贴结果",
-          onClick: () => setGeneratedScriptModalOpen(true)
-        };
-      }),
+        if (key === "import-generated") {
+          return {
+            key,
+            icon: <ImportOutlined />,
+            label: "粘贴结果",
+            onClick: () => setGeneratedScriptModalOpen(true)
+          };
+        }
+        if (key === "validate") {
+          return {
+            key,
+            icon: <CheckCircleOutlined />,
+            label: "校验",
+            onClick: () => void editor.handleValidate()
+          };
+        }
+        return null;
+      })
+      .filter(Boolean),
     ...(editor.headerActionModel.moreActionKeys.some((key) => dangerousMoreActionKeys.has(key))
       ? [{ type: "divider" as const }]
       : []),
@@ -571,7 +583,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       />
 
       <Space className="script-editor-page" direction="vertical" size={16} style={{ width: "100%" }}>
-        <Row className="page-card-header" justify="end" align="middle" gutter={[12, 12]}>
+        <Row className="page-card-header" justify="space-between" align="middle" gutter={[12, 12]}>
           <Col className="page-card-header__back">
             <Button
               type="link"
