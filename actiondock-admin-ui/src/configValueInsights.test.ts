@@ -9,6 +9,7 @@ const detail: ConfigValueDetail = {
     scriptReferences: [{ scriptId: "script-a", scriptName: "Script A" }],
     scheduleReferences: [{ scheduleId: "schedule-a", scheduleName: "Nightly", scriptId: "script-a", scriptName: "Script A" }],
     pluginConfigReferences: [{ pluginId: "plugin-a", pluginName: "Plugin A", dependentScriptCount: 2 }],
+    modelReferences: [{ modelId: "model-a", modelName: "GPT-4", referenceType: "direct" }],
     templateDeclarations: [{
       repositoryId: "repo-a",
       repositoryName: "Repo A",
