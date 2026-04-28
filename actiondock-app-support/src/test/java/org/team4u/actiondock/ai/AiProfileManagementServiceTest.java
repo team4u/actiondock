@@ -6,6 +6,11 @@ import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProvider;
+import org.team4u.actiondock.ai.api.AiTool;
+import org.team4u.actiondock.ai.api.AiToolExecutionContext;
+import org.team4u.actiondock.ai.api.AiToolExecutionResult;
+import org.team4u.actiondock.ai.api.AiToolPermission;
+import org.team4u.actiondock.ai.api.AiToolRegistry;
 import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.ai.core.AiAgentProfileService;
@@ -65,6 +70,20 @@ class AiProfileManagementServiceTest {
                 .hasMessageContaining("AI 工具集不存在: missing-tools");
     }
 
+    @Test
+    void toolsetSaveRequiresExistingTools() {
+        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
+
+        AiToolsetService service = new AiToolsetService(toolsets, null, new SingleToolRegistry());
+
+        assertThatThrownBy(() -> service.save(new AiToolset()
+                .setId("tools")
+                .setName("Tools")
+                .setToolNames(List.of("missing-tool"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("AI 工具不存在: missing-tool");
+    }
+
     private static AiModelProfile model(String id) {
         return new AiModelProfile()
                 .setId(id)
@@ -109,5 +128,57 @@ class AiProfileManagementServiceTest {
         public Optional<AiToolset> findById(String id) { return Optional.ofNullable(values.get(id)); }
         public List<AiToolset> findAll() { return new ArrayList<>(values.values()); }
         public void deleteById(String id) { values.remove(id); }
+    }
+
+    private static final class SingleToolRegistry implements AiToolRegistry {
+        @Override
+        public List<AiTool> listTools(String toolsetId) {
+            return List.of(new TestTool());
+        }
+
+        @Override
+        public AiTool getTool(String name) {
+            if (!"existing-tool".equals(name)) {
+                throw new IllegalArgumentException("AI 工具不存在: " + name);
+            }
+            return new TestTool();
+        }
+
+        @Override
+        public AiToolExecutionResult invoke(String toolName, Map<String, Object> input, AiToolExecutionContext context) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class TestTool implements AiTool {
+        @Override
+        public String name() {
+            return "existing-tool";
+        }
+
+        @Override
+        public String description() {
+            return "existing";
+        }
+
+        @Override
+        public Map<String, Object> inputSchema() {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> outputSchema() {
+            return Map.of();
+        }
+
+        @Override
+        public AiToolPermission permission() {
+            return AiToolPermission.READ_ONLY;
+        }
+
+        @Override
+        public AiToolExecutionResult invoke(Map<String, Object> input, AiToolExecutionContext context) {
+            return AiToolExecutionResult.success(Map.of(), 1L);
+        }
     }
 }

@@ -155,6 +155,7 @@ export function AiOverviewPage() {
           dataSource={recentRuns}
           pagination={false}
           columns={runColumns}
+          scroll={{ x: 900 }}
         />
       </Card>
     </Space>

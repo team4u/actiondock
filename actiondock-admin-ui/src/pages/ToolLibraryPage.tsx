@@ -701,6 +701,7 @@ export function ToolLibraryPage() {
             columns={columns}
             dataSource={filteredScripts}
             rowSelection={rowSelection}
+            scroll={{ x: 900 }}
             pagination={{ pageSize: 10, showSizeChanger: true }}
             locale={{
               emptyText: (

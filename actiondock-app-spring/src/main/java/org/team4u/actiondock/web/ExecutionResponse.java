@@ -21,6 +21,8 @@ public record ExecutionResponse(
         SubmitMode submitMode,
         ExecutionTriggerSource triggerSource,
         String scheduleId,
+        String agentRunId,
+        String agentStepId,
         Map<String, Object> output,
         java.util.List<ExecutionLogEntry> logs,
         String errorMessage,

@@ -34,6 +34,7 @@ export function AiRunListPage() {
         rowKey="id"
         dataSource={sortedRuns}
         columns={columns}
+        scroll={{ x: 1000 }}
       />
     </Space>
   );

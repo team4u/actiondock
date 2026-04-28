@@ -43,6 +43,8 @@ function getTriggerSourceLabel(source: string): string {
       return "手工";
     case "SCHEDULED":
       return "定时";
+    case "AI_TOOL":
+      return "AI 工具";
     default:
       return source;
   }
@@ -118,7 +120,7 @@ export function ExecutionResultCard({
           {showTriggerSource ? (
             <div className="execution-result-card__meta-item">
               <Text type="secondary">触发</Text>
-              <Tag color={execution.triggerSource === "SCHEDULED" ? "blue" : "default"}>
+              <Tag color={execution.triggerSource === "SCHEDULED" ? "blue" : execution.triggerSource === "AI_TOOL" ? "cyan" : "default"}>
                 {getTriggerSourceLabel(execution.triggerSource)}
               </Tag>
               {execution.scheduleId ? (

@@ -79,6 +79,8 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setSubmitMode(record.getSubmitMode().name());
         entity.setTriggerSource(record.getTriggerSource().name());
         entity.setScheduleId(record.getScheduleId());
+        entity.setAgentRunId(record.getAgentRunId());
+        entity.setAgentStepId(record.getAgentStepId());
         entity.setInputJson(jsonCodec.write(record.getInput()));
         entity.setOutputJson(jsonCodec.write(record.getOutput()));
         entity.setLogsJson(jsonCodec.write(record.getLogs()));
@@ -109,6 +111,8 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
                         ? ExecutionTriggerSource.MANUAL
                         : ExecutionTriggerSource.valueOf(entity.getTriggerSource()))
                 .setScheduleId(entity.getScheduleId())
+                .setAgentRunId(entity.getAgentRunId())
+                .setAgentStepId(entity.getAgentStepId())
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
                 .setOutput(jsonCodec.readMap(entity.getOutputJson()))
                 .setLogs(jsonCodec.readList(entity.getLogsJson(), ExecutionLogEntry.class))

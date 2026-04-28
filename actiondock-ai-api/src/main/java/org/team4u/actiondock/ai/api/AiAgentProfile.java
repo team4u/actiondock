@@ -9,6 +9,7 @@ import java.util.Map;
 public class AiAgentProfile {
     private String id;
     private String name;
+    private String description;
     private AiProvider provider = AiProvider.AGENTSCOPE;
     private String modelProfileId;
     private String systemPrompt;
@@ -23,6 +24,8 @@ public class AiAgentProfile {
     public AiAgentProfile setId(String id) { this.id = id; return this; }
     public String getName() { return name; }
     public AiAgentProfile setName(String name) { this.name = name; return this; }
+    public String getDescription() { return description; }
+    public AiAgentProfile setDescription(String description) { this.description = description; return this; }
     public AiProvider getProvider() { return provider; }
     public AiAgentProfile setProvider(AiProvider provider) { this.provider = provider == null ? AiProvider.AGENTSCOPE : provider; return this; }
     public String getModelProfileId() { return modelProfileId; }

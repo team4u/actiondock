@@ -118,6 +118,7 @@ export function AiModelProfileListPage() {
         loading={loading}
         dataSource={filteredModels}
         columns={columns}
+        scroll={{ x: 1200 }}
       />
     </Space>
   );

@@ -15,6 +15,8 @@ public class AiAgentProfileEntity {
     private String id;
     @Column(nullable = false)
     private String name;
+    @Lob
+    private String description;
     @Column(nullable = false)
     private String provider;
     @Column(nullable = false)
@@ -35,6 +37,8 @@ public class AiAgentProfileEntity {
     public void setId(String id) { this.id = id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
     public String getProvider() { return provider; }
     public void setProvider(String provider) { this.provider = provider; }
     public String getModelProfileId() { return modelProfileId; }

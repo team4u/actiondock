@@ -6,6 +6,9 @@ import { AiToolPickerTable, ToolConfigWorkspace, buildAiToolsetPayload, filterAi
 const tools: AiTool[] = [
   {
     name: "agentscope.list_directory",
+    displayName: "List Directory",
+    sourceType: "SYSTEM",
+    sourceId: "agentscope.list_directory",
     description: "AgentScope 内置工具：列出目录内容",
     inputSchema: { type: "object" },
     outputSchema: { type: "object" },
@@ -16,6 +19,9 @@ const tools: AiTool[] = [
   },
   {
     name: "agentscope.execute_shell_command",
+    displayName: "Run Shell",
+    sourceType: "SYSTEM",
+    sourceId: "agentscope.execute_shell_command",
     description: "AgentScope 内置工具：执行 Shell 命令",
     inputSchema: { type: "object" },
     outputSchema: { type: "object" },
@@ -76,6 +82,7 @@ describe("AiToolsetDetailPage tool picker", () => {
   it("filters tools by description and permission", () => {
     expect(filterAiToolsForPicker(tools, "Shell")).toEqual([tools[1]]);
     expect(filterAiToolsForPicker(tools, "dangerous")).toEqual([tools[1]]);
+    expect(filterAiToolsForPicker(tools, "system")).toEqual(tools);
   });
 
   it("builds save payload with selected tool names", () => {

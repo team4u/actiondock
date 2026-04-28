@@ -7,5 +7,6 @@ package org.team4u.actiondock.domain.model;
  */
 public enum ExecutionTriggerSource {
     MANUAL,
-    SCHEDULED
+    SCHEDULED,
+    AI_TOOL
 }

@@ -772,9 +772,10 @@ a {
 }
 
 .markdown-description table {
+  display: block;
+  overflow-x: auto;
   width: 100%;
   border-collapse: collapse;
-  overflow: hidden;
 }
 
 .markdown-description th,

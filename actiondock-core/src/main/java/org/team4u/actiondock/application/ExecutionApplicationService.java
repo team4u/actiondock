@@ -107,8 +107,18 @@ public class ExecutionApplicationService {
                                             SubmitMode submitMode,
                                             ExecutionTriggerSource triggerSource,
                                             String scheduleId) {
+        return executePublished(scriptId, input, submitMode, triggerSource, scheduleId, null, null);
+    }
+
+    public ExecutionRecord executePublished(String scriptId,
+                                            Map<String, Object> input,
+                                            SubmitMode submitMode,
+                                            ExecutionTriggerSource triggerSource,
+                                            String scheduleId,
+                                            String agentRunId,
+                                            String agentStepId) {
         ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
-        return execute(scriptDefinition, input, submitMode, triggerSource, scheduleId);
+        return execute(scriptDefinition, input, submitMode, triggerSource, scheduleId, agentRunId, agentStepId);
     }
 
     private ExecutionRecord execute(ScriptDefinition scriptDefinition,
@@ -116,6 +126,16 @@ public class ExecutionApplicationService {
                                     SubmitMode submitMode,
                                     ExecutionTriggerSource triggerSource,
                                     String scheduleId) {
+        return execute(scriptDefinition, input, submitMode, triggerSource, scheduleId, null, null);
+    }
+
+    private ExecutionRecord execute(ScriptDefinition scriptDefinition,
+                                    Map<String, Object> input,
+                                    SubmitMode submitMode,
+                                    ExecutionTriggerSource triggerSource,
+                                    String scheduleId,
+                                    String agentRunId,
+                                    String agentStepId) {
         Map<String, Object> payload = configValueApplicationService.resolveMap(input);
         scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
 
@@ -125,6 +145,8 @@ public class ExecutionApplicationService {
                 .setSubmitMode(submitMode == null ? SubmitMode.SYNC : submitMode)
                 .setTriggerSource(triggerSource)
                 .setScheduleId(scheduleId)
+                .setAgentRunId(agentRunId)
+                .setAgentStepId(agentStepId)
                 .setInput(payload)
                 .setCreatedAt(LocalDateTime.now());
 

@@ -462,6 +462,7 @@ export function RepositoryDiscoveryPage() {
             loading={loading}
             columns={columns}
             dataSource={filteredTools}
+            scroll={{ x: 1200 }}
             pagination={{ pageSize: 10, showSizeChanger: true }}
             locale={{
               emptyText: (

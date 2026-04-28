@@ -18,6 +18,7 @@ import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiProviderClient;
 import org.team4u.actiondock.ai.api.AiSecretResolver;
 import org.team4u.actiondock.ai.api.AiTool;
+import org.team4u.actiondock.ai.api.AiToolProvider;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.ai.core.AiAgentProfileService;
 import org.team4u.actiondock.ai.core.AiAgentRuntimeImpl;
@@ -27,6 +28,7 @@ import org.team4u.actiondock.ai.core.AiToolRegistryImpl;
 import org.team4u.actiondock.ai.core.AiToolsetService;
 import org.team4u.actiondock.ai.plugin.ActionDockAiSystemPlugin;
 import org.team4u.actiondock.ai.tool.ActionDockAiTools;
+import org.team4u.actiondock.ai.tool.ActionDockDynamicAiToolProvider;
 import org.team4u.actiondock.ai.workbench.AiWorkbenchDefaults;
 import org.team4u.actiondock.ai.workbench.AiWorkbenchService;
 import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
@@ -121,14 +123,18 @@ public class RuntimeConfiguration {
 
     @Bean
     public AiToolsetService aiToolsetService(AiToolsetRepository repository,
-                                             AiAgentProfileRepository agentProfileRepository) {
-        return new AiToolsetService(repository, agentProfileRepository);
+                                             AiAgentProfileRepository agentProfileRepository,
+                                             AiToolRegistryImpl toolRegistry) {
+        return new AiToolsetService(repository, agentProfileRepository, toolRegistry);
     }
 
     @Bean
-    public AiToolRegistryImpl aiToolRegistry(AiToolsetRepository toolsetRepository, ObjectProvider<List<AiTool>> toolsProvider) {
+    public AiToolRegistryImpl aiToolRegistry(AiToolsetRepository toolsetRepository,
+                                             ObjectProvider<List<AiTool>> toolsProvider,
+                                             ObjectProvider<List<AiToolProvider>> toolProviders) {
         List<AiTool> tools = toolsProvider.getIfAvailable(List::of);
-        return new AiToolRegistryImpl(toolsetRepository, tools);
+        List<AiToolProvider> providers = toolProviders.getIfAvailable(List::of);
+        return new AiToolRegistryImpl(toolsetRepository, tools, providers);
     }
 
     @Bean
@@ -146,6 +152,19 @@ public class RuntimeConfiguration {
                                AiProviderClient providerClient,
                                AiCallLogRepository callLogRepository) {
         return new AiGatewayImpl(modelProfileService, providerClient, callLogRepository);
+    }
+
+    @Bean
+    public AiToolProvider actionDockDynamicAiToolProvider(ScriptRepository scriptRepository,
+                                                          AiAgentProfileRepository agentProfileRepository,
+                                                          ObjectProvider<ExecutionApplicationService> executionApplicationServiceProvider,
+                                                          ObjectProvider<AiAgentRuntimeImpl> aiAgentRuntimeProvider) {
+        return new ActionDockDynamicAiToolProvider(
+                scriptRepository,
+                agentProfileRepository,
+                executionApplicationServiceProvider::getObject,
+                aiAgentRuntimeProvider::getObject
+        );
     }
 
     @Bean

@@ -4,12 +4,13 @@ export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "DEVELOPMENT" | "
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
-export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED";
+export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED" | "AI_TOOL";
 export type ExecutionLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 export type AiCapability = "CHAT" | "STRUCTURED_OUTPUT" | "EMBEDDING" | "AGENT_RUN";
 export type AiProvider = "AGENTSCOPE";
 export type AiModelProvider = "DASHSCOPE" | "OPENAI" | "OPENAI_COMPATIBLE" | "ANTHROPIC" | "GEMINI" | "OLLAMA";
 export type AiToolPermission = "READ_ONLY" | "PROPOSE_CHANGE" | "CONTROLLED_ACTION" | "DANGEROUS_ACTION";
+export type AiToolSourceType = "SYSTEM" | "SCRIPT" | "AGENT";
 export type AiRunStatus = "RUNNING" | "SUCCESS" | "FAILED" | "WAITING_APPROVAL" | "CANCELLED" | "INTERRUPTED";
 export type AiCallerType = "SCRIPT" | "PLUGIN" | "WORKBENCH" | "ADMIN_TEST" | "AGENT";
 export type AiStepType = "MODEL_REASONING" | "TOOL_CALL" | "TOOL_RESULT" | "APPROVAL" | "INTERRUPT";
@@ -105,6 +106,7 @@ export interface AiModelProfile {
 export interface AiAgentProfile {
   id: string;
   name: string;
+  description?: string;
   provider: AiProvider;
   modelProfileId: string;
   systemPrompt?: string;
@@ -130,6 +132,9 @@ export interface AiToolset {
 
 export interface AiTool {
   name: string;
+  displayName: string;
+  sourceType: AiToolSourceType;
+  sourceId: string;
   description: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
@@ -253,6 +258,8 @@ export interface ExecutionRecord {
   submitMode: SubmitMode;
   triggerSource: ExecutionTriggerSource;
   scheduleId?: string;
+  agentRunId?: string;
+  agentStepId?: string;
   input: Record<string, unknown>;
   output: Record<string, unknown>;
   logs: ExecutionLogEntry[];
@@ -286,6 +293,8 @@ export interface ExecutionResponse {
   submitMode: SubmitMode;
   triggerSource: ExecutionTriggerSource;
   scheduleId?: string;
+  agentRunId?: string;
+  agentStepId?: string;
   output: Record<string, unknown>;
   logs: ExecutionLogEntry[];
   errorMessage?: string;

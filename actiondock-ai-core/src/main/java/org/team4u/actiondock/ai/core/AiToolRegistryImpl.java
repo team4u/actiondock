@@ -4,6 +4,7 @@ import org.team4u.actiondock.ai.api.AiTool;
 import org.team4u.actiondock.ai.api.AiToolExecutionContext;
 import org.team4u.actiondock.ai.api.AiToolExecutionResult;
 import org.team4u.actiondock.ai.api.AiToolPermission;
+import org.team4u.actiondock.ai.api.AiToolProvider;
 import org.team4u.actiondock.ai.api.AiToolRegistry;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.ai.api.ConfigurableAiTool;
@@ -11,23 +12,36 @@ import org.team4u.actiondock.ai.api.ConfigurableAiTool;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class AiToolRegistryImpl implements AiToolRegistry {
     private final AiToolsetRepository toolsetRepository;
     private final Map<String, AiTool> tools;
+    private final List<AiToolProvider> providers;
 
     public AiToolRegistryImpl(AiToolsetRepository toolsetRepository, List<AiTool> tools) {
+        this(toolsetRepository, tools, List.of());
+    }
+
+    public AiToolRegistryImpl(AiToolsetRepository toolsetRepository, List<AiTool> tools, List<AiToolProvider> providers) {
         this.toolsetRepository = toolsetRepository;
         this.tools = new LinkedHashMap<>();
         if (tools != null) {
             tools.forEach(tool -> this.tools.put(tool.name(), tool));
         }
+        this.providers = providers == null ? List.of() : List.copyOf(providers);
     }
 
     @Override
     public List<AiTool> listTools(String toolsetId) {
         if (toolsetId == null || toolsetId.isBlank()) {
-            return List.copyOf(tools.values());
+            Map<String, AiTool> values = new LinkedHashMap<>(tools);
+            for (AiToolProvider provider : providers) {
+                for (AiTool tool : provider.listTools()) {
+                    values.putIfAbsent(tool.name(), tool);
+                }
+            }
+            return List.copyOf(values.values());
         }
         return toolsetRepository.findById(toolsetId)
                 .filter(toolset -> toolset.isEnabled())
@@ -49,6 +63,14 @@ public class AiToolRegistryImpl implements AiToolRegistry {
     @Override
     public AiTool getTool(String name) {
         AiTool tool = tools.get(name);
+        if (tool == null) {
+            tool = providers.stream()
+                    .map(provider -> provider.findTool(name))
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .findFirst()
+                    .orElse(null);
+        }
         if (tool == null) {
             throw new IllegalArgumentException("AI 工具不存在: " + name);
         }

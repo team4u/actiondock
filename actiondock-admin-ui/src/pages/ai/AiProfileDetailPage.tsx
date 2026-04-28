@@ -44,6 +44,7 @@ interface ModelFormValues {
 interface AgentFormValues {
   id: string;
   name: string;
+  description?: string;
   modelProfileId: string;
   systemPrompt?: string;
   toolsetIds: string[];
@@ -254,6 +255,7 @@ export function AiAgentProfileDetailPage() {
       form.setFieldsValue({
         id: "",
         name: "",
+        description: "",
         modelProfileId: "",
         toolsetIds: [],
         enabled: true,
@@ -269,6 +271,7 @@ export function AiAgentProfileDetailPage() {
       form.setFieldsValue({
         id: profile.id,
         name: profile.name,
+        description: profile.description,
         modelProfileId: profile.modelProfileId,
         systemPrompt: profile.systemPrompt,
         toolsetIds: profile.toolsetIds,
@@ -332,6 +335,7 @@ export function AiAgentProfileDetailPage() {
       const profile: AiAgentProfile = {
         id: values.id.trim(),
         name: values.name.trim(),
+        description: values.description?.trim() || undefined,
         provider: "AGENTSCOPE",
         modelProfileId: values.modelProfileId,
         systemPrompt: values.systemPrompt,
@@ -403,6 +407,7 @@ export function AiAgentProfileDetailPage() {
                 <Form form={form} layout="vertical">
                   <Form.Item name="id" label="ID" rules={[{ required: true }]}><Input disabled={!isCreate} /></Form.Item>
                   <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
+                  <Form.Item name="description" label="说明"><Input.TextArea rows={3} /></Form.Item>
                   <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
                   <Form.Item name="modelProfileId" label="模型 Profile" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={modelOptions} /></Form.Item>
                   <Form.Item name="toolsetIds" label="工具集"><Select mode="multiple" optionFilterProp="label" options={toolsetOptions} /></Form.Item>

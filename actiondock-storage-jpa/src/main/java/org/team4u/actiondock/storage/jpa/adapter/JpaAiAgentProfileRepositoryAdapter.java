@@ -43,6 +43,7 @@ public class JpaAiAgentProfileRepositoryAdapter implements AiAgentProfileReposit
         AiAgentProfileEntity entity = new AiAgentProfileEntity();
         entity.setId(profile.getId());
         entity.setName(profile.getName());
+        entity.setDescription(profile.getDescription());
         entity.setProvider(profile.getProvider().name());
         entity.setModelProfileId(profile.getModelProfileId());
         entity.setSystemPrompt(profile.getSystemPrompt());
@@ -59,6 +60,7 @@ public class JpaAiAgentProfileRepositoryAdapter implements AiAgentProfileReposit
         return new AiAgentProfile()
                 .setId(entity.getId())
                 .setName(entity.getName())
+                .setDescription(entity.getDescription())
                 .setProvider(entity.getProvider() == null ? AiProvider.AGENTSCOPE : AiProvider.valueOf(entity.getProvider()))
                 .setModelProfileId(entity.getModelProfileId())
                 .setSystemPrompt(entity.getSystemPrompt())

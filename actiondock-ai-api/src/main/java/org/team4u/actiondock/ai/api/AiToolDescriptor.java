@@ -5,6 +5,9 @@ import java.util.Map;
 
 public record AiToolDescriptor(
         String name,
+        String displayName,
+        AiToolSourceType sourceType,
+        String sourceId,
         String description,
         Map<String, Object> inputSchema,
         Map<String, Object> outputSchema,
@@ -21,6 +24,9 @@ public record AiToolDescriptor(
         ConfigurableAiTool configurableTool = configurable ? (ConfigurableAiTool) tool : null;
         return new AiToolDescriptor(
                 tool.name(),
+                tool.displayName(),
+                tool.sourceType(),
+                tool.sourceId(),
                 tool.description(),
                 copy(tool.inputSchema()),
                 copy(tool.outputSchema()),

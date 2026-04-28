@@ -8,7 +8,7 @@ import { ApiError, createAiToolset, getAiToolset, listAiTools, testAiTool, updat
 import { AiToolPermissionTag } from "../../components/ai/AiTags";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
-import type { AiTool, AiToolExecutionResult, AiToolPermission, AiToolset } from "../../types";
+import type { AiTool, AiToolExecutionResult, AiToolPermission, AiToolSourceType, AiToolset } from "../../types";
 import { parseJsonText, prettyJson } from "../../utils";
 
 const PERMISSIONS: AiToolPermission[] = ["READ_ONLY", "PROPOSE_CHANGE", "CONTROLLED_ACTION", "DANGEROUS_ACTION"];
@@ -21,6 +21,17 @@ export interface ToolsetFormValues {
   description?: string;
   maxPermission: AiToolPermission;
   enabled: boolean;
+}
+
+function getToolSourceLabel(sourceType: AiToolSourceType): string {
+  switch (sourceType) {
+    case "SCRIPT":
+      return "脚本";
+    case "AGENT":
+      return "Agent";
+    default:
+      return "系统";
+  }
 }
 
 function cloneToolConfigMap(source?: ToolConfigMap): ToolConfigMap {
@@ -62,8 +73,11 @@ export function filterAiToolsForPicker(tools: AiTool[], query: string): AiTool[]
   if (!keyword) return tools;
   return tools.filter((tool) => [
     tool.name,
+    tool.displayName,
     tool.description,
-    tool.permission
+    tool.permission,
+    tool.sourceId,
+    tool.sourceType
   ].some((value) => value.toLowerCase().includes(keyword)));
 }
 
@@ -132,6 +146,12 @@ export function ToolConfigWorkspace({
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {!selected ? <Alert type="warning" showIcon message="当前工具未勾选，保存工具集时这份配置不会生效。" /> : null}
       <Descriptions size="small" column={1} bordered>
+        <Descriptions.Item label="来源">
+          <Space size={8} wrap>
+            <Tag>{getToolSourceLabel(tool.sourceType)}</Tag>
+            <Typography.Text code>{tool.sourceId}</Typography.Text>
+          </Space>
+        </Descriptions.Item>
         <Descriptions.Item label="说明">{tool.description}</Descriptions.Item>
         <Descriptions.Item label="权限"><AiToolPermissionTag permission={tool.permission} /></Descriptions.Item>
         <Descriptions.Item label="配置状态">
@@ -185,7 +205,7 @@ function ToolConfigDrawer({
 }: ToolConfigDrawerProps) {
   return (
     <Drawer
-      title={tool ? `查看工具：${tool.name}` : "查看工具"}
+      title={tool ? `查看工具：${tool.displayName}` : "查看工具"}
       open={open}
       width={640}
       onClose={onClose}
@@ -246,7 +266,11 @@ export function AiToolPickerTable({
       dataIndex: "name",
       render: (name, tool) => (
         <Space direction="vertical" size={2}>
-          <Typography.Text strong>{name}</Typography.Text>
+          <Space size={8} wrap>
+            <Typography.Text strong>{tool.displayName}</Typography.Text>
+            <Tag>{getToolSourceLabel(tool.sourceType)}</Tag>
+          </Space>
+          {tool.displayName !== name ? <Typography.Text code>{name}</Typography.Text> : null}
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>{tool.description}</Typography.Text>
         </Space>
       )
@@ -281,6 +305,7 @@ export function AiToolPickerTable({
       pagination={{ pageSize: 8, showSizeChanger: false }}
       rowSelection={rowSelection}
       columns={toolColumns}
+      scroll={{ x: 900 }}
     />
   );
 }
@@ -344,6 +369,10 @@ export function AiToolsetDetailPage() {
 
   const filteredTools = useMemo(() => filterAiToolsForPicker(tools, toolQuery), [tools, toolQuery]);
   const configTool = useMemo(() => tools.find((tool) => tool.name === configToolName) ?? null, [configToolName, tools]);
+  const invalidSelectedNames = useMemo(
+    () => selectedNames.filter((name) => !tools.some((tool) => tool.name === name)),
+    [selectedNames, tools]
+  );
 
   const openToolConfig = (toolName: string) => {
     const tool = tools.find((item) => item.name === toolName) ?? null;
@@ -389,7 +418,7 @@ export function AiToolsetDetailPage() {
   };
 
   const handleSelectionChange = (names: Key[]) => {
-    setSelectedNames(names.map(String));
+    setSelectedNames([...invalidSelectedNames, ...names.map(String)]);
   };
 
   const handleTestInputChange = (toolName: string, value: string) => {
@@ -446,9 +475,29 @@ export function AiToolsetDetailPage() {
       <Card title="工具列表">
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Alert type="info" showIcon message="勾选决定工具集里启用哪些工具，工具详情请在行内点击“查看”打开。" />
+          {invalidSelectedNames.length > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="当前工具集中包含已失效工具，请移除后再保存。"
+              description={
+                <Space size={[8, 8]} wrap>
+                  {invalidSelectedNames.map((name) => (
+                    <Tag
+                      key={name}
+                      closable
+                      onClose={() => setSelectedNames((current) => current.filter((item) => item !== name))}
+                    >
+                      {name}
+                    </Tag>
+                  ))}
+                </Space>
+              }
+            />
+          ) : null}
           <Input.Search
             allowClear
-            placeholder="搜索工具名、说明或权限"
+            placeholder="搜索工具名、显示名、来源、说明或权限"
             value={toolQuery}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setToolQuery(event.target.value)}
           />

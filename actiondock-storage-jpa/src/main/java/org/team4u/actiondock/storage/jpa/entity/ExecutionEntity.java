@@ -32,6 +32,8 @@ public class ExecutionEntity {
     private String triggerSource = "MANUAL";
 
     private String scheduleId;
+    private String agentRunId;
+    private String agentStepId;
 
     @Lob
     private String inputJson;
@@ -66,6 +68,10 @@ public class ExecutionEntity {
     public void setTriggerSource(String triggerSource) { this.triggerSource = triggerSource; }
     public String getScheduleId() { return scheduleId; }
     public void setScheduleId(String scheduleId) { this.scheduleId = scheduleId; }
+    public String getAgentRunId() { return agentRunId; }
+    public void setAgentRunId(String agentRunId) { this.agentRunId = agentRunId; }
+    public String getAgentStepId() { return agentStepId; }
+    public void setAgentStepId(String agentStepId) { this.agentStepId = agentStepId; }
     public String getInputJson() { return inputJson; }
     public void setInputJson(String inputJson) { this.inputJson = inputJson; }
     public String getOutputJson() { return outputJson; }

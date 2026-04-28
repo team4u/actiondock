@@ -7,6 +7,18 @@ public interface AiTool {
 
     String description();
 
+    default AiToolSourceType sourceType() {
+        return AiToolSourceType.SYSTEM;
+    }
+
+    default String sourceId() {
+        return name();
+    }
+
+    default String displayName() {
+        return name();
+    }
+
     Map<String, Object> inputSchema();
 
     Map<String, Object> outputSchema();

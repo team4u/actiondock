@@ -22,6 +22,8 @@ public class ExecutionRecord {
     private SubmitMode submitMode = SubmitMode.SYNC;
     private ExecutionTriggerSource triggerSource = ExecutionTriggerSource.MANUAL;
     private String scheduleId;
+    private String agentRunId;
+    private String agentStepId;
     private Map<String, Object> input = new LinkedHashMap<>();
     private Map<String, Object> output = new LinkedHashMap<>();
     private List<ExecutionLogEntry> logs = new ArrayList<>();
@@ -92,6 +94,24 @@ public class ExecutionRecord {
 
     public ExecutionRecord setScheduleId(String scheduleId) {
         this.scheduleId = scheduleId;
+        return this;
+    }
+
+    public String getAgentRunId() {
+        return agentRunId;
+    }
+
+    public ExecutionRecord setAgentRunId(String agentRunId) {
+        this.agentRunId = agentRunId;
+        return this;
+    }
+
+    public String getAgentStepId() {
+        return agentStepId;
+    }
+
+    public ExecutionRecord setAgentStepId(String agentStepId) {
+        this.agentStepId = agentStepId;
         return this;
     }
 

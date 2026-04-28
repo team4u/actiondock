@@ -117,6 +117,7 @@ export function AiToolsetListPage() {
         loading={loading}
         dataSource={filteredToolsets}
         columns={columns}
+        scroll={{ x: 1100 }}
       />
     </Space>
   );

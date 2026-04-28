@@ -279,6 +279,7 @@ export function RepositoryManagementPage() {
             loading={loading}
             columns={columns}
             dataSource={repositories}
+            scroll={{ x: 800 }}
             locale={{
               emptyText: (
                 <Empty

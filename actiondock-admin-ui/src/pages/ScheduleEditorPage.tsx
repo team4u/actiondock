@@ -789,6 +789,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                         }
                       ]}
                       dataSource={historyRecords}
+                      scroll={{ x: 600 }}
                       pagination={{ pageSize: 5, responsive: true }}
                       onRow={(record: ExecutionRecord) => ({
                         onClick: () => {

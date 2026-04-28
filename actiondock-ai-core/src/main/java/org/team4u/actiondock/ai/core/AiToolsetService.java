@@ -1,6 +1,7 @@
 package org.team4u.actiondock.ai.core;
 
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
+import org.team4u.actiondock.ai.api.AiToolRegistry;
 import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 
@@ -10,14 +11,22 @@ import java.util.List;
 public class AiToolsetService {
     private final AiToolsetRepository repository;
     private final AiAgentProfileRepository agentProfileRepository;
+    private final AiToolRegistry toolRegistry;
 
     public AiToolsetService(AiToolsetRepository repository) {
-        this(repository, null);
+        this(repository, null, null);
     }
 
     public AiToolsetService(AiToolsetRepository repository, AiAgentProfileRepository agentProfileRepository) {
+        this(repository, agentProfileRepository, null);
+    }
+
+    public AiToolsetService(AiToolsetRepository repository,
+                            AiAgentProfileRepository agentProfileRepository,
+                            AiToolRegistry toolRegistry) {
         this.repository = repository;
         this.agentProfileRepository = agentProfileRepository;
+        this.toolRegistry = toolRegistry;
     }
 
     public List<AiToolset> list() {
@@ -63,6 +72,14 @@ public class AiToolsetService {
         }
         if (toolset.getName() == null || toolset.getName().isBlank()) {
             throw new IllegalArgumentException("AI 工具集名称不能为空");
+        }
+        if (toolRegistry != null) {
+            for (String toolName : toolset.getToolNames()) {
+                if (toolName == null || toolName.isBlank()) {
+                    throw new IllegalArgumentException("AI 工具名不能为空");
+                }
+                toolRegistry.getTool(toolName);
+            }
         }
     }
 }

@@ -38,7 +38,7 @@ export function AiAgentProfileListPage() {
     const keyword = searchText.trim().toLowerCase();
     if (!keyword) return agents;
     return agents.filter((item) =>
-      [item.id, item.name, item.modelProfileId, item.systemPrompt ?? "", ...item.toolsetIds]
+      [item.id, item.name, item.description ?? "", item.modelProfileId, item.systemPrompt ?? "", ...item.toolsetIds]
         .some((field) => field.toLowerCase().includes(keyword))
     );
   }, [agents, searchText]);
@@ -61,6 +61,15 @@ export function AiAgentProfileListPage() {
   const columns: ColumnsType<AiAgentProfile> = [
     { title: "ID", dataIndex: "id", render: (id) => <TableLinkCell to={`/ai/agents/${id}`}>{id}</TableLinkCell> },
     { title: "名称", dataIndex: "name" },
+    {
+      title: "说明",
+      dataIndex: "description",
+      render: (value) => value ? (
+        <Typography.Paragraph ellipsis={{ rows: 2, tooltip: value }} style={{ marginBottom: 0, maxWidth: 280 }}>
+          {value}
+        </Typography.Paragraph>
+      ) : <Typography.Text type="secondary">-</Typography.Text>
+    },
     {
       title: "模型 Profile",
       dataIndex: "modelProfileId",
@@ -107,7 +116,7 @@ export function AiAgentProfileListPage() {
       />
       <Input.Search
         allowClear
-        placeholder="搜索 ID、名称、模型 Profile、工具集或 System Prompt"
+        placeholder="搜索 ID、名称、说明、模型 Profile、工具集或 System Prompt"
         value={searchText}
         onChange={(event: ChangeEvent<HTMLInputElement>) => setSearchText(event.target.value)}
       />
@@ -116,6 +125,7 @@ export function AiAgentProfileListPage() {
         loading={loading}
         dataSource={filteredAgents}
         columns={columns}
+        scroll={{ x: 1000 }}
       />
     </Space>
   );
