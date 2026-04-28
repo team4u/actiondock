@@ -46,6 +46,29 @@ export interface ExecutionResponse {
   };
 }
 
+export interface ScriptScheduleView {
+  id: string;
+  scriptId: string;
+  name?: string;
+  cronExpression?: string;
+  input?: Record<string, unknown>;
+  enabled?: boolean;
+  nextRunAt?: string | null;
+  lastTriggeredAt?: string | null;
+  lastExecutionId?: string | null;
+  lastExecutionStatus?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ScriptScheduleUpsertRequest {
+  scriptId: string;
+  name: string;
+  cronExpression: string;
+  input: Record<string, unknown>;
+  enabled: boolean;
+}
+
 export interface PluginActionDefinition {
   action: string;
   title?: string;

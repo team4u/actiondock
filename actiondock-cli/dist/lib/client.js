@@ -60,6 +60,42 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
+    async listSchedules(scriptId) {
+        if (scriptId) {
+            return this.requestJson(`/api/scripts/${scriptId}/schedules`);
+        }
+        return this.requestJson("/api/schedules");
+    }
+    async getSchedule(scheduleId) {
+        return this.requestJson(`/api/schedules/${scheduleId}`);
+    }
+    async createSchedule(payload) {
+        return this.requestJson("/api/schedules", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async updateSchedule(scheduleId, payload) {
+        return this.requestJson(`/api/schedules/${scheduleId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+        });
+    }
+    async enableSchedule(scheduleId) {
+        return this.requestJson(`/api/schedules/${scheduleId}/enable`, {
+            method: "POST"
+        });
+    }
+    async disableSchedule(scheduleId) {
+        return this.requestJson(`/api/schedules/${scheduleId}/disable`, {
+            method: "POST"
+        });
+    }
+    async deleteSchedule(scheduleId) {
+        await this.requestJson(`/api/schedules/${scheduleId}`, {
+            method: "DELETE"
+        });
+    }
     async listPlugins() {
         return this.requestJson("/api/plugins");
     }

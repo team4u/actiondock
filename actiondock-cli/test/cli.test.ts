@@ -146,6 +146,26 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "GET" && req.url === "/api/executions?scheduleId=schedule-1") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "exec-schedule-1",
+            scriptId: "published-tool",
+            scheduleId: "schedule-1",
+            status: "SUCCESS",
+            submitMode: "ASYNC",
+            triggerSource: "SCHEDULED",
+            input: { name: "Alice" },
+            output: { ok: true },
+            logs: []
+          }
+        ]
+      });
+    }
+
     if (req.method === "DELETE" && req.url === "/api/executions/exec-1") {
       return json(res, {
         status: 0,
@@ -158,6 +178,142 @@ beforeAll(async () => {
       return json(res, {
         status: 0,
         msg: "cleared",
+        data: null
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/schedules") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "schedule-1",
+            scriptId: "published-tool",
+            name: "Nightly Sync",
+            cronExpression: "0 0 * * * *",
+            input: {
+              name: "Alice",
+              payload: { scope: "night" }
+            },
+            enabled: true,
+            nextRunAt: "2026-04-29T00:00:00",
+            lastExecutionId: "exec-schedule-1",
+            lastExecutionStatus: "SUCCESS"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/scripts/published-tool/schedules") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "schedule-1",
+            scriptId: "published-tool",
+            name: "Nightly Sync",
+            cronExpression: "0 0 * * * *",
+            input: {
+              name: "Alice",
+              payload: { scope: "night" }
+            },
+            enabled: true
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/schedules/schedule-1") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          id: "schedule-1",
+          scriptId: "published-tool",
+          name: "Nightly Sync",
+          cronExpression: "0 0 * * * *",
+          input: {
+            name: "Alice",
+            payload: { scope: "night" }
+          },
+          enabled: true,
+          nextRunAt: "2026-04-29T00:00:00",
+          lastExecutionId: "exec-schedule-1",
+          lastExecutionStatus: "SUCCESS"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/schedules") {
+      return json(res, {
+        status: 0,
+        msg: "created",
+        data: {
+          id: "schedule-2",
+          scriptId: body?.scriptId,
+          name: body?.name,
+          cronExpression: body?.cronExpression,
+          input: body?.input ?? {},
+          enabled: body?.enabled ?? true
+        }
+      });
+    }
+
+    if (req.method === "PUT" && req.url === "/api/schedules/schedule-1") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: {
+          id: "schedule-1",
+          scriptId: body?.scriptId,
+          name: body?.name,
+          cronExpression: body?.cronExpression,
+          input: body?.input ?? {},
+          enabled: body?.enabled ?? true
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/schedules/schedule-1/enable") {
+      return json(res, {
+        status: 0,
+        msg: "enabled",
+        data: {
+          id: "schedule-1",
+          scriptId: "published-tool",
+          name: "Nightly Sync",
+          cronExpression: "0 0 * * * *",
+          input: {
+            name: "Alice"
+          },
+          enabled: true
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/schedules/schedule-1/disable") {
+      return json(res, {
+        status: 0,
+        msg: "disabled",
+        data: {
+          id: "schedule-1",
+          scriptId: "published-tool",
+          name: "Nightly Sync",
+          cronExpression: "0 0 * * * *",
+          input: {
+            name: "Alice"
+          },
+          enabled: false
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/schedules/schedule-1") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
         data: null
       });
     }
@@ -469,11 +625,118 @@ describe("CLI integration", () => {
     const list = await runCli(["execution", "list", "--script-id", "published-tool", "--server", baseUrl, "--json"]);
     expect(list.status).toBe(0);
     expect(JSON.parse(list.stdout)).toHaveLength(2);
+
+    const scheduleList = await runCli(["execution", "list", "--schedule-id", "schedule-1", "--server", baseUrl, "--json"]);
+    expect(scheduleList.status).toBe(0);
+    expect(JSON.parse(scheduleList.stdout)).toEqual([
+      expect.objectContaining({
+        id: "exec-schedule-1",
+        scheduleId: "schedule-1"
+      })
+    ]);
   });
 
   it("deletes and clears execution records", async () => {
     expect((await runCli(["execution", "delete", "exec-1", "--server", baseUrl, "--json"])).status).toBe(0);
     expect((await runCli(["execution", "clear", "--script-id", "published-tool", "--server", baseUrl, "--json"])).status).toBe(0);
+  });
+
+  it("manages schedules with flat flags", async () => {
+    const list = await runCli(["schedule", "list", "--script-id", "published-tool", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        id: "schedule-1",
+        scriptId: "published-tool"
+      })
+    ]);
+
+    const detail = await runCli(["schedule", "get", "schedule-1", "--server", baseUrl, "--json"]);
+    expect(detail.status).toBe(0);
+    expect(JSON.parse(detail.stdout)).toEqual(
+      expect.objectContaining({
+        id: "schedule-1",
+        cronExpression: "0 0 * * * *"
+      })
+    );
+
+    const created = await runCli([
+      "schedule",
+      "create",
+      "--script-id",
+      "published-tool",
+      "--schedule-name",
+      "Hourly Sync",
+      "--schedule-cron",
+      "0 */5 * * * *",
+      "--input-json",
+      '{"payload":{"source":"file"}}',
+      "--name",
+      "Alice",
+      "--count",
+      "3",
+      "--schedule-disabled",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(created.status).toBe(0);
+    expect(JSON.parse(created.stdout)).toEqual(
+      expect.objectContaining({
+        id: "schedule-2",
+        enabled: false
+      })
+    );
+
+    const createRequest = requests.find((item) => item.method === "POST" && item.url === "/api/schedules");
+    expect(createRequest?.body).toEqual({
+      scriptId: "published-tool",
+      name: "Hourly Sync",
+      cronExpression: "0 */5 * * * *",
+      input: {
+        payload: { source: "file" },
+        name: "Alice",
+        count: 3
+      },
+      enabled: false
+    });
+
+    const updated = await runCli([
+      "schedule",
+      "update",
+      "schedule-1",
+      "--schedule-name",
+      "Nightly Sync v2",
+      "--count",
+      "2",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(updated.status).toBe(0);
+    expect(JSON.parse(updated.stdout)).toEqual(
+      expect.objectContaining({
+        id: "schedule-1",
+        name: "Nightly Sync v2"
+      })
+    );
+
+    const updateRequest = requests.find((item) => item.method === "PUT" && item.url === "/api/schedules/schedule-1");
+    expect(updateRequest?.body).toEqual({
+      scriptId: "published-tool",
+      name: "Nightly Sync v2",
+      cronExpression: "0 0 * * * *",
+      input: {
+        name: "Alice",
+        payload: { scope: "night" },
+        count: 2
+      },
+      enabled: true
+    });
+
+    expect((await runCli(["schedule", "enable", "schedule-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["schedule", "disable", "schedule-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["schedule", "delete", "schedule-1", "--server", baseUrl, "--json"])).status).toBe(0);
   });
 
   it("invokes a plugin action with flat args and script input json", async () => {

@@ -13,6 +13,8 @@ import type {
   PluginInvokeResponse,
   PluginReferenceView,
   PluginView,
+  ScriptScheduleUpsertRequest,
+  ScriptScheduleView,
   ScriptDefinition,
   SharedStateCompareAndSetRequest,
   SharedStateCompareAndSetResult,
@@ -97,6 +99,49 @@ export class ActionDockClient {
   async clearExecutions(scriptId?: string): Promise<void> {
     const suffix = scriptId ? `?${new URLSearchParams({ scriptId }).toString()}` : "";
     await this.requestJson<null>(`/api/executions${suffix}`, {
+      method: "DELETE"
+    });
+  }
+
+  async listSchedules(scriptId?: string): Promise<ScriptScheduleView[]> {
+    if (scriptId) {
+      return this.requestJson<ScriptScheduleView[]>(`/api/scripts/${scriptId}/schedules`);
+    }
+    return this.requestJson<ScriptScheduleView[]>("/api/schedules");
+  }
+
+  async getSchedule(scheduleId: string): Promise<ScriptScheduleView> {
+    return this.requestJson<ScriptScheduleView>(`/api/schedules/${scheduleId}`);
+  }
+
+  async createSchedule(payload: ScriptScheduleUpsertRequest): Promise<ScriptScheduleView> {
+    return this.requestJson<ScriptScheduleView>("/api/schedules", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updateSchedule(scheduleId: string, payload: ScriptScheduleUpsertRequest): Promise<ScriptScheduleView> {
+    return this.requestJson<ScriptScheduleView>(`/api/schedules/${scheduleId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async enableSchedule(scheduleId: string): Promise<ScriptScheduleView> {
+    return this.requestJson<ScriptScheduleView>(`/api/schedules/${scheduleId}/enable`, {
+      method: "POST"
+    });
+  }
+
+  async disableSchedule(scheduleId: string): Promise<ScriptScheduleView> {
+    return this.requestJson<ScriptScheduleView>(`/api/schedules/${scheduleId}/disable`, {
+      method: "POST"
+    });
+  }
+
+  async deleteSchedule(scheduleId: string): Promise<void> {
+    await this.requestJson<null>(`/api/schedules/${scheduleId}`, {
       method: "DELETE"
     });
   }

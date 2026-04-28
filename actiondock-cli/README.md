@@ -57,11 +57,25 @@ actiondock tool run hello-world --message hello --draft --json
 ```bash
 actiondock execution get exec-1 --json
 actiondock execution list --script-id hello-world --json
+actiondock execution list --schedule-id schedule-1 --json
 actiondock execution delete exec-1 --json
 actiondock execution clear --script-id hello-world --json
 ```
 
 `execution list` 至少需要提供 `--script-id` 或 `--schedule-id` 之一。
+
+### Schedule
+
+```bash
+actiondock schedule list --json
+actiondock schedule list --script-id hello-world --json
+actiondock schedule get schedule-1 --json
+actiondock schedule create --script-id hello-world --schedule-name hourly-sync --schedule-cron "0 */5 * * * *" --message hello --name alice --json
+actiondock schedule update schedule-1 --schedule-name nightly-sync --count 3 --json
+actiondock schedule enable schedule-1 --json
+actiondock schedule disable schedule-1 --json
+actiondock schedule delete schedule-1 --json
+```
 
 ### Plugin
 
@@ -103,6 +117,8 @@ actiondock plugin invoke my-plugin summarize --topic ops --limit 5
 ```bash
 actiondock tool run hello-world --input-json '{"name":"alice","payload":{"x":1,"tags":["a","b"]}}' --json
 actiondock tool run hello-world --input-file ./examples/hello-world.json --json
+actiondock schedule create --script-id hello-world --schedule-name hourly-sync --schedule-cron "0 */5 * * * *" --input-json '{"payload":{"source":"file"}}' --name alice --json
+actiondock schedule update schedule-1 --replace-input --input-file ./examples/schedule-input.json --schedule-disabled --json
 actiondock plugin invoke my-plugin summarize --args-json '{"topic":"ops","filters":{"env":"prod"}}'
 actiondock plugin invoke my-plugin summarize --args-file ./examples/plugin-args.json --script-input-file ./examples/script-input.json
 ```
