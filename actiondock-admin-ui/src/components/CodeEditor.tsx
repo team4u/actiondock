@@ -1,7 +1,7 @@
 import Editor from "@monaco-editor/react";
 
 interface CodeEditorProps {
-  value: string;
+  value?: string;
   onChange: (nextValue: string) => void;
   theme: "vs-light" | "vs-dark";
   language?: string;
@@ -21,13 +21,15 @@ export function CodeEditor({
   placeholder,
   readOnly = false
 }: CodeEditorProps) {
+  const safeValue = value ?? "";
+
   return (
     <div className="app-code-editor">
       <Editor
         height={height}
         defaultLanguage={defaultLanguage ?? language}
         language={language}
-        value={value}
+        value={safeValue}
         onChange={(nextValue) => onChange(nextValue ?? "")}
         theme={theme}
         options={{
@@ -42,7 +44,7 @@ export function CodeEditor({
           readOnly
         }}
       />
-      {placeholder && !value.trim() ? (
+      {placeholder && !safeValue.trim() ? (
         <div className="app-code-editor__placeholder">{placeholder}</div>
       ) : null}
     </div>

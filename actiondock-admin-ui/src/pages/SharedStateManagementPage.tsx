@@ -612,25 +612,40 @@ export function SharedStateManagementPage({ embedded = false }: SharedStateManag
                   />
                 </Form.Item>
               ) : (
-                <Form.Item
-                  label="值"
-                  name="valueText"
-                  rules={[{
-                    validator: async (_rule, value) => {
-                      parseSharedStateValue(typeof value === "string" ? value : "");
-                    }
-                  }]}
-                  extra="请输入合法 JSON。可保存对象、数组、字符串、数字、布尔值或 null。"
-                >
-                  <CodeEditor
-                    height="320px"
-                    language="json"
-                    value={watchedValueText}
-                    onChange={(nextValue) => form.setFieldValue("valueText", nextValue)}
-                    theme={editorTheme}
-                    placeholder='{"accessToken":"...","expiresAt":"2026-04-28T12:00:00"}'
-                  />
-                </Form.Item>
+                <>
+                  <Form.Item
+                    name="valueText"
+                    hidden
+                    rules={[{
+                      validator: async (_rule, value) => {
+                        parseSharedStateValue(typeof value === "string" ? value : "");
+                      }
+                    }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                  <Form.Item
+                    label="值"
+                    validateStatus={(() => {
+                      const errors = form.getFieldError("valueText");
+                      return errors.length > 0 ? "error" : undefined;
+                    })()}
+                    help={(() => {
+                      const errors = form.getFieldError("valueText");
+                      return errors.length > 0 ? errors[0] : undefined;
+                    })()}
+                    extra="请输入合法 JSON。可保存对象、数组、字符串、数字、布尔值或 null。"
+                  >
+                    <CodeEditor
+                      height="320px"
+                      language="json"
+                      value={watchedValueText}
+                      onChange={(nextValue) => form.setFieldValue("valueText", nextValue)}
+                      theme={editorTheme}
+                      placeholder='{"accessToken":"...","expiresAt":"2026-04-28T12:00:00"}'
+                    />
+                  </Form.Item>
+                </>
               )}
 
               <Form.Item
