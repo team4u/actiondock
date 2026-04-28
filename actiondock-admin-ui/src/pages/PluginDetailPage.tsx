@@ -63,6 +63,7 @@ import {
   buildSchemaObjectEditorJsonText,
   parseSchemaObjectEditorJsonText
 } from "../schemaObjectEditorSupport";
+import { useDefaultOwner } from "../hooks/useDefaultOwner";
 import { resolveSchemaFields } from "../schema";
 import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
@@ -134,6 +135,7 @@ export function PluginDetailPage() {
   const [publishForm] = Form.useForm<PublishPluginFormValues>();
   const watchedArgsValues = Form.useWatch([], argsForm) as Record<string, unknown> | undefined;
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
+  const defaultOwner = useDefaultOwner();
   const [plugin, setPlugin] = useState<PluginView | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -401,7 +403,7 @@ export function PluginDetailPage() {
         repositoryId: repositories[0]?.id,
         displayName: plugin.name || plugin.pluginId,
         version: plugin.version,
-        owner: "",
+        owner: defaultOwner,
         description: plugin.description || "",
         releaseNotes: "",
         tags: [],

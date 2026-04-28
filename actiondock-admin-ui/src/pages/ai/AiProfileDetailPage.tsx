@@ -30,6 +30,7 @@ import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
 import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
 import { buildSystemSettingsSearch } from "../../settingsRouting";
+import { useDefaultOwner } from "../../hooks/useDefaultOwner";
 import type {
   AiAgentProfile,
   AiAgentRunSnapshot,
@@ -262,6 +263,7 @@ export function AiAgentProfileDetailPage() {
   const isCreate = !id;
   const isManagedAgent = Boolean(id && (id.startsWith("pkg.") || id.startsWith("cap.")));
   const navigate = useNavigate();
+  const defaultOwner = useDefaultOwner();
   const [searchParams, setSearchParams] = useSearchParams();
   const [form] = Form.useForm<AgentFormValues>();
   const [publishForm] = Form.useForm<AiPackagePublishFormValues>();
@@ -626,7 +628,7 @@ export function AiAgentProfileDetailPage() {
       packageId: id.replace(/[^a-zA-Z0-9._-]/g, "-"),
       displayName: form.getFieldValue("name"),
       version: "1.0.0",
-      owner: "",
+      owner: defaultOwner,
       releaseNotes: "",
       tagsText: ""
     });

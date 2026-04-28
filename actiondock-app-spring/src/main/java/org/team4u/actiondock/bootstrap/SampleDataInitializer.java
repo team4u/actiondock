@@ -2,7 +2,9 @@ package org.team4u.actiondock.bootstrap;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
+import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptType;
 
@@ -16,9 +18,12 @@ import java.util.Map;
 @Component
 public class SampleDataInitializer implements CommandLineRunner {
     private final ScriptApplicationService scriptApplicationService;
+    private final ConfigValueApplicationService configValueApplicationService;
 
-    public SampleDataInitializer(ScriptApplicationService scriptApplicationService) {
+    public SampleDataInitializer(ScriptApplicationService scriptApplicationService,
+                                 ConfigValueApplicationService configValueApplicationService) {
         this.scriptApplicationService = scriptApplicationService;
+        this.configValueApplicationService = configValueApplicationService;
     }
 
     /**
@@ -56,6 +61,15 @@ public class SampleDataInitializer implements CommandLineRunner {
                     ));
             scriptApplicationService.save(script);
             scriptApplicationService.publish("hello-groovy");
+        }
+
+        try {
+            configValueApplicationService.get("system.default-owner");
+        } catch (IllegalArgumentException ignored) {
+            configValueApplicationService.create(new ConfigValue()
+                    .setKey("system.default-owner")
+                    .setValue("")
+                    .setDescription("发布到仓库时默认的维护人/作者名称"));
         }
     }
 }

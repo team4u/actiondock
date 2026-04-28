@@ -24,6 +24,7 @@ import {
   toTagOptions
 } from "./types";
 import type { RepositoryPublishVersionSuggestion } from "./types";
+import { useDefaultOwner } from "../../hooks/useDefaultOwner";
 
 export interface UseScriptPublishToRepoParams {
   currentScript: ScriptDefinition | null;
@@ -72,6 +73,7 @@ export function useScriptPublishToRepo({
   const versionSuggestionRequestRef = useRef(0);
   const configPreviewRequestRef = useRef(0);
   const versionManuallyEditedRef = useRef(false);
+  const defaultOwner = useDefaultOwner();
   const selectedRepositoryId = Form.useWatch("repositoryId", publishForm);
   const selectedToolId = Form.useWatch("toolId", publishForm);
   const selectedScheduleIds = Form.useWatch("scheduleIds", publishForm);
@@ -108,7 +110,7 @@ export function useScriptPublishToRepo({
         toolId: script.repositoryToolId || script.id,
         displayName: script.name,
         version: suggestNextRepositoryVersion(script.repositoryVersion),
-        owner: script.owner ?? "",
+        owner: script.owner ?? defaultOwner,
         releaseNotes: "",
         tags: toTagOptions(script.tags),
         scheduleIds: []
