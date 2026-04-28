@@ -29,6 +29,9 @@
   "jdeploy": {
     "javaVersion": "21",
     "jar": "target/actiondock-app-spring-0.2.0.jar",
+    "args": [
+      "-Dfile.encoding=UTF-8"
+    ],
     "title": "ActionDock Server",
     "commands": {
       "actiondock-server": {
