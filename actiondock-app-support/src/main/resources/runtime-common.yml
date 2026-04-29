@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:file:${app.home-dir}/data/dsl-runtime;AUTO_SERVER=TRUE
+    url: jdbc:h2:file:${app.home-dir}/data/actiondock;AUTO_SERVER=TRUE
     driver-class-name: org.h2.Driver
     username: sa
     password:
