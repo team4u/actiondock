@@ -16,9 +16,10 @@ import type {
   PluginDependency,
   RepositoryDefinition,
   RepositoryPublishConfigPreview,
+  RepositoryToolDescriptor,
   ScriptSchedule
 } from "../../types";
-import type { PublishToRepositoryFormValues, RepositoryPublishVersionSuggestion } from "./types";
+import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues, RepositoryPublishVersionSuggestion } from "./types";
 
 const { Text } = Typography;
 
@@ -50,6 +51,70 @@ function renderPluginDependencyList(dependencies: PluginDependency[]) {
   );
 }
 
+function renderScriptDependencyList(
+  dependencies: PublishScriptDependencyDraft[],
+  repositories: RepositoryDefinition[],
+  repositoryTools: RepositoryToolDescriptor[],
+  onChange: (scriptId: string, changedValues: Partial<PublishScriptDependencyDraft>) => void
+) {
+  if (dependencies.length === 0) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前源码没有检测到 scripts.invoke(...) 调用" />;
+  }
+
+  return (
+    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      {dependencies.map((dependency) => {
+        const toolOptions = repositoryTools
+          .filter((item) => item.repositoryId === dependency.repositoryId)
+          .map((item) => ({
+            value: item.toolId,
+            label: `${item.displayName} (${item.toolId})`
+          }));
+        return (
+          <div key={dependency.scriptId} className="plugin-dependency-row">
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Space wrap size={[8, 8]}>
+                <Text code>{dependency.scriptId}</Text>
+                {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>待补全版本</Tag>}
+              </Space>
+              <Space size={12} style={{ width: "100%" }} wrap>
+                <Select
+                  value={dependency.repositoryId}
+                  placeholder="选择仓库"
+                  style={{ flex: "1 1 180px", minWidth: 180 }}
+                  options={repositories.map((item) => ({
+                    value: item.id,
+                    label: item.name
+                  }))}
+                  onChange={(value) => onChange(dependency.scriptId, {
+                    repositoryId: value,
+                    toolId: undefined,
+                    versionRange: undefined
+                  })}
+                />
+                <Select
+                  value={dependency.toolId}
+                  placeholder="选择依赖工具"
+                  style={{ flex: "2 1 260px", minWidth: 260 }}
+                  options={toolOptions}
+                  disabled={!dependency.repositoryId}
+                  onChange={(value) => onChange(dependency.scriptId, { toolId: value, versionRange: undefined })}
+                />
+                <Input
+                  value={dependency.versionRange}
+                  placeholder="例如 >= 1.0.0"
+                  style={{ flex: "1 1 180px", minWidth: 180 }}
+                  onChange={(event) => onChange(dependency.scriptId, { versionRange: event.target.value })}
+                />
+              </Space>
+            </Space>
+          </div>
+        );
+      })}
+    </Space>
+  );
+}
+
 interface PublishToRepositoryModalProps {
   open: boolean;
   onCancel: () => void;
@@ -62,8 +127,12 @@ interface PublishToRepositoryModalProps {
   schedules: ScriptSchedule[];
   configPreview: RepositoryPublishConfigPreview | null;
   configPreviewLoading: boolean;
+  repositoryTools: RepositoryToolDescriptor[];
+  scriptDependencies: PublishScriptDependencyDraft[];
+  hasDynamicScriptDependencies: boolean;
   configModes: Record<string, "INLINE" | "PLACEHOLDER">;
   onConfigModesChange: React.Dispatch<React.SetStateAction<Record<string, "INLINE" | "PLACEHOLDER">>>;
+  onScriptDependencyChange: (scriptId: string, changedValues: Partial<PublishScriptDependencyDraft>) => void;
   onValuesChange: (changedValues: Partial<PublishToRepositoryFormValues>) => void;
   pluginDependencies: PluginDependency[];
 }
@@ -109,13 +178,18 @@ export function PublishToRepositoryModal({
   schedules,
   configPreview,
   configPreviewLoading,
+  repositoryTools,
+  scriptDependencies,
+  hasDynamicScriptDependencies,
   configModes,
   onConfigModesChange,
+  onScriptDependencyChange,
   onValuesChange,
   pluginDependencies
 }: PublishToRepositoryModalProps) {
   const hasMissingConfigKeys = Boolean(configPreview?.missingKeys.length);
   const detectedConfigItems = configPreview?.items ?? [];
+  const hasIncompleteScriptDependencies = scriptDependencies.some((item) => !item.repositoryId || !item.toolId);
 
   return (
     <Modal
@@ -126,7 +200,9 @@ export function PublishToRepositoryModal({
       okText="发布"
       cancelText="取消"
       confirmLoading={confirmLoading}
-      okButtonProps={{ disabled: metadataLoading || configPreviewLoading || hasMissingConfigKeys }}
+      okButtonProps={{
+        disabled: metadataLoading || configPreviewLoading || hasMissingConfigKeys || hasDynamicScriptDependencies || hasIncompleteScriptDependencies
+      }}
       width={760}
       destroyOnHidden
     >
@@ -209,10 +285,29 @@ export function PublishToRepositoryModal({
           <Card type="inner" title={`插件依赖 (${pluginDependencies.length})`}>
             {renderPluginDependencyList(pluginDependencies)}
             {pluginDependencies.length > 0 ? (
-              <Text type="secondary">
+            <Text type="secondary">
                 发布会把这些依赖写入仓库工具描述；安装工具时可选择同步安装或更新依赖插件。请先把对应插件发布到同一仓库。
               </Text>
             ) : null}
+          </Card>
+
+          <Card type="inner" title={`脚本依赖 (${scriptDependencies.length})`}>
+            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+              {hasDynamicScriptDependencies ? (
+                <Alert
+                  type="error"
+                  showIcon
+                  message="检测到动态脚本调用"
+                  description="仓库发布仅支持字面量 scripts.invoke(...) 依赖，请先把动态脚本 ID 改成固定字符串。"
+                />
+              ) : null}
+              {renderScriptDependencyList(scriptDependencies, repositories, repositoryTools, onScriptDependencyChange)}
+              {scriptDependencies.length > 0 ? (
+                <Text type="secondary">
+                  每个逻辑脚本 ID 都需要映射到一个仓库工具；安装仓库工具时可选择递归安装这些脚本依赖。
+                </Text>
+              ) : null}
+            </Space>
           </Card>
 
           <Card type="inner" title={`配置模板 (${detectedConfigItems.length})`}>

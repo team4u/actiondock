@@ -21,6 +21,14 @@ describe("parseScriptImportBundle", () => {
             owner: "platform-team",
             description: "demo script",
             tags: ["demo", "ops"],
+            scriptDependencies: [
+              {
+                scriptId: "child",
+                repositoryId: "repo-a",
+                toolId: "child-tool",
+                versionRange: ">= 1.0.0"
+              }
+            ],
             pluginDependencies: [
               {
                 pluginId: "email-plugin",
@@ -40,6 +48,14 @@ describe("parseScriptImportBundle", () => {
         owner: "platform-team",
         description: "demo script",
         tags: ["demo", "ops"],
+        scriptDependencies: [
+          {
+            scriptId: "child",
+            repositoryId: "repo-a",
+            toolId: "child-tool",
+            versionRange: ">= 1.0.0"
+          }
+        ],
         pluginDependencies: [
           {
             pluginId: "email-plugin",

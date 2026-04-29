@@ -32,6 +32,7 @@ export interface PublishedScriptSnapshot {
   source: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
+  scriptDependencies?: ScriptDependency[];
   aiDependencies?: AiDependency[];
 }
 
@@ -58,6 +59,7 @@ export interface ScriptDefinition {
   owner?: string;
   description?: string;
   tags?: string[];
+  scriptDependencies?: ScriptDependency[];
   pluginDependencies?: PluginDependency[];
   aiDependencies?: AiDependency[];
   publishedSnapshot?: PublishedScriptSnapshot;
@@ -70,6 +72,13 @@ export interface PluginDependency {
   pluginId: string;
   versionRange?: string;
   requiredActions: string[];
+}
+
+export interface ScriptDependency {
+  scriptId: string;
+  repositoryId: string;
+  toolId: string;
+  versionRange?: string;
 }
 
 export interface AiDependency {
@@ -632,6 +641,7 @@ export interface RepositoryToolDescriptor {
   scheduleTemplatePath?: string;
   digest?: string;
   riskLevel?: string;
+  scriptDependencies: ScriptDependency[];
   pluginDependencies: PluginDependency[];
   aiDependencies?: AiDependency[];
   installed: boolean;
@@ -821,6 +831,7 @@ export interface RepositoryAiPackageInstallResult {
 
 export interface RepositoryInstallRequest {
   installSchedules: boolean;
+  installScriptDependencies?: boolean;
   installPluginDependencies?: boolean;
   forcePluginUpgrade?: boolean;
 }
@@ -914,6 +925,7 @@ export interface RepositoryPublishRequest {
   tags?: string[];
   scheduleIds?: string[];
   configItems?: RepositoryPublishConfigItem[];
+  scriptDependencies?: ScriptDependency[];
   force?: boolean;
 }
 

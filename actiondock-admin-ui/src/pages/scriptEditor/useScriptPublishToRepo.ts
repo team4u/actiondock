@@ -4,6 +4,7 @@ import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useRef, useState } from "react";
 import {
   listRepositories,
+  listRepositoryTools,
   listSchedules,
   listToolsByRepository,
   previewRepositoryPublishConfig,
@@ -13,11 +14,13 @@ import {
 import type {
   RepositoryDefinition,
   RepositoryPublishConfigPreview,
+  RepositoryToolDescriptor,
   ScriptDefinition,
   ScriptSchedule
 } from "../../types";
 import { getErrorMessage } from "../../utils";
-import type { PublishToRepositoryFormValues } from "./types";
+import { extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../scriptDependencies";
+import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues } from "./types";
 import {
   resolveRepositoryPublishVersion,
   suggestNextRepositoryVersion,
@@ -28,6 +31,7 @@ import { useDefaultOwner } from "../../hooks/useDefaultOwner";
 
 export interface UseScriptPublishToRepoParams {
   currentScript: ScriptDefinition | null;
+  availableScripts: ScriptDefinition[];
   sourceText: string;
   isReadOnlyScript: boolean;
   ensureCurrentScriptPublished: (successMessage?: string) => Promise<ScriptDefinition>;
@@ -45,8 +49,12 @@ export interface ScriptPublishToRepoContext {
   publishConfigPreview: RepositoryPublishConfigPreview | null;
   publishConfigPreviewLoading: boolean;
   publishVersionSuggestion: RepositoryPublishVersionSuggestion;
+  publishRepositoryTools: RepositoryToolDescriptor[];
+  publishScriptDependencies: PublishScriptDependencyDraft[];
+  publishHasDynamicScriptDependencies: boolean;
   publishConfigModes: Record<string, "INLINE" | "PLACEHOLDER">;
   setPublishConfigModes: React.Dispatch<React.SetStateAction<Record<string, "INLINE" | "PLACEHOLDER">>>;
+  updatePublishScriptDependency: (scriptId: string, changedValues: Partial<PublishScriptDependencyDraft>) => void;
   handlePublishFormValuesChange: (changedValues: Partial<PublishToRepositoryFormValues>) => void;
   openPublishToRepositoryModal: (initialValues?: Partial<PublishToRepositoryFormValues>) => Promise<void>;
   handlePublishToRepository: () => Promise<void>;
@@ -54,6 +62,7 @@ export interface ScriptPublishToRepoContext {
 
 export function useScriptPublishToRepo({
   currentScript,
+  availableScripts,
   sourceText,
   isReadOnlyScript,
   ensureCurrentScriptPublished,
@@ -68,6 +77,9 @@ export function useScriptPublishToRepo({
   const [publishConfigPreview, setPublishConfigPreview] = useState<RepositoryPublishConfigPreview | null>(null);
   const [publishConfigPreviewLoading, setPublishConfigPreviewLoading] = useState(false);
   const [publishVersionSuggestion, setPublishVersionSuggestion] = useState<RepositoryPublishVersionSuggestion>({ status: "IDLE" });
+  const [publishRepositoryTools, setPublishRepositoryTools] = useState<RepositoryToolDescriptor[]>([]);
+  const [publishScriptDependencies, setPublishScriptDependencies] = useState<PublishScriptDependencyDraft[]>([]);
+  const [publishHasDynamicScriptDependencies, setPublishHasDynamicScriptDependencies] = useState(false);
   const [publishConfigModes, setPublishConfigModes] = useState<Record<string, "INLINE" | "PLACEHOLDER">>({});
   const syncedRepositoryIdsRef = useRef<Set<string>>(new Set());
   const versionSuggestionRequestRef = useRef(0);
@@ -78,15 +90,60 @@ export function useScriptPublishToRepo({
   const selectedToolId = Form.useWatch("toolId", publishForm);
   const selectedScheduleIds = Form.useWatch("scheduleIds", publishForm);
 
+  const resolveDependencyVersionRange = (
+    repositoryId: string | undefined,
+    toolId: string | undefined,
+    currentValue?: string
+  ): string | undefined => {
+    if (currentValue?.trim()) {
+      return currentValue.trim();
+    }
+    const descriptor = publishRepositoryTools.find(
+      (item) => item.repositoryId === repositoryId && item.toolId === toolId
+    );
+    return descriptor?.version ? `>= ${descriptor.version}` : undefined;
+  };
+
+  const buildScriptDependencyDrafts = (
+    script: ScriptDefinition
+  ): PublishScriptDependencyDraft[] => {
+    const declaredDependencies = new Map(
+      (script.scriptDependencies ?? script.publishedSnapshot?.scriptDependencies ?? []).map((item) => [item.scriptId, item])
+    );
+    const publishedScripts = new Map(
+      availableScripts
+        .filter((item) => item.id !== script.id)
+        .filter((item) => Boolean(item.publishedSnapshot))
+        .map((item) => [item.id, item])
+    );
+
+    return extractScriptDependenciesFromSource(sourceText).map(({ scriptId }) => {
+      const declared = declaredDependencies.get(scriptId);
+      const localScript = publishedScripts.get(scriptId);
+      const repositoryId = declared?.repositoryId ?? localScript?.repositoryId;
+      const toolId = declared?.toolId ?? localScript?.repositoryToolId;
+      const fallbackVersion = declared?.versionRange
+        ?? (localScript?.repositoryVersion ? `>= ${localScript.repositoryVersion}` : undefined);
+      const versionRange = resolveDependencyVersionRange(repositoryId, toolId, fallbackVersion);
+      return {
+        scriptId,
+        repositoryId,
+        toolId,
+        versionRange
+      };
+    });
+  };
+
   const loadPublishMetadata = async (
     script: ScriptDefinition,
     initialValues?: Partial<PublishToRepositoryFormValues>
   ): Promise<RepositoryDefinition[]> => {
     setPublishMetadataLoading(true);
     try {
-      const [repositories, schedules] = await Promise.all([
+      const [repositories, schedules, repositoryTools] = await Promise.all([
         listRepositories(),
-        listSchedules()
+        listSchedules(),
+        listRepositoryTools()
       ]);
       const publishableRepositories = repositories
         .filter((item) => item.enabled && item.type !== "HTTP")
@@ -96,7 +153,10 @@ export function useScriptPublishToRepo({
         .sort((left, right) => left.name.localeCompare(right.name));
 
       setPublishRepositories(publishableRepositories);
+      setPublishRepositoryTools(repositoryTools);
       setPublishSchedules(relatedSchedules);
+      setPublishHasDynamicScriptDependencies(hasDynamicScriptDependencies(sourceText));
+      setPublishScriptDependencies(buildScriptDependencyDrafts(script));
       setPublishConfigPreview(null);
       setPublishConfigModes({});
       setPublishVersionSuggestion({ status: "IDLE" });
@@ -236,10 +296,33 @@ export function useScriptPublishToRepo({
     };
   }, [currentScript?.id, messageApi, publishToRepositoryOpen, selectedScheduleIds, sourceText]);
 
+  useEffect(() => {
+    if (!publishToRepositoryOpen || !currentScript) {
+      setPublishHasDynamicScriptDependencies(false);
+      setPublishScriptDependencies([]);
+      return;
+    }
+    setPublishHasDynamicScriptDependencies(hasDynamicScriptDependencies(sourceText));
+    setPublishScriptDependencies(buildScriptDependencyDrafts(currentScript));
+  }, [availableScripts, currentScript, publishRepositoryTools, publishToRepositoryOpen, sourceText]);
+
   const handlePublishFormValuesChange = (changedValues: Partial<PublishToRepositoryFormValues>) => {
     if (Object.prototype.hasOwnProperty.call(changedValues, "version")) {
       versionManuallyEditedRef.current = true;
     }
+  };
+
+  const updatePublishScriptDependency = (scriptId: string, changedValues: Partial<PublishScriptDependencyDraft>) => {
+    setPublishScriptDependencies((previous) => previous.map((item) => {
+      if (item.scriptId !== scriptId) {
+        return item;
+      }
+      const next = { ...item, ...changedValues };
+      return {
+        ...next,
+        versionRange: resolveDependencyVersionRange(next.repositoryId, next.toolId, next.versionRange)
+      };
+    }));
   };
 
   const openPublishToRepositoryModal = async (initialValues?: Partial<PublishToRepositoryFormValues>) => {
@@ -276,6 +359,23 @@ export function useScriptPublishToRepo({
         messageApi.error(`缺少发布依赖的配置值: ${publishConfigPreview.missingKeys.join(", ")}`);
         return;
       }
+      if (publishHasDynamicScriptDependencies) {
+        messageApi.error("仓库发布仅支持字面量 scripts.invoke(...) 依赖，请先移除动态脚本调用");
+        return;
+      }
+      const incompleteScriptDependency = publishScriptDependencies.find(
+        (item) => !item.repositoryId?.trim() || !item.toolId?.trim()
+      );
+      if (incompleteScriptDependency) {
+        messageApi.error(`脚本依赖 ${incompleteScriptDependency.scriptId} 缺少仓库映射`);
+        return;
+      }
+      const scriptDependencies = normalizeScriptDependencies(publishScriptDependencies.map((item) => ({
+        scriptId: item.scriptId,
+        repositoryId: item.repositoryId ?? "",
+        toolId: item.toolId ?? "",
+        versionRange: resolveDependencyVersionRange(item.repositoryId, item.toolId, item.versionRange)
+      })));
       setPublishingToRepository(true);
       const publishedScript = await ensureCurrentScriptPublished();
       const configItems = (publishConfigPreview?.items ?? []).map((item) => ({
@@ -291,7 +391,8 @@ export function useScriptPublishToRepo({
         releaseNotes: values.releaseNotes?.trim() || undefined,
         tags: toTagOptions(values.tags),
         scheduleIds: values.scheduleIds ?? [],
-        configItems
+        configItems,
+        scriptDependencies
       };
       retry = { repositoryId: values.repositoryId, payload };
       await publishRepositoryTool(values.repositoryId, payload);
@@ -344,8 +445,12 @@ export function useScriptPublishToRepo({
     publishConfigPreview,
     publishConfigPreviewLoading,
     publishVersionSuggestion,
+    publishRepositoryTools,
+    publishScriptDependencies,
+    publishHasDynamicScriptDependencies,
     publishConfigModes,
     setPublishConfigModes,
+    updatePublishScriptDependency,
     handlePublishFormValuesChange,
     openPublishToRepositoryModal,
     handlePublishToRepository

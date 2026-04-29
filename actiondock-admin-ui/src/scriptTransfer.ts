@@ -4,6 +4,7 @@ import type {
   PublishedScriptSnapshot,
   ScriptSchedule,
   ScriptDefinition,
+  ScriptDependency,
   ScriptPackaging,
   ScriptStatus,
   ScriptType
@@ -116,6 +117,37 @@ function parsePluginDependencies(value: unknown, fieldName: string): PluginDepen
   return value.map((item, index) => parsePluginDependency(item, `${fieldName}[${index}]`));
 }
 
+function parseScriptDependency(value: unknown, fieldName: string): ScriptDependency {
+  if (!isRecord(value)) {
+    throw new Error(`${fieldName} 必须是对象`);
+  }
+  if (!isNonEmptyString(value.scriptId)) {
+    throw new Error(`${fieldName}.scriptId 缺少合法值`);
+  }
+  if (!isNonEmptyString(value.repositoryId)) {
+    throw new Error(`${fieldName}.repositoryId 缺少合法值`);
+  }
+  if (!isNonEmptyString(value.toolId)) {
+    throw new Error(`${fieldName}.toolId 缺少合法值`);
+  }
+  return {
+    scriptId: value.scriptId.trim(),
+    repositoryId: value.repositoryId.trim(),
+    toolId: value.toolId.trim(),
+    versionRange: assertOptionalString(value.versionRange, `${fieldName}.versionRange`)
+  };
+}
+
+function parseScriptDependencies(value: unknown, fieldName: string): ScriptDependency[] | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} 必须是数组`);
+  }
+  return value.map((item, index) => parseScriptDependency(item, `${fieldName}[${index}]`));
+}
+
 function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScriptSnapshot | undefined {
   if (value == null) {
     return undefined;
@@ -148,7 +180,8 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
     packaging: (packaging as ScriptPackaging | undefined) ?? "TOOL",
     source,
     inputSchema: assertSchemaObject(value.inputSchema, `${fieldName}.inputSchema`),
-    outputSchema: assertSchemaObject(value.outputSchema, `${fieldName}.outputSchema`)
+    outputSchema: assertSchemaObject(value.outputSchema, `${fieldName}.outputSchema`),
+    scriptDependencies: parseScriptDependencies(value.scriptDependencies, `${fieldName}.scriptDependencies`)
   };
 }
 
@@ -200,6 +233,10 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
     owner: assertOptionalString(value.owner, `第 ${index + 1} 条脚本 ${id} 的 owner`),
     description: assertOptionalString(value.description, `第 ${index + 1} 条脚本 ${id} 的 description`),
     tags: assertOptionalStringArray(value.tags, `第 ${index + 1} 条脚本 ${id} 的 tags`),
+    scriptDependencies: parseScriptDependencies(
+      value.scriptDependencies,
+      `第 ${index + 1} 条脚本 ${id} 的 scriptDependencies`
+    ),
     pluginDependencies: parsePluginDependencies(
       value.pluginDependencies,
       `第 ${index + 1} 条脚本 ${id} 的 pluginDependencies`

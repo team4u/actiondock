@@ -7,6 +7,7 @@ package org.team4u.actiondock.web;
  */
 public class RepositoryInstallRequest {
     private boolean installSchedules;
+    private boolean installScriptDependencies;
     private boolean installPluginDependencies;
     private boolean forcePluginUpgrade;
 
@@ -16,6 +17,14 @@ public class RepositoryInstallRequest {
 
     public void setInstallSchedules(boolean installSchedules) {
         this.installSchedules = installSchedules;
+    }
+
+    public boolean isInstallScriptDependencies() {
+        return installScriptDependencies;
+    }
+
+    public void setInstallScriptDependencies(boolean installScriptDependencies) {
+        this.installScriptDependencies = installScriptDependencies;
     }
 
     public boolean isInstallPluginDependencies() {

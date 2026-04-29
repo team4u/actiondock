@@ -41,6 +41,7 @@ function descriptor(pluginDependencies: PluginDependency[]): RepositoryToolDescr
     type: "GROOVY",
     packaging: "TOOL",
     sourcePath: "tools/tool/source.groovy",
+    scriptDependencies: [],
     pluginDependencies,
     installed: true,
     updateAvailable: false,

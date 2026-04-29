@@ -69,11 +69,12 @@ public class ScriptInvocationService {
                                   Map<String, Object> input) {
         ensureEnabled();
         String normalizedScriptId = normalizeScriptId(scriptId);
+        String resolvedScriptId = resolveInvokedScriptId(normalizedScriptId, callerDefinition);
         try {
-            ScriptDefinition definition = scriptRepository.findById(normalizedScriptId)
-                    .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + normalizedScriptId));
+            ScriptDefinition definition = scriptRepository.findById(resolvedScriptId)
+                    .orElseThrow(() -> new IllegalArgumentException(buildMissingScriptMessage(normalizedScriptId, callerDefinition)));
             if (definition.getPublishedSnapshot() == null) {
-                throw new IllegalArgumentException("脚本未发布: " + normalizedScriptId);
+                throw new IllegalArgumentException("脚本未发布: " + resolvedScriptId);
             }
 
             ScriptDefinition publishedDefinition = definition.toPublishedDefinition();
@@ -120,6 +121,40 @@ public class ScriptInvocationService {
             throw new IllegalArgumentException("scriptId 不能为空");
         }
         return scriptId.trim();
+    }
+
+    private String resolveInvokedScriptId(String scriptId, ScriptDefinition callerDefinition) {
+        if (callerDefinition == null) {
+            return scriptId;
+        }
+        return callerDefinition.getScriptDependencies().stream()
+                .filter(dependency -> scriptId.equals(dependency.getScriptId()))
+                .findFirst()
+                .map(dependency -> scriptRepository.findInstalledByRepositorySource(
+                        dependency.getRepositoryId(),
+                        dependency.getToolId()
+                ).map(ScriptDefinition::getId).orElseGet(() -> defaultInstalledScriptId(
+                        dependency.getRepositoryId(),
+                        dependency.getToolId()
+                )))
+                .orElse(scriptId);
+    }
+
+    private String buildMissingScriptMessage(String requestedScriptId, ScriptDefinition callerDefinition) {
+        if (callerDefinition == null) {
+            return "脚本不存在: " + requestedScriptId;
+        }
+        return callerDefinition.getScriptDependencies().stream()
+                .filter(dependency -> requestedScriptId.equals(dependency.getScriptId()))
+                .findFirst()
+                .map(dependency -> "缺少脚本依赖: " + requestedScriptId
+                        + " -> " + defaultInstalledScriptId(dependency.getRepositoryId(), dependency.getToolId())
+                        + " " + dependency.getVersionRange())
+                .orElse("脚本不存在: " + requestedScriptId);
+    }
+
+    private String defaultInstalledScriptId(String repositoryId, String toolId) {
+        return repositoryId + "." + toolId;
     }
 
     private ScriptExecutionContext childContext(ScriptDefinition callerDefinition,

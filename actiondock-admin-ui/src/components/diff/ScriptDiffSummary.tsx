@@ -42,7 +42,7 @@ export function ScriptDiffSummary({ diff }: ScriptDiffSummaryProps) {
           <Text>Input Schema：{summarizeSchema(diff.inputSchema)}</Text>
           <Text>Output Schema：{summarizeSchema(diff.outputSchema)}</Text>
           <Text>Metadata：{diff.metadata.changed ? `${diff.metadata.changes.length} 项变更` : "无变化"}</Text>
-          {diff.dependencies.available ? <Text>插件依赖：{summarizeDependencies(diff.dependencies)}</Text> : null}
+          {diff.dependencies.available ? <Text>依赖：{summarizeDependencies(diff.dependencies)}</Text> : null}
           {diff.highlights.length > 0 ? (
             <Space direction="vertical" size={2}>
               {diff.highlights.map((item) => (

@@ -31,6 +31,7 @@ final class SchemaViewSanitizer {
                 .setName(definition.getName())
                 .setType(definition.getType())
                 .setSource(definition.getSource())
+                .setPackaging(definition.getPackaging())
                 .setInputSchema(sanitizeSchema(definition.getInputSchema()))
                 .setOutputSchema(sanitizeSchema(definition.getOutputSchema()))
                 .setPublishedSnapshot(sanitizeSnapshot(definition.getPublishedSnapshot()))
@@ -49,6 +50,9 @@ final class SchemaViewSanitizer {
                 .setOwner(definition.getOwner())
                 .setDescription(definition.getDescription())
                 .setTags(definition.getTags())
+                .setScriptDependencies(definition.getScriptDependencies())
+                .setPluginDependencies(definition.getPluginDependencies())
+                .setAiDependencies(definition.getAiDependencies())
                 .setCreatedAt(definition.getCreatedAt())
                 .setUpdatedAt(definition.getUpdatedAt());
     }
@@ -66,9 +70,12 @@ final class SchemaViewSanitizer {
         return new PublishedScriptSnapshot()
                 .setName(snapshot.getName())
                 .setType(snapshot.getType())
+                .setPackaging(snapshot.getPackaging())
                 .setSource(snapshot.getSource())
                 .setInputSchema(sanitizeSchema(snapshot.getInputSchema()))
-                .setOutputSchema(sanitizeSchema(snapshot.getOutputSchema()));
+                .setOutputSchema(sanitizeSchema(snapshot.getOutputSchema()))
+                .setScriptDependencies(snapshot.getScriptDependencies())
+                .setAiDependencies(snapshot.getAiDependencies());
     }
 
     /**

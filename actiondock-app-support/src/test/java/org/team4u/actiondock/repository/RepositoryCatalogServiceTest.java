@@ -134,6 +134,46 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
+    void toolMetadataRoundTripsScriptDependencies() throws Exception {
+        RepositoryCatalogService.ToolFile tool = new RepositoryCatalogService.ToolFile(
+                1,
+                "demo-tool",
+                "Demo Tool",
+                "1.0.0",
+                "GROOVY",
+                "TOOL",
+                "Asset docs",
+                "Initial",
+                "team",
+                List.of("demo"),
+                "source.groovy",
+                "input.schema.json",
+                "output.schema.json",
+                null,
+                null,
+                null,
+                null,
+                List.of(new org.team4u.actiondock.domain.model.ScriptDependency()
+                        .setScriptId("child")
+                        .setRepositoryId("repo-a")
+                        .setToolId("child-tool")
+                        .setVersionRange(">= 1.2.0")),
+                List.of()
+        );
+
+        String json = objectMapper.writeValueAsString(tool);
+        RepositoryCatalogService.ToolFile restored = objectMapper.readValue(json, RepositoryCatalogService.ToolFile.class);
+
+        assertThat(restored.scriptDependencies()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getScriptId()).isEqualTo("child");
+                    assertThat(item.getRepositoryId()).isEqualTo("repo-a");
+                    assertThat(item.getToolId()).isEqualTo("child-tool");
+                    assertThat(item.getVersionRange()).isEqualTo(">= 1.2.0");
+                });
+    }
+
+    @Test
     void repositoryMetadataRejectsIndexEntriesWithoutReleaseNotes() {
         String indexJson = """
                 {

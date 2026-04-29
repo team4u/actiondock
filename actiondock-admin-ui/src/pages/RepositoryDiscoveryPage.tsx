@@ -52,6 +52,7 @@ import type {
   RepositoryAiPackageDescriptor,
   RepositoryAiPackageDetail,
   RepositoryDefinition,
+  ScriptDependency,
   RepositoryToolDescriptor,
   RepositoryToolDetail
 } from "../types";
@@ -95,6 +96,40 @@ function renderPluginDependencies(dependencies: PluginDependency[]) {
               {actions.length > 0 ? actions.map((action) => <Tag key={action}>{action}</Tag>) : <Text type="secondary">未声明</Text>}
             </Space>
           )
+        }
+      ]}
+    />
+  );
+}
+
+function renderScriptDependencies(dependencies: ScriptDependency[]) {
+  if (dependencies.length === 0) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有声明脚本依赖" />;
+  }
+
+  return (
+    <Table<ScriptDependency>
+      rowKey={(item) => `${item.scriptId}:${item.repositoryId}:${item.toolId}`}
+      size="small"
+      pagination={false}
+      dataSource={dependencies}
+      columns={[
+        {
+          title: "逻辑脚本 ID",
+          dataIndex: "scriptId",
+          key: "scriptId",
+          render: (value: string) => <Text code>{value}</Text>
+        },
+        {
+          title: "仓库工具",
+          key: "target",
+          render: (_value: unknown, record) => <Text code>{`${record.repositoryId}/${record.toolId}`}</Text>
+        },
+        {
+          title: "版本要求",
+          dataIndex: "versionRange",
+          key: "versionRange",
+          render: (value?: string) => value ? <Tag color="blue">{value}</Tag> : <Tag>未锁定版本</Tag>
         }
       ]}
     />
@@ -245,6 +280,7 @@ export function RepositoryDiscoveryPage() {
 
   const confirmInstallAction = async (descriptor: RepositoryToolDescriptor, action: InstallAction) => {
     let installSchedules = false;
+    let installScriptDependencies = descriptor.scriptDependencies.length > 0;
     let installPluginDependencies = descriptor.pluginDependencies.length > 0;
     let detailForAction = detail?.descriptor.repositoryId === descriptor.repositoryId && detail?.descriptor.toolId === descriptor.toolId
       ? detail
@@ -277,6 +313,16 @@ export function RepositoryDiscoveryPage() {
           ) : (
             <Text type="secondary">该工具没有定时任务模板。</Text>
           )}
+          {descriptor.scriptDependencies.length > 0 ? (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Checkbox defaultChecked onChange={(event) => { installScriptDependencies = event.target.checked; }}>
+                同时安装或更新 {descriptor.scriptDependencies.length} 个脚本依赖
+              </Checkbox>
+              {renderScriptDependencies(descriptor.scriptDependencies)}
+            </Space>
+          ) : (
+            <Text type="secondary">该工具没有声明脚本依赖。</Text>
+          )}
           {descriptor.pluginDependencies.length > 0 ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
               <Checkbox defaultChecked onChange={(event) => { installPluginDependencies = event.target.checked; }}>
@@ -297,9 +343,17 @@ export function RepositoryDiscoveryPage() {
     setActionKey(`${action}:${descriptor.installedScriptId}`);
     try {
       if (action === "install") {
-        await installRepositoryTool(descriptor.repositoryId, descriptor.toolId, { installSchedules, installPluginDependencies });
+        await installRepositoryTool(descriptor.repositoryId, descriptor.toolId, {
+          installSchedules,
+          installScriptDependencies,
+          installPluginDependencies
+        });
       } else {
-        await updateRepositoryTool(descriptor.repositoryId, descriptor.toolId, { installSchedules, installPluginDependencies });
+        await updateRepositoryTool(descriptor.repositoryId, descriptor.toolId, {
+          installSchedules,
+          installScriptDependencies,
+          installPluginDependencies
+        });
       }
       messageApi.success(action === "install" ? "工具已安装到本机" : "工具已更新");
       await loadData();
@@ -800,6 +854,11 @@ export function RepositoryDiscoveryPage() {
 	                  ) : (
 	                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有配置模板" />
 	                  )
+	                },
+	                {
+	                  key: "scripts",
+	                  label: `脚本依赖 (${detail.descriptor.scriptDependencies.length})`,
+	                  children: renderScriptDependencies(detail.descriptor.scriptDependencies)
 	                },
 	                {
 	                  key: "plugins",

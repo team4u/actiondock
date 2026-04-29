@@ -58,7 +58,7 @@ import {
   parseScriptImportBundle
 } from "../scriptTransfer";
 import { buildScriptDiff, toDiffTarget } from "../scriptDiff";
-import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptScope, ScriptStatus, ScriptType } from "../types";
+import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptStatus, ScriptType } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 import { DevelopmentSyncTag } from "../components/domain/DevelopmentSyncTag";
 import { ForkScriptModal } from "../components/ForkScriptModal";
@@ -92,6 +92,24 @@ function renderPluginDependencies(dependencies: PluginDependency[]) {
           <Text code>{dependency.pluginId}</Text>
           {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>未锁定版本</Tag>}
           {dependency.requiredActions.map((action) => <Tag key={action}>{action}</Tag>)}
+        </Space>
+      ))}
+    </Space>
+  );
+}
+
+function renderScriptDependencies(dependencies: ScriptDependency[]) {
+  if (dependencies.length === 0) {
+    return <Text type="secondary">该工具没有声明脚本依赖。</Text>;
+  }
+
+  return (
+    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+      {dependencies.map((dependency) => (
+        <Space key={`${dependency.scriptId}:${dependency.repositoryId}:${dependency.toolId}`} wrap size={[6, 6]}>
+          <Text code>{dependency.scriptId}</Text>
+          <Text code>{`${dependency.repositoryId}/${dependency.toolId}`}</Text>
+          {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>未锁定版本</Tag>}
         </Space>
       ))}
     </Space>
@@ -357,6 +375,7 @@ export function ToolLibraryPage() {
     }
 
     let installSchedules = false;
+    let installScriptDependencies = Boolean(descriptor?.scriptDependencies.length);
     let installPluginDependencies = Boolean(descriptor?.pluginDependencies.length);
     let scheduleCount = 0;
 
@@ -387,6 +406,21 @@ export function ToolLibraryPage() {
           ) : (
             <Text type="secondary">该工具没有额外定时模板可同步。</Text>
           )}
+          {descriptor?.scriptDependencies.length ? (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Checkbox
+                defaultChecked
+                onChange={(event) => {
+                  installScriptDependencies = event.target.checked;
+                }}
+              >
+                同时安装或更新 {descriptor.scriptDependencies.length} 个脚本依赖
+              </Checkbox>
+              {renderScriptDependencies(descriptor.scriptDependencies)}
+            </Space>
+          ) : (
+            <Text type="secondary">该工具没有声明脚本依赖。</Text>
+          )}
           {descriptor?.pluginDependencies.length ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
               <Checkbox
@@ -408,7 +442,11 @@ export function ToolLibraryPage() {
 
     setActionKey(`update:${tool.id}`);
     try {
-      await updateRepositoryTool(tool.repositoryId, tool.repositoryToolId, { installSchedules, installPluginDependencies });
+      await updateRepositoryTool(tool.repositoryId, tool.repositoryToolId, {
+        installSchedules,
+        installScriptDependencies,
+        installPluginDependencies
+      });
       messageApi.success("工具已更新");
       await loadData();
     } catch (error) {
@@ -468,6 +506,7 @@ export function ToolLibraryPage() {
         try {
           await updateRepositoryTool(tool.repositoryId, tool.toolId, {
             installSchedules: true,
+            installScriptDependencies: true,
             installPluginDependencies: true
           });
           updatedCount += 1;

@@ -181,12 +181,14 @@ public class RepositoryController {
                                                      @PathVariable String toolId,
                                                      @RequestBody(required = false) RepositoryInstallRequest request) {
         boolean installSchedules = request != null && request.isInstallSchedules();
+        boolean installScriptDependencies = request != null && request.isInstallScriptDependencies();
         boolean installPluginDependencies = request != null && request.isInstallPluginDependencies();
         boolean forcePluginUpgrade = request != null && request.isForcePluginUpgrade();
         return ApiResponse.success(repositoryCatalogService.installTool(
                 id,
                 toolId,
                 installSchedules,
+                installScriptDependencies,
                 installPluginDependencies,
                 forcePluginUpgrade
         ), "安装完成");
@@ -205,12 +207,14 @@ public class RepositoryController {
                                                     @PathVariable String toolId,
                                                     @RequestBody(required = false) RepositoryInstallRequest request) {
         boolean installSchedules = request != null && request.isInstallSchedules();
+        boolean installScriptDependencies = request != null && request.isInstallScriptDependencies();
         boolean installPluginDependencies = request != null && request.isInstallPluginDependencies();
         boolean forcePluginUpgrade = request != null && request.isForcePluginUpgrade();
         return ApiResponse.success(repositoryCatalogService.updateTool(
                 id,
                 toolId,
                 installSchedules,
+                installScriptDependencies,
                 installPluginDependencies,
                 forcePluginUpgrade
         ), "更新完成");

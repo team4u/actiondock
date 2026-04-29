@@ -3,6 +3,7 @@ package org.team4u.actiondock.application;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.model.ScriptType;
@@ -145,6 +146,33 @@ class ScriptInvocationServiceTest {
         assertThatThrownBy(() -> service.invokePublished("draft-only", null, null, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("调用脚本 draft-only 失败: 脚本未发布: draft-only");
+    }
+
+    @Test
+    void invokePublishedResolvesRepositoryScriptDependencyBeforeLookup() {
+        RecordingScriptEngine scriptEngine = new RecordingScriptEngine();
+        ScriptDefinition child = publishedScript("repo.child-tool");
+        child.setScope(org.team4u.actiondock.domain.model.ScriptScope.REPOSITORY)
+                .setRepositoryId("repo")
+                .setRepositoryToolId("child-tool")
+                .setRepositoryVersion("1.0.0");
+        ScriptInvocationService service = new ScriptInvocationService(repositoryWith(child), () -> scriptEngine);
+
+        Object result = service.invokePublished(
+                "child",
+                new ScriptDefinition()
+                        .setId("parent")
+                        .setScriptDependencies(List.of(new ScriptDependency()
+                                .setScriptId("child")
+                                .setRepositoryId("repo")
+                                .setToolId("child-tool")
+                                .setVersionRange(">= 1.0.0"))),
+                new ScriptExecutionContext().setScriptStack(List.of("parent")),
+                Map.of()
+        );
+
+        assertThat(result).isEqualTo(Map.of("result", 42));
+        assertThat(scriptEngine.lastContext.getScriptStack()).containsExactly("parent", "repo.child-tool");
     }
 
     private ScriptRepository repositoryWith(ScriptDefinition definition) {

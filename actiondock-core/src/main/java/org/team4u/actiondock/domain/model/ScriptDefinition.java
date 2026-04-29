@@ -37,6 +37,7 @@ public class ScriptDefinition {
     private String owner;
     private String description;
     private List<String> tags = new ArrayList<>();
+    private List<ScriptDependency> scriptDependencies = new ArrayList<>();
     private List<PluginDependency> pluginDependencies = new ArrayList<>();
     private List<AiDependency> aiDependencies = new ArrayList<>();
     private LocalDateTime createdAt;
@@ -262,6 +263,27 @@ public class ScriptDefinition {
         return this;
     }
 
+    public List<ScriptDependency> getScriptDependencies() {
+        return scriptDependencies.stream()
+                .map(dependency -> new ScriptDependency()
+                        .setScriptId(dependency.getScriptId())
+                        .setRepositoryId(dependency.getRepositoryId())
+                        .setToolId(dependency.getToolId())
+                        .setVersionRange(dependency.getVersionRange()))
+                .toList();
+    }
+
+    public ScriptDefinition setScriptDependencies(List<ScriptDependency> scriptDependencies) {
+        this.scriptDependencies = scriptDependencies == null ? new ArrayList<>() : scriptDependencies.stream()
+                .map(dependency -> new ScriptDependency()
+                        .setScriptId(dependency.getScriptId())
+                        .setRepositoryId(dependency.getRepositoryId())
+                        .setToolId(dependency.getToolId())
+                        .setVersionRange(dependency.getVersionRange()))
+                .toList();
+        return this;
+    }
+
     public List<AiDependency> getAiDependencies() {
         return aiDependencies.stream()
                 .map(dependency -> new AiDependency()
@@ -326,6 +348,7 @@ public class ScriptDefinition {
                 .setSource(source)
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
+                .setScriptDependencies(scriptDependencies)
                 .setAiDependencies(aiDependencies);
     }
 
@@ -380,6 +403,7 @@ public class ScriptDefinition {
                 .setOwner(owner)
                 .setDescription(description)
                 .setTags(tags)
+                .setScriptDependencies(snapshot.getScriptDependencies())
                 .setPluginDependencies(pluginDependencies)
                 .setAiDependencies(snapshot.getAiDependencies())
                 .setCreatedAt(createdAt)

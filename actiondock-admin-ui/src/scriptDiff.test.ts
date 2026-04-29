@@ -23,6 +23,7 @@ function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
     },
     status: "PUBLISHED",
     version: 2,
+    scriptDependencies: [],
     ...overrides
   };
 }
@@ -110,7 +111,8 @@ describe("buildScriptDiff", () => {
     expect(diff.dependencies.changed).toBe(true);
     expect(diff.dependencies.added).toEqual([
       {
-        pluginId: "user-plugin",
+        dependencyType: "PLUGIN",
+        dependencyId: "user-plugin",
         versionRange: ">= 1.0.0",
         requiredActions: ["query"],
         risk: "MEDIUM"
@@ -118,7 +120,8 @@ describe("buildScriptDiff", () => {
     ]);
     expect(diff.dependencies.modified).toEqual([
       {
-        pluginId: "email-plugin",
+        dependencyType: "PLUGIN",
+        dependencyId: "email-plugin",
         changes: [
           {
             field: "versionRange",

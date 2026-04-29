@@ -38,6 +38,13 @@ export interface PublishToRepositoryFormValues {
   scheduleIds?: string[];
 }
 
+export interface PublishScriptDependencyDraft {
+  scriptId: string;
+  repositoryId?: string;
+  toolId?: string;
+  versionRange?: string;
+}
+
 export type { ForkFormValues } from "../../types";
 
 export type ExecutionInputMode = "SCHEMA" | "JSON";

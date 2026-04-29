@@ -22,6 +22,7 @@ public class PublishedScriptSnapshot {
     private String source;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
     private Map<String, Object> outputSchema = new LinkedHashMap<>();
+    private List<ScriptDependency> scriptDependencies = new ArrayList<>();
     private List<AiDependency> aiDependencies = new ArrayList<>();
 
     public PublishedScriptSnapshot() {
@@ -42,6 +43,7 @@ public class PublishedScriptSnapshot {
         this.source = other.getSource();
         this.inputSchema = SchemaValueCopier.copyMap(other.getInputSchema());
         this.outputSchema = SchemaValueCopier.copyMap(other.getOutputSchema());
+        this.scriptDependencies = other.getScriptDependencies();
         this.aiDependencies = other.getAiDependencies();
     }
 
@@ -109,6 +111,27 @@ public class PublishedScriptSnapshot {
         return this;
     }
 
+    public List<ScriptDependency> getScriptDependencies() {
+        return scriptDependencies.stream()
+                .map(dependency -> new ScriptDependency()
+                        .setScriptId(dependency.getScriptId())
+                        .setRepositoryId(dependency.getRepositoryId())
+                        .setToolId(dependency.getToolId())
+                        .setVersionRange(dependency.getVersionRange()))
+                .toList();
+    }
+
+    public PublishedScriptSnapshot setScriptDependencies(List<ScriptDependency> scriptDependencies) {
+        this.scriptDependencies = scriptDependencies == null ? new ArrayList<>() : scriptDependencies.stream()
+                .map(dependency -> new ScriptDependency()
+                        .setScriptId(dependency.getScriptId())
+                        .setRepositoryId(dependency.getRepositoryId())
+                        .setToolId(dependency.getToolId())
+                        .setVersionRange(dependency.getVersionRange()))
+                .toList();
+        return this;
+    }
+
     public List<AiDependency> getAiDependencies() {
         return aiDependencies.stream()
                 .map(dependency -> new AiDependency()
@@ -153,11 +176,12 @@ public class PublishedScriptSnapshot {
                 && Objects.equals(source, other.source)
                 && Objects.equals(inputSchema, other.inputSchema)
                 && Objects.equals(outputSchema, other.outputSchema)
+                && Objects.equals(scriptDependencies, other.scriptDependencies)
                 && Objects.equals(aiDependencies, other.aiDependencies);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, type, packaging, source, inputSchema, outputSchema, aiDependencies);
+        return Objects.hash(name, type, packaging, source, inputSchema, outputSchema, scriptDependencies, aiDependencies);
     }
 }

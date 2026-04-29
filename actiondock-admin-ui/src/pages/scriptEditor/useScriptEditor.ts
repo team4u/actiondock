@@ -292,6 +292,7 @@ export function useScriptEditor({
       status: currentScript?.status ?? "DRAFT",
       version: currentScript?.version ?? 1,
       description: values.description?.trim() || undefined,
+      scriptDependencies: currentScript?.scriptDependencies,
       pluginDependencies: selectedScriptType === "GROOVY" ? detectedPluginDependencies : [],
       aiDependencies: selectedScriptType === "GROOVY" ? detectedAiDependencies : [],
       publishedSnapshot: currentScript?.publishedSnapshot,

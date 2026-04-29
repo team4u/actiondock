@@ -134,6 +134,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   // --- Publish to repository hook ---
   const publishToRepo = useScriptPublishToRepo({
     currentScript: editor.currentScript,
+    availableScripts: editor.availableScripts,
     sourceText: editor.sourceText,
     isReadOnlyScript: editor.isReadOnlyScript,
     ensureCurrentScriptPublished: editor.ensureCurrentScriptPublished,
@@ -569,6 +570,10 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         configPreviewLoading={publishToRepo.publishConfigPreviewLoading}
         configModes={publishToRepo.publishConfigModes}
         onConfigModesChange={publishToRepo.setPublishConfigModes}
+        repositoryTools={publishToRepo.publishRepositoryTools}
+        scriptDependencies={publishToRepo.publishScriptDependencies}
+        hasDynamicScriptDependencies={publishToRepo.publishHasDynamicScriptDependencies}
+        onScriptDependencyChange={publishToRepo.updatePublishScriptDependency}
         onValuesChange={publishToRepo.handlePublishFormValuesChange}
         pluginDependencies={editor.detectedPluginDependencies}
       />

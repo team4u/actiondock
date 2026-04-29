@@ -31,6 +31,21 @@ public interface ScriptRepository {
     Optional<ScriptDefinition> findById(String id);
 
     /**
+     * 根据来源仓库与工具标识查找已安装的仓库脚本。
+     *
+     * @param repositoryId 来源仓库 ID
+     * @param repositoryToolId 来源工具 ID
+     * @return 匹配的已安装脚本，不存在时返回空的 Optional
+     */
+    default Optional<ScriptDefinition> findInstalledByRepositorySource(String repositoryId, String repositoryToolId) {
+        return findAll().stream()
+                .filter(item -> item.getScope() == org.team4u.actiondock.domain.model.ScriptScope.REPOSITORY)
+                .filter(item -> java.util.Objects.equals(repositoryId, item.getRepositoryId()))
+                .filter(item -> java.util.Objects.equals(repositoryToolId, item.getRepositoryToolId()))
+                .findFirst();
+    }
+
+    /**
      * 查询全部脚本定义。
      *
      * @return 所有脚本定义列表，无数据时返回空列表

@@ -1,6 +1,6 @@
 import { diffLines } from "diff";
 import { prettyJson } from "./utils";
-import type { PluginDependency, ScriptDefinition, ScriptType } from "./types";
+import type { PluginDependency, ScriptDefinition, ScriptDependency, ScriptType } from "./types";
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type ScriptDiffContext = "publish" | "import";
@@ -16,6 +16,7 @@ export interface ScriptDiffTarget {
   description?: string;
   owner?: string;
   tags?: string[];
+  scriptDependencies?: ScriptDependency[];
   pluginDependencies?: PluginDependency[];
   rawInputSchemaText?: string;
   rawOutputSchemaText?: string;
@@ -97,24 +98,27 @@ export interface DependencyDiffSummary {
   available: boolean;
   changed: boolean;
   risk: RiskLevel;
-  added: PluginDependencyChange[];
-  removed: PluginDependencyChange[];
-  modified: PluginDependencyModification[];
-  unchanged: PluginDependencyChange[];
+  added: DependencyChange[];
+  removed: DependencyChange[];
+  modified: DependencyModification[];
+  unchanged: DependencyChange[];
 }
 
-export interface PluginDependencyChange {
-  pluginId: string;
+export interface DependencyChange {
+  dependencyType: "PLUGIN" | "SCRIPT";
+  dependencyId: string;
+  target?: string;
   action?: string;
   versionRange?: string;
   requiredActions: string[];
   risk: RiskLevel;
 }
 
-export interface PluginDependencyModification {
-  pluginId: string;
+export interface DependencyModification {
+  dependencyType: "PLUGIN" | "SCRIPT";
+  dependencyId: string;
   changes: Array<{
-    field: "versionRange" | "requiredActions";
+    field: "versionRange" | "requiredActions" | "target";
     before: unknown;
     after: unknown;
     risk: RiskLevel;
@@ -483,18 +487,37 @@ function diffMetadata(
   };
 }
 
-function normalizeDependencyKey(dependency: PluginDependency): string {
-  return dependency.pluginId;
+function normalizePluginDependencyKey(dependency: PluginDependency): string {
+  return `plugin:${dependency.pluginId}`;
 }
 
-function normalizeDependencyChange(
+function normalizePluginDependencyChange(
   dependency: PluginDependency,
   risk: RiskLevel
-): PluginDependencyChange {
+): DependencyChange {
   return {
-    pluginId: dependency.pluginId,
+    dependencyType: "PLUGIN",
+    dependencyId: dependency.pluginId,
     versionRange: dependency.versionRange,
     requiredActions: [...dependency.requiredActions].sort(),
+    risk
+  };
+}
+
+function normalizeScriptDependencyKey(dependency: ScriptDependency): string {
+  return `script:${dependency.scriptId}`;
+}
+
+function normalizeScriptDependencyChange(
+  dependency: ScriptDependency,
+  risk: RiskLevel
+): DependencyChange {
+  return {
+    dependencyType: "SCRIPT",
+    dependencyId: dependency.scriptId,
+    target: `${dependency.repositoryId}/${dependency.toolId}`,
+    versionRange: dependency.versionRange,
+    requiredActions: [],
     risk
   };
 }
@@ -517,31 +540,40 @@ function diffDependencies(
     };
   }
 
-  const baseDependencies = new Map(
-    (base?.pluginDependencies ?? []).map((dependency) => [normalizeDependencyKey(dependency), dependency])
+  const basePluginDependencies = new Map(
+    (base?.pluginDependencies ?? []).map((dependency) => [normalizePluginDependencyKey(dependency), dependency])
   );
-  const targetDependencies = new Map(
-    (target.pluginDependencies ?? []).map((dependency) => [normalizeDependencyKey(dependency), dependency])
+  const targetPluginDependencies = new Map(
+    (target.pluginDependencies ?? []).map((dependency) => [normalizePluginDependencyKey(dependency), dependency])
+  );
+  const baseScriptDependencies = new Map(
+    (base?.scriptDependencies ?? []).map((dependency) => [normalizeScriptDependencyKey(dependency), dependency])
+  );
+  const targetScriptDependencies = new Map(
+    (target.scriptDependencies ?? []).map((dependency) => [normalizeScriptDependencyKey(dependency), dependency])
   );
 
-  const added: PluginDependencyChange[] = [];
-  const removed: PluginDependencyChange[] = [];
-  const modified: PluginDependencyModification[] = [];
-  const unchanged: PluginDependencyChange[] = [];
+  const added: DependencyChange[] = [];
+  const removed: DependencyChange[] = [];
+  const modified: DependencyModification[] = [];
+  const unchanged: DependencyChange[] = [];
 
   if (comparisonMode === "INITIAL") {
-    for (const dependency of targetDependencies.values()) {
-      added.push(normalizeDependencyChange(dependency, "LOW"));
+    for (const dependency of targetPluginDependencies.values()) {
+      added.push(normalizePluginDependencyChange(dependency, "LOW"));
+    }
+    for (const dependency of targetScriptDependencies.values()) {
+      added.push(normalizeScriptDependencyChange(dependency, "LOW"));
     }
   } else {
-    for (const [key, beforeDependency] of baseDependencies.entries()) {
-      const afterDependency = targetDependencies.get(key);
+    for (const [key, beforeDependency] of basePluginDependencies.entries()) {
+      const afterDependency = targetPluginDependencies.get(key);
       if (!afterDependency) {
-        removed.push(normalizeDependencyChange(beforeDependency, "LOW"));
+        removed.push(normalizePluginDependencyChange(beforeDependency, "LOW"));
         continue;
       }
 
-      const changes: PluginDependencyModification["changes"] = [];
+      const changes: DependencyModification["changes"] = [];
       if (!sameValue(beforeDependency.versionRange, afterDependency.versionRange)) {
         changes.push({
           field: "versionRange",
@@ -565,17 +597,62 @@ function diffDependencies(
 
       if (changes.length > 0) {
         modified.push({
-          pluginId: beforeDependency.pluginId,
+          dependencyType: "PLUGIN",
+          dependencyId: beforeDependency.pluginId,
           changes
         });
       } else {
-        unchanged.push(normalizeDependencyChange(afterDependency, "LOW"));
+        unchanged.push(normalizePluginDependencyChange(afterDependency, "LOW"));
       }
     }
 
-    for (const [key, dependency] of targetDependencies.entries()) {
-      if (!baseDependencies.has(key)) {
-        added.push(normalizeDependencyChange(dependency, "MEDIUM"));
+    for (const [key, dependency] of targetPluginDependencies.entries()) {
+      if (!basePluginDependencies.has(key)) {
+        added.push(normalizePluginDependencyChange(dependency, "MEDIUM"));
+      }
+    }
+
+    for (const [key, beforeDependency] of baseScriptDependencies.entries()) {
+      const afterDependency = targetScriptDependencies.get(key);
+      if (!afterDependency) {
+        removed.push(normalizeScriptDependencyChange(beforeDependency, "LOW"));
+        continue;
+      }
+
+      const changes: DependencyModification["changes"] = [];
+      const beforeTarget = `${beforeDependency.repositoryId}/${beforeDependency.toolId}`;
+      const afterTarget = `${afterDependency.repositoryId}/${afterDependency.toolId}`;
+      if (!sameValue(beforeTarget, afterTarget)) {
+        changes.push({
+          field: "target",
+          before: beforeTarget,
+          after: afterTarget,
+          risk: "HIGH"
+        });
+      }
+      if (!sameValue(beforeDependency.versionRange, afterDependency.versionRange)) {
+        changes.push({
+          field: "versionRange",
+          before: beforeDependency.versionRange,
+          after: afterDependency.versionRange,
+          risk: "MEDIUM"
+        });
+      }
+
+      if (changes.length > 0) {
+        modified.push({
+          dependencyType: "SCRIPT",
+          dependencyId: beforeDependency.scriptId,
+          changes
+        });
+      } else {
+        unchanged.push(normalizeScriptDependencyChange(afterDependency, "LOW"));
+      }
+    }
+
+    for (const [key, dependency] of targetScriptDependencies.entries()) {
+      if (!baseScriptDependencies.has(key)) {
+        added.push(normalizeScriptDependencyChange(dependency, "MEDIUM"));
       }
     }
   }
@@ -658,7 +735,8 @@ function toPublishBase(snapshot: ScriptDefinition["publishedSnapshot"]): ScriptD
     type: snapshot.type,
     source: snapshot.source,
     inputSchema: snapshot.inputSchema,
-    outputSchema: snapshot.outputSchema
+    outputSchema: snapshot.outputSchema,
+    scriptDependencies: snapshot.scriptDependencies
   };
 }
 
@@ -672,6 +750,7 @@ export function toDiffTarget(script: ScriptDefinition): ScriptDiffTarget {
     description: script.description,
     owner: script.owner,
     tags: script.tags,
+    scriptDependencies: script.scriptDependencies,
     pluginDependencies: script.pluginDependencies
   };
 }

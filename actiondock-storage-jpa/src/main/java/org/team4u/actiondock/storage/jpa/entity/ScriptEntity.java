@@ -52,6 +52,8 @@ public class ScriptEntity {
     @Lob
     private String publishedOutputSchemaJson;
     @Lob
+    private String publishedScriptDependenciesJson;
+    @Lob
     private String publishedAiDependenciesJson;
 
     private String status;
@@ -71,6 +73,8 @@ public class ScriptEntity {
     private String description;
     @Lob
     private String tagsJson;
+    @Lob
+    private String scriptDependenciesJson;
     @Lob
     private String pluginDependenciesJson;
     @Lob
@@ -104,6 +108,8 @@ public class ScriptEntity {
     public void setPublishedInputSchemaJson(String publishedInputSchemaJson) { this.publishedInputSchemaJson = publishedInputSchemaJson; }
     public String getPublishedOutputSchemaJson() { return publishedOutputSchemaJson; }
     public void setPublishedOutputSchemaJson(String publishedOutputSchemaJson) { this.publishedOutputSchemaJson = publishedOutputSchemaJson; }
+    public String getPublishedScriptDependenciesJson() { return publishedScriptDependenciesJson; }
+    public void setPublishedScriptDependenciesJson(String publishedScriptDependenciesJson) { this.publishedScriptDependenciesJson = publishedScriptDependenciesJson; }
     public String getPublishedAiDependenciesJson() { return publishedAiDependenciesJson; }
     public void setPublishedAiDependenciesJson(String publishedAiDependenciesJson) { this.publishedAiDependenciesJson = publishedAiDependenciesJson; }
     public String getStatus() { return status; }
@@ -136,6 +142,8 @@ public class ScriptEntity {
     public void setDescription(String description) { this.description = description; }
     public String getTagsJson() { return tagsJson; }
     public void setTagsJson(String tagsJson) { this.tagsJson = tagsJson; }
+    public String getScriptDependenciesJson() { return scriptDependenciesJson; }
+    public void setScriptDependenciesJson(String scriptDependenciesJson) { this.scriptDependenciesJson = scriptDependenciesJson; }
     public String getPluginDependenciesJson() { return pluginDependenciesJson; }
     public void setPluginDependenciesJson(String pluginDependenciesJson) { this.pluginDependenciesJson = pluginDependenciesJson; }
     public String getAiDependenciesJson() { return aiDependenciesJson; }
