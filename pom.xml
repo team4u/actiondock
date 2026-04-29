@@ -12,7 +12,7 @@
 
     <groupId>org.team4u</groupId>
     <artifactId>actiondock</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <packaging>pom</packaging>
     <name>actiondock</name>
     <description>Multi-module Spring ActionDock runtime with H2 and script execution</description>

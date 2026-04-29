@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ActionDock official server",
   "author": "jay.wu <fjayblue@126.com>",
   "license": "MIT",
@@ -36,7 +36,7 @@
   },
   "jdeploy": {
     "javaVersion": "21",
-    "jar": "target/actiondock-app-spring-0.2.0.jar",
+    "jar": "target/actiondock-app-spring-0.3.0.jar",
     "args": [
       "-Dfile.encoding=UTF-8"
     ],
