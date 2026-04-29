@@ -41,6 +41,12 @@ public class AiAgentProfileService {
         return repository.findAll();
     }
 
+    public List<AiAgentProfile> list(boolean includeManaged) {
+        return list().stream()
+                .filter(profile -> includeManaged || (!profile.getId().startsWith(MANAGED_INTERNAL_PREFIX) && !profile.getId().startsWith(MANAGED_ENTRY_PREFIX)))
+                .toList();
+    }
+
     public AiAgentProfile get(String id) {
         return repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("AI Agent Profile 不存在: " + id));

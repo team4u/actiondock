@@ -226,83 +226,26 @@ public class PythonScriptEngine implements ScriptEngine {
                 """;
     }
 
+    private static final String PYTHON_WRAPPER_TEMPLATE = loadPythonWrapperTemplate();
+
+    private static String loadPythonWrapperTemplate() {
+        try (InputStream is = PythonScriptEngine.class.getClassLoader().getResourceAsStream("python-wrapper.py")) {
+            if (is == null) {
+                throw new IllegalStateException("python-wrapper.py template not found");
+            }
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to load python-wrapper.py template", e);
+        }
+    }
+
     private String buildWrappedSource(String source) {
         String normalizedSource = source == null ? "" : source.replace("\r\n", "\n");
         if (normalizedSource.isBlank()) {
             normalizedSource = "return {}";
         }
-        List<String> lines = new ArrayList<>();
-        lines.add("import json");
-        lines.add("import os");
-        lines.add("import sys");
-        lines.add("");
-        lines.add("class __ActionDockLog:");
-        lines.add("    def _write(self, level, message):");
-        lines.add("        payload = json.dumps({\"level\": level, \"message\": str(message)}, ensure_ascii=False)");
-        lines.add("        sys.stderr.write(\"" + LOG_PREFIX + "\" + payload + \"\\n\")");
-        lines.add("        sys.stderr.flush()");
-        lines.add("");
-        lines.add("    def debug(self, message):");
-        lines.add("        self._write(\"DEBUG\", message)");
-        lines.add("");
-        lines.add("    def info(self, message):");
-        lines.add("        self._write(\"INFO\", message)");
-        lines.add("");
-        lines.add("    def warn(self, message):");
-        lines.add("        self._write(\"WARN\", message)");
-        lines.add("");
-        lines.add("    def error(self, message):");
-        lines.add("        self._write(\"ERROR\", message)");
-        lines.add("");
-        lines.add("log = __ActionDockLog()");
-        lines.add("");
-        lines.add("class __ActionDockScripts:");
-        lines.add("    def invoke(self, script_id, args=None):");
-        lines.add("        payload = json.dumps({\"scriptId\": script_id, \"args\": {} if args is None else args}, ensure_ascii=False)");
-        lines.add("        sys.stderr.write(\"" + INVOKE_PREFIX + "\" + payload + \"\\n\")");
-        lines.add("        sys.stderr.flush()");
-        lines.add("        response_text = sys.stdin.readline()");
-        lines.add("        if not response_text:");
-        lines.add("            raise RuntimeError(\"Script invocation bridge closed\")");
-        lines.add("        response = json.loads(response_text)");
-        lines.add("        if response.get(\"ok\"):");
-        lines.add("            return response.get(\"result\")");
-        lines.add("        raise RuntimeError(response.get(\"error\") or \"Script invocation failed\")");
-        lines.add("");
-        lines.add("scripts = __ActionDockScripts()");
-        lines.add("");
-        lines.add("class __ActionDockState:");
-        lines.add("    def _request(self, payload):");
-        lines.add("        sys.stderr.write(\"" + STATE_PREFIX + "\" + json.dumps(payload, ensure_ascii=False) + \"\\n\")");
-        lines.add("        sys.stderr.flush()");
-        lines.add("        response_text = sys.stdin.readline()");
-        lines.add("        if not response_text:");
-        lines.add("            raise RuntimeError(\"State bridge closed\")");
-        lines.add("        response = json.loads(response_text)");
-        lines.add("        if response.get(\"ok\"):");
-        lines.add("            return response.get(\"result\")");
-        lines.add("        raise RuntimeError(response.get(\"error\") or \"State request failed\")");
-        lines.add("");
-        lines.add("    def get(self, namespace, key):");
-        lines.add("        return self._request({\"operation\": \"get\", \"namespace\": namespace, \"key\": key})");
-        lines.add("");
-        lines.add("    def put(self, namespace, key, value, options=None):");
-        lines.add("        return self._request({\"operation\": \"put\", \"namespace\": namespace, \"key\": key, \"value\": value, \"options\": {} if options is None else options})");
-        lines.add("");
-        lines.add("    def cas(self, namespace, key, expected_version, value, options=None):");
-        lines.add("        return self._request({\"operation\": \"cas\", \"namespace\": namespace, \"key\": key, \"expectedVersion\": expected_version, \"value\": value, \"options\": {} if options is None else options})");
-        lines.add("");
-        lines.add("    def delete(self, namespace, key):");
-        lines.add("        return self._request({\"operation\": \"delete\", \"namespace\": namespace, \"key\": key})");
-        lines.add("");
-        lines.add("    def list(self, namespace):");
-        lines.add("        return self._request({\"operation\": \"list\", \"namespace\": namespace})");
-        lines.add("");
-        lines.add("state = __ActionDockState()");
-        lines.add("");
-        lines.add("def __actiondock_main(input):");
-        lines.addAll(indent(normalizedSource));
-        return String.join("\n", lines) + "\n";
+        String indentedSource = String.join("\n", indent(normalizedSource));
+        return PYTHON_WRAPPER_TEMPLATE.replace("{{ user_script }}", indentedSource);
     }
 
     private List<String> indent(String source) {

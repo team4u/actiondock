@@ -7,11 +7,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -23,14 +21,15 @@ import java.util.regex.Pattern;
  */
 public class ConfigValueApplicationService {
     private static final Pattern KEY_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_.-]*");
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{config\\.([A-Za-z][A-Za-z0-9_.-]*)}");
     private static final ConfigValueApplicationService DISABLED = new ConfigValueApplicationService();
 
     private final ConfigValueRepository configValueRepository;
+    private final ConfigPlaceholderResolver placeholderResolver;
     private final boolean enabled;
 
     private ConfigValueApplicationService() {
         this.configValueRepository = null;
+        this.placeholderResolver = null;
         this.enabled = false;
     }
 
@@ -42,6 +41,7 @@ public class ConfigValueApplicationService {
      */
     public ConfigValueApplicationService(ConfigValueRepository configValueRepository) {
         this.configValueRepository = Objects.requireNonNull(configValueRepository);
+        this.placeholderResolver = new ConfigPlaceholderResolver(configValueRepository);
         this.enabled = true;
     }
 
@@ -191,117 +191,28 @@ public class ConfigValueApplicationService {
         if (!enabled) {
             return Map.of();
         }
-        Map<String, String> rawValues = loadRawValues();
-        Map<String, String> resolved = new LinkedHashMap<>();
-        rawValues.keySet().forEach(key -> resolveValue(key, rawValues, resolved, new LinkedHashSet<>()));
-        return Collections.unmodifiableMap(new LinkedHashMap<>(resolved));
+        return placeholderResolver.snapshot();
     }
 
-    /**
-     * 解析 Map 结构中的所有配置占位符。
-     * <p>
-     * 递归遍历 Map 中的所有字符串值，将 {@code ${config.xxx}} 占位符替换为实际配置值。
-     *
-     * @param source 原始输入 Map，可以为 null
-     * @return 解析后的 Map
-     */
     public Map<String, Object> resolveMap(Map<String, Object> source) {
-        if (source == null) {
-            return new LinkedHashMap<>();
+        if (!enabled) {
+            return source == null ? new LinkedHashMap<>() : new LinkedHashMap<>(source);
         }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> resolved = (Map<String, Object>) resolveObject(source, snapshot());
-        return resolved;
+        return placeholderResolver.resolveMap(source, snapshot());
     }
 
-    /**
-     * 解析对象中的所有配置占位符。
-     * <p>
-     * 支持 Map、List 和 String 类型的递归解析，其他类型直接返回。
-     *
-     * @param value 待解析的对象
-     * @return 解析后的对象
-     */
     public Object resolveObject(Object value) {
-        return resolveObject(value, snapshot());
+        if (!enabled) {
+            return value;
+        }
+        return placeholderResolver.resolveObject(value, snapshot());
     }
 
-    /**
-     * 解析字符串中的配置占位符。
-     * <p>
-     * 将字符串中所有 {@code ${config.xxx}} 格式的占位符替换为对应的配置值。
-     *
-     * @param value 待解析的字符串
-     * @return 解析后的字符串
-     * @throws IllegalArgumentException 如果引用了不存在的配置 key
-     */
     public String resolveText(String value) {
-        return resolveText(value, snapshot());
-    }
-
-    private Object resolveObject(Object value, Map<String, String> configValues) {
-        if (value instanceof Map<?, ?> mapValue) {
-            Map<String, Object> resolved = new LinkedHashMap<>();
-            mapValue.forEach((key, item) -> resolved.put(String.valueOf(key), resolveObject(item, configValues)));
-            return resolved;
-        }
-        if (value instanceof List<?> listValue) {
-            List<Object> resolved = new ArrayList<>();
-            listValue.forEach(item -> resolved.add(resolveObject(item, configValues)));
-            return resolved;
-        }
-        if (value instanceof String text) {
-            return resolveText(text, configValues);
-        }
-        return value;
-    }
-
-    private String resolveText(String value, Map<String, String> configValues) {
-        if (value == null || value.isEmpty()) {
+        if (!enabled) {
             return value == null ? "" : value;
         }
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(value);
-        StringBuilder result = new StringBuilder();
-        while (matcher.find()) {
-            String key = matcher.group(1);
-            String replacement = configValues.get(key);
-            if (replacement == null) {
-                throw new IllegalArgumentException("配置值不存在: " + key);
-            }
-            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(result);
-        return result.toString();
-    }
-
-    private String resolveValue(String key,
-                                Map<String, String> rawValues,
-                                Map<String, String> resolvedValues,
-                                LinkedHashSet<String> stack) {
-        String cached = resolvedValues.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        if (!rawValues.containsKey(key)) {
-            throw new IllegalArgumentException("配置值不存在: " + key);
-        }
-        if (!stack.add(key)) {
-            List<String> cycle = new ArrayList<>(stack);
-            cycle.add(key);
-            throw new IllegalArgumentException("配置值引用存在循环: " + String.join(" -> ", cycle));
-        }
-        String resolved = resolveText(rawValues.get(key), new LazyResolvedConfigMap(rawValues, resolvedValues, stack));
-        resolvedValues.put(key, resolved);
-        stack.remove(key);
-        return resolved;
-    }
-
-    private Map<String, String> loadRawValues() {
-        Map<String, String> rawValues = new LinkedHashMap<>();
-        configValueRepository.findAll().stream()
-                .sorted((left, right) -> left.getKey().compareTo(right.getKey()))
-                .forEach(item -> rawValues.put(item.getKey(), item.getValue() == null ? "" : item.getValue()));
-        return rawValues;
+        return placeholderResolver.resolveText(value, snapshot());
     }
 
     private ConfigValue normalizeForCreate(ConfigValue configValue) {
@@ -406,28 +317,6 @@ public class ConfigValueApplicationService {
     private void ensureEnabled() {
         if (!enabled) {
             throw new IllegalStateException("配置值服务未启用");
-        }
-    }
-
-    private final class LazyResolvedConfigMap extends LinkedHashMap<String, String> {
-        private final Map<String, String> rawValues;
-        private final Map<String, String> resolvedValues;
-        private final LinkedHashSet<String> stack;
-
-        private LazyResolvedConfigMap(Map<String, String> rawValues,
-                                      Map<String, String> resolvedValues,
-                                      LinkedHashSet<String> stack) {
-            this.rawValues = rawValues;
-            this.resolvedValues = resolvedValues;
-            this.stack = stack;
-        }
-
-        @Override
-        public String get(Object key) {
-            if (!(key instanceof String keyText)) {
-                return null;
-            }
-            return resolveValue(keyText, rawValues, resolvedValues, new LinkedHashSet<>(stack));
         }
     }
 }

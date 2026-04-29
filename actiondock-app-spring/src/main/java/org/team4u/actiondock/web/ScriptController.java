@@ -18,7 +18,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/scripts")
 public class ScriptController {
-    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
 
     private final ScriptApplicationService scriptApplicationService;
     private final ExecutionApplicationService executionApplicationService;
@@ -46,8 +45,7 @@ public class ScriptController {
     @GetMapping
     public ApiResponse<List<ScriptDefinition>> list(@RequestParam(defaultValue = "false") boolean includeUiSchema,
                                                     @RequestParam(defaultValue = "false") boolean includeManaged) {
-        return ApiResponse.success(scriptApplicationService.list().stream()
-                .filter(definition -> includeManaged || !definition.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+        return ApiResponse.success(scriptApplicationService.list(includeManaged).stream()
                 .map(definition -> toResponse(definition, includeUiSchema))
                 .toList());
     }

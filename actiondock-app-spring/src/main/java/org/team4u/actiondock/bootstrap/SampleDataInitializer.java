@@ -7,6 +7,8 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptType;
+import org.team4u.actiondock.domain.port.ConfigValueRepository;
+import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.util.Map;
 
@@ -19,11 +21,17 @@ import java.util.Map;
 public class SampleDataInitializer implements CommandLineRunner {
     private final ScriptApplicationService scriptApplicationService;
     private final ConfigValueApplicationService configValueApplicationService;
+    private final ScriptRepository scriptRepository;
+    private final ConfigValueRepository configValueRepository;
 
     public SampleDataInitializer(ScriptApplicationService scriptApplicationService,
-                                 ConfigValueApplicationService configValueApplicationService) {
+                                 ConfigValueApplicationService configValueApplicationService,
+                                 ScriptRepository scriptRepository,
+                                 ConfigValueRepository configValueRepository) {
         this.scriptApplicationService = scriptApplicationService;
         this.configValueApplicationService = configValueApplicationService;
+        this.scriptRepository = scriptRepository;
+        this.configValueRepository = configValueRepository;
     }
 
     /**
@@ -35,9 +43,7 @@ public class SampleDataInitializer implements CommandLineRunner {
      */
     @Override
     public void run(String... args) {
-        try {
-            scriptApplicationService.get("hello-groovy");
-        } catch (IllegalArgumentException ignored) {
+        if (scriptRepository.findById("hello-groovy").isEmpty()) {
             ScriptDefinition script = new ScriptDefinition()
                     .setId("hello-groovy")
                     .setName("Hello Groovy")
@@ -63,9 +69,7 @@ public class SampleDataInitializer implements CommandLineRunner {
             scriptApplicationService.publish("hello-groovy");
         }
 
-        try {
-            configValueApplicationService.get("system.default-owner");
-        } catch (IllegalArgumentException ignored) {
+        if (configValueRepository.findByKey("system.default-owner").isEmpty()) {
             configValueApplicationService.create(new ConfigValue()
                     .setKey("system.default-owner")
                     .setValue("")

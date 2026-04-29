@@ -35,6 +35,12 @@ public class AiToolsetService {
         return repository.findAll();
     }
 
+    public List<AiToolset> list(boolean includeManaged) {
+        return list().stream()
+                .filter(toolset -> includeManaged || !toolset.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .toList();
+    }
+
     public AiToolset get(String id) {
         return repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("AI 工具集不存在: " + id));

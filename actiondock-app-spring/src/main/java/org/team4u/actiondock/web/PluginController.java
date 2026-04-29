@@ -20,7 +20,6 @@ import org.team4u.actiondock.plugin.PluginInvokeView;
 import org.team4u.actiondock.plugin.PluginReferenceView;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginView;
-import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.io.IOException;
 import java.util.List;
@@ -34,11 +33,9 @@ import java.util.List;
 @RequestMapping("/api/plugins")
 public class PluginController {
     private final PluginRuntimeService pluginRuntimeService;
-    private final ScriptRepository scriptRepository;
 
-    public PluginController(PluginRuntimeService pluginRuntimeService, ScriptRepository scriptRepository) {
+    public PluginController(PluginRuntimeService pluginRuntimeService) {
         this.pluginRuntimeService = pluginRuntimeService;
-        this.scriptRepository = scriptRepository;
     }
 
     /**
@@ -198,17 +195,7 @@ public class PluginController {
     @DeleteMapping("/{pluginId}")
     public ApiResponse<Void> uninstall(@PathVariable String pluginId,
                                        @RequestParam(defaultValue = "false") boolean force) {
-        if (!force) {
-            List<String> dependentScripts = scriptRepository.findAll().stream()
-                    .filter(script -> script.getPluginDependencies().stream()
-                            .anyMatch(dependency -> pluginId.equals(dependency.getPluginId())))
-                    .map(script -> script.getId())
-                    .toList();
-            if (!dependentScripts.isEmpty()) {
-                throw new IllegalArgumentException("插件仍被工具依赖，不能卸载: " + String.join(", ", dependentScripts));
-            }
-        }
-        pluginRuntimeService.uninstall(pluginId);
+        pluginRuntimeService.uninstall(pluginId, force);
         return ApiResponse.success(null, "插件已卸载");
     }
 }

@@ -152,8 +152,16 @@ public class ScriptApplicationService {
      *
      * @return 脚本定义列表
      */
+    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
+
     public List<ScriptDefinition> list() {
         return scriptRepository.findAll();
+    }
+
+    public List<ScriptDefinition> list(boolean includeManaged) {
+        return list().stream()
+                .filter(definition -> includeManaged || !definition.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .toList();
     }
 
     /**

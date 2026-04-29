@@ -69,7 +69,7 @@ public class ScriptScheduleDispatcher {
      */
     public synchronized void refreshAll() {
         Set<String> scheduleIds = Set.copyOf(scheduledTasks.keySet());
-        scheduleIds.forEach(this::cancelSchedule);
+        scheduleIds.forEach(this::synchronizedCancelSchedule);
         scheduleApplicationService.listEnabled().forEach(this::registerSchedule);
     }
 
@@ -85,7 +85,7 @@ public class ScriptScheduleDispatcher {
                 .filter(entry -> entry.getValue().equals(scriptId))
                 .map(Map.Entry::getKey)
                 .toList()
-                .forEach(this::cancelSchedule);
+                .forEach(this::synchronizedCancelSchedule);
         List<ScriptSchedule> schedules;
         try {
             schedules = scheduleApplicationService.list(scriptId);
@@ -98,7 +98,7 @@ public class ScriptScheduleDispatcher {
     }
 
     private void registerSchedule(ScriptSchedule schedule) {
-        cancelSchedule(schedule.getId());
+        synchronizedCancelSchedule(schedule.getId());
         ScheduledFuture<?> future = taskScheduler.schedule(
                 () -> dispatch(schedule.getId()),
                 new CronTrigger(schedule.getCronExpression())
@@ -113,13 +113,13 @@ public class ScriptScheduleDispatcher {
         try {
             ScriptSchedule schedule = scheduleApplicationService.getById(scheduleId);
             if (!schedule.isEnabled()) {
-                cancelSchedule(scheduleId);
+                synchronizedCancelSchedule(scheduleId);
                 return;
             }
 
             ScriptDefinition script = scriptRepository.findById(schedule.getScriptId()).orElse(null);
             if (script == null || script.getPublishedSnapshot() == null) {
-                cancelSchedule(scheduleId);
+                synchronizedCancelSchedule(scheduleId);
                 return;
             }
             if (hasActiveExecution(schedule.getLastExecutionId())) {
@@ -137,7 +137,7 @@ public class ScriptScheduleDispatcher {
             scheduleApplicationService.markTriggered(schedule.getId(), record.getId(), now);
         } catch (IllegalArgumentException exception) {
             log.warn("Skip invalid schedule {}", scheduleId, exception);
-            cancelSchedule(scheduleId);
+            synchronizedCancelSchedule(scheduleId);
         } catch (Exception exception) {
             log.error("Schedule dispatch failed: {}", scheduleId, exception);
         }
@@ -153,7 +153,7 @@ public class ScriptScheduleDispatcher {
                 .isPresent();
     }
 
-    private synchronized void cancelSchedule(String scheduleId) {
+    private synchronized void synchronizedCancelSchedule(String scheduleId) {
         ScheduledFuture<?> future = scheduledTasks.remove(scheduleId);
         if (future != null) {
             future.cancel(false);

@@ -26,6 +26,12 @@ public class AiModelProfileService {
         return repository.findAll();
     }
 
+    public List<AiModelProfile> list(boolean includeManaged) {
+        return list().stream()
+                .filter(profile -> includeManaged || !profile.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .toList();
+    }
+
     public AiModelProfile get(String id) {
         return repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("AI 模型 Profile 不存在: " + id));

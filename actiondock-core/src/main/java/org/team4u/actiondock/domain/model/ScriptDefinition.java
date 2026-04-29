@@ -1,5 +1,7 @@
 package org.team4u.actiondock.domain.model;
 
+import org.team4u.actiondock.application.SchemaValueCopier;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -444,5 +446,56 @@ public class ScriptDefinition {
             return snapshotCurrent();
         }
         return null;
+    }
+
+    /**
+     * 发布脚本，将当前内容冻结为发布快照并切换为 PUBLISHED 状态。
+     *
+     * @return 当前实例
+     * @throws IllegalStateException 如果脚本是 ARCHIVED 状态
+     */
+    public ScriptDefinition publish() {
+        if (status == ScriptStatus.ARCHIVED) {
+            throw new IllegalStateException("已归档脚本不能发布: " + id);
+        }
+        this.publishedSnapshot = snapshotCurrent();
+        this.status = ScriptStatus.PUBLISHED;
+        this.version = version + 1;
+        this.dirty = false;
+        return this;
+    }
+
+    /**
+     * 丢弃草稿，恢复为已发布快照的内容。
+     *
+     * @return 当前实例
+     * @throws IllegalStateException 如果没有已发布快照
+     */
+    public ScriptDefinition revertToPublished() {
+        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        if (snapshot == null) {
+            throw new IllegalStateException("没有已发布快照可恢复: " + id);
+        }
+        this.name = snapshot.getName();
+        this.type = snapshot.getType();
+        this.packaging = snapshot.getPackaging();
+        this.source = snapshot.getSource();
+        this.inputSchema = snapshot.getInputSchema();
+        this.outputSchema = snapshot.getOutputSchema();
+        this.scriptDependencies = snapshot.getScriptDependencies();
+        this.aiDependencies = snapshot.getAiDependencies();
+        this.status = ScriptStatus.PUBLISHED;
+        this.dirty = false;
+        return this;
+    }
+
+    /**
+     * 归档脚本。
+     *
+     * @return 当前实例
+     */
+    public ScriptDefinition archive() {
+        this.status = ScriptStatus.ARCHIVED;
+        return this;
     }
 }

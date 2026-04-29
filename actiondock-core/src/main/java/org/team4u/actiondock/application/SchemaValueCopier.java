@@ -1,4 +1,4 @@
-package org.team4u.actiondock.domain.model;
+package org.team4u.actiondock.application;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

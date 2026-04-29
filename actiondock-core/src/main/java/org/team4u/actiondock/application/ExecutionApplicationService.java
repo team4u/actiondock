@@ -176,7 +176,7 @@ public class ExecutionApplicationService {
     }
 
     private ExecutionRecord run(ScriptDefinition definition, ExecutionRecord record) {
-        ExecutionLogCollector logCollector = new ExecutionLogCollector(record);
+        ExecutionLogCollector logCollector = new ExecutionLogCollector(record, executionRepository);
         try {
             record.setStatus(ExecutionStatus.RUNNING);
             record.setStartedAt(LocalDateTime.now());
@@ -300,59 +300,6 @@ public class ExecutionApplicationService {
     private void ensureExecutionDeletable(ExecutionRecord record) {
         if (record.getStatus() == ExecutionStatus.PENDING || record.getStatus() == ExecutionStatus.RUNNING) {
             throw new IllegalArgumentException("执行进行中，无法删除");
-        }
-    }
-
-    private final class ExecutionLogCollector {
-        private final ExecutionRecord record;
-        private final Object monitor = new Object();
-
-        private ExecutionLogCollector(ExecutionRecord record) {
-            this.record = record;
-        }
-
-        private void append(ExecutionLogLevel level, String message) {
-            synchronized (monitor) {
-                record.addLog(new ExecutionLogEntry()
-                        .setLevel(level)
-                        .setMessage(message)
-                        .setCreatedAt(LocalDateTime.now()));
-                try {
-                    executionRepository.save(record);
-                } catch (Exception ignored) {
-                    // 日志持久化失败不应中断脚本执行
-                }
-            }
-        }
-
-        private ExecutionRecord completeSuccess(Map<String, Object> output) {
-            synchronized (monitor) {
-                record.setOutput(output);
-                record.setErrorMessage(null);
-                record.setErrorDetail(null);
-                record.setStatus(ExecutionStatus.SUCCESS);
-                record.setFinishedAt(LocalDateTime.now());
-                return safeSave(record);
-            }
-        }
-
-        private ExecutionRecord completeFailure(Exception exception) {
-            synchronized (monitor) {
-                record.setStatus(ExecutionStatus.FAILED);
-                record.setErrorMessage(ErrorDetailSupport.summarize(exception));
-                record.setErrorDetail(ErrorDetailSupport.describe(exception));
-                record.setFinishedAt(LocalDateTime.now());
-                return safeSave(record);
-            }
-        }
-
-        private ExecutionRecord safeSave(ExecutionRecord record) {
-            try {
-                return executionRepository.save(record);
-            } catch (Exception ex) {
-                // 持久化失败时返回内存中的记录，确保调用方拿到正确的最终状态
-                return record;
-            }
         }
     }
 }

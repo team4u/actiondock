@@ -3,6 +3,7 @@ package org.team4u.actiondock.storage.jpa.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
@@ -16,7 +17,10 @@ import java.time.LocalDateTime;
  * @author jay.wu
  */
 @Entity
-@Table(name = "script_definition")
+@Table(name = "script_definition", indexes = {
+        @Index(name = "idx_script_status", columnList = "status"),
+        @Index(name = "idx_script_scope", columnList = "scope")
+})
 public class ScriptEntity {
     @Id
     private String id;

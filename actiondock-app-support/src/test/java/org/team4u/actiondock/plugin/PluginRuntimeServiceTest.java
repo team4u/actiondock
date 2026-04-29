@@ -119,7 +119,7 @@ class PluginRuntimeServiceTest {
         PluginView restarted = service.start("actiondock-demo-plugin");
         assertThat(restarted.isStarted()).isTrue();
         Path installedPluginPath = tempDir.resolve(repository.findByPluginId("actiondock-demo-plugin").orElseThrow().getFileName());
-        service.uninstall("actiondock-demo-plugin");
+        service.uninstall("actiondock-demo-plugin", true);
 
         assertThat(service.list()).isEmpty();
         assertThat(repository.findAll()).isEmpty();

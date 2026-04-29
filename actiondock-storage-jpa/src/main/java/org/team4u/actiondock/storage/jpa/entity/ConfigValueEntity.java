@@ -3,6 +3,7 @@ package org.team4u.actiondock.storage.jpa.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
  * @author jay.wu
  */
 @Entity
-@Table(name = "config_value")
+@Table(name = "config_value", indexes = @Index(name = "idx_config_value_repository_id", columnList = "repositoryId"))
 public class ConfigValueEntity {
     @Id
     @Column(name = "config_key", nullable = false)

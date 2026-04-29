@@ -1,6 +1,5 @@
 package org.team4u.actiondock.application;
 
-import org.team4u.actiondock.domain.model.SchemaValueCopier;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;

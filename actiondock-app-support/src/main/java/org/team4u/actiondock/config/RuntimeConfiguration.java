@@ -101,10 +101,11 @@ public class RuntimeConfiguration {
     @Bean
     public PluginRuntimeService pluginRuntimeService(JsonCodec jsonCodec,
                                                      PluginRegistryRepository pluginRegistryRepository,
+                                                     ScriptRepository scriptRepository,
                                                      ConfigValueApplicationService configValueApplicationService,
                                                      AppProperties properties,
                                                      List<ActionDockPlugin> systemPlugins) {
-        return new PluginRuntimeService(jsonCodec, pluginRegistryRepository, properties.getPlugins(), configValueApplicationService, systemPlugins);
+        return new PluginRuntimeService(jsonCodec, pluginRegistryRepository, scriptRepository, properties.getPlugins(), configValueApplicationService, systemPlugins);
     }
 
     @Bean
