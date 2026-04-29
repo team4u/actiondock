@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.port.JsonCodec;
 
@@ -380,7 +381,7 @@ class RepositoryCatalogServiceTest {
                 "demo-tool",
                 "1.0.0"
         ))
-                .isInstanceOf(RepositoryCatalogService.RepositoryVersionExistsException.class)
+                .isInstanceOf(RepositoryVersionExistsException.class)
                 .hasMessage("工具版本已存在: demo-tool@1.0.0")
                 .extracting("assetKind", "repositoryId", "assetId", "version")
                 .containsExactly("TOOL", "repo-1", "demo-tool", "1.0.0");
@@ -435,7 +436,7 @@ class RepositoryCatalogServiceTest {
                 "demo-plugin",
                 "1.0.0"
         ))
-                .isInstanceOf(RepositoryCatalogService.RepositoryVersionExistsException.class)
+                .isInstanceOf(RepositoryVersionExistsException.class)
                 .hasMessage("插件版本已存在: demo-plugin@1.0.0")
                 .extracting("assetKind", "repositoryId", "assetId", "version")
                 .containsExactly("PLUGIN", "repo-1", "demo-plugin", "1.0.0");

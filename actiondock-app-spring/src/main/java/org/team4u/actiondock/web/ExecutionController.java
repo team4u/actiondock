@@ -21,10 +21,11 @@ public class ExecutionController {
     private final ExecutionResponseMapper executionResponseMapper;
 
     public ExecutionController(ExecutionApplicationService executionApplicationService,
-                               ScriptApplicationService scriptApplicationService) {
+                               ScriptApplicationService scriptApplicationService,
+                               ExecutionResponseMapper executionResponseMapper) {
         this.executionApplicationService = executionApplicationService;
         this.scriptApplicationService = scriptApplicationService;
-        this.executionResponseMapper = new ExecutionResponseMapper();
+        this.executionResponseMapper = executionResponseMapper;
     }
 
     /**

@@ -1,6 +1,6 @@
 package org.team4u.actiondock.domain.model;
 
-import org.team4u.actiondock.application.SchemaValueCopier;
+import org.team4u.actiondock.domain.model.SchemaValueCopier;
 
 import java.util.Collections;
 import java.util.ArrayList;

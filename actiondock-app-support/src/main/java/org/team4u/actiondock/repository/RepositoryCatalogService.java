@@ -17,6 +17,10 @@ import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ConfigPublishMode;
+import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
+import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
+import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
+import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.PluginDependency;
@@ -2992,13 +2996,6 @@ public class RepositoryCatalogService {
     ) {
     }
 
-    public record RepositoryPluginConflict(
-            String scriptId,
-            String scriptName,
-            String requiredVersionRange
-    ) {
-    }
-
     public record RepositoryPublishConfigItem(String key, String publishMode) {
     }
 
@@ -3315,90 +3312,5 @@ public class RepositoryCatalogService {
     }
 
     private record ToolSourceState(String path, String commit, String digest) {
-    }
-
-    public static class RepositoryPluginConflictException extends IllegalArgumentException {
-        private final String pluginId;
-        private final List<RepositoryPluginConflict> conflicts;
-
-        public RepositoryPluginConflictException(String pluginId, List<RepositoryPluginConflict> conflicts) {
-            super("插件版本会影响已安装工具: " + pluginId);
-            this.pluginId = pluginId;
-            this.conflicts = conflicts == null ? List.of() : List.copyOf(conflicts);
-        }
-
-        public String getPluginId() {
-            return pluginId;
-        }
-
-        public List<RepositoryPluginConflict> getConflicts() {
-            return conflicts;
-        }
-    }
-
-    public static class RepositoryVersionExistsException extends IllegalArgumentException {
-        private final String assetKind;
-        private final String repositoryId;
-        private final String assetId;
-        private final String version;
-
-        public RepositoryVersionExistsException(String assetKind, String repositoryId, String assetId, String version) {
-            super(assetLabel(assetKind) + "版本已存在: " + assetId + "@" + version);
-            this.assetKind = assetKind;
-            this.repositoryId = repositoryId;
-            this.assetId = assetId;
-            this.version = version;
-        }
-
-        private static String assetLabel(String assetKind) {
-            if ("PLUGIN".equals(assetKind)) {
-                return "插件";
-            }
-            if ("AI_PACKAGE".equals(assetKind)) {
-                return "AI 能力包";
-            }
-            return "工具";
-        }
-
-        public String getAssetKind() {
-            return assetKind;
-        }
-
-        public String getRepositoryId() {
-            return repositoryId;
-        }
-
-        public String getAssetId() {
-            return assetId;
-        }
-
-        public String getVersion() {
-            return version;
-        }
-    }
-
-    public static class DevelopmentConflictException extends IllegalArgumentException {
-        private final String scriptId;
-        private final String repositoryId;
-        private final String toolId;
-
-        public DevelopmentConflictException(String scriptId, String repositoryId, String toolId) {
-            super("远端工具已更新，但本地也有未发布修改");
-            this.scriptId = scriptId;
-            this.repositoryId = repositoryId;
-            this.toolId = toolId;
-        }
-
-        public String getScriptId() {
-            return scriptId;
-        }
-
-        public String getRepositoryId() {
-            return repositoryId;
-        }
-
-        public String getToolId() {
-            return toolId;
-        }
     }
 }

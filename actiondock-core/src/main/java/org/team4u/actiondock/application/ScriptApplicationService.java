@@ -64,57 +64,9 @@ public class ScriptApplicationService {
             }
         } else {
             ensureEditable(existing);
-            definition.setCreatedAt(existing.getCreatedAt());
-            if (definition.getVersion() == null) {
-                definition.setVersion(existing.getVersion());
-            }
-            if (definition.getOwner() == null) {
-                definition.setOwner(existing.getOwner());
-            }
-            if (definition.getPackaging() == null) {
-                definition.setPackaging(existing.getPackaging());
-            }
-            if (definition.getDescription() == null) {
-                definition.setDescription(existing.getDescription());
-            }
-            if (definition.getStatus() == null) {
-                definition.setStatus(existing.getStatus());
-            }
-            if (!definition.hasStoredPublishedSnapshot()) {
-                definition.setPublishedSnapshot(existing.getPublishedSnapshot());
-            }
-            if (definition.getScope() == null) {
-                definition.setScope(existing.getScope());
-            }
-            if (definition.getRepositoryId() == null) {
-                definition.setRepositoryId(existing.getRepositoryId());
-            }
-            if (definition.getRepositoryToolId() == null) {
-                definition.setRepositoryToolId(existing.getRepositoryToolId());
-            }
-            if (definition.getRepositoryVersion() == null) {
-                definition.setRepositoryVersion(existing.getRepositoryVersion());
-            }
-            if (definition.getSourcePath() == null) {
-                definition.setSourcePath(existing.getSourcePath());
-            }
-            if (definition.getSourceCommit() == null) {
-                definition.setSourceCommit(existing.getSourceCommit());
-            }
-            if (definition.getSourceDigest() == null) {
-                definition.setSourceDigest(existing.getSourceDigest());
-            }
-            if (definition.getSourceSyncedAt() == null) {
-                definition.setSourceSyncedAt(existing.getSourceSyncedAt());
-            }
-            if (definition.getScope() == ScriptScope.DEVELOPMENT) {
-                definition.setDirty(existing.isDirty() || !definition.snapshotCurrent().equals(existing.snapshotCurrent()));
-            } else {
-                definition.setDirty(existing.isDirty());
-            }
-            definition.setEditable(existing.isEditable());
+            definition.mergeFrom(existing);
         }
-        normalizePublicationState(definition);
+        definition.normalizePublicationState();
         definition.setUpdatedAt(now);
         return scriptRepository.save(definition);
     }
@@ -300,16 +252,6 @@ public class ScriptApplicationService {
                     .setLastExecutionId(null)
                     .setCreatedAt(now)
                     .setUpdatedAt(now));
-        }
-    }
-
-    private void normalizePublicationState(ScriptDefinition definition) {
-        if (definition.hasStoredPublishedSnapshot()) {
-            definition.setStatus(ScriptStatus.PUBLISHED);
-            return;
-        }
-        if (definition.getStatus() == ScriptStatus.PUBLISHED) {
-            definition.setPublishedSnapshot(definition.snapshotCurrent());
         }
     }
 

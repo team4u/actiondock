@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
@@ -22,6 +24,7 @@ import java.util.Optional;
  *
  * @author jay.wu
  */
+@Component
 public class JpaScriptRepositoryAdapter implements ScriptRepository {
     private final SpringDataScriptEntityRepository repository;
     private final JsonCodec jsonCodec;

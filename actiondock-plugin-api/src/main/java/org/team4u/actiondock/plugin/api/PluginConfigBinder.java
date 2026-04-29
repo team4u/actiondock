@@ -1,18 +1,13 @@
 package org.team4u.actiondock.plugin.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Collections;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public final class PluginConfigBinder {
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
     private PluginConfigBinder() {
     }
 
@@ -34,8 +29,8 @@ public final class PluginConfigBinder {
         }
 
         try {
-            return OBJECT_MAPPER.readValue(
-                    OBJECT_MAPPER.writeValueAsString(source == null ? Collections.emptyMap() : source),
+            return PluginObjectMappers.DEFAULT.readValue(
+                    PluginObjectMappers.DEFAULT.writeValueAsString(source == null ? Collections.emptyMap() : source),
                     type
             );
         } catch (JsonProcessingException exception) {

@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.ai.api.AiCallAction;
 import org.team4u.actiondock.ai.api.AiCallLog;
 import org.team4u.actiondock.ai.api.AiCallLogRepository;
@@ -11,6 +13,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataAiCallLogRepository;
 
 import java.util.List;
 
+@Component
 public class JpaAiCallLogRepositoryAdapter implements AiCallLogRepository {
     private final SpringDataAiCallLogRepository repository;
     private final JsonCodec jsonCodec;

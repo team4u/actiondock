@@ -1,8 +1,9 @@
 import { Form, Modal } from "antd";
 import type { FormInstance } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  getRepositoryTool,
   listRepositories,
   listRepositoryTools,
   listSchedules,
@@ -21,20 +22,68 @@ import type {
 import { getErrorMessage } from "../../utils";
 import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../scriptDependencies";
 import { getEnabledRepositories, getPublishableRepositories } from "../../repositoryPublish";
+import {
+  buildRepositoryPublishDiffTarget,
+  buildScriptDiff,
+  toRepositoryToolDiffTarget
+} from "../../scriptDiff";
 import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues } from "./types";
 import {
-  resolveRepositoryPublishVersion,
   suggestNextRepositoryVersion,
   toTagOptions
 } from "./types";
 import type { RepositoryPublishVersionSuggestion } from "./types";
+import type { ScriptDiffResult, ScriptDiffTarget } from "../../scriptDiff";
 import { useDefaultOwner } from "../../hooks/useDefaultOwner";
+
+function normalizeTagValues(tags: string[] | undefined): string[] {
+  return (tags ?? []).filter((item) => item.trim().length > 0);
+}
+
+function buildRepositoryToolDigestPayload(params: {
+  toolId: string;
+  displayName: string;
+  version: string;
+  source?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  type?: string;
+  packaging?: string;
+  description?: string;
+  owner?: string;
+  tags?: string[];
+  scriptDependencies?: Array<Record<string, unknown>>;
+  pluginDependencies?: Array<Record<string, unknown>>;
+}) {
+  return {
+    toolId: params.toolId,
+    displayName: params.displayName,
+    version: params.version,
+    type: params.type ?? null,
+    packaging: params.packaging ?? null,
+    description: params.description ?? null,
+    owner: params.owner ?? null,
+    tags: params.tags ?? [],
+    scriptDependencies: params.scriptDependencies ?? [],
+    pluginDependencies: params.pluginDependencies ?? [],
+    source: params.source ?? "",
+    inputSchema: params.inputSchema ?? {},
+    outputSchema: params.outputSchema ?? {}
+  };
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const hash = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(hash)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
 
 export interface UseScriptPublishToRepoParams {
   currentScript: ScriptDefinition | null;
   availableScripts: ScriptDefinition[];
   sourceText: string;
   isReadOnlyScript: boolean;
+  publishTarget: ScriptDiffTarget;
   ensureCurrentScriptPublished: (successMessage?: string) => Promise<ScriptDefinition>;
   messageApi: MessageInstance;
 }
@@ -50,6 +99,9 @@ export interface ScriptPublishToRepoContext {
   publishMetadataLoading: boolean;
   publishConfigPreview: RepositoryPublishConfigPreview | null;
   publishConfigPreviewLoading: boolean;
+  publishRepositoryDiff: ScriptDiffResult | null;
+  publishRepositoryDiffLoading: boolean;
+  publishRepositoryContentUnchanged: boolean;
   publishVersionSuggestion: RepositoryPublishVersionSuggestion;
   publishRepositoryTools: RepositoryToolDescriptor[];
   publishScriptDependencies: PublishScriptDependencyDraft[];
@@ -67,6 +119,7 @@ export function useScriptPublishToRepo({
   availableScripts,
   sourceText,
   isReadOnlyScript,
+  publishTarget,
   ensureCurrentScriptPublished,
   messageApi
 }: UseScriptPublishToRepoParams): ScriptPublishToRepoContext {
@@ -79,6 +132,9 @@ export function useScriptPublishToRepo({
   const [publishMetadataLoading, setPublishMetadataLoading] = useState(false);
   const [publishConfigPreview, setPublishConfigPreview] = useState<RepositoryPublishConfigPreview | null>(null);
   const [publishConfigPreviewLoading, setPublishConfigPreviewLoading] = useState(false);
+  const [publishRepositoryDiff, setPublishRepositoryDiff] = useState<ScriptDiffResult | null>(null);
+  const [publishRepositoryDiffLoading, setPublishRepositoryDiffLoading] = useState(false);
+  const [publishRepositoryContentUnchanged, setPublishRepositoryContentUnchanged] = useState(false);
   const [publishVersionSuggestion, setPublishVersionSuggestion] = useState<RepositoryPublishVersionSuggestion>({ status: "IDLE" });
   const [publishRepositoryTools, setPublishRepositoryTools] = useState<RepositoryToolDescriptor[]>([]);
   const [publishScriptDependencies, setPublishScriptDependencies] = useState<PublishScriptDependencyDraft[]>([]);
@@ -91,7 +147,21 @@ export function useScriptPublishToRepo({
   const defaultOwner = useDefaultOwner();
   const selectedRepositoryId = Form.useWatch("repositoryId", publishForm);
   const selectedToolId = Form.useWatch("toolId", publishForm);
+  const selectedVersion = Form.useWatch("version", publishForm);
+  const selectedDisplayName = Form.useWatch("displayName", publishForm);
+  const selectedOwner = Form.useWatch("owner", publishForm);
+  const selectedTags = Form.useWatch("tags", publishForm);
   const selectedScheduleIds = Form.useWatch("scheduleIds", publishForm);
+  const publishRepositoryTarget = useMemo(() => {
+    const selectedName = selectedDisplayName?.trim();
+    const selectedOwnerValue = selectedOwner === undefined ? publishTarget.owner : selectedOwner.trim() || undefined;
+    return buildRepositoryPublishDiffTarget({
+      ...publishTarget,
+      name: selectedName || publishTarget.name || "",
+      owner: selectedOwnerValue,
+      tags: normalizeTagValues(selectedTags as string[] | undefined)
+    });
+  }, [publishTarget, selectedDisplayName, selectedOwner, selectedTags]);
 
   const resolveDependencyVersionRange = (
     repositoryId: string | undefined,
@@ -205,6 +275,9 @@ export function useScriptPublishToRepo({
       ));
       setPublishConfigPreview(null);
       setPublishConfigModes({});
+      setPublishRepositoryDiff(null);
+      setPublishRepositoryDiffLoading(false);
+      setPublishRepositoryContentUnchanged(false);
       setPublishVersionSuggestion({ status: "IDLE" });
       syncedRepositoryIdsRef.current = new Set();
       configPreviewRequestRef.current += 1;
@@ -235,11 +308,15 @@ export function useScriptPublishToRepo({
     if (!publishToRepositoryOpen || !selectedRepositoryId || !selectedToolId?.trim()) {
       versionSuggestionRequestRef.current += 1;
       setPublishVersionSuggestion({ status: "IDLE" });
+      setPublishRepositoryDiff(null);
+      setPublishRepositoryDiffLoading(false);
+      setPublishRepositoryContentUnchanged(false);
       return;
     }
     const requestId = versionSuggestionRequestRef.current + 1;
     versionSuggestionRequestRef.current = requestId;
     setPublishVersionSuggestion({ status: "LOADING" });
+    setPublishRepositoryDiffLoading(true);
 
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -252,28 +329,66 @@ export function useScriptPublishToRepo({
           if (versionSuggestionRequestRef.current !== requestId) {
             return;
           }
-          const resolution = resolveRepositoryPublishVersion(tools, selectedToolId);
-          if (resolution.status === "READY") {
+          const descriptor = tools.find(
+            (item) => item.repositoryId === selectedRepositoryId && item.toolId === selectedToolId
+          );
+          if (!descriptor) {
+            setPublishVersionSuggestion({ status: "NOT_FOUND" });
+            setPublishRepositoryDiff(buildScriptDiff(
+              undefined,
+              buildRepositoryPublishDiffTarget(publishTarget),
+              { context: "publish" }
+            ));
+            setPublishRepositoryContentUnchanged(false);
+            return;
+          }
+
+          const detail = await getRepositoryTool(selectedRepositoryId, selectedToolId);
+          if (versionSuggestionRequestRef.current !== requestId) {
+            return;
+          }
+          const nextVersion = suggestNextRepositoryVersion(descriptor.version);
+          if (nextVersion === descriptor.version) {
+            setPublishVersionSuggestion({
+              status: "MANUAL",
+              currentVersion: descriptor.version
+            });
+          } else {
             const autoFilled = !versionManuallyEditedRef.current;
             if (autoFilled) {
-              publishForm.setFieldsValue({ version: resolution.suggestedVersion });
+              publishForm.setFieldsValue({ version: nextVersion });
             }
             setPublishVersionSuggestion({
               status: "READY",
-              currentVersion: resolution.currentVersion,
-              suggestedVersion: resolution.suggestedVersion,
+              currentVersion: descriptor.version,
+              suggestedVersion: nextVersion,
               autoFilled
             });
-            return;
           }
-          if (resolution.status === "MANUAL") {
-            setPublishVersionSuggestion({
-              status: "MANUAL",
-              currentVersion: resolution.currentVersion
-            });
-            return;
-          }
-          setPublishVersionSuggestion({ status: "NOT_FOUND" });
+          const diffTarget = publishRepositoryTarget;
+          setPublishRepositoryDiff(buildScriptDiff(
+            toRepositoryToolDiffTarget(detail),
+            diffTarget,
+            { context: "publish" }
+          ));
+          const digestPayload = buildRepositoryToolDigestPayload({
+            toolId: selectedToolId,
+            displayName: diffTarget.name || "",
+            version: selectedVersion === undefined ? "" : selectedVersion.trim(),
+            source: diffTarget.source,
+            inputSchema: diffTarget.inputSchema,
+            outputSchema: diffTarget.outputSchema,
+            type: diffTarget.type,
+            packaging: diffTarget.packaging,
+            description: diffTarget.description,
+            owner: diffTarget.owner,
+            tags: diffTarget.tags,
+            scriptDependencies: (diffTarget.scriptDependencies ?? []).map((item) => ({ ...item })),
+            pluginDependencies: (diffTarget.pluginDependencies ?? []).map((item) => ({ ...item }))
+          });
+          setPublishRepositoryContentUnchanged(
+            Boolean(detail.descriptor.digest) && detail.descriptor.digest === await sha256Hex(JSON.stringify(digestPayload))
+          );
         } catch (error) {
           if (versionSuggestionRequestRef.current !== requestId) {
             return;
@@ -282,6 +397,12 @@ export function useScriptPublishToRepo({
             status: "ERROR",
             message: getErrorMessage(error, "拉取仓库版本失败")
           });
+          setPublishRepositoryDiff(null);
+          setPublishRepositoryContentUnchanged(false);
+        } finally {
+          if (versionSuggestionRequestRef.current === requestId) {
+            setPublishRepositoryDiffLoading(false);
+          }
         }
       })();
     }, 400);
@@ -289,7 +410,17 @@ export function useScriptPublishToRepo({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [publishForm, publishToRepositoryOpen, selectedRepositoryId, selectedToolId]);
+  }, [
+    publishForm,
+    publishTarget,
+    publishToRepositoryOpen,
+    selectedDisplayName,
+    selectedOwner,
+    selectedRepositoryId,
+    selectedTags,
+    selectedToolId,
+    selectedVersion
+  ]);
 
   useEffect(() => {
     if (!publishToRepositoryOpen || !currentScript?.id) {
@@ -409,6 +540,10 @@ export function useScriptPublishToRepo({
   const handlePublishToRepository = async () => {
     let retry: { repositoryId: string; payload: Parameters<typeof publishRepositoryTool>[1] } | null = null;
     try {
+      if (publishRepositoryContentUnchanged) {
+        messageApi.warning("仓库当前内容与本次发布一致，无需重复发布");
+        return;
+      }
       const values = await publishForm.validateFields();
       if (publishConfigPreviewLoading) {
         messageApi.warning("正在分析配置依赖，请稍后再试");
@@ -504,6 +639,9 @@ export function useScriptPublishToRepo({
     publishMetadataLoading,
     publishConfigPreview,
     publishConfigPreviewLoading,
+    publishRepositoryDiff,
+    publishRepositoryDiffLoading,
+    publishRepositoryContentUnchanged,
     publishVersionSuggestion,
     publishRepositoryTools,
     publishScriptDependencies,

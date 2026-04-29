@@ -1,5 +1,6 @@
 package org.team4u.actiondock.web;
 
+import org.springframework.stereotype.Component;
 import org.springframework.scheduling.support.CronExpression;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
@@ -14,10 +15,11 @@ import java.util.Map;
  *
  * @author jay.wu
  */
-final class ScriptScheduleViewMapper {
+@Component
+public class ScriptScheduleViewMapper {
     private final ExecutionRepository executionRepository;
 
-    ScriptScheduleViewMapper(ExecutionRepository executionRepository) {
+    public ScriptScheduleViewMapper(ExecutionRepository executionRepository) {
         this.executionRepository = executionRepository;
     }
 
@@ -29,7 +31,7 @@ final class ScriptScheduleViewMapper {
      * @param schedule 调度实体
      * @return 调度视图
      */
-    ScriptScheduleView toView(ScriptSchedule schedule) {
+    public ScriptScheduleView toView(ScriptSchedule schedule) {
         return new ScriptScheduleView(
                 schedule.getId(),
                 schedule.getScriptId(),

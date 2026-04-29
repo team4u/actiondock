@@ -192,7 +192,7 @@ public class ExecutionApplicationService {
                             .setScriptStack(List.of(definition.getId()))
                             .setLogger(logCollector::append)
             );
-            return logCollector.completeSuccess(toMap(result));
+            return logCollector.completeSuccess(MapValueConverter.toResultMap(result));
         } catch (Exception ex) {
             return logCollector.completeFailure(ex);
         } catch (Throwable t) {
@@ -210,20 +210,6 @@ public class ExecutionApplicationService {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> toMap(Object result) {
-        if (result == null) {
-            return new LinkedHashMap<>();
-        }
-        if (result instanceof Map<?, ?> map) {
-            Map<String, Object> values = new LinkedHashMap<>();
-            map.forEach((k, v) -> values.put(String.valueOf(k), v));
-            return values;
-        }
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("result", result);
-        return values;
-    }
-
     /**
      * 根据 ID 查询执行记录。
      *

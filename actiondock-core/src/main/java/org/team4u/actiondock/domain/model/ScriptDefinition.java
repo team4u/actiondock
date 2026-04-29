@@ -1,6 +1,6 @@
 package org.team4u.actiondock.domain.model;
 
-import org.team4u.actiondock.application.SchemaValueCopier;
+import org.team4u.actiondock.domain.model.SchemaValueCopier;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,11 +30,7 @@ public class ScriptDefinition {
     private String repositoryId;
     private String repositoryToolId;
     private String repositoryVersion;
-    private String sourcePath;
-    private String sourceCommit;
-    private String sourceDigest;
-    private LocalDateTime sourceSyncedAt;
-    private boolean dirty;
+    private ScriptSourceMetadata sourceMetadata = new ScriptSourceMetadata();
     private boolean editable = true;
     private String owner;
     private String description;
@@ -165,48 +161,57 @@ public class ScriptDefinition {
         return this;
     }
 
+    public ScriptSourceMetadata getSourceMetadata() {
+        return sourceMetadata;
+    }
+
+    public ScriptDefinition setSourceMetadata(ScriptSourceMetadata sourceMetadata) {
+        this.sourceMetadata = sourceMetadata != null ? sourceMetadata : new ScriptSourceMetadata();
+        return this;
+    }
+
     public String getSourcePath() {
-        return sourcePath;
+        return sourceMetadata.getPath();
     }
 
     public ScriptDefinition setSourcePath(String sourcePath) {
-        this.sourcePath = sourcePath;
+        sourceMetadata.setPath(sourcePath);
         return this;
     }
 
     public String getSourceCommit() {
-        return sourceCommit;
+        return sourceMetadata.getCommit();
     }
 
     public ScriptDefinition setSourceCommit(String sourceCommit) {
-        this.sourceCommit = sourceCommit;
+        sourceMetadata.setCommit(sourceCommit);
         return this;
     }
 
     public String getSourceDigest() {
-        return sourceDigest;
+        return sourceMetadata.getDigest();
     }
 
     public ScriptDefinition setSourceDigest(String sourceDigest) {
-        this.sourceDigest = sourceDigest;
+        sourceMetadata.setDigest(sourceDigest);
         return this;
     }
 
     public LocalDateTime getSourceSyncedAt() {
-        return sourceSyncedAt;
+        return sourceMetadata.getSyncedAt();
     }
 
     public ScriptDefinition setSourceSyncedAt(LocalDateTime sourceSyncedAt) {
-        this.sourceSyncedAt = sourceSyncedAt;
+        sourceMetadata.setSyncedAt(sourceSyncedAt);
         return this;
     }
 
     public boolean isDirty() {
-        return dirty;
+        return sourceMetadata.isDirty();
     }
 
     public ScriptDefinition setDirty(boolean dirty) {
-        this.dirty = dirty;
+        sourceMetadata.setDirty(dirty);
         return this;
     }
 
@@ -316,7 +321,7 @@ public class ScriptDefinition {
      * @return 发布的快照副本，如果未发布则返回 null
      */
     public PublishedScriptSnapshot getPublishedSnapshot() {
-        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        PublishedScriptSnapshot snapshot = resolveEffectiveSnapshot();
         return snapshot == null ? null : snapshot.copy();
     }
 
@@ -362,7 +367,7 @@ public class ScriptDefinition {
      * @return 如果存在未发布的更改返回 true
      */
     public boolean getHasUnpublishedChanges() {
-        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        PublishedScriptSnapshot snapshot = getStoredSnapshot();
         return snapshot != null && !snapshot.equals(snapshotCurrent());
     }
 
@@ -376,7 +381,7 @@ public class ScriptDefinition {
      * @throws IllegalStateException 如果脚本尚未发布
      */
     public ScriptDefinition toPublishedDefinition() {
-        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        PublishedScriptSnapshot snapshot = resolveEffectiveSnapshot();
         if (snapshot == null) {
             throw new IllegalStateException("Script not published: " + id);
         }
@@ -396,11 +401,11 @@ public class ScriptDefinition {
                 .setRepositoryId(repositoryId)
                 .setRepositoryToolId(repositoryToolId)
                 .setRepositoryVersion(repositoryVersion)
-                .setSourcePath(sourcePath)
-                .setSourceCommit(sourceCommit)
-                .setSourceDigest(sourceDigest)
-                .setSourceSyncedAt(sourceSyncedAt)
-                .setDirty(dirty)
+                .setSourcePath(getSourcePath())
+                .setSourceCommit(getSourceCommit())
+                .setSourceDigest(getSourceDigest())
+                .setSourceSyncedAt(getSourceSyncedAt())
+                .setDirty(isDirty())
                 .setEditable(editable)
                 .setOwner(owner)
                 .setDescription(description)
@@ -431,14 +436,23 @@ public class ScriptDefinition {
     }
 
     /**
-     * 解析已发布的快照。
+     * 获取已存储的发布快照。
+     *
+     * @return 存储的快照，如果没有则返回 null
+     */
+    private PublishedScriptSnapshot getStoredSnapshot() {
+        return publishedSnapshot;
+    }
+
+    /**
+     * 解析有效的发布快照。
      * <p>
      * 优先返回存储的快照，如果没有存储快照但状态为已发布，
      * 则基于当前内容创建临时快照。
      *
      * @return 发布的快照，如果未发布则返回 null
      */
-    private PublishedScriptSnapshot resolvePublishedSnapshot() {
+    private PublishedScriptSnapshot resolveEffectiveSnapshot() {
         if (publishedSnapshot != null) {
             return publishedSnapshot;
         }
@@ -461,7 +475,7 @@ public class ScriptDefinition {
         this.publishedSnapshot = snapshotCurrent();
         this.status = ScriptStatus.PUBLISHED;
         this.version = version + 1;
-        this.dirty = false;
+        sourceMetadata.setDirty(false);
         return this;
     }
 
@@ -472,7 +486,7 @@ public class ScriptDefinition {
      * @throws IllegalStateException 如果没有已发布快照
      */
     public ScriptDefinition revertToPublished() {
-        PublishedScriptSnapshot snapshot = resolvePublishedSnapshot();
+        PublishedScriptSnapshot snapshot = getStoredSnapshot();
         if (snapshot == null) {
             throw new IllegalStateException("没有已发布快照可恢复: " + id);
         }
@@ -485,7 +499,7 @@ public class ScriptDefinition {
         this.scriptDependencies = snapshot.getScriptDependencies();
         this.aiDependencies = snapshot.getAiDependencies();
         this.status = ScriptStatus.PUBLISHED;
-        this.dirty = false;
+        sourceMetadata.setDirty(false);
         return this;
     }
 
@@ -497,5 +511,136 @@ public class ScriptDefinition {
     public ScriptDefinition archive() {
         this.status = ScriptStatus.ARCHIVED;
         return this;
+    }
+
+    /**
+     * 从已有的脚本定义合并缺失字段。
+     * <p>
+     * 当传入的定义中某个字段为 null 时，使用已有定义的对应字段填充。
+     * 同时根据比较结果计算 dirty 标志。
+     *
+     * @param existing 已有的脚本定义
+     * @return 当前实例
+     */
+    public ScriptDefinition mergeFrom(ScriptDefinition existing) {
+        if (createdAt == null) {
+            setCreatedAt(existing.getCreatedAt());
+        }
+        if (version == null) {
+            setVersion(existing.getVersion());
+        }
+        if (owner == null) {
+            setOwner(existing.getOwner());
+        }
+        if (packaging == null) {
+            setPackaging(existing.getPackaging());
+        }
+        if (description == null) {
+            setDescription(existing.getDescription());
+        }
+        if (status == null) {
+            setStatus(existing.getStatus());
+        }
+        if (!hasStoredPublishedSnapshot()) {
+            setPublishedSnapshot(existing.getPublishedSnapshot());
+        }
+        if (scope == null) {
+            setScope(existing.getScope());
+        }
+        if (repositoryId == null) {
+            setRepositoryId(existing.getRepositoryId());
+        }
+        if (repositoryToolId == null) {
+            setRepositoryToolId(existing.getRepositoryToolId());
+        }
+        if (repositoryVersion == null) {
+            setRepositoryVersion(existing.getRepositoryVersion());
+        }
+        if (getSourcePath() == null) {
+            setSourcePath(existing.getSourcePath());
+        }
+        if (getSourceCommit() == null) {
+            setSourceCommit(existing.getSourceCommit());
+        }
+        if (getSourceDigest() == null) {
+            setSourceDigest(existing.getSourceDigest());
+        }
+        if (getSourceSyncedAt() == null) {
+            setSourceSyncedAt(existing.getSourceSyncedAt());
+        }
+        if (scope == ScriptScope.DEVELOPMENT) {
+            setDirty(existing.isDirty() || !snapshotCurrent().equals(existing.snapshotCurrent()));
+        } else {
+            setDirty(existing.isDirty());
+        }
+        setEditable(existing.isEditable());
+        return this;
+    }
+
+    /**
+     * 规范化发布状态。
+     * <p>
+     * 如果存在存储的发布快照，确保状态为 PUBLISHED；
+     * 如果状态为 PUBLISHED 但无快照，自动创建快照。
+     */
+    /**
+     * 创建去除 UI 扩展字段的脚本定义副本。
+     * <p>
+     * 递归移除输入输出 Schema 中的 ui、x-ui 字段。
+     *
+     * @return 去除 UI 字段的脚本定义副本
+     */
+    public ScriptDefinition withoutUiSchema() {
+        PublishedScriptSnapshot sanitizedSnapshot = getPublishedSnapshot();
+        if (sanitizedSnapshot != null) {
+            sanitizedSnapshot = new PublishedScriptSnapshot()
+                    .setName(sanitizedSnapshot.getName())
+                    .setType(sanitizedSnapshot.getType())
+                    .setPackaging(sanitizedSnapshot.getPackaging())
+                    .setSource(sanitizedSnapshot.getSource())
+                    .setInputSchema(SchemaValueCopier.sanitizeSchema(sanitizedSnapshot.getInputSchema()))
+                    .setOutputSchema(SchemaValueCopier.sanitizeSchema(sanitizedSnapshot.getOutputSchema()))
+                    .setScriptDependencies(sanitizedSnapshot.getScriptDependencies())
+                    .setAiDependencies(sanitizedSnapshot.getAiDependencies());
+        }
+        return new ScriptDefinition()
+                .setId(id)
+                .setName(name)
+                .setType(type)
+                .setSource(source)
+                .setPackaging(packaging)
+                .setInputSchema(SchemaValueCopier.sanitizeSchema(inputSchema))
+                .setOutputSchema(SchemaValueCopier.sanitizeSchema(outputSchema))
+                .setPublishedSnapshot(sanitizedSnapshot)
+                .setStatus(status)
+                .setVersion(version)
+                .setScope(scope)
+                .setRepositoryId(repositoryId)
+                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryVersion(repositoryVersion)
+                .setSourcePath(getSourcePath())
+                .setSourceCommit(getSourceCommit())
+                .setSourceDigest(getSourceDigest())
+                .setSourceSyncedAt(getSourceSyncedAt())
+                .setDirty(isDirty())
+                .setEditable(editable)
+                .setOwner(owner)
+                .setDescription(description)
+                .setTags(tags)
+                .setScriptDependencies(scriptDependencies)
+                .setPluginDependencies(pluginDependencies)
+                .setAiDependencies(aiDependencies)
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt);
+    }
+
+    public void normalizePublicationState() {
+        if (hasStoredPublishedSnapshot()) {
+            setStatus(ScriptStatus.PUBLISHED);
+            return;
+        }
+        if (status == ScriptStatus.PUBLISHED) {
+            setPublishedSnapshot(snapshotCurrent());
+        }
     }
 }

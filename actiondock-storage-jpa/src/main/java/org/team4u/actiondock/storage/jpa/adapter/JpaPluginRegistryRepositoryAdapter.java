@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.domain.model.PluginActionMetadata;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -15,6 +17,7 @@ import java.util.Optional;
  *
  * @author jay.wu
  */
+@Component
 public class JpaPluginRegistryRepositoryAdapter implements PluginRegistryRepository {
     private final SpringDataPluginRegistrationRepository repository;
     private final JsonCodec jsonCodec;

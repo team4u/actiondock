@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.ai.api.AiAgentRunRecord;
 import org.team4u.actiondock.ai.api.AiAgentRunRepository;
 import org.team4u.actiondock.ai.api.AiCallerType;
@@ -11,6 +13,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentRunRepository;
 import java.util.List;
 import java.util.Optional;
 
+@Component
 public class JpaAiAgentRunRepositoryAdapter implements AiAgentRunRepository {
     private final SpringDataAiAgentRunRepository repository;
     private final JsonCodec jsonCodec;

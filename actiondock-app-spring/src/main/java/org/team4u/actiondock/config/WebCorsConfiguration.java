@@ -6,22 +6,23 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Web CORS 跨域配置。
+ * <p>
+ * 允许通过 {@code app.cors.allowed-origins} 配置允许的跨域来源，默认允许所有来源。
  *
  * @author jay.wu
  */
 @Configuration(proxyBeanMethods = false)
 public class WebCorsConfiguration implements WebMvcConfigurer {
-    /**
-     * 配置 API 路径的 CORS 跨域策略。
-     * <p>
-     * 允许所有来源的 GET、POST、PUT、DELETE、OPTIONS 请求。
-     *
-     * @param registry CORS 注册器
-     */
+    private final AppProperties appProperties;
+
+    public WebCorsConfiguration(AppProperties appProperties) {
+        this.appProperties = appProperties;
+    }
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOriginPatterns("*")
+                .allowedOriginPatterns(appProperties.getCors().getAllowedOrigins().toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .maxAge(3600);

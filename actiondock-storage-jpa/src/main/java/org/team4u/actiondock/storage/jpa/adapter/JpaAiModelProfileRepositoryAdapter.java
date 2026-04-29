@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.ai.api.AiCapability;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+@Component
 public class JpaAiModelProfileRepositoryAdapter implements AiModelProfileRepository {
     private final SpringDataAiModelProfileRepository repository;
     private final JsonCodec jsonCodec;

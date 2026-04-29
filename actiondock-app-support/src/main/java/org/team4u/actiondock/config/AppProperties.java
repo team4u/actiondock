@@ -20,6 +20,7 @@ public class AppProperties {
     private final Execution execution = new Execution();
     private final Schedules schedules = new Schedules();
     private final SharedState sharedState = new SharedState();
+    private final Cors cors = new Cors();
 
     public String getHomeDir() {
         return homeDir;
@@ -43,6 +44,10 @@ public class AppProperties {
 
     public SharedState getSharedState() {
         return sharedState;
+    }
+
+    public Cors getCors() {
+        return cors;
     }
 
     public static String defaultHomeDir() {
@@ -159,6 +164,18 @@ public class AppProperties {
 
         public void setPurgeIntervalSeconds(int purgeIntervalSeconds) {
             this.purgeIntervalSeconds = purgeIntervalSeconds;
+        }
+    }
+
+    public static class Cors {
+        private List<String> allowedOrigins = new ArrayList<>(List.of("*"));
+
+        public List<String> getAllowedOrigins() {
+            return allowedOrigins;
+        }
+
+        public void setAllowedOrigins(List<String> allowedOrigins) {
+            this.allowedOrigins = allowedOrigins;
         }
     }
 }

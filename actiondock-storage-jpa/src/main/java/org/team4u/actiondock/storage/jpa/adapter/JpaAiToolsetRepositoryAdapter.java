@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.ai.api.AiToolPermission;
 import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
@@ -12,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+@Component
 public class JpaAiToolsetRepositoryAdapter implements AiToolsetRepository {
     private final SpringDataAiToolsetRepository repository;
     private final JsonCodec jsonCodec;

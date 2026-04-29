@@ -10,6 +10,7 @@ import {
   getAiAgent,
   getAiRun,
   getAiModel,
+  getRepositoryAiPackage,
   listConfigValues,
   listAiModels,
   listAiTools,
@@ -26,6 +27,7 @@ import {
 import { buildToolOptionsPayload, cloneToolConfigMap, resolveAgentToolSelection, type ResolvedAgentToolView, type ToolConfigMap } from "../../aiAgentTools";
 import { AiRunStatusTag } from "../../components/ai/AiTags";
 import { AiStepTracePanel } from "../../components/ai/AiStepTracePanel";
+import { RepositoryAiPackageDiffPanel } from "../../components/diff/RepositoryAiPackageDiffPanel";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
 import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
@@ -43,6 +45,7 @@ import type {
   AiToolExecutionResult,
   AiToolset,
   ConfigValue,
+  RepositoryAiPackageDetail,
   RepositoryAiPackagePublishPreview,
   RepositoryDefinition
 } from "../../types";
@@ -278,8 +281,11 @@ export function AiAgentProfileDetailPage() {
   const [managerOpen, setManagerOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishPreview, setPublishPreview] = useState<RepositoryAiPackagePublishPreview | null>(null);
+  const [publishCurrentPackage, setPublishCurrentPackage] = useState<RepositoryAiPackageDetail | null>(null);
+  const [publishCurrentPackageError, setPublishCurrentPackageError] = useState<string | null>(null);
   const [previewingPublish, setPreviewingPublish] = useState(false);
   const [publishingPackage, setPublishingPackage] = useState(false);
+  const [publishTab, setPublishTab] = useState<"form" | "preview">("form");
   const [draftToolsetIds, setDraftToolsetIds] = useState<string[]>([]);
   const [draftDirectToolNames, setDraftDirectToolNames] = useState<string[]>([]);
   const [draftDirectToolOptions, setDraftDirectToolOptions] = useState<ToolConfigMap>({});
@@ -296,6 +302,13 @@ export function AiAgentProfileDetailPage() {
   const [testRun, setTestRun] = useState<AiAgentRunSnapshot | null>(null);
   const activeTab = searchParams.get("tab") === "test" ? "test" : "config";
   const watchedToolsetIds = Form.useWatch("toolsetIds", form) ?? [];
+
+  const resetPublishModalState = () => {
+    setPublishPreview(null);
+    setPublishCurrentPackage(null);
+    setPublishCurrentPackageError(null);
+    setPublishTab("form");
+  };
 
   useEffect(() => {
     void Promise.all([listAiModels(), listAiToolsets(), listAiTools(), listRepositories()])
@@ -450,6 +463,7 @@ export function AiAgentProfileDetailPage() {
     {
       title: "工具",
       dataIndex: "toolName",
+      width: 420,
       render: (_, item) => (
         <Space direction="vertical" size={2}>
           <Space size={8} wrap>
@@ -463,10 +477,12 @@ export function AiAgentProfileDetailPage() {
     },
     {
       title: "来源",
+      width: 260,
       render: (_, item) => <Space size={[4, 4]} wrap>{item.sources.map((source) => <Tag key={`${item.toolName}-${source.label}`}>{source.label}</Tag>)}</Space>
     },
     {
       title: "配置",
+      width: 140,
       render: (_, item) => <Tag color={Object.keys(item.config).length > 0 ? "green" : "default"}>{Object.keys(item.config).length > 0 ? "已配置" : "默认"}</Tag>
     }
   ];
@@ -633,8 +649,15 @@ export function AiAgentProfileDetailPage() {
       releaseNotes: "",
       tagsText: ""
     });
-    setPublishPreview(null);
+    resetPublishModalState();
+    setPublishTab("preview");
     setPublishOpen(true);
+    window.setTimeout(() => {
+      const values = publishForm.getFieldsValue(["repositoryId", "packageId"]);
+      if (values.repositoryId && values.packageId) {
+        void handlePreviewPublish();
+      }
+    }, 0);
   };
 
   const handlePreviewPublish = async () => {
@@ -644,11 +667,29 @@ export function AiAgentProfileDetailPage() {
     setPreviewingPublish(true);
     try {
       const values = await publishForm.validateFields(["repositoryId", "packageId"]);
-      const preview = await previewRepositoryAiPackagePublish(values.repositoryId, {
+      const repositoryId = values.repositoryId;
+      const packageId = values.packageId.trim();
+      setPublishTab("preview");
+      setPublishPreview(null);
+      setPublishCurrentPackage(null);
+      setPublishCurrentPackageError(null);
+      const preview = await previewRepositoryAiPackagePublish(repositoryId, {
         agentProfileId: id,
-        packageId: values.packageId.trim()
+        packageId
       });
       setPublishPreview(preview);
+      setPublishCurrentPackageError(null);
+      try {
+        setPublishCurrentPackage(await getRepositoryAiPackage(repositoryId, packageId));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          setPublishCurrentPackage(null);
+        } else {
+          setPublishCurrentPackage(null);
+          setPublishCurrentPackageError(error instanceof Error ? error.message : "加载目标仓库当前包失败");
+        }
+      }
+      setPublishTab("preview");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "AI 能力包预览失败");
     } finally {
@@ -791,6 +832,7 @@ export function AiAgentProfileDetailPage() {
                               pagination={false}
                               dataSource={draftResolution.effectiveTools}
                               columns={effectiveToolColumns}
+                              scroll={{ x: "max-content" }}
                               locale={{ emptyText: "当前没有生效工具" }}
                             />
                           </Space>
@@ -878,108 +920,147 @@ export function AiAgentProfileDetailPage() {
                   />
                 </Drawer>
                 <Modal
-                  title="发布 AI 能力包"
+                  title="发布到仓库"
                   open={publishOpen}
-                  width={820}
+                  width={1120}
                   onCancel={() => {
                     setPublishOpen(false);
-                    setPublishPreview(null);
+                    resetPublishModalState();
                   }}
                   footer={(
                     <Space>
                       <Button onClick={() => {
                         setPublishOpen(false);
-                        setPublishPreview(null);
+                        resetPublishModalState();
                       }}
                       >
                         取消
                       </Button>
-                      <Button loading={previewingPublish} onClick={() => void handlePreviewPublish()}>预览依赖</Button>
                       <Button type="primary" loading={publishingPackage} onClick={() => void handlePublishAiPackage()}>确认发布</Button>
                     </Space>
                   )}
                 >
                   <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                    <Form form={publishForm} layout="vertical">
-                      <Form.Item name="repositoryId" label="目标仓库" rules={[{ required: true, message: "请选择目标仓库" }]}>
-                        <Select
-                          showSearch
-                          optionFilterProp="label"
-                          options={repositories.map((repository) => ({
-                            value: repository.id,
-                            label: `${repository.id} (${repository.name})`
-                          }))}
-                        />
-                      </Form.Item>
-                      <Form.Item name="packageId" label="能力包 ID" rules={[{ required: true, message: "请输入能力包 ID" }]}>
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="displayName" label="展示名称">
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="version" label="版本" rules={[{ required: true, message: "请输入版本号" }]}>
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="owner" label="Owner">
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="tagsText" label="标签">
-                        <Input placeholder="多个标签用逗号或换行分隔" />
-                      </Form.Item>
-                      <Form.Item name="releaseNotes" label="发布说明">
-                        <Input.TextArea rows={4} />
-                      </Form.Item>
-                    </Form>
-                    {publishPreview ? (
-                      <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                        <Descriptions bordered size="small" column={{ xs: 1, md: 3 }}>
-                          <Descriptions.Item label="入口 Agent">{publishPreview.entryAgentId}</Descriptions.Item>
-                          <Descriptions.Item label="模型">{publishPreview.modelIds.length}</Descriptions.Item>
-                          <Descriptions.Item label="工具集">{publishPreview.toolsetIds.length}</Descriptions.Item>
-                          <Descriptions.Item label="Agent">{publishPreview.agentIds.length}</Descriptions.Item>
-                          <Descriptions.Item label="脚本">{publishPreview.scriptIds.length}</Descriptions.Item>
-                          <Descriptions.Item label="外部依赖">{publishPreview.externalDependencies.length}</Descriptions.Item>
-                        </Descriptions>
-                        <Card size="small" title="闭包摘要">
-                          <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                            <Typography.Text>模型: {publishPreview.modelIds.join(", ") || "无"}</Typography.Text>
-                            <Typography.Text>工具集: {publishPreview.toolsetIds.join(", ") || "无"}</Typography.Text>
-                            <Typography.Text>Agent: {publishPreview.agentIds.join(", ") || "无"}</Typography.Text>
-                            <Typography.Text>脚本: {publishPreview.scriptIds.join(", ") || "无"}</Typography.Text>
-                          </Space>
-                        </Card>
-                        <Card size="small" title="配置模板">
-                          {publishPreview.configTemplate.length > 0 ? (
-                            <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                              {publishPreview.configTemplate.map((item) => (
-                                <Typography.Text key={item.key}>
-                                  <Typography.Text code>{item.key}</Typography.Text>
-                                  {item.secret ? " · 密钥" : ""}
-                                  {item.label ? ` · ${item.label}` : ""}
-                                </Typography.Text>
-                              ))}
+                    <Tabs
+                      activeKey={publishTab}
+                      onChange={(key) => setPublishTab(key as "form" | "preview")}
+                      items={[
+                        {
+                          key: "form",
+                          label: "发布信息",
+                          children: (
+                            <Form form={publishForm} layout="vertical">
+                              <Form.Item name="repositoryId" label="目标仓库" rules={[{ required: true, message: "请选择目标仓库" }]}>
+                                <Select
+                                  showSearch
+                                  optionFilterProp="label"
+                                  options={repositories.map((repository) => ({
+                                    value: repository.id,
+                                    label: `${repository.id} (${repository.name})`
+                                  }))}
+                                />
+                              </Form.Item>
+                              <Form.Item name="packageId" label="能力包 ID" rules={[{ required: true, message: "请输入能力包 ID" }]}>
+                                <Input />
+                              </Form.Item>
+                              <Form.Item name="displayName" label="展示名称">
+                                <Input />
+                              </Form.Item>
+                              <Form.Item name="version" label="版本" rules={[{ required: true, message: "请输入版本号" }]}>
+                                <Input />
+                              </Form.Item>
+                              <Form.Item name="owner" label="Owner">
+                                <Input />
+                              </Form.Item>
+                              <Form.Item name="tagsText" label="标签">
+                                <Input placeholder="多个标签用逗号或换行分隔" />
+                              </Form.Item>
+                              <Form.Item name="releaseNotes" label="发布说明">
+                                <Input.TextArea autoSize={{ minRows: 5, maxRows: 12 }} placeholder="本次发布的变更说明，支持 Markdown 语法" />
+                              </Form.Item>
+                            </Form>
+                          )
+                        },
+                        {
+                          key: "preview",
+                          label: "预览依赖",
+                          children: previewingPublish && !publishPreview ? (
+                            <Alert type="info" showIcon message="正在预览依赖，请稍候。" />
+                          ) : publishPreview ? (
+                            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                              {publishCurrentPackageError ? (
+                                <Alert type="warning" showIcon message="当前仓库 AI 包加载失败" description={publishCurrentPackageError} />
+                              ) : (
+                                <Card type="inner" title="变更明细">
+                                  <RepositoryAiPackageDiffPanel
+                                    currentPackage={publishCurrentPackage}
+                                    preview={publishPreview}
+                                    sourceToolsetIds={watchedToolsetIds}
+                                    sourceDirectToolNames={directToolNames}
+                                    sourceDirectToolOptions={directToolOptions}
+                                  />
+                                </Card>
+                              )}
+                              <Descriptions bordered size="small" column={{ xs: 1, md: 3 }}>
+                                <Descriptions.Item label="入口 Agent">{publishPreview.entryAgentId}</Descriptions.Item>
+                                <Descriptions.Item label="模型">{publishPreview.modelIds.length}</Descriptions.Item>
+                                <Descriptions.Item label="工具集">{publishPreview.toolsetIds.length}</Descriptions.Item>
+                                <Descriptions.Item label="Agent">{publishPreview.agentIds.length}</Descriptions.Item>
+                                <Descriptions.Item label="脚本">{publishPreview.scriptIds.length}</Descriptions.Item>
+                                <Descriptions.Item label="外部依赖">{publishPreview.externalDependencies.length}</Descriptions.Item>
+                              </Descriptions>
+                              <Card type="inner" title="闭包摘要">
+                                <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                  <Typography.Text>模型: {publishPreview.modelIds.join(", ") || "无"}</Typography.Text>
+                                  <Typography.Text>工具集: {publishPreview.toolsetIds.join(", ") || "无"}</Typography.Text>
+                                  <Typography.Text>Agent: {publishPreview.agentIds.join(", ") || "无"}</Typography.Text>
+                                  <Typography.Text>脚本: {publishPreview.scriptIds.join(", ") || "无"}</Typography.Text>
+                                </Space>
+                              </Card>
+                              <Card type="inner" title={`配置模板 (${publishPreview.configTemplate.length})`}>
+                                {publishPreview.configTemplate.length > 0 ? (
+                                  <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                                    {publishPreview.configTemplate.map((item) => (
+                                      <div key={item.key} className="repository-config-publish-row">
+                                        <Space direction="vertical" size={2}>
+                                          <Space wrap size={[8, 8]}>
+                                            <Typography.Text code>{item.key}</Typography.Text>
+                                            {item.secret ? <Tag color="gold">SECRET</Tag> : null}
+                                          </Space>
+                                          <Typography.Text type="secondary">{item.label || "未填写说明"}</Typography.Text>
+                                        </Space>
+                                        <Space wrap size={[6, 6]}>
+                                          {item.required ? <Tag color="blue">必填</Tag> : <Tag>可选</Tag>}
+                                          <Tag>{item.type}</Tag>
+                                          <Tag>{item.defaultValue || "无默认值"}</Tag>
+                                        </Space>
+                                      </div>
+                                    ))}
+                                  </Space>
+                                ) : (
+                                  <Typography.Text type="secondary">无额外配置项</Typography.Text>
+                                )}
+                              </Card>
+                              <Card type="inner" title={`外部依赖 (${publishPreview.externalDependencies.length})`}>
+                                {publishPreview.externalDependencies.length > 0 ? (
+                                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                    {publishPreview.externalDependencies.map((dependency) => (
+                                      <Typography.Text key={`${dependency.assetType}:${dependency.repositoryId}:${dependency.assetId}`}>
+                                        {dependency.assetType} · {dependency.repositoryId}/{dependency.assetId}@{dependency.version}
+                                      </Typography.Text>
+                                    ))}
+                                  </Space>
+                                ) : (
+                                  <Typography.Text type="secondary">所有依赖均已本地闭包打包</Typography.Text>
+                                )}
+                              </Card>
                             </Space>
                           ) : (
-                            <Typography.Text type="secondary">无额外配置项</Typography.Text>
-                          )}
-                        </Card>
-                        <Card size="small" title="外部依赖">
-                          {publishPreview.externalDependencies.length > 0 ? (
-                            <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                              {publishPreview.externalDependencies.map((dependency) => (
-                                <Typography.Text key={`${dependency.assetType}:${dependency.repositoryId}:${dependency.assetId}`}>
-                                  {dependency.assetType} · {dependency.repositoryId}/{dependency.assetId}@{dependency.version}
-                                </Typography.Text>
-                              ))}
-                            </Space>
-                          ) : (
-                            <Typography.Text type="secondary">所有依赖均已本地闭包打包</Typography.Text>
-                          )}
-                        </Card>
-                      </Space>
-                    ) : (
-                      <Alert type="info" showIcon message="建议先做依赖预览，确认会被打包的模型、工具集、脚本和外部依赖。" />
-                    )}
+                            <Alert type="info" showIcon message="先在“发布信息”页填写并点击“预览依赖”，这里才会展示 diff 和闭包内容。" />
+                          )
+                        }
+                      ]}
+                    />
                   </Space>
                 </Modal>
               </Space>

@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.domain.model.RepositoryAiPackageInstallation;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.RepositoryAiPackageInstallationRepository;
@@ -9,6 +11,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryAiPackageInsta
 import java.util.List;
 import java.util.Optional;
 
+@Component
 public class JpaRepositoryAiPackageInstallationRepositoryAdapter implements RepositoryAiPackageInstallationRepository {
     private final SpringDataRepositoryAiPackageInstallationRepository repository;
     private final JsonCodec jsonCodec;

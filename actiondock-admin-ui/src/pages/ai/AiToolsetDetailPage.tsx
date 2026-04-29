@@ -179,6 +179,7 @@ export function AiToolPickerTable({
     {
       title: "工具",
       dataIndex: "name",
+      width: 420,
       render: (name, tool) => (
         <Space direction="vertical" size={2}>
           <Space size={8} wrap>
@@ -190,9 +191,10 @@ export function AiToolPickerTable({
         </Space>
       )
     },
-    { title: "权限", dataIndex: "permission", render: (permission) => <AiToolPermissionTag permission={permission} /> },
+    { title: "权限", dataIndex: "permission", width: 140, render: (permission) => <AiToolPermissionTag permission={permission} /> },
     {
       title: "配置状态",
+      width: 140,
       render: (_, tool) => {
         const configStatus = getToolConfigStatus(tool, toolOptionsByName);
         return <Tag color={configStatus.color}>{configStatus.label}</Tag>;
@@ -200,6 +202,7 @@ export function AiToolPickerTable({
     },
     {
       title: "操作",
+      width: 120,
       render: (_, tool) => (
         <Space wrap>
           <Button icon={<EyeOutlined />} onClick={() => onOpenConfig(tool.name)}>查看</Button>
@@ -224,7 +227,7 @@ export function AiToolPickerTable({
       pagination={{ pageSize: 8, showSizeChanger: false }}
       rowSelection={rowSelection}
       columns={toolColumns}
-      scroll={{ x: 900 }}
+      scroll={{ x: "max-content" }}
     />
   );
 }

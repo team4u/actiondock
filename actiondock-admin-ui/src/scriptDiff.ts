@@ -1,6 +1,13 @@
 import { diffLines } from "diff";
 import { prettyJson } from "./utils";
-import type { PluginDependency, ScriptDefinition, ScriptDependency, ScriptType } from "./types";
+import type {
+  PluginDependency,
+  RepositoryToolDetail,
+  ScriptDefinition,
+  ScriptDependency,
+  ScriptPackaging,
+  ScriptType
+} from "./types";
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type ScriptDiffContext = "publish" | "import";
@@ -10,6 +17,7 @@ export type DiffTabKey = "source" | "inputSchema" | "outputSchema" | "metadata" 
 export interface ScriptDiffTarget {
   name?: string;
   type?: ScriptType;
+  packaging?: ScriptPackaging;
   source?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
@@ -452,11 +460,16 @@ function diffMetadata(
     context === "publish"
       ? [
           { field: "name", label: "名称", risk: "LOW" as RiskLevel },
-          { field: "type", label: "类型", risk: "HIGH" as RiskLevel }
+          { field: "type", label: "类型", risk: "HIGH" as RiskLevel },
+          { field: "packaging", label: "打包属性", risk: "HIGH" as RiskLevel },
+          { field: "description", label: "说明", risk: "LOW" as RiskLevel },
+          { field: "owner", label: "Owner", risk: "LOW" as RiskLevel },
+          { field: "tags", label: "标签", risk: "LOW" as RiskLevel }
         ]
       : [
           { field: "name", label: "名称", risk: "LOW" as RiskLevel },
           { field: "type", label: "类型", risk: "HIGH" as RiskLevel },
+          { field: "packaging", label: "打包属性", risk: "HIGH" as RiskLevel },
           { field: "description", label: "说明", risk: "LOW" as RiskLevel },
           { field: "owner", label: "Owner", risk: "LOW" as RiskLevel },
           { field: "tags", label: "标签", risk: "LOW" as RiskLevel }
@@ -528,18 +541,6 @@ function diffDependencies(
   context: ScriptDiffContext,
   comparisonMode: ScriptDiffComparisonMode
 ): DependencyDiffSummary {
-  if (context !== "import") {
-    return {
-      available: false,
-      changed: false,
-      risk: "LOW",
-      added: [],
-      removed: [],
-      modified: [],
-      unchanged: []
-    };
-  }
-
   const basePluginDependencies = new Map(
     (base?.pluginDependencies ?? []).map((dependency) => [normalizePluginDependencyKey(dependency), dependency])
   );
@@ -725,18 +726,24 @@ function diffSource(
   };
 }
 
-function toPublishBase(snapshot: ScriptDefinition["publishedSnapshot"]): ScriptDiffTarget | undefined {
+function toPublishBase(script: ScriptDefinition): ScriptDiffTarget | undefined {
+  const snapshot = script.publishedSnapshot;
   if (!snapshot) {
     return undefined;
   }
 
   return {
-    name: snapshot.name,
+    name: normalizeString(snapshot.name),
     type: snapshot.type,
+    packaging: snapshot.packaging,
     source: snapshot.source,
     inputSchema: snapshot.inputSchema,
     outputSchema: snapshot.outputSchema,
-    scriptDependencies: snapshot.scriptDependencies
+    description: normalizeString(script.description),
+    owner: normalizeString(script.owner),
+    tags: normalizeStringArray(script.tags),
+    scriptDependencies: snapshot.scriptDependencies,
+    pluginDependencies: script.pluginDependencies
   };
 }
 
@@ -744,6 +751,7 @@ export function toDiffTarget(script: ScriptDefinition): ScriptDiffTarget {
   return {
     name: script.name,
     type: script.type,
+    packaging: script.packaging,
     source: script.source,
     inputSchema: script.inputSchema,
     outputSchema: script.outputSchema,
@@ -756,22 +764,66 @@ export function toDiffTarget(script: ScriptDefinition): ScriptDiffTarget {
 }
 
 export function buildPublishDiffTarget(
-  script: Pick<
+  script: Partial<Pick<
     ScriptDefinition,
-    "name" | "type" | "source" | "inputSchema" | "outputSchema"
-  > & {
+    | "name"
+    | "type"
+    | "packaging"
+    | "source"
+    | "inputSchema"
+    | "outputSchema"
+    | "description"
+    | "owner"
+    | "tags"
+    | "scriptDependencies"
+    | "pluginDependencies"
+  >> & {
     rawInputSchemaText?: string;
     rawOutputSchemaText?: string;
   }
 ): ScriptDiffTarget {
   return {
-    name: script.name,
+    name: normalizeString(script.name),
     type: script.type,
+    packaging: script.packaging,
     source: script.source,
     inputSchema: script.inputSchema,
     outputSchema: script.outputSchema,
     rawInputSchemaText: script.rawInputSchemaText,
-    rawOutputSchemaText: script.rawOutputSchemaText
+    rawOutputSchemaText: script.rawOutputSchemaText,
+    description: normalizeString(script.description),
+    owner: normalizeString(script.owner),
+    tags: normalizeStringArray(script.tags),
+    scriptDependencies: script.scriptDependencies,
+    pluginDependencies: script.pluginDependencies
+  };
+}
+
+export function buildRepositoryPublishDiffTarget(target: ScriptDiffTarget): ScriptDiffTarget {
+  return {
+    name: normalizeString(target.name),
+    type: target.type,
+    packaging: target.packaging,
+    source: target.source,
+    description: normalizeString(target.description),
+    owner: normalizeString(target.owner),
+    tags: normalizeStringArray(target.tags),
+    scriptDependencies: target.scriptDependencies,
+    pluginDependencies: target.pluginDependencies
+  };
+}
+
+export function toRepositoryToolDiffTarget(detail: RepositoryToolDetail): ScriptDiffTarget {
+  return {
+    name: normalizeString(detail.descriptor.displayName),
+    type: detail.descriptor.type,
+    packaging: detail.descriptor.packaging,
+    source: detail.source,
+    description: normalizeString(detail.descriptor.description),
+    owner: normalizeString(detail.descriptor.owner),
+    tags: normalizeStringArray(detail.descriptor.tags),
+    scriptDependencies: detail.descriptor.scriptDependencies,
+    pluginDependencies: detail.descriptor.pluginDependencies
   };
 }
 
@@ -816,6 +868,9 @@ export function buildScriptDiff(
   highRiskModifiedSummary(outputSchema, "Output Schema").forEach((item) => highlights.push(item));
   if (metadata.changes.some((change) => change.field === "type" && change.risk === "HIGH")) {
     highlights.push("脚本类型发生变化。");
+  }
+  if (metadata.changes.some((change) => change.field === "packaging" && change.risk === "HIGH")) {
+    highlights.push("脚本打包属性发生变化。");
   }
 
   const tabs: DiffTabKey[] = ["source", "inputSchema", "outputSchema", "metadata"];
@@ -863,5 +918,5 @@ function highRiskModifiedSummary(summary: SchemaDiffSummary, label: string): str
 }
 
 export function buildPublishScriptDiff(script: ScriptDefinition, target: ScriptDiffTarget): ScriptDiffResult {
-  return buildScriptDiff(toPublishBase(script.publishedSnapshot), target, { context: "publish" });
+  return buildScriptDiff(toPublishBase(script), target, { context: "publish" });
 }

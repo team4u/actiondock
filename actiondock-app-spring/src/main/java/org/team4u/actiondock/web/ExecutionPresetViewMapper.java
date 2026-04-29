@@ -1,5 +1,6 @@
 package org.team4u.actiondock.web;
 
+import org.springframework.stereotype.Component;
 import org.team4u.actiondock.domain.model.ExecutionPreset;
 
 /**
@@ -7,9 +8,10 @@ import org.team4u.actiondock.domain.model.ExecutionPreset;
  *
  * @author jay.wu
  */
-final class ExecutionPresetViewMapper {
+@Component
+public class ExecutionPresetViewMapper {
 
-    ExecutionPresetView toView(ExecutionPreset preset) {
+    public ExecutionPresetView toView(ExecutionPreset preset) {
         return new ExecutionPresetView(
                 preset.getId(),
                 preset.getScriptId(),

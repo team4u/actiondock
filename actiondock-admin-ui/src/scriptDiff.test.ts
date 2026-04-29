@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildScriptDiff, buildPublishScriptDiff, buildPublishDiffTarget, toDiffTarget } from "./scriptDiff";
+import {
+  buildScriptDiff,
+  buildPublishScriptDiff,
+  buildPublishDiffTarget,
+  toDiffTarget
+} from "./scriptDiff";
 import type { ScriptDefinition } from "./types";
 
 function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
@@ -140,6 +145,54 @@ describe("buildScriptDiff", () => {
     ]);
   });
 
+  it("detects publish metadata and dependency changes", () => {
+    const diff = buildScriptDiff(
+      toDiffTarget(
+        script({
+          packaging: "TOOL",
+          pluginDependencies: [
+            {
+              pluginId: "email-plugin",
+              versionRange: ">= 1.0.0",
+              requiredActions: ["send"]
+            }
+          ]
+        })
+      ),
+      buildPublishDiffTarget({
+        name: "User Query",
+        type: "GROOVY",
+        packaging: "FLOW",
+        source: "return [message: 'ok']",
+        inputSchema: script().inputSchema,
+        outputSchema: script().outputSchema,
+        description: "Updated docs",
+        owner: "platform",
+        tags: ["demo"],
+        scriptDependencies: [],
+        pluginDependencies: [
+          {
+            pluginId: "email-plugin",
+            versionRange: ">= 2.0.0",
+            requiredActions: ["send", "render"]
+          }
+        ]
+      }),
+      { context: "publish" }
+    );
+
+    expect(diff.metadata.changed).toBe(true);
+    expect(diff.metadata.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "packaging" }),
+        expect.objectContaining({ field: "owner" }),
+        expect.objectContaining({ field: "tags" })
+      ])
+    );
+    expect(diff.dependencies.changed).toBe(true);
+    expect(diff.dependencies.available).toBe(true);
+  });
+
   it("warns when schema contains nested unsupported structure", () => {
     const diff = buildScriptDiff(
       toDiffTarget(script()),
@@ -174,6 +227,7 @@ describe("buildPublishScriptDiff", () => {
       buildPublishDiffTarget({
         name: current.name,
         type: current.type,
+        packaging: current.packaging,
         source: current.source,
         inputSchema: current.inputSchema,
         outputSchema: current.outputSchema
@@ -183,5 +237,54 @@ describe("buildPublishScriptDiff", () => {
     expect(diff.comparisonMode).toBe("INITIAL");
     expect(diff.riskLevel).toBe("LOW");
     expect(diff.highlights[0]).toContain("首次发布");
+  });
+
+  it("reports no changes when publish target matches the published snapshot", () => {
+    const current = script({
+      description: "Updated docs",
+      owner: "platform",
+      tags: ["demo"],
+      publishedSnapshot: {
+        name: "User Query",
+        type: "GROOVY",
+        packaging: "TOOL",
+        source: "return [message: 'ok']",
+        inputSchema: {
+          type: "object",
+          properties: {
+            region: { type: "string" }
+          }
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            message: { type: "string" }
+          }
+        },
+        scriptDependencies: [],
+        aiDependencies: []
+      }
+    });
+
+    const diff = buildPublishScriptDiff(
+      current,
+      buildPublishDiffTarget({
+        name: current.name,
+        type: current.type,
+        packaging: current.packaging,
+        source: current.source,
+        inputSchema: current.inputSchema,
+        outputSchema: current.outputSchema,
+        description: current.description,
+        owner: current.owner,
+        tags: current.tags,
+        scriptDependencies: current.scriptDependencies,
+        pluginDependencies: current.pluginDependencies
+      })
+    );
+
+    expect(diff.hasChanges).toBe(false);
+    expect(diff.comparisonMode).toBe("COMPARE");
+    expect(diff.metadata.changed).toBe(false);
   });
 });

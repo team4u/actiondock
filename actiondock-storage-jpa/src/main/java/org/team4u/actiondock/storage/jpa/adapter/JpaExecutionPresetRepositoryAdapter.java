@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -14,6 +16,7 @@ import java.util.Optional;
  *
  * @author jay.wu
  */
+@Component
 public class JpaExecutionPresetRepositoryAdapter implements ExecutionPresetRepository {
 
     private final SpringDataExecutionPresetEntityRepository repository;

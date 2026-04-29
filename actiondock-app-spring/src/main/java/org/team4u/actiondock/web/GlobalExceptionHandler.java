@@ -2,8 +2,10 @@ package org.team4u.actiondock.web;
 
 import org.team4u.actiondock.application.InvalidExecutionInputException;
 import org.team4u.actiondock.application.ErrorDetailSupport;
+import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
+import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
+import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.ErrorDetail;
-import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -62,8 +64,8 @@ public class GlobalExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(RepositoryCatalogService.RepositoryPluginConflictException.class)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> handlePluginConflict(RepositoryCatalogService.RepositoryPluginConflictException exception) {
+    @ExceptionHandler(RepositoryPluginConflictException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handlePluginConflict(RepositoryPluginConflictException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error(
                 exception.getMessage(),
                 400,
@@ -75,8 +77,8 @@ public class GlobalExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(RepositoryCatalogService.RepositoryVersionExistsException.class)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> handleRepositoryVersionExists(RepositoryCatalogService.RepositoryVersionExistsException exception) {
+    @ExceptionHandler(RepositoryVersionExistsException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleRepositoryVersionExists(RepositoryVersionExistsException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error(
                 exception.getMessage(),
                 400,
@@ -90,8 +92,8 @@ public class GlobalExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(RepositoryCatalogService.DevelopmentConflictException.class)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> handleDevelopmentConflict(RepositoryCatalogService.DevelopmentConflictException exception) {
+    @ExceptionHandler(DevelopmentConflictException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleDevelopmentConflict(DevelopmentConflictException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error(
                 exception.getMessage(),
                 400,

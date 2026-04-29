@@ -121,16 +121,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     messageApi
   });
 
-  // --- Publish to repository hook ---
-  const publishToRepo = useScriptPublishToRepo({
-    currentScript: editor.currentScript,
-    availableScripts: editor.availableScripts,
-    sourceText: editor.sourceText,
-    isReadOnlyScript: editor.isReadOnlyScript,
-    ensureCurrentScriptPublished: editor.ensureCurrentScriptPublished,
-    messageApi
-  });
-
   // --- Fork hook ---
   const fork = useScriptFork({
     currentScript: editor.currentScript,
@@ -280,30 +270,62 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const previewOutputSchemaText = formatSchemaEditorState(editor.outputSchemaState);
   const previewScriptType =
     (watchedScriptValues?.type as ScriptType | undefined) ?? editor.selectedScriptType;
+  const publishTarget = useMemo(
+    () =>
+      buildPublishDiffTarget({
+        name: watchedScriptValues?.name?.trim() || editor.currentScript?.name || "",
+        type: previewScriptType,
+        packaging: (watchedScriptValues?.packaging as "TOOL" | "FLOW" | undefined) ?? editor.currentScript?.packaging ?? "TOOL",
+        source: editor.sourceText,
+        inputSchema: resolvePreviewSchema(previewInputSchemaText),
+        outputSchema: resolvePreviewSchema(previewOutputSchemaText),
+        rawInputSchemaText: previewInputSchemaText,
+        rawOutputSchemaText: previewOutputSchemaText,
+        description: watchedScriptValues?.description?.trim() || editor.currentScript?.description,
+        owner: editor.currentScript?.owner,
+        tags: editor.currentScript?.tags ?? [],
+        scriptDependencies: editor.currentScript?.scriptDependencies,
+        pluginDependencies: previewScriptType === "GROOVY" ? editor.detectedPluginDependencies : []
+      }),
+    [
+      editor.currentScript?.description,
+      editor.currentScript?.name,
+      editor.currentScript?.owner,
+      editor.currentScript?.packaging,
+      editor.currentScript?.scriptDependencies,
+      editor.detectedPluginDependencies,
+      editor.sourceText,
+      previewInputSchemaText,
+      previewOutputSchemaText,
+      previewScriptType,
+      watchedScriptValues?.description,
+      watchedScriptValues?.name,
+      watchedScriptValues?.packaging
+    ]
+  );
+  const publishToRepo = useScriptPublishToRepo({
+    currentScript: editor.currentScript,
+    availableScripts: editor.availableScripts,
+    sourceText: editor.sourceText,
+    isReadOnlyScript: editor.isReadOnlyScript,
+    publishTarget,
+    ensureCurrentScriptPublished: editor.ensureCurrentScriptPublished,
+    messageApi
+  });
   const publishDiff = useMemo(() => {
-    const target = buildPublishDiffTarget({
-      name: watchedScriptValues?.name?.trim() || editor.currentScript?.name || "",
-      type: previewScriptType,
-      source: editor.sourceText,
-      inputSchema: resolvePreviewSchema(previewInputSchemaText),
-      outputSchema: resolvePreviewSchema(previewOutputSchemaText),
-      rawInputSchemaText: previewInputSchemaText,
-      rawOutputSchemaText: previewOutputSchemaText
-    });
-
     return buildPublishScriptDiff(
       editor.currentScript ?? {
         id: "",
-        name: target.name ?? "",
+        name: publishTarget.name ?? "",
         type: previewScriptType,
-        packaging: (watchedScriptValues?.packaging as "TOOL" | "FLOW" | undefined) ?? "TOOL",
+        packaging: publishTarget.packaging ?? "TOOL",
         source: editor.sourceText,
-        inputSchema: target.inputSchema ?? {},
-        outputSchema: target.outputSchema ?? {},
+        inputSchema: publishTarget.inputSchema ?? {},
+        outputSchema: publishTarget.outputSchema ?? {},
         status: "DRAFT",
         version: 1
       },
-      target
+      publishTarget
     );
   }, [
     editor.currentScript,
@@ -312,10 +334,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     previewInputSchemaText,
     previewOutputSchemaText,
     previewScriptType,
-    watchedScriptValues?.name
+    publishTarget
   ]);
   const showDiffNotice = editor.hasUnpublishedChanges;
-
   const openPublishConfirm = () => {
     if (!publishDiff.hasChanges && publishDiff.comparisonMode !== "INITIAL") {
       void editor.handlePublish();
@@ -456,6 +477,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         schedules={publishToRepo.publishSchedules}
         configPreview={publishToRepo.publishConfigPreview}
         configPreviewLoading={publishToRepo.publishConfigPreviewLoading}
+        repositoryDiff={publishToRepo.publishRepositoryDiff}
+        repositoryDiffLoading={publishToRepo.publishRepositoryDiffLoading}
+        repositoryContentUnchanged={publishToRepo.publishRepositoryContentUnchanged}
+        theme={editorTheme}
+        targetType={previewScriptType}
         configModes={publishToRepo.publishConfigModes}
         onConfigModesChange={publishToRepo.setPublishConfigModes}
         repositoryTools={publishToRepo.publishRepositoryTools}

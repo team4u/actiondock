@@ -1012,9 +1012,8 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                           </Button>
                         </Space>
                       ) : null}
-                    >
+                      >
                       <Descriptions column={1} size="small">
-                        <Descriptions.Item label="当前值">{renderConfigValue(detail)}</Descriptions.Item>
                         <Descriptions.Item label="来源">
                           {detail.origin ? (
                             <Space wrap>
@@ -1064,20 +1063,6 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                         </Form.Item>
                         <Form.Item
                           label="值"
-                          name="value"
-                          rules={[{
-                            validator: async (_, value) => {
-                              const secret = Boolean(detailForm.getFieldValue("secret"));
-                              const preserveValue = Boolean(detailForm.getFieldValue("preserveValue"));
-                              if (secret && preserveValue) {
-                                return;
-                              }
-                              if (typeof value === "string" && value.length > 0) {
-                                return;
-                              }
-                              throw new Error("请输入配置值");
-                            }
-                          }]}
                           extra="支持在值内继续引用其他配置值，例如 https://host/${config.region}/v1。"
                         >
                           <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -1097,11 +1082,29 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                                 </Form.Item>
                               </div>
                             ) : null}
-                            <Input.TextArea
-                              rows={6}
-                              placeholder="sk-..."
-                              disabled={detailValueFieldState.valueInputDisabled}
-                            />
+                            <Form.Item
+                              name="value"
+                              noStyle
+                              rules={[{
+                                validator: async (_, value) => {
+                                  const secret = Boolean(detailForm.getFieldValue("secret"));
+                                  const preserveValue = Boolean(detailForm.getFieldValue("preserveValue"));
+                                  if (secret && preserveValue) {
+                                    return;
+                                  }
+                                  if (typeof value === "string" && value.length > 0) {
+                                    return;
+                                  }
+                                  throw new Error("请输入配置值");
+                                }
+                              }]}
+                            >
+                              <Input.TextArea
+                                rows={6}
+                                placeholder="sk-..."
+                                disabled={detailValueFieldState.valueInputDisabled}
+                              />
+                            </Form.Item>
                           </Space>
                         </Form.Item>
                         <Form.Item label="高级选项" style={{ marginBottom: 12 }}>

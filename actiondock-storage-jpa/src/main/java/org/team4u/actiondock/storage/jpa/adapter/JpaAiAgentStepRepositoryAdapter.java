@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.ai.api.AiAgentStep;
 import org.team4u.actiondock.ai.api.AiAgentStepRepository;
 import org.team4u.actiondock.ai.api.AiStepType;
@@ -10,6 +12,7 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataAiAgentStepRepository;
 
 import java.util.List;
 
+@Component
 public class JpaAiAgentStepRepositoryAdapter implements AiAgentStepRepository {
     private final SpringDataAiAgentStepRepository repository;
     private final JsonCodec jsonCodec;

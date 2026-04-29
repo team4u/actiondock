@@ -15,26 +15,24 @@ import java.util.function.Supplier;
 /**
  * 脚本互调服务，提供已发布脚本之间的同步调用能力。
  */
-public class ScriptInvocationService {
+public class ScriptInvocationService extends OptionalServiceSupport {
     private static final ScriptInvocationService DISABLED = new ScriptInvocationService();
 
     private final ScriptRepository scriptRepository;
     private final Supplier<ScriptEngine> scriptEngineSupplier;
     private final ScriptSchemaSupport scriptSchemaSupport;
-    private final boolean enabled;
 
     private ScriptInvocationService() {
         this.scriptRepository = null;
         this.scriptEngineSupplier = null;
         this.scriptSchemaSupport = new ScriptSchemaSupport();
-        this.enabled = false;
     }
 
     public ScriptInvocationService(ScriptRepository scriptRepository, Supplier<ScriptEngine> scriptEngineSupplier) {
+        super(true);
         this.scriptRepository = Objects.requireNonNull(scriptRepository);
         this.scriptEngineSupplier = Objects.requireNonNull(scriptEngineSupplier);
         this.scriptSchemaSupport = new ScriptSchemaSupport();
-        this.enabled = true;
     }
 
     /**
@@ -87,7 +85,7 @@ public class ScriptInvocationService {
                     publishedDefinition.getId()
             );
             Object result = scriptEngine().execute(publishedDefinition, payload, nestedContext);
-            return normalizeResult(result);
+            return MapValueConverter.toResultMap(result);
         } catch (InvalidExecutionInputException exception) {
             throw new InvalidExecutionInputException(
                     exception.getScriptId(),
@@ -187,24 +185,9 @@ public class ScriptInvocationService {
         return List.copyOf(stack);
     }
 
-    private Map<String, Object> normalizeResult(Object result) {
-        if (result == null) {
-            return new LinkedHashMap<>();
-        }
-        if (result instanceof Map<?, ?> map) {
-            Map<String, Object> normalized = new LinkedHashMap<>();
-            map.forEach((key, value) -> normalized.put(String.valueOf(key), value));
-            return normalized;
-        }
-        Map<String, Object> normalized = new LinkedHashMap<>();
-        normalized.put("result", result);
-        return normalized;
-    }
-
-    private void ensureEnabled() {
-        if (!enabled) {
-            throw new IllegalStateException("脚本互调未启用");
-        }
+    @Override
+    protected String serviceName() {
+        return "脚本互调";
     }
 
     private String prefixedInvocationMessage(String calleeScriptId, RuntimeException exception) {

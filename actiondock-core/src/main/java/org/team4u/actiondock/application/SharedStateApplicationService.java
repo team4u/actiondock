@@ -17,21 +17,19 @@ import java.util.regex.Pattern;
  *
  * @author jay.wu
  */
-public class SharedStateApplicationService {
+public class SharedStateApplicationService extends OptionalServiceSupport {
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_.:/-]*");
     private static final SharedStateApplicationService DISABLED = new SharedStateApplicationService();
 
     private final SharedStateRepository repository;
-    private final boolean enabled;
 
     private SharedStateApplicationService() {
         this.repository = null;
-        this.enabled = false;
     }
 
     public SharedStateApplicationService(SharedStateRepository repository) {
+        super(true);
         this.repository = Objects.requireNonNull(repository);
-        this.enabled = true;
     }
 
     public static SharedStateApplicationService disabled() {
@@ -39,7 +37,7 @@ public class SharedStateApplicationService {
     }
 
     public SharedStateEntry get(String namespace, String key) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return null;
         }
         String normalizedNamespace = normalizeNamespace(namespace);
@@ -149,7 +147,7 @@ public class SharedStateApplicationService {
     }
 
     public List<SharedStateEntry> list(String namespace) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return List.of();
         }
         String normalizedNamespace = normalizeNamespace(namespace);
@@ -162,7 +160,7 @@ public class SharedStateApplicationService {
     }
 
     public List<String> listNamespaces() {
-        if (!enabled) {
+        if (!isEnabled()) {
             return List.of();
         }
         LocalDateTime now = LocalDateTime.now();
@@ -212,10 +210,9 @@ public class SharedStateApplicationService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private void ensureEnabled() {
-        if (!enabled) {
-            throw new IllegalStateException("共享状态服务未启用");
-        }
+    @Override
+    protected String serviceName() {
+        return "共享状态服务";
     }
 
     private SharedStateEntry copy(SharedStateEntry source) {

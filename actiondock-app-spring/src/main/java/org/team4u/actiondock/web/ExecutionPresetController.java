@@ -25,9 +25,10 @@ public class ExecutionPresetController {
     private final ExecutionPresetApplicationService executionPresetApplicationService;
     private final ExecutionPresetViewMapper executionPresetViewMapper;
 
-    public ExecutionPresetController(ExecutionPresetApplicationService executionPresetApplicationService) {
+    public ExecutionPresetController(ExecutionPresetApplicationService executionPresetApplicationService,
+                                     ExecutionPresetViewMapper executionPresetViewMapper) {
         this.executionPresetApplicationService = executionPresetApplicationService;
-        this.executionPresetViewMapper = new ExecutionPresetViewMapper();
+        this.executionPresetViewMapper = executionPresetViewMapper;
     }
 
     /**

@@ -19,18 +19,16 @@ import java.util.regex.Pattern;
  *
  * @author jay.wu
  */
-public class ConfigValueApplicationService {
+public class ConfigValueApplicationService extends OptionalServiceSupport {
     private static final Pattern KEY_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_.-]*");
     private static final ConfigValueApplicationService DISABLED = new ConfigValueApplicationService();
 
     private final ConfigValueRepository configValueRepository;
     private final ConfigPlaceholderResolver placeholderResolver;
-    private final boolean enabled;
 
     private ConfigValueApplicationService() {
         this.configValueRepository = null;
         this.placeholderResolver = null;
-        this.enabled = false;
     }
 
     /**
@@ -40,9 +38,9 @@ public class ConfigValueApplicationService {
      * @throws NullPointerException 如果 configValueRepository 为 null
      */
     public ConfigValueApplicationService(ConfigValueRepository configValueRepository) {
+        super(true);
         this.configValueRepository = Objects.requireNonNull(configValueRepository);
         this.placeholderResolver = new ConfigPlaceholderResolver(configValueRepository);
-        this.enabled = true;
     }
 
     /**
@@ -63,7 +61,7 @@ public class ConfigValueApplicationService {
      * @return 配置值列表（禁用状态下返回空列表）
      */
     public List<ConfigValue> list() {
-        if (!enabled) {
+        if (!isEnabled()) {
             return List.of();
         }
         return configValueRepository.findAll().stream()
@@ -188,28 +186,28 @@ public class ConfigValueApplicationService {
      * @throws IllegalArgumentException 如果存在循环引用或引用了不存在的 key
      */
     public Map<String, String> snapshot() {
-        if (!enabled) {
+        if (!isEnabled()) {
             return Map.of();
         }
         return placeholderResolver.snapshot();
     }
 
     public Map<String, Object> resolveMap(Map<String, Object> source) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return source == null ? new LinkedHashMap<>() : new LinkedHashMap<>(source);
         }
         return placeholderResolver.resolveMap(source, snapshot());
     }
 
     public Object resolveObject(Object value) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return value;
         }
         return placeholderResolver.resolveObject(value, snapshot());
     }
 
     public String resolveText(String value) {
-        if (!enabled) {
+        if (!isEnabled()) {
             return value == null ? "" : value;
         }
         return placeholderResolver.resolveText(value, snapshot());
@@ -219,17 +217,12 @@ public class ConfigValueApplicationService {
         if (configValue == null) {
             throw new IllegalArgumentException("配置值不能为空");
         }
-        return new ConfigValue()
-                .setKey(normalizeKey(configValue.getKey()))
-                .setValue(configValue.getValue())
-                .setDescription(normalizeDescription(configValue.getDescription()))
-                .setSecret(configValue.isSecret())
-                .setRepositoryId(configValue.getRepositoryId())
-                .setRepositoryToolId(configValue.getRepositoryToolId())
-                .setRepositoryVersion(configValue.getRepositoryVersion())
-                .setPublishMode(configValue.getPublishMode())
-                .setManaged(configValue.isManaged())
-                .setOverridden(configValue.isOverridden());
+        return normalizeAndBuild(
+                normalizeKey(configValue.getKey()),
+                configValue.getValue(),
+                configValue,
+                null
+        );
     }
 
     private ConfigValue normalizeForUpdate(String key,
@@ -242,17 +235,12 @@ public class ConfigValueApplicationService {
         if (configValue.getKey() != null && !configValue.getKey().isBlank() && !key.equals(normalizeKey(configValue.getKey()))) {
             throw new IllegalArgumentException("不支持修改配置值 key");
         }
-        return new ConfigValue()
-                .setKey(key)
-                .setValue(preserveValue ? existing.getValue() : configValue.getValue())
-                .setDescription(normalizeDescription(configValue.getDescription()))
-                .setSecret(configValue.isSecret())
-                .setRepositoryId(configValue.getRepositoryId())
-                .setRepositoryToolId(configValue.getRepositoryToolId())
-                .setRepositoryVersion(configValue.getRepositoryVersion())
-                .setPublishMode(configValue.getPublishMode())
-                .setManaged(configValue.isManaged())
-                .setOverridden(configValue.isOverridden());
+        return normalizeAndBuild(
+                key,
+                preserveValue ? existing.getValue() : configValue.getValue(),
+                configValue,
+                null
+        );
     }
 
     private ConfigValue normalizeForRestore(String key, ConfigValue restoredValue, ConfigValue existing) {
@@ -262,17 +250,33 @@ public class ConfigValueApplicationService {
         if (restoredValue.getKey() != null && !restoredValue.getKey().isBlank() && !key.equals(normalizeKey(restoredValue.getKey()))) {
             throw new IllegalArgumentException("恢复默认值的 key 不匹配");
         }
+        return normalizeAndBuild(
+                key,
+                restoredValue.getValue(),
+                restoredValue,
+                existing
+        ).setManaged(true).setOverridden(false);
+    }
+
+    private ConfigValue normalizeAndBuild(String key,
+                                          String value,
+                                          ConfigValue source,
+                                          ConfigValue fallback) {
         return new ConfigValue()
                 .setKey(key)
-                .setValue(restoredValue.getValue())
-                .setDescription(normalizeDescription(restoredValue.getDescription()))
-                .setSecret(restoredValue.isSecret())
-                .setRepositoryId(restoredValue.getRepositoryId() == null ? existing.getRepositoryId() : restoredValue.getRepositoryId())
-                .setRepositoryToolId(restoredValue.getRepositoryToolId() == null ? existing.getRepositoryToolId() : restoredValue.getRepositoryToolId())
-                .setRepositoryVersion(restoredValue.getRepositoryVersion() == null ? existing.getRepositoryVersion() : restoredValue.getRepositoryVersion())
-                .setPublishMode(restoredValue.getPublishMode() == null ? existing.getPublishMode() : restoredValue.getPublishMode())
-                .setManaged(true)
-                .setOverridden(false);
+                .setValue(value)
+                .setDescription(normalizeDescription(source.getDescription()))
+                .setSecret(source.isSecret())
+                .setRepositoryId(fallback == null ? source.getRepositoryId() :
+                        (source.getRepositoryId() == null ? fallback.getRepositoryId() : source.getRepositoryId()))
+                .setRepositoryToolId(fallback == null ? source.getRepositoryToolId() :
+                        (source.getRepositoryToolId() == null ? fallback.getRepositoryToolId() : source.getRepositoryToolId()))
+                .setRepositoryVersion(fallback == null ? source.getRepositoryVersion() :
+                        (source.getRepositoryVersion() == null ? fallback.getRepositoryVersion() : source.getRepositoryVersion()))
+                .setPublishMode(fallback == null ? source.getPublishMode() :
+                        (source.getPublishMode() == null ? fallback.getPublishMode() : source.getPublishMode()))
+                .setManaged(source.isManaged())
+                .setOverridden(source.isOverridden());
     }
 
     private String normalizeKey(String key) {
@@ -314,9 +318,8 @@ public class ConfigValueApplicationService {
                 .setUpdatedAt(source.getUpdatedAt());
     }
 
-    private void ensureEnabled() {
-        if (!enabled) {
-            throw new IllegalStateException("配置值服务未启用");
-        }
+    @Override
+    protected String serviceName() {
+        return "配置值服务";
     }
 }

@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.domain.model.ApiAccessToken;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.storage.jpa.entity.ApiAccessTokenEntity;
@@ -13,6 +15,7 @@ import java.util.Optional;
  *
  * @author jay.wu
  */
+@Component
 public class JpaApiAccessTokenRepositoryAdapter implements ApiAccessTokenRepository {
     private final SpringDataApiAccessTokenRepository repository;
 

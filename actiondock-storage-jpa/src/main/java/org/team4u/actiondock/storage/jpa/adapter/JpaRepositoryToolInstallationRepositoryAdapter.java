@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.storage.jpa.entity.RepositoryToolInstallationEntity;
@@ -13,6 +15,7 @@ import java.util.Optional;
  *
  * @author jay.wu
  */
+@Component
 public class JpaRepositoryToolInstallationRepositoryAdapter implements RepositoryToolInstallationRepository {
     private final SpringDataRepositoryToolInstallationRepository repository;
 

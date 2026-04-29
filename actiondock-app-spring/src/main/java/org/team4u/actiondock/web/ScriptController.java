@@ -40,13 +40,14 @@ public class ScriptController {
                             ExecutionApplicationService executionApplicationService,
                             ScriptScheduleDispatcher scriptScheduleDispatcher,
                             RepositoryCatalogService repositoryCatalogService,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            ExecutionResponseMapper executionResponseMapper) {
         this.scriptApplicationService = scriptApplicationService;
         this.executionApplicationService = executionApplicationService;
         this.scriptScheduleDispatcher = scriptScheduleDispatcher;
         this.repositoryCatalogService = repositoryCatalogService;
         this.objectMapper = objectMapper;
-        this.executionResponseMapper = new ExecutionResponseMapper();
+        this.executionResponseMapper = executionResponseMapper;
     }
 
     /**

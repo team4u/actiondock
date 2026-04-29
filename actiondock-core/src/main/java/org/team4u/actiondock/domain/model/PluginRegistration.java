@@ -2,6 +2,7 @@ package org.team4u.actiondock.domain.model;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -110,7 +111,7 @@ public class PluginRegistration {
      * @return 配置模式映射
      */
     public Map<String, Object> getConfigSchema() {
-        return configSchema;
+        return Collections.unmodifiableMap(configSchema);
     }
 
     public PluginRegistration setConfigSchema(Map<String, Object> configSchema) {
@@ -124,7 +125,7 @@ public class PluginRegistration {
      * @return 默认配置映射
      */
     public Map<String, Object> getDefaultConfig() {
-        return defaultConfig;
+        return Collections.unmodifiableMap(defaultConfig);
     }
 
     public PluginRegistration setDefaultConfig(Map<String, Object> defaultConfig) {
@@ -140,7 +141,7 @@ public class PluginRegistration {
      * @return 动作元数据列表
      */
     public List<PluginActionMetadata> getActions() {
-        return actions;
+        return Collections.unmodifiableList(actions);
     }
 
     public PluginRegistration setActions(List<PluginActionMetadata> actions) {

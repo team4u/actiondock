@@ -12,12 +12,14 @@ import {
   Typography
 } from "antd";
 import type { FormInstance } from "antd";
+import { ScriptDiffPanel } from "../../components/diff/ScriptDiffPanel";
 import type {
   PluginDependency,
   RepositoryDefinition,
   RepositoryPublishConfigPreview,
   RepositoryToolDescriptor,
-  ScriptSchedule
+  ScriptSchedule,
+  ScriptType
 } from "../../types";
 import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues, RepositoryPublishVersionSuggestion } from "./types";
 
@@ -133,6 +135,11 @@ interface PublishToRepositoryModalProps {
   schedules: ScriptSchedule[];
   configPreview: RepositoryPublishConfigPreview | null;
   configPreviewLoading: boolean;
+  repositoryDiff: import("../../scriptDiff").ScriptDiffResult | null;
+  repositoryDiffLoading: boolean;
+  repositoryContentUnchanged: boolean;
+  theme: "vs-light" | "vs-dark";
+  targetType?: ScriptType;
   repositoryTools: RepositoryToolDescriptor[];
   scriptDependencies: PublishScriptDependencyDraft[];
   hasDynamicScriptDependencies: boolean;
@@ -185,6 +192,11 @@ export function PublishToRepositoryModal({
   schedules,
   configPreview,
   configPreviewLoading,
+  repositoryDiff,
+  repositoryDiffLoading,
+  repositoryContentUnchanged,
+  theme,
+  targetType,
   repositoryTools,
   scriptDependencies,
   hasDynamicScriptDependencies,
@@ -208,21 +220,26 @@ export function PublishToRepositoryModal({
       cancelText="取消"
       confirmLoading={confirmLoading}
       okButtonProps={{
-        disabled: metadataLoading || configPreviewLoading || hasMissingConfigKeys || hasDynamicScriptDependencies || hasIncompleteScriptDependencies
+        disabled: metadataLoading
+          || configPreviewLoading
+          || repositoryDiffLoading
+          || repositoryContentUnchanged
+          || hasMissingConfigKeys
+          || hasDynamicScriptDependencies
+          || hasIncompleteScriptDependencies
       }}
-      width={760}
+      width={1120}
       destroyOnHidden
     >
       {metadataLoading ? (
         <div className="page-loading"><Spin size="large" /></div>
       ) : (
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Alert
-            type="info"
-            showIcon
-            message="发布前会先执行本地保存、校验与发布"
-            description="脚本说明来自脚本自己的说明字段；这里填写的是本次版本发布日志。配置项只会按你选择的模式导出为模板。"
-          />
+          {repositoryDiff ? (
+            <Card type="inner" title="变更明细">
+              <ScriptDiffPanel diff={repositoryDiff} theme={theme} targetType={targetType} />
+            </Card>
+          ) : null}
           <Form form={form} layout="vertical" onValuesChange={onValuesChange}>
             <Form.Item
               label="目标仓库"

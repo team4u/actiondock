@@ -1,5 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.stereotype.Component;
+
 import org.team4u.actiondock.domain.model.SharedStateEntry;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
@@ -15,6 +17,7 @@ import java.util.Optional;
  *
  * @author jay.wu
  */
+@Component
 public class JpaSharedStateRepositoryAdapter implements SharedStateRepository {
     private static final String ID_SEPARATOR = "\u0000";
 

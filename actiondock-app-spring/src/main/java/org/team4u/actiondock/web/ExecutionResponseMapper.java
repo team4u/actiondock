@@ -1,5 +1,6 @@
 package org.team4u.actiondock.web;
 
+import org.springframework.stereotype.Component;
 import org.team4u.actiondock.application.ExecutionOutputProjector;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionLogEntry;
@@ -14,7 +15,8 @@ import java.util.Map;
  *
  * @author jay.wu
  */
-final class ExecutionResponseMapper {
+@Component
+public class ExecutionResponseMapper {
     private final ExecutionOutputProjector executionOutputProjector = new ExecutionOutputProjector();
 
     /**
@@ -28,7 +30,7 @@ final class ExecutionResponseMapper {
      * @param responseView 响应视图模式
      * @return 执行结果响应
      */
-    ExecutionResponse toResponse(ExecutionRecord record,
+    public ExecutionResponse toResponse(ExecutionRecord record,
                                  ScriptDefinition scriptDefinition,
                                  ExecutionResponseView responseView) {
         Map<String, Object> rawOutput = copy(record.getOutput());
