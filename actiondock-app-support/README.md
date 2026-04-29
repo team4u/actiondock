@@ -190,7 +190,83 @@ if (!result.updated) {
 - 过期条目对脚本不可见，`state.get(...)` 会返回 `null`
 - `ttlSeconds` 必须大于 `0`
 - 写入时会自动记录当前脚本 ID 和执行 ID
-- Python 脚本通过 stderr/stdin 桥接协议访问 `plugins`、`scripts`、`state`，Groovy 脚本通过本地对象直接访问
+
+## 脚本引擎底层交互机制
+
+Groovy 和 Python 的脚本引擎实现完全不同，但对外暴露了统一的门面（`plugins`、`scripts`、`state`、`log`、`config`）。脚本互调不依赖语言层面直接调用，而是通过平台统一的 `scripts.invoke()` 门面实现——无论调用方和被调用方各自是什么语言，都能互通。
+
+### Groovy：JVM 内直接执行
+
+`GroovyScriptEngine` 在 JVM 内编译并运行脚本，通过 Groovy `Binding` 将门面对象作为本地变量注入：
+
+```
+Binding binding = new Binding();
+binding.setVariable("input", input);
+binding.setVariable("config", config);
+binding.setVariable("log", new ScriptLogger(context));
+binding.setVariable("plugins", new GroovyPlugins(...));
+binding.setVariable("scripts", new GroovyScripts(...));
+binding.setVariable("state", new ScriptStateBridge(...));
+```
+
+门面对象是普通 Java/Groovy 对象，方法调用发生在同一进程、同一线程内，没有 IPC 开销。
+
+### Python：子进程 + stderr 桥接协议
+
+`PythonScriptEngine` 以子进程方式执行 Python 脚本。用户脚本被包装进模板（`python-wrapper.py`），模板定义了 `__ActionDockPlugins`、`__ActionDockScripts`、`__ActionDockState` 等 Python 类，使得脚本源码可以用自然的 Python 语法调用门面。
+
+底层通过 **stderr 前缀协议** 与 Java 引擎通信：
+
+| 方向 | 通道 | 协议格式 | 用途 |
+|------|------|----------|------|
+| Python → Java | stderr | `__ACTIONDOCK_LOG__` + JSON | 脚本日志 |
+| Python → Java | stderr | `__ACTIONDOCK_PLUGIN__` + JSON | 插件调用请求 |
+| Python → Java | stderr | `__ACTIONDOCK_INVOKE__` + JSON | 脚本互调请求 |
+| Python → Java | stderr | `__ACTIONDOCK_STATE__` + JSON | 共享状态请求 |
+| Java → Python | stdin | JSON 行 | 请求的返回结果 |
+| Java → Python | stdin（首行）| JSON 行 | 脚本输入 `input` |
+| Python → Java | stdout | JSON | 脚本最终返回值 |
+
+以 `plugins.invoke("my-plugin", "action", args)` 为例，一次完整的调用流程：
+
+```
+Python 脚本
+  │
+  │  plugins.invoke("my-plugin", "action", {"key": "value"})
+  │
+  ▼
+python-wrapper.py：__ActionDockPlugins.invoke()
+  │  向 stderr 写入：__ACTIONDOCK_PLUGIN__{"pluginId":"my-plugin","action":"action","args":{"key":"value"}}
+  │  从 stdin 阻塞读取一行
+  │
+  ▼
+PythonScriptEngine：handlePlugin()
+  │  解析前缀 + JSON 载荷
+  │  调用 PluginRuntimeService.invoke()
+  │  向 stdin 写入：{"ok":true,"result":{...}}
+  │
+  ▼
+python-wrapper.py
+  │  解析 JSON 响应，返回 result 或抛出异常
+  │
+  ▼
+Python 脚本获得返回值
+```
+
+`scripts.invoke()` 和 `state` 操作的流程与此相同，只是 stderr 前缀和载荷结构不同。
+
+### 脚本互调模型
+
+平台通过 `ScriptInvocationService` 实现脚本互调，不关心调用方和被调用方的语言类型：
+
+```
+Groovy 脚本 ──scripts.invoke("py-script")──→ RoutingScriptEngine ──→ PythonScriptEngine ──→ Python 子进程
+Python 脚本 ──scripts.invoke("gy-script")──→ PythonBridge ──→ Java 引擎 ──→ GroovyScriptEngine ──→ JVM
+Python 脚本 ──scripts.invoke("py-script")──→ PythonBridge ──→ Java 引擎 ──→ PythonScriptEngine ──→ 另一个 Python 子进程
+Groovy 脚本 ──scripts.invoke("gy-script")──→ GroovyScripts ──→ Java 引擎 ──→ GroovyScriptEngine ──→ JVM
+```
+
+互调时被调用脚本始终以**已发布版本**执行（`invokePublished`），草稿修改不会影响正在被其他脚本调用的版本。
 
 ## 适合放在这里的能力
 
