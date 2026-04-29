@@ -20,6 +20,7 @@ import type {
 } from "../../types";
 import { getErrorMessage } from "../../utils";
 import { extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../scriptDependencies";
+import { getPublishableRepositories } from "../../repositoryPublish";
 import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues } from "./types";
 import {
   resolveRepositoryPublishVersion,
@@ -145,9 +146,7 @@ export function useScriptPublishToRepo({
         listSchedules(),
         listRepositoryTools()
       ]);
-      const publishableRepositories = repositories
-        .filter((item) => item.enabled && item.type !== "HTTP")
-        .sort((left, right) => left.id.localeCompare(right.id));
+      const publishableRepositories = getPublishableRepositories(repositories);
       const relatedSchedules = schedules
         .filter((item) => item.scriptId === script.id)
         .sort((left, right) => left.name.localeCompare(right.name));

@@ -31,6 +31,7 @@ import { PageHeader } from "../../components/PageHeader";
 import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
 import { buildSystemSettingsSearch } from "../../settingsRouting";
 import { useDefaultOwner } from "../../hooks/useDefaultOwner";
+import { getPublishableRepositories, pickDefaultPublishRepository } from "../../repositoryPublish";
 import type {
   AiAgentProfile,
   AiAgentRunSnapshot,
@@ -302,7 +303,7 @@ export function AiAgentProfileDetailPage() {
         setModels(nextModels);
         setToolsets(nextToolsets);
         setTools(nextTools);
-        setRepositories(nextRepositories.filter((repository) => repository.enabled && repository.type !== "HTTP"));
+        setRepositories(getPublishableRepositories(nextRepositories));
       })
       .catch((error) => messageApi.error(error instanceof ApiError ? error.message : "加载 Agent 配置元数据失败"));
   }, [messageApi]);
@@ -622,7 +623,7 @@ export function AiAgentProfileDetailPage() {
     if (!id) {
       return;
     }
-    const preferredRepository = repositories.find((repository) => repository.usage !== "DEVELOPMENT") ?? repositories[0];
+    const preferredRepository = pickDefaultPublishRepository(repositories);
     publishForm.setFieldsValue({
       repositoryId: preferredRepository?.id,
       packageId: id.replace(/[^a-zA-Z0-9._-]/g, "-"),

@@ -112,6 +112,9 @@ public class RepositoryCatalogService {
     private final HttpClient httpClient;
     private final PluginArtifactResolverRegistry pluginArtifactResolverRegistry;
     private final Path repositoriesRoot;
+    private final ToolRepositoryPublisher toolRepositoryPublisher;
+    private final AiPackageRepositoryPublisher aiPackageRepositoryPublisher;
+    private final PluginRepositoryPublisher pluginRepositoryPublisher;
 
     public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                     RepositoryToolInstallationRepository repositoryToolInstallationRepository,
@@ -179,6 +182,9 @@ public class RepositoryCatalogService {
         this.repositoriesRoot = Path.of(properties == null || properties.getHomeDir() == null || properties.getHomeDir().isBlank()
                 ? AppProperties.defaultHomeDir()
                 : properties.getHomeDir()).resolve("repositories").toAbsolutePath().normalize();
+        this.toolRepositoryPublisher = new ToolRepositoryPublisher(this);
+        this.aiPackageRepositoryPublisher = new AiPackageRepositoryPublisher(this);
+        this.pluginRepositoryPublisher = new PluginRepositoryPublisher(this);
     }
 
     public List<RepositoryDefinition> listRepositories() {
@@ -605,7 +611,7 @@ public class RepositoryCatalogService {
         return scriptRepository.save(definition);
     }
 
-    private void assertDevelopmentPublishSafe(ScriptDefinition script, RepositoryDefinition repository) {
+    void assertDevelopmentPublishSafe(ScriptDefinition script, RepositoryDefinition repository) {
         RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
         ToolSourceState state = resolveToolSourceState(repository, detail);
         String syncState = resolveDevelopmentSyncState(script, computeDevelopmentLocalDigest(script), state);
@@ -614,9 +620,9 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void updateDevelopmentSourceMetadata(ScriptDefinition sourceScript,
-                                                 RepositoryDefinition repository,
-                                                 RepositoryToolDetail detail) {
+    void updateDevelopmentSourceMetadata(ScriptDefinition sourceScript,
+                                         RepositoryDefinition repository,
+                                         RepositoryToolDetail detail) {
         ToolSourceState state = resolveToolSourceState(repository, detail);
         ScriptDefinition updated = scriptApplicationService.get(sourceScript.getId())
                 .setRepositoryVersion(detail.descriptor().version())
@@ -683,85 +689,11 @@ public class RepositoryCatalogService {
     }
 
     public RepositoryToolDescriptor publishTool(String repositoryId, RepositoryPublishRequest request) {
-        RepositoryDefinition repository = getRepository(repositoryId);
-        if ("HTTP".equals(repository.getType())) {
-            throw new IllegalArgumentException("HTTP 仓库暂不支持发布");
-        }
-        if ("GIT".equals(repository.getType())) {
-            syncRepository(repositoryId);
-        } else {
-            ensureLocalDirRepository(repository);
-        }
-
-        ScriptDefinition sourceScript = scriptApplicationService.get(normalize(request.scriptId(), "scriptId 不能为空"));
-        if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
-                && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
-                && !request.force()) {
-            assertDevelopmentPublishSafe(sourceScript, repository);
-        }
-        ScriptDefinition script = scriptApplicationService.getPublished(sourceScript.getId());
-        assertPackagingConstraints(script);
-        String toolId = normalize(request.toolId(), "toolId 不能为空");
-        String version = normalize(request.version(), "version 不能为空");
-        List<ScriptSchedule> selectedSchedules = resolvePublishSchedules(script.getId(), request.scheduleIds());
-        List<ScriptDependency> scriptDependencies = resolveToolScriptDependencies(repositoryId, script, request);
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
-        RepositoryPublishConfigResolver.PublishConfigResolution configResolution = RepositoryPublishConfigResolver.resolve(
-                snapshot == null ? script.getSource() : snapshot.getSource(),
-                selectedSchedules.stream().map(ScriptSchedule::getInput).toList(),
-                configValueRepository.findAll()
-        );
-        List<ConfigTemplateItem> configTemplates = buildConfigTemplate(configResolution, request.configItems());
-        List<ScheduleTemplateItem> scheduleTemplates = buildScheduleTemplate(selectedSchedules);
-        Path root = resolveRepositoryRoot(repository);
-        RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
-        assertToolVersionAvailable(repositoryId, current, toolId, version);
-        Path toolDir = root.resolve("tools").resolve(toolId);
-        writeToolFiles(toolDir, toolId, script, request, configTemplates, scheduleTemplates, scriptDependencies);
-        updateRepositoryIndex(root, repository, toolId, script, request);
-
-        if ("GIT".equals(repository.getType())) {
-            commitAndPush(repository, toolId, version, request.releaseNotes());
-        }
-        RepositoryToolDetail publishedDetail = getRepositoryTool(repositoryId, toolId);
-        if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
-                && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
-                && Objects.equals(sourceScript.getRepositoryToolId(), toolId)) {
-            updateDevelopmentSourceMetadata(sourceScript, repository, publishedDetail);
-        }
-        return publishedDetail.descriptor();
+        return toolRepositoryPublisher.publish(repositoryId, request);
     }
 
     public RepositoryAiPackageDescriptor publishAiPackage(String repositoryId, RepositoryAiPackagePublishRequest request) {
-        RepositoryDefinition repository = getRepository(repositoryId);
-        if ("HTTP".equals(repository.getType())) {
-            throw new IllegalArgumentException("HTTP 仓库暂不支持发布");
-        }
-        if ("GIT".equals(repository.getType())) {
-            syncRepository(repositoryId);
-        } else {
-            ensureLocalDirRepository(repository);
-        }
-
-        String packageId = normalize(request.packageId(), "packageId 不能为空");
-        String version = normalize(request.version(), "version 不能为空");
-        AiPackageBundle bundle = buildAiPackageBundle(
-                repository,
-                normalize(request.agentProfileId(), "agentProfileId 不能为空"),
-                packageId
-        );
-        List<ConfigTemplateItem> configTemplates = buildAiPackageConfigTemplate(bundle);
-        Path root = resolveRepositoryRoot(repository);
-        RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
-        assertAiPackageVersionAvailable(repositoryId, current, packageId, version);
-        Path packageDir = root.resolve(AI_PACKAGES_DIR).resolve(packageId);
-        writeAiPackageFiles(packageDir, bundle, request, configTemplates);
-        updateRepositoryAiPackageIndex(root, repository, bundle, request);
-
-        if ("GIT".equals(repository.getType())) {
-            commitAndPush(repository, packageId, version, request.releaseNotes());
-        }
-        return getRepositoryAiPackage(repositoryId, packageId).descriptor();
+        return aiPackageRepositoryPublisher.publish(repositoryId, request);
     }
 
     public RepositoryAiPackageInstallResult installAiPackage(String repositoryId, String packageId) {
@@ -782,6 +714,10 @@ public class RepositoryCatalogService {
     }
 
     public RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryPluginPublishRequest request) {
+        return pluginRepositoryPublisher.publish(repositoryId, request);
+    }
+
+    WritableRepositorySession openWritableRepositorySession(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         if ("HTTP".equals(repository.getType())) {
             throw new IllegalArgumentException("HTTP 仓库暂不支持发布");
@@ -791,22 +727,16 @@ public class RepositoryCatalogService {
         } else {
             ensureLocalDirRepository(repository);
         }
-
-        String pluginId = normalize(request.pluginId(), "pluginId 不能为空");
-        String displayName = normalize(request.displayName(), "displayName 不能为空");
-        String version = normalize(request.version(), "version 不能为空");
         Path root = resolveRepositoryRoot(repository);
-        PluginArtifactRef artifact = completePluginArtifactRef(pluginId, request.artifact(), repository, root);
-        RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
-        assertPluginVersionAvailable(repositoryId, current, pluginId, version);
-        Path pluginDir = root.resolve("plugins").resolve(pluginId);
-        writePluginFiles(pluginDir, pluginId, displayName, artifact, request, version);
-        updateRepositoryPluginIndex(root, repository, pluginId, displayName, request, version);
+        return new WritableRepositorySession(this, repository, root, readRepositoryIndexFile(root, repository));
+    }
 
-        if ("GIT".equals(repository.getType())) {
-            commitAndPush(repository, pluginId, version, request.releaseNotes());
-        }
-        return getRepositoryPlugin(repositoryId, pluginId).descriptor();
+    ScriptApplicationService scriptApplicationService() {
+        return scriptApplicationService;
+    }
+
+    ConfigValueRepository configValueRepository() {
+        return configValueRepository;
     }
 
     private RepositoryToolInstallation installOrUpdateTool(String repositoryId,
@@ -1092,9 +1022,9 @@ public class RepositoryCatalogService {
         }
     }
 
-    private AiPackageBundle buildAiPackageBundle(RepositoryDefinition repository,
-                                                 String entryAgentId,
-                                                 String packageId) {
+    AiPackageBundle buildAiPackageBundle(RepositoryDefinition repository,
+                                         String entryAgentId,
+                                         String packageId) {
         AiPackageBundleBuilder builder = new AiPackageBundleBuilder(repository, packageId, entryAgentId);
         collectAgentDependency(repository, builder, entryAgentId, true);
         return builder.build();
@@ -1220,7 +1150,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private List<ConfigTemplateItem> buildAiPackageConfigTemplate(AiPackageBundle bundle) {
+    List<ConfigTemplateItem> buildAiPackageConfigTemplate(AiPackageBundle bundle) {
         Map<String, ConfigTemplateItem> templates = new LinkedHashMap<>();
         for (AiPackageModelFile model : bundle.models().values()) {
             if (model.apiKeyConfigKey() == null || model.apiKeyConfigKey().isBlank()) {
@@ -1255,10 +1185,10 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
-    private void writeAiPackageFiles(Path packageDir,
-                                     AiPackageBundle bundle,
-                                     RepositoryAiPackagePublishRequest request,
-                                     List<ConfigTemplateItem> configTemplates) {
+    void writeAiPackageFiles(Path packageDir,
+                             AiPackageBundle bundle,
+                             RepositoryAiPackagePublishRequest request,
+                             List<ConfigTemplateItem> configTemplates) {
         try {
             Files.createDirectories(packageDir);
             if (!configTemplates.isEmpty()) {
@@ -1286,10 +1216,10 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void updateRepositoryAiPackageIndex(Path root,
-                                                RepositoryDefinition repository,
-                                                AiPackageBundle bundle,
-                                                RepositoryAiPackagePublishRequest request) {
+    void updateRepositoryAiPackageIndex(Path root,
+                                        RepositoryDefinition repository,
+                                        AiPackageBundle bundle,
+                                        RepositoryAiPackagePublishRequest request) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
                 : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
@@ -1703,13 +1633,13 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void writeToolFiles(Path toolDir,
-                                String toolId,
-                                ScriptDefinition script,
-                                RepositoryPublishRequest request,
-                                List<ConfigTemplateItem> configTemplates,
-                                List<ScheduleTemplateItem> scheduleTemplates,
-                                List<ScriptDependency> scriptDependencies) {
+    void writeToolFiles(Path toolDir,
+                        String toolId,
+                        ScriptDefinition script,
+                        RepositoryPublishRequest request,
+                        List<ConfigTemplateItem> configTemplates,
+                        List<ScheduleTemplateItem> scheduleTemplates,
+                        List<ScriptDependency> scriptDependencies) {
         try {
             Files.createDirectories(toolDir);
             String sourceFileName = script.getType() == ScriptType.PYTHON ? "source.py" : "source.groovy";
@@ -1729,12 +1659,12 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void writePluginFiles(Path pluginDir,
-                                  String pluginId,
-                                  String displayName,
-                                  PluginArtifactRef artifact,
-                                  RepositoryPluginPublishRequest request,
-                                  String version) {
+    void writePluginFiles(Path pluginDir,
+                          String pluginId,
+                          String displayName,
+                          PluginArtifactRef artifact,
+                          RepositoryPluginPublishRequest request,
+                          String version) {
         try {
             Files.createDirectories(pluginDir);
             writeJson(pluginDir.resolve("plugin.json"), new PluginFile(
@@ -1798,9 +1728,9 @@ public class RepositoryCatalogService {
         return List.copyOf(dependencies.values());
     }
 
-    private List<ScriptDependency> resolveToolScriptDependencies(String defaultRepositoryId,
-                                                                 ScriptDefinition script,
-                                                                 RepositoryPublishRequest request) {
+    List<ScriptDependency> resolveToolScriptDependencies(String defaultRepositoryId,
+                                                         ScriptDefinition script,
+                                                         RepositoryPublishRequest request) {
         PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
         String source = snapshot == null ? script.getSource() : snapshot.getSource();
         int invocationCount = countScriptInvocations(source);
@@ -1895,15 +1825,15 @@ public class RepositoryCatalogService {
         }
     }
 
-    private List<ConfigTemplateItem> buildConfigTemplate(RepositoryPublishConfigResolver.PublishConfigResolution resolution,
-                                                         List<RepositoryPublishConfigItem> configItems) {
+    List<ConfigTemplateItem> buildConfigTemplate(RepositoryPublishConfigResolver.PublishConfigResolution resolution,
+                                                 List<RepositoryPublishConfigItem> configItems) {
         return RepositoryPublishConfigResolver.buildTemplates(resolution, configItems);
     }
 
-    private PluginArtifactRef completePluginArtifactRef(String pluginId,
-                                                        PluginArtifactRef artifact,
-                                                        RepositoryDefinition repository,
-                                                        Path repositoryRoot) {
+    PluginArtifactRef completePluginArtifactRef(String pluginId,
+                                                PluginArtifactRef artifact,
+                                                RepositoryDefinition repository,
+                                                Path repositoryRoot) {
         PluginArtifactRef requested = validatePluginArtifactRef(artifact, false);
         ensureLocalPublishArtifactPresent(pluginId, requested, repository, repositoryRoot);
         PluginArtifact resolved = pluginArtifactResolverRegistry.resolve(
@@ -1987,7 +1917,7 @@ public class RepositoryCatalogService {
         );
     }
 
-    private List<ScheduleTemplateItem> buildScheduleTemplate(List<ScriptSchedule> schedules) {
+    List<ScheduleTemplateItem> buildScheduleTemplate(List<ScriptSchedule> schedules) {
         List<ScheduleTemplateItem> templates = new ArrayList<>();
         for (ScriptSchedule schedule : schedules == null ? List.<ScriptSchedule>of() : schedules) {
             templates.add(new ScheduleTemplateItem(schedule.getId(), schedule.getName(), schedule.getCronExpression(), schedule.getInput(), false));
@@ -1995,7 +1925,7 @@ public class RepositoryCatalogService {
         return templates;
     }
 
-    private List<ScriptSchedule> resolvePublishSchedules(String scriptId, List<String> scheduleIds) {
+    List<ScriptSchedule> resolvePublishSchedules(String scriptId, List<String> scheduleIds) {
         List<ScriptSchedule> schedules = new ArrayList<>();
         for (String scheduleId : scheduleIds == null ? List.<String>of() : scheduleIds) {
             String normalizedScheduleId = normalize(scheduleId, "定时任务 ID 不能为空");
@@ -2009,11 +1939,11 @@ public class RepositoryCatalogService {
         return schedules;
     }
 
-    private void updateRepositoryIndex(Path root,
-                                       RepositoryDefinition repository,
-                                       String toolId,
-                                       ScriptDefinition script,
-                                       RepositoryPublishRequest request) {
+    void updateRepositoryIndex(Path root,
+                               RepositoryDefinition repository,
+                               String toolId,
+                               ScriptDefinition script,
+                               RepositoryPublishRequest request) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
                 : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
@@ -2040,12 +1970,12 @@ public class RepositoryCatalogService {
         ));
     }
 
-    private void updateRepositoryPluginIndex(Path root,
-                                             RepositoryDefinition repository,
-                                             String pluginId,
-                                             String displayName,
-                                             RepositoryPluginPublishRequest request,
-                                             String version) {
+    void updateRepositoryPluginIndex(Path root,
+                                     RepositoryDefinition repository,
+                                     String pluginId,
+                                     String displayName,
+                                     RepositoryPluginPublishRequest request,
+                                     String version) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
                 : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
@@ -2071,7 +2001,7 @@ public class RepositoryCatalogService {
         ));
     }
 
-    private void commitAndPush(RepositoryDefinition repository, String toolId, String version, String releaseNotes) {
+    void commitAndPush(RepositoryDefinition repository, String toolId, String version, String releaseNotes) {
         Path root = resolveRepositoryRoot(repository);
         runGit(root, List.of("git", "-C", root.toString(), "add", "."));
         List<String> commitCommand = new ArrayList<>(List.of(
@@ -2413,7 +2343,7 @@ public class RepositoryCatalogService {
         return ScriptPackaging.valueOf(packaging.trim().toUpperCase(Locale.ROOT));
     }
 
-    private void assertPackagingConstraints(ScriptDefinition script) {
+    void assertPackagingConstraints(ScriptDefinition script) {
         if (script.getPackaging() != ScriptPackaging.TOOL) {
             return;
         }
@@ -2486,7 +2416,7 @@ public class RepositoryCatalogService {
         runGit(root, List.of("git", "-C", root.toString(), "pull", "--ff-only", "origin", normalizeOrDefault(repository.getBranch(), "main")));
     }
 
-    private void ensureLocalDirRepository(RepositoryDefinition repository) {
+    void ensureLocalDirRepository(RepositoryDefinition repository) {
         Path root = resolveRepositoryRoot(repository);
         ensureRepositoryWorkspace(root, repository, jsonCodec);
     }
@@ -2559,7 +2489,7 @@ public class RepositoryCatalogService {
         return jsonCodec.readList(raw, elementType);
     }
 
-    private Path resolveRepositoryRoot(RepositoryDefinition repository) {
+    Path resolveRepositoryRoot(RepositoryDefinition repository) {
         if ("LOCAL_DIR".equals(repository.getType())) {
             return Path.of(repository.getUrl());
         }
@@ -2790,7 +2720,7 @@ public class RepositoryCatalogService {
         return file == null || file.scripts() == null ? List.of() : file.scripts();
     }
 
-    private RepositoryIndexFile readRepositoryIndexFile(Path root, RepositoryDefinition repository) {
+    RepositoryIndexFile readRepositoryIndexFile(Path root, RepositoryDefinition repository) {
         return Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
                 : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
@@ -2837,18 +2767,18 @@ public class RepositoryCatalogService {
         return new RelativeRepositoryPath(Path.of(packagePath).getParent().toString().replace('\\', '/'));
     }
 
-    private String normalize(String value, String message) {
+    String normalize(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(message);
         }
         return value.trim();
     }
 
-    private String normalizeOrDefault(String value, String defaultValue) {
+    String normalizeOrDefault(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value.trim();
     }
 
-    private String normalizeNullable(String value) {
+    String normalizeNullable(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
@@ -3218,16 +3148,16 @@ public class RepositoryCatalogService {
                                        boolean enabledByDefault) {
     }
 
-    private record AiPackageBundle(String repositoryId,
-                                   String packageId,
-                                   String entryAgentId,
-                                   String entryAgentName,
-                                   String entryAgentDescription,
-                                   Map<String, AiPackageModelFile> models,
-                                   Map<String, AiPackageToolsetFile> toolsets,
-                                   Map<String, AiPackageAgentFile> agents,
-                                   Map<String, AiPackageScriptFile> scripts,
-                                   Map<String, RepositoryAiPackageDependency> externalDependencies) {
+    record AiPackageBundle(String repositoryId,
+                           String packageId,
+                           String entryAgentId,
+                           String entryAgentName,
+                           String entryAgentDescription,
+                           Map<String, AiPackageModelFile> models,
+                           Map<String, AiPackageToolsetFile> toolsets,
+                           Map<String, AiPackageAgentFile> agents,
+                           Map<String, AiPackageScriptFile> scripts,
+                           Map<String, RepositoryAiPackageDependency> externalDependencies) {
     }
 
     private final class AiPackageBundleBuilder {

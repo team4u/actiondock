@@ -65,6 +65,7 @@ import {
   parseSchemaObjectEditorJsonText
 } from "../schemaObjectEditorSupport";
 import { useDefaultOwner } from "../hooks/useDefaultOwner";
+import { getPublishableRepositories } from "../repositoryPublish";
 import { resolveSchemaFields } from "../schema";
 import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
@@ -392,9 +393,7 @@ export function PluginDetailPage() {
     }
     setPublishingPlugin(true);
     try {
-      const repositories = (await listRepositories())
-        .filter((item) => item.enabled && item.type !== "HTTP")
-        .sort((left, right) => left.id.localeCompare(right.id));
+      const repositories = getPublishableRepositories(await listRepositories());
       if (repositories.length === 0) {
         messageApi.warning("当前没有可发布的仓库，请先添加一个 Git 或本地目录仓库");
         return;
