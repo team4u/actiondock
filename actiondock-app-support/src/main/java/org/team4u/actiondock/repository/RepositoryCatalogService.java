@@ -76,7 +76,7 @@ import java.util.regex.Pattern;
 public class RepositoryCatalogService {
     private static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
     private static final ObjectMapper METADATA_OBJECT_MAPPER = new ObjectMapper();
-    private static final Pattern GROOVY_PLUGIN_INVOKE_PATTERN = Pattern.compile(
+    private static final Pattern PLUGIN_INVOKE_PATTERN = Pattern.compile(
             "plugins\\s*\\.\\s*invoke\\s*\\(\\s*([\"'`])([^\"'`]+)\\1\\s*,\\s*([\"'`])([^\"'`]+)\\3"
     );
     private static final Pattern SCRIPT_INVOKE_PATTERN = Pattern.compile(
@@ -86,10 +86,10 @@ public class RepositoryCatalogService {
             "scripts\\s*\\.\\s*invoke\\s*\\("
     );
     private static final Pattern MODEL_PROFILE_LITERAL_PATTERN = Pattern.compile(
-            "(modelProfile\\s*:\\s*)([\"'`])([^\"'`]+)(\\2)"
+            "((?:[\"'`])?modelProfile(?:[\"'`])?\\s*:\\s*)([\"'`])([^\"'`]+)(\\2)"
     );
     private static final Pattern AGENT_PROFILE_LITERAL_PATTERN = Pattern.compile(
-            "(agentProfile\\s*:\\s*)([\"'`])([^\"'`]+)(\\2)"
+            "((?:[\"'`])?agentProfile(?:[\"'`])?\\s*:\\s*)([\"'`])([^\"'`]+)(\\2)"
     );
     private static final String AI_PACKAGES_DIR = "ai-packages";
     private static final String AI_PACKAGE_FILE_NAME = "ai-package.json";
@@ -1786,7 +1786,7 @@ public class RepositoryCatalogService {
         }
 
         Map<String, LinkedHashSet<String>> actionsByPlugin = new LinkedHashMap<>();
-        Matcher matcher = GROOVY_PLUGIN_INVOKE_PATTERN.matcher(source);
+        Matcher matcher = PLUGIN_INVOKE_PATTERN.matcher(source);
         while (matcher.find()) {
             String pluginId = matcher.group(2).trim();
             String action = matcher.group(4).trim();

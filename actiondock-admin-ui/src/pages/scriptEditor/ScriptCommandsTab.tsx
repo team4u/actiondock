@@ -3,6 +3,7 @@ import { Grid } from "antd";
 import { CommandPanel, type CommandPreset } from "../../components/CommandPanel";
 import { InfoHint } from "../../components/InfoHint";
 import { JsonPreview } from "../../components/JsonPreview";
+import { SkillExamplePanel } from "../../components/SkillExamplePanel";
 import { getCommandInputSourceLabel, type ResolvedCommandInput } from "../../commands";
 
 const { Text } = Typography;
@@ -19,8 +20,9 @@ interface ScriptCommandsTabProps {
   schemaCommandPresets: CommandPreset[];
   hasInputSchema: boolean;
   hasOutputSchema: boolean;
+  skillExample: string;
   toolContractResponseExample: Record<string, unknown> | undefined;
-  onCopy: (command: string) => void;
+  onCopy: (value: string, successText?: string, errorText?: string) => void | Promise<boolean>;
 }
 
 export function ScriptCommandsTab({
@@ -33,6 +35,7 @@ export function ScriptCommandsTab({
   schemaCommandPresets,
   hasInputSchema,
   hasOutputSchema,
+  skillExample,
   toolContractResponseExample,
   onCopy
 }: ScriptCommandsTabProps) {
@@ -76,7 +79,7 @@ export function ScriptCommandsTab({
                 <CommandPanel
                   title="执行脚本命令"
                   presets={executeCommandPresets}
-                  onCopy={onCopy}
+                  onCopy={(command) => void onCopy(command)}
                 />
               </Space>
             )
@@ -90,7 +93,7 @@ export function ScriptCommandsTab({
                 <CommandPanel
                   title="详情查询命令"
                   presets={detailCommandPresets}
-                  onCopy={onCopy}
+                  onCopy={(command) => void onCopy(command)}
                 />
               </Space>
             )
@@ -106,7 +109,7 @@ export function ScriptCommandsTab({
                       <CommandPanel
                         title="获取 Schema 命令"
                         presets={schemaCommandPresets}
-                        onCopy={onCopy}
+                        onCopy={(command) => void onCopy(command)}
                       />
                       <JsonPreview
                         title="Schema 响应示例"
@@ -117,7 +120,19 @@ export function ScriptCommandsTab({
                   )
                 }
               ]
-            : [])
+            : []),
+          {
+            key: "command-skill",
+            label: "Skill 示例",
+            children: (
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                <SkillExamplePanel
+                  value={skillExample}
+                  onCopy={(value) => void onCopy(value, "Skill 已复制", "复制 Skill 失败")}
+                />
+              </Space>
+            )
+          }
         ]}
       />
     </Space>

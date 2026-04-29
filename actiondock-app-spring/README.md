@@ -193,7 +193,7 @@ actiondock state cas cursor.sync users \
 ## 使用提示
 
 - `PYTHON` 脚本要求宿主机存在 `python3`
-- Groovy 脚本可以通过系统插件 `actiondock-ai` 使用 AI 能力
+- Groovy 和 Python 脚本都可以通过系统插件 `actiondock-ai` 使用 AI 能力
 - 若系统存在访问令牌，则 `/api/*` 需要 `Authorization: Bearer <token>`
 
 ## 相关模块

@@ -45,6 +45,7 @@ return [message: "Hello, \${name}!"]
 
     expect(parsed.id).toBe("hello-groovy");
     expect(parsed.name).toBe("Hello Groovy");
+    expect(parsed.type).toBe("GROOVY");
     expect(parsed.source).toContain('def name = input.name ?: "World"');
     expect(parseSchemaText(parsed.inputSchemaText)).toEqual({
       type: "object",
@@ -102,6 +103,7 @@ return [
 
     expect(parsed.id).toBe("hello-inferred");
     expect(parsed.name).toBe("Hello Inferred");
+    expect(parsed.type).toBe("GROOVY");
     expect(parseSchemaText(parsed.inputSchemaText)).toEqual({
       type: "object",
       properties: {
@@ -151,6 +153,7 @@ return [message: "hello"]
 
     expect(parsed.id).toBe("partial-script");
     expect(parsed.name).toBe("Partial Script");
+    expect(parsed.type).toBe("GROOVY");
     expect(parseSchemaText(parsed.inputSchemaText)).toEqual({
       type: "object",
       properties: {
@@ -177,6 +180,7 @@ return [status: "ok", retry: false]
 
     expect(parsed.id).toBeUndefined();
     expect(parsed.name).toBeUndefined();
+    expect(parsed.type).toBe("GROOVY");
     expect(parseSchemaText(parsed.inputSchemaText)).toEqual({
       type: "object",
       properties: {
@@ -212,6 +216,68 @@ return [message: "fallback"]
       properties: {
         message: { type: "string" },
         code: { type: "integer" }
+      }
+    });
+  });
+
+  it("parses Python fixed-format scripts and infers schemas from python source", () => {
+    const parsed = parseGeneratedScriptText(`### 脚本 ID
+hello-python
+
+### 脚本名称
+Hello Python
+
+### Python 脚本
+\`\`\`python
+name = input.get("name") or "World"
+return {"message": f"Hello, {name}!", "enabled": True}
+\`\`\`
+
+### Input Schema
+\`\`\`json
+{}
+\`\`\`
+
+### Output Schema
+\`\`\`json
+{}
+\`\`\``);
+
+    expect(parsed.type).toBe("PYTHON");
+    expect(parsed.source).toContain('input.get("name")');
+    expect(parseSchemaText(parsed.inputSchemaText)).toEqual({
+      type: "object",
+      properties: {
+        name: { type: "string" }
+      }
+    });
+    expect(parseSchemaText(parsed.outputSchemaText)).toEqual({
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        enabled: { type: "boolean" }
+      }
+    });
+  });
+
+  it("infers Python source without wrappers", () => {
+    const parsed = parseGeneratedScriptText(`
+name = input.get("name") or "World"
+return {"message": f"Hello, {name}!", "count": 1}
+`);
+
+    expect(parsed.type).toBe("PYTHON");
+    expect(parseSchemaText(parsed.inputSchemaText)).toEqual({
+      type: "object",
+      properties: {
+        name: { type: "string" }
+      }
+    });
+    expect(parseSchemaText(parsed.outputSchemaText)).toEqual({
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        count: { type: "integer" }
       }
     });
   });

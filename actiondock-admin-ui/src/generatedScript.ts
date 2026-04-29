@@ -1,6 +1,8 @@
 import { prettyJson } from "./utils";
+import type { ScriptType } from "./types";
 
 export interface ParsedGeneratedScript {
+  type: ScriptType;
   id?: string;
   name?: string;
   source: string;
@@ -33,6 +35,9 @@ function resolveSectionKind(title: string): SectionKind | null {
     return "name";
   }
   if (/^Groovy\s*脚本$/i.test(value)) {
+    return "source";
+  }
+  if (/^Python\s*脚本$/i.test(value)) {
     return "source";
   }
   if (/^Input\s*Schema(?:\s*[（(]输入参数[）)])?$/i.test(value)) {
@@ -117,8 +122,8 @@ function extractOptionalText(sections: Map<SectionKind, string>, kind: "id" | "n
 function extractSectionCodeBlock(
   sections: Map<SectionKind, string>,
   kind: "source" | "inputSchema" | "outputSchema",
-  expectedLanguage: "groovy" | "json"
-): string | undefined {
+  expectedLanguage: "groovy" | "python" | "json" | ReadonlyArray<"groovy" | "python" | "json">
+): CodeBlock | undefined {
   const content = sections.get(kind);
   if (!content) {
     return undefined;
@@ -126,15 +131,16 @@ function extractSectionCodeBlock(
 
   const blocks = collectCodeBlocks(content);
   if (blocks.length === 0) {
-    throw new Error(`${getSectionLabel(kind)} 缺少 ${expectedLanguage} 代码块`);
+    throw new Error(`${getSectionLabel(kind)} 缺少代码块`);
   }
 
-  const matched = blocks.find((block) => block.language === expectedLanguage);
+  const languages = Array.isArray(expectedLanguage) ? expectedLanguage : [expectedLanguage];
+  const matched = blocks.find((block) => languages.includes(block.language as "groovy" | "python" | "json"));
   if (!matched) {
-    throw new Error(`${getSectionLabel(kind)} 代码块语言必须是 ${expectedLanguage}`);
+    throw new Error(`${getSectionLabel(kind)} 代码块语言必须是 ${languages.join(" 或 ")}`);
   }
 
-  return matched.content;
+  return matched;
 }
 
 function looksLikeGroovySource(text: string): boolean {
@@ -142,36 +148,78 @@ function looksLikeGroovySource(text: string): boolean {
   if (!value) {
     return false;
   }
-  return /\breturn\b/.test(value) || /\bdef\b/.test(value) || /\binput(?:\s*\.|\s*\[|\s*\.get\s*\()/.test(value);
+  return /\bdef\b/.test(value)
+    || /\?:/.test(value)
+    || /\breturn\s*\[/.test(value)
+    || /\binput(?:\s*\.|\s*\[)/.test(value);
 }
 
-function extractSource(text: string, sections: Map<SectionKind, string>): string {
-  const sourceFromSection = extractSectionCodeBlock(sections, "source", "groovy");
+function looksLikePythonSource(text: string): boolean {
+  const value = text.trim();
+  if (!value) {
+    return false;
+  }
+  return /\binput\s*\.\s*get\s*\(/.test(value)
+    || /\breturn\s*\{/.test(value)
+    || /\b(True|False|None)\b/.test(value)
+    || /\bf["']/.test(value);
+}
+
+function resolveInlineSourceType(text: string): ScriptType {
+  const looksGroovy = looksLikeGroovySource(text);
+  const looksPython = looksLikePythonSource(text);
+  if (looksGroovy && !looksPython) {
+    return "GROOVY";
+  }
+  if (looksPython && !looksGroovy) {
+    return "PYTHON";
+  }
+  if (/\bdef\b/.test(text) || /\?:/.test(text) || /\breturn\s*\[/.test(text)) {
+    return "GROOVY";
+  }
+  return "PYTHON";
+}
+
+function extractSource(text: string, sections: Map<SectionKind, string>): { source: string; type: ScriptType } {
+  const sourceFromSection = extractSectionCodeBlock(sections, "source", ["groovy", "python"]);
   if (sourceFromSection) {
-    return sourceFromSection;
+    return {
+      source: sourceFromSection.content,
+      type: sourceFromSection.language === "python" ? "PYTHON" : "GROOVY"
+    };
   }
 
-  const sourceFromBlock = collectCodeBlocks(text).find((block) => block.language === "groovy");
+  const sourceFromBlock = collectCodeBlocks(text).find(
+    (block) => block.language === "groovy" || block.language === "python"
+  );
   if (sourceFromBlock) {
-    return sourceFromBlock.content;
+    return {
+      source: sourceFromBlock.content,
+      type: sourceFromBlock.language === "python" ? "PYTHON" : "GROOVY"
+    };
   }
 
-  if (looksLikeGroovySource(text)) {
-    return text.trim();
+  if (looksLikeGroovySource(text) || looksLikePythonSource(text)) {
+    const source = text.trim();
+    return {
+      source,
+      type: resolveInlineSourceType(source)
+    };
   }
 
   if (sections.size > 0) {
     throw new Error(`缺少段落：${getSectionLabel("source")}`);
   }
 
-  throw new Error("未找到可识别的 Groovy 源码");
+  throw new Error("未找到可识别的 Groovy 或 Python 源码");
 }
 
 function inferInputFields(source: string): Map<string, FieldKind> {
   const fields = new Map<string, FieldKind>();
   const patterns = [
-    /\binput\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)/g,
-    /\binput\s*\[\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\s*\]/g
+    /\binput\s*\.\s*(?!get\b)([A-Za-z_][A-Za-z0-9_]*)/g,
+    /\binput\s*\[\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\s*\]/g,
+    /\binput\s*\.\s*get\s*\(\s*["']([A-Za-z_][A-Za-z0-9_]*)["']\s*\)/g
   ];
 
   patterns.forEach((pattern) => {
@@ -245,7 +293,7 @@ function inferLiteralKind(expression: string): FieldKind | null {
   if (!value) {
     return null;
   }
-  if (/^(true|false)$/.test(value)) {
+  if (/^(true|false|True|False)$/.test(value)) {
     return "boolean";
   }
   if (/^[-+]?\d+$/.test(value)) {
@@ -254,7 +302,7 @@ function inferLiteralKind(expression: string): FieldKind | null {
   if (/^[-+]?(?:\d+\.\d*|\d*\.\d+)(?:[eE][-+]?\d+)?$/.test(value)) {
     return "number";
   }
-  if (value.startsWith("'") || value.startsWith("\"")) {
+  if (/^(?:[furbFURB]{0,2})?['"]/.test(value)) {
     return "string";
   }
   return null;
@@ -269,11 +317,61 @@ function mergeField(fields: Map<string, FieldKind>, fieldName: string, nextKind:
   fields.set(fieldName, "string");
 }
 
+function extractReturnedBodies(source: string, opening: "[" | "{", closing: "]" | "}"): string[] {
+  const matcher = new RegExp(`\\breturn\\s*\\${opening}`, "g");
+  const bodies: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = matcher.exec(source)) !== null) {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let quote: "'" | "\"" | null = null;
+    let escaping = false;
+
+    for (let index = start; index < source.length; index += 1) {
+      const current = source[index];
+
+      if (quote) {
+        if (escaping) {
+          escaping = false;
+          continue;
+        }
+        if (current === "\\") {
+          escaping = true;
+          continue;
+        }
+        if (current === quote) {
+          quote = null;
+        }
+        continue;
+      }
+
+      if (current === "'" || current === "\"") {
+        quote = current;
+        continue;
+      }
+      if (current === opening) {
+        depth += 1;
+        continue;
+      }
+      if (current === closing) {
+        depth -= 1;
+        if (depth === 0) {
+          bodies.push(source.slice(start, index));
+          matcher.lastIndex = index + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  return bodies;
+}
+
 function inferOutputFields(source: string): Map<string, FieldKind> {
   const fields = new Map<string, FieldKind>();
 
-  for (const match of source.matchAll(/\breturn\s*\[([\s\S]*?)\]/g)) {
-    const body = match[1]?.trim() ?? "";
+  for (const body of extractReturnedBodies(source, "[", "]")) {
     splitTopLevelEntries(body).forEach((entry) => {
       const parsed = entry.match(/^\s*(?:["']?([A-Za-z_][A-Za-z0-9_]*)["']?)\s*:\s*([\s\S]+)$/);
       if (!parsed) {
@@ -283,6 +381,23 @@ function inferOutputFields(source: string): Map<string, FieldKind> {
       const fieldName = parsed[1];
       const valueExpression = parsed[2].trim();
       if (valueExpression.startsWith("[") || valueExpression.startsWith("{")) {
+        return;
+      }
+
+      mergeField(fields, fieldName, inferLiteralKind(valueExpression) ?? "string");
+    });
+  }
+
+  for (const body of extractReturnedBodies(source, "{", "}")) {
+    splitTopLevelEntries(body).forEach((entry) => {
+      const parsed = entry.match(/^\s*(?:["']([A-Za-z_][A-Za-z0-9_]*)["']|([A-Za-z_][A-Za-z0-9_]*))\s*:\s*([\s\S]+)$/);
+      if (!parsed) {
+        return;
+      }
+
+      const fieldName = parsed[1] ?? parsed[2];
+      const valueExpression = parsed[3].trim();
+      if (!fieldName || valueExpression.startsWith("[") || valueExpression.startsWith("{")) {
         return;
       }
 
@@ -337,19 +452,20 @@ function shouldUseInferredSchema(schemaText: string | undefined): boolean {
 export function parseGeneratedScriptText(text: string): ParsedGeneratedScript {
   const normalizedText = normalizeLineBreaks(text).trim();
   if (!normalizedText) {
-    throw new Error("请先粘贴 generate-script 输出或 Groovy 源码");
+    throw new Error("请先粘贴 generate-script 输出或 Groovy/Python 源码");
   }
 
   const sections = collectSections(normalizedText);
-  const source = extractSource(normalizedText, sections);
-  const explicitInputSchema = extractSectionCodeBlock(sections, "inputSchema", "json");
-  const explicitOutputSchema = extractSectionCodeBlock(sections, "outputSchema", "json");
-  const inferred = inferSchemaTexts(source);
+  const extracted = extractSource(normalizedText, sections);
+  const explicitInputSchema = extractSectionCodeBlock(sections, "inputSchema", "json")?.content;
+  const explicitOutputSchema = extractSectionCodeBlock(sections, "outputSchema", "json")?.content;
+  const inferred = inferSchemaTexts(extracted.source);
 
   return {
+    type: extracted.type,
     id: extractOptionalText(sections, "id"),
     name: extractOptionalText(sections, "name"),
-    source,
+    source: extracted.source,
     inputSchemaText:
       shouldUseInferredSchema(explicitInputSchema) || !explicitInputSchema
         ? inferred.inputSchemaText

@@ -50,6 +50,7 @@ import { CommandPanel } from "../components/CommandPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
 import { InfoHint } from "../components/InfoHint";
 import { PluginActionsOverview } from "../components/PluginActionsOverview";
+import { SkillExamplePanel } from "../components/SkillExamplePanel";
 import { SchemaObjectEditor, type SchemaObjectEditorMode } from "../components/SchemaObjectEditor";
 import { SchemaObjectResultView } from "../components/SchemaObjectResultView";
 import {
@@ -69,6 +70,7 @@ import { getPublishableRepositories } from "../repositoryPublish";
 import { resolveSchemaFields } from "../schema";
 import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
+import { buildPluginSkillExample } from "../skillExamples";
 import { getErrorMessage, parseJsonText, prettyJson } from "../utils";
 import { useCopyMessage } from "../hooks/useCopyMessage";
 
@@ -526,6 +528,24 @@ export function PluginDetailPage() {
       })
     ]);
   }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);
+
+  const skillExample = useMemo(() => {
+    if (!plugin || !currentAction) {
+      return "";
+    }
+    return buildPluginSkillExample({
+      pluginId: plugin.pluginId,
+      action: currentAction.action,
+      args: commandArgsInput.value,
+      argsSource: commandArgsInput.source,
+      scriptInput: commandScriptInput.value,
+      scriptInputSource: commandScriptInput.source,
+      inputSchema: currentAction.inputSchema,
+      outputSchema: currentAction.outputSchema,
+      invokeCommandPresets
+    });
+  }, [plugin, currentAction, commandArgsInput, commandScriptInput, invokeCommandPresets]);
+
   if (loading && !plugin) {
     return (
       <div className="page-loading">
@@ -819,6 +839,10 @@ export function PluginDetailPage() {
 	                      presets={invokeCommandPresets}
 	                      onCopy={(command) => void handleCopyCommand(command)}
 	                    />
+                      <SkillExamplePanel
+                        value={skillExample}
+                        onCopy={(value) => void handleCopyCommand(value, "Skill 已复制", "复制 Skill 失败")}
+                      />
 	                  </Space>
 	                ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前插件没有可生成命令的动作。" />

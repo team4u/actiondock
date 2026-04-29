@@ -204,7 +204,13 @@ public class RuntimeConfiguration {
                                      SharedStateApplicationService sharedStateApplicationService) {
         return new RoutingScriptEngine(
                 new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService),
-                new PythonScriptEngine(jsonCodec, properties.getExecution().getPython(), scriptInvocationService, sharedStateApplicationService)
+                new PythonScriptEngine(
+                        jsonCodec,
+                        properties.getExecution().getPython(),
+                        pluginRuntimeService,
+                        scriptInvocationService,
+                        sharedStateApplicationService
+                )
         );
     }
 

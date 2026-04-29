@@ -9,6 +9,7 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ScriptEngine;
+import org.team4u.actiondock.plugin.PluginRuntimeService;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -38,6 +39,7 @@ import java.util.function.Consumer;
 public class PythonScriptEngine implements ScriptEngine {
     private static final String LOG_PREFIX = "__ACTIONDOCK_LOG__";
     private static final String INVOKE_PREFIX = "__ACTIONDOCK_INVOKE__";
+    private static final String PLUGIN_PREFIX = "__ACTIONDOCK_PLUGIN__";
     private static final String STATE_PREFIX = "__ACTIONDOCK_STATE__";
     private static final String VALIDATION_RUNNER = """
             import py_compile
@@ -48,25 +50,49 @@ public class PythonScriptEngine implements ScriptEngine {
 
     private final JsonCodec jsonCodec;
     private final AppProperties.Python properties;
+    private final PluginRuntimeService pluginRuntimeService;
     private final ScriptInvocationService scriptInvocationService;
     private final SharedStateApplicationService sharedStateApplicationService;
 
     public PythonScriptEngine(JsonCodec jsonCodec, AppProperties.Python properties) {
-        this(jsonCodec, properties, ScriptInvocationService.disabled(), SharedStateApplicationService.disabled());
+        this(
+                jsonCodec,
+                properties,
+                PluginRuntimeService.disabled(),
+                ScriptInvocationService.disabled(),
+                SharedStateApplicationService.disabled()
+        );
     }
 
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties.Python properties,
                               ScriptInvocationService scriptInvocationService) {
-        this(jsonCodec, properties, scriptInvocationService, SharedStateApplicationService.disabled());
+        this(
+                jsonCodec,
+                properties,
+                PluginRuntimeService.disabled(),
+                scriptInvocationService,
+                SharedStateApplicationService.disabled()
+        );
     }
 
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties.Python properties,
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService) {
+        this(jsonCodec, properties, PluginRuntimeService.disabled(), scriptInvocationService, sharedStateApplicationService);
+    }
+
+    public PythonScriptEngine(JsonCodec jsonCodec,
+                              AppProperties.Python properties,
+                              PluginRuntimeService pluginRuntimeService,
+                              ScriptInvocationService scriptInvocationService,
+                              SharedStateApplicationService sharedStateApplicationService) {
         this.jsonCodec = Objects.requireNonNull(jsonCodec);
         this.properties = Objects.requireNonNull(properties);
+        this.pluginRuntimeService = pluginRuntimeService == null
+                ? PluginRuntimeService.disabled()
+                : pluginRuntimeService;
         this.scriptInvocationService = scriptInvocationService == null
                 ? ScriptInvocationService.disabled()
                 : scriptInvocationService;
@@ -140,7 +166,7 @@ public class PythonScriptEngine implements ScriptEngine {
                             executionContext.log(event.level(), event.message());
                         }
                     },
-                    new PythonBridge(definition, executionContext)
+                    new PythonBridge(definition, input == null ? Map.of() : input, executionContext)
             );
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本执行超时");
@@ -282,6 +308,10 @@ public class PythonScriptEngine implements ScriptEngine {
                     handleInvocation(line.substring(INVOKE_PREFIX.length()), stdinStream, bridge);
                     continue;
                 }
+                if (line.startsWith(PLUGIN_PREFIX)) {
+                    handlePlugin(line.substring(PLUGIN_PREFIX.length()), stdinStream, bridge);
+                    continue;
+                }
                 if (line.startsWith(STATE_PREFIX)) {
                     handleState(line.substring(STATE_PREFIX.length()), stdinStream, bridge);
                     continue;
@@ -329,6 +359,22 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
+    private void handlePlugin(String payload,
+                              OutputStream stdinStream,
+                              PythonBridge bridge) {
+        if (bridge == null) {
+            throw new IllegalStateException("Python 插件桥接未初始化");
+        }
+        PythonPluginRequest request = parsePluginRequest(payload);
+        String response = bridge.respondPlugin(request);
+        try {
+            stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
+            stdinStream.flush();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to write Python plugin response", e);
+        }
+    }
+
     private PythonInvocationRequest parseInvocationRequest(String payload) {
         Map<String, Object> value = jsonCodec.readMap(payload);
         Object scriptId = value.get("scriptId");
@@ -350,6 +396,16 @@ public class PythonScriptEngine implements ScriptEngine {
                 expectedVersion instanceof Number number ? number.longValue() : null,
                 value.get("value"),
                 options instanceof Map<?, ?> map ? normalizeMap(map) : Map.of()
+        );
+    }
+
+    private PythonPluginRequest parsePluginRequest(String payload) {
+        Map<String, Object> value = jsonCodec.readMap(payload);
+        Object args = value.get("args");
+        return new PythonPluginRequest(
+                stringValue(value.get("pluginId")),
+                stringValue(value.get("action")),
+                args instanceof Map<?, ?> map ? normalizeMap(map) : Map.of()
         );
     }
 
@@ -391,13 +447,29 @@ public class PythonScriptEngine implements ScriptEngine {
     private String extractErrorMessage(ProcessResult result) {
         String stderr = result.stderr() == null ? "" : result.stderr().trim();
         if (!stderr.isEmpty()) {
-            return stderr;
+            return summarizePythonError(stderr);
         }
         String stdout = result.stdout() == null ? "" : result.stdout().trim();
         if (!stdout.isEmpty()) {
             return stdout;
         }
         return "Python 脚本执行失败";
+    }
+
+    private String summarizePythonError(String stderr) {
+        String[] lines = stderr.split("\\R");
+        for (int index = lines.length - 1; index >= 0; index -= 1) {
+            String line = lines[index].trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+            int separator = line.indexOf(": ");
+            if (separator > 0 && separator < line.length() - 2) {
+                return line.substring(separator + 2).trim();
+            }
+            return line;
+        }
+        return stderr;
     }
 
     private void deleteIfExists(Path path) {
@@ -419,6 +491,9 @@ public class PythonScriptEngine implements ScriptEngine {
     record PythonInvocationRequest(String scriptId, Map<String, Object> args) {
     }
 
+    record PythonPluginRequest(String pluginId, String action, Map<String, Object> args) {
+    }
+
     record PythonStateRequest(String operation,
                               String namespace,
                               String key,
@@ -429,11 +504,15 @@ public class PythonScriptEngine implements ScriptEngine {
 
     private final class PythonBridge {
         private final ScriptDefinition definition;
+        private final Map<String, Object> input;
         private final ScriptExecutionContext executionContext;
         private final ScriptStateBridge stateBridge;
 
-        private PythonBridge(ScriptDefinition definition, ScriptExecutionContext executionContext) {
+        private PythonBridge(ScriptDefinition definition,
+                             Map<String, Object> input,
+                             ScriptExecutionContext executionContext) {
             this.definition = definition;
+            this.input = input == null ? Map.of() : new LinkedHashMap<>(input);
             this.executionContext = executionContext;
             this.stateBridge = new ScriptStateBridge(sharedStateApplicationService, definition, executionContext);
         }
@@ -444,6 +523,28 @@ public class PythonScriptEngine implements ScriptEngine {
                         request.scriptId(),
                         definition,
                         executionContext,
+                        request.args()
+                );
+                return jsonCodec.write(Map.of(
+                        "ok", true,
+                        "result", result
+                ));
+            } catch (Exception exception) {
+                return jsonCodec.write(Map.of(
+                        "ok", false,
+                        "error", ErrorDetailSupport.summarize(exception)
+                ));
+            }
+        }
+
+        private String respondPlugin(PythonPluginRequest request) {
+            try {
+                Object result = pluginRuntimeService.invoke(
+                        request.pluginId(),
+                        request.action(),
+                        definition,
+                        executionContext,
+                        input,
                         request.args()
                 );
                 return jsonCodec.write(Map.of(

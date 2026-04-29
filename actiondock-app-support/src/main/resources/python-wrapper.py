@@ -37,6 +37,25 @@ class __ActionDockScripts:
 
 scripts = __ActionDockScripts()
 
+class __ActionDockPlugins:
+    def invoke(self, plugin_id, action, args=None):
+        payload = json.dumps({
+            "pluginId": plugin_id,
+            "action": action,
+            "args": {} if args is None else args
+        }, ensure_ascii=False)
+        sys.stderr.write("__ACTIONDOCK_PLUGIN__" + payload + "\n")
+        sys.stderr.flush()
+        response_text = sys.stdin.readline()
+        if not response_text:
+            raise RuntimeError("Plugin bridge closed")
+        response = json.loads(response_text)
+        if response.get("ok"):
+            return response.get("result")
+        raise RuntimeError(response.get("error") or "Plugin invocation failed")
+
+plugins = __ActionDockPlugins()
+
 class __ActionDockState:
     def _request(self, payload):
         sys.stderr.write("__ACTIONDOCK_STATE__" + json.dumps(payload, ensure_ascii=False) + "\n")

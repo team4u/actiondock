@@ -2,6 +2,8 @@
 
 从业务需求出发，生成脚本并完成创建草稿→校验→调试→Patch→循环修复→发布的完整闭环。
 
+如果脚本需求涉及 `plugins.invoke(...)`、`scripts.invoke(...)` 或 `actiondock-ai`，补读 `references/script-runtime-calls.md`，确认源码内调用方式后再生成脚本。
+
 ---
 
 ## 阶段一：需求分析与脚本生成

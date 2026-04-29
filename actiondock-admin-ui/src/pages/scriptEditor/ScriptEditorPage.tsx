@@ -57,6 +57,7 @@ import {
 } from "../../commands";
 import { formatDateTime, parseJsonText } from "../../utils";
 import { useCopyMessage } from "../../hooks/useCopyMessage";
+import { buildScriptSkillExample } from "../../skillExamples";
 import { DevelopmentSyncTag } from "../../components/domain/DevelopmentSyncTag";
 import { ScriptDiffDrawer } from "../../components/diff/ScriptDiffDrawer";
 import { ScriptDiffSummary } from "../../components/diff/ScriptDiffSummary";
@@ -249,6 +250,31 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         }
       }
     : undefined;
+
+  const skillExample = useMemo(() => {
+    if (!editor.currentScript) {
+      return "";
+    }
+    return buildScriptSkillExample({
+      scriptId: editor.currentScript.id,
+      description: editor.currentScript.description,
+      executionMode: execution.executionMode,
+      input: commandInput.value,
+      inputSource: commandInput.source,
+      inputSchema: execution.hasInputSchema ? execution.supportedFields : undefined,
+      outputSchema: execution.hasOutputSchema ? execution.supportedOutputFields : undefined,
+      executeCommandPresets
+    });
+  }, [
+    editor.currentScript,
+    execution.executionMode,
+    execution.hasInputSchema,
+    execution.hasOutputSchema,
+    execution.supportedFields,
+    execution.supportedOutputFields,
+    commandInput,
+    executeCommandPresets
+  ]);
 
   const previewInputSchemaText = formatSchemaEditorState(editor.inputSchemaState);
   const previewOutputSchemaText = formatSchemaEditorState(editor.outputSchemaState);
@@ -719,6 +745,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           schemaCommandPresets={schemaCommandPresets}
                           hasInputSchema={execution.hasInputSchema}
                           hasOutputSchema={execution.hasOutputSchema}
+                          skillExample={skillExample}
                           toolContractResponseExample={toolContractResponseExample}
                           onCopy={handleCopyCommand}
                         />

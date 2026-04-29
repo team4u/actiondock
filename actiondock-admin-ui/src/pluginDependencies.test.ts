@@ -115,13 +115,15 @@ describe("resolveEffectivePluginDependencies", () => {
     ]);
   });
 
-  it("does not detect dependencies from Python source", () => {
+  it("detects dependencies from Python source too", () => {
     const dependencies = resolveEffectivePluginDependencies(
       script({ type: "PYTHON", source: 'plugins.invoke("source-plugin", "run")' }),
       undefined,
       [plugin("source-plugin", "3.0.0")]
     );
 
-    expect(dependencies).toEqual([]);
+    expect(dependencies).toEqual([
+      { pluginId: "source-plugin", versionRange: ">= 3.0.0", requiredActions: ["run"] }
+    ]);
   });
 });

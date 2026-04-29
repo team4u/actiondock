@@ -89,6 +89,27 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
+    void extractsLiteralPluginDependenciesFromPythonSource() {
+        String source = """
+                first = plugins.invoke("plugin-a", "echo", {"message": "hi"})
+                second = plugins.invoke('plugin-a', 'summarize')
+                ignored = plugins.invoke(plugin_id, "dynamic")
+                return plugins.invoke("plugin-b", "run")
+                """;
+
+        var dependencies = RepositoryCatalogService.extractPluginDependenciesFromSource(
+                source,
+                Map.of("plugin-a", "1.2.3", "plugin-b", "0.4.0")
+        );
+
+        assertThat(dependencies).hasSize(2);
+        assertThat(dependencies.get(0).getPluginId()).isEqualTo("plugin-a");
+        assertThat(dependencies.get(0).getRequiredActions()).containsExactly("echo", "summarize");
+        assertThat(dependencies.get(1).getPluginId()).isEqualTo("plugin-b");
+        assertThat(dependencies.get(1).getRequiredActions()).containsExactly("run");
+    }
+
+    @Test
     void repositoryMetadataKeepsAssetDescriptionSeparateFromReleaseNotes() throws Exception {
         String toolJson = """
                 {

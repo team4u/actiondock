@@ -64,7 +64,7 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 
 - 基于 PF4J 插件体系扩展平台能力
 - 插件通过 Manifest 声明动作、Schema、配置和示例
-- Groovy 脚本通过统一门面 `plugins.invoke(...)` 调用插件
+- Groovy 和 Python 脚本都通过统一门面 `plugins.invoke(...)` 调用插件
 - 插件可以单独打包、安装、升级，也可来自仓库分发
 
 当脚本需要访问外部系统、封装内部 SDK 或沉淀共用能力时，不必把复杂逻辑都塞进脚本源码。
@@ -80,7 +80,7 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
   - 诊断执行失败
   - 发布前 Review
   - 生成 Release Notes
-- `actiondock-ai` 系统插件可让 Groovy 脚本直接调用 `chat`、`structured`、`embed`、`agentRun`
+- `actiondock-ai` 系统插件可让 Groovy 和 Python 脚本直接调用 `chat`、`structured`、`embed`、`agentRun`
 
 当前 Provider 方向已包含 OpenAI、DashScope、Ollama、Gemini、Anthropic 的统一接入边界。
 

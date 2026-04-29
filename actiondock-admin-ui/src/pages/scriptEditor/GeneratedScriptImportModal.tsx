@@ -32,14 +32,14 @@ export function GeneratedScriptImportModal({
         <Alert
           type="info"
           showIcon
-          message="支持固定格式，也支持从 Groovy 源码智能提取"
-          description="带有显式 Input/Output Schema 时优先使用原始 Schema；仅粘贴源码时会自动提取输入输出结构，但不会自动填写 ID 和名称。"
+          message="支持固定格式，也支持从 Groovy/Python 源码智能提取"
+          description="带有显式 Input/Output Schema 时优先使用原始 Schema；仅粘贴源码时会自动提取输入输出结构，并按源码语言回填脚本类型。"
         />
         <Input.TextArea
           className="generated-script-textarea"
           value={value}
           onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)}
-          placeholder={`支持两种粘贴方式，例如：\n\n1. 固定格式\n### 脚本 ID\nhello-groovy\n\n### 脚本名称\nHello Groovy\n\n### Groovy 脚本\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\`\n\n### Input Schema（输入参数）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n### Output Schema（输出结果）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n2. 直接粘贴源码\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\``}
+          placeholder={`支持两种粘贴方式，例如：\n\n1. 固定格式\n### 脚本 ID\nhello-python\n\n### 脚本名称\nHello Python\n\n### Python 脚本\n\`\`\`python\nname = input.get("name") or "World"\nreturn {"message": f"Hello, {name}!"}\n\`\`\`\n\n### Input Schema（输入参数）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n### Output Schema（输出结果）\n\`\`\`json\n{\n  "type": "object",\n  "properties": {}\n}\n\`\`\`\n\n2. 直接粘贴源码\n\`\`\`groovy\ndef name = input.name ?: "World"\nreturn [message: "Hello, \${name}!"]\n\`\`\``}
           autoSize={{ minRows: 14, maxRows: 22 }}
         />
       </Space>

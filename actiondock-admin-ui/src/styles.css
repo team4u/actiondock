@@ -628,6 +628,18 @@ a {
   gap: 12px;
 }
 
+.skill-example-panel__title {
+  min-width: 0;
+}
+
+.skill-example-panel__description {
+  margin: 2px 0 0;
+}
+
+.skill-example-panel__preview {
+  max-height: 560px;
+}
+
 .plugin-action-reference + .plugin-action-reference {
   margin-top: 12px;
   padding-top: 12px;

@@ -1,8 +1,8 @@
 import type { AiDependency } from "./types";
 
 const AI_INVOKE_PATTERN = /plugins\s*\.\s*invoke\s*\(\s*(["'`])actiondock-ai\1\s*,\s*(["'`])([^"'`]+)\2\s*,?\s*([\s\S]*?)\)/g;
-const MODEL_PROFILE_PATTERN = /modelProfile\s*:\s*(["'`])([^"'`]+)\1/;
-const AGENT_PROFILE_PATTERN = /agentProfile\s*:\s*(["'`])([^"'`]+)\1/;
+const MODEL_PROFILE_PATTERN = /["'`]?modelProfile["'`]?\s*:\s*(["'`])([^"'`]+)\1/;
+const AGENT_PROFILE_PATTERN = /["'`]?agentProfile["'`]?\s*:\s*(["'`])([^"'`]+)\1/;
 
 const ACTION_CAPABILITY: Record<string, AiDependency["capability"]> = {
   chat: "CHAT",

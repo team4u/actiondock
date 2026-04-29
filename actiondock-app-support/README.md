@@ -142,7 +142,7 @@ if (!result.updated) {
 - 过期条目对脚本不可见，`state.get(...)` 会返回 `null`
 - `ttlSeconds` 必须大于 `0`
 - 写入时会自动记录当前脚本 ID 和执行 ID
-- Python 脚本通过 stderr/stdin 桥接协议访问状态，Groovy 脚本通过本地对象直接访问
+- Python 脚本通过 stderr/stdin 桥接协议访问 `plugins`、`scripts`、`state`，Groovy 脚本通过本地对象直接访问
 
 ## 适合放在这里的能力
 

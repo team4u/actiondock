@@ -48,9 +48,5 @@ export function resolveEffectivePluginDependencies(
     return script.pluginDependencies;
   }
 
-  if (script.type !== "GROOVY") {
-    return [];
-  }
-
   return extractPluginDependenciesFromSource(script.source, plugins);
 }

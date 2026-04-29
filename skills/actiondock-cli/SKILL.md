@@ -1,6 +1,6 @@
 ---
 name: actiondock-cli
-description: 使用 ActionDock CLI 完成脚本的完整作者态闭环或日常执行已发布脚本。适用于创建、调试、发布脚本，以及查找、运行、管理定时任务和共享状态等日常使用场景。
+description: 使用 ActionDock CLI 完成脚本的作者态闭环、已发布脚本执行、插件查看与调用，以及围绕脚本源码中的 plugins.invoke(...) / scripts.invoke(...) 提供参考。适用于创建、调试、发布脚本，以及查找、运行、管理插件、定时任务和共享状态等日常使用场景。
 ---
 
 # ActionDock CLI
@@ -67,6 +67,8 @@ actiondock script list
 
 | 用户意图 | 子文档 |
 |----------|--------|
+| "调用插件" / "插件动作" / "plugin invoke" / "actiondock-ai" | `references/plugin-usage.md` |
+| "脚本里调插件" / "脚本里调脚本" / "plugins.invoke" / "scripts.invoke" | `references/script-runtime-calls.md` |
 | "查看执行结果" / "执行历史" / "清空执行记录" | `references/execution-history.md` |
 | "定时任务" / "定时执行" / "cron" / "schedule" | `references/schedule-management.md` |
 | "共享状态" / "state" / "命名空间" | `references/state-management.md` |
@@ -77,10 +79,17 @@ actiondock script list
 |----------|----------|
 | "帮我写一个脚本" / "创建脚本" / "从零做一个" | 作者态 |
 | "发布脚本" / "调试脚本" / "patch 脚本" | 作者态 |
+| "脚本里调用插件" / "脚本里调用脚本" / "plugins.invoke" / "scripts.invoke" | 作者态 + `references/script-runtime-calls.md` |
 | "执行脚本" / "跑一下脚本" / "运行 xxx" | 日常执行 |
 | "有哪些脚本" / "列出脚本" / "脚本入参" | 日常执行 |
+| "调用插件" / "看插件动作" / "插件参数" | `references/plugin-usage.md` |
 
 如果用户意图同时涉及多个模块（如"创建脚本并定时运行"），先完成作者态闭环，再按需加载命令参考文档。
+
+如果需求同时涉及 CLI 调用和脚本源码内互调：
+
+- CLI 插件调用 → 读取 `references/plugin-usage.md`
+- 脚本源码内 `plugins.invoke(...)` / `scripts.invoke(...)` → 读取 `references/script-runtime-calls.md`
 
 ---
 

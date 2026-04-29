@@ -3,6 +3,7 @@
 查找和运行已发布的 ActionDock 脚本。只覆盖 `script` 和 `config` 命令。
 
 其他管理命令见独立子文档：
+- 插件查看与调用 → `references/plugin-usage.md`
 - 执行历史管理 → `references/execution-history.md`
 - 定时任务管理 → `references/schedule-management.md`
 - 共享状态管理 → `references/state-management.md`

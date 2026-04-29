@@ -74,7 +74,7 @@ export function useScriptEditor({
 
   const selectedScriptType = (form.getFieldValue("type") as ScriptType | undefined) ?? "GROOVY";
   const copyFromScriptId = mode === "create" ? searchParams.get("copyFrom")?.trim() || null : null;
-  const canImportGeneratedScript = selectedScriptType === "GROOVY";
+  const canImportGeneratedScript = true;
   const isReadOnlyScript = Boolean(mode === "edit" && currentScript && currentScript.editable === false);
   const hasUnpublishedChanges = Boolean(
     currentScript?.status === "PUBLISHED" && currentScript.hasUnpublishedChanges
@@ -82,12 +82,12 @@ export function useScriptEditor({
   const canPublishToRepository = Boolean(currentScript && currentScript.scope !== "REPOSITORY");
 
   const detectedPluginDependencies = useMemo(
-    () => selectedScriptType === "GROOVY" ? extractPluginDependenciesFromSource(sourceText, availablePlugins) : [],
-    [availablePlugins, selectedScriptType, sourceText]
+    () => extractPluginDependenciesFromSource(sourceText, availablePlugins),
+    [availablePlugins, sourceText]
   );
   const detectedAiDependencies = useMemo(
-    () => selectedScriptType === "GROOVY" ? extractAiDependenciesFromSource(sourceText) : [],
-    [selectedScriptType, sourceText]
+    () => extractAiDependenciesFromSource(sourceText),
+    [sourceText]
   );
 
   const headerActionModel = useMemo(
@@ -191,11 +191,6 @@ export function useScriptEditor({
   }, [messageApi]);
 
   useEffect(() => {
-    if (selectedScriptType !== "GROOVY") {
-      setAvailablePlugins([]);
-      setAvailablePluginReferences([]);
-      return;
-    }
     let cancelled = false;
     setPluginsLoading(true);
     void Promise.all([listPlugins(), listPluginReferences()])
@@ -212,7 +207,7 @@ export function useScriptEditor({
       })
       .finally(() => { if (!cancelled) setPluginsLoading(false); });
     return () => { cancelled = true; };
-  }, [messageApi, selectedScriptType]);
+  }, [messageApi]);
 
   useEffect(() => {
     if (mode === "create") {
@@ -511,7 +506,7 @@ export function useScriptEditor({
       const parsed = parseGeneratedScriptText(text);
       const nextInputSchemaState = deserializeSchemaJsonText(parsed.inputSchemaText, "输入结构");
       const nextOutputSchemaState = deserializeSchemaJsonText(parsed.outputSchemaText, "输出结构");
-      const nextFields: Partial<ScriptEditorFormValues> = { type: "GROOVY" };
+      const nextFields: Partial<ScriptEditorFormValues> = { type: parsed.type };
       if (parsed.id?.trim()) nextFields.id = parsed.id.trim();
       if (parsed.name?.trim()) nextFields.name = parsed.name.trim();
 
