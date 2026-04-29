@@ -1,31 +1,143 @@
+# 脚本作者态闭环
+
+从业务需求出发，生成脚本并完成创建草稿→校验→调试→Patch→循环修复→发布的完整闭环。
+
 ---
-name: actiondock-cli-lifecycle
-description: 使用 ActionDock CLI 完成脚本的完整作者态闭环：创建草稿、Patch 源码或 Schema、校验、草稿调试、查看执行结果、循环修复并最终发布。适用于 Codex 需要通过 CLI 而不是直接调 REST API 来稳定创建和调试 ActionDock 脚本的场景。
----
 
-# ActionDock CLI Lifecycle
+## 阶段一：需求分析与脚本生成
 
-当用户希望你“用 CLI”创建、调试、修复并发布 ActionDock 脚本时，使用这个 skill。
-
-这个 skill 关注的是 **如何用 CLI 跑完整链路**，不是如何凭空设计业务逻辑本身。
-
-在这个 skill 里，默认公共术语只有 `script`。
-
-- 不要再使用 `actiondock tool ...`
-- 创建、查看、执行、调试、发布都统一走 `actiondock script ...`
-- 如果用户把 “tool” 和 “script” 混着说，按“它们在这里是同一个脚本资产”来处理
-
-如果用户只给了业务需求、还没有脚本内容，先产出以下内容，再进入 CLI 闭环：
+当用户只给了业务需求、还没有脚本内容时，先完成此阶段，产出以下 5 项内容：
 
 1. 脚本 ID
 2. 脚本名称
-3. Groovy/Python 源码
+3. Groovy 源码
 4. `inputSchema`
 5. `outputSchema`
 
-必要时可结合仓库里的 `generate-script` skill 先生成这些内容。
+### ActionDock 脚本规范
 
-## 关键原则
+ActionDock 是一个 Groovy 脚本执行平台，脚本通过 `input` 对象访问输入参数，返回值作为 `output`。
+
+```groovy
+// input 是 Map 类型，访问参数用 input.字段名 或 input["字段名"]
+def name = input.name
+def age = input.age
+
+// 脚本逻辑...
+
+// 返回值必须是 Map，作为 output
+return [
+    field1: value1,
+    field2: value2
+]
+```
+
+### 可用依赖
+
+脚本运行环境中已预装以下依赖，可直接在脚本中使用：
+
+| 依赖 | 版本 | 说明 |
+|------|------|------|
+| `groovy-all` | 4.x | Groovy 核心库，支持所有 Groovy 语法和标准库（JSON、XML、日期处理等） |
+| `hutool-all` | 5.x | Hutool 工具库，提供丰富的 Java 工具方法（字符串、日期、HTTP、加解密、IO 等） |
+
+### Schema 字段类型
+
+在 Schema 中使用以下 JSON Schema 类型：
+
+| kind | 说明 | 示例 |
+|------|------|------|
+| string | 字符串 | `{"type": "string"}` |
+| number | 浮点数 | `{"type": "number"}` |
+| integer | 整数 | `{"type": "integer"}` |
+| boolean | 布尔值 | `{"type": "boolean"}` |
+| enum | 枚举（字符串下拉） | `{"type": "string", "enum": ["A", "B"]}` |
+
+### UI 扩展（可选）
+
+字符串字段可以指定 widget：
+
+```json
+{
+  "name": {"type": "string", "title": "姓名"},
+  "description": {
+    "type": "string",
+    "title": "描述",
+    "x-ui": {"widget": "textarea", "rows": 4}
+  }
+}
+```
+
+### 需求分析流程
+
+1. **理解需求**：分析用户描述的业务逻辑，明确输入参数和输出结果
+2. **反问确认**：如果需求不明确，主动询问：
+    - 输入参数有哪些？（名称、类型、是否必填）
+    - 输出字段有哪些？
+    - 是否有特殊逻辑需要处理？
+3. **生成代码**：按照规范生成脚本和 Schema
+
+### 生成原则
+
+- 脚本代码简洁清晰，添加必要的注释
+- Schema 中的 `title` 字段用于前端显示标签
+- 必填字段放在 `required` 数组中
+- 返回值使用 Map 字面量 `[:]` 语法
+- 合理使用 Groovy 语法糖（如闭包、with 等）
+
+### 脚本产物输出格式
+
+按顺序输出以下 5 段固定格式，要求：
+- 标题、文案必须保持完全一致，便于前端自动解析
+- `脚本 ID` 与 `脚本名称` 段落正文使用纯文本，不要放进代码块
+- `Groovy 脚本`、`Input Schema（输入参数）`、`Output Schema（输出结果）` 必须各自只包含一个对应语言的代码块
+- 不要在这 5 段中间插入额外标题，仅保留示例中的5个标题
+- 这 5 段都是必需的，不能省略
+
+#### 脚本 ID
+
+hello-groovy
+
+#### 脚本名称
+
+Hello Groovy
+
+#### Groovy 脚本
+
+```groovy
+// 脚本代码
+```
+
+#### Input Schema（输入参数）
+
+```json
+{
+  "type": "object",
+  "properties": {
+    // 字段定义
+  },
+  "required": ["必需字段"]
+}
+```
+
+#### Output Schema（输出结果）
+
+```json
+{
+  "type": "object",
+  "properties": {
+    // 字段定义
+  }
+}
+```
+
+---
+
+## 阶段二：CLI 闭环
+
+完成阶段一后，将生成的脚本和 Schema 写入文件，然后用 CLI 跑完整链路。
+
+### 关键原则
 
 - 默认使用 `--json`，让输出稳定可机读。
 - 调试草稿时，默认使用 `actiondock script run <id> --draft --response-view debug --json`。
@@ -37,9 +149,9 @@ description: 使用 ActionDock CLI 完成脚本的完整作者态闭环：创建
 - 执行失败后，先读失败结果，再改草稿；不要盲改。
 - 发布是显式动作；只有确认草稿可用后才执行 `script publish`。
 
-## 标准闭环
+### 标准闭环
 
-### 1. 创建草稿
+#### 1. 创建草稿
 
 优先使用文件输入，避免 shell 转义问题。
 
@@ -56,7 +168,7 @@ actiondock script create \
 
 如果源码或 schema 很短，也可以内联，但文件方式更稳定。
 
-### 2. 校验草稿
+#### 2. 校验草稿
 
 ```bash
 actiondock script validate hello-world --json
@@ -64,7 +176,7 @@ actiondock script validate hello-world --json
 
 如果这里失败，先修源码或 schema，再继续执行。
 
-### 3. 执行草稿
+#### 3. 执行草稿
 
 ```bash
 actiondock script run hello-world \
@@ -85,7 +197,7 @@ actiondock script run hello-world \
 
 如果返回里已经有足够信息，直接修；如果只拿到了执行 ID，继续查详情。
 
-### 4. 读取执行详情
+#### 4. 读取执行详情
 
 ```bash
 actiondock execution get <execution-id> --json
@@ -98,7 +210,7 @@ actiondock execution get <execution-id> --json
 - `errorMessage` / `errorDetail.stackTrace`
 - 输出结构是否和 `outputSchema` 匹配
 
-### 5. Patch 草稿
+#### 5. Patch 草稿
 
 只改源码：
 
@@ -133,7 +245,7 @@ actiondock script patch hello-world \
   --json
 ```
 
-### 6. 循环直到成功
+#### 6. 循环直到成功
 
 重复以下步骤：
 
@@ -148,7 +260,7 @@ actiondock script patch hello-world \
 - 输出字段与 `outputSchema` 一致
 - 日志和 debug 信息显示逻辑正确
 
-### 7. 发布
+#### 7. 发布
 
 ```bash
 actiondock script publish hello-world --json
@@ -160,9 +272,9 @@ actiondock script publish hello-world --json
 actiondock script get hello-world --json
 ```
 
-## 失败处理策略
+### 失败处理策略
 
-### 输入校验失败
+#### 输入校验失败
 
 症状：
 
@@ -175,7 +287,7 @@ actiondock script get hello-world --json
 - 或修 `inputSchema`
 - 不要先改业务逻辑源码
 
-### 运行时异常
+#### 运行时异常
 
 症状：
 
@@ -188,7 +300,7 @@ actiondock script get hello-world --json
 - 优先修源码
 - 如果是返回结构不匹配，再同步修 `outputSchema`
 
-### 输出结构不符合预期
+#### 输出结构不符合预期
 
 症状：
 
@@ -197,26 +309,26 @@ actiondock script get hello-world --json
 动作：
 
 - 比对 `debug.rawOutput` 与 `outputSchema`
-- 明确是“代码返回错了”还是“schema 定义错了”
+- 明确是"代码返回错了"还是"schema 定义错了"
 - 只 patch 必需字段，避免同时引入无关改动
 
-## 推荐工作方式
+### 推荐工作方式
 
 - 对较长源码，先在工作区生成 `.groovy` / `.py` 文件，再用 `--source-file`。
 - 对 schema，先写成 `.json` 文件，再用 `--input-schema-file` / `--output-schema-file`。
 - 每轮 patch 尽量只改一个问题，减少调试噪音。
 - 如果执行结果不清楚，优先加日志再跑一轮，而不是猜。
 
-## 不要这样做
+### 不要这样做
 
 - 不要默认走非 `--json` 输出。
 - 不要把 `script patch` 当成任意字段 patch；只允许源码和 schema。
 - 不要在未验证草稿前直接发布。
 - 不要在一次 patch 里混入大量无关重构，除非当前问题必须一起改。
 
-## 最小模板
+### 最小模板
 
-如果用户明确要“用 CLI 从零做一个脚本”，默认按这个顺序执行：
+如果用户明确要"用 CLI 从零做一个脚本"，默认按这个顺序执行：
 
 ```bash
 actiondock script create --script-id <id> --name "<name>" --type groovy --source-file ./source.groovy --input-schema-file ./input.schema.json --output-schema-file ./output.schema.json --json
