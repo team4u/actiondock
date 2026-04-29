@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPublishableRepositories, pickDefaultPublishRepository } from "./repositoryPublish";
+import { getEnabledRepositories, getPublishableRepositories, pickDefaultPublishRepository } from "./repositoryPublish";
 import type { RepositoryDefinition } from "./types";
 
 function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinition {
@@ -17,6 +17,16 @@ function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinit
 }
 
 describe("repositoryPublish", () => {
+  it("filters enabled repositories and sorts by id", () => {
+    const repositories = getEnabledRepositories([
+      repository({ id: "b" }),
+      repository({ id: "c", enabled: false }),
+      repository({ id: "a", type: "LOCAL_DIR" })
+    ]);
+
+    expect(repositories.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
   it("filters non-publishable repositories and sorts by id", () => {
     const repositories = getPublishableRepositories([
       repository({ id: "b" }),

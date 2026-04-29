@@ -1,4 +1,4 @@
-import type { ScriptDependency } from "./types";
+import type { RepositoryDefinition, RepositoryToolDescriptor, ScriptDependency } from "./types";
 
 const SCRIPT_INVOKE_PATTERN = /scripts\s*\.\s*invoke\s*\(\s*(["'`])([^"'`]+)\1/g;
 const SCRIPT_INVOKE_ANY_PATTERN = /scripts\s*\.\s*invoke\s*\(/g;
@@ -43,4 +43,47 @@ export function normalizeScriptDependencies(dependencies: ScriptDependency[]): S
       versionRange: item.versionRange?.trim() || undefined
     }))
     .filter((item) => item.scriptId && item.repositoryId && item.toolId);
+}
+
+function getPreferredRepositoryIds(
+  repositories: Pick<RepositoryDefinition, "id">[],
+  preferredRepositoryId?: string
+): string[] {
+  const orderedIds = repositories.map((item) => item.id);
+  if (!preferredRepositoryId) {
+    return orderedIds;
+  }
+  return [
+    preferredRepositoryId,
+    ...orderedIds.filter((repositoryId) => repositoryId !== preferredRepositoryId)
+  ];
+}
+
+export function autoMatchScriptDependency(
+  scriptId: string,
+  repositories: Pick<RepositoryDefinition, "id">[],
+  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "toolId" | "version">[],
+  preferredRepositoryId?: string
+): ScriptDependency | undefined {
+  const normalizedScriptId = scriptId.trim();
+  if (!normalizedScriptId) {
+    return undefined;
+  }
+
+  const repositoryIds = getPreferredRepositoryIds(repositories, preferredRepositoryId);
+  for (const repositoryId of repositoryIds) {
+    const matched = repositoryTools.find(
+      (item) => item.repositoryId === repositoryId && item.toolId === normalizedScriptId
+    );
+    if (!matched) {
+      continue;
+    }
+    return {
+      scriptId: normalizedScriptId,
+      repositoryId,
+      toolId: matched.toolId,
+      versionRange: matched.version ? `>= ${matched.version}` : undefined
+    };
+  }
+  return undefined;
 }

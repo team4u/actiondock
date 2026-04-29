@@ -19,8 +19,8 @@ import type {
   ScriptSchedule
 } from "../../types";
 import { getErrorMessage } from "../../utils";
-import { extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../scriptDependencies";
-import { getPublishableRepositories } from "../../repositoryPublish";
+import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../scriptDependencies";
+import { getEnabledRepositories, getPublishableRepositories } from "../../repositoryPublish";
 import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues } from "./types";
 import {
   resolveRepositoryPublishVersion,
@@ -45,6 +45,7 @@ export interface ScriptPublishToRepoContext {
   setPublishToRepositoryOpen: (open: boolean) => void;
   publishingToRepository: boolean;
   publishRepositories: RepositoryDefinition[];
+  publishDependencyRepositories: RepositoryDefinition[];
   publishSchedules: ScriptSchedule[];
   publishMetadataLoading: boolean;
   publishConfigPreview: RepositoryPublishConfigPreview | null;
@@ -73,6 +74,7 @@ export function useScriptPublishToRepo({
   const [publishToRepositoryOpen, setPublishToRepositoryOpen] = useState(false);
   const [publishingToRepository, setPublishingToRepository] = useState(false);
   const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
+  const [publishDependencyRepositories, setPublishDependencyRepositories] = useState<RepositoryDefinition[]>([]);
   const [publishSchedules, setPublishSchedules] = useState<ScriptSchedule[]>([]);
   const [publishMetadataLoading, setPublishMetadataLoading] = useState(false);
   const [publishConfigPreview, setPublishConfigPreview] = useState<RepositoryPublishConfigPreview | null>(null);
@@ -94,19 +96,24 @@ export function useScriptPublishToRepo({
   const resolveDependencyVersionRange = (
     repositoryId: string | undefined,
     toolId: string | undefined,
-    currentValue?: string
+    currentValue?: string,
+    repositoryTools: RepositoryToolDescriptor[] = publishRepositoryTools
   ): string | undefined => {
     if (currentValue?.trim()) {
       return currentValue.trim();
     }
-    const descriptor = publishRepositoryTools.find(
+    const descriptor = repositoryTools.find(
       (item) => item.repositoryId === repositoryId && item.toolId === toolId
     );
     return descriptor?.version ? `>= ${descriptor.version}` : undefined;
   };
 
   const buildScriptDependencyDrafts = (
-    script: ScriptDefinition
+    script: ScriptDefinition,
+    repositories: RepositoryDefinition[],
+    repositoryTools: RepositoryToolDescriptor[],
+    preferredRepositoryId?: string,
+    previousDrafts: PublishScriptDependencyDraft[] = []
   ): PublishScriptDependencyDraft[] => {
     const declaredDependencies = new Map(
       (script.scriptDependencies ?? script.publishedSnapshot?.scriptDependencies ?? []).map((item) => [item.scriptId, item])
@@ -117,21 +124,50 @@ export function useScriptPublishToRepo({
         .filter((item) => Boolean(item.publishedSnapshot))
         .map((item) => [item.id, item])
     );
+    const previousDraftsByScriptId = new Map(previousDrafts.map((item) => [item.scriptId, item]));
+
+    const toDraft = (
+      scriptId: string,
+      repositoryId: string | undefined,
+      toolId: string | undefined,
+      versionRange: string | undefined,
+      state: PublishScriptDependencyDraft["state"]
+    ): PublishScriptDependencyDraft => ({
+      scriptId,
+      repositoryId,
+      toolId,
+      versionRange: resolveDependencyVersionRange(repositoryId, toolId, versionRange, repositoryTools),
+      state
+    });
 
     return extractScriptDependenciesFromSource(sourceText).map(({ scriptId }) => {
+      const previous = previousDraftsByScriptId.get(scriptId);
+      if (previous?.state === "MANUAL") {
+        return toDraft(scriptId, previous.repositoryId, previous.toolId, previous.versionRange, "MANUAL");
+      }
+
       const declared = declaredDependencies.get(scriptId);
+      if (declared?.repositoryId?.trim() && declared.toolId?.trim()) {
+        return toDraft(scriptId, declared.repositoryId, declared.toolId, declared.versionRange, "MANUAL");
+      }
+
       const localScript = publishedScripts.get(scriptId);
-      const repositoryId = declared?.repositoryId ?? localScript?.repositoryId;
-      const toolId = declared?.toolId ?? localScript?.repositoryToolId;
-      const fallbackVersion = declared?.versionRange
-        ?? (localScript?.repositoryVersion ? `>= ${localScript.repositoryVersion}` : undefined);
-      const versionRange = resolveDependencyVersionRange(repositoryId, toolId, fallbackVersion);
-      return {
-        scriptId,
-        repositoryId,
-        toolId,
-        versionRange
-      };
+      if (localScript?.repositoryId?.trim() && localScript.repositoryToolId?.trim()) {
+        return toDraft(
+          scriptId,
+          localScript.repositoryId,
+          localScript.repositoryToolId,
+          localScript.repositoryVersion ? `>= ${localScript.repositoryVersion}` : undefined,
+          "MANUAL"
+        );
+      }
+
+      const matched = autoMatchScriptDependency(scriptId, repositories, repositoryTools, preferredRepositoryId);
+      if (matched) {
+        return toDraft(scriptId, matched.repositoryId, matched.toolId, matched.versionRange, "AUTO");
+      }
+
+      return toDraft(scriptId, undefined, undefined, undefined, "UNRESOLVED");
     });
   };
 
@@ -146,16 +182,27 @@ export function useScriptPublishToRepo({
         listSchedules(),
         listRepositoryTools()
       ]);
+      const enabledRepositories = getEnabledRepositories(repositories);
       const publishableRepositories = getPublishableRepositories(repositories);
       const relatedSchedules = schedules
         .filter((item) => item.scriptId === script.id)
         .sort((left, right) => left.name.localeCompare(right.name));
+      const initialRepositoryId = initialValues?.repositoryId
+        ?? (script.scope === "DEVELOPMENT" && script.repositoryId
+          ? script.repositoryId
+          : publishableRepositories[0]?.id);
 
       setPublishRepositories(publishableRepositories);
+      setPublishDependencyRepositories(enabledRepositories);
       setPublishRepositoryTools(repositoryTools);
       setPublishSchedules(relatedSchedules);
       setPublishHasDynamicScriptDependencies(hasDynamicScriptDependencies(sourceText));
-      setPublishScriptDependencies(buildScriptDependencyDrafts(script));
+      setPublishScriptDependencies(buildScriptDependencyDrafts(
+        script,
+        enabledRepositories,
+        repositoryTools,
+        initialRepositoryId
+      ));
       setPublishConfigPreview(null);
       setPublishConfigModes({});
       setPublishVersionSuggestion({ status: "IDLE" });
@@ -163,9 +210,7 @@ export function useScriptPublishToRepo({
       configPreviewRequestRef.current += 1;
       versionManuallyEditedRef.current = false;
       publishForm.setFieldsValue({
-        repositoryId: script.scope === "DEVELOPMENT" && script.repositoryId
-          ? script.repositoryId
-          : publishableRepositories[0]?.id,
+        repositoryId: initialRepositoryId,
         toolId: script.repositoryToolId || script.id,
         displayName: script.name,
         version: suggestNextRepositoryVersion(script.repositoryVersion),
@@ -302,8 +347,22 @@ export function useScriptPublishToRepo({
       return;
     }
     setPublishHasDynamicScriptDependencies(hasDynamicScriptDependencies(sourceText));
-    setPublishScriptDependencies(buildScriptDependencyDrafts(currentScript));
-  }, [availableScripts, currentScript, publishRepositoryTools, publishToRepositoryOpen, sourceText]);
+    setPublishScriptDependencies((previous) => buildScriptDependencyDrafts(
+      currentScript,
+      publishDependencyRepositories,
+      publishRepositoryTools,
+      selectedRepositoryId,
+      previous
+    ));
+  }, [
+    availableScripts,
+    currentScript,
+    publishDependencyRepositories,
+    publishRepositoryTools,
+    publishToRepositoryOpen,
+    selectedRepositoryId,
+    sourceText
+  ]);
 
   const handlePublishFormValuesChange = (changedValues: Partial<PublishToRepositoryFormValues>) => {
     if (Object.prototype.hasOwnProperty.call(changedValues, "version")) {
@@ -319,7 +378,8 @@ export function useScriptPublishToRepo({
       const next = { ...item, ...changedValues };
       return {
         ...next,
-        versionRange: resolveDependencyVersionRange(next.repositoryId, next.toolId, next.versionRange)
+        versionRange: resolveDependencyVersionRange(next.repositoryId, next.toolId, next.versionRange),
+        state: "MANUAL"
       };
     }));
   };
@@ -439,6 +499,7 @@ export function useScriptPublishToRepo({
     setPublishToRepositoryOpen,
     publishingToRepository,
     publishRepositories,
+    publishDependencyRepositories,
     publishSchedules,
     publishMetadataLoading,
     publishConfigPreview,

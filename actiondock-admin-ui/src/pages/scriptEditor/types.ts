@@ -43,6 +43,7 @@ export interface PublishScriptDependencyDraft {
   repositoryId?: string;
   toolId?: string;
   versionRange?: string;
+  state: "AUTO" | "MANUAL" | "UNRESOLVED";
 }
 
 export type { ForkFormValues } from "../../types";

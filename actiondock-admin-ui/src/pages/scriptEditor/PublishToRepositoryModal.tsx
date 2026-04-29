@@ -75,8 +75,13 @@ function renderScriptDependencyList(
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
               <Space wrap size={[8, 8]}>
                 <Text code>{dependency.scriptId}</Text>
+                {dependency.state === "AUTO" ? <Tag color="green">已自动匹配</Tag> : null}
+                {dependency.state === "UNRESOLVED" ? <Tag color="orange">未匹配</Tag> : null}
                 {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>待补全版本</Tag>}
               </Space>
+              {dependency.state === "AUTO" && dependency.repositoryId && dependency.toolId ? (
+                <Text type="secondary">已自动匹配到 {dependency.repositoryId} / {dependency.toolId}</Text>
+              ) : null}
               <Space size={12} style={{ width: "100%" }} wrap>
                 <Select
                   value={dependency.repositoryId}
@@ -124,6 +129,7 @@ interface PublishToRepositoryModalProps {
   form: FormInstance<PublishToRepositoryFormValues>;
   versionSuggestion: RepositoryPublishVersionSuggestion;
   repositories: RepositoryDefinition[];
+  dependencyRepositories: RepositoryDefinition[];
   schedules: ScriptSchedule[];
   configPreview: RepositoryPublishConfigPreview | null;
   configPreviewLoading: boolean;
@@ -175,6 +181,7 @@ export function PublishToRepositoryModal({
   form,
   versionSuggestion,
   repositories,
+  dependencyRepositories,
   schedules,
   configPreview,
   configPreviewLoading,
@@ -301,10 +308,10 @@ export function PublishToRepositoryModal({
                   description="仓库发布仅支持字面量 scripts.invoke(...) 依赖，请先把动态脚本 ID 改成固定字符串。"
                 />
               ) : null}
-              {renderScriptDependencyList(scriptDependencies, repositories, repositoryTools, onScriptDependencyChange)}
+              {renderScriptDependencyList(scriptDependencies, dependencyRepositories, repositoryTools, onScriptDependencyChange)}
               {scriptDependencies.length > 0 ? (
                 <Text type="secondary">
-                  每个逻辑脚本 ID 都需要映射到一个仓库工具；安装仓库工具时可选择递归安装这些脚本依赖。
+                  会优先在当前目标仓库内按同名 toolId 自动匹配，未命中时再扫描其他已启用仓库；你仍然可以手动改写。
                 </Text>
               ) : null}
             </Space>

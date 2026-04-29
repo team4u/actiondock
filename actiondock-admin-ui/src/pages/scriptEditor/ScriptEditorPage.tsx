@@ -565,6 +565,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         form={publishToRepo.publishForm}
         versionSuggestion={publishToRepo.publishVersionSuggestion}
         repositories={publishToRepo.publishRepositories}
+        dependencyRepositories={publishToRepo.publishDependencyRepositories}
         schedules={publishToRepo.publishSchedules}
         configPreview={publishToRepo.publishConfigPreview}
         configPreviewLoading={publishToRepo.publishConfigPreviewLoading}

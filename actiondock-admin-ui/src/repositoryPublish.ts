@@ -1,9 +1,14 @@
 import type { RepositoryDefinition } from "./types";
 
-export function getPublishableRepositories(repositories: RepositoryDefinition[]): RepositoryDefinition[] {
+export function getEnabledRepositories(repositories: RepositoryDefinition[]): RepositoryDefinition[] {
   return repositories
-    .filter((item) => item.enabled && item.type !== "HTTP")
+    .filter((item) => item.enabled)
     .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+export function getPublishableRepositories(repositories: RepositoryDefinition[]): RepositoryDefinition[] {
+  return getEnabledRepositories(repositories)
+    .filter((item) => item.type !== "HTTP");
 }
 
 export function pickDefaultPublishRepository(repositories: RepositoryDefinition[]): RepositoryDefinition | undefined {
