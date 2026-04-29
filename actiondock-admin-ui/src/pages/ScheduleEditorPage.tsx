@@ -745,7 +745,6 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                             title="调试结果"
                             pollingExecutionId={pollingExecutionId}
                             errorTitle="调试执行失败"
-                            aiDiagnoseTo={`/ai/workbench?task=diagnose&scriptId=${encodeURIComponent(debugResult.scriptId)}&executionId=${encodeURIComponent(debugResult.id)}`}
                           />
                         )}
                       </Space>
@@ -819,7 +818,6 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
             outputSchema={selectedScript?.outputSchema}
             title="执行记录"
             showTriggerSource
-            aiDiagnoseTo={`/ai/workbench?task=diagnose&scriptId=${encodeURIComponent(historyDetailRecord.scriptId)}&executionId=${encodeURIComponent(historyDetailRecord.id)}`}
           />
         ) : null}
       </Drawer>

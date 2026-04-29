@@ -835,7 +835,6 @@ export function BatchRunPanel({
               inputSchema={inputSchema}
               outputSchema={outputSchema}
               title={`第 ${selectedItem.rowIndex} 行详情`}
-              aiDiagnoseTo={`/ai/workbench?task=diagnose&scriptId=${encodeURIComponent(selectedItem.execution.scriptId)}&executionId=${encodeURIComponent(selectedItem.execution.id)}`}
             />
           ) : (
             <Space direction="vertical" size={12} style={{ width: "100%" }}>

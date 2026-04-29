@@ -8,8 +8,6 @@ import type {
   AiAgentRunResult,
   AiAgentRunSnapshot,
   AiAgentRunSubmission,
-  AiWorkbenchCommand,
-  AiWorkbenchResult,
   AiChatRequest,
   AiChatResponse,
   AiModelProfile,
@@ -370,54 +368,6 @@ export function resumeAiRun(id: string, payload: Record<string, unknown> = {}): 
 export function cancelAiRun(id: string): Promise<void> {
   return request<void>(`/api/ai/agents/runs/${encodeURIComponent(id)}/cancel`, {
     method: "POST"
-  });
-}
-
-export function generateWorkbenchScript(payload: AiWorkbenchCommand): Promise<AiWorkbenchResult> {
-  return request<AiWorkbenchResult>("/api/ai/workbench/scripts/generate", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function improveWorkbenchScript(payload: AiWorkbenchCommand): Promise<AiWorkbenchResult> {
-  return request<AiWorkbenchResult>("/api/ai/workbench/scripts/improve", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function improveWorkbenchSchema(payload: AiWorkbenchCommand): Promise<AiWorkbenchResult> {
-  return request<AiWorkbenchResult>("/api/ai/workbench/schemas/improve", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function diagnoseWorkbenchExecution(executionId: string, payload: AiWorkbenchCommand): Promise<AiWorkbenchResult> {
-  return request<AiWorkbenchResult>(`/api/ai/workbench/executions/${encodeURIComponent(executionId)}/diagnose`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function reviewWorkbenchPublish(scriptId: string, payload: AiWorkbenchCommand): Promise<AiWorkbenchResult> {
-  return request<AiWorkbenchResult>(`/api/ai/workbench/scripts/${encodeURIComponent(scriptId)}/review-publish`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function generateWorkbenchReleaseNotes(scriptId: string, payload: AiWorkbenchCommand): Promise<AiWorkbenchResult> {
-  return request<AiWorkbenchResult>(`/api/ai/workbench/scripts/${encodeURIComponent(scriptId)}/release-notes`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
   });
 }
 

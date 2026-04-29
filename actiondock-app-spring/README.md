@@ -1,6 +1,6 @@
 # actiondock-app-spring
 
-Spring Boot Web 入口模块，负责把脚本平台和 AI 工作台以 REST API 与管理台页面的形式对外暴露。
+Spring Boot Web 入口模块，负责把脚本平台和 AI 能力以 REST API 与管理台页面的形式对外暴露。
 
 ## 提供什么
 
@@ -91,7 +91,6 @@ npm run dev
 | `/api/shared-state` | 通用共享状态管理 |
 | `/api/access-tokens` | 访问令牌管理 |
 | `/api/ai` | 模型、Agent、Toolset、AI Tool、Agent Run 和调用日志 |
-| `/api/ai/workbench` | 脚本生成、改进、诊断、评审等工作台能力 |
 | `/api/schema` | 脚本输入/输出 Schema 摘要 |
 | `/api/installed-tools` | 已安装仓库工具卸载入口 |
 

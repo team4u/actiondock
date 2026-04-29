@@ -52,18 +52,4 @@ describe("ExecutionResultCard", () => {
     expect(successHtml).not.toContain("AI 诊断");
   });
 
-  it("shows AI review only for successful executions", () => {
-    const successHtml = renderToStaticMarkup(
-      <ExecutionResultCard execution={execution} onAiReview={() => undefined} />
-    );
-    const failedHtml = renderToStaticMarkup(
-      <ExecutionResultCard
-        execution={{ ...execution, status: "FAILED", errorMessage: "boom" }}
-        onAiReview={() => undefined}
-      />
-    );
-
-    expect(successHtml).toContain("AI 发布前 Review");
-    expect(failedHtml).not.toContain("AI 发布前 Review");
-  });
 });

@@ -2,8 +2,7 @@ import {
   ArrowLeftOutlined,
   PlayCircleOutlined,
   QuestionCircleOutlined,
-  ReloadOutlined,
-  RobotOutlined
+  ReloadOutlined
 } from "@ant-design/icons";
 import {
   Alert,
@@ -477,15 +476,6 @@ export function ScriptRunPage() {
                           message={executionResult.errorMessage}
                           detail={executionResult.errorDetail}
                         />
-
-                        {executionResult.status === "FAILED" ? (
-                          <Button
-                            icon={<RobotOutlined />}
-                            onClick={() => navigate(`/ai/workbench?task=diagnose&scriptId=${encodeURIComponent(executionResult.scriptId)}&executionId=${encodeURIComponent(executionResult.id)}`)}
-                          >
-                            AI 诊断
-                          </Button>
-                        ) : null}
 
                         {hasStructuredOutput ? (
                           <div className="run-output-list">

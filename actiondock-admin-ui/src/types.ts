@@ -13,7 +13,7 @@ export type AiModelProvider = "DASHSCOPE" | "OPENAI" | "OPENAI_COMPATIBLE" | "AN
 export type AiToolPermission = "READ_ONLY" | "PROPOSE_CHANGE" | "CONTROLLED_ACTION" | "DANGEROUS_ACTION";
 export type AiToolSourceType = "SYSTEM" | "SCRIPT" | "AGENT";
 export type AiRunStatus = "RUNNING" | "SUCCESS" | "FAILED" | "WAITING_APPROVAL" | "CANCELLED" | "INTERRUPTED";
-export type AiCallerType = "SCRIPT" | "PLUGIN" | "WORKBENCH" | "ADMIN_TEST" | "AGENT";
+export type AiCallerType = "SCRIPT" | "PLUGIN" | "ADMIN_TEST" | "AGENT";
 export type AiStepType = "MODEL_REASONING" | "TOOL_CALL" | "TOOL_RESULT" | "APPROVAL" | "INTERRUPT";
 export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
@@ -235,33 +235,6 @@ export interface AiAgentRunRecord {
 
 export interface AiAgentRunSnapshot extends AiAgentRunRecord {
   steps: AiAgentStep[];
-}
-
-export type AiWorkbenchTaskType =
-  | "GENERATE_SCRIPT"
-  | "IMPROVE_SCRIPT"
-  | "IMPROVE_SCHEMA"
-  | "DIAGNOSE_EXECUTION"
-  | "REVIEW_BEFORE_PUBLISH"
-  | "GENERATE_RELEASE_NOTES";
-
-export interface AiWorkbenchCommand {
-  objective?: string;
-  instructions?: string;
-  agentProfile?: string;
-  scriptId?: string;
-  executionId?: string;
-  context?: Record<string, unknown>;
-}
-
-export interface AiWorkbenchResult {
-  taskType: AiWorkbenchTaskType;
-  status: AiRunStatus;
-  result: Record<string, unknown>;
-  agentRunId?: string;
-  steps: AiAgentStep[];
-  rawOutput: Record<string, unknown>;
-  errorMessage?: string;
 }
 
 export interface ExecutionRecord {

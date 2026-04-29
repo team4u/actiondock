@@ -8,7 +8,6 @@ import {
   Typography
 } from "antd";
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { ErrorDetailPanel } from "./ErrorDetailPanel";
 import { ExecutionLogPanel } from "./ExecutionLogPanel";
 import { SchemaObjectResultView } from "./SchemaObjectResultView";
@@ -33,8 +32,6 @@ export interface ExecutionResultCardProps {
   errorTitle?: string;
   aiDiagnoseTo?: string;
   onAiDiagnose?: () => void;
-  aiReviewTo?: string;
-  onAiReview?: () => void;
 }
 
 function getTriggerSourceLabel(source: string): string {
@@ -77,9 +74,7 @@ export function ExecutionResultCard({
   pollingExecutionId,
   errorTitle = "执行失败",
   aiDiagnoseTo,
-  onAiDiagnose,
-  aiReviewTo,
-  onAiReview
+  onAiDiagnose
 }: ExecutionResultCardProps) {
   const inputValue = inputOverride ?? (hasInput(execution) ? execution.input : undefined);
   const hasOutputSchema = Boolean(outputSchema && Object.keys(outputSchema).length > 0);
@@ -145,24 +140,8 @@ export function ExecutionResultCard({
           detail={execution.errorDetail}
         />
 
-        {execution.status === "FAILED" && (aiDiagnoseTo || onAiDiagnose) ? (
-          aiDiagnoseTo ? (
-            <Link to={aiDiagnoseTo}>
-              <Button icon={<RobotOutlined />}>AI 诊断</Button>
-            </Link>
-          ) : (
+        {execution.status === "FAILED" && onAiDiagnose ? (
             <Button icon={<RobotOutlined />} onClick={onAiDiagnose}>AI 诊断</Button>
-          )
-        ) : null}
-
-        {execution.status === "SUCCESS" && (aiReviewTo || onAiReview) ? (
-          aiReviewTo ? (
-            <Link to={aiReviewTo}>
-              <Button icon={<RobotOutlined />}>AI 发布前 Review</Button>
-            </Link>
-          ) : (
-            <Button icon={<RobotOutlined />} onClick={onAiReview}>AI 发布前 Review</Button>
-          )
         ) : null}
 
         <Tabs

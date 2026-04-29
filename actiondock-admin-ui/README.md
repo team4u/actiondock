@@ -23,7 +23,6 @@ React + Vite 管理台模块，承载脚本平台和 AI 工作台的可视化操
 
 AI 相关能力主要分布在：
 
-- `aiWorkbench.ts`
 - `aiAgentTools.ts`
 - `pages` 下的脚本编辑、运行和系统设置相关页面
 

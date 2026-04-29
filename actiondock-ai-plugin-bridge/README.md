@@ -27,25 +27,6 @@ def result = plugins.invoke("actiondock-ai", "chat", [
 return [summary: result.text]
 ```
 
-```groovy
-def run = plugins.invoke("actiondock-ai", "agentRun", [
-  agentProfile: "workbench-script-dev-agent",
-  messages: [
-    [role: "user", content: "分析当前脚本并给出改进建议"]
-  ],
-  input: [
-    goal: "review script",
-    scriptId: "hello-groovy"
-  ]
-])
-
-return [
-  agentRunId: run.runId,
-  status: run.status,
-  output: run.output
-]
-```
-
 ## 使用约定
 
 - `chat`、`structured`、`embed` 使用 `modelProfile`

@@ -57,9 +57,6 @@ const SystemSettingsPage = lazy(() =>
 const AiOverviewPage = lazy(() =>
   import("./pages/ai/AiOverviewPage").then((module) => ({ default: module.AiOverviewPage }))
 );
-const AiWorkbenchPage = lazy(() =>
-  import("./pages/ai/AiWorkbenchPage").then((module) => ({ default: module.AiWorkbenchPage }))
-);
 const AiModelProfileListPage = lazy(() =>
   import("./pages/ai/AiModelProfileListPage").then((module) => ({ default: module.AiModelProfileListPage }))
 );
@@ -260,7 +257,6 @@ function AdminShell() {
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
               <Route path="/ai" element={<AiOverviewPage />} />
-              <Route path="/ai/workbench" element={<AiWorkbenchPage />} />
               <Route path="/ai/models" element={<AiModelProfileListPage />} />
               <Route path="/ai/models/new" element={<AiModelProfileDetailPage />} />
               <Route path="/ai/models/:id" element={<AiModelProfileDetailPage />} />

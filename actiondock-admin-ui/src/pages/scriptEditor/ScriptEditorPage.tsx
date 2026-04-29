@@ -7,7 +7,6 @@ import {
   ForkOutlined,
   ImportOutlined,
   MoreOutlined,
-  RobotOutlined,
   RollbackOutlined,
   RocketOutlined,
   SaveOutlined,
@@ -79,16 +78,6 @@ import { ScriptExecutionTab } from "./ScriptExecutionTab";
 import type { ScriptEditorFormValues } from "./types";
 import type { ScriptEditorPageProps } from "./types";
 import type { ScriptType } from "../../types";
-import {
-  clearWorkbenchExecutionPrefill,
-  clearWorkbenchReleaseNotesDraft,
-  clearWorkbenchSchemaPatchApplication,
-  clearWorkbenchScriptPatchApplication,
-  readWorkbenchExecutionPrefill,
-  readWorkbenchReleaseNotesDraft,
-  readWorkbenchSchemaPatchApplication,
-  readWorkbenchScriptPatchApplication
-} from "../../workbenchSession";
 
 const { Text } = Typography;
 
@@ -301,99 +290,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   ]);
   const showDiffNotice = editor.hasUnpublishedChanges;
 
-  useEffect(() => {
-    if (mode !== "create" || searchParams.get("importGenerated") !== "1") {
-      return;
-    }
-    const generated = sessionStorage.getItem("actiondock.workbench.generatedScript");
-    if (!generated) {
-      return;
-    }
-    setGeneratedScriptText(generated);
-    setGeneratedScriptModalOpen(true);
-    sessionStorage.removeItem("actiondock.workbench.generatedScript");
-  }, [mode, searchParams]);
-
-  useEffect(() => {
-    if (mode !== "edit" || !editor.currentScript?.id) {
-      return;
-    }
-
-    const applyKind = searchParams.get("workbenchApply");
-    const shouldPrefill = searchParams.get("workbenchPrefill") === "1";
-    const shouldOpenReleaseNotes = searchParams.get("workbenchReleaseNotes") === "1";
-    const shouldAutoSave = searchParams.get("workbenchAutoSave") === "1";
-
-    if (!applyKind && !shouldPrefill && !shouldOpenReleaseNotes && !shouldAutoSave) {
-      return;
-    }
-
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("workbenchApply");
-    nextParams.delete("workbenchPrefill");
-    nextParams.delete("workbenchReleaseNotes");
-    nextParams.delete("workbenchAutoSave");
-    setSearchParams(nextParams, { replace: true });
-
-    void (async () => {
-      let appliedWorkbenchChange = false;
-
-      if (applyKind === "scriptPatch") {
-        const payload = readWorkbenchScriptPatchApplication();
-        clearWorkbenchScriptPatchApplication();
-        if (payload && payload.scriptId === editor.currentScript?.id) {
-          if (editor.isReadOnlyScript) {
-            messageApi.warning("当前脚本不可直接应用 AI 修改，请先 Fork");
-          } else {
-            editor.applyWorkbenchScriptPatch(payload.updatedSource);
-            appliedWorkbenchChange = true;
-          }
-        }
-      }
-
-      if (applyKind === "schemaPatch") {
-        const payload = readWorkbenchSchemaPatchApplication();
-        clearWorkbenchSchemaPatchApplication();
-        if (payload && payload.scriptId === editor.currentScript?.id) {
-          if (editor.isReadOnlyScript) {
-            messageApi.warning("当前脚本不可直接应用 AI 修改，请先 Fork");
-          } else {
-            editor.applyWorkbenchSchemaPatch(payload.inputSchemaPatch, payload.outputSchemaPatch);
-            appliedWorkbenchChange = true;
-          }
-        }
-      }
-
-      if (shouldPrefill) {
-        const payload = readWorkbenchExecutionPrefill();
-        clearWorkbenchExecutionPrefill();
-        if (payload && payload.scriptId === editor.currentScript?.id) {
-          execution.handleLoadPreset(payload.input);
-        }
-      }
-
-      if (shouldOpenReleaseNotes) {
-        const payload = readWorkbenchReleaseNotesDraft();
-        clearWorkbenchReleaseNotesDraft();
-        if (payload && payload.scriptId === editor.currentScript?.id) {
-          await publishToRepo.openPublishToRepositoryModal({ releaseNotes: payload.notes });
-        }
-      }
-
-      if (shouldAutoSave && appliedWorkbenchChange && !editor.isReadOnlyScript) {
-        await editor.handleSave();
-      }
-    })();
-  }, [
-    editor,
-    execution,
-    messageApi,
-    mode,
-    publishToRepo,
-    searchParams,
-    setSearchParams
-  ]);
-
   const openPublishConfirm = () => {
     if (!publishDiff.hasChanges && publishDiff.comparisonMode !== "INITIAL") {
       void editor.handlePublish();
@@ -417,41 +313,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   const dangerousMoreActionKeys = new Set(["discard-draft", "delete"]);
   const moreMenuItems: MenuProps["items"] = [
-    {
-      key: "ai-generate",
-      icon: <RobotOutlined />,
-      label: "AI 生成脚本",
-      onClick: () => navigate("/ai/workbench?task=generate")
-    },
-    ...(editor.currentScript?.id
-      ? [
-          {
-            key: "ai-improve",
-            icon: <RobotOutlined />,
-            label: "AI 修复脚本",
-            onClick: () => navigate(`/ai/workbench?task=improve&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
-          },
-          {
-            key: "ai-schema",
-            icon: <RobotOutlined />,
-            label: "AI 补全 Schema",
-            onClick: () => navigate(`/ai/workbench?task=schema&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
-          },
-          {
-            key: "ai-review",
-            icon: <RobotOutlined />,
-            label: "AI 发布前 Review",
-            onClick: () => navigate(`/ai/workbench?task=review&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
-          },
-          {
-            key: "ai-release-notes",
-            icon: <RobotOutlined />,
-            label: "AI Release Notes",
-            onClick: () => navigate(`/ai/workbench?task=releaseNotes&scriptId=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
-          },
-          { type: "divider" as const }
-        ]
-      : [{ type: "divider" as const }]),
     ...(editor.currentScript?.scope === "DEVELOPMENT"
       ? [{
           key: "pull-development",
@@ -643,12 +504,6 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             <Space className="page-card-actions script-editor-page__header-actions" wrap>
               {editor.headerActionModel.showForkOnly && editor.currentScript?.scope === "REPOSITORY" ? (
                 <>
-                  <Dropdown
-                    trigger={["click"]}
-                    menu={{ items: moreMenuItems.filter((item) => String(item?.key ?? "").startsWith("ai-")) }}
-                  >
-                    <Button icon={<RobotOutlined />}>AI Workbench</Button>
-                  </Dropdown>
                   <Button icon={<ForkOutlined />} type="primary" onClick={fork.openForkModal} loading={fork.forkingRepositoryTool}>
                     创建 Fork
                   </Button>

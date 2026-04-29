@@ -37,29 +37,6 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-.ai-workbench-layout {
-  display: grid;
-  grid-template-columns: 250px minmax(320px, 0.9fr) minmax(360px, 1.1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.ai-workbench-nav,
-.ai-workbench-form,
-.ai-workbench-result {
-  min-width: 0;
-}
-
-.ai-workbench-nav__item {
-  cursor: pointer;
-  border-radius: 8px;
-  padding: 10px 12px !important;
-}
-
-.ai-workbench-nav__item--active {
-  background: rgba(35, 87, 213, 0.10);
-}
-
 .ai-management-card {
   height: 100%;
 }
@@ -79,16 +56,6 @@
   color: var(--app-primary);
   background: var(--app-primary-soft);
   font-size: 18px;
-}
-
-html[data-theme="dark"] .ai-workbench-nav__item--active {
-  background: rgba(138, 180, 255, 0.14);
-}
-
-@media (max-width: 1180px) {
-  .ai-workbench-layout {
-    grid-template-columns: 1fr;
-  }
 }
 
 :root[data-theme="dark"] {

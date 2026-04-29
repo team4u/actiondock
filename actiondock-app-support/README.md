@@ -7,7 +7,7 @@
 - 装配脚本执行引擎
 - 装配 PF4J 插件运行时
 - 装配仓库解析与插件制品解析
-- 暴露 AI Workbench 和动态 Tool Provider
+- 暴露动态 Tool Provider
 - 提供统一应用配置 `AppProperties`
 
 ## 关键组件
@@ -32,10 +32,9 @@
 - `LocalPluginArtifactResolver`
 - `HttpPluginArtifactResolver`
 
-### AI 与工作台
+### AI
 
 - `org.team4u.actiondock.ai.tool`
-- `org.team4u.actiondock.ai.workbench`
 
 ## 默认配置关注点
 
@@ -150,7 +149,7 @@ if (!result.updated) {
 - 运行时实现与装配
 - 脚本引擎和插件交互
 - 仓库文件系统和网络制品解析
-- 工作台辅助服务
+- AI 辅助服务
 
 不适合放这里的是纯领域规则，那些应留在 `actiondock-core` 或 `actiondock-ai-*`。
 

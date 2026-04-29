@@ -1,7 +1,6 @@
 package org.team4u.actiondock.ai;
 
 import org.junit.jupiter.api.Test;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiAgentRunContext;
@@ -43,10 +42,6 @@ import org.team4u.actiondock.ai.core.AiAgentProfileService;
 import org.team4u.actiondock.ai.core.AiAgentRuntimeImpl;
 import org.team4u.actiondock.ai.core.AiToolRegistryImpl;
 import org.team4u.actiondock.ai.tool.ActionDockAiTools;
-import org.team4u.actiondock.ai.workbench.AiWorkbenchCommand;
-import org.team4u.actiondock.ai.workbench.AiWorkbenchDefaults;
-import org.team4u.actiondock.ai.workbench.AiWorkbenchResult;
-import org.team4u.actiondock.ai.workbench.AiWorkbenchService;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -208,113 +203,6 @@ class AiRuntimePolicyTest {
     }
 
     @Test
-    void workbenchAgentRunAllowsDangerousToolsWithoutAgentPermissionCap() {
-        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
-        models.save(new AiModelProfile()
-                .setId("model")
-                .setName("Model")
-                .setModelProvider(AiModelProvider.OPENAI)
-                .setModelName("gpt-test")
-                .setCapabilities(java.util.Set.of(AiCapability.CHAT)));
-        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
-        agents.save(new AiAgentProfile()
-                .setId("agent")
-                .setName("Agent")
-                .setModelProfileId("model")
-                .setToolsetIds(List.of("controlled-tools")));
-        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
-        toolsets.save(new AiToolset()
-                .setId("controlled-tools")
-                .setName("Controlled Tools")
-                .setMaxPermission(AiToolPermission.DANGEROUS_ACTION)
-                .setToolNames(List.of("run_script")));
-        AiToolRegistryImpl registry = new AiToolRegistryImpl(toolsets, List.of(new TestTool("run_script", AiToolPermission.DANGEROUS_ACTION)));
-        CapturingProviderClient providerClient = new CapturingProviderClient();
-        AiAgentRuntime runtime = new AiAgentRuntimeImpl(
-                new AiAgentProfileService(agents, models),
-                models,
-                new InMemoryAiAgentRunRepository(),
-                new InMemoryAiAgentStepRepository(),
-                providerClient,
-                registry
-        );
-
-        AiAgentRunResult result = runtime.run(
-                new AiAgentRunRequest("agent", List.of(new AiMessage("user", "review")), Map.of(), Map.of()),
-                new AiAgentRunContext(AiCallerType.WORKBENCH, "script-1", null, null, Map.of())
-        );
-
-        assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
-        assertThat(providerClient.context.metadata()).doesNotContainKey("maxToolPermission");
-    }
-
-    @Test
-    void workbenchDefaultsCreateOnlyMissingProfiles() {
-        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
-        models.save(new AiModelProfile()
-                .setId(AiWorkbenchDefaults.MODEL_PROFILE_ID)
-                .setName("User Custom Model")
-                .setModelProvider(AiModelProvider.OPENAI)
-                .setModelName("custom"));
-        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
-        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
-
-        new AiWorkbenchDefaults(models, toolsets, agents).initializeMissingDefaults();
-
-        assertThat(models.findById(AiWorkbenchDefaults.MODEL_PROFILE_ID).orElseThrow().getName())
-                .isEqualTo("User Custom Model");
-        assertThat(toolsets.findById(AiWorkbenchDefaults.READONLY_TOOLSET_ID)).isPresent();
-        assertThat(toolsets.findById(AiWorkbenchDefaults.PROPOSAL_TOOLSET_ID).orElseThrow().getMaxPermission())
-                .isEqualTo(AiToolPermission.PROPOSE_CHANGE);
-        assertThat(agents.findById(AiWorkbenchDefaults.SCRIPT_DEV_AGENT_ID)).isPresent();
-        assertThat(agents.findById(AiWorkbenchDefaults.EXECUTION_DEBUG_AGENT_ID)).isPresent();
-    }
-
-    @Test
-    void workbenchGenerateScriptReturnsStructuredDraftAndRunContext() {
-        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
-        models.save(new AiModelProfile()
-                .setId("model")
-                .setName("Model")
-                .setModelProvider(AiModelProvider.OPENAI)
-                .setModelName("gpt-test")
-                .setCapabilities(java.util.Set.of(AiCapability.CHAT)));
-        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
-        agents.save(new AiAgentProfile()
-                .setId(AiWorkbenchDefaults.SCRIPT_DEV_AGENT_ID)
-                .setName("Workbench")
-                .setModelProfileId("model")
-                .setToolsetIds(List.of()));
-        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
-        StructuredProviderClient providerClient = new StructuredProviderClient(Map.of(
-                "scriptDraft", Map.of(
-                        "id", "hello-ai",
-                        "name", "Hello AI",
-                        "source", "return [ok: true]",
-                        "inputSchema", Map.of("type", "object"),
-                        "outputSchema", Map.of("type", "object")
-                )
-        ));
-        AiAgentRuntime runtime = new AiAgentRuntimeImpl(
-                new AiAgentProfileService(agents, models),
-                models,
-                new InMemoryAiAgentRunRepository(),
-                new InMemoryAiAgentStepRepository(),
-                providerClient,
-                new AiToolRegistryImpl(toolsets, List.of())
-        );
-        AiWorkbenchService service = new AiWorkbenchService(runtime, new InMemoryScriptRepository(), new InMemoryExecutionRepository(), new ObjectMapper());
-
-        AiWorkbenchResult result = service.generateScript(new AiWorkbenchCommand("build hello", null, null, null, null, Map.of()));
-
-        assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
-        assertThat(result.result()).containsEntry("id", "hello-ai");
-        assertThat(result.agentRunId()).isNotBlank();
-        assertThat(providerClient.context.callerType()).isEqualTo(AiCallerType.WORKBENCH);
-        assertThat(providerClient.context.metadata()).doesNotContainKey("maxToolPermission");
-    }
-
-    @Test
     void agentRuntimeReturnsFailedRunWhenProviderThrowsAfterRunCreated() {
         InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
         models.save(new AiModelProfile()
@@ -341,7 +229,7 @@ class AiRuntimePolicyTest {
 
         AiAgentRunResult result = runtime.run(
                 new AiAgentRunRequest("agent", List.of(new AiMessage("user", "run")), Map.of(), Map.of()),
-                new AiAgentRunContext(AiCallerType.WORKBENCH, "script-1", null, null, Map.of())
+                new AiAgentRunContext(AiCallerType.ADMIN_TEST, "script-1", null, null, Map.of())
         );
 
         assertThat(result.status()).isEqualTo(AiRunStatus.FAILED);
@@ -467,203 +355,6 @@ class AiRuntimePolicyTest {
         assertThat(runs.findById(result.runId()).orElseThrow().getOutputSummary())
                 .containsEntry("text", "partial answer")
                 .containsEntry("errorMessage", "provider boom");
-    }
-
-    @Test
-    void workbenchMarksUnstructuredAgentOutputAsFailedWithRunId() {
-        AiWorkbenchService service = new AiWorkbenchService(
-                workbenchRuntime(new StructuredProviderClient(Map.of("text", "plain answer"))),
-                new InMemoryScriptRepository(),
-                new InMemoryExecutionRepository(),
-                new ObjectMapper()
-        );
-
-        AiWorkbenchResult result = service.generateScript(new AiWorkbenchCommand("build hello", null, null, null, null, Map.of()));
-
-        assertThat(result.status()).isEqualTo(AiRunStatus.FAILED);
-        assertThat(result.agentRunId()).isNotBlank();
-        assertThat(result.rawOutput()).containsEntry("text", "plain answer");
-        assertThat(result.errorMessage()).contains("scriptDraft");
-    }
-
-    @Test
-    void workbenchParsesDataTextJsonToolOutputAndProposalPayload() {
-        Map<String, Object> draft = Map.of("id", "from-text", "source", "return [ok: true]");
-        AiWorkbenchResult dataResult = new AiWorkbenchService(
-                workbenchRuntime(new StructuredProviderClient(Map.of("data", Map.of("scriptDraft", Map.of("id", "from-data"))))),
-                new InMemoryScriptRepository(),
-                new InMemoryExecutionRepository(),
-                new ObjectMapper()
-        ).generateScript(new AiWorkbenchCommand("build", null, null, null, null, Map.of()));
-
-        AiWorkbenchResult textResult = new AiWorkbenchService(
-                workbenchRuntime(new StructuredProviderClient(Map.of("text", "{\"scriptDraft\":{\"id\":\"from-text\",\"source\":\"return [ok: true]\"}}"))),
-                new InMemoryScriptRepository(),
-                new InMemoryExecutionRepository(),
-                new ObjectMapper()
-        ).generateScript(new AiWorkbenchCommand("build", null, null, null, null, Map.of()));
-
-        AiWorkbenchResult toolResult = new AiWorkbenchService(
-                workbenchRuntime(new StepOutputProviderClient(Map.of("scriptDraft", Map.of("id", "from-tool")))),
-                new InMemoryScriptRepository(),
-                new InMemoryExecutionRepository(),
-                new ObjectMapper()
-        ).generateScript(new AiWorkbenchCommand("build", null, null, null, null, Map.of()));
-
-        AiWorkbenchResult proposalResult = new AiWorkbenchService(
-                workbenchRuntime(new StepOutputProviderClient(Map.of("proposal", Map.of("resultKey", "scriptDraft", "payload", Map.of("id", "from-proposal"))))),
-                new InMemoryScriptRepository(),
-                new InMemoryExecutionRepository(),
-                new ObjectMapper()
-        ).generateScript(new AiWorkbenchCommand("build", null, null, null, null, Map.of()));
-
-        assertThat(dataResult.result()).containsEntry("id", "from-data");
-        assertThat(textResult.result()).containsEntry("id", draft.get("id"));
-        assertThat(toolResult.result()).containsEntry("id", "from-tool");
-        assertThat(proposalResult.result()).containsEntry("id", "from-proposal");
-    }
-
-    @Test
-    void workbenchParsesScriptPatchWithUpdatedSourceFromProposalPayload() {
-        InMemoryScriptRepository scripts = new InMemoryScriptRepository();
-        scripts.save(new ScriptDefinition().setId("script-1").setName("Script").setSource("return [:]"));
-
-        AiWorkbenchResult result = new AiWorkbenchService(
-                workbenchRuntime(new StepOutputProviderClient(
-                        "propose_script_patch",
-                        Map.of("proposal", Map.of(
-                                "resultKey", "scriptPatch",
-                                "payload", Map.of(
-                                        "scriptId", "script-1",
-                                        "patch", "@@ -1 +1 @@",
-                                        "updatedSource", "return [patched: true]"
-                                )
-                        ))
-                )),
-                scripts,
-                new InMemoryExecutionRepository(),
-                new ObjectMapper()
-        ).improveScript(new AiWorkbenchCommand("fix", null, null, "script-1", null, Map.of()));
-
-        assertThat(result.result())
-                .containsEntry("scriptId", "script-1")
-                .containsEntry("updatedSource", "return [patched: true]");
-    }
-
-    @Test
-    void workbenchBuildsRequestContextForScriptAndExecutionTasks() {
-        InMemoryScriptRepository scripts = new InMemoryScriptRepository();
-        scripts.save(new ScriptDefinition().setId("script-1").setName("Script").setSource("return [:]"));
-        InMemoryExecutionRepository executions = new InMemoryExecutionRepository();
-        executions.save(new ExecutionRecord().setId("exec-1").setScriptId("script-1"));
-        StructuredProviderClient providerClient = new StructuredProviderClient(Map.of(
-                "executionDiagnosis", Map.of("rootCause", "boom")
-        ));
-        AiWorkbenchService service = new AiWorkbenchService(
-                workbenchRuntime(providerClient),
-                scripts,
-                executions,
-                new ObjectMapper()
-        );
-
-        AiWorkbenchResult result = service.diagnoseExecution("exec-1", new AiWorkbenchCommand("diagnose", null, null, null, null, Map.of()));
-
-        assertThat(result.status()).isEqualTo(AiRunStatus.SUCCESS);
-        assertThat(providerClient.request.agentProfile()).isEqualTo(AiWorkbenchDefaults.EXECUTION_DEBUG_AGENT_ID);
-        assertThat(providerClient.request.input()).containsEntry("taskType", "DIAGNOSE_EXECUTION");
-        assertThat(providerClient.context.callerType()).isEqualTo(AiCallerType.WORKBENCH);
-        assertThat(providerClient.context.scriptId()).isEqualTo("script-1");
-        assertThat(providerClient.context.executionId()).isEqualTo("exec-1");
-    }
-
-    @Test
-    void workbenchIncludesOptionalExecutionContextForReviewAndReleaseNotesTasks() {
-        InMemoryScriptRepository scripts = new InMemoryScriptRepository();
-        scripts.save(new ScriptDefinition().setId("script-1").setName("Script").setSource("return [:]"));
-        InMemoryExecutionRepository executions = new InMemoryExecutionRepository();
-        executions.save(new ExecutionRecord()
-                .setId("exec-1")
-                .setScriptId("script-1")
-                .setInput(Map.of("name", "Alice"))
-                .setErrorMessage("boom"));
-
-        StructuredProviderClient reviewProviderClient = new StructuredProviderClient(Map.of(
-                "publishReview", Map.of("recommendation", "approve")
-        ));
-        AiWorkbenchResult review = new AiWorkbenchService(
-                workbenchRuntime(reviewProviderClient),
-                scripts,
-                executions,
-                new ObjectMapper()
-        ).reviewBeforePublish("script-1", new AiWorkbenchCommand("review", null, null, null, "exec-1", Map.of()));
-
-        assertThat(review.status()).isEqualTo(AiRunStatus.SUCCESS);
-        assertThat(reviewProviderClient.request.input()).containsKey("execution");
-        assertThat(reviewProviderClient.context.executionId()).isEqualTo("exec-1");
-
-        StructuredProviderClient releaseProviderClient = new StructuredProviderClient(Map.of(
-                "releaseNotes", Map.of("notes", "Ship it")
-        ));
-        AiWorkbenchResult release = new AiWorkbenchService(
-                workbenchRuntime(releaseProviderClient),
-                scripts,
-                executions,
-                new ObjectMapper()
-        ).generateReleaseNotes("script-1", new AiWorkbenchCommand("release", null, null, null, "exec-1", Map.of()));
-
-        assertThat(release.status()).isEqualTo(AiRunStatus.SUCCESS);
-        assertThat(releaseProviderClient.request.input()).containsKey("execution");
-        assertThat(releaseProviderClient.context.executionId()).isEqualTo("exec-1");
-    }
-
-    @Test
-    void workbenchRejectsMismatchedOptionalExecutionContext() {
-        InMemoryScriptRepository scripts = new InMemoryScriptRepository();
-        scripts.save(new ScriptDefinition().setId("script-1").setName("Script").setSource("return [:]"));
-        InMemoryExecutionRepository executions = new InMemoryExecutionRepository();
-        executions.save(new ExecutionRecord().setId("exec-2").setScriptId("script-2"));
-
-        AiWorkbenchService service = new AiWorkbenchService(
-                workbenchRuntime(new StructuredProviderClient(Map.of(
-                        "publishReview", Map.of("recommendation", "approve")
-                ))),
-                scripts,
-                executions,
-                new ObjectMapper()
-        );
-
-        assertThatThrownBy(() -> service.reviewBeforePublish("script-1", new AiWorkbenchCommand("review", null, null, null, "exec-2", Map.of())))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("执行记录不属于脚本");
-    }
-
-    private AiAgentRuntime workbenchRuntime(CapturingProviderClient providerClient) {
-        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
-        models.save(new AiModelProfile()
-                .setId("model")
-                .setName("Model")
-                .setModelProvider(AiModelProvider.OPENAI)
-                .setModelName("gpt-test")
-                .setCapabilities(java.util.Set.of(AiCapability.CHAT)));
-        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
-        agents.save(new AiAgentProfile()
-                .setId(AiWorkbenchDefaults.SCRIPT_DEV_AGENT_ID)
-                .setName("Workbench")
-                .setModelProfileId("model")
-                .setToolsetIds(List.of()));
-        agents.save(new AiAgentProfile()
-                .setId(AiWorkbenchDefaults.EXECUTION_DEBUG_AGENT_ID)
-                .setName("Debug")
-                .setModelProfileId("model")
-                .setToolsetIds(List.of()));
-        return new AiAgentRuntimeImpl(
-                new AiAgentProfileService(agents, models),
-                models,
-                new InMemoryAiAgentRunRepository(),
-                new InMemoryAiAgentStepRepository(),
-                providerClient,
-                new AiToolRegistryImpl(new InMemoryAiToolsetRepository(), List.of())
-        );
     }
 
     private record TestTool(String name, AiToolPermission permission) implements AiTool {

@@ -1,13 +1,11 @@
 package org.team4u.actiondock.config;
 
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.team4u.actiondock.ai.agentscope.AgentScopeAiProviderClient;
 import org.team4u.actiondock.ai.agentscope.AgentScopeBuiltinAiTools;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
@@ -30,8 +28,6 @@ import org.team4u.actiondock.ai.core.AiToolsetService;
 import org.team4u.actiondock.ai.plugin.ActionDockAiSystemPlugin;
 import org.team4u.actiondock.ai.tool.ActionDockAiTools;
 import org.team4u.actiondock.ai.tool.ActionDockDynamicAiToolProvider;
-import org.team4u.actiondock.ai.workbench.AiWorkbenchDefaults;
-import org.team4u.actiondock.ai.workbench.AiWorkbenchService;
 import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
@@ -187,22 +183,6 @@ public class RuntimeConfiguration {
                                              AiToolRegistryImpl toolRegistry,
                                              Executor executionExecutor) {
         return new AiAgentRuntimeImpl(agentProfileService, modelProfileRepository, runRepository, stepRepository, providerClient, toolRegistry, executionExecutor);
-    }
-
-    @Bean
-    public AiWorkbenchService aiWorkbenchService(AiAgentRuntimeImpl aiAgentRuntime,
-                                                 ScriptRepository scriptRepository,
-                                                 ExecutionRepository executionRepository,
-                                                 ObjectMapper objectMapper) {
-        return new AiWorkbenchService(aiAgentRuntime, scriptRepository, executionRepository, objectMapper);
-    }
-
-    @Bean
-    public CommandLineRunner aiWorkbenchDefaultsInitializer(AiModelProfileRepository modelProfileRepository,
-                                                           AiToolsetRepository toolsetRepository,
-                                                           AiAgentProfileRepository agentProfileRepository) {
-        return args -> new AiWorkbenchDefaults(modelProfileRepository, toolsetRepository, agentProfileRepository)
-                .initializeMissingDefaults();
     }
 
     @Bean

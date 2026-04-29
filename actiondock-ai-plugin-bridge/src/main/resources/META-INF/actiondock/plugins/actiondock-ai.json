@@ -239,7 +239,7 @@
         }
       },
       "exampleArgs": {
-        "agentProfile": "workbench-script-dev-agent",
+        "agentProfile": "my-agent",
         "messages": [
           {
             "role": "user",

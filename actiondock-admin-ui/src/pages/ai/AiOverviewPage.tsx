@@ -1,7 +1,6 @@
 import { Alert, Button, Card, Row, Space, Statistic, Table, Tag, Typography, message } from "antd";
 import {
   ApiOutlined,
-  ExperimentOutlined,
   FunctionOutlined,
   PlusOutlined,
   RobotOutlined
@@ -109,11 +108,6 @@ export function AiOverviewPage() {
       <PageHeader
         title="AI 能力"
         meta="模型 Profile、Agent Profile、工具目录、工具集和运行记录"
-        actions={(
-          <>
-            <Button type="primary" icon={<ExperimentOutlined />} onClick={() => navigate("/ai/workbench")}>Workbench</Button>
-          </>
-        )}
       />
       <Row gutter={[12, 12]}>
         <Col xs={24} lg={12} xl={6}>

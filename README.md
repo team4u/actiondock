@@ -22,7 +22,7 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 - **统一脚本抽象**：脚本不是一段源码，而是带 `Schema`、发布快照、依赖、日志和执行入口的脚本资产
 - **多入口复用**：同一个脚本可被管理台、REST API、CLI、Agent 复用，不需要为不同入口各写一套适配
 - **仓库化协作**：脚本、插件、AI 能力包可从仓库发现、安装、更新，也支持同步成开发脚本继续演进
-- **AI 原生集成**：既能把平台脚本暴露给 Agent，也能用 AI Workbench 做脚本生成、诊断、Review 和发布辅助
+- **AI 原生集成**：既能把平台脚本暴露给 Agent，也能用 AI 做脚本生成、诊断、Review 和发布辅助
 - **治理能力完整**：内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复，不再靠外围拼装
 
 ## 它和普通脚本平台的区别
@@ -33,7 +33,7 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 | 草稿与发布 | 通常没有 | 依赖额外发布流程 | 内建草稿、发布快照、丢弃草稿 |
 | 团队分发 | 拷文件 / Git 约定 | 重新部署服务 | 仓库发现、安装、更新、开发同步 |
 | 插件扩展 | 零散 SDK | 常需改主服务 | PF4J 插件机制，脚本侧统一调用 |
-| AI 接入 | prompt 拼接 | 需额外接工具层 | AI Toolset、Agent、Workbench、脚本桥接 |
+| AI 接入 | prompt 拼接 | 需额外接工具层 | AI Toolset、Agent、脚本桥接 |
 | 共享状态治理 | 落文件 / Redis 自管 | 另接状态服务 | 内建共享状态 `namespace + key + JSON + version + CAS` |
 | 多入口调用 | 各写各的 | API 为主 | UI、REST、CLI、Agent 共用同一脚本 |
 | 审计与执行记录 | 弱 | 取决于实现 | 执行记录、日志、调试视图、触发来源内建 |
@@ -73,7 +73,7 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 
 - 管理模型配置、Agent 配置、Toolset 和运行记录
 - 可把平台内工具聚合成 Agent 可消费的工具集
-- 内置 AI Workbench，支持：
+- 内置 AI 能力，支持：
   - 生成脚本
   - 修复脚本
   - 补全 Schema
@@ -236,7 +236,7 @@ actiondock script publish hello-world --json
 - 插件与仓库：`/api/plugins`、`/api/repositories`
 - 定时任务：`/api/schedules`
 - 共享状态与配置：`/api/shared-state`、`/api/config-values`
-- AI 能力：`/api/ai`、`/api/ai/workbench`
+- AI 能力：`/api/ai`
 - CLI：`actiondock`
 
 ## 文档地图
