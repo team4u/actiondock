@@ -27,7 +27,7 @@ export function buildSelfUpdatePlan({
   target: string;
   platform?: NodeJS.Platform;
 }): SelfUpdatePlan {
-  const executable = platform === "win32" ? "npm.cmd" : "npm";
+  const executable = "npm";
   const spec = `${packageName}@${target}`;
   const args = ["install", "-g", spec];
 

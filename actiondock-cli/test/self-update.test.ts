@@ -23,14 +23,14 @@ describe("self update helpers", () => {
     });
   });
 
-  it("uses npm.cmd on windows", () => {
+  it("uses npm on windows", () => {
     const plan = buildSelfUpdatePlan({
       packageName: "@actiondock/cli",
       target: "0.1.4",
       platform: "win32",
     });
 
-    expect(plan.executable).toBe("npm.cmd");
-    expect(plan.command).toBe("npm.cmd install -g @actiondock/cli@0.1.4");
+    expect(plan.executable).toBe("npm");
+    expect(plan.command).toBe("npm install -g @actiondock/cli@0.1.4");
   });
 });

@@ -8,7 +8,7 @@ export function resolveSelfUpdateTarget(value) {
     return target;
 }
 export function buildSelfUpdatePlan({ packageName, target, platform = process.platform, }) {
-    const executable = platform === "win32" ? "npm.cmd" : "npm";
+    const executable = "npm";
     const spec = `${packageName}@${target}`;
     const args = ["install", "-g", spec];
     return {
