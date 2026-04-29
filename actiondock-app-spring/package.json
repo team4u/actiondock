@@ -36,7 +36,7 @@
   },
   "jdeploy": {
     "javaVersion": "21",
-    "jar": "target/actiondock-app-spring-0.3.0.jar",
+    "jar": "target/actiondock-app-spring.jar",
     "args": [
       "-Dfile.encoding=UTF-8"
     ],
