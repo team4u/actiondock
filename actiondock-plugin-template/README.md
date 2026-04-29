@@ -1,6 +1,6 @@
 # ActionDock Plugin Template
 
-ActionDock 插件开发模板项目。基于此模板可快速创建自定义插件，扩展 ActionDock 的 Groovy 脚本能力。
+ActionDock 插件开发模板项目。基于此模板可快速创建自定义插件，扩展 ActionDock 的 Groovy 和 Python 脚本能力。
 
 ## 架构概览
 
@@ -11,7 +11,7 @@ actiondock-plugin-api          插件 API（接口定义 + 工具类）
   └── actiondock-plugin-template  插件模板（本模块，可直接复制开发）
 ```
 
-插件作为独立 JAR 包，通过 PF4J 动态加载到 ActionDock 主应用中。Groovy 脚本可通过内置的 `plugins` 变量调用已安装插件的功能。
+插件作为独立 JAR 包，通过 PF4J 动态加载到 ActionDock 主应用中。Groovy 和 Python 脚本都可通过内置的 `plugins` 变量调用已安装插件的功能。
 
 ## 快速开始
 
@@ -385,9 +385,9 @@ public void validateConfig(Map<String, Object> config) {
 
 ---
 
-## 在 Groovy 脚本中调用插件
+## 在脚本中调用插件
 
-ActionDock 在 Groovy 脚本中注入了 `plugins` 变量，可直接调用已安装且已启动的插件：
+ActionDock 在 Groovy 和 Python 脚本中都会注入 `plugins` 变量，可直接调用已安装且已启动的插件。
 
 ```groovy
 // 基本调用（无参数）
@@ -403,6 +403,22 @@ return [
     greeting: result.greeting,
     scriptId: result.scriptId
 ]
+```
+
+```python
+# 基本调用（无参数）
+result = plugins.invoke("my-plugin", "hello")
+
+# 带参数调用
+result = plugins.invoke("my-plugin", "hello", {
+    "name": "ActionDock"
+})
+
+# 使用插件返回结果
+return {
+    "greeting": result["greeting"],
+    "scriptId": result["scriptId"]
+}
 ```
 
 ### 方法签名
@@ -524,13 +540,20 @@ public class DemoPluginConfig {
 }
 ```
 
-### 在 Groovy 脚本中使用
+### 在脚本中使用
 
 ```groovy
 def result = plugins.invoke("actiondock-demo-plugin", "echo", [
     message: "hello"
 ])
 return [pluginMessage: result.message]
+```
+
+```python
+result = plugins.invoke("actiondock-demo-plugin", "echo", {
+    "message": "hello"
+})
+return {"pluginMessage": result["message"]}
 ```
 
 ---

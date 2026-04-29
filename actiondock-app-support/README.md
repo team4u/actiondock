@@ -50,6 +50,54 @@
 - 插件：`~/.actiondock/plugins`
 - 仓库工作目录：`~/.actiondock/repositories`
 
+## 脚本内门面
+
+Groovy 和 Python 脚本都会注入这些运行时对象：
+
+- `log`
+- `config`
+- `plugins`
+- `scripts`
+- `state`
+
+### 插件调用示例
+
+Groovy：
+
+```groovy
+def result = plugins.invoke("actiondock-ai", "chat", [
+    modelProfile: "default-chat",
+    messages: [[role: "user", content: input.text]]
+])
+
+return [summary: result.text]
+```
+
+Python：
+
+```python
+result = plugins.invoke("actiondock-ai", "chat", {
+    "modelProfile": "default-chat",
+    "messages": [{"role": "user", "content": input.get("text")}]
+})
+
+return {"summary": result["text"]}
+```
+
+### 脚本互调示例
+
+Groovy：
+
+```groovy
+return scripts.invoke("target-script-id", [name: input.name])
+```
+
+Python：
+
+```python
+return scripts.invoke("target-script-id", {"name": input.get("name")})
+```
+
 ## 脚本内共享状态 `state`
 
 Groovy 和 Python 脚本现在都会注入内置对象 `state`，用于访问通用共享状态存储。

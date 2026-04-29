@@ -19,12 +19,18 @@ ActionDock 的插件 SPI 模块，定义 PF4J 插件如何向平台声明动作�
 
 ## 运行时交互
 
-Groovy 脚本通过统一门面调用插件：
+Groovy 和 Python 脚本都通过统一门面调用插件。
 
 ```groovy
 def result = plugins.invoke("my-plugin", "hello", [
   name: "ActionDock"
 ])
+```
+
+```python
+result = plugins.invoke("my-plugin", "hello", {
+  "name": "ActionDock"
+})
 ```
 
 插件实现侧会收到：

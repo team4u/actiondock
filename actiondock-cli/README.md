@@ -66,6 +66,7 @@ actiondock config show
 
 ```bash
 actiondock script create --script-id hello-world --name "Hello World" --type groovy --source-file ./hello.groovy --input-schema-file ./input.schema.json --output-schema-file ./output.schema.json --json
+actiondock script create --script-id hello-python --name "Hello Python" --type python --source-file ./hello.py --input-schema-file ./input.schema.json --output-schema-file ./output.schema.json --json
 actiondock script get hello-world --json
 actiondock script patch hello-world --source-file ./hello.v2.groovy --json
 actiondock script patch hello-world --patch-json '{"inputSchema":{"properties":{"name":{"type":"string"}}}}' --json
@@ -176,6 +177,16 @@ actiondock script validate hello-world --json
 actiondock script run hello-world --draft --input-json '{"name":"alice"}' --response-view debug --json
 actiondock execution get exec-1 --json
 actiondock script publish hello-world --json
+```
+
+Python 脚本的闭环也是同一组命令，只是把 `--type` 和源码文件换成 Python：
+
+```bash
+actiondock script create --script-id hello-python --name "Hello Python" --type python --source-file ./hello.py --json
+actiondock script patch hello-python --source-file ./hello.v2.py --json
+actiondock script validate hello-python --json
+actiondock script run hello-python --draft --input-json '{"name":"alice"}' --response-view debug --json
+actiondock script publish hello-python --json
 ```
 
 `script patch` 会调用服务端的 `PATCH /api/scripts/{id}`，只允许更新 `source`、`inputSchema`、`outputSchema`，避免模型在调试时误覆盖脚本元数据。

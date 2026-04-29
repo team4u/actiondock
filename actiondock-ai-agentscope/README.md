@@ -29,4 +29,4 @@
 
 - 抽象协议见 [../actiondock-ai-api/README.md](../actiondock-ai-api/README.md)
 - 业务编排见 [../actiondock-ai-core/README.md](../actiondock-ai-core/README.md)
-- Groovy 脚本侧调用见 [../actiondock-ai-plugin-bridge/README.md](../actiondock-ai-plugin-bridge/README.md)
+- Groovy / Python 脚本侧调用见 [../actiondock-ai-plugin-bridge/README.md](../actiondock-ai-plugin-bridge/README.md)

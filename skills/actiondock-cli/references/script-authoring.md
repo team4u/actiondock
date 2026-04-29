@@ -12,13 +12,13 @@
 
 1. 脚本 ID
 2. 脚本名称
-3. Groovy 源码
+3. Groovy 或 Python 源码
 4. `inputSchema`
 5. `outputSchema`
 
 ### ActionDock 脚本规范
 
-ActionDock 是一个 Groovy 脚本执行平台，脚本通过 `input` 对象访问输入参数，返回值作为 `output`。
+ActionDock 支持 Groovy 和 Python 两种脚本类型。脚本通过 `input` 对象访问输入参数，返回值作为 `output`。
 
 ```groovy
 // input 是 Map 类型，访问参数用 input.字段名 或 input["字段名"]
@@ -34,14 +34,36 @@ return [
 ]
 ```
 
+```python
+# input 是 dict，通常使用 input.get("fieldName") 读取字段
+name = input.get("name")
+age = input.get("age")
+
+# 脚本逻辑...
+
+# 返回值必须是 JSON 可序列化结果，通常返回 dict
+return {
+    "field1": value1,
+    "field2": value2
+}
+```
+
+### 语言选择建议
+
+- 需要 Groovy/Java 生态、`hutool`、Groovy 语法糖时，优先选 Groovy
+- 需求更接近 Python 字典处理、字符串处理，或用户明确要求 Python 时，选 Python
+- 如果用户没有指定语言，默认仍可优先生成 Groovy；如果需求明显更适合 Python，再改为 Python
+
 ### 可用依赖
 
-脚本运行环境中已预装以下依赖，可直接在脚本中使用：
+Groovy 脚本运行环境中已预装以下依赖，可直接在脚本中使用：
 
 | 依赖 | 版本 | 说明 |
 |------|------|------|
 | `groovy-all` | 4.x | Groovy 核心库，支持所有 Groovy 语法和标准库（JSON、XML、日期处理等） |
 | `hutool-all` | 5.x | Hutool 工具库，提供丰富的 Java 工具方法（字符串、日期、HTTP、加解密、IO 等） |
+
+Python 脚本默认依赖宿主 `python3` 与标准库；如需调用平台能力，优先使用内置的 `plugins`、`scripts`、`state` 门面，不要假设额外第三方包已预装。
 
 ### Schema 字段类型
 
@@ -84,17 +106,21 @@ return [
 - 脚本代码简洁清晰，添加必要的注释
 - Schema 中的 `title` 字段用于前端显示标签
 - 必填字段放在 `required` 数组中
-- 返回值使用 Map 字面量 `[:]` 语法
-- 合理使用 Groovy 语法糖（如闭包、with 等）
+- Groovy 返回值使用 Map 字面量 `[:]` 语法
+- Python 返回值使用 JSON 可序列化的 `dict` / `list` / 标量
+- Groovy 可合理使用语法糖（如闭包、with 等）；Python 优先保持直接、清晰
 
 ### 脚本产物输出格式
 
 按顺序输出以下 5 段固定格式，要求：
 - 标题、文案必须保持完全一致，便于前端自动解析
 - `脚本 ID` 与 `脚本名称` 段落正文使用纯文本，不要放进代码块
-- `Groovy 脚本`、`Input Schema（输入参数）`、`Output Schema（输出结果）` 必须各自只包含一个对应语言的代码块
+- 脚本源码段标题只能是 `Groovy 脚本` 或 `Python 脚本`
+- `Input Schema（输入参数）`、`Output Schema（输出结果）` 必须各自只包含一个 `json` 代码块
 - 不要在这 5 段中间插入额外标题，仅保留示例中的5个标题
 - 这 5 段都是必需的，不能省略
+
+如果生成 Groovy，用下面格式：
 
 #### 脚本 ID
 
@@ -108,6 +134,12 @@ Hello Groovy
 
 ```groovy
 // 脚本代码
+```
+
+如果生成 Python，把对应标题改成 `#### Python 脚本`，并使用：
+
+```python
+# 脚本代码
 ```
 
 #### Input Schema（输入参数）
@@ -167,6 +199,8 @@ actiondock script create \
   --output-schema-file ./output.schema.json \
   --json
 ```
+
+如果当前脚本是 Python，把 `--type groovy`、`./hello-world.groovy` 替换为 `--type python`、`./hello-world.py`。
 
 如果源码或 schema 很短，也可以内联，但文件方式更稳定。
 
@@ -342,5 +376,7 @@ actiondock script validate <id> --json
 actiondock script run <id> --draft --input-json '<input-json>' --response-view debug --json
 actiondock script publish <id> --json
 ```
+
+如果是 Python 脚本，把上面的 `--type groovy` 和 `.groovy` 文件名替换为 `python` / `.py` 即可，其余闭环不变。
 
 在真正执行前，先根据用户需求把 `<id>`、源码文件、schema 文件和测试输入准备好。
