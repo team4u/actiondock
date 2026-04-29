@@ -1,7 +1,7 @@
 import { inspect } from "node:util";
-export function renderToolList(items) {
+export function renderScriptList(items) {
     if (items.length === 0) {
-        return "没有可用工具。";
+        return "没有可用脚本。";
     }
     return items
         .map((item) => {
@@ -41,6 +41,26 @@ export function renderSchemaDetail(params) {
         for (const field of jsonOnlyFields) {
             lines.push(`  ${field.name} <${field.kind}>${field.required ? " required" : ""}${formatSupplement(field)}`);
         }
+    }
+    return lines.join("\n");
+}
+export function renderScriptDetail(script, target) {
+    const lines = [
+        `Script: ${script.id}${script.name ? ` (${script.name})` : ""}`,
+        `Target: ${target}`,
+        `Type: ${script.type ?? "-"}`,
+        `Status: ${script.status ?? "-"}`,
+        `Version: ${script.version ?? "-"}`,
+        `Published: ${script.publishedSnapshot ? "yes" : "no"}`
+    ];
+    if (script.description) {
+        lines.push(`Description: ${script.description}`);
+    }
+    if (script.owner) {
+        lines.push(`Owner: ${script.owner}`);
+    }
+    if (script.tags && script.tags.length > 0) {
+        lines.push(`Tags: ${script.tags.join(", ")}`);
     }
     return lines.join("\n");
 }

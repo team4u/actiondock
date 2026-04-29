@@ -38,10 +38,10 @@ export function ForkScriptModal({
       </Text>
       <Form form={form} layout="vertical">
         <Form.Item
-          label="新工具 ID"
+          label="新脚本 ID"
           name="id"
           rules={[
-            { required: true, message: "请输入新的工具 ID" },
+            { required: true, message: "请输入新的脚本 ID" },
             { pattern: /^[A-Za-z0-9._-]+$/, message: "仅支持字母、数字、点、中横线和下划线" }
           ]}
         >

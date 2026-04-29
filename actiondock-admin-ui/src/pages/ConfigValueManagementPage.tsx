@@ -504,7 +504,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
               </>
             ) : null}
             {currentDetail.managed ? (
-              <Text type="secondary">这是托管配置值。删除后，下次工具安装或更新时可能被仓库模板重新同步。</Text>
+              <Text type="secondary">这是托管配置值。删除后，下次脚本安装或更新时可能被仓库模板重新同步。</Text>
             ) : null}
           </Space>
         ),
@@ -1215,7 +1215,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                   <Space direction="vertical" size={16} style={{ width: "100%" }}>
                     <Card size="small" title={`仓库模板声明 (${detail.usage.templateDeclarations.length})`}>
                       {detail.usage.templateDeclarations.length === 0 ? (
-                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有仓库工具模板声明这个 key" />
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有仓库脚本模板声明这个 key" />
                       ) : (
                         <List
                           size="small"

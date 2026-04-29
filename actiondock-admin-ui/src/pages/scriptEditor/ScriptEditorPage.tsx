@@ -468,7 +468,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
           return {
             key,
             icon: <CopyOutlined />,
-            label: "复制工具",
+            label: "复制脚本",
             onClick: () => navigate(`/scripts/new?copyFrom=${encodeURIComponent(editor.currentScript?.id ?? "")}`)
           };
         }
@@ -634,9 +634,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
               type="link"
               icon={<ArrowLeftOutlined />}
               style={{ paddingInline: 0 }}
-              onClick={() => navigate("/tools")}
+              onClick={() => navigate("/scripts")}
             >
-              返回工具列表
+              返回脚本列表
             </Button>
           </Col>
           <Col className="page-card-actions">
@@ -741,7 +741,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 <Space size={8} wrap>
                   <ScopeTag scope={editor.currentScript.scope} />
                   {editor.isReadOnlyScript ? (
-                    <Tooltip title="当前是仓库安装的只读工具。你可以直接运行和查看契约，但不能原地修改。需要调整实现时，请先创建 Fork，或重新发布到某个仓库。">
+                    <Tooltip title="当前是仓库安装的只读脚本。你可以直接运行和查看契约，但不能原地修改。需要调整实现时，请先创建 Fork，或重新发布到某个仓库。">
                       <Tag color="gold">只读</Tag>
                     </Tooltip>
                   ) : (
@@ -781,7 +781,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 <Descriptions.Item label="版本">{editor.currentScript.version}</Descriptions.Item>
               )}
               <Descriptions.Item label="来源仓库">{editor.currentScript.repositoryId || "-"}</Descriptions.Item>
-              <Descriptions.Item label="来源工具">{editor.currentScript.repositoryToolId || "-"}</Descriptions.Item>
+              <Descriptions.Item label="来源脚本">{editor.currentScript.repositoryToolId || "-"}</Descriptions.Item>
               <Descriptions.Item label={editor.currentScript.scope === "DEVELOPMENT" ? "上次同步仓库版本" : "仓库版本"}>
                 {editor.currentScript.repositoryVersion || "-"}
               </Descriptions.Item>

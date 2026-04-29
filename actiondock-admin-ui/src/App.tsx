@@ -27,8 +27,8 @@ const { useBreakpoint } = Grid;
 const RepositoryDiscoveryPage = lazy(() =>
   import("./pages/RepositoryDiscoveryPage").then((module) => ({ default: module.RepositoryDiscoveryPage }))
 );
-const ToolLibraryPage = lazy(() =>
-  import("./pages/ToolLibraryPage").then((module) => ({ default: module.ToolLibraryPage }))
+const ScriptLibraryPage = lazy(() =>
+  import("./pages/ScriptLibraryPage").then((module) => ({ default: module.ScriptLibraryPage }))
 );
 const RepositoryManagementPage = lazy(() =>
   import("./pages/RepositoryManagementPage").then((module) => ({ default: module.RepositoryManagementPage }))
@@ -129,8 +129,8 @@ function resolveSelectedNavKey(pathname: string): string {
   if (pathname.startsWith("/discover")) {
     return "discover";
   }
-  if (pathname.startsWith("/tools") || pathname.startsWith("/scripts")) {
-    return "tools";
+  if (pathname.startsWith("/scripts")) {
+    return "scripts";
   }
   return "";
 }
@@ -138,11 +138,11 @@ function resolveSelectedNavKey(pathname: string): string {
 function resolveTitle(selectedNavKey: string): string {
   switch (selectedNavKey) {
     case "discover":
-      return "发现工具";
-    case "tools":
-      return "工具库";
+      return "发现脚本";
+    case "scripts":
+      return "脚本库";
     case "repositories":
-      return "工具仓库";
+      return "仓库管理";
     case "plugins":
       return "插件管理";
     case "settings":
@@ -152,7 +152,7 @@ function resolveTitle(selectedNavKey: string): string {
     case "schedules":
       return "定时任务";
     default:
-      return "工具库";
+      return "脚本库";
   }
 }
 
@@ -173,7 +173,7 @@ function AdminShell() {
     <div className="app-navigation">
       <div className="brand-block">
         <Title level={4}>ActionDock</Title>
-        <Text type="secondary">脚本即工具，协议即接入</Text>
+        <Text type="secondary">脚本即能力，协议即接入</Text>
       </div>
       <Menu
         mode="inline"
@@ -182,13 +182,13 @@ function AdminShell() {
         items={[
           {
             key: "discover",
-            label: "发现工具",
+            label: "发现脚本",
             onClick: () => navigate("/discover")
           },
           {
-            key: "tools",
-            label: "工具库",
-            onClick: () => navigate("/tools")
+            key: "scripts",
+            label: "脚本库",
+            onClick: () => navigate("/scripts")
           },
           {
             key: "repositories",
@@ -253,9 +253,8 @@ function AdminShell() {
             <Routes>
               <Route path="/" element={<Navigate to="/discover" replace />} />
               <Route path="/discover" element={<RepositoryDiscoveryPage />} />
-              <Route path="/tools" element={<ToolLibraryPage />} />
               <Route path="/repositories" element={<RepositoryManagementPage />} />
-              <Route path="/scripts" element={<Navigate to="/tools" replace />} />
+              <Route path="/scripts" element={<ScriptLibraryPage />} />
               <Route path="/schedules" element={<ScheduleManagementPage />} />
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
@@ -286,6 +285,7 @@ function AdminShell() {
                 path="/scripts/:id"
                 element={<ScriptEditorPage mode="edit" colorMode={colorMode} />}
               />
+              <Route path="/scripts/:id/run" element={<ScriptRunPage />} />
               <Route path="*" element={<Navigate to="/discover" replace />} />
             </Routes>
           </Suspense>
@@ -405,7 +405,6 @@ export function App() {
             }
           >
             <Routes>
-              <Route path="/run/:id" element={<ScriptRunPage />} />
               <Route path="/*" element={<AdminShell />} />
             </Routes>
           </Suspense>

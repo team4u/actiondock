@@ -15,6 +15,33 @@ export class ActionDockClient {
     async getScript(scriptId, draft) {
         return this.requestJson(draft ? `/api/scripts/${scriptId}` : `/api/scripts/${scriptId}/published`);
     }
+    async createScript(definition) {
+        return this.requestJson("/api/scripts", {
+            method: "POST",
+            body: JSON.stringify(definition)
+        });
+    }
+    async patchScript(scriptId, patch) {
+        return this.requestJson(`/api/scripts/${scriptId}`, {
+            method: "PATCH",
+            body: JSON.stringify(patch)
+        });
+    }
+    async validateScript(scriptId) {
+        await this.requestJson(`/api/scripts/${scriptId}/validate`, {
+            method: "POST"
+        });
+    }
+    async publishScript(scriptId) {
+        return this.requestJson(`/api/scripts/${scriptId}/publish`, {
+            method: "POST"
+        });
+    }
+    async discardDraft(scriptId) {
+        return this.requestJson(`/api/scripts/${scriptId}/discard-draft`, {
+            method: "POST"
+        });
+    }
     async executeScript(options, draft) {
         if (draft) {
             return this.requestJson("/api/executions", {

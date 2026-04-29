@@ -386,11 +386,11 @@ export function useScriptPublishToRepo({
 
   const openPublishToRepositoryModal = async (initialValues?: Partial<PublishToRepositoryFormValues>) => {
     if (isReadOnlyScript) {
-      messageApi.warning("仓库工具为只读版本，请先 Fork 再发布");
+      messageApi.warning("仓库脚本为只读版本，请先 Fork 再发布");
       return;
     }
     if (!currentScript?.id) {
-      messageApi.warning("请先保存工具");
+      messageApi.warning("请先保存脚本");
       return;
     }
 
@@ -470,11 +470,11 @@ export function useScriptPublishToRepo({
         && (error as { data?: { code?: string } }).data?.code === "DEVELOPMENT_CONFLICT";
       if (conflict) {
         if (!retry) {
-          messageApi.error("远端工具已更新。请先拉取远端，或确认后再强制发布。");
+          messageApi.error("远端脚本已更新。请先拉取远端，或确认后再强制发布。");
           return;
         }
         void Modal.confirm({
-          title: "远端工具已更新",
+          title: "远端脚本已更新",
           content: "强制发布会用当前脚本内容作为新版本写回仓库。版本号仍必须是仓库中不存在的新版本。",
           okText: "强制发布",
           cancelText: "取消",

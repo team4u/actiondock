@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const cliDir = path.resolve(import.meta.dirname, "..");
+const packageVersion = JSON.parse(fs.readFileSync(path.join(cliDir, "package.json"), "utf8")).version as string;
 
 let server: http.Server;
 let baseUrl = "";
@@ -537,15 +538,15 @@ afterAll(async () => {
 });
 
 describe("CLI integration", () => {
-  it("lists published tools by default", async () => {
-    const result = await runCli(["tool", "list", "--server", baseUrl]);
+  it("lists published scripts by default", async () => {
+    const result = await runCli(["script", "list", "--server", baseUrl]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("published-tool");
     expect(result.stdout).not.toContain("draft-only-tool");
   });
 
   it("returns schema detail as JSON", async () => {
-    const result = await runCli(["tool", "schema", "published-tool", "--server", baseUrl, "--json"]);
+    const result = await runCli(["script", "schema", "published-tool", "--server", baseUrl, "--json"]);
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
@@ -561,13 +562,13 @@ describe("CLI integration", () => {
     );
   });
 
-  it("runs a published tool with flat flags and merged JSON input", async () => {
+  it("runs a published script with flat flags and merged JSON input", async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "actiondock-cli-test-"));
     const inputFile = path.join(tempDir, "input.json");
     fs.writeFileSync(inputFile, JSON.stringify({ payload: { source: "file" } }));
 
     const result = await runCli([
-      "tool",
+      "script",
       "run",
       "published-tool",
       "--server",
@@ -601,8 +602,8 @@ describe("CLI integration", () => {
     });
   });
 
-  it("reads tool detail for draft with json output", async () => {
-    const result = await runCli(["tool", "get", "published-tool", "--draft", "--server", baseUrl, "--json"]);
+  it("reads script detail for draft with json output", async () => {
+    const result = await runCli(["script", "get", "published-tool", "--draft", "--server", baseUrl, "--json"]);
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
@@ -970,7 +971,7 @@ describe("CLI integration", () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
       packageName: "@actiondock/cli",
-      currentVersion: "0.1.4",
+      currentVersion: packageVersion,
       target: "latest",
       command: "npm install -g @actiondock/cli@latest",
       executable: "npm",
@@ -993,7 +994,7 @@ describe("CLI integration", () => {
 
   it("keeps command output stable when version checks are disabled explicitly", async () => {
     const result = await runCli(
-      ["tool", "list", "--server", baseUrl, "--json"],
+      ["script", "list", "--server", baseUrl, "--json"],
       undefined,
       { ACTIONDOCK_SKIP_NEW_VERSION_CHECK: "1" },
     );

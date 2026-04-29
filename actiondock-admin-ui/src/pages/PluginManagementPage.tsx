@@ -119,13 +119,13 @@ export function PluginManagementPage() {
         if (isPluginVersionConflict(error)) {
           const conflicts = ((error.data as { conflicts?: RepositoryPluginConflict[] }).conflicts ?? []);
           await modal.confirm({
-            title: "插件版本会影响已安装工具",
+            title: "插件版本会影响已安装脚本",
             okText: "强制覆盖",
             cancelText: "取消",
             width: 620,
             content: (
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <Text>以下工具声明的插件版本范围不满足仓库版本。强制覆盖后，这些工具可能运行失败。</Text>
+                <Text>以下脚本声明的插件版本范围不满足仓库版本。强制覆盖后，这些脚本可能运行失败。</Text>
                 <pre className="script-import-result__code">{formatConflicts(conflicts)}</pre>
               </Space>
             ),
@@ -425,7 +425,7 @@ export function PluginManagementPage() {
         <Space direction="vertical" size={2}>
           {record.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
           {record.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-          {record.dependentToolCount > 0 ? <Tag color="purple">{record.dependentToolCount} 个工具依赖</Tag> : null}
+          {record.dependentToolCount > 0 ? <Tag color="purple">{record.dependentToolCount} 个脚本依赖</Tag> : null}
         </Space>
       )
     },
@@ -549,7 +549,7 @@ export function PluginManagementPage() {
               </Descriptions.Item>
               <Descriptions.Item label="风险等级">{drawerDescriptor.riskLevel || "—"}</Descriptions.Item>
               <Descriptions.Item label="维护人">{drawerDescriptor.owner || "—"}</Descriptions.Item>
-              <Descriptions.Item label="依赖工具数">{drawerDescriptor.dependentToolCount}</Descriptions.Item>
+              <Descriptions.Item label="依赖脚本数">{drawerDescriptor.dependentToolCount}</Descriptions.Item>
               <Descriptions.Item label="标签">
                 {drawerDescriptor.tags.length > 0 ? drawerDescriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : "—"}
               </Descriptions.Item>

@@ -3,10 +3,10 @@ import { Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
-import { renderToolList } from "../../lib/render.js";
+import { renderScriptList } from "../../lib/render.js";
 
-export default class ToolListCommand extends BaseCommand {
-  static description = "List available ActionDock tools";
+export default class ScriptListCommand extends BaseCommand {
+  static description = "List available ActionDock scripts";
 
   static flags = {
     ...BaseCommand.baseFlags,
@@ -23,7 +23,7 @@ export default class ToolListCommand extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const { flags } = await this.parse(ToolListCommand);
+    const { flags } = await this.parse(ScriptListCommand);
 
     try {
       const client = new ActionDockClient({
@@ -48,7 +48,7 @@ export default class ToolListCommand extends BaseCommand {
         return;
       }
 
-      this.log(renderToolList(items));
+      this.log(renderScriptList(items));
     } catch (error) {
       this.handleError(error, flags.json);
     }

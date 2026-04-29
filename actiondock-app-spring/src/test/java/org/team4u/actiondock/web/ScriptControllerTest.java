@@ -25,11 +25,14 @@ import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -150,6 +153,97 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.data.name").value("Updated"));
 
         verify(scriptApplicationService).save(any(ScriptDefinition.class));
+    }
+
+    @Test
+    void patchUpdatesOnlySourceWithoutResettingOtherFields() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Original")
+                .setSource("return [message: 'old']")
+                .setInputSchema(Map.of("type", "object", "properties", Map.of("name", Map.of("type", "string"))))
+                .setOutputSchema(Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+                .setDescription("desc")
+                .setOwner("alice"));
+        when(scriptApplicationService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mockMvc.perform(patch("/api/scripts/script-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"source":"return [message: 'new']"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("script-1"))
+                .andExpect(jsonPath("$.data.source").value("return [message: 'new']"))
+                .andExpect(jsonPath("$.data.inputSchema.properties.name.type").value("string"))
+                .andExpect(jsonPath("$.data.outputSchema.properties.message.type").value("string"))
+                .andExpect(jsonPath("$.data.owner").value("alice"));
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<ScriptDefinition> captor = org.mockito.ArgumentCaptor.forClass(ScriptDefinition.class);
+        verify(scriptApplicationService, atLeastOnce()).save(captor.capture());
+        java.util.List<ScriptDefinition> savedValues = captor.getAllValues();
+        ScriptDefinition saved = savedValues.get(savedValues.size() - 1);
+        assertThat(saved.getSource()).isEqualTo("return [message: 'new']");
+        assertThat(saved.getInputSchema()).containsKey("properties");
+        assertThat(saved.getOutputSchema()).containsKey("properties");
+        assertThat(saved.getDescription()).isEqualTo("desc");
+    }
+
+    @Test
+    void patchMergesNestedSchemaObjects() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setSource("return [message: 'ok']")
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "name", Map.of("type", "string"),
+                                "count", Map.of("type", "integer")
+                        ),
+                        "required", java.util.List.of("name")
+                )));
+        when(scriptApplicationService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mockMvc.perform(patch("/api/scripts/script-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "inputSchema": {
+                                    "properties": {
+                                      "count": null,
+                                      "enabled": { "type": "boolean" }
+                                    },
+                                    "required": ["name", "enabled"]
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.inputSchema.properties.name.type").value("string"))
+                .andExpect(jsonPath("$.data.inputSchema.properties.count").doesNotExist())
+                .andExpect(jsonPath("$.data.inputSchema.properties.enabled.type").value("boolean"))
+                .andExpect(jsonPath("$.data.inputSchema.required[0]").value("name"))
+                .andExpect(jsonPath("$.data.inputSchema.required[1]").value("enabled"));
+    }
+
+    @Test
+    void patchRejectsFieldsOutsideWhitelist() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition().setId("script-1"));
+
+        mockMvc.perform(patch("/api/scripts/script-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"status":"PUBLISHED","source":"return [:]"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.msg").value("脚本 Patch 仅允许更新以下字段: source, inputSchema, outputSchema"))
+                .andExpect(jsonPath("$.data.code").value("INVALID_SCRIPT_PATCH"))
+                .andExpect(jsonPath("$.data.scriptId").value("script-1"))
+                .andExpect(jsonPath("$.data.rejectedFields[0]").value("status"))
+                .andExpect(jsonPath("$.data.allowedFields[0]").value("source"))
+                .andExpect(jsonPath("$.data.allowedFields[1]").value("inputSchema"))
+                .andExpect(jsonPath("$.data.allowedFields[2]").value("outputSchema"));
     }
 
     @Test

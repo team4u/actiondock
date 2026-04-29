@@ -2,11 +2,11 @@
 
 **ActionDock** 是一套把脚本、插件、仓库分发、AI 调用和运行治理放进同一运行体系的工具平台。
 
-它解决的不是“怎么再多跑几个脚本”，而是怎么把零散脚本升级成团队可复用、可分发、可审计、可被 AI 稳定调用的工具资产。
+它解决的不是“怎么再多跑几个脚本”，而是怎么把零散脚本升级成团队可复用、可分发、可审计、可被 AI 稳定调用的脚本资产。
 
 一句话概括：
 
-> **同一份工具定义，可以同时被人、REST API、CLI 和 Agent 使用。**
+> **同一份脚本定义，可以同时被人、REST API、CLI 和 Agent 使用。**
 
 ## 为什么值得团队采用
 
@@ -19,10 +19,10 @@
 
 ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 
-- **统一工具抽象**：脚本不是一段源码，而是带 `Schema`、发布快照、依赖、日志和执行入口的工具
-- **多入口复用**：同一个工具可被管理台、REST API、CLI、Agent 复用，不需要为不同入口各写一套适配
-- **仓库化协作**：工具、插件、AI 能力包可从仓库发现、安装、更新，也支持同步成开发脚本继续演进
-- **AI 原生集成**：既能把平台工具暴露给 Agent，也能用 AI Workbench 做脚本生成、诊断、Review 和发布辅助
+- **统一脚本抽象**：脚本不是一段源码，而是带 `Schema`、发布快照、依赖、日志和执行入口的脚本资产
+- **多入口复用**：同一个脚本可被管理台、REST API、CLI、Agent 复用，不需要为不同入口各写一套适配
+- **仓库化协作**：脚本、插件、AI 能力包可从仓库发现、安装、更新，也支持同步成开发脚本继续演进
+- **AI 原生集成**：既能把平台脚本暴露给 Agent，也能用 AI Workbench 做脚本生成、诊断、Review 和发布辅助
 - **治理能力完整**：内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复，不再靠外围拼装
 
 ## 它和普通脚本平台的区别
@@ -35,12 +35,12 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 | 插件扩展 | 零散 SDK | 常需改主服务 | PF4J 插件机制，脚本侧统一调用 |
 | AI 接入 | prompt 拼接 | 需额外接工具层 | AI Toolset、Agent、Workbench、脚本桥接 |
 | 共享状态治理 | 落文件 / Redis 自管 | 另接状态服务 | 内建共享状态 `namespace + key + JSON + version + CAS` |
-| 多入口调用 | 各写各的 | API 为主 | UI、REST、CLI、Agent 共用同一工具 |
+| 多入口调用 | 各写各的 | API 为主 | UI、REST、CLI、Agent 共用同一脚本 |
 | 审计与执行记录 | 弱 | 取决于实现 | 执行记录、日志、调试视图、触发来源内建 |
 
 ## 核心能力
 
-### 1. 把脚本变成可治理的工具
+### 1. 把脚本变成可治理的脚本资产
 
 - 支持 `GROOVY` 和 `PYTHON` 两类脚本
 - 每个脚本都带输入/输出 `Schema`
@@ -48,14 +48,14 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 - 支持同步/异步执行、结果视图与调试视图
 - 支持执行预设、执行记录、日志和错误详情
 
-这意味着工具调用不再靠 README 口头约定，而是有明确契约和稳定入口。
+这意味着脚本调用不再靠 README 口头约定，而是有明确契约和稳定入口。
 
 ### 2. 团队协作与仓库分发
 
 - 仓库类型支持 `LOCAL_DIR`、`GIT`、`HTTP`
 - 仓库用途区分 `DISTRIBUTION` 和 `DEVELOPMENT`
-- 可以浏览仓库中的工具、插件、AI 能力包并按需安装或更新
-- 已安装仓库工具可以同步为本地开发脚本，继续修改、对比、再发布
+- 可以浏览仓库中的脚本、插件、AI 能力包并按需安装或更新
+- 已安装仓库脚本可以同步为本地开发脚本，继续修改、对比、再发布
 - 支持 `PERSONAL`、`REPOSITORY`、`FORK`、`DEVELOPMENT`、`SAMPLE` 等脚本作用域
 
 这套模型适合团队内部工具市场、公共脚本仓库、试点脚本孵化到正式纳管的全过程。
@@ -118,7 +118,7 @@ Script / Plugin / Repository / AI Package
 
 核心理念是：
 
-- **脚本即工具**
+- **脚本即入口**
 - **仓库即分发渠道**
 - **Schema 即调用契约**
 - **AI 也是平台消费者，而不是旁路系统**
@@ -128,7 +128,7 @@ Script / Plugin / Repository / AI Package
 - 团队里已经有很多内部脚本，想统一纳管、发布和复用
 - 需要给 AI Agent 提供稳定、可审计、可配置的内部工具
 - 需要维护 OAuth Token、同步游标、水位线、批次号等跨脚本共享状态
-- 需要做“工具仓库”而不是“脚本文件夹”，让安装、更新、开发同步都有正式流程
+- 需要做“脚本仓库”而不是“脚本文件夹”，让安装、更新、开发同步都有正式流程
 - 需要在脚本开发阶段就把 Review、诊断、发布说明这些辅助动作工具化
 
 ## 快速开始
@@ -181,7 +181,7 @@ curl -X POST http://localhost:5177/api/scripts/hello-groovy/published/execute \
 如果更偏向终端或 AI 调用，可以直接使用 CLI：
 
 ```bash
-actiondock tool run hello-groovy --name alice --json
+actiondock script run hello-groovy --name alice --json
 ```
 
 ## 分发形态
@@ -204,13 +204,28 @@ npm i -g @actiondock/cli
 actiondock --help
 ```
 
-CLI 的价值不只是“把 API 搬到终端”，而是把工具 `Schema` 展平为更适合人和 Agent 调用的参数形式：
+CLI 的价值不只是“把 API 搬到终端”，而是把脚本 `Schema` 展平为更适合人和 Agent 调用的参数形式：
 
 ```bash
-actiondock tool run hello-groovy --name alice --json
+actiondock script run hello-groovy --name alice --json
 ```
 
 能展开成普通 flag 的字段就不要求手写 JSON；对象和数组再回退到 `--input-json` 或文件输入。
+
+如果你要让外部大模型持续生成并调试新脚本，推荐整个闭环都统一走 `script`：
+
+```bash
+actiondock script create --script-id hello-world --name "Hello World" --type groovy --source-file ./hello.groovy --json
+actiondock script patch hello-world --source-file ./hello.v2.groovy --json
+actiondock script validate hello-world --json
+actiondock script run hello-world --draft --input-json '{"name":"alice"}' --response-view debug --json
+actiondock script publish hello-world --json
+```
+
+- `script create/patch/validate/publish` 负责作者态操作
+- `script run --draft` 负责调试草稿并返回结果
+
+对应 REST API 里，调试更新建议优先走 `PATCH /api/scripts/{id}`，只允许更新 `source`、`inputSchema`、`outputSchema`，避免模型误覆盖整份脚本定义。
 
 ## 公开入口
 

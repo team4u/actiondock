@@ -8,11 +8,14 @@ export interface ScriptDefinition {
   id: string;
   name?: string;
   type?: string;
+  packaging?: string;
+  scope?: string;
   status?: string;
   version?: number;
   description?: string;
   owner?: string;
   tags?: string[];
+  source?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   publishedSnapshot?: {

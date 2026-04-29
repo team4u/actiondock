@@ -12,8 +12,8 @@ React + Vite 管理台模块，承载脚本平台和 AI 工作台的可视化操
 
 ## 主要页面
 
-- `ScriptListPage` / `ScriptEditorPage` / `ScriptRunPage`
-- `RepositoryManagementPage` / `RepositoryDiscoveryPage` / `ToolLibraryPage`
+- `ScriptLibraryPage` / `ScriptEditorPage` / `ScriptRunPage`
+- `RepositoryManagementPage` / `RepositoryDiscoveryPage`
 - `PluginManagementPage` / `PluginDetailPage`
 - `ScheduleManagementPage` / `ScheduleEditorPage`
 - `SystemSettingsPage`

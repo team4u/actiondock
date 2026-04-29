@@ -12,9 +12,9 @@ import type {
   SharedStateSummary
 } from "./types.js";
 
-export function renderToolList(items: ScriptDefinition[]): string {
+export function renderScriptList(items: ScriptDefinition[]): string {
   if (items.length === 0) {
-    return "没有可用工具。";
+    return "没有可用脚本。";
   }
 
   return items
@@ -63,6 +63,27 @@ export function renderSchemaDetail(params: {
     }
   }
 
+  return lines.join("\n");
+}
+
+export function renderScriptDetail(script: ScriptDefinition, target: "published" | "draft"): string {
+  const lines = [
+    `Script: ${script.id}${script.name ? ` (${script.name})` : ""}`,
+    `Target: ${target}`,
+    `Type: ${script.type ?? "-"}`,
+    `Status: ${script.status ?? "-"}`,
+    `Version: ${script.version ?? "-"}`,
+    `Published: ${script.publishedSnapshot ? "yes" : "no"}`
+  ];
+  if (script.description) {
+    lines.push(`Description: ${script.description}`);
+  }
+  if (script.owner) {
+    lines.push(`Owner: ${script.owner}`);
+  }
+  if (script.tags && script.tags.length > 0) {
+    lines.push(`Tags: ${script.tags.join(", ")}`);
+  }
   return lines.join("\n");
 }
 

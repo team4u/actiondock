@@ -33,6 +33,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(exception.getMessage(), 400, data));
     }
 
+    @ExceptionHandler(InvalidScriptPatchException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleInvalidScriptPatch(InvalidScriptPatchException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+                exception.getMessage(),
+                400,
+                Map.of(
+                        "code", "INVALID_SCRIPT_PATCH",
+                        "scriptId", exception.getScriptId(),
+                        "rejectedFields", exception.getRejectedFields(),
+                        "allowedFields", exception.getAllowedFields()
+                )
+        ));
+    }
+
     /**
      * 处理非法参数异常，返回 400 响应及错误摘要。
      *

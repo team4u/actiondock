@@ -2,9 +2,9 @@ import { Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
-import { renderToolList } from "../../lib/render.js";
-export default class ToolListCommand extends BaseCommand {
-    static description = "List available ActionDock tools";
+import { renderScriptList } from "../../lib/render.js";
+export default class ScriptListCommand extends BaseCommand {
+    static description = "List available ActionDock scripts";
     static flags = {
         ...BaseCommand.baseFlags,
         all: Flags.boolean({
@@ -19,7 +19,7 @@ export default class ToolListCommand extends BaseCommand {
         help: Flags.help({ char: "h" })
     };
     async run() {
-        const { flags } = await this.parse(ToolListCommand);
+        const { flags } = await this.parse(ScriptListCommand);
         try {
             const client = new ActionDockClient({
                 serverUrl: resolveServerUrl(flags.server),
@@ -41,7 +41,7 @@ export default class ToolListCommand extends BaseCommand {
                 this.printJson(items);
                 return;
             }
-            this.log(renderToolList(items));
+            this.log(renderScriptList(items));
         }
         catch (error) {
             this.handleError(error, flags.json);

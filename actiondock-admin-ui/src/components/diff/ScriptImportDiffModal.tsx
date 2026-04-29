@@ -43,7 +43,7 @@ export function ScriptImportDiffModal({
 
   return (
     <Modal
-      title="确认导入工具"
+      title="确认导入脚本"
       open={open}
       onCancel={onCancel}
       onOk={onOk}
@@ -55,12 +55,12 @@ export function ScriptImportDiffModal({
     >
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <Space direction="vertical" size={4}>
-          <Text>共解析到 {totalCount} 个工具。</Text>
+          <Text>共解析到 {totalCount} 个脚本。</Text>
           <Text>新增 {createCount} 个，覆盖 {overwriteItems.length} 个。</Text>
         </Space>
 
         {overwriteItems.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有覆盖项，将直接新增导入工具。" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有覆盖项，将直接新增导入脚本。" />
         ) : (
           <div className="script-import-diff-layout">
             <div className="script-import-diff-sidebar">

@@ -7,8 +7,8 @@ import { collectDynamicFlags, buildInputFromSchema, parseInputObject } from "../
 import { renderExecution } from "../../lib/render.js";
 import { extractSchemaFields } from "../../lib/schema.js";
 
-export default class ToolRunCommand extends BaseCommand {
-  static description = "Execute a published or draft ActionDock tool";
+export default class ScriptRunCommand extends BaseCommand {
+  static description = "Execute a published or draft ActionDock script";
 
   static args = {
     scriptId: Args.string({ required: true })
@@ -30,10 +30,10 @@ export default class ToolRunCommand extends BaseCommand {
       default: "result"
     }),
     "input-json": Flags.string({
-      description: "Base JSON object for tool input"
+      description: "Base JSON object for script input"
     }),
     "input-file": Flags.string({
-      description: "Path to a JSON file containing the base tool input object"
+      description: "Path to a JSON file containing the base script input object"
     }),
     server: Flags.string({
       description: "Override ActionDock server URL"
@@ -48,7 +48,7 @@ export default class ToolRunCommand extends BaseCommand {
   static ["--"] = false;
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(ToolRunCommand);
+    const { args, flags } = await this.parse(ScriptRunCommand);
 
     try {
       const client = new ActionDockClient({

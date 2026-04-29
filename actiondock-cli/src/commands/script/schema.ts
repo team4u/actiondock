@@ -6,8 +6,8 @@ import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderSchemaDetail } from "../../lib/render.js";
 import { extractSchemaFields, splitSchemaFields } from "../../lib/schema.js";
 
-export default class ToolSchemaCommand extends BaseCommand {
-  static description = "Show a tool input schema summary";
+export default class ScriptSchemaCommand extends BaseCommand {
+  static description = "Show a script input schema summary";
 
   static args = {
     scriptId: Args.string({ required: true })
@@ -28,7 +28,7 @@ export default class ToolSchemaCommand extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(ToolSchemaCommand);
+    const { args, flags } = await this.parse(ScriptSchemaCommand);
 
     try {
       const client = new ActionDockClient({

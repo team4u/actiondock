@@ -303,7 +303,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool get 'hello-groovy' --draft --token 'local-dev-key'");
+    ).toBe("actiondock script get 'hello-groovy' --draft --token 'local-dev-key'");
 
     expect(
       buildToolSchemaCliCommand({
@@ -313,7 +313,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool schema 'hello-groovy' --draft --token 'local-dev-key'");
+    ).toBe("actiondock script schema 'hello-groovy' --draft --token 'local-dev-key'");
   });
 
   it("flattens scalar execute args and preserves nested data in input-json", () => {
@@ -327,7 +327,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool run 'hello-groovy' --draft --token 'secret-token' --mode 'async' --name 'Alice' --count '3' --enabled 'false' --input-json '{\"payload\":{\"source\":\"file\"}}'");
+    ).toBe("actiondock script run 'hello-groovy' --draft --token 'secret-token' --mode 'async' --name 'Alice' --count '3' --enabled 'false' --input-json '{\"payload\":{\"source\":\"file\"}}'");
   });
 
   it("omits sync mode because it is the CLI default", () => {
@@ -339,7 +339,7 @@ describe("CLI command helpers", () => {
         origin: "http://localhost:8080",
         scriptId: "hello-groovy"
       })
-    ).toBe("actiondock tool run 'hello-groovy' --message 'hi'");
+    ).toBe("actiondock script run 'hello-groovy' --message 'hi'");
   });
 
   it("flattens plugin args but keeps scriptInput as json", () => {
@@ -361,21 +361,21 @@ describe("CLI command helpers", () => {
     expect(
       buildCliCommandPresets({
         keyPrefix: "invoke",
-        cliBash: "actiondock tool run 'hello-groovy'",
-        cliPowerShell: "actiondock tool run 'hello-groovy'"
+        cliBash: "actiondock script run 'hello-groovy'",
+        cliPowerShell: "actiondock script run 'hello-groovy'"
       })
     ).toEqual([
       {
         key: "invoke-cli-bash",
         family: "CLI",
         environment: "bash/zsh",
-        command: "actiondock tool run 'hello-groovy'"
+        command: "actiondock script run 'hello-groovy'"
       },
       {
         key: "invoke-cli-powershell",
         family: "CLI",
         environment: "PowerShell",
-        command: "actiondock tool run 'hello-groovy'"
+        command: "actiondock script run 'hello-groovy'"
       }
     ]);
   });

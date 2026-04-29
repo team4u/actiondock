@@ -402,7 +402,7 @@ export function useScriptEditor({
     try {
       await deleteScript(currentScript.id);
       messageApi.success("删除成功");
-      navigate("/tools", { replace: true });
+      navigate("/scripts", { replace: true });
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "删除脚本失败";
       messageApi.error(detail);
@@ -498,7 +498,7 @@ export function useScriptEditor({
       return;
     }
     void modal.confirm({
-      title: "确认删除这个工具？",
+      title: "确认删除这个脚本？",
       content: "删除后不可恢复。",
       okText: "删除",
       cancelText: "取消",
@@ -584,7 +584,7 @@ export function useScriptEditor({
         if (key === "copy") {
           return {
             key,
-            label: "复制工具",
+            label: "复制脚本",
             onClick: () => navigate(`/scripts/new?copyFrom=${encodeURIComponent(currentScript?.id ?? "")}`)
           };
         }

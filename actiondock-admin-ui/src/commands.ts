@@ -392,7 +392,7 @@ export function buildScriptDetailCliCommand({
   origin: string;
   scriptId: string;
 }): string {
-  return buildCliCommand("actiondock tool get", [
+  return buildCliCommand("actiondock script get", [
     quoteCliValue(scriptId, environment),
     ...(draft ? ["--draft"] : []),
     ...buildCliCommonFlags({ apiKey, environment })
@@ -445,7 +445,7 @@ export function buildToolSchemaCliCommand({
   origin: string;
   scriptId: string;
 }): string {
-  return buildCliCommand("actiondock tool schema", [
+  return buildCliCommand("actiondock script schema", [
     quoteCliValue(scriptId, environment),
     ...(draft ? ["--draft"] : []),
     ...buildCliCommonFlags({ apiKey, environment })
@@ -525,7 +525,7 @@ export function buildExecuteCliCommand({
   origin: string;
   scriptId: string;
 }): string {
-  return buildCliCommand("actiondock tool run", [
+  return buildCliCommand("actiondock script run", [
     quoteCliValue(scriptId, environment),
     ...(draft ? ["--draft"] : []),
     ...buildCliCommonFlags({ apiKey, environment }),

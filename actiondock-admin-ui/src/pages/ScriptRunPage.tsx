@@ -122,7 +122,7 @@ export function ScriptRunPage() {
   const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
   const canBatchExecute = Boolean(script?.status === "PUBLISHED");
   const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
-  const backPath = "/tools";
+  const backPath = "/scripts";
 
   const watchedFormValues = Form.useWatch([], form) as Record<string, unknown> | undefined;
 

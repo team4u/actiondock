@@ -46,9 +46,9 @@ actiondock self-update 0.1.4 --dry-run
 如果你的 ActionDock 服务运行在本机，CLI 默认会连接 `http://127.0.0.1:5177`，不需要显式传 `--server`。
 
 ```bash
-actiondock tool list
-actiondock tool schema hello-world
-actiondock tool run hello-world --message hello --name alice --json
+actiondock script list
+actiondock script schema hello-world
+actiondock script run hello-world --message hello --name alice --json
 ```
 
 如果服务要求鉴权，先保存 token：
@@ -62,14 +62,26 @@ actiondock config show
 
 ## 常用命令
 
-### Tool
+### Script
 
 ```bash
-actiondock tool list
-actiondock tool get hello-world --json
-actiondock tool schema hello-world
-actiondock tool run hello-world --message hello --name alice --count 3 --json
-actiondock tool run hello-world --message hello --draft --json
+actiondock script create --script-id hello-world --name "Hello World" --type groovy --source-file ./hello.groovy --input-schema-file ./input.schema.json --output-schema-file ./output.schema.json --json
+actiondock script get hello-world --json
+actiondock script patch hello-world --source-file ./hello.v2.groovy --json
+actiondock script patch hello-world --patch-json '{"inputSchema":{"properties":{"name":{"type":"string"}}}}' --json
+actiondock script validate hello-world --json
+actiondock script publish hello-world --json
+actiondock script discard-draft hello-world --json
+```
+
+### Script Invocation
+
+```bash
+actiondock script list
+actiondock script get hello-world --json
+actiondock script schema hello-world
+actiondock script run hello-world --message hello --name alice --count 3 --json
+actiondock script run hello-world --message hello --draft --json
 ```
 
 ### Execution
@@ -126,7 +138,7 @@ actiondock state purge-expired oauth.github --json
 CLI 会优先把顶层字符串、数字和布尔字段展开成普通 flags。例如：
 
 ```bash
-actiondock tool run hello-world --message hello --count 3 --json
+actiondock script run hello-world --message hello --count 3 --json
 actiondock plugin invoke my-plugin summarize --topic ops --limit 5
 ```
 
@@ -135,8 +147,8 @@ actiondock plugin invoke my-plugin summarize --topic ops --limit 5
 当字段本身是对象或数组时，改用 JSON 或文件输入：
 
 ```bash
-actiondock tool run hello-world --input-json '{"name":"alice","payload":{"x":1,"tags":["a","b"]}}' --json
-actiondock tool run hello-world --input-file ./examples/hello-world.json --json
+actiondock script run hello-world --input-json '{"name":"alice","payload":{"x":1,"tags":["a","b"]}}' --json
+actiondock script run hello-world --input-file ./examples/hello-world.json --json
 actiondock schedule create --script-id hello-world --schedule-name hourly-sync --schedule-cron "0 */5 * * * *" --input-json '{"payload":{"source":"file"}}' --name alice --json
 actiondock schedule update schedule-1 --replace-input --input-file ./examples/schedule-input.json --schedule-disabled --json
 actiondock plugin invoke my-plugin summarize --args-json '{"topic":"ops","filters":{"env":"prod"}}'
@@ -146,10 +158,27 @@ actiondock plugin invoke my-plugin summarize --args-file ./examples/plugin-args.
 PowerShell 也建议保持单行调用，避免多行反引号和额外转义：
 
 ```powershell
-actiondock tool run hello-world --input-json '{"name":"alice","payload":{"x":1}}' --json
+actiondock script run hello-world --input-json '{"name":"alice","payload":{"x":1}}' --json
 ```
 
 如果需要更多执行细节，可显式传 `--response-view debug`。
+
+## 推荐给 AI 的闭环
+
+如果你是让外部大模型持续创建和调试脚本，建议整个闭环都只使用 `script` 命令，避免混入旧术语。
+
+一个最稳定的循环通常是：
+
+```bash
+actiondock script create --script-id hello-world --name "Hello World" --type groovy --source-file ./hello.groovy --json
+actiondock script patch hello-world --source-file ./hello.v2.groovy --json
+actiondock script validate hello-world --json
+actiondock script run hello-world --draft --input-json '{"name":"alice"}' --response-view debug --json
+actiondock execution get exec-1 --json
+actiondock script publish hello-world --json
+```
+
+`script patch` 会调用服务端的 `PATCH /api/scripts/{id}`，只允许更新 `source`、`inputSchema`、`outputSchema`，避免模型在调试时误覆盖脚本元数据。
 
 ## 配置与默认值
 
@@ -171,7 +200,7 @@ actiondock config clear token
 
 命令参数 > 环境变量 > 本地配置 > 默认值
 
-默认服务地址是 `http://127.0.0.1:5177`。`tool run` 默认同步执行，不需要额外指定同步模式。
+默认服务地址是 `http://127.0.0.1:5177`。`script run` 默认同步执行，不需要额外指定同步模式。
 
 ## 自动补全
 
@@ -211,7 +240,7 @@ Add-Content -Path $PROFILE -Value (Invoke-Expression -Command "actiondock autoco
 
 ```bash
 npm install
-npm run dev -- tool list
+npm run dev -- script list
 npm run build
 npm test
 ```

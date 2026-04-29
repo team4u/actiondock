@@ -63,7 +63,7 @@ export function DependencyDiffViewer({ diff }: DependencyDiffViewerProps) {
             ]}
             dataSource={diff.added}
           />
-          <Text type="secondary">新增依赖时，请确认目标环境已安装并配置对应工具或插件。</Text>
+          <Text type="secondary">新增依赖时，请确认目标环境已安装并配置对应脚本或插件。</Text>
         </Card>
       ) : null}
 

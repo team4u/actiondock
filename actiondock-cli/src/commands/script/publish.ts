@@ -3,9 +3,10 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
+import { renderScriptDetail } from "../../lib/render.js";
 
-export default class ToolGetCommand extends BaseCommand {
-  static description = "Show a published or draft ActionDock tool definition";
+export default class ScriptPublishCommand extends BaseCommand {
+  static description = "Publish an ActionDock draft script";
 
   static args = {
     scriptId: Args.string({ required: true })
@@ -13,9 +14,6 @@ export default class ToolGetCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    draft: Flags.boolean({
-      description: "Read the draft script instead of the published snapshot"
-    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -26,28 +24,21 @@ export default class ToolGetCommand extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(ToolGetCommand);
+    const { args, flags } = await this.parse(ScriptPublishCommand);
 
     try {
       const client = new ActionDockClient({
         serverUrl: resolveServerUrl(flags.server),
         token: resolveToken(flags.token)
       });
-      const script = await client.getScript(args.scriptId, flags.draft);
+      const script = await client.publishScript(args.scriptId);
 
       if (flags.json) {
         this.printJson(script);
         return;
       }
 
-      this.log([
-        `Script: ${script.id}${script.name ? ` (${script.name})` : ""}`,
-        `Target: ${flags.draft ? "draft" : "published"}`,
-        `Type: ${script.type ?? "-"}`,
-        `Status: ${script.status ?? "-"}`,
-        `Version: ${script.version ?? "-"}`,
-        `Published: ${script.publishedSnapshot ? "yes" : "no"}`
-      ].join("\n"));
+      this.log(renderScriptDetail(script, "draft"));
     } catch (error) {
       this.handleError(error, flags.json);
     }

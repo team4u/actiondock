@@ -65,7 +65,7 @@ type InstallAction = "install" | "update";
 
 function renderPluginDependencies(dependencies: PluginDependency[]) {
   if (dependencies.length === 0) {
-    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有声明插件依赖" />;
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有声明插件依赖" />;
   }
 
   return (
@@ -104,7 +104,7 @@ function renderPluginDependencies(dependencies: PluginDependency[]) {
 
 function renderScriptDependencies(dependencies: ScriptDependency[]) {
   if (dependencies.length === 0) {
-    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有声明脚本依赖" />;
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有声明脚本依赖" />;
   }
 
   return (
@@ -121,7 +121,7 @@ function renderScriptDependencies(dependencies: ScriptDependency[]) {
           render: (value: string) => <Text code>{value}</Text>
         },
         {
-          title: "仓库工具",
+          title: "仓库脚本",
           key: "target",
           render: (_value: unknown, record) => <Text code>{`${record.repositoryId}/${record.toolId}`}</Text>
         },
@@ -259,7 +259,7 @@ export function RepositoryDiscoveryPage() {
       setDetail(await getRepositoryTool(descriptor.repositoryId, descriptor.toolId));
     } catch (error) {
       setDetail(null);
-      messageApi.error(getErrorMessage(error, "加载工具详情失败"));
+      messageApi.error(getErrorMessage(error, "加载脚本详情失败"));
     } finally {
       setDetailLoading(false);
     }
@@ -290,7 +290,7 @@ export function RepositoryDiscoveryPage() {
       try {
         detailForAction = await getRepositoryTool(descriptor.repositoryId, descriptor.toolId);
       } catch (error) {
-        messageApi.error(getErrorMessage(error, "读取工具模板失败"));
+        messageApi.error(getErrorMessage(error, "读取脚本模板失败"));
         return;
       }
     }
@@ -298,7 +298,7 @@ export function RepositoryDiscoveryPage() {
     const scheduleCount = detailForAction.scheduleTemplate.length;
 
     await modal.confirm({
-      title: action === "install" ? "安装工具" : "更新工具",
+      title: action === "install" ? "安装脚本" : "更新脚本",
       okText: action === "install" ? "安装" : "更新",
       cancelText: "取消",
       content: (
@@ -311,7 +311,7 @@ export function RepositoryDiscoveryPage() {
               同时创建 {scheduleCount} 个定时任务模板（创建后默认停用）
             </Checkbox>
           ) : (
-            <Text type="secondary">该工具没有定时任务模板。</Text>
+            <Text type="secondary">该脚本没有定时任务模板。</Text>
           )}
           {descriptor.scriptDependencies.length > 0 ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -321,7 +321,7 @@ export function RepositoryDiscoveryPage() {
               {renderScriptDependencies(descriptor.scriptDependencies)}
             </Space>
           ) : (
-            <Text type="secondary">该工具没有声明脚本依赖。</Text>
+            <Text type="secondary">该脚本没有声明脚本依赖。</Text>
           )}
           {descriptor.pluginDependencies.length > 0 ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -331,7 +331,7 @@ export function RepositoryDiscoveryPage() {
               {renderPluginDependencies(descriptor.pluginDependencies)}
             </Space>
           ) : (
-            <Text type="secondary">该工具没有声明插件依赖。</Text>
+            <Text type="secondary">该脚本没有声明插件依赖。</Text>
           )}
           {!descriptor.trusted ? (
             <Text type="warning">当前来源仓库未标记为可信，安装前请先检查源码与配置模板。</Text>
@@ -355,7 +355,7 @@ export function RepositoryDiscoveryPage() {
           installPluginDependencies
         });
       }
-      messageApi.success(action === "install" ? "工具已安装到本机" : "工具已更新");
+      messageApi.success(action === "install" ? "脚本已安装到本机" : "脚本已更新");
       await loadData();
       if (detailOpen) {
         await openDetail(descriptor);
@@ -461,7 +461,7 @@ export function RepositoryDiscoveryPage() {
 
   const columns: ColumnsType<RepositoryToolDescriptor> = [
     {
-      title: "工具",
+      title: "脚本",
       key: "tool",
       render: (_value: unknown, record) => (
         <Space wrap size={[8, 8]}>
@@ -642,8 +642,8 @@ export function RepositoryDiscoveryPage() {
       {modalContextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title="发现工具"
-          meta={<Text type="secondary">聚合展示所有已添加仓库中的工具。安装只是把定义同步到本机，执行仍在你的机器上完成。</Text>}
+          title="发现脚本"
+          meta={<Text type="secondary">聚合展示所有已添加仓库中的脚本。安装只是把定义同步到本机，执行仍在你的机器上完成。</Text>}
           actions={
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
               刷新目录
@@ -714,7 +714,7 @@ export function RepositoryDiscoveryPage() {
               emptyText: (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="当前没有可发现的工具。先到仓库管理页添加并同步仓库。"
+                  description="当前没有可发现的脚本。先到仓库管理页添加并同步仓库。"
                 />
               )
             }}
@@ -742,7 +742,7 @@ export function RepositoryDiscoveryPage() {
       </Space>
 
       <Drawer
-        title={detail?.descriptor.displayName || "工具详情"}
+        title={detail?.descriptor.displayName || "脚本详情"}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         width={920}
@@ -753,7 +753,7 @@ export function RepositoryDiscoveryPage() {
             <Spin size="large" />
           </div>
         ) : !detail ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="工具详情加载失败" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="脚本详情加载失败" />
         ) : (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Descriptions
@@ -761,7 +761,7 @@ export function RepositoryDiscoveryPage() {
               size="small"
               column={2}
               items={[
-                { key: "tool", label: "工具 ID", children: <Text code>{detail.descriptor.installedScriptId}</Text> },
+                { key: "tool", label: "脚本 ID", children: <Text code>{detail.descriptor.installedScriptId}</Text> },
                 { key: "repo", label: "来源仓库", children: detail.descriptor.repositoryId },
                 { key: "usage", label: "仓库用途", children: detail.descriptor.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag>分发仓库</Tag> },
                 { key: "type", label: "类型", children: getScriptTypeLabel(detail.descriptor.type) },
@@ -790,7 +790,7 @@ export function RepositoryDiscoveryPage() {
                   children: (
                     <MarkdownDescription
                       value={detail.descriptor.description}
-                      emptyText="该工具没有填写说明。"
+                      emptyText="该脚本没有填写说明。"
                       className="markdown-description--panel"
                     />
                   )
@@ -852,7 +852,7 @@ export function RepositoryDiscoveryPage() {
                       ]}
                     />
 	                  ) : (
-	                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有配置模板" />
+	                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有配置模板" />
 	                  )
 	                },
 	                {
@@ -886,7 +886,7 @@ export function RepositoryDiscoveryPage() {
                       ]}
                     />
                   ) : (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该工具没有定时任务模板" />
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有定时任务模板" />
                   )
                 }
               ]}

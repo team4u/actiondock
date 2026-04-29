@@ -99,7 +99,7 @@ function renderScriptDependencyList(
                 />
                 <Select
                   value={dependency.toolId}
-                  placeholder="选择依赖工具"
+                  placeholder="选择依赖脚本"
                   style={{ flex: "2 1 260px", minWidth: 260 }}
                   options={toolOptions}
                   disabled={!dependency.repositoryId}
@@ -164,7 +164,7 @@ function renderVersionSuggestion(suggestion: RepositoryPublishVersionSuggestion)
     return <Text type="warning">仓库当前版本 {suggestion.currentVersion} 无法自动递增，请手动填写新版本。</Text>;
   }
   if (suggestion.status === "NOT_FOUND") {
-    return <Text type="secondary">目标仓库暂无该工具版本。</Text>;
+    return <Text type="secondary">目标仓库暂无该脚本版本。</Text>;
   }
   if (suggestion.status === "ERROR") {
     return <Text type="danger">{suggestion.message}</Text>;
@@ -221,7 +221,7 @@ export function PublishToRepositoryModal({
             type="info"
             showIcon
             message="发布前会先执行本地保存、校验与发布"
-            description="工具说明来自脚本自己的说明字段；这里填写的是本次版本发布日志。配置项只会按你选择的模式导出为模板。"
+            description="脚本说明来自脚本自己的说明字段；这里填写的是本次版本发布日志。配置项只会按你选择的模式导出为模板。"
           />
           <Form form={form} layout="vertical" onValuesChange={onValuesChange}>
             <Form.Item
@@ -238,7 +238,7 @@ export function PublishToRepositoryModal({
             </Form.Item>
             <Space size={12} style={{ width: "100%" }} wrap>
               <Form.Item
-                label="仓库工具 ID"
+                label="仓库脚本 ID"
                 name="toolId"
                 rules={[{ required: true, message: "请输入 toolId" }]}
                 style={{ flex: "1 1 220px", minWidth: 220 }}
@@ -279,7 +279,7 @@ export function PublishToRepositoryModal({
             <Form.Item label={`定时任务模板 (${schedules.length})`} name="scheduleIds">
               <Select
                 mode="multiple"
-                placeholder={schedules.length > 0 ? "选择要一起发布的定时任务模板" : "当前工具没有可发布的定时任务"}
+                placeholder={schedules.length > 0 ? "选择要一起发布的定时任务模板" : "当前脚本没有可发布的定时任务"}
                 options={schedules.map((item) => ({
                   value: item.id,
                   label: `${item.name} · ${item.cronExpression}`
@@ -293,7 +293,7 @@ export function PublishToRepositoryModal({
             {renderPluginDependencyList(pluginDependencies)}
             {pluginDependencies.length > 0 ? (
             <Text type="secondary">
-                发布会把这些依赖写入仓库工具描述；安装工具时可选择同步安装或更新依赖插件。请先把对应插件发布到同一仓库。
+                发布会把这些依赖写入仓库脚本描述；安装脚本时可选择同步安装或更新依赖插件。请先把对应插件发布到同一仓库。
               </Text>
             ) : null}
           </Card>

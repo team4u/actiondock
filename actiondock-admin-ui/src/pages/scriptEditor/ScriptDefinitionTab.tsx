@@ -164,7 +164,7 @@ export function ScriptDefinitionTab({
                   <Input.TextArea
                     autoSize={{ minRows: 5, maxRows: 12 }}
                     disabled={isReadOnlyScript}
-                    placeholder="脚本自己的说明，支持 Markdown 语法；发布到仓库时会作为工具说明"
+                    placeholder="脚本自己的说明，支持 Markdown 语法；发布到仓库时会作为脚本说明"
                   />
                 </Form.Item>
               </Col>

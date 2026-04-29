@@ -47,6 +47,7 @@ import {
   updateScript
 } from "../api";
 import { ScriptImportDiffModal, type ScriptImportDiffItem } from "../components/diff/ScriptImportDiffModal";
+import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { PageHeader } from "../components/PageHeader";
 import { ScopeTag, getScopeLabel } from "../components/ScopeTag";
 import { TableLinkCell } from "../components/TableLinkCell";
@@ -82,7 +83,7 @@ function isRunnable(script: ScriptDefinition): boolean {
 
 function renderPluginDependencies(dependencies: PluginDependency[]) {
   if (dependencies.length === 0) {
-    return <Text type="secondary">该工具没有声明插件依赖。</Text>;
+    return <Text type="secondary">该脚本没有声明插件依赖。</Text>;
   }
 
   return (
@@ -100,7 +101,7 @@ function renderPluginDependencies(dependencies: PluginDependency[]) {
 
 function renderScriptDependencies(dependencies: ScriptDependency[]) {
   if (dependencies.length === 0) {
-    return <Text type="secondary">该工具没有声明脚本依赖。</Text>;
+    return <Text type="secondary">该脚本没有声明脚本依赖。</Text>;
   }
 
   return (
@@ -118,7 +119,7 @@ function renderScriptDependencies(dependencies: ScriptDependency[]) {
 
 
 
-export function ToolLibraryPage() {
+export function ScriptLibraryPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [bulkUpdating, setBulkUpdating] = useState(false);
@@ -162,7 +163,7 @@ export function ToolLibraryPage() {
         )
       );
     } catch (error) {
-      messageApi.error(getErrorMessage(error, "加载工具库失败"));
+      messageApi.error(getErrorMessage(error, "加载脚本库失败"));
     } finally {
       setLoading(false);
     }
@@ -240,18 +241,18 @@ export function ToolLibraryPage() {
       downloadJsonFile(formatScriptExportFileName(), bundle);
       messageApi.success(successMessage);
     } catch {
-      messageApi.error("导出工具失败");
+      messageApi.error("导出脚本失败");
     }
   };
 
   const handleExportSelected = () => {
     const selectedScripts = editableScripts.filter((script) => selectedScriptIds.includes(script.id));
-    exportScripts(selectedScripts, `已导出 ${selectedScripts.length} 个选中工具`);
+    exportScripts(selectedScripts, `已导出 ${selectedScripts.length} 个选中脚本`);
   };
 
   const handleExportVisible = () => {
     const targetScripts = filteredScripts.filter(isEditableAsset);
-    exportScripts(targetScripts, `已导出 ${targetScripts.length} 个可编辑工具`);
+    exportScripts(targetScripts, `已导出 ${targetScripts.length} 个可编辑脚本`);
   };
 
   const runImport = async (importedScripts: ScriptDefinition[]) => {
@@ -281,12 +282,12 @@ export function ToolLibraryPage() {
       }
 
       if (failures.length === 0) {
-        messageApi.success(`导入完成，成功处理 ${successes.length} 个工具`);
+        messageApi.success(`导入完成，成功处理 ${successes.length} 个脚本`);
         return;
       }
 
       modal.warning({
-        title: "导入已完成，部分工具处理失败",
+        title: "导入已完成，部分脚本处理失败",
         width: 640,
         content: (
           <div className="script-import-result">
@@ -335,7 +336,7 @@ export function ToolLibraryPage() {
       setSelectedImportDiffId(overwriteItems[0]?.id ?? null);
       setImportDiffOpen(true);
     } catch (error) {
-      messageApi.error(getErrorMessage(error, "导入工具失败"));
+      messageApi.error(getErrorMessage(error, "导入脚本失败"));
     }
   };
 
@@ -387,7 +388,7 @@ export function ToolLibraryPage() {
     }
 
     await modal.confirm({
-      title: "更新仓库安装工具",
+      title: "更新仓库安装脚本",
       okText: "更新",
       cancelText: "取消",
       content: (
@@ -404,7 +405,7 @@ export function ToolLibraryPage() {
               同步更新定时任务模板（仍保持默认停用）
             </Checkbox>
           ) : (
-            <Text type="secondary">该工具没有额外定时模板可同步。</Text>
+            <Text type="secondary">该脚本没有额外定时模板可同步。</Text>
           )}
           {descriptor?.scriptDependencies.length ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -419,7 +420,7 @@ export function ToolLibraryPage() {
               {renderScriptDependencies(descriptor.scriptDependencies)}
             </Space>
           ) : (
-            <Text type="secondary">该工具没有声明脚本依赖。</Text>
+            <Text type="secondary">该脚本没有声明脚本依赖。</Text>
           )}
           {descriptor?.pluginDependencies.length ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -434,7 +435,7 @@ export function ToolLibraryPage() {
               {renderPluginDependencies(descriptor.pluginDependencies)}
             </Space>
           ) : (
-            <Text type="secondary">该工具没有声明插件依赖。</Text>
+            <Text type="secondary">该脚本没有声明插件依赖。</Text>
           )}
         </Space>
       )
@@ -447,10 +448,10 @@ export function ToolLibraryPage() {
         installScriptDependencies,
         installPluginDependencies
       });
-      messageApi.success("工具已更新");
+      messageApi.success("脚本已更新");
       await loadData();
     } catch (error) {
-      messageApi.error(getErrorMessage(error, "更新工具失败"));
+      messageApi.error(getErrorMessage(error, "更新脚本失败"));
     } finally {
       setActionKey(null);
     }
@@ -498,7 +499,7 @@ export function ToolLibraryPage() {
             )
           );
         } catch (error) {
-          repositoryFailures.push(`${repositoryId}: ${getErrorMessage(error, "读取工具失败")}`);
+          repositoryFailures.push(`${repositoryId}: ${getErrorMessage(error, "读取脚本失败")}`);
         }
       }
 
@@ -539,7 +540,7 @@ export function ToolLibraryPage() {
         return;
       }
 
-      messageApi.success(`已更新 ${updatedCount} 个工具，拉取 ${pulledCount} 个开发脚本`);
+      messageApi.success(`已更新 ${updatedCount} 个脚本，拉取 ${pulledCount} 个开发脚本`);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "一键更新失败"));
     } finally {
@@ -548,9 +549,22 @@ export function ToolLibraryPage() {
     }
   };
 
+  const handleUninstall = async (tool: ScriptDefinition) => {
+    setActionKey(`uninstall:${tool.id}`);
+    try {
+      await uninstallInstalledTool(tool.id);
+      messageApi.success("已卸载");
+      await loadData();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "卸载失败"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
   const columns: ColumnsType<ScriptDefinition> = [
     {
-      title: "工具",
+      title: "脚本",
       dataIndex: "id",
       key: "id",
       render: (value: string, record) => (
@@ -588,7 +602,7 @@ export function ToolLibraryPage() {
             size="small"
             icon={<PlayCircleOutlined />}
             disabled={!isRunnable(record)}
-            onClick={() => navigate(`/run/${record.id}`)}
+            onClick={() => navigate(`/scripts/${record.id}/run`)}
           >
             运行
           </Button>
@@ -608,15 +622,33 @@ export function ToolLibraryPage() {
             导出
           </Button>
           {record.scope === "REPOSITORY" ? (
-            <Button
-              size="small"
-              icon={<SyncOutlined />}
-              loading={actionKey === `update:${record.id}`}
-              disabled={!descriptorMap.get(record.id)?.updateAvailable}
-              onClick={() => void handleUpdate(record)}
-            >
-              更新
-            </Button>
+            <>
+              <Button
+                size="small"
+                icon={<SyncOutlined />}
+                loading={actionKey === `update:${record.id}`}
+                disabled={!descriptorMap.get(record.id)?.updateAvailable}
+                onClick={() => void handleUpdate(record)}
+              >
+                更新
+              </Button>
+              <ConfirmDangerAction
+                title="确认卸载这个仓库工具？"
+                description="将删除本地的脚本定义及相关定时任务配置。"
+                okText="卸载"
+                onConfirm={() => void handleUninstall(record)}
+                loading={actionKey === `uninstall:${record.id}`}
+              >
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  loading={actionKey === `uninstall:${record.id}`}
+                >
+                  卸载
+                </Button>
+              </ConfirmDangerAction>
+            </>
           ) : null}
         </Space>
       )
@@ -646,8 +678,8 @@ export function ToolLibraryPage() {
       />
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title="工具库"
-          meta={<Text type="secondary">管理本机可运行、可编辑或从仓库安装的工具。</Text>}
+          title="脚本库"
+          meta={<Text type="secondary">管理本机可运行、可编辑或从仓库安装的脚本。</Text>}
           actions={
             <>
               <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
@@ -665,10 +697,10 @@ export function ToolLibraryPage() {
                 导出可编辑
               </Button>
               <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
-                导入工具
+                导入脚本
               </Button>
               <Button icon={<PlusOutlined />} type="primary" onClick={() => navigate("/scripts/new")}>
-                新建工具
+                新建脚本
               </Button>
             </>
           }
@@ -728,7 +760,7 @@ export function ToolLibraryPage() {
               导出选中
             </Button>
             <Text type="secondary">
-              共 {filteredScripts.length} 个工具，已选 {selectedScriptIds.length} 个
+              共 {filteredScripts.length} 个脚本，已选 {selectedScriptIds.length} 个
             </Text>
           </Space>
         </Card>
@@ -746,7 +778,7 @@ export function ToolLibraryPage() {
               emptyText: (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="还没有本机工具。可以新建工具，或到发现工具中安装仓库工具。"
+                  description="还没有本机脚本。可以新建脚本，或到发现脚本中安装仓库脚本。"
                 />
               )
             }}

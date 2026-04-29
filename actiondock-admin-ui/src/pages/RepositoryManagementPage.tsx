@@ -230,7 +230,7 @@ export function RepositoryManagementPage() {
           </Button>
           <ConfirmDangerAction
             title="确认删除这个仓库？"
-            description="删除后不会卸载已安装工具，但将无法继续从该仓库同步或发布。"
+            description="删除后不会卸载已安装脚本，但将无法继续从该仓库同步或发布。"
             onConfirm={async () => {
               setDeletingId(record.id);
               try {
@@ -259,7 +259,7 @@ export function RepositoryManagementPage() {
       {contextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title="工具仓库"
+          title="脚本仓库"
           meta={<Text type="secondary">支持 Git、HTTP 与本地目录仓库。本地目录仓库在创建时会自动初始化为空仓库，不需要手工创建 actiondock.repository.json，也不用先点同步。</Text>}
           actions={
             <>
@@ -284,7 +284,7 @@ export function RepositoryManagementPage() {
               emptyText: (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="还没有配置工具仓库。先添加一个 Git、HTTP 或本地目录仓库。"
+                  description="还没有配置脚本仓库。先添加一个 Git、HTTP 或本地目录仓库。"
                 />
               )
             }}
@@ -318,7 +318,7 @@ export function RepositoryManagementPage() {
               name="name"
               rules={[{ required: true, message: "请输入仓库名称" }]}
             >
-              <Input placeholder="例如 平台组工具仓库" />
+              <Input placeholder="例如 平台组脚本仓库" />
             </Form.Item>
 
             <Space size={12} style={{ width: "100%" }} wrap>
