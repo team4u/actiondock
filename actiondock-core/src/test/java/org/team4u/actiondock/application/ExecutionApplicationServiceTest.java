@@ -99,8 +99,37 @@ class ExecutionApplicationServiceTest {
 
         assertThatThrownBy(() -> service.execute("script-1", Map.of(), SubmitMode.SYNC))
                 .isInstanceOf(InvalidExecutionInputException.class)
-                .hasMessage("输入参数校验失败");
+                .hasMessage("脚本 script-1 输入参数校验失败: Name 必填");
         assertThat(executionRepository.savedSnapshots).isEmpty();
+    }
+
+    @Test
+    void executeNormalizesCharSequenceInputsBeforeValidation() {
+        scriptRepository.save(new ScriptDefinition()
+                .setId("script-1")
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "required", List.of("tableName"),
+                        "properties", Map.of(
+                                "tableName", Map.of("type", "string", "title", "Table Name")
+                        )
+                )));
+        when(scriptEngine.execute(any(), any(), any())).thenAnswer(invocation -> {
+            Map<String, Object> input = invocation.getArgument(1);
+            assertThat(input.get("tableName")).isEqualTo("cap_cbs.table_a").isInstanceOf(String.class);
+            return Map.of("ok", true);
+        });
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        ExecutionRecord record = service.execute("script-1", Map.of("tableName", new StringBuilder("cap_cbs.table_a")), SubmitMode.SYNC);
+
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
+        assertThat(record.getInput().get("tableName")).isEqualTo("cap_cbs.table_a").isInstanceOf(String.class);
     }
 
     @Test

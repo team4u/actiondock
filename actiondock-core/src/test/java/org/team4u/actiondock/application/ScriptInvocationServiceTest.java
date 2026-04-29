@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ScriptInvocationServiceTest {
@@ -38,6 +39,62 @@ class ScriptInvocationServiceTest {
     }
 
     @Test
+    void invokePublishedNormalizesCharSequenceInputsBeforeValidation() {
+        RecordingScriptEngine scriptEngine = new RecordingScriptEngine();
+        ScriptInvocationService service = new ScriptInvocationService(repositoryWith(publishedScript("child")), () -> scriptEngine);
+
+        Object result = service.invokePublished(
+                "child",
+                new ScriptDefinition().setId("parent"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent")),
+                Map.of("name", new StringBuilder("Alice"))
+        );
+
+        assertThat(result).isEqualTo(Map.of("result", 42));
+        assertThat(scriptEngine.lastInput.get("name")).isEqualTo("Alice").isInstanceOf(String.class);
+    }
+
+    @Test
+    void invokePublishedIncludesCalleeScriptIdWhenNestedValidationFails() {
+        ScriptInvocationService service = new ScriptInvocationService(repositoryWith(publishedScript("child")), RecordingScriptEngine::new);
+
+        InvalidExecutionInputException exception = catchThrowableOfType(() -> service.invokePublished(
+                "child",
+                new ScriptDefinition().setId("parent"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent")),
+                Map.of("name", 123)
+        ), InvalidExecutionInputException.class);
+
+        assertThat(exception)
+                .isNotNull()
+                .hasMessage("调用脚本 child 失败: 脚本 child 输入参数校验失败: Name 类型应为 string，实际为 integer");
+        assertThat(exception.getFieldErrors()).singleElement()
+                .satisfies(fieldError -> assertThat(fieldError.field()).isEqualTo("name"));
+    }
+
+    @Test
+    void invokePublishedIncludesCalleeScriptIdWhenNestedExecutionFails() {
+        ScriptInvocationService service = new ScriptInvocationService(
+                repositoryWith(publishedScript("child")),
+                () -> new RecordingScriptEngine() {
+                    @Override
+                    public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
+                        throw new IllegalStateException("boom");
+                    }
+                }
+        );
+
+        assertThatThrownBy(() -> service.invokePublished(
+                "child",
+                new ScriptDefinition().setId("parent"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent")),
+                Map.of("name", "Alice")
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("调用脚本 child 失败: boom");
+    }
+
+    @Test
     void invokePublishedDetectsRecursiveCalls() {
         ScriptInvocationService service = new ScriptInvocationService(repositoryWith(publishedScript("child")), RecordingScriptEngine::new);
 
@@ -48,7 +105,7 @@ class ScriptInvocationServiceTest {
                 Map.of()
         ))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("检测到脚本循环调用: parent -> child -> child");
+                .hasMessage("调用脚本 child 失败: 检测到脚本循环调用: parent -> child -> child");
     }
 
     @Test
@@ -87,7 +144,7 @@ class ScriptInvocationServiceTest {
 
         assertThatThrownBy(() -> service.invokePublished("draft-only", null, null, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("脚本未发布: draft-only");
+                .hasMessage("调用脚本 draft-only 失败: 脚本未发布: draft-only");
     }
 
     private ScriptRepository repositoryWith(ScriptDefinition definition) {
@@ -120,12 +177,22 @@ class ScriptInvocationServiceTest {
                 .setName("Draft Name")
                 .setType(ScriptType.PYTHON)
                 .setSource("draft-source")
-                .setInputSchema(Map.of("type", "object"))
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "name", Map.of("type", "string", "title", "Name")
+                        )
+                ))
                 .setPublishedSnapshot(new PublishedScriptSnapshot()
                         .setName("Published Name")
                         .setType(ScriptType.GROOVY)
                         .setSource("published-source")
-                        .setInputSchema(Map.of("type", "object"))
+                        .setInputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "name", Map.of("type", "string", "title", "Name")
+                                )
+                        ))
                         .setOutputSchema(Map.of("type", "object")));
     }
 

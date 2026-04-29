@@ -97,7 +97,7 @@ public class ScriptSchemaSupport {
                 fieldErrors.add(new SchemaFieldError(
                         field.name(),
                         "type_mismatch",
-                        field.label() + " 类型应为 " + field.kind(),
+                        field.label() + " 类型应为 " + field.kind() + "，实际为 " + describeActualType(value),
                         field.kind(),
                         detectType(value)
                 ));
@@ -210,6 +210,17 @@ public class ScriptSchemaSupport {
             return "object";
         }
         return value.getClass().getSimpleName();
+    }
+
+    private String describeActualType(Object value) {
+        String logicalType = detectType(value);
+        if (value == null) {
+            return logicalType;
+        }
+        if (value instanceof String || value instanceof Boolean || value instanceof Number || value instanceof List<?> || value instanceof Map<?, ?>) {
+            return logicalType;
+        }
+        return logicalType + " (" + value.getClass().getName() + ")";
     }
 
     private boolean isSupportedType(String type) {

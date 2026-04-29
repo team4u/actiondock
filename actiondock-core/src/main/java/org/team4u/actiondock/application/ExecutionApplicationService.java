@@ -136,7 +136,9 @@ public class ExecutionApplicationService {
                                     String scheduleId,
                                     String agentRunId,
                                     String agentStepId) {
-        Map<String, Object> payload = configValueApplicationService.resolveMap(input);
+        Map<String, Object> payload = ExecutionInputNormalizer.normalizeMap(
+                configValueApplicationService.resolveMap(input)
+        );
         scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
 
         ExecutionRecord record = new ExecutionRecord()

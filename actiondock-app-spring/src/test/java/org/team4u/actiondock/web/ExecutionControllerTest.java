@@ -202,10 +202,11 @@ class ExecutionControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.msg").value("输入参数校验失败"))
+                .andExpect(jsonPath("$.msg").value("脚本 script-1 输入参数校验失败: Name 为必填"))
                 .andExpect(jsonPath("$.data.code").value("INVALID_ARGUMENTS"))
                 .andExpect(jsonPath("$.data.scriptId").value("script-1"))
-                .andExpect(jsonPath("$.data.fieldErrors[0].field").value("name"));
+                .andExpect(jsonPath("$.data.fieldErrors[0].field").value("name"))
+                .andExpect(jsonPath("$.data.fieldErrors[0].message").value("Name 为必填"));
     }
 
     @Test

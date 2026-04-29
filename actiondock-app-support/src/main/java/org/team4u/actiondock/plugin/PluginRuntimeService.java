@@ -4,6 +4,7 @@ import org.pf4j.DefaultPluginManager;
 import org.pf4j.PluginState;
 import org.pf4j.PluginWrapper;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
+import org.team4u.actiondock.application.ErrorDetailSupport;
 import org.team4u.actiondock.application.ExecutionOutputProjector;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.PluginActionMetadata;
@@ -500,23 +501,23 @@ public class PluginRuntimeService {
                                       Map<String, Object> input,
                                       Map<String, Object> args) {
         assertActionAvailable(pluginId, action);
-        ActionDockPlugin systemPlugin = systemPlugins.get(pluginId);
-        if (systemPlugin != null) {
-            return systemPlugin.invoke(
-                    action,
-                    new ScriptPluginContext()
-                            .setScriptId(definition == null ? null : definition.getId())
-                            .setScriptName(definition == null ? null : definition.getName())
-                            .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
-                            .setSubmitMode(resolveSubmitMode(executionContext))
-                            .setScriptInput(input)
-                            .setPluginConfig(Map.of()),
-                    args == null ? Map.of() : new LinkedHashMap<>(args)
-            );
-        }
-        PluginRegistration registration = requireRegistration(pluginId);
-        ActionDockPlugin plugin = requireLoadedExtension(pluginId);
         try {
+            ActionDockPlugin systemPlugin = systemPlugins.get(pluginId);
+            if (systemPlugin != null) {
+                return systemPlugin.invoke(
+                        action,
+                        new ScriptPluginContext()
+                                .setScriptId(definition == null ? null : definition.getId())
+                                .setScriptName(definition == null ? null : definition.getName())
+                                .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
+                                .setSubmitMode(resolveSubmitMode(executionContext))
+                                .setScriptInput(input)
+                                .setPluginConfig(Map.of()),
+                        args == null ? Map.of() : new LinkedHashMap<>(args)
+                );
+            }
+            PluginRegistration registration = requireRegistration(pluginId);
+            ActionDockPlugin plugin = requireLoadedExtension(pluginId);
             return plugin.invoke(
                     action,
                     new ScriptPluginContext()
@@ -529,9 +530,9 @@ public class PluginRuntimeService {
                     args == null ? Map.of() : new LinkedHashMap<>(args)
             );
         } catch (PluginRuntimeException exception) {
-            throw exception;
+            throw enrichPluginInvocationException(pluginId, action, exception);
         } catch (Exception exception) {
-            throw new PluginRuntimeException("插件调用失败 " + pluginId + "/" + action + ": " + exception.getMessage(), exception);
+            throw enrichPluginInvocationException(pluginId, action, exception);
         }
     }
 
@@ -602,6 +603,18 @@ public class PluginRuntimeService {
     private String resolveSubmitMode(ScriptExecutionContext executionContext) {
         SubmitMode submitMode = executionContext == null ? null : executionContext.getSubmitMode();
         return submitMode == null ? null : submitMode.name();
+    }
+
+    private PluginRuntimeException enrichPluginInvocationException(String pluginId, String action, Exception exception) {
+        String prefix = "插件调用失败 " + pluginId + "/" + action + ": ";
+        String message = ErrorDetailSupport.summarize(exception);
+        if (message.startsWith(prefix) && exception instanceof PluginRuntimeException pluginRuntimeException) {
+            return pluginRuntimeException;
+        }
+        return new PluginRuntimeException(
+                message.startsWith(prefix) ? message : prefix + message,
+                exception
+        );
     }
 
     private PluginRegistration requireRegistration(String pluginId) {

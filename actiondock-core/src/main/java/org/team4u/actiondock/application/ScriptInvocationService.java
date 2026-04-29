@@ -69,23 +69,38 @@ public class ScriptInvocationService {
                                   Map<String, Object> input) {
         ensureEnabled();
         String normalizedScriptId = normalizeScriptId(scriptId);
-        ScriptDefinition definition = scriptRepository.findById(normalizedScriptId)
-                .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + normalizedScriptId));
-        if (definition.getPublishedSnapshot() == null) {
-            throw new IllegalArgumentException("脚本未发布: " + normalizedScriptId);
+        try {
+            ScriptDefinition definition = scriptRepository.findById(normalizedScriptId)
+                    .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + normalizedScriptId));
+            if (definition.getPublishedSnapshot() == null) {
+                throw new IllegalArgumentException("脚本未发布: " + normalizedScriptId);
+            }
+
+            ScriptDefinition publishedDefinition = definition.toPublishedDefinition();
+            Map<String, Object> payload = normalizeInput(input);
+            scriptSchemaSupport.validateInput(publishedDefinition.getId(), payload, publishedDefinition.getInputSchema());
+
+            ScriptExecutionContext nestedContext = childContext(
+                    callerDefinition,
+                    executionContext,
+                    publishedDefinition.getId()
+            );
+            Object result = scriptEngine().execute(publishedDefinition, payload, nestedContext);
+            return normalizeResult(result);
+        } catch (InvalidExecutionInputException exception) {
+            throw new InvalidExecutionInputException(
+                    exception.getScriptId(),
+                    exception.getFieldErrors(),
+                    prefixedInvocationMessage(normalizedScriptId, exception),
+                    exception
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(prefixedInvocationMessage(normalizedScriptId, exception), exception);
+        } catch (IllegalStateException exception) {
+            throw new IllegalStateException(prefixedInvocationMessage(normalizedScriptId, exception), exception);
+        } catch (RuntimeException exception) {
+            throw new IllegalStateException(prefixedInvocationMessage(normalizedScriptId, exception), exception);
         }
-
-        ScriptDefinition publishedDefinition = definition.toPublishedDefinition();
-        Map<String, Object> payload = normalizeInput(input);
-        scriptSchemaSupport.validateInput(publishedDefinition.getId(), payload, publishedDefinition.getInputSchema());
-
-        ScriptExecutionContext nestedContext = childContext(
-                callerDefinition,
-                executionContext,
-                publishedDefinition.getId()
-        );
-        Object result = scriptEngine().execute(publishedDefinition, payload, nestedContext);
-        return normalizeResult(result);
     }
 
     private ScriptEngine scriptEngine() {
@@ -97,7 +112,7 @@ public class ScriptInvocationService {
     }
 
     private Map<String, Object> normalizeInput(Map<String, Object> input) {
-        return input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
+        return ExecutionInputNormalizer.normalizeMap(input);
     }
 
     private String normalizeScriptId(String scriptId) {
@@ -155,5 +170,14 @@ public class ScriptInvocationService {
         if (!enabled) {
             throw new IllegalStateException("脚本互调未启用");
         }
+    }
+
+    private String prefixedInvocationMessage(String calleeScriptId, RuntimeException exception) {
+        String prefix = "调用脚本 " + calleeScriptId + " 失败: ";
+        String message = ErrorDetailSupport.summarize(exception);
+        if (message.startsWith(prefix)) {
+            return message;
+        }
+        return prefix + message;
     }
 }

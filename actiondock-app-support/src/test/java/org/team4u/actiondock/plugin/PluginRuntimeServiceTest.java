@@ -31,6 +31,7 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
+import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
 import java.io.IOException;
@@ -358,6 +359,30 @@ class PluginRuntimeServiceTest {
         assertThat(service.listPluginReferences()).isEmpty();
     }
 
+    @Test
+    void invokeIncludesPluginIdAndActionWhenPluginThrowsRuntimeException() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new FailingSystemPlugin())
+        );
+
+        assertThatThrownBy(() -> service.invoke(
+                "failing-system-plugin",
+                "explode",
+                new ScriptDefinition().setId("script-1"),
+                new ScriptExecutionContext().setExecutionId("exec-1"),
+                Map.of("name", "Alice"),
+                Map.of("message", "hi")
+        ))
+                .isInstanceOf(PluginRuntimeException.class)
+                .hasMessage("插件调用失败 failing-system-plugin/explode: downstream boom");
+    }
+
     private Path buildPluginJar(Path destination, String manifestJson) throws IOException {
         return buildPluginJar(
                 destination,
@@ -624,6 +649,18 @@ class PluginRuntimeServiceTest {
         @Override
         public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
             throw new UnsupportedOperationException("Not needed for this test");
+        }
+    }
+
+    private static final class FailingSystemPlugin implements ActionDockPlugin {
+        @Override
+        public String id() {
+            return "failing-system-plugin";
+        }
+
+        @Override
+        public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
+            throw new PluginRuntimeException("downstream boom");
         }
     }
 

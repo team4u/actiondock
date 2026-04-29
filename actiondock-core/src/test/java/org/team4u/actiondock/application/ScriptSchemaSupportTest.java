@@ -81,7 +81,7 @@ class ScriptSchemaSupportTest {
                 .satisfies(error -> {
                     InvalidExecutionInputException exception = (InvalidExecutionInputException) error;
                     assertThat(exception.getFieldErrors()).containsExactlyInAnyOrder(
-                            new SchemaFieldError("age", "type_mismatch", "Age 类型应为 integer", "integer", "string"),
+                            new SchemaFieldError("age", "type_mismatch", "Age 类型应为 integer，实际为 string", "integer", "string"),
                             new SchemaFieldError("mode", "enum_mismatch", "Mode 必须是枚举值之一: FAST, SAFE", "enum(FAST, SAFE)", "DEBUG")
                     );
                 });

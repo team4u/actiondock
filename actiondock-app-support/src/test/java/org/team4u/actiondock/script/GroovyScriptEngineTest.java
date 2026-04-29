@@ -6,15 +6,21 @@ import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
+import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.model.SharedStateEntry;
 import org.team4u.actiondock.domain.model.ScriptType;
+import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.plugin.api.ActionDockPlugin;
+import org.team4u.actiondock.plugin.api.PluginRuntimeException;
+import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -233,6 +239,74 @@ class GroovyScriptEngineTest {
     }
 
     @Test
+    void executeNormalizesGStringArgumentsBeforeNestedScriptValidation() {
+        GroovyScriptEngine invocationEngine = new GroovyScriptEngine(
+                groovyProperties(),
+                PluginRuntimeService.disabled(),
+                invocationService()
+        );
+
+        Object result = invocationEngine.execute(
+                new ScriptDefinition()
+                        .setId("parent")
+                        .setSource("""
+                                def schemaName = input.schemaName
+                                def fullTableName = "${schemaName}.cbs_audit_flow"
+                                return scripts.invoke('child', [name: fullTableName])
+                                """),
+                Map.of("schemaName", "cap_cbs"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent"))
+        );
+
+        assertThat(result).isEqualTo(Map.of("message", "Hello, cap_cbs.cbs_audit_flow"));
+    }
+
+    @Test
+    void executeIncludesNestedScriptAndPluginContextWhenPluginInvocationFails() {
+        PluginRuntimeService pluginRuntimeService = new PluginRuntimeService(
+                new MinimalJsonCodec(),
+                new EmptyPluginRegistryRepository(),
+                groovyPluginProperties(),
+                org.team4u.actiondock.application.ConfigValueApplicationService.disabled(),
+                List.of(new FailingSystemPlugin())
+        );
+        ScriptDefinition child = new ScriptDefinition()
+                .setId("child")
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Child")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return plugins.invoke('failing-system-plugin', 'explode', [message: input.name])")
+                        .setInputSchema(Map.of(
+                                "type", "object",
+                                "required", List.of("name"),
+                                "properties", Map.of(
+                                        "name", Map.of("type", "string", "title", "Name")
+                                )
+                        ))
+                        .setOutputSchema(Map.of("type", "object")));
+        GroovyScriptEngine childEngine = new GroovyScriptEngine(
+                groovyProperties(),
+                pluginRuntimeService,
+                ScriptInvocationService.disabled()
+        );
+        GroovyScriptEngine parentEngine = new GroovyScriptEngine(
+                groovyProperties(),
+                pluginRuntimeService,
+                invocationService(child, childEngine)
+        );
+
+        assertThatThrownBy(() -> parentEngine.execute(
+                new ScriptDefinition()
+                        .setId("parent")
+                        .setSource("return scripts.invoke('child', [name: input.name])"),
+                Map.of("name", "Alice"),
+                new ScriptExecutionContext().setScriptStack(List.of("parent"))
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("调用脚本 child 失败: 插件调用失败 failing-system-plugin/explode: downstream boom");
+    }
+
+    @Test
     void executeExposesStateBinding() {
         SharedStateApplicationService stateService = new SharedStateApplicationService(new InMemorySharedStateRepository());
         GroovyScriptEngine stateEngine = new GroovyScriptEngine(
@@ -285,6 +359,12 @@ class GroovyScriptEngineTest {
 
     private static AppProperties.Groovy groovyProperties() {
         return new AppProperties.Groovy();
+    }
+
+    private static AppProperties.Plugins groovyPluginProperties() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(System.getProperty("java.io.tmpdir") + "/actiondock-groovy-test-plugins");
+        return properties;
     }
 
     private static class CountingGroovyScriptEngine extends GroovyScriptEngine {
@@ -439,8 +519,28 @@ class GroovyScriptEngineTest {
                         .setName("Child")
                         .setType(ScriptType.GROOVY)
                         .setSource("return [message: 'Hello, ' + input.name]")
-                        .setInputSchema(Map.of("type", "object"))
+                        .setInputSchema(Map.of(
+                                "type", "object",
+                                "required", List.of("name"),
+                                "properties", Map.of(
+                                        "name", Map.of("type", "string", "title", "Name")
+                                )
+                        ))
                         .setOutputSchema(Map.of("type", "object")));
+        ScriptEngine nestedEngine = new ScriptEngine() {
+            @Override
+            public void validate(ScriptDefinition definition) {
+            }
+
+            @Override
+            public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
+                return Map.of("message", "Hello, " + input.get("name"));
+            }
+        };
+        return invocationService(child, nestedEngine);
+    }
+
+    private static ScriptInvocationService invocationService(ScriptDefinition child, ScriptEngine nestedEngine) {
         ScriptRepository repository = new ScriptRepository() {
             @Override
             public ScriptDefinition save(ScriptDefinition definition) {
@@ -462,16 +562,71 @@ class GroovyScriptEngineTest {
                 throw new UnsupportedOperationException("Not needed");
             }
         };
-        ScriptEngine nestedEngine = new ScriptEngine() {
-            @Override
-            public void validate(ScriptDefinition definition) {
-            }
-
-            @Override
-            public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
-                return Map.of("message", "Hello, " + input.get("name"));
-            }
-        };
         return new ScriptInvocationService(repository, () -> nestedEngine);
+    }
+
+    private static final class FailingSystemPlugin implements ActionDockPlugin {
+        @Override
+        public String id() {
+            return "failing-system-plugin";
+        }
+
+        @Override
+        public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
+            throw new PluginRuntimeException("downstream boom");
+        }
+    }
+
+    private static final class MinimalJsonCodec implements JsonCodec {
+        @Override
+        public String write(Object value) {
+            return value == null ? null : String.valueOf(value);
+        }
+
+        @Override
+        public <T> T read(String json, Class<T> type) {
+            throw new UnsupportedOperationException("Not needed for this test");
+        }
+
+        @Override
+        public Object readUntyped(String json) {
+            throw new UnsupportedOperationException("Not needed for this test");
+        }
+
+        @Override
+        public <T> List<T> readList(String json, Class<T> elementType) {
+            throw new UnsupportedOperationException("Not needed for this test");
+        }
+
+        @Override
+        public Map<String, Object> readMap(String json) {
+            throw new UnsupportedOperationException("Not needed for this test");
+        }
+    }
+
+    private static final class EmptyPluginRegistryRepository implements PluginRegistryRepository {
+        @Override
+        public PluginRegistration save(PluginRegistration registration) {
+            return registration;
+        }
+
+        @Override
+        public Optional<PluginRegistration> findByPluginId(String pluginId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<PluginRegistration> findAll() {
+            return List.of();
+        }
+
+        @Override
+        public List<PluginRegistration> findEnabled() {
+            return List.of();
+        }
+
+        @Override
+        public void deleteByPluginId(String pluginId) {
+        }
     }
 }
