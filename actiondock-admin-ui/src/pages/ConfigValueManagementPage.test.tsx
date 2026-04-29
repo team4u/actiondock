@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDetailFormValues, buildReferenceItems } from "./ConfigValueManagementPage";
+import { buildDetailFormValues, buildDetailValueFieldState, buildReferenceItems } from "./ConfigValueManagementPage";
 import type { ConfigValueDetail } from "../types";
 
 const baseDetail: ConfigValueDetail = {
@@ -49,6 +49,53 @@ describe("ConfigValueManagementPage helpers", () => {
       description: "API key",
       secret: false,
       preserveValue: false
+    });
+  });
+
+  it("shows preserve-value behavior for secret details with an existing value", () => {
+    expect(buildDetailValueFieldState(baseDetail, {
+      secret: true,
+      preserveValue: true,
+      editable: true
+    })).toEqual({
+      showPreserveValue: true,
+      valueInputDisabled: true
+    });
+  });
+
+  it("keeps the value input editable when preserve-value is off", () => {
+    expect(buildDetailValueFieldState(baseDetail, {
+      secret: true,
+      preserveValue: false,
+      editable: true
+    })).toEqual({
+      showPreserveValue: true,
+      valueInputDisabled: false
+    });
+  });
+
+  it("does not show preserve-value controls for non-secret details", () => {
+    expect(buildDetailValueFieldState({
+      ...baseDetail,
+      secret: false
+    }, {
+      secret: false,
+      preserveValue: false,
+      editable: true
+    })).toEqual({
+      showPreserveValue: false,
+      valueInputDisabled: false
+    });
+  });
+
+  it("keeps the value input disabled when the detail is read-only", () => {
+    expect(buildDetailValueFieldState(baseDetail, {
+      secret: true,
+      preserveValue: false,
+      editable: false
+    })).toEqual({
+      showPreserveValue: true,
+      valueInputDisabled: true
     });
   });
 

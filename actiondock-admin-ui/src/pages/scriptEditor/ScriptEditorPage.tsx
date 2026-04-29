@@ -298,11 +298,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     previewScriptType,
     watchedScriptValues?.name
   ]);
-  const showDiffNotice =
-    mode === "edit"
-    && !editor.isReadOnlyScript
-    && Boolean(editor.currentScript?.publishedSnapshot)
-    && publishDiff.hasChanges;
+  const showDiffNotice = editor.hasUnpublishedChanges;
 
   useEffect(() => {
     if (mode !== "create" || searchParams.get("importGenerated") !== "1") {
@@ -709,14 +705,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             message="有未发布变更"
             description="当前本地内容与已发布版本存在差异，发布前建议先核对完整 Diff。"
             action={
-              <Space wrap>
-                <Button size="small" onClick={() => setScriptDiffDrawerOpen(true)}>
-                  查看变更
-                </Button>
-                <Button size="small" type="primary" onClick={openPublishConfirm}>
-                  发布
-                </Button>
-              </Space>
+              <Button size="small" onClick={() => setScriptDiffDrawerOpen(true)}>
+                查看变更
+              </Button>
             }
           />
         ) : null}

@@ -67,6 +67,11 @@ interface ConfigValueManagementPageProps {
   embedded?: boolean;
 }
 
+interface DetailValueFieldState {
+  showPreserveValue: boolean;
+  valueInputDisabled: boolean;
+}
+
 function detailToSummary(detail: ConfigValueDetail): ConfigValue {
   return {
     key: detail.key,
@@ -108,6 +113,17 @@ export function buildReferenceItems(key: string) {
     { label: "Python 脚本", value: `config.get("${normalizedKey}")` },
     { label: "插件调用参数", value: `plugins.invoke("plugin-id", "action", [token: "\${config.${normalizedKey}}"])` }
   ];
+}
+
+export function buildDetailValueFieldState(
+  detail: Pick<ConfigValueDetail, "secret" | "hasValue">,
+  options: { secret: boolean; preserveValue: boolean; editable: boolean }
+): DetailValueFieldState {
+  const showPreserveValue = Boolean(options.secret && detail.secret && detail.hasValue);
+  return {
+    showPreserveValue,
+    valueInputDisabled: !options.editable || (showPreserveValue && options.preserveValue)
+  };
 }
 
 function renderConfigValue(item: Pick<ConfigValue, "secret" | "publishMode" | "hasValue" | "value" | "valueMasked">) {
@@ -177,6 +193,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
   const watchedCreateSecret = Form.useWatch("secret", createForm) ?? false;
   const watchedDetailKey = Form.useWatch("key", detailForm);
   const watchedDetailSecret = Form.useWatch("secret", detailForm) ?? false;
+  const watchedDetailPreserveValue = Form.useWatch("preserveValue", detailForm) ?? false;
   const [items, setItems] = useState<ConfigValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -268,6 +285,16 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     [watchedDetailKey]
   );
   const detailEditable = Boolean(detail && (!detail.managed || detail.overridden));
+  const detailValueFieldState = useMemo(
+    () => detail
+      ? buildDetailValueFieldState(detail, {
+        secret: watchedDetailSecret,
+        preserveValue: watchedDetailPreserveValue,
+        editable: detailEditable
+      })
+      : { showPreserveValue: false, valueInputDisabled: true },
+    [detail, detailEditable, watchedDetailPreserveValue, watchedDetailSecret]
+  );
 
   const confirmDiscardDetailChanges = async (title: string, content: string): Promise<boolean> => {
     if (!detailDirty) {
@@ -411,7 +438,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
         value: values.value ?? "",
         description: values.description?.trim() || undefined,
         secret: Boolean(values.secret),
-        preserveValue: Boolean(values.preserveValue)
+        preserveValue: Boolean(detailForm.getFieldValue("preserveValue"))
       };
 
       const currentDetail = detail?.key === detailKey ? detail : await getConfigValue(detailKey);
@@ -1014,12 +1041,6 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                       />
                     ) : null}
 
-                    <Card size="small" title="影响摘要">
-                      <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                        {buildImpactSummary(detail).map((line) => <Text key={line}>{line}</Text>)}
-                      </Space>
-                    </Card>
-
                     <Card size="small" title="编辑配置">
                       <Form
                         form={detailForm}
@@ -1059,7 +1080,29 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                           }]}
                           extra="支持在值内继续引用其他配置值，例如 https://host/${config.region}/v1。"
                         >
-                          <Input.TextArea rows={6} placeholder="sk-..." disabled={!detailEditable} />
+                          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                            {detailValueFieldState.showPreserveValue ? (
+                              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                <Form.Item name="preserveValue" valuePropName="checked" noStyle>
+                                  <Checkbox
+                                    disabled={!detailEditable}
+                                    onChange={(event) => {
+                                      if (event.target.checked) {
+                                        detailForm.setFieldValue("value", "");
+                                      }
+                                    }}
+                                  >
+                                    保留现值
+                                  </Checkbox>
+                                </Form.Item>
+                              </div>
+                            ) : null}
+                            <Input.TextArea
+                              rows={6}
+                              placeholder="sk-..."
+                              disabled={detailValueFieldState.valueInputDisabled}
+                            />
+                          </Space>
                         </Form.Item>
                         <Form.Item label="高级选项" style={{ marginBottom: 12 }}>
                           <Space direction="vertical" size={8}>
@@ -1074,11 +1117,6 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                             <Text type="secondary">
                               Secret 值不会在列表和详情页中明文回显，但运行时仍可通过 {"${config.key}"} 引用。
                             </Text>
-                            {watchedDetailSecret && detail.secret && detail.hasValue ? (
-                              <Form.Item name="preserveValue" valuePropName="checked" noStyle>
-                                <Checkbox disabled={!detailEditable}>保留现值，不覆盖为当前输入</Checkbox>
-                              </Form.Item>
-                            ) : null}
                           </Space>
                         </Form.Item>
                         <Form.Item label="说明" name="description">
