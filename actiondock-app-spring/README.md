@@ -41,7 +41,17 @@ npm i -g @actiondock/server
 actiondock-server
 ```
 
-默认端口是 `5177`。启动后常用入口：
+默认端口是 `5177`，且仅允许本机访问（绑定 `127.0.0.1`）。如需对外部网络开放，可通过以下方式修改绑定地址：
+
+```bash
+# 启动时传入参数
+actiondock-server --server.address=0.0.0.0
+
+# 或设置环境变量
+SERVER_ADDRESS=0.0.0.0 actiondock-server
+```
+
+启动后常用入口：
 
 - 管理台：`http://localhost:5177/admin/scripts`
 - API 根路径：`http://localhost:5177/api`
