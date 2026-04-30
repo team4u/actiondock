@@ -241,11 +241,7 @@ Script / Plugin / Repository / AI Package
 ### 本地启动
 
 ```bash
-# 编译全部模块
-mvn clean package -DskipTests
-
-# 启动服务
-mvn -pl actiondock-app-spring -am spring-boot:run
+actiondock-server
 ```
 
 启动后：
