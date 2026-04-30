@@ -92,7 +92,7 @@ export function renderSchemaFieldInput(
     );
   }
 
-  if (field.widget === "textarea") {
+  if (field.widget && field.widget !== "input") {
     const minRows = field.rows ?? 6;
     return (
       <Input.TextArea

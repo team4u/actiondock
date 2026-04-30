@@ -1,7 +1,7 @@
 import { parseJsonText, prettyJson } from "./utils";
 
 export type SchemaFieldKind = "string" | "number" | "integer" | "boolean" | "enum" | "object" | "array";
-export type SchemaFieldWidget = "input" | "textarea";
+export type SchemaFieldWidget = "input" | "textarea" | "markdown" | "json" | "code";
 
 export interface SchemaFieldDraft {
   id: string;
@@ -14,6 +14,7 @@ export interface SchemaFieldDraft {
   enumText: string;
   widget: SchemaFieldWidget;
   rows: number;
+  language?: string;
   children?: SchemaFieldDraft[];
   items?: SchemaFieldDraft | null;
 }
@@ -28,6 +29,7 @@ export interface SchemaFieldDefinition {
   examples?: unknown[];
   widget?: SchemaFieldWidget;
   rows?: number;
+  language?: string;
   enumValues?: string[];
   children?: SchemaFieldDefinition[];
   childRequiredFields?: string[];
@@ -44,6 +46,7 @@ export interface SchemaFieldValidationErrors {
 interface ResolvedFieldUiConfig {
   widget?: SchemaFieldWidget;
   rows?: number;
+  language?: string;
 }
 
 interface ResolvedFieldMeta {
@@ -73,9 +76,10 @@ export type SchemaEditorState =
 const FIELD_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 const ROOT_KEYS = new Set(["type", "properties", "required"]);
 const FIELD_KEYS = new Set(["type", "title", "description", "default", "enum", "x-ui", "properties", "items", "required"]);
-const UI_KEYS = new Set(["widget", "rows"]);
+const UI_KEYS = new Set(["widget", "rows", "language"]);
 const DEFAULT_TEXTAREA_ROWS = 6;
 const MAX_SCHEMA_DEPTH = 3;
+const DEFAULT_CODE_LANGUAGE = "plaintext";
 
 let schemaFieldSequence = 0;
 
@@ -101,6 +105,13 @@ function dedupeStrings(values: string[]): string[] {
 
 function hasUnsupportedKeys(source: Record<string, unknown>, supportedKeys: Set<string>): boolean {
   return Object.keys(source).some((key) => !supportedKeys.has(key));
+}
+
+function normalizeStringWidget(widget: SchemaFieldWidget | undefined): SchemaFieldWidget {
+  if (widget === "json") {
+    return "code";
+  }
+  return widget ?? "input";
 }
 
 export function createEmptySchema(): Record<string, unknown> {
@@ -218,7 +229,7 @@ export function validateSchemaFields(
         : "array 类型必须定义 items 类型";
     }
 
-    if (field.widget === "textarea" && (!Number.isInteger(field.rows) || field.rows <= 0)) {
+    if ((field.widget === "textarea" || field.widget === "json" || field.widget === "code") && (!Number.isInteger(field.rows) || field.rows <= 0)) {
       fieldErrors.rows = "请输入大于 0 的整数行数";
     }
 
@@ -288,6 +299,14 @@ function parseTextareaRows(value: unknown): number | null {
   return value;
 }
 
+function parseCodeLanguage(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const language = value.trim();
+  return language ? language : null;
+}
+
 function parseFieldUi(
   meta: Record<string, unknown>,
   fieldName: string,
@@ -316,34 +335,86 @@ function parseFieldUi(
   }
 
   const widgetValue = ui.widget;
-  if (widgetValue !== undefined && widgetValue !== "input" && widgetValue !== "textarea") {
+  if (
+    widgetValue !== undefined &&
+    widgetValue !== "input" &&
+    widgetValue !== "textarea" &&
+    widgetValue !== "markdown" &&
+    widgetValue !== "json" &&
+    widgetValue !== "code"
+  ) {
     if (options.strict) {
-      throw new Error(`字段 ${fieldName} 的 x-ui.widget 仅支持 input 或 textarea`);
+      throw new Error(`字段 ${fieldName} 的 x-ui.widget 仅支持 input、textarea、markdown、json 或 code`);
     }
     return {};
   }
 
   const rowsValue = ui.rows;
   const rows = rowsValue === undefined ? DEFAULT_TEXTAREA_ROWS : parseTextareaRows(rowsValue);
+  const language = parseCodeLanguage(ui.language);
+  const widget = normalizeStringWidget(widgetValue as SchemaFieldWidget | undefined);
+  const legacyJsonWidget = widgetValue === "json";
+  const resolvedLanguage = language ?? (legacyJsonWidget ? "json" : DEFAULT_CODE_LANGUAGE);
+
+  if (widget === "input") {
+    if (rowsValue !== undefined || language !== null) {
+      if (options.strict) {
+        throw new Error(`字段 ${fieldName} 的 x-ui.rows / x-ui.language 仅能用于 textarea 或 code`);
+      }
+      return {};
+    }
+    return {};
+  }
+
+  if (widget === "markdown") {
+    if (rowsValue !== undefined || language !== null) {
+      if (options.strict) {
+        throw new Error(`字段 ${fieldName} 的 x-ui.rows / x-ui.language 仅能用于 textarea 或 code`);
+      }
+      return {};
+    }
+    return {
+      widget: "markdown"
+    };
+  }
+
+  if (widget === "code") {
+    if (rowsValue !== undefined && rows === null) {
+      if (options.strict) {
+        throw new Error(`字段 ${fieldName} 的 x-ui.rows 必须是大于 0 的整数`);
+      }
+      return {
+        widget: "code",
+        rows: DEFAULT_TEXTAREA_ROWS,
+        language: resolvedLanguage
+      };
+    }
+    return {
+      widget: "code",
+      rows: rows ?? DEFAULT_TEXTAREA_ROWS,
+      language: resolvedLanguage
+    };
+  }
+
+  if (widget !== "textarea") {
+    return {};
+  }
+
+  if (language !== null) {
+    if (options.strict) {
+      throw new Error(`字段 ${fieldName} 的 x-ui.language 仅能用于 code`);
+    }
+    return {};
+  }
+
   if (rowsValue !== undefined && rows === null) {
     if (options.strict) {
       throw new Error(`字段 ${fieldName} 的 x-ui.rows 必须是大于 0 的整数`);
     }
     return {
-      widget: widgetValue === "textarea" ? "textarea" : undefined,
-      rows: widgetValue === "textarea" ? DEFAULT_TEXTAREA_ROWS : undefined
+      widget: "textarea",
+      rows: DEFAULT_TEXTAREA_ROWS
     };
-  }
-
-  if ((widgetValue ?? "input") !== "textarea" && rowsValue !== undefined) {
-    if (options.strict) {
-      throw new Error(`字段 ${fieldName} 的 x-ui.rows 仅能用于 textarea`);
-    }
-    return {};
-  }
-
-  if (widgetValue !== "textarea") {
-    return {};
   }
 
   return {
@@ -567,7 +638,8 @@ function deserializeFieldDraftsFromProperties(
         defaultValue: defaultState.hasDefaultValue ? defaultState.defaultValue : undefined,
         enumText: "",
         widget: fieldMeta.ui.widget ?? "input",
-        rows: fieldMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS
+        rows: fieldMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS,
+        language: fieldMeta.ui.language
       });
     }
   }
@@ -619,6 +691,7 @@ function deserializeArrayItemsDraft(
       enumText: itemsMeta.kind === "enum" ? (itemsMeta.enumValues?.join(", ") ?? "") : "",
       widget: itemsMeta.ui.widget ?? "input",
       rows: itemsMeta.ui.rows ?? DEFAULT_TEXTAREA_ROWS,
+      language: itemsMeta.ui.language,
       ...(itemsMeta.kind === "enum" && itemsMeta.enumValues
         ? { enumText: itemsMeta.enumValues.join(", ") }
         : {})
@@ -741,6 +814,16 @@ function buildPropertyFromDraft(field: SchemaFieldDraft): Record<string, unknown
     if (field.rows !== DEFAULT_TEXTAREA_ROWS) {
       ui.rows = field.rows;
     }
+    property["x-ui"] = ui;
+  } else if (field.type === "string" && field.widget === "markdown") {
+    const ui: Record<string, unknown> = { widget: "markdown" };
+    property["x-ui"] = ui;
+  } else if (field.type === "string" && (field.widget === "json" || field.widget === "code")) {
+    const ui: Record<string, unknown> = { widget: "code" };
+    if (field.rows !== DEFAULT_TEXTAREA_ROWS) {
+      ui.rows = field.rows;
+    }
+    ui.language = field.widget === "json" ? "json" : field.language?.trim() || DEFAULT_CODE_LANGUAGE;
     property["x-ui"] = ui;
   }
   return property;
@@ -912,7 +995,8 @@ function resolveSchemaFieldsRecursive(
         defaultValue: fieldMeta.defaultValue,
         examples: fieldMeta.examples,
         widget: fieldMeta.ui.widget,
-        rows: fieldMeta.ui.rows
+        rows: fieldMeta.ui.rows,
+        language: fieldMeta.ui.language
       });
       return;
     }

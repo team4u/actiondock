@@ -231,6 +231,7 @@ export function ScriptDefinitionTab({
                     onChange={onOutputSchemaStateChange}
                     theme={editorTheme}
                     disabled={isReadOnlyScript}
+                    allowRichTextWidgets
                   />
                 )
               }

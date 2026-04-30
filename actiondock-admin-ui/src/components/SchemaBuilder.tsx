@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import { CodeEditor } from "./CodeEditor";
 import { InfoHint } from "./InfoHint";
-import type { SchemaEditorState, SchemaFieldDraft, SchemaFieldKind } from "../schema";
+import type { SchemaEditorState, SchemaFieldDraft, SchemaFieldKind, SchemaFieldWidget } from "../schema";
 import {
   createSchemaFieldDraft,
   createSchemaFieldDraftForObject,
@@ -33,9 +33,25 @@ const FIELD_TYPE_OPTIONS: Array<{ value: SchemaFieldKind; label: string }> = [
 
 const ARRAY_ITEMS_TYPE_OPTIONS = FIELD_TYPE_OPTIONS.filter((opt) => opt.value !== "array");
 
-const STRING_WIDGET_OPTIONS = [
+const RICH_STRING_WIDGET_OPTIONS: Array<{ value: SchemaFieldWidget; label: string }> = [
   { value: "input", label: "单行输入" },
-  { value: "textarea", label: "多行输入" }
+  { value: "textarea", label: "多行输入" },
+  { value: "markdown", label: "Markdown" },
+  { value: "code", label: "代码" }
+] as const;
+
+const BASIC_STRING_WIDGET_OPTIONS: Array<{ value: SchemaFieldWidget; label: string }> = RICH_STRING_WIDGET_OPTIONS.slice(0, 2);
+
+const CODE_LANGUAGE_OPTIONS = [
+  { value: "plaintext", label: "plaintext" },
+  { value: "json", label: "json" },
+  { value: "javascript", label: "javascript" },
+  { value: "typescript", label: "typescript" },
+  { value: "python", label: "python" },
+  { value: "groovy", label: "groovy" },
+  { value: "bash", label: "bash" },
+  { value: "yaml", label: "yaml" },
+  { value: "sql", label: "sql" }
 ] as const;
 
 const BOOLEAN_DEFAULT_OPTIONS = [
@@ -49,6 +65,7 @@ interface SchemaBuilderProps {
   onChange: (nextValue: SchemaEditorState) => void;
   theme: "vs-light" | "vs-dark";
   disabled?: boolean;
+  allowRichTextWidgets?: boolean;
 }
 
 function updateBuilderFields(
@@ -82,8 +99,16 @@ function BuilderUnavailable({
   );
 }
 
-export function SchemaBuilder({ label, value, onChange, theme, disabled = false }: SchemaBuilderProps) {
+export function SchemaBuilder({
+  label,
+  value,
+  onChange,
+  theme,
+  disabled = false,
+  allowRichTextWidgets = false
+}: SchemaBuilderProps) {
   const [activeTab, setActiveTab] = useState<"builder" | "json">(value.mode === "json" ? "json" : "builder");
+  const stringWidgetOptions = allowRichTextWidgets ? RICH_STRING_WIDGET_OPTIONS : BASIC_STRING_WIDGET_OPTIONS;
 
   useEffect(() => {
     if (value.mode === "json") {
@@ -99,6 +124,7 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
       type: nextType,
       widget: nextType === "string" ? field.widget : "input",
       defaultValue: undefined,
+      language: nextType === "string" ? field.language : undefined,
       children: undefined,
       items: undefined
     };
@@ -436,20 +462,29 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                 <div className="schema-field-grid__item schema-field-grid__item--compact">
                                   <Text type="secondary">输入控件</Text>
                                   <Select
-                                    value={field.widget}
+                                    value={
+                                      allowRichTextWidgets || field.widget === "input" || field.widget === "textarea"
+                                        ? field.widget === "json"
+                                          ? "code"
+                                          : field.widget
+                                        : "input"
+                                    }
                                     disabled={disabled}
-                                    options={[...STRING_WIDGET_OPTIONS]}
+                                    options={stringWidgetOptions}
                                     onChange={(nextValue) =>
                                       setField(field.id, {
                                         widget: nextValue,
-                                        rows: nextValue === "textarea" ? field.rows || 6 : field.rows
+                                        rows: field.rows,
+                                        language: nextValue === "code" ? field.language || "plaintext" : undefined
                                       })
                                     }
                                   />
                                 </div>
                               )}
 
-                              {field.type === "string" && field.widget === "textarea" && (
+                              {field.type === "string" &&
+                                ((field.widget === "json" ? "code" : field.widget) !== "input" &&
+                                  (field.widget === "json" ? "code" : field.widget) !== "markdown") && (
                                 <div className="schema-field-grid__item schema-field-grid__item--compact">
                                   <Text type="secondary">行数</Text>
                                   <InputNumber
@@ -465,6 +500,18 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                         rows: typeof nextValue === "number" ? nextValue : 0
                                       })
                                     }
+                                  />
+                                </div>
+                              )}
+
+                              {field.type === "string" && field.widget === "code" && (
+                                <div className="schema-field-grid__item schema-field-grid__item--compact">
+                                  <Text type="secondary">语言</Text>
+                                  <Select
+                                    value={field.language || "plaintext"}
+                                    disabled={disabled}
+                                    options={CODE_LANGUAGE_OPTIONS}
+                                    onChange={(nextValue) => setField(field.id, { language: String(nextValue) })}
                                   />
                                 </div>
                               )}
@@ -524,7 +571,15 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                         }))}
                                       onChange={(nextValue) => setField(field.id, { defaultValue: nextValue })}
                                     />
-                                  ) : field.widget === "textarea" ? (
+                                  ) : field.widget === "input" ? (
+                                    <Input
+                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
+                                      status={fieldErrors.defaultValue ? "error" : ""}
+                                      placeholder="默认值"
+                                      disabled={disabled}
+                                      onChange={(event: ChangeEvent<HTMLInputElement>) => setField(field.id, { defaultValue: event.target.value })}
+                                    />
+                                  ) : (
                                     <Input.TextArea
                                       value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
                                       status={fieldErrors.defaultValue ? "error" : ""}
@@ -532,14 +587,6 @@ export function SchemaBuilder({ label, value, onChange, theme, disabled = false 
                                       placeholder="默认值"
                                       disabled={disabled}
                                       onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setField(field.id, { defaultValue: event.target.value })}
-                                    />
-                                  ) : (
-                                    <Input
-                                      value={typeof field.defaultValue === "string" ? field.defaultValue : ""}
-                                      status={fieldErrors.defaultValue ? "error" : ""}
-                                      placeholder="默认值"
-                                      disabled={disabled}
-                                      onChange={(event: ChangeEvent<HTMLInputElement>) => setField(field.id, { defaultValue: event.target.value })}
                                     />
                                   )}
                                 </div>

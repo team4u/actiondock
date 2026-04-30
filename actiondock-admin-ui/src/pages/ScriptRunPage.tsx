@@ -31,9 +31,8 @@ import {
   getPublishedScript
 } from "../api";
 import { BatchRunPanel } from "../components/BatchRunPanel";
-import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
-import { ExecutionLogPanel } from "../components/ExecutionLogPanel";
 import { ExecutionPresetBar } from "../components/ExecutionPresetBar";
+import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { usePollingExecution } from "../hooks/usePollingExecution";
 import { resolveSchemaFields } from "../schema";
 import {
@@ -54,7 +53,7 @@ import type {
   SubmitMode,
   ValidationErrorData
 } from "../types";
-import { formatDateTime, getErrorMessage, isExecutionActive, prettyJson } from "../utils";
+import { getErrorMessage, isExecutionActive } from "../utils";
 
 const { Text, Title } = Typography;
 
@@ -95,6 +94,7 @@ export function ScriptRunPage() {
   const [executing, setExecuting] = useState(false);
   const [script, setScript] = useState<ScriptDefinition | null>(null);
   const [executionResult, setExecutionResult] = useState<ExecutionResponse | null>(null);
+  const [executedInput, setExecutedInput] = useState<Record<string, unknown> | null>(null);
   const [validationError, setValidationError] = useState<ValidationErrorData | null>(null);
   const [pageError, setPageError] = useState<PageStateError | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
@@ -110,7 +110,7 @@ export function ScriptRunPage() {
     () => resolveSchemaFields(script?.inputSchema),
     [script?.inputSchema]
   );
-  const { supportedFields: outputFields, unsupportedFields: unsupportedOutputFields } = useMemo(
+  const { supportedFields: outputFields } = useMemo(
     () => resolveSchemaFields(script?.outputSchema),
     [script?.outputSchema]
   );
@@ -120,7 +120,6 @@ export function ScriptRunPage() {
   );
   const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
   const canBatchExecute = Boolean(script?.status === "PUBLISHED");
-  const hasStructuredOutput = outputFields.length > 0 && unsupportedOutputFields.length === 0;
   const backPath = "/scripts";
 
   const watchedFormValues = Form.useWatch([], form) as Record<string, unknown> | undefined;
@@ -158,6 +157,7 @@ export function ScriptRunPage() {
       setLoading(true);
       setPageError(null);
       setExecutionResult(null);
+      setExecutedInput(null);
       setValidationError(null);
       setScript(null);
       form.resetFields();
@@ -225,10 +225,12 @@ export function ScriptRunPage() {
 
     try {
       const values = (await form.validateFields()) as Record<string, unknown>;
+      const input = buildSchemaExecutionInput(supportedInputFields, values);
       const response = await executePublishedScript(script.id, {
-        input: buildSchemaExecutionInput(supportedInputFields, values),
+        input,
         mode: executionMode
       });
+      setExecutedInput(input);
 
       if (response.submitMode === "ASYNC" && isExecutionActive(response.status)) {
         messageApi.success("异步执行已提交");
@@ -274,16 +276,7 @@ export function ScriptRunPage() {
     form.setFieldsValue(executionInitialState.formValues);
     setValidationError(null);
     setExecutionResult(null);
-  };
-
-  const formatOutputValue = (value: unknown): string => {
-    if (value === undefined || value === null) {
-      return "-";
-    }
-    if (typeof value === "string") {
-      return value;
-    }
-    return JSON.stringify(value);
+    setExecutedInput(null);
   };
 
   if (loading) {
@@ -446,58 +439,25 @@ export function ScriptRunPage() {
                     )}
                   </Card>
 
-                  <Card className="run-panel run-panel--output" title="结果">
-                    {!executionResult ? (
+                  {executionResult ? (
+                    <ExecutionResultCard
+                      execution={executionResult}
+                      inputSchema={script?.inputSchema}
+                      outputSchema={script?.outputSchema}
+                      inputOverride={executedInput ?? undefined}
+                      pollingExecutionId={pollingExecutionId}
+                      title="结果"
+                    />
+                  ) : (
+                    <Card className="run-panel run-panel--output" title="结果">
                       <div className="run-panel__empty">
                         <Empty
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
                           description="执行后这里会显示正式输出"
                         />
                       </div>
-                    ) : (
-                      <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                        <div className="run-result__summary">
-                          {pollingExecutionId ? (
-                            <Tag color="processing">轮询中: {pollingExecutionId.slice(0, 8)}</Tag>
-                          ) : (
-                            <>
-                              <Text type="secondary">状态：</Text>
-                              <Tag color={executionResult.status === "SUCCESS" ? "green" : "red"}>
-                                {executionResult.status}
-                              </Tag>
-                              <Text type="secondary">完成时间：</Text>
-                              <Text>{formatDateTime(executionResult.finishedAt ?? executionResult.createdAt)}</Text>
-                            </>
-                          )}
-                        </div>
-
-                        <ErrorDetailPanel
-                          title="执行失败"
-                          message={executionResult.errorMessage}
-                          detail={executionResult.errorDetail}
-                        />
-
-                        {hasStructuredOutput ? (
-                          <div className="run-output-list">
-                            {outputFields.map((field) => (
-                              <div key={field.name} className="run-output-item">
-                                <Text className="run-output-item__label">{field.label}</Text>
-                                <Text className="run-output-item__value">
-                                  {formatOutputValue(executionResult.output?.[field.name])}
-                                </Text>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <pre className="json-preview run-json-preview">
-                            {prettyJson(executionResult.output)}
-                          </pre>
-                        )}
-
-                        <ExecutionLogPanel logs={executionResult.logs} />
-                      </Space>
-                    )}
-                  </Card>
+                    </Card>
+                  )}
                 </div>
               )
             },

@@ -1,8 +1,35 @@
 import { Button } from "antd";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ExecutionResultCard } from "./ExecutionResultCard";
 import type { ExecutionRecord } from "../types";
+
+vi.mock("antd", async () => {
+  const actual = await vi.importActual<typeof import("antd")>("antd");
+  return {
+    ...actual,
+    Tabs: ({ items, defaultActiveKey }: { items?: Array<{ key: string; label: React.ReactNode; children: React.ReactNode }>; defaultActiveKey?: string }) => (
+      <div data-testid="mock-tabs" data-active-key={defaultActiveKey}>
+        {items?.map((item) => (
+          <section key={item.key} data-tab-key={item.key}>
+            <div>{item.label}</div>
+            <div>{item.children}</div>
+          </section>
+        ))}
+      </div>
+    )
+  };
+});
+
+vi.mock("./SchemaObjectResultView", () => ({
+  SchemaObjectResultView: ({ value, schemaName }: { value?: Record<string, unknown>; schemaName?: string }) => (
+    <div
+      data-testid="schema-object-result-view"
+      data-schema-name={schemaName ?? "outputSchema"}
+      data-value={JSON.stringify(value ?? {})}
+    />
+  )
+}));
 
 const execution: ExecutionRecord = {
   id: "exec-1",
@@ -50,6 +77,18 @@ describe("ExecutionResultCard", () => {
 
     expect(failedHtml).toContain("AI 诊断");
     expect(successHtml).not.toContain("AI 诊断");
+  });
+
+  it("prefers inputOverride for input preview", () => {
+    const html = renderToStaticMarkup(
+      <ExecutionResultCard
+        execution={execution}
+        inputOverride={{ name: "Bob" }}
+      />
+    );
+
+    expect(html).toContain('data-schema-name="inputSchema"');
+    expect(html).toContain('&quot;name&quot;:&quot;Bob&quot;');
   });
 
 });

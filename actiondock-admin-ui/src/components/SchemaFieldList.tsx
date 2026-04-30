@@ -35,7 +35,15 @@ function SchemaFieldListItem({ field, depth }: { field: SchemaFieldDefinition; d
         </Space>
 
         <Text type="secondary">
-          {[typeLabel, field.required ? "required" : "optional", field.widget === "textarea" ? "textarea" : ""]
+          {[
+            typeLabel,
+            field.required ? "required" : "optional",
+            field.widget && field.widget !== "input"
+              ? field.widget === "code" || field.widget === "json"
+                ? `code${field.language ? `(${field.language})` : ""}`
+                : field.widget
+              : ""
+          ]
             .filter(Boolean)
             .join(" · ")}
         </Text>

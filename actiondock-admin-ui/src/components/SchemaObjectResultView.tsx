@@ -1,6 +1,9 @@
 import { Alert, Form, Input, InputNumber, Segmented, Select, Space, Switch, Typography } from "antd";
 import { useEffect, useState } from "react";
+import { useColorMode } from "../contexts/ColorModeContext";
 import { resolveSchemaFields, type SchemaFieldDefinition } from "../schema";
+import { CodeEditor } from "./CodeEditor";
+import { MarkdownDescription } from "./MarkdownDescription";
 import { prettyJson } from "../utils";
 
 const { Text } = Typography;
@@ -11,7 +14,25 @@ function getDefaultResultMode(supportedFieldCount: number, unsupportedFieldCount
   return supportedFieldCount > 0 && unsupportedFieldCount === 0 ? "SCHEMA" : "JSON";
 }
 
-function renderReadonlyField(field: SchemaFieldDefinition, value: unknown) {
+function resolveCodePreviewHeight(rows?: number): string {
+  const rowCount = rows && rows > 0 ? rows : 6;
+  return `${Math.max(rowCount * 28 + 28, 180)}px`;
+}
+
+function formatTextValue(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value);
+}
+
+function renderReadonlyField(field: SchemaFieldDefinition, value: unknown, editorTheme: "vs-light" | "vs-dark") {
   if (field.kind === "enum") {
     return (
       <Select
@@ -33,10 +54,33 @@ function renderReadonlyField(field: SchemaFieldDefinition, value: unknown) {
     return <InputNumber style={{ width: "100%" }} value={typeof value === "number" ? value : null} disabled />;
   }
 
+  if (field.widget === "markdown") {
+    return (
+      <MarkdownDescription
+        value={formatTextValue(value)}
+        emptyText="暂无内容"
+        className="markdown-description--panel"
+      />
+    );
+  }
+
+  if (field.widget === "json" || field.widget === "code") {
+    return (
+      <CodeEditor
+        value={formatTextValue(value)}
+        onChange={() => undefined}
+        theme={editorTheme}
+        language={field.widget === "json" ? "json" : field.language || "plaintext"}
+        height={resolveCodePreviewHeight(field.rows)}
+        readOnly
+      />
+    );
+  }
+
   if (field.widget === "textarea") {
     return (
       <Input.TextArea
-        value={typeof value === "string" ? value : value == null ? "" : String(value)}
+        value={formatTextValue(value)}
         readOnly
         autoSize={{
           minRows: field.rows ?? 6,
@@ -46,7 +90,7 @@ function renderReadonlyField(field: SchemaFieldDefinition, value: unknown) {
     );
   }
 
-  return <Input value={typeof value === "string" ? value : value == null ? "" : String(value)} readOnly />;
+  return <Input value={formatTextValue(value)} readOnly />;
 }
 
 export function SchemaObjectResultView({
@@ -61,6 +105,7 @@ export function SchemaObjectResultView({
   valueName?: string;
 }) {
   const { supportedFields, unsupportedFields } = resolveSchemaFields(schema);
+  const editorTheme = useColorMode() === "dark" ? "vs-dark" : "vs-light";
   const [mode, setMode] = useState<SchemaObjectResultMode>(
     getDefaultResultMode(supportedFields.length, unsupportedFields.length)
   );
@@ -103,7 +148,7 @@ export function SchemaObjectResultView({
           <Form layout="vertical" disabled>
             {supportedFields.map((field) => (
               <Form.Item key={field.name} label={field.label} extra={field.description}>
-                {renderReadonlyField(field, resultValue[field.name])}
+                {renderReadonlyField(field, resultValue[field.name], editorTheme)}
               </Form.Item>
             ))}
           </Form>
