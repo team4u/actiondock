@@ -1,0 +1,55 @@
+name: jDeploy Desktop Release
+
+on:
+  release:
+    types:
+      - published
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: jdeploy-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  build-installers:
+    name: Build desktop installers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: actiondock-admin-ui/package-lock.json
+
+      - name: Build application jar
+        run: mvn -pl actiondock-app-spring -am package -DskipTests --batch-mode --no-transfer-progress
+
+      - name: Stage jDeploy project at repository root
+        run: |
+          mkdir -p target
+          cp actiondock-app-spring/package.json package.json
+          cp actiondock-app-spring/README.md README.md
+          cp actiondock-app-spring/target/actiondock-app-spring.jar target/actiondock-app-spring.jar
+
+      - name: Build and upload desktop installers
+        uses: shannah/jdeploy@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          jdeploy_version: "6.1.3"

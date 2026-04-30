@@ -9,6 +9,7 @@ import org.team4u.actiondock.auth.AuthConfiguration;
 import org.team4u.actiondock.bootstrap.SampleDataInitializer;
 import org.team4u.actiondock.config.RuntimeConfiguration;
 import org.team4u.actiondock.config.WebCorsConfiguration;
+import org.team4u.actiondock.desktop.DesktopApplicationLauncher;
 import org.team4u.actiondock.schedule.ScheduleConfiguration;
 import org.team4u.actiondock.storage.jpa.StorageConfiguration;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
@@ -26,17 +27,8 @@ import org.team4u.actiondock.web.ScriptController;
  */
 public class RuntimeApplication {
     public static void main(String[] args) {
-        if ("gui".equals(System.getProperty("jdeploy.mode", ""))) {
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                javax.swing.JOptionPane.showMessageDialog(
-                        null,
-                        "ActionDock Server\n\nThis application runs as a background service.\n"
-                                + "Use 'actiondock-server' in a terminal or the jDeploy service commands to manage it.",
-                        "About ActionDock Server",
-                        javax.swing.JOptionPane.INFORMATION_MESSAGE
-                );
-                System.exit(0);
-            });
+        if (DesktopApplicationLauncher.isGuiMode()) {
+            new DesktopApplicationLauncher(RuntimeApplication.class).launch(args);
             return;
         }
         SpringApplication.run(RuntimeApplication.class, args);

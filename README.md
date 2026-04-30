@@ -250,7 +250,7 @@ mvn -pl actiondock-app-spring -am spring-boot:run
 
 启动后：
 
-- 管理台：`http://localhost:5177/admin/scripts`
+- 管理台：`http://localhost:5177/admin/app/scripts`
 - API：`http://localhost:5177/api`
 
 ### Docker 启动
@@ -293,6 +293,24 @@ npm i -g @actiondock/server
 actiondock-server
 ```
 
+发布 npm 包：
+
+```bash
+cd actiondock-app-spring
+npm run pack:dry-run
+npm publish --access public
+```
+
+### 桌面安装包
+
+发布 GitHub Release 或推送 `v*` tag 后，`.github/workflows/jdeploy.yml` 会构建桌面安装包：
+
+```bash
+gh release create v0.3.5 --target main --title "v0.3.5" --notes "ActionDock desktop release"
+```
+
+用户从 GitHub Releases 下载 `.exe`、`.dmg` 或 Linux 安装包，安装后双击 `ActionDock` 即可打开管理台并使用托盘入口。
+
 ### CLI
 
 CLI 子项目发布名为 `@actiondock/cli`：
@@ -329,7 +347,7 @@ actiondock script publish hello-world --json
 
 常见入口包括：
 
-- 管理台：`/admin/scripts`
+- 管理台：`/admin/app/scripts`
 - 脚本与执行：`/api/scripts`、`/api/executions`
 - 插件与仓库：`/api/plugins`、`/api/repositories`
 - 定时任务：`/api/schedules`

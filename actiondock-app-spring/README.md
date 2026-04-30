@@ -53,7 +53,7 @@ SERVER_ADDRESS=0.0.0.0 actiondock-server
 
 启动后常用入口：
 
-- 管理台：`http://localhost:5177/admin/scripts`
+- 管理台：`http://localhost:5177/admin/app/scripts`
 - API 根路径：`http://localhost:5177/api`
 - Swagger UI：`http://localhost:5177/swagger-ui.html`
 
@@ -86,7 +86,7 @@ actiondock script run hello-groovy --name alice --json
 说明：
 
 - `PYTHON` 类型脚本默认使用宿主机里的 `python3`
-- 首次安装后，`actiondock-server` 会通过 jDeploy 启动打包好的 Java 服务
+- 通过 jDeploy 桌面安装包启动时，ActionDock 会启动本机服务并自动打开管理台
 
 ## 这个包里有什么
 
@@ -123,27 +123,15 @@ npm i -g @actiondock/server@latest
 
 启动后服务会低频检查 npm 上是否有新版本，并在日志里输出升级提示。可通过环境变量 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
 
-### 3. 作为系统服务运行
+### 3. 桌面版启动
 
-```bash
-actiondock-server service install
-actiondock-server service start
-actiondock-server service status
-actiondock-server service stop
-actiondock-server service uninstall
-```
+jDeploy 原生桌面安装包会提供桌面入口。双击启动后，ActionDock 会：
 
-当前实现会按平台调用本机服务管理器：
+- 启动或复用本机 `5177` 端口上的 ActionDock 服务
+- 自动打开默认浏览器到管理台
+- 在系统托盘提供 `Open Admin Console` 和 `Quit ActionDock`
 
-- Linux: `systemd --user`
-- macOS: `launchctl` LaunchAgent
-- Windows: `sc.exe`
-
-说明：
-
-- `install` 会写入服务定义并尝试启动
-- `start` / `stop` / `status` / `uninstall` 直接操作已安装的服务
-- Windows 通常需要管理员权限
+桌面版不再安装或管理系统服务；如果需要命令行常驻运行，直接执行 `actiondock-server`。
 
 ## 公开接口概览
 
@@ -234,8 +222,8 @@ npm run dev
 
 开发时常用地址：
 
-- 前端开发地址：`http://localhost:5173/admin/scripts`
-- 后端管理台地址：`http://localhost:5177/admin/scripts`
+- 前端开发地址：`http://localhost:5173/admin/app/scripts`
+- 后端管理台地址：`http://localhost:5177/admin/app/scripts`
 
 ## 发布前自检
 
@@ -247,3 +235,30 @@ npm run pack:dry-run
 ```
 
 `pack:dry-run` 会先构建 Spring Boot jar，再生成 `jdeploy-bundle/`，最后校验 npm 包内容。
+
+## 发布
+
+### npm 包
+
+```bash
+cd actiondock-app-spring
+npm run pack:dry-run
+npm publish --access public
+```
+
+用户安装：
+
+```bash
+npm i -g @actiondock/server
+actiondock-server
+```
+
+### 桌面安装包
+
+仓库根目录的 `.github/workflows/jdeploy.yml` 会在发布 GitHub Release 或推送 `v*` tag 时构建并上传桌面安装包：
+
+```bash
+gh release create v0.3.5 --target main --title "v0.3.5" --notes "ActionDock desktop release"
+```
+
+用户从 GitHub Releases 下载对应平台安装包。安装后双击 `ActionDock`，会启动或复用本机服务、打开管理台，并提供托盘入口。

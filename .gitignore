@@ -16,7 +16,9 @@ bin
 .springBeans
 .sts4-cache
 .vscode
-.github
+.github/*
+!.github/workflows/
+!.github/workflows/**
 jdeploy
 jdeploy-bundle
 

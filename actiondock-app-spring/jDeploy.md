@@ -791,19 +791,16 @@ The GitHub Action creates:
 
 Users download the installer from `https://github.com/<owner>/<repo>/releases/latest` and run it. No Java installation is required — jDeploy bundles the appropriate JRE.
 
-### Service Commands
+### Desktop and CLI Commands
 
-If the app is a background service, document the service lifecycle commands that jDeploy exposes for the installed CLI entrypoint:
+For ActionDock, document the direct CLI entrypoint and desktop launcher behavior:
 
 ```bash
-actiondock-server service install
-actiondock-server service start
-actiondock-server service status
-actiondock-server service stop
-actiondock-server service uninstall
+actiondock-server
+actiondock-server update
 ```
 
-These commands are handled by the native launcher when the command is marked with `service_controller`.
+The desktop launcher starts or reuses the local web server, opens the admin console in the default browser, and exposes basic tray actions. ActionDock does not expose `service_controller` commands.
 
 ### MCP Server Auto-Registration
 

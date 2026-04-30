@@ -9,8 +9,7 @@
     "actiondock-server": "jdeploy-bundle/jdeploy.js"
   },
   "files": [
-    "jdeploy-bundle",
-    "service-manager.js"
+    "jdeploy-bundle"
   ],
   "publishConfig": {
     "access": "public"
@@ -27,7 +26,7 @@
   },
   "scripts": {
     "build:jar": "mvn -pl actiondock-app-spring -am package -DskipTests -f ../pom.xml",
-    "jdeploy:package": "jdeploy package && node patch-jdeploy-bundle.js",
+    "jdeploy:package": "jdeploy package",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "npm run build:jar && npm run jdeploy:package"
   },
@@ -37,12 +36,11 @@
     "args": [
       "-Dfile.encoding=UTF-8"
     ],
-    "title": "ActionDock Server",
+    "title": "ActionDock",
     "commands": {
       "actiondock-server": {
         "description": "ActionDock official server",
         "implements": [
-          "service_controller",
           "updater"
         ]
       }
