@@ -96,5 +96,4 @@ actiondock script list
 ## 通用原则
 
 - 默认使用 `--json`，让输出稳定可机读。
-- 查找已有脚本时使用 `script list`，不加 `--json`。
 - 第一次执行已发布脚本前，通过 `script schema <id>` 获取入参，避免用 `get` 查看脚本细节。
