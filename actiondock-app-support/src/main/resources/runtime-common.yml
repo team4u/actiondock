@@ -16,6 +16,9 @@ app:
   home-dir: ${user.home}/.actiondock
   plugins:
     dir: ${app.home-dir}/plugins
+  repositories:
+    auto-sync-enabled: true
+    auto-sync-interval-seconds: 1800
   execution:
     async-pool-size: 4
     groovy:

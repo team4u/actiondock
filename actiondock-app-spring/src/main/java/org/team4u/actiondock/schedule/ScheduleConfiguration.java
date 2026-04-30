@@ -12,6 +12,7 @@ import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;
 import org.team4u.actiondock.domain.port.ScriptRepository;
+import org.team4u.actiondock.repository.RepositoryCatalogService;
 
 /**
  * 调度模块配置，注册任务调度器和调度分发器。
@@ -89,5 +90,20 @@ public class ScheduleConfiguration {
                                                                     SharedStateApplicationService sharedStateService,
                                                                     AppProperties properties) {
         return new SharedStateCleanupScheduler(taskScheduler, sharedStateService, properties);
+    }
+
+    /**
+     * 创建仓库自动同步调度器。
+     *
+     * @param taskScheduler 任务调度器
+     * @param repositoryCatalogService 仓库目录服务
+     * @param properties 应用配置属性
+     * @return 仓库自动同步调度器
+     */
+    @Bean
+    public RepositoryAutoSyncScheduler repositoryAutoSyncScheduler(TaskScheduler taskScheduler,
+                                                                   RepositoryCatalogService repositoryCatalogService,
+                                                                   AppProperties properties) {
+        return new RepositoryAutoSyncScheduler(taskScheduler, repositoryCatalogService, properties);
     }
 }

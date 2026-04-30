@@ -13,6 +13,8 @@ class AppPropertiesTest {
 
         assertThat(properties.getHomeDir()).isEqualTo(Path.of(System.getProperty("user.home"), ".actiondock").toString());
         assertThat(properties.getPlugins().getDir()).isEqualTo(Path.of(properties.getHomeDir(), "plugins").toString());
+        assertThat(properties.getRepositories().isAutoSyncEnabled()).isTrue();
+        assertThat(properties.getRepositories().getAutoSyncIntervalSeconds()).isEqualTo(1800);
         assertThat(properties.getExecution().getGroovy().isEnabled()).isTrue();
         assertThat(properties.getExecution().getGroovy().getCacheMaxSize()).isEqualTo(128);
         assertThat(properties.getExecution().getGroovy().getCacheExpireAfterAccessMinutes()).isEqualTo(30);

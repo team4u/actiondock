@@ -17,6 +17,7 @@ import java.util.List;
 public class AppProperties {
     private String homeDir = defaultHomeDir();
     private final Plugins plugins = new Plugins();
+    private final Repositories repositories = new Repositories();
     private final Execution execution = new Execution();
     private final Schedules schedules = new Schedules();
     private final SharedState sharedState = new SharedState();
@@ -36,6 +37,10 @@ public class AppProperties {
 
     public Plugins getPlugins() {
         return plugins;
+    }
+
+    public Repositories getRepositories() {
+        return repositories;
     }
 
     public Schedules getSchedules() {
@@ -89,6 +94,27 @@ public class AppProperties {
 
         public void setDir(String dir) {
             this.dir = dir;
+        }
+    }
+
+    public static class Repositories {
+        private boolean autoSyncEnabled = true;
+        private int autoSyncIntervalSeconds = 1800;
+
+        public boolean isAutoSyncEnabled() {
+            return autoSyncEnabled;
+        }
+
+        public void setAutoSyncEnabled(boolean autoSyncEnabled) {
+            this.autoSyncEnabled = autoSyncEnabled;
+        }
+
+        public int getAutoSyncIntervalSeconds() {
+            return autoSyncIntervalSeconds;
+        }
+
+        public void setAutoSyncIntervalSeconds(int autoSyncIntervalSeconds) {
+            this.autoSyncIntervalSeconds = autoSyncIntervalSeconds;
         }
     }
 
