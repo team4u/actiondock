@@ -360,6 +360,7 @@ export function ScriptExecutionTab({
         open={executionDetailOpen}
         onClose={onCloseExecutionDetail}
         width={"50vw"}
+        rootClassName="execution-detail-drawer"
       >
         {currentExecution ? (
           <ExecutionResultCard

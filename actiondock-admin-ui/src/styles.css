@@ -1003,6 +1003,10 @@ a {
 }
 
 @media (max-width: 767px) {
+  .execution-detail-drawer .ant-drawer-content-wrapper {
+    width: 100vw !important;
+  }
+
   .script-import-diff-layout,
   .script-diff-raw-grid {
     grid-template-columns: 1fr;

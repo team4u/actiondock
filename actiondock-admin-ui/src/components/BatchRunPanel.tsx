@@ -827,6 +827,7 @@ export function BatchRunPanel({
         open={detailDrawerOpen}
         onClose={() => setDetailDrawerOpen(false)}
         destroyOnClose={false}
+        rootClassName="execution-detail-drawer"
       >
         {selectedItem ? (
           selectedItem.execution ? (
