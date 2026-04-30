@@ -359,7 +359,7 @@ export function ScriptExecutionTab({
         title="执行详情"
         open={executionDetailOpen}
         onClose={onCloseExecutionDetail}
-        width={720}
+        width={"50vw"}
       >
         {currentExecution ? (
           <ExecutionResultCard
