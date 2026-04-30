@@ -5,9 +5,7 @@ spring:
     name: actiondock-app-spring
   h2:
     console:
-      enabled: true
-      settings:
-        web-allow-others: true
+      enabled: false
 
 server:
   port: 5177
