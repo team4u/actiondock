@@ -540,6 +540,10 @@ export function useScriptPublishToRepo({
   const handlePublishToRepository = async () => {
     let retry: { repositoryId: string; payload: Parameters<typeof publishRepositoryTool>[1] } | null = null;
     try {
+      if (publishRepositoryDiff && !publishRepositoryDiff.hasChanges) {
+        messageApi.warning("当前没有变更明细，不允许发布");
+        return;
+      }
       if (publishRepositoryContentUnchanged) {
         messageApi.warning("仓库当前内容与本次发布一致，无需重复发布");
         return;

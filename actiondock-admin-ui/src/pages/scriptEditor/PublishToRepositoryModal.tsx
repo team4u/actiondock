@@ -209,6 +209,7 @@ export function PublishToRepositoryModal({
   const hasMissingConfigKeys = Boolean(configPreview?.missingKeys.length);
   const detectedConfigItems = configPreview?.items ?? [];
   const hasIncompleteScriptDependencies = scriptDependencies.some((item) => !item.repositoryId || !item.toolId);
+  const hasNoRepositoryChanges = repositoryDiff?.hasChanges === false;
 
   return (
     <Modal
@@ -223,6 +224,7 @@ export function PublishToRepositoryModal({
         disabled: metadataLoading
           || configPreviewLoading
           || repositoryDiffLoading
+          || hasNoRepositoryChanges
           || repositoryContentUnchanged
           || hasMissingConfigKeys
           || hasDynamicScriptDependencies
