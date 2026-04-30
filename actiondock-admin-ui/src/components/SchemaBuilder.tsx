@@ -42,7 +42,7 @@ const RICH_STRING_WIDGET_OPTIONS: Array<{ value: SchemaFieldWidget; label: strin
 
 const BASIC_STRING_WIDGET_OPTIONS: Array<{ value: SchemaFieldWidget; label: string }> = RICH_STRING_WIDGET_OPTIONS.slice(0, 2);
 
-const CODE_LANGUAGE_OPTIONS = [
+const CODE_LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "plaintext", label: "plaintext" },
   { value: "json", label: "json" },
   { value: "javascript", label: "javascript" },
@@ -52,7 +52,7 @@ const CODE_LANGUAGE_OPTIONS = [
   { value: "bash", label: "bash" },
   { value: "yaml", label: "yaml" },
   { value: "sql", label: "sql" }
-] as const;
+];
 
 const BOOLEAN_DEFAULT_OPTIONS = [
   { value: true, label: "true" },
