@@ -153,7 +153,60 @@ actiondock script run <script-id> --response-view debug --name alice
 
 ---
 
-## 3. 典型工作流
+## 3. 执行失败时怎么判断
+
+如果执行返回失败，优先看这些字段：
+
+- `status`
+- `errorMessage`
+- `errorDetail.stackTrace`
+- `errorDetail.details.code`
+- `logs`
+
+如果是异步执行，先拿到 execution ID，再用：
+
+```bash
+actiondock execution get <execution-id> --json
+```
+
+### 常见 Python 失败码
+
+如果目标脚本是 Python，`errorDetail.details.code` 可能出现以下值：
+
+- `PYTHON_RUNTIME_MISSING`
+- `PYTHON_ENV_PREPARE_FAILED`
+- `PYTHON_DEP_INSTALL_FAILED`
+- `PYTHON_EXECUTION_FAILED`
+
+判读建议：
+
+- `PYTHON_RUNTIME_MISSING`
+  - 说明宿主 Python 运行环境不可用
+  - 优先判断服务端是否缺少 `python3`
+
+- `PYTHON_ENV_PREPARE_FAILED`
+  - 说明虚拟环境准备失败
+  - 优先判断服务端是否缺少 `python3 -m venv` 能力，而不是先怀疑脚本业务逻辑
+
+- `PYTHON_DEP_INSTALL_FAILED`
+  - 说明脚本声明的第三方依赖安装失败
+  - 优先回到作者态流程检查 `pythonRequirements` / `requirements.txt`
+  - 不要先改业务代码
+
+- `PYTHON_EXECUTION_FAILED`
+  - 说明依赖已准备完成，但 Python 脚本本身运行失败
+  - 这时再结合 `errorMessage`、`stackTrace`、`logs` 判断代码问题
+
+### 处理原则
+
+- 输入不合法：先修输入，不要先改脚本
+- Python 环境/依赖失败：先修运行环境或 `pythonRequirements`
+- 脚本逻辑失败：再回作者态修源码
+- 输出结构不对：回作者态同时核对源码和 `outputSchema`
+
+---
+
+## 4. 典型工作流
 
 ### 执行已知脚本
 

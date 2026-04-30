@@ -79,12 +79,14 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setType(definition.getType().name());
         entity.setPackaging(definition.getPackaging().name());
         entity.setSource(definition.getSource());
+        entity.setPythonRequirements(definition.getPythonRequirements());
         entity.setInputSchemaJson(jsonCodec.write(definition.getInputSchema()));
         entity.setOutputSchemaJson(jsonCodec.write(definition.getOutputSchema()));
         entity.setPublishedName(publishedSnapshot == null ? null : publishedSnapshot.getName());
         entity.setPublishedType(publishedSnapshot == null ? null : publishedSnapshot.getType().name());
         entity.setPublishedPackaging(publishedSnapshot == null ? null : publishedSnapshot.getPackaging().name());
         entity.setPublishedSource(publishedSnapshot == null ? null : publishedSnapshot.getSource());
+        entity.setPublishedPythonRequirements(publishedSnapshot == null ? null : publishedSnapshot.getPythonRequirements());
         entity.setPublishedInputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getInputSchema()));
         entity.setPublishedOutputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getOutputSchema()));
         entity.setPublishedScriptDependenciesJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getScriptDependencies()));
@@ -127,6 +129,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setType(ScriptType.valueOf(entity.getType()))
                 .setPackaging(entity.getPackaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(entity.getPackaging()))
                 .setSource(entity.getSource())
+                .setPythonRequirements(entity.getPythonRequirements())
                 .setInputSchema(jsonCodec.readMap(entity.getInputSchemaJson()))
                 .setOutputSchema(jsonCodec.readMap(entity.getOutputSchemaJson()))
                 .setPublishedSnapshot(toSnapshot(entity))
@@ -170,6 +173,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setType(entity.getPublishedType() == null ? ScriptType.GROOVY : ScriptType.valueOf(entity.getPublishedType()))
                 .setPackaging(entity.getPublishedPackaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(entity.getPublishedPackaging()))
                 .setSource(entity.getPublishedSource())
+                .setPythonRequirements(entity.getPublishedPythonRequirements())
                 .setInputSchema(jsonCodec.readMap(entity.getPublishedInputSchemaJson()))
                 .setOutputSchema(jsonCodec.readMap(entity.getPublishedOutputSchemaJson()))
                 .setScriptDependencies(jsonCodec.readList(entity.getPublishedScriptDependenciesJson(), ScriptDependency.class))

@@ -25,6 +25,7 @@ export interface ScriptEditorFormValues {
   type: ScriptType;
   packaging: ScriptPackaging;
   description?: string;
+  pythonRequirements?: string;
 }
 
 export interface PublishToRepositoryFormValues {
@@ -78,7 +79,7 @@ export function getScriptContentHint(type: ScriptType): string {
 
 export function getEditorFooterHint(type: ScriptType): string {
   if (type === "PYTHON") {
-    return "保存时校验配置格式，脚本语法由运行时校验。";
+    return "保存时校验 requirements 格式，脚本语法和依赖安装由运行时校验。";
   }
   return "保存时校验配置格式，Groovy 语法通过后端校验。";
 }

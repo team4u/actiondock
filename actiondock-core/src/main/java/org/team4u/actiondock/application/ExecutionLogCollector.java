@@ -1,5 +1,6 @@
 package org.team4u.actiondock.application;
 
+import org.team4u.actiondock.domain.model.ErrorDetail;
 import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
@@ -50,10 +51,23 @@ class ExecutionLogCollector {
     }
 
     ExecutionRecord completeFailure(Exception exception) {
+        if (exception instanceof StructuredExecutionException structuredException) {
+            return completeFailure(
+                    structuredException.getMessage(),
+                    structuredException.getDetail()
+            );
+        }
+        return completeFailure(
+                ErrorDetailSupport.summarize(exception),
+                ErrorDetailSupport.describe(exception)
+        );
+    }
+
+    ExecutionRecord completeFailure(String message, ErrorDetail detail) {
         synchronized (monitor) {
             record.setStatus(ExecutionStatus.FAILED);
-            record.setErrorMessage(ErrorDetailSupport.summarize(exception));
-            record.setErrorDetail(ErrorDetailSupport.describe(exception));
+            record.setErrorMessage(message);
+            record.setErrorDetail(detail);
             record.setFinishedAt(LocalDateTime.now());
             return safeSave(record);
         }

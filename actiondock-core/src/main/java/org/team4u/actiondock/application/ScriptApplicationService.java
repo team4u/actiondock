@@ -46,6 +46,7 @@ public class ScriptApplicationService {
      * @return 保存后的脚本定义
      */
     public ScriptDefinition save(ScriptDefinition definition) {
+        PythonRequirementsSupport.validateScriptDefinition(definition);
         LocalDateTime now = LocalDateTime.now();
         ScriptDefinition existing = definition.getId() == null ? null : scriptRepository.findById(definition.getId()).orElse(null);
         if (existing == null) {
@@ -210,6 +211,7 @@ public class ScriptApplicationService {
                 .setType(source.getType())
                 .setPackaging(source.getPackaging())
                 .setSource(source.getSource())
+                .setPythonRequirements(source.getPythonRequirements())
                 .setInputSchema(source.getInputSchema())
                 .setOutputSchema(source.getOutputSchema())
                 .setStatus(source.getStatus())

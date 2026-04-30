@@ -16,6 +16,18 @@ export function resolveScriptSource(source, sourceFile, required) {
     }
     return undefined;
 }
+export function resolveOptionalTextInput(value, valueFile, labels) {
+    if (value !== undefined && valueFile) {
+        throw new ActionDockCliError(`${labels.valueFlag} 和 ${labels.fileFlag} 不能同时使用。`, 2);
+    }
+    if (value !== undefined) {
+        return value;
+    }
+    if (valueFile) {
+        return fs.readFileSync(valueFile, "utf8");
+    }
+    return undefined;
+}
 export function parseSchemaInput(inputJson, inputFile, labels) {
     const parsed = parseJsonValueInput(inputJson, inputFile, labels);
     if (parsed === undefined) {

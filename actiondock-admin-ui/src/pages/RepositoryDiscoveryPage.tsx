@@ -821,6 +821,26 @@ export function RepositoryDiscoveryPage() {
                   )
                 },
                 {
+                  key: "requirements",
+                  label: "Python 依赖",
+                  children: detail.descriptor.type === "PYTHON" ? (
+                    detail.pythonRequirements ? (
+                      <CodeEditor
+                        height="240px"
+                        language="plaintext"
+                        value={detail.pythonRequirements}
+                        onChange={() => undefined}
+                        theme={editorTheme}
+                        readOnly={true}
+                      />
+                    ) : (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本未声明 Python 依赖" />
+                    )
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="仅 Python 脚本支持依赖声明" />
+                  )
+                },
+                {
                   key: "config",
                   label: `配置模板 (${detail.configTemplate.length})`,
                   children: detail.configTemplate.length > 0 ? (

@@ -110,7 +110,8 @@ export function useScriptEditor({
       name: script.name,
       type: script.type,
       packaging: script.packaging,
-      description: script.description ?? ""
+      description: script.description ?? "",
+      pythonRequirements: script.pythonRequirements ?? ""
     });
     setSourceText(script.source);
     setInputSchemaState(deserializeSchema(script.inputSchema));
@@ -136,7 +137,8 @@ export function useScriptEditor({
       name: draft.name,
       type: draft.type,
       packaging: draft.packaging,
-      description: draft.description ?? ""
+      description: draft.description ?? "",
+      pythonRequirements: draft.pythonRequirements ?? ""
     });
     form.setFields([{ name: "id", errors: [] }]);
     setSourceText(draft.source);
@@ -152,6 +154,7 @@ export function useScriptEditor({
       type: "GROOVY",
       packaging: "TOOL",
       source: getDefaultSource("GROOVY"),
+      pythonRequirements: "",
       inputSchema: {},
       outputSchema: {},
       status: "DRAFT",
@@ -281,6 +284,7 @@ export function useScriptEditor({
       type: values.type,
       packaging: values.packaging,
       source: sourceText,
+      pythonRequirements: values.pythonRequirements?.trim() ? values.pythonRequirements : undefined,
       inputSchema,
       outputSchema,
       status: currentScript?.status ?? "DRAFT",
@@ -531,6 +535,9 @@ export function useScriptEditor({
         sourceText === getDefaultSource(nextType))
     ) {
       setSourceText(getDefaultSource(nextType));
+    }
+    if (nextType !== "PYTHON") {
+      form.setFieldValue("pythonRequirements", "");
     }
   };
 

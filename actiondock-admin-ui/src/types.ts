@@ -30,6 +30,7 @@ export interface PublishedScriptSnapshot {
   type: ScriptType;
   packaging: ScriptPackaging;
   source: string;
+  pythonRequirements?: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
   scriptDependencies?: ScriptDependency[];
@@ -42,6 +43,7 @@ export interface ScriptDefinition {
   type: ScriptType;
   packaging: ScriptPackaging;
   source: string;
+  pythonRequirements?: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
   status: ScriptStatus;
@@ -265,6 +267,7 @@ export interface ExecutionLogEntry {
 export interface ErrorDetail {
   type: string;
   stackTrace: string;
+  details?: Record<string, unknown>;
 }
 
 export interface ExecutionResponseDebug {
@@ -608,6 +611,7 @@ export interface RepositoryToolDescriptor {
   type: ScriptType;
   packaging: ScriptPackaging;
   sourcePath: string;
+  pythonRequirementsPath?: string;
   inputSchemaPath?: string;
   outputSchemaPath?: string;
   configTemplatePath?: string;
@@ -648,6 +652,7 @@ export interface RepositoryScheduleTemplateItem {
 export interface RepositoryToolDetail {
   descriptor: RepositoryToolDescriptor;
   source: string;
+  pythonRequirements?: string;
   configTemplate: RepositoryConfigTemplateItem[];
   scheduleTemplate: RepositoryScheduleTemplateItem[];
 }

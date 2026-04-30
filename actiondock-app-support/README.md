@@ -197,7 +197,16 @@ Groovy 和 Python 的脚本引擎实现完全不同，但对外暴露了统一�
 
 ### Groovy：JVM 内直接执行
 
-`GroovyScriptEngine` 在 JVM 内编译并运行脚本，通过 Groovy `Binding` 将门面对象作为本地变量注入：
+`GroovyScriptEngine` 在 JVM 内编译并运行脚本，通过 Groovy `Binding` 将门面对象作为本地变量注入。脚本可通过 `@Grab` 注解声明第三方依赖，Groovy 的 Grape 机制会在编译时自动解析并下载：
+
+```groovy
+@Grab('com.google.guava:guava:33.0.0-jre')
+import com.google.common.base.Strings
+
+return [result: Strings.emptyToNull(input.name)]
+```
+
+`@Grab` 格式为 Maven 坐标 `groupId:artifactId:version`，需放在 import 之前。首次编译时下载依赖，后续通过编译缓存（SHA-256）避免重复解析。
 
 ```
 Binding binding = new Binding();

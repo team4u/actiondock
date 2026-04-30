@@ -125,6 +125,8 @@ public class AppProperties {
     public static class Python {
         private String executable = "python3";
         private int timeoutSeconds = 30;
+        private String envCacheDir = Path.of(defaultHomeDir(), "python-envs").toString();
+        private int installTimeoutSeconds = 300;
 
         public String getExecutable() {
             return executable;
@@ -140,6 +142,22 @@ public class AppProperties {
 
         public void setTimeoutSeconds(int timeoutSeconds) {
             this.timeoutSeconds = timeoutSeconds;
+        }
+
+        public String getEnvCacheDir() {
+            return envCacheDir;
+        }
+
+        public void setEnvCacheDir(String envCacheDir) {
+            this.envCacheDir = envCacheDir;
+        }
+
+        public int getInstallTimeoutSeconds() {
+            return installTimeoutSeconds;
+        }
+
+        public void setInstallTimeoutSeconds(int installTimeoutSeconds) {
+            this.installTimeoutSeconds = installTimeoutSeconds;
         }
     }
 

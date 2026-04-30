@@ -21,6 +21,7 @@ public class ScriptDefinition {
     private ScriptType type = ScriptType.GROOVY;
     private ScriptPackaging packaging = ScriptPackaging.TOOL;
     private String source;
+    private String pythonRequirements;
     private Map<String, Object> inputSchema = SchemaValueCopier.copyMap(null);
     private Map<String, Object> outputSchema = SchemaValueCopier.copyMap(null);
     private ScriptStatus status = ScriptStatus.DRAFT;
@@ -86,6 +87,15 @@ public class ScriptDefinition {
 
     public ScriptDefinition setSource(String source) {
         this.source = source;
+        return this;
+    }
+
+    public String getPythonRequirements() {
+        return pythonRequirements;
+    }
+
+    public ScriptDefinition setPythonRequirements(String pythonRequirements) {
+        this.pythonRequirements = pythonRequirements;
         return this;
     }
 
@@ -353,6 +363,7 @@ public class ScriptDefinition {
                 .setType(type)
                 .setPackaging(packaging)
                 .setSource(source)
+                .setPythonRequirements(pythonRequirements)
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
                 .setScriptDependencies(scriptDependencies)
@@ -392,6 +403,7 @@ public class ScriptDefinition {
                 .setType(snapshot.getType())
                 .setPackaging(snapshot.getPackaging())
                 .setSource(snapshot.getSource())
+                .setPythonRequirements(snapshot.getPythonRequirements())
                 .setInputSchema(snapshot.getInputSchema())
                 .setOutputSchema(snapshot.getOutputSchema())
                 .setStatus(ScriptStatus.PUBLISHED)
@@ -494,6 +506,7 @@ public class ScriptDefinition {
         this.type = snapshot.getType();
         this.packaging = snapshot.getPackaging();
         this.source = snapshot.getSource();
+        this.pythonRequirements = snapshot.getPythonRequirements();
         this.inputSchema = snapshot.getInputSchema();
         this.outputSchema = snapshot.getOutputSchema();
         this.scriptDependencies = snapshot.getScriptDependencies();
@@ -537,6 +550,9 @@ public class ScriptDefinition {
         }
         if (description == null) {
             setDescription(existing.getDescription());
+        }
+        if (pythonRequirements == null) {
+            setPythonRequirements(existing.getPythonRequirements());
         }
         if (status == null) {
             setStatus(existing.getStatus());
@@ -598,6 +614,7 @@ public class ScriptDefinition {
                     .setType(sanitizedSnapshot.getType())
                     .setPackaging(sanitizedSnapshot.getPackaging())
                     .setSource(sanitizedSnapshot.getSource())
+                    .setPythonRequirements(sanitizedSnapshot.getPythonRequirements())
                     .setInputSchema(SchemaValueCopier.sanitizeSchema(sanitizedSnapshot.getInputSchema()))
                     .setOutputSchema(SchemaValueCopier.sanitizeSchema(sanitizedSnapshot.getOutputSchema()))
                     .setScriptDependencies(sanitizedSnapshot.getScriptDependencies())
@@ -608,6 +625,7 @@ public class ScriptDefinition {
                 .setName(name)
                 .setType(type)
                 .setSource(source)
+                .setPythonRequirements(pythonRequirements)
                 .setPackaging(packaging)
                 .setInputSchema(SchemaValueCopier.sanitizeSchema(inputSchema))
                 .setOutputSchema(SchemaValueCopier.sanitizeSchema(outputSchema))

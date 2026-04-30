@@ -35,6 +35,8 @@ public class ScriptEntity {
     @Lob
     @Column(nullable = false)
     private String source;
+    @Lob
+    private String pythonRequirements;
 
     @Lob
     private String inputSchemaJson;
@@ -49,6 +51,8 @@ public class ScriptEntity {
 
     @Lob
     private String publishedSource;
+    @Lob
+    private String publishedPythonRequirements;
 
     @Lob
     private String publishedInputSchemaJson;
@@ -96,6 +100,8 @@ public class ScriptEntity {
     public void setPackaging(String packaging) { this.packaging = packaging; }
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+    public String getPythonRequirements() { return pythonRequirements; }
+    public void setPythonRequirements(String pythonRequirements) { this.pythonRequirements = pythonRequirements; }
     public String getInputSchemaJson() { return inputSchemaJson; }
     public void setInputSchemaJson(String inputSchemaJson) { this.inputSchemaJson = inputSchemaJson; }
     public String getOutputSchemaJson() { return outputSchemaJson; }
@@ -108,6 +114,8 @@ public class ScriptEntity {
     public void setPublishedPackaging(String publishedPackaging) { this.publishedPackaging = publishedPackaging; }
     public String getPublishedSource() { return publishedSource; }
     public void setPublishedSource(String publishedSource) { this.publishedSource = publishedSource; }
+    public String getPublishedPythonRequirements() { return publishedPythonRequirements; }
+    public void setPublishedPythonRequirements(String publishedPythonRequirements) { this.publishedPythonRequirements = publishedPythonRequirements; }
     public String getPublishedInputSchemaJson() { return publishedInputSchemaJson; }
     public void setPublishedInputSchemaJson(String publishedInputSchemaJson) { this.publishedInputSchemaJson = publishedInputSchemaJson; }
     public String getPublishedOutputSchemaJson() { return publishedOutputSchemaJson; }

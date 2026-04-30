@@ -232,18 +232,19 @@ class ScriptControllerTest {
 
         mockMvc.perform(patch("/api/scripts/script-1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
+                .content("""
                                 {"status":"PUBLISHED","source":"return [:]"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.msg").value("脚本 Patch 仅允许更新以下字段: source, inputSchema, outputSchema"))
+                .andExpect(jsonPath("$.msg").value("脚本 Patch 仅允许更新以下字段: source, pythonRequirements, inputSchema, outputSchema"))
                 .andExpect(jsonPath("$.data.code").value("INVALID_SCRIPT_PATCH"))
                 .andExpect(jsonPath("$.data.scriptId").value("script-1"))
                 .andExpect(jsonPath("$.data.rejectedFields[0]").value("status"))
                 .andExpect(jsonPath("$.data.allowedFields[0]").value("source"))
-                .andExpect(jsonPath("$.data.allowedFields[1]").value("inputSchema"))
-                .andExpect(jsonPath("$.data.allowedFields[2]").value("outputSchema"));
+                .andExpect(jsonPath("$.data.allowedFields[1]").value("pythonRequirements"))
+                .andExpect(jsonPath("$.data.allowedFields[2]").value("inputSchema"))
+                .andExpect(jsonPath("$.data.allowedFields[3]").value("outputSchema"));
     }
 
     @Test

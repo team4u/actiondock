@@ -4,7 +4,7 @@ import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 import { renderScriptDetail } from "../../lib/render.js";
-import { parsePatchObject, parseSchemaInput, resolveScriptSource, setPatchField } from "../../lib/script.js";
+import { parsePatchObject, parseSchemaInput, resolveOptionalTextInput, resolveScriptSource, setPatchField } from "../../lib/script.js";
 export default class ScriptPatchCommand extends BaseCommand {
     static description = "Apply a JSON Merge Patch to an ActionDock draft script";
     static args = {
@@ -23,6 +23,12 @@ export default class ScriptPatchCommand extends BaseCommand {
         }),
         "source-file": Flags.string({
             description: "Replace script source using a text file"
+        }),
+        "python-requirements": Flags.string({
+            description: "Replace pythonRequirements inline"
+        }),
+        "python-requirements-file": Flags.string({
+            description: "Replace pythonRequirements using a requirements.txt file"
         }),
         "input-schema-json": Flags.string({
             description: "Merge-patch inputSchema using an inline JSON object"
@@ -51,6 +57,13 @@ export default class ScriptPatchCommand extends BaseCommand {
             const source = resolveScriptSource(flags.source, flags["source-file"], false);
             if (source !== undefined) {
                 setPatchField(patch, "source", source);
+            }
+            const pythonRequirements = resolveOptionalTextInput(flags["python-requirements"], flags["python-requirements-file"], {
+                valueFlag: "`--python-requirements`",
+                fileFlag: "`--python-requirements-file`"
+            });
+            if (pythonRequirements !== undefined) {
+                setPatchField(patch, "pythonRequirements", pythonRequirements);
             }
             const inputSchema = parseSchemaInput(flags["input-schema-json"], flags["input-schema-file"], {
                 jsonFlag: "`--input-schema-json`",

@@ -61,6 +61,8 @@ actiondock script list
 - **作者态闭环**：创建脚本、调试、修复并发布 → 读取 `references/script-authoring.md`
 - **日常执行**：查找脚本、运行已发布脚本 → 读取 `references/script-execution.md`
 
+如果用户要编写 Python 脚本，且需求涉及第三方 PyPI 依赖、镜像源或 `requirements.txt`，作者态阶段仍读取 `references/script-authoring.md`，但必须按其中的 `pythonRequirements` / `requirements.txt` 约定一起产出并通过 CLI 提交。
+
 ## 命令参考文档（按需加载）
 
 以下模块不绑定特定流程，作者态和日常执行都会用到，根据用户意图按需读取：

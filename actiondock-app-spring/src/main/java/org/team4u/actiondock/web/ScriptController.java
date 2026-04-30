@@ -24,7 +24,7 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/scripts")
 public class ScriptController {
-    private static final List<String> ALLOWED_PATCH_FIELDS = List.of("source", "inputSchema", "outputSchema");
+    private static final List<String> ALLOWED_PATCH_FIELDS = List.of("source", "pythonRequirements", "inputSchema", "outputSchema");
     private static final Set<String> ALLOWED_PATCH_FIELD_SET = Set.copyOf(ALLOWED_PATCH_FIELDS);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -140,6 +140,9 @@ public class ScriptController {
         Map<String, Object> safePatch = patch == null ? Map.of() : patch;
         if (safePatch.containsKey("source")) {
             applySourcePatch(updated, safePatch.get("source"));
+        }
+        if (safePatch.containsKey("pythonRequirements")) {
+            applyPythonRequirementsPatch(updated, safePatch.get("pythonRequirements"));
         }
         if (safePatch.containsKey("inputSchema")) {
             updated.setInputSchema(applySchemaPatch(existing.getInputSchema(), safePatch.get("inputSchema"), "inputSchema"));
@@ -279,6 +282,13 @@ public class ScriptController {
             throw new IllegalArgumentException("source 必须是字符串或 null");
         }
         definition.setSource((String) value);
+    }
+
+    private void applyPythonRequirementsPatch(ScriptDefinition definition, Object value) {
+        if (value != null && !(value instanceof String)) {
+            throw new IllegalArgumentException("pythonRequirements 必须是字符串或 null");
+        }
+        definition.setPythonRequirements((String) value);
     }
 
     private Map<String, Object> applySchemaPatch(Map<String, Object> currentValue, Object patchValue, String fieldName) {

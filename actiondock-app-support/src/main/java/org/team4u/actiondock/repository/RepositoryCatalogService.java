@@ -380,7 +380,10 @@ public class RepositoryCatalogService {
                 ScheduleTemplateItem.class
         );
         String source = readRepositoryFile(repository, toolDirectoryPath(entry.toolPath()).resolve(tool.sourcePath()));
-        return new RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, configTemplate, scheduleTemplate);
+        String pythonRequirements = tool.pythonRequirementsPath() == null || tool.pythonRequirementsPath().isBlank()
+                ? null
+                : readRepositoryFile(repository, toolDirectoryPath(entry.toolPath()).resolve(tool.pythonRequirementsPath()));
+        return new RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
     }
 
     public RepositoryAiPackageDetail getRepositoryAiPackage(String repositoryId, String packageId) {
@@ -583,6 +586,7 @@ public class RepositoryCatalogService {
                 .setType(ScriptType.valueOf(detail.descriptor().type()))
                 .setPackaging(packaging)
                 .setSource(detail.source())
+                .setPythonRequirements(detail.pythonRequirements())
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
                 .setStatus(ScriptStatus.PUBLISHED)
@@ -591,6 +595,7 @@ public class RepositoryCatalogService {
                         .setType(ScriptType.valueOf(detail.descriptor().type()))
                         .setPackaging(packaging)
                         .setSource(detail.source())
+                        .setPythonRequirements(detail.pythonRequirements())
                         .setInputSchema(inputSchema)
                         .setOutputSchema(outputSchema)
                         .setScriptDependencies(detail.descriptor().scriptDependencies()))
@@ -781,6 +786,7 @@ public class RepositoryCatalogService {
                     .setType(ScriptType.valueOf(detail.descriptor().type()))
                     .setPackaging(packaging)
                     .setSource(detail.source())
+                    .setPythonRequirements(detail.pythonRequirements())
                     .setInputSchema(inputSchema)
                     .setOutputSchema(outputSchema)
                     .setStatus(ScriptStatus.PUBLISHED)
@@ -789,6 +795,7 @@ public class RepositoryCatalogService {
                             .setType(ScriptType.valueOf(detail.descriptor().type()))
                             .setPackaging(packaging)
                             .setSource(detail.source())
+                            .setPythonRequirements(detail.pythonRequirements())
                             .setInputSchema(inputSchema)
                             .setOutputSchema(outputSchema)
                             .setScriptDependencies(detail.descriptor().scriptDependencies()))
@@ -1322,8 +1329,9 @@ public class RepositoryCatalogService {
         values.put("owner", descriptor.owner());
         values.put("tags", descriptor.tags());
         values.put("scriptDependencies", descriptor.scriptDependencies());
-        values.put("pluginDependencies", descriptor.pluginDependencies());
+       values.put("pluginDependencies", descriptor.pluginDependencies());
         values.put("source", detail.source());
+        values.put("pythonRequirements", detail.pythonRequirements());
         values.put("inputSchema", readSchema(descriptor.repositoryId(), descriptor.inputSchemaPath()));
         values.put("outputSchema", readSchema(descriptor.repositoryId(), descriptor.outputSchemaPath()));
         return sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
@@ -1342,6 +1350,7 @@ public class RepositoryCatalogService {
         values.put("scriptDependencies", script.getScriptDependencies());
         values.put("pluginDependencies", script.getPluginDependencies());
         values.put("source", script.getSource());
+        values.put("pythonRequirements", script.getPythonRequirements());
         values.put("inputSchema", script.getInputSchema());
         values.put("outputSchema", script.getOutputSchema());
         return sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
@@ -1651,6 +1660,10 @@ public class RepositoryCatalogService {
             writeJson(toolDir.resolve("tool.json"), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies));
             writeJson(toolDir.resolve("input.schema.json"), script.getPublishedSnapshot().getInputSchema());
             writeJson(toolDir.resolve("output.schema.json"), script.getPublishedSnapshot().getOutputSchema());
+            if (script.getPublishedSnapshot().getPythonRequirements() != null
+                    && !script.getPublishedSnapshot().getPythonRequirements().isBlank()) {
+                Files.writeString(toolDir.resolve("requirements.txt"), script.getPublishedSnapshot().getPythonRequirements(), StandardCharsets.UTF_8);
+            }
 
             if (!configTemplates.isEmpty()) {
                 writeJson(toolDir.resolve("config.template.json"), configTemplates);
@@ -1706,6 +1719,9 @@ public class RepositoryCatalogService {
                 normalizeNullable(request.owner()),
                 request.tags() == null ? List.of() : request.tags(),
                 sourceFileName,
+                script.getPublishedSnapshot().getPythonRequirements() == null || script.getPublishedSnapshot().getPythonRequirements().isBlank()
+                        ? null
+                        : "requirements.txt",
                 "input.schema.json",
                 "output.schema.json",
                 configTemplates.isEmpty() ? null : "config.template.json",
@@ -2043,6 +2059,7 @@ public class RepositoryCatalogService {
             ToolSourceState state = resolveToolSourceState(repository, new RepositoryToolDetail(
                     toDescriptorWithoutDevelopment(repository, tool, toolPath),
                     readRepositoryFile(repository, toolDirectoryPath(toolPath).resolve(tool.sourcePath())),
+                    tool.pythonRequirementsPath() == null ? null : readRepositoryFile(repository, toolDirectoryPath(toolPath).resolve(tool.pythonRequirementsPath())),
                     List.of(),
                     List.of()
             ));
@@ -2065,6 +2082,7 @@ public class RepositoryCatalogService {
                 base.type(),
                 base.packaging(),
                 base.sourcePath(),
+                base.pythonRequirementsPath(),
                 base.inputSchemaPath(),
                 base.outputSchemaPath(),
                 base.configTemplatePath(),
@@ -2101,6 +2119,7 @@ public class RepositoryCatalogService {
                 tool.type(),
                 resolvePackaging(tool.packaging()).name(),
                 tool.sourcePath(),
+                resolveRelative(toolPath, tool.pythonRequirementsPath()),
                 resolveRelative(toolPath, tool.inputSchemaPath()),
                 resolveRelative(toolPath, tool.outputSchemaPath()),
                 resolveRelative(toolPath, tool.configTemplatePath()),
@@ -2799,6 +2818,7 @@ public class RepositoryCatalogService {
             String type,
             String packaging,
             String sourcePath,
+            String pythonRequirementsPath,
             String inputSchemaPath,
             String outputSchemaPath,
             String configTemplatePath,
@@ -2822,6 +2842,7 @@ public class RepositoryCatalogService {
     public record RepositoryToolDetail(
             RepositoryToolDescriptor descriptor,
             String source,
+            String pythonRequirements,
             List<ConfigTemplateItem> configTemplate,
             List<ScheduleTemplateItem> scheduleTemplate
     ) {
@@ -3043,6 +3064,7 @@ public class RepositoryCatalogService {
                            String owner,
                            List<String> tags,
                            String sourcePath,
+                           String pythonRequirementsPath,
                            String inputSchemaPath,
                            String outputSchemaPath,
                            String configTemplatePath,

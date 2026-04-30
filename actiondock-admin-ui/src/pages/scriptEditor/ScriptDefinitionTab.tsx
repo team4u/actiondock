@@ -194,6 +194,21 @@ export function ScriptDefinitionTab({
                 )
               },
               {
+                key: "requirements",
+                label: "requirements.txt",
+                children: selectedScriptType === "PYTHON" ? (
+                  <Form.Item name="pythonRequirements" style={{ marginBottom: 0 }}>
+                    <Input.TextArea
+                      autoSize={{ minRows: 16, maxRows: 24 }}
+                      disabled={isReadOnlyScript}
+                      placeholder={"例如:\nrequests==2.32.3\npydantic>=2.7,<3\n--index-url https://pypi.org/simple"}
+                    />
+                  </Form.Item>
+                ) : (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="仅 Python 脚本支持依赖声明" />
+                )
+              },
+              {
                 key: "input",
                 label: "inputSchema.json",
                 children: (

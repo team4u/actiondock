@@ -4,6 +4,8 @@
 
 如果脚本需求涉及 `plugins.invoke(...)`、`scripts.invoke(...)` 或 `actiondock-ai`，补读 `references/script-runtime-calls.md`，确认源码内调用方式后再生成脚本。
 
+如果脚本是 Python，且需要额外第三方依赖，必须同时产出 `pythonRequirements`。该字段的内容等价于 `requirements.txt` 文本，并在执行前由平台安装到隔离缓存环境中。
+
 ---
 
 ## 阶段一：需求分析与脚本生成
@@ -15,6 +17,10 @@
 3. Groovy 或 Python 源码
 4. `inputSchema`
 5. `outputSchema`
+
+如果是带第三方依赖的 Python 脚本，再额外产出第 6 项：
+
+6. `pythonRequirements`（即 `requirements.txt` 文本）
 
 ### ActionDock 脚本规范
 
@@ -63,7 +69,47 @@ Groovy 脚本运行环境中已预装以下依赖，可直接在脚本中使用�
 | `groovy-all` | 4.x | Groovy 核心库，支持所有 Groovy 语法和标准库（JSON、XML、日期处理等） |
 | `hutool-all` | 5.x | Hutool 工具库，提供丰富的 Java 工具方法（字符串、日期、HTTP、加解密、IO 等） |
 
-Python 脚本默认依赖宿主 `python3` 与标准库；如需调用平台能力，优先使用内置的 `plugins`、`scripts`、`state` 门面，不要假设额外第三方包已预装。
+#### Groovy 声明第三方依赖（`@Grab`）
+
+除了预装依赖外，Groovy 脚本可通过 `@Grab` 注解声明额外的第三方依赖包。`@Grab` 是 Groovy 内置的 Grape 依赖管理机制，脚本编译时自动从 Maven 仓库解析并下载声明的 JAR。
+
+语法：`@Grab('group:artifact:version')`，放在脚本顶部、import 语句之前：
+
+```groovy
+@Grab('org.apache.ivy:ivy:2.5.2')
+import org.apache.ivy.util.StringUtils
+
+def joined = StringUtils.join(input.parts as Object[], '-')
+return [result: joined]
+```
+
+注意事项：
+
+- `@Grab` 必须在使用该依赖的 `import` 语句之前声明
+- 格式为 Maven 坐标：`groupId:artifactId:version`
+- 首次执行时需要下载依赖，后续会缓存编译结果（基于源码 SHA-256），不会重复下载
+- 仅支持 Maven Central 仓库中的依赖
+
+Python 脚本默认只有宿主 `python3` 与标准库；如需第三方包，不要假设环境已预装，必须显式提供 `pythonRequirements`。如需调用平台能力，优先使用内置的 `plugins`、`scripts`、`state` 门面。
+
+#### Python 依赖声明规范
+
+`pythonRequirements` 使用 `requirements.txt` 文本格式，当前按以下约束生成：
+
+- 允许普通 PyPI 包行，如 `requests==2.32.3`
+- 允许单个 `--index-url ...`
+- 允许注释和空行
+- 不要生成 `-r`
+- 不要生成 `--extra-index-url`
+- 不要生成本地路径、wheel 文件路径、URL 依赖、VCS 依赖
+- 不要生成 `git+...`、`https://...`、`package @ url` 这类形式
+
+示例：
+
+```text
+requests==2.32.3
+pydantic>=2.7,<3
+```
 
 ### Schema 字段类型
 
@@ -109,6 +155,7 @@ Python 脚本默认依赖宿主 `python3` 与标准库；如需调用平台能�
 - Groovy 返回值使用 Map 字面量 `[:]` 语法
 - Python 返回值使用 JSON 可序列化的 `dict` / `list` / 标量
 - Groovy 可合理使用语法糖（如闭包、with 等）；Python 优先保持直接、清晰
+- Python 如果依赖第三方包，依赖清单要尽量最小，只列当前脚本真实需要的包
 
 ### 脚本产物输出格式
 
@@ -119,6 +166,7 @@ Python 脚本默认依赖宿主 `python3` 与标准库；如需调用平台能�
 - `Input Schema（输入参数）`、`Output Schema（输出结果）` 必须各自只包含一个 `json` 代码块
 - 不要在这 5 段中间插入额外标题，仅保留示例中的5个标题
 - 这 5 段都是必需的，不能省略
+- 如果是带第三方依赖的 Python 脚本，在 `#### Python 脚本` 之后、`#### Input Schema（输入参数）` 之前，额外插入 `#### Python Requirements` 段，并放一个 `text` 代码块
 
 如果生成 Groovy，用下面格式：
 
@@ -140,6 +188,14 @@ Hello Groovy
 
 ```python
 # 脚本代码
+```
+
+如果 Python 需要第三方依赖，再补：
+
+#### Python Requirements
+
+```text
+requests==2.32.3
 ```
 
 #### Input Schema（输入参数）
@@ -178,6 +234,7 @@ Hello Groovy
 - 调试更新时，默认使用 `actiondock script patch`，不要用整对象覆盖思路。
 - 当前 patch 只允许更新：
   - `source`
+  - `pythonRequirements`
   - `inputSchema`
   - `outputSchema`
 - 执行失败后，先读失败结果，再改草稿；不要盲改。
@@ -201,6 +258,12 @@ actiondock script create \
 ```
 
 如果当前脚本是 Python，把 `--type groovy`、`./hello-world.groovy` 替换为 `--type python`、`./hello-world.py`。
+
+如果 Python 还需要第三方依赖，再追加：
+
+```bash
+  --python-requirements-file ./requirements.txt \
+```
 
 如果源码或 schema 很短，也可以内联，但文件方式更稳定。
 
@@ -244,7 +307,15 @@ actiondock execution get <execution-id> --json
 - 输入是否符合 `inputSchema`
 - `logs` 是否暴露了关键分支
 - `errorMessage` / `errorDetail.stackTrace`
+- `errorDetail.details.code` 是否给出了结构化失败码
 - 输出结构是否和 `outputSchema` 匹配
+
+如果是 Python 且涉及依赖安装，额外关注这些错误码：
+
+- `PYTHON_RUNTIME_MISSING`
+- `PYTHON_ENV_PREPARE_FAILED`
+- `PYTHON_DEP_INSTALL_FAILED`
+- `PYTHON_EXECUTION_FAILED`
 
 #### 5. Patch 草稿
 
@@ -264,6 +335,14 @@ actiondock script patch hello-world \
   --json
 ```
 
+只改 Python 依赖：
+
+```bash
+actiondock script patch hello-world \
+  --python-requirements-file ./requirements.txt \
+  --json
+```
+
 直接传 merge patch：
 
 ```bash
@@ -278,6 +357,15 @@ actiondock script patch hello-world \
 actiondock script patch hello-world \
   --source-file ./hello-world.v3.groovy \
   --output-schema-file ./output.schema.json \
+  --json
+```
+
+如果同时改 Python 源码和依赖，也可以组合：
+
+```bash
+actiondock script patch hello-world \
+  --source-file ./hello-world.v2.py \
+  --python-requirements-file ./requirements.txt \
   --json
 ```
 
@@ -336,6 +424,19 @@ actiondock script get hello-world --json
 - 优先修源码
 - 如果是返回结构不匹配，再同步修 `outputSchema`
 
+#### Python 依赖/环境异常
+
+症状：
+
+- `status=FAILED`
+- `errorDetail.details.code` 为 `PYTHON_RUNTIME_MISSING` / `PYTHON_ENV_PREPARE_FAILED` / `PYTHON_DEP_INSTALL_FAILED`
+
+动作：
+
+- `PYTHON_RUNTIME_MISSING` / `PYTHON_ENV_PREPARE_FAILED`：优先判断运行环境是否缺少 `python3 -m venv` 能力，不要先改业务源码
+- `PYTHON_DEP_INSTALL_FAILED`：优先修 `pythonRequirements`
+- 只有确认依赖已安装但逻辑仍失败时，再改 Python 源码
+
 #### 输出结构不符合预期
 
 症状：
@@ -352,13 +453,14 @@ actiondock script get hello-world --json
 
 - 对较长源码，先在工作区生成 `.groovy` / `.py` 文件，再用 `--source-file`。
 - 对 schema，先写成 `.json` 文件，再用 `--input-schema-file` / `--output-schema-file`。
+- 对 Python 第三方依赖，先写 `requirements.txt`，再用 `--python-requirements-file`。
 - 每轮 patch 尽量只改一个问题，减少调试噪音。
 - 如果执行结果不清楚，优先加日志再跑一轮，而不是猜。
 
 ### 不要这样做
 
 - 不要默认走非 `--json` 输出。
-- 不要把 `script patch` 当成任意字段 patch；只允许源码和 schema。
+- 不要把 `script patch` 当成任意字段 patch；只允许源码、`pythonRequirements` 和 schema。
 - 不要在未验证草稿前直接发布。
 - 不要在一次 patch 里混入大量无关重构，除非当前问题必须一起改。
 
@@ -378,5 +480,7 @@ actiondock script publish <id> --json
 ```
 
 如果是 Python 脚本，把上面的 `--type groovy` 和 `.groovy` 文件名替换为 `python` / `.py` 即可，其余闭环不变。
+
+如果 Python 脚本需要第三方依赖，则在 `script create` / `script patch` 中追加 `--python-requirements-file ./requirements.txt`。
 
 在真正执行前，先根据用户需求把 `<id>`、源码文件、schema 文件和测试输入准备好。

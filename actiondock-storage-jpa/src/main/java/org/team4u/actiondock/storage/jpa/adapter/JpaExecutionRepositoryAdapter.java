@@ -90,6 +90,7 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setErrorMessage(record.getErrorMessage());
         entity.setErrorType(record.getErrorDetail() == null ? null : record.getErrorDetail().getType());
         entity.setErrorStackTrace(record.getErrorDetail() == null ? null : record.getErrorDetail().getStackTrace());
+        entity.setErrorDetailsJson(record.getErrorDetail() == null ? null : jsonCodec.write(record.getErrorDetail().getDetails()));
         entity.setCreatedAt(record.getCreatedAt());
         entity.setStartedAt(record.getStartedAt());
         entity.setFinishedAt(record.getFinishedAt());
@@ -138,6 +139,7 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         }
         return new ErrorDetail()
                 .setType(entity.getErrorType())
-                .setStackTrace(entity.getErrorStackTrace());
+                .setStackTrace(entity.getErrorStackTrace())
+                .setDetails(jsonCodec.readMap(entity.getErrorDetailsJson()));
     }
 }

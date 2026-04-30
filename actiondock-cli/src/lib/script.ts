@@ -19,6 +19,23 @@ export function resolveScriptSource(source: string | undefined, sourceFile: stri
   return undefined;
 }
 
+export function resolveOptionalTextInput(
+  value: string | undefined,
+  valueFile: string | undefined,
+  labels: { valueFlag: string; fileFlag: string }
+): string | undefined {
+  if (value !== undefined && valueFile) {
+    throw new ActionDockCliError(`${labels.valueFlag} 和 ${labels.fileFlag} 不能同时使用。`, 2);
+  }
+  if (value !== undefined) {
+    return value;
+  }
+  if (valueFile) {
+    return fs.readFileSync(valueFile, "utf8");
+  }
+  return undefined;
+}
+
 export function parseSchemaInput(
   inputJson: string | undefined,
   inputFile: string | undefined,
@@ -53,7 +70,7 @@ export function parsePatchObject(
 
 export function setPatchField(
   patch: Record<string, unknown>,
-  field: "source" | "inputSchema" | "outputSchema",
+  field: "source" | "pythonRequirements" | "inputSchema" | "outputSchema",
   value: unknown
 ): void {
   if (Object.hasOwn(patch, field)) {

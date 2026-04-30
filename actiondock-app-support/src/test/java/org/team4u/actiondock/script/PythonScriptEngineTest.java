@@ -126,6 +126,64 @@ class PythonScriptEngineTest {
     }
 
     @Test
+    void executeInstallsPythonRequirementsIntoCachedEnvironment() {
+        assumeVirtualEnvironmentSupported();
+        AppProperties.Python properties = pythonProperties(30);
+        properties.setEnvCacheDir(tempDir.resolve("python-envs").toString());
+        PythonScriptEngine requirementEngine = new PythonScriptEngine(jsonCodec, properties);
+
+        Object result = requirementEngine.execute(
+                new ScriptDefinition()
+                        .setId("requirements-script")
+                        .setPythonRequirements("colorama==0.4.6")
+                        .setSource("""
+                                import colorama
+                                return {"version": colorama.__version__}
+                                """),
+                Map.of(),
+                new ScriptExecutionContext()
+        );
+
+        assertThat(result).isEqualTo(Map.of("version", "0.4.6"));
+    }
+
+    @Test
+    void executeReturnsStructuredErrorWhenDependencyInstallFails() {
+        assumeVirtualEnvironmentSupported();
+        AppProperties.Python properties = pythonProperties(30);
+        properties.setEnvCacheDir(tempDir.resolve("python-envs-fail").toString());
+        PythonScriptEngine requirementEngine = new PythonScriptEngine(jsonCodec, properties);
+
+        assertThatThrownBy(() -> requirementEngine.execute(
+                new ScriptDefinition()
+                        .setId("requirements-script")
+                        .setPythonRequirements("package-does-not-exist-actiondock==9.9.9")
+                        .setSource("return {\"ok\": True}"),
+                Map.of(),
+                new ScriptExecutionContext()
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Python 依赖安装失败")
+                .extracting("detail.details")
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("code", "PYTHON_DEP_INSTALL_FAILED");
+    }
+
+    private void assumeVirtualEnvironmentSupported() {
+        AppProperties.Python properties = pythonProperties(10);
+        Path envDir = tempDir.resolve("venv-probe");
+        try {
+            Process process = new ProcessBuilder(properties.getExecutable(), "-m", "venv", envDir.toString()).start();
+            boolean finished = process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished || process.exitValue() != 0) {
+                org.junit.jupiter.api.Assumptions.assumeTrue(false, "python venv is not available in this environment");
+            }
+        } catch (Exception exception) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false, "python venv is not available in this environment");
+        }
+    }
+
+    @Test
     void executeExposesConfigBinding() {
         ScriptExecutionContext context = new ScriptExecutionContext()
                 .setConfig(Map.of("api_key", "secret-value"));

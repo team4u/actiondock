@@ -2,6 +2,7 @@ package org.team4u.actiondock.web;
 
 import org.team4u.actiondock.application.InvalidExecutionInputException;
 import org.team4u.actiondock.application.ErrorDetailSupport;
+import org.team4u.actiondock.application.InvalidPythonRequirementsException;
 import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
@@ -46,6 +47,15 @@ public class GlobalExceptionHandler {
                         "rejectedFields", exception.getRejectedFields(),
                         "allowedFields", exception.getAllowedFields()
                 )
+        ));
+    }
+
+    @ExceptionHandler(InvalidPythonRequirementsException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleInvalidPythonRequirements(InvalidPythonRequirementsException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(
+                exception.getMessage(),
+                400,
+                exception.toResponseData()
         ));
     }
 

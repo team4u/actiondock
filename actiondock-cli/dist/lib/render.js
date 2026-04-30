@@ -62,6 +62,9 @@ export function renderScriptDetail(script, target) {
     if (script.tags && script.tags.length > 0) {
         lines.push(`Tags: ${script.tags.join(", ")}`);
     }
+    if (script.pythonRequirements) {
+        lines.push("Python requirements: configured");
+    }
     return lines.join("\n");
 }
 export function renderExecution(response) {

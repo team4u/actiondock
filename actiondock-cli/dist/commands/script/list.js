@@ -29,19 +29,15 @@ export default class ScriptListCommand extends BaseCommand {
             const filtered = flags.all ? scripts : scripts.filter((item) => Boolean(item.publishedSnapshot));
             const items = filtered.map((item) => ({
                 id: item.id,
-                name: item.name,
-                type: item.type,
-                status: item.status,
-                description: item.description,
-                owner: item.owner,
-                tags: item.tags ?? [],
-                publishedSnapshot: item.publishedSnapshot ?? null
+                name: item.name ?? null,
+                type: item.type ?? null,
+                published: Boolean(item.publishedSnapshot)
             }));
             if (flags.json) {
                 this.printJson(items);
                 return;
             }
-            this.log(renderScriptList(items));
+            this.log(renderScriptList(filtered));
         }
         catch (error) {
             this.handleError(error, flags.json);

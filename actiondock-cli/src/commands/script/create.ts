@@ -4,7 +4,7 @@ import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScriptDetail } from "../../lib/render.js";
-import { parseSchemaInput, resolveScriptSource } from "../../lib/script.js";
+import { parseSchemaInput, resolveOptionalTextInput, resolveScriptSource } from "../../lib/script.js";
 
 export default class ScriptCreateCommand extends BaseCommand {
   static description = "Create an ActionDock draft script";
@@ -29,6 +29,12 @@ export default class ScriptCreateCommand extends BaseCommand {
     }),
     "source-file": Flags.string({
       description: "Path to a text file containing the script source"
+    }),
+    "python-requirements": Flags.string({
+      description: "Inline Python requirements.txt content"
+    }),
+    "python-requirements-file": Flags.string({
+      description: "Path to a requirements.txt file"
     }),
     description: Flags.string({
       description: "Script description"
@@ -74,6 +80,10 @@ export default class ScriptCreateCommand extends BaseCommand {
         name: flags.name,
         type: flags.type.toUpperCase(),
         source: resolveScriptSource(flags.source, flags["source-file"], true),
+        pythonRequirements: resolveOptionalTextInput(flags["python-requirements"], flags["python-requirements-file"], {
+          valueFlag: "`--python-requirements`",
+          fileFlag: "`--python-requirements-file`"
+        }),
         description: flags.description,
         owner: flags.owner,
         tags: flags.tag?.length ? flags.tag : undefined,

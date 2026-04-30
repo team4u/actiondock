@@ -16,11 +16,13 @@ export interface ScriptDefinition {
   owner?: string;
   tags?: string[];
   source?: string;
+  pythonRequirements?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   publishedSnapshot?: {
     name?: string;
     type?: string;
+    pythonRequirements?: string;
     inputSchema?: Record<string, unknown>;
     outputSchema?: Record<string, unknown>;
   } | null;

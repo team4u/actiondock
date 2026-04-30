@@ -169,6 +169,7 @@ class RepositoryCatalogServiceTest {
                 "team",
                 List.of("demo"),
                 "source.groovy",
+                null,
                 "input.schema.json",
                 "output.schema.json",
                 null,

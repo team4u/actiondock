@@ -1,9 +1,11 @@
 package org.team4u.actiondock.script;
 
 import org.team4u.actiondock.application.ErrorDetailSupport;
+import org.team4u.actiondock.application.PythonRequirementsSupport;
 import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
+import org.team4u.actiondock.domain.model.ErrorDetail;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
@@ -16,14 +18,21 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -41,6 +50,16 @@ public class PythonScriptEngine implements ScriptEngine {
     private static final String INVOKE_PREFIX = "__ACTIONDOCK_INVOKE__";
     private static final String PLUGIN_PREFIX = "__ACTIONDOCK_PLUGIN__";
     private static final String STATE_PREFIX = "__ACTIONDOCK_STATE__";
+    private static final String VENV_VALIDATION_RUNNER = """
+            import json
+            import sys
+            import venv
+
+            print(json.dumps({
+                "version": "{}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro),
+                "executable": sys.executable
+            }, ensure_ascii=False))
+            """;
     private static final String VALIDATION_RUNNER = """
             import py_compile
             import sys
@@ -115,13 +134,15 @@ public class PythonScriptEngine implements ScriptEngine {
     public void validate(ScriptDefinition definition) {
         Path scriptPath = null;
         try {
+            PythonRequirementsSupport.parse(definition.getId(), definition.getPythonRequirements());
             scriptPath = writeScriptFile(definition.getSource(), false);
             ProcessResult result = runCommand(
                     List.of(resolveExecutable(), "-c", VALIDATION_RUNNER, scriptPath.toAbsolutePath().toString()),
                     null,
                     "{}",
                     null,
-                    null
+                    null,
+                    properties.getTimeoutSeconds()
             );
             if (result.timedOut()) {
                 throw new IllegalStateException("Python 脚本校验超时");
@@ -156,9 +177,12 @@ public class PythonScriptEngine implements ScriptEngine {
     public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         Path scriptPath = null;
         try {
+            PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements =
+                    PythonRequirementsSupport.parse(definition.getId(), definition.getPythonRequirements());
+            PythonExecutable executable = resolveRuntimeExecutable(parsedRequirements, definition, executionContext);
             scriptPath = writeScriptFile(definition.getSource(), true);
             ProcessResult result = runCommand(
-                    List.of(resolveExecutable(), scriptPath.toAbsolutePath().toString()),
+                    List.of(executable.path(), scriptPath.toAbsolutePath().toString()),
                     jsonCodec.write(input == null ? Map.of() : input) + "\n",
                     jsonCodec.write(executionContext == null ? Map.of() : executionContext.getConfig()),
                     event -> {
@@ -172,9 +196,16 @@ public class PythonScriptEngine implements ScriptEngine {
                 throw new IllegalStateException("Python 脚本执行超时");
             }
             if (result.exitCode() != 0) {
-                throw new IllegalStateException(extractErrorMessage(result));
+                throw new PythonExecutionException(
+                        extractErrorMessage(result),
+                        buildErrorDetail("PYTHON_EXECUTION_FAILED", result, Map.of(
+                                "command", List.of(executable.path(), scriptPath.toAbsolutePath().toString())
+                        ))
+                );
             }
             return jsonCodec.readUntyped(result.stdout());
+        } catch (PythonExecutionException exception) {
+            throw exception;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to execute Python script", e);
         } catch (InterruptedException e) {
@@ -190,6 +221,16 @@ public class PythonScriptEngine implements ScriptEngine {
                                      String configJson,
                                      Consumer<LogEvent> logConsumer,
                                      PythonBridge invocationBridge)
+            throws IOException, InterruptedException {
+        return runCommand(command, stdin, configJson, logConsumer, invocationBridge, properties.getTimeoutSeconds());
+    }
+
+    private ProcessResult runCommand(List<String> command,
+                                     String stdin,
+                                     String configJson,
+                                     Consumer<LogEvent> logConsumer,
+                                     PythonBridge invocationBridge,
+                                     int timeoutSeconds)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command);
@@ -210,7 +251,10 @@ public class PythonScriptEngine implements ScriptEngine {
                 stdinStream.flush();
             }
 
-            boolean finished = process.waitFor(properties.getTimeoutSeconds(), TimeUnit.SECONDS);
+            if (timeoutSeconds <= 0) {
+                timeoutSeconds = properties.getTimeoutSeconds();
+            }
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
                 process.waitFor();
@@ -230,6 +274,180 @@ public class PythonScriptEngine implements ScriptEngine {
             return "python3";
         }
         return properties.getExecutable().trim();
+    }
+
+    private PythonExecutable resolveRuntimeExecutable(PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
+                                                      ScriptDefinition definition,
+                                                      ScriptExecutionContext executionContext)
+            throws IOException, InterruptedException {
+        String executable = resolveExecutable();
+        PythonRuntimeInfo runtimeInfo = inspectRuntime(executable, definition.getId());
+        if (parsedRequirements == null || parsedRequirements.isEmpty()) {
+            return new PythonExecutable(executable, runtimeInfo.version());
+        }
+        Path envDir = prepareEnvironment(executable, runtimeInfo, parsedRequirements, definition, executionContext);
+        return new PythonExecutable(resolveEnvironmentPython(envDir), runtimeInfo.version());
+    }
+
+    private PythonRuntimeInfo inspectRuntime(String executable, String scriptId) throws IOException, InterruptedException {
+        ProcessResult result = runCommand(
+                List.of(executable, "-c", VENV_VALIDATION_RUNNER),
+                null,
+                "{}",
+                null,
+                null,
+                properties.getInstallTimeoutSeconds()
+        );
+        if (result.timedOut()) {
+            throw new PythonExecutionException(
+                    "检测 Python 运行环境超时",
+                    buildSimpleErrorDetail("PYTHON_RUNTIME_MISSING", Map.of(
+                            "scriptId", scriptId,
+                            "executable", executable,
+                            "reason", "检测 Python 运行环境超时"
+                    ))
+            );
+        }
+        if (result.exitCode() != 0) {
+            throw new PythonExecutionException(
+                    "Python 运行环境不可用",
+                    buildErrorDetail("PYTHON_RUNTIME_MISSING", result, Map.of(
+                            "scriptId", scriptId,
+                            "executable", executable
+                    ))
+            );
+        }
+        Map<String, Object> payload = jsonCodec.readMap(result.stdout());
+        Object version = payload.get("version");
+        return new PythonRuntimeInfo(version == null ? "" : String.valueOf(version));
+    }
+
+    private Path prepareEnvironment(String executable,
+                                    PythonRuntimeInfo runtimeInfo,
+                                    PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
+                                    ScriptDefinition definition,
+                                    ScriptExecutionContext executionContext)
+            throws IOException, InterruptedException {
+        Path cacheRoot = resolveEnvCacheDir();
+        Files.createDirectories(cacheRoot);
+        String cacheKey = sha256(parsedRequirements.cacheKeyMaterial(executable, runtimeInfo.version()));
+        Path envDir = cacheRoot.resolve(cacheKey);
+        Path readyFile = envDir.resolve("READY");
+        if (Files.isRegularFile(readyFile)) {
+            return envDir;
+        }
+
+        Files.createDirectories(envDir);
+        Path lockFile = envDir.resolve(".lock");
+        try (FileChannel channel = FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            if (Files.isRegularFile(readyFile)) {
+                return envDir;
+            }
+            clearDirectoryContents(envDir, Set.of(".lock"));
+            installEnvironment(executable, envDir, parsedRequirements, definition, executionContext);
+            Files.writeString(readyFile, "ready\n", StandardCharsets.UTF_8);
+        }
+        return envDir;
+    }
+
+    private void installEnvironment(String executable,
+                                    Path envDir,
+                                    PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
+                                    ScriptDefinition definition,
+                                    ScriptExecutionContext executionContext)
+            throws IOException, InterruptedException {
+        if (executionContext != null) {
+            executionContext.log(ExecutionLogLevel.INFO, "[python-install] Preparing virtual environment");
+        }
+
+        ProcessResult venvResult = runLoggedCommand(
+                List.of(executable, "-m", "venv", envDir.toAbsolutePath().toString()),
+                executionContext,
+                properties.getInstallTimeoutSeconds()
+        );
+        if (venvResult.timedOut() || venvResult.exitCode() != 0) {
+            throw new PythonExecutionException(
+                    "Python 虚拟环境创建失败",
+                    buildErrorDetail("PYTHON_ENV_PREPARE_FAILED", venvResult, Map.of(
+                            "scriptId", definition.getId(),
+                            "envDir", envDir.toString()
+                    ))
+            );
+        }
+
+        Path requirementsPath = envDir.resolve("requirements.txt");
+        Files.writeString(requirementsPath, parsedRequirements.normalizedText(), StandardCharsets.UTF_8);
+        List<String> installCommand = new ArrayList<>(List.of(
+                resolveEnvironmentPython(envDir),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-input",
+                "-r",
+                requirementsPath.toAbsolutePath().toString()
+        ));
+        ProcessResult pipResult = runLoggedCommand(
+                installCommand,
+                executionContext,
+                properties.getInstallTimeoutSeconds()
+        );
+        if (pipResult.timedOut() || pipResult.exitCode() != 0) {
+            throw new PythonExecutionException(
+                    "Python 依赖安装失败",
+                    buildErrorDetail("PYTHON_DEP_INSTALL_FAILED", pipResult, Map.of(
+                            "scriptId", definition.getId(),
+                            "envDir", envDir.toString(),
+                            "requirements", parsedRequirements.normalizedText(),
+                            "command", installCommand
+                    ))
+            );
+        }
+    }
+
+    private ProcessResult runLoggedCommand(List<String> command,
+                                           ScriptExecutionContext executionContext,
+                                           int timeoutSeconds)
+            throws IOException, InterruptedException {
+        Process process = new ProcessBuilder(command).start();
+        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() ->
+                readLoggedStream(process.getInputStream(), line -> logInstallLine(executionContext, ExecutionLogLevel.INFO, line)));
+        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
+                readLoggedStream(process.getErrorStream(), line -> logInstallLine(executionContext, ExecutionLogLevel.WARN, line)));
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            process.waitFor();
+        }
+        return new ProcessResult(
+                finished ? process.exitValue() : -1,
+                stdoutFuture.join(),
+                stderrFuture.join(),
+                !finished
+        );
+    }
+
+    private void logInstallLine(ScriptExecutionContext executionContext, ExecutionLogLevel level, String line) {
+        if (executionContext != null && line != null && !line.isBlank()) {
+            executionContext.log(level, "[python-install] " + line);
+        }
+    }
+
+    private Path resolveEnvCacheDir() {
+        String configured = properties.getEnvCacheDir();
+        if (configured == null || configured.isBlank()) {
+            return Path.of(AppProperties.defaultHomeDir(), "python-envs");
+        }
+        return Path.of(configured.trim());
+    }
+
+    private String resolveEnvironmentPython(Path envDir) {
+        Path unix = envDir.resolve("bin").resolve("python");
+        if (Files.exists(unix)) {
+            return unix.toString();
+        }
+        return envDir.resolve("Scripts").resolve("python.exe").toString();
     }
 
     private Path writeScriptFile(String source, boolean executable) throws IOException {
@@ -288,6 +506,25 @@ public class PythonScriptEngine implements ScriptEngine {
             return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read Python process output", e);
+        }
+    }
+
+    private String readLoggedStream(InputStream stream, Consumer<String> lineConsumer) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (output.length() > 0) {
+                    output.append('\n');
+                }
+                output.append(line);
+                if (lineConsumer != null) {
+                    lineConsumer.accept(line);
+                }
+            }
+            return output.toString();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read Python process output", exception);
         }
     }
 
@@ -482,10 +719,74 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
+    private ErrorDetail buildErrorDetail(String code, ProcessResult result, Map<String, Object> details) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("code", code);
+        values.put("stdout", result.stdout());
+        values.put("stderr", result.stderr());
+        values.put("exitCode", result.exitCode());
+        values.put("timedOut", result.timedOut());
+        values.putAll(details);
+        return new ErrorDetail()
+                .setType(PythonExecutionException.class.getName())
+                .setStackTrace((result.stderr() == null || result.stderr().isBlank()) ? result.stdout() : result.stderr())
+                .setDetails(values);
+    }
+
+    private ErrorDetail buildSimpleErrorDetail(String code, Map<String, Object> details) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("code", code);
+        values.putAll(details);
+        return new ErrorDetail()
+                .setType(PythonExecutionException.class.getName())
+                .setStackTrace("")
+                .setDetails(values);
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 not available", exception);
+        }
+    }
+
+    private void clearDirectoryContents(Path directory, Set<String> preserveNames) throws IOException {
+        if (Files.notExists(directory)) {
+            return;
+        }
+        try (var children = Files.list(directory)) {
+            for (Path child : children.toList()) {
+                if (preserveNames.contains(child.getFileName().toString())) {
+                    continue;
+                }
+                deleteRecursively(child);
+            }
+        }
+    }
+
+    private void deleteRecursively(Path path) throws IOException {
+        if (Files.isDirectory(path) && !Files.isSymbolicLink(path)) {
+            try (var children = Files.list(path)) {
+                for (Path child : children.toList()) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        Files.deleteIfExists(path);
+    }
+
     record ProcessResult(int exitCode, String stdout, String stderr, boolean timedOut) {
     }
 
     record LogEvent(ExecutionLogLevel level, String message) {
+    }
+
+    record PythonExecutable(String path, String version) {
+    }
+
+    record PythonRuntimeInfo(String version) {
     }
 
     record PythonInvocationRequest(String scriptId, Map<String, Object> args) {

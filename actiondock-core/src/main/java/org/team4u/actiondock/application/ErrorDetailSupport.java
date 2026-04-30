@@ -4,6 +4,7 @@ import org.team4u.actiondock.domain.model.ErrorDetail;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Map;
 
 /**
  * 错误详情工具类，提供异常信息的摘要提取和详情构建。
@@ -42,6 +43,10 @@ public final class ErrorDetailSupport {
         return new ErrorDetail()
                 .setType(throwable.getClass().getName())
                 .setStackTrace(stackTraceOf(throwable));
+    }
+
+    public static ErrorDetail describe(Throwable throwable, Map<String, Object> details) {
+        return describe(throwable).setDetails(details);
     }
 
     private static String stackTraceOf(Throwable throwable) {

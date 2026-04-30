@@ -22,6 +22,7 @@ public class PublishedScriptSnapshot {
     private ScriptType type = ScriptType.GROOVY;
     private ScriptPackaging packaging = ScriptPackaging.TOOL;
     private String source;
+    private String pythonRequirements;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
     private Map<String, Object> outputSchema = new LinkedHashMap<>();
     private List<ScriptDependency> scriptDependencies = new ArrayList<>();
@@ -43,6 +44,7 @@ public class PublishedScriptSnapshot {
         this.type = other.getType();
         this.packaging = other.getPackaging();
         this.source = other.getSource();
+        this.pythonRequirements = other.getPythonRequirements();
         this.inputSchema = SchemaValueCopier.copyMap(other.getInputSchema());
         this.outputSchema = SchemaValueCopier.copyMap(other.getOutputSchema());
         this.scriptDependencies = other.getScriptDependencies();
@@ -82,6 +84,15 @@ public class PublishedScriptSnapshot {
 
     public PublishedScriptSnapshot setSource(String source) {
         this.source = source;
+        return this;
+    }
+
+    public String getPythonRequirements() {
+        return pythonRequirements;
+    }
+
+    public PublishedScriptSnapshot setPythonRequirements(String pythonRequirements) {
+        this.pythonRequirements = pythonRequirements;
         return this;
     }
 
@@ -176,6 +187,7 @@ public class PublishedScriptSnapshot {
                 && type == other.type
                 && packaging == other.packaging
                 && Objects.equals(source, other.source)
+                && Objects.equals(pythonRequirements, other.pythonRequirements)
                 && Objects.equals(inputSchema, other.inputSchema)
                 && Objects.equals(outputSchema, other.outputSchema)
                 && Objects.equals(scriptDependencies, other.scriptDependencies)
@@ -184,6 +196,6 @@ public class PublishedScriptSnapshot {
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, type, packaging, source, inputSchema, outputSchema, scriptDependencies, aiDependencies);
+        return Objects.hash(name, type, packaging, source, pythonRequirements, inputSchema, outputSchema, scriptDependencies, aiDependencies);
     }
 }
