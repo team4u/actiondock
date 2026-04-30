@@ -64,6 +64,7 @@ export function AiStepTracePanel({ steps }: AiStepTracePanelProps) {
                   <Collapse
                     ghost
                     size="small"
+                    defaultActiveKey={["input"]}
                     items={[{
                       key: "input",
                       label: "工具输入",
@@ -75,6 +76,7 @@ export function AiStepTracePanel({ steps }: AiStepTracePanelProps) {
                   <Collapse
                     ghost
                     size="small"
+                    defaultActiveKey={["output"]}
                     items={[{
                       key: "output",
                       label: "工具输出",
