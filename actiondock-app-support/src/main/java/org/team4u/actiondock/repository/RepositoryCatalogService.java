@@ -2033,7 +2033,7 @@ public class RepositoryCatalogService {
             commitCommand.add(normalizedReleaseNotes);
         }
         runGit(root, commitCommand, true);
-        runGit(root, List.of("git", "-C", root.toString(), "push", "origin", normalizeOrDefault(repository.getBranch(), "main")));
+        runGit(root, List.of("git", "-C", root.toString(), "push", "origin", normalizeOrDefault(repository.getBranch(), "master")));
     }
 
     private Map<String, Object> readSchema(String repositoryId, String schemaPath) {
@@ -2429,14 +2429,14 @@ public class RepositoryCatalogService {
         }
         if (Files.notExists(root)) {
             runGit(repositoriesRoot, List.of(
-                    "git", "clone", "--branch", normalizeOrDefault(repository.getBranch(), "main"),
+                    "git", "clone", "--branch", normalizeOrDefault(repository.getBranch(), "master"),
                     "--single-branch", repository.getUrl(), root.toString()
             ));
             return;
         }
-        runGit(root, List.of("git", "-C", root.toString(), "fetch", "origin", normalizeOrDefault(repository.getBranch(), "main")));
-        runGit(root, List.of("git", "-C", root.toString(), "checkout", normalizeOrDefault(repository.getBranch(), "main")));
-        runGit(root, List.of("git", "-C", root.toString(), "pull", "--ff-only", "origin", normalizeOrDefault(repository.getBranch(), "main")));
+        runGit(root, List.of("git", "-C", root.toString(), "fetch", "origin", normalizeOrDefault(repository.getBranch(), "master")));
+        runGit(root, List.of("git", "-C", root.toString(), "checkout", normalizeOrDefault(repository.getBranch(), "master")));
+        runGit(root, List.of("git", "-C", root.toString(), "pull", "--ff-only", "origin", normalizeOrDefault(repository.getBranch(), "master")));
     }
 
     void ensureLocalDirRepository(RepositoryDefinition repository) {

@@ -7,7 +7,7 @@
   "preferGlobal": true,
   "repository": {
     "type": "git",
-    "url": "git+https://gitee.com/fjay/script-flow.git"
+    "url": "git+https://gitee.com/fjay/action-dock.git"
   },
   "bin": {
     "actiondock-server": "jdeploy-bundle/jdeploy.js"
