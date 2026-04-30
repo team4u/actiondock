@@ -1,123 +1,155 @@
-# actiondock-app-spring
+# @actiondock/server
 
-Spring Boot Web 入口模块，负责把脚本平台和 AI 能力以 REST API 与管理台页面的形式对外暴露。
+**`@actiondock/server`** 是 ActionDock 的官方服务端发行包。
 
-## 提供什么
+它把脚本运行、管理台、REST API、仓库分发、插件调用、共享状态和 AI 能力放进同一个可直接启动的服务里，让一套脚本同时被人、HTTP 客户端、CLI 和 Agent 使用。
 
-- REST API
-- 管理台静态资源挂载
-- Spring MVC / Validation / Actuator / OpenAPI
-- 与 `actiondock-app-support`、`actiondock-storage-jpa` 的整合启动
+一句话概括：
 
-## 启动方式
+> **把零散脚本升级成可发布、可复用、可审计、可被 AI 稳定调用的服务端运行平台。**
 
-```bash
-mvn -pl actiondock-app-spring -am spring-boot:run
-```
+## 适合谁
 
-生产打包：
+如果你遇到的是下面这类问题，这个包就是给你用的：
 
-```bash
-mvn -pl actiondock-app-spring -am package
-java -jar target/actiondock-app-spring-0.2.0.jar
-```
+- 团队里已经有很多内部脚本，但分散在个人目录、机器人、Cron、Jenkins 或各种仓库里
+- 想把脚本统一收进一个带输入输出契约的运行平台，而不是继续靠 README 和口头约定
+- 想给外部系统、CLI 或 AI Agent 提供稳定的内部工具调用入口
+- 需要给脚本补上发布、依赖、分发、配置、共享状态、日志和审计能力
 
-## npm / jDeploy 分发
+## 核心能力
 
-对外发布名为 `@actiondock/server`，推荐安装方式：
+- **脚本资产化**：支持 `GROOVY` 和 `PYTHON` 脚本，带 `inputSchema` / `outputSchema`、草稿、发布快照、执行记录和调试视图。
+- **多入口复用**：同一份脚本可被管理台、REST API、CLI 和 Agent 共用。
+- **仓库化分发**：支持脚本、插件、AI 能力包的仓库发现、安装、更新、开发同步和再次发布。
+- **插件扩展**：Groovy / Python 脚本统一通过 `plugins.invoke(...)` 调用插件动作。
+- **AI 原生能力**：管理模型、Agent、Toolset，并支持脚本生成、修复、诊断、发布辅助等场景。
+- **共享状态与配置治理**：内建配置值、共享状态、访问令牌、定时任务、备份恢复。
+- **调用命令与 Skill 示例生成**：管理台可基于当前脚本或插件动作，自动生成可直接执行的 HTTP / CLI 调用命令，也能进一步生成适合 Agent / Codex 复用的 skill 示例，减少二次手写。
+
+## 快速开始
+
+### 安装
 
 ```bash
 npm i -g @actiondock/server
+```
+
+### 启动
+
+```bash
 actiondock-server
 ```
 
-如果希望作为系统服务安装和托管，可使用 jDeploy 提供的 service 子命令：
+默认端口是 `5177`。启动后常用入口：
+
+- 管理台：`http://localhost:5177/admin/scripts`
+- API 根路径：`http://localhost:5177/api`
+- Swagger UI：`http://localhost:5177/swagger-ui.html`
+
+### 最小验证
+
+服务默认会初始化示例脚本 `hello-groovy`。可直接调用：
 
 ```bash
-actiondock-server service install
-actiondock-server service start
-actiondock-server service status
+curl -X POST http://localhost:5177/api/scripts/hello-groovy/published/execute \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "input": {
+      "name": "alice"
+    },
+    "mode": "SYNC"
+  }'
 ```
 
-使用 jDeploy 自更新：
+如果你同时安装了 CLI，也可以直接执行：
+
+```bash
+actiondock script run hello-groovy --name alice --json
+```
+
+## 安装要求
+
+- JDK 21+
+- Python 3.x
+
+说明：
+
+- `PYTHON` 类型脚本默认使用宿主机里的 `python3`
+- 首次安装后，`actiondock-server` 会通过 jDeploy 启动打包好的 Java 服务
+
+## 这个包里有什么
+
+这是一个完整可运行的服务端分发包，包含：
+
+- Spring Boot Web 服务
+- ActionDock 管理台静态资源
+- 脚本、插件、仓库、执行、共享状态、AI 等 REST API
+- jDeploy 打包与更新能力
+
+它对应仓库里的 `actiondock-app-spring` 模块，但公网用户通常只需要关心“安装后如何启动和使用”，不需要先理解整个多模块结构。
+
+## 常见使用方式
+
+### 1. 直接启动
+
+```bash
+actiondock-server
+```
+
+适合个人使用、开发环境和快速试跑。
+
+### 2. 更新到新版本
 
 ```bash
 actiondock-server update
 ```
 
-如需兜底，也可继续使用 npm 全局升级：
+如需使用 npm 方式升级，也可以：
 
 ```bash
 npm i -g @actiondock/server@latest
 ```
 
-启动后会低频检查 npm 上是否有新版本，并在日志里输出升级提示。发现新版本后可执行 `actiondock-server update`。可用 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
+启动后服务会低频检查 npm 上是否有新版本，并在日志里输出升级提示。可通过环境变量 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
 
-发布前可在本目录执行：
+## 公开接口概览
 
-```bash
-npm install
-npm run pack:dry-run
-```
-
-`pack:dry-run` 会先构建 Spring Boot jar，再生成 `jdeploy-bundle/`，最后校验 npm 包内容。
-
-## 前后端开发
-
-```bash
-# 后端
-mvn -pl actiondock-app-spring -am spring-boot:run
-
-# 前端
-cd ../actiondock-admin-ui
-npm install
-npm run dev
-```
-
-- 前端开发地址：`http://localhost:5173/admin/scripts`
-- 后端管理台地址：`http://localhost:5177/admin/scripts`
-
-## API 分组
+常用 API 分组如下：
 
 | 路径前缀 | 说明 |
 |----------|------|
 | `/api/scripts` | 脚本管理、发布、Fork、开发同步 |
 | `/api/executions` | 脚本执行与执行记录 |
 | `/api/plugins` | 插件管理、配置与动作调用 |
-| `/api/repositories` | 仓库、仓库工具和仓库插件管理 |
+| `/api/repositories` | 仓库、仓库工具、仓库插件、AI 能力包 |
 | `/api/schedules` | 全局定时任务管理 |
 | `/api/scripts/{scriptId}/schedules` | 脚本级定时任务管理 |
-| `/api/config-values` | 全局配置值管理 |
-| `/api/shared-state` | 通用共享状态管理 |
+| `/api/config-values` | 配置值管理 |
+| `/api/shared-state` | 共享状态管理 |
 | `/api/access-tokens` | 访问令牌管理 |
-| `/api/ai` | 模型、Agent、Toolset、AI Tool、Agent Run 和调用日志 |
-| `/api/schema` | 脚本输入/输出 Schema 摘要 |
+| `/api/ai` | 模型、Agent、Toolset、AI Tool、Agent Run、调用日志 |
+| `/api/schema` | 脚本输入输出 Schema 摘要 |
 | `/api/installed-tools` | 已安装仓库工具卸载入口 |
 
-## 共享状态 API
+如果系统里配置了访问令牌，调用 `/api/*` 时需要带：
 
-共享状态用于多个脚本或外部客户端复用同一份运行时状态。它不是只面向 OAuth 的特化能力，而是通用的带命名空间状态存储。
+```text
+Authorization: Bearer <token>
+```
+
+## 共享状态
+
+共享状态适合保存 OAuth Token、同步游标、水位线、批次号等跨脚本复用的数据。它不是某个单一业务功能，而是通用运行时状态存储。
 
 核心字段：
 
-- `namespace`：显式命名空间，例如 `oauth.github`
-- `key`：命名空间内唯一键，例如 `access-token`
-- `value`：任意 JSON 值
-- `secret`：是否按敏感值处理
-- `expiresAt`：过期时间，ISO 本地时间，例如 `2026-04-28T12:00:00`
-- `version`：版本号，可用于 CAS
-
-当前接口：
-
-- `GET /api/shared-state/namespaces`
-- `GET /api/shared-state?namespace=oauth.github`
-- `GET /api/shared-state/detail?namespace=oauth.github&key=access-token`
-- `POST /api/shared-state`
-- `PUT /api/shared-state`
-- `POST /api/shared-state/cas`
-- `DELETE /api/shared-state?namespace=oauth.github&key=access-token`
-- `POST /api/shared-state/purge-expired`
-- `POST /api/shared-state/purge-expired?namespace=oauth.github`
+- `namespace`
+- `key`
+- `value`：任意 JSON
+- `secret`
+- `expiresAt`
+- `version`
 
 写入示例：
 
@@ -136,67 +168,50 @@ curl -X POST http://localhost:5177/api/shared-state \
   }'
 ```
 
-等价 CLI：
+它支持 CAS 更新、按命名空间查询和过期清理，适合做脚本之间的轻量共享状态层。
+
+## 调用命令与 Skill 示例
+
+管理台里的脚本页和插件页都可以直接生成：
+
+- 可执行的 HTTP 调用命令
+- 可执行的 CLI 调用命令
+- 基于当前调用命令整理出的 skill 示例
+
+这个能力适合：
+
+- 给同事复制一条可直接运行的命令
+- 给 Agent / Codex 提供稳定调用模板
+- 把当前页面的测试入参、执行模式、Schema 上下文一起带进 skill 示例
+
+相比手写说明文档，它的好处是命令和页面当前状态保持一致，减少“文档写的是一套，实际调用又是另一套”的偏差。
+
+## 本地开发
+
+如果你是在仓库里开发这个子项目，而不是作为 npm 用户使用：
 
 ```bash
-actiondock state put oauth.github access-token \
-  --value-json '{"accessToken":"gho_xxx","tokenType":"Bearer"}' \
-  --secret \
-  --expires-at '2026-04-28T12:00:00' \
-  --json
+# 启动后端
+mvn -pl actiondock-app-spring -am spring-boot:run
+
+# 启动前端开发服务器
+cd ../actiondock-admin-ui
+npm install
+npm run dev
 ```
 
-CAS 示例：
+开发时常用地址：
+
+- 前端开发地址：`http://localhost:5173/admin/scripts`
+- 后端管理台地址：`http://localhost:5177/admin/scripts`
+
+## 发布前自检
+
+在本目录可执行：
 
 ```bash
-curl -X POST http://localhost:5177/api/shared-state/cas \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "namespace": "cursor.sync",
-    "key": "users",
-    "expectedVersion": 3,
-    "value": {
-      "cursor": "next-page-token"
-    }
-  }'
+npm install
+npm run pack:dry-run
 ```
 
-等价 CLI：
-
-```bash
-actiondock state cas cursor.sync users \
-  --expected-version 3 \
-  --value-json '{"cursor":"next-page-token"}' \
-  --json
-```
-
-语义说明：
-
-- 过期条目不会被 `get` / `list` / `namespaces` 返回
-- 对已过期条目再次 `put` 时，会按新条目重建，版本从 `1` 开始
-- `cas` 返回 `updated`、`entry`、`current`，便于处理并发更新失败
-- `secret` 只是管理和展示语义，不代表数据库加密；当前实现是数据库明文存储、UI 遮罩展示
-
-## 管理台与静态资源
-
-- `/admin/*`：管理台入口
-- 打包时会自动构建 `actiondock-admin-ui` 并复制到 jar 静态资源目录
-
-系统配置页已包含：
-
-- 配置值
-- 共享状态
-- 访问令牌
-- 控制台凭证
-- 数据备份
-
-## 使用提示
-
-- `PYTHON` 脚本要求宿主机存在 `python3`
-- Groovy 和 Python 脚本都可以通过系统插件 `actiondock-ai` 使用 AI 能力
-- 若系统存在访问令牌，则 `/api/*` 需要 `Authorization: Bearer <token>`
-
-## 相关模块
-
-- UI 见 [../actiondock-admin-ui/README.md](../actiondock-admin-ui/README.md)
-- 运行时装配见 [../actiondock-app-support/README.md](../actiondock-app-support/README.md)
+`pack:dry-run` 会先构建 Spring Boot jar，再生成 `jdeploy-bundle/`，最后校验 npm 包内容。
