@@ -972,6 +972,16 @@ a {
   margin-inline-end: 0;
 }
 
+.script-execution-summary-card__id {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.script-execution-summary-card__id .ant-typography {
+  margin-bottom: 0;
+}
+
 @media (min-width: 1200px) {
   .equal-height-row {
     align-items: stretch;

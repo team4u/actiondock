@@ -42,6 +42,9 @@ export interface ScriptExecutionContext {
   executionHistory: ExecutionRecord[];
   currentExecution: ExecutionRecord | null;
   setCurrentExecution: React.Dispatch<React.SetStateAction<ExecutionRecord | null>>;
+  executionDetailOpen: boolean;
+  openExecutionDetail: (record?: ExecutionRecord | null) => void;
+  closeExecutionDetail: () => void;
   executing: boolean;
   historyLoading: boolean;
   deletingExecutionId: string | null;
@@ -66,6 +69,23 @@ export interface ScriptExecutionContext {
   loadExecutionHistory: (scriptId: string, preferredExecutionId?: string) => Promise<void>;
 }
 
+export function selectCurrentExecution(
+  records: ExecutionRecord[],
+  previous: ExecutionRecord | null,
+  preferredExecutionId?: string
+): ExecutionRecord | null {
+  if (records.length === 0) {
+    return null;
+  }
+  if (preferredExecutionId) {
+    return records.find((item) => item.id === preferredExecutionId) ?? records[0] ?? null;
+  }
+  if (previous?.id) {
+    return records.find((item) => item.id === previous.id) ?? records[0] ?? null;
+  }
+  return records[0] ?? null;
+}
+
 export function useScriptExecution({
   currentScript,
   executionForm,
@@ -76,6 +96,7 @@ export function useScriptExecution({
   const [executionJsonInput, setExecutionJsonInput] = useState("{}");
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
   const [currentExecution, setCurrentExecution] = useState<ExecutionRecord | null>(null);
+  const [executionDetailOpen, setExecutionDetailOpen] = useState(false);
   const [executionValidationError, setExecutionValidationError] = useState<ValidationErrorData | null>(null);
   const [executing, setExecuting] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -124,17 +145,22 @@ export function useScriptExecution({
   const sortExecutions = (records: ExecutionRecord[]): ExecutionRecord[] =>
     [...records].sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
 
+  const openExecutionDetail = (record?: ExecutionRecord | null) => {
+    if (record) {
+      setCurrentExecution(record);
+    }
+    setExecutionDetailOpen(true);
+  };
+
+  const closeExecutionDetail = () => {
+    setExecutionDetailOpen(false);
+  };
+
   const syncExecutionState = (records: ExecutionRecord[], preferredExecutionId?: string) => {
     const sorted = sortExecutions(records);
     setExecutionHistory(sorted);
     setCurrentExecution((previous) => {
-      if (preferredExecutionId) {
-        return sorted.find((item) => item.id === preferredExecutionId) ?? null;
-      }
-      if (previous?.id) {
-        return sorted.find((item) => item.id === previous.id) ?? null;
-      }
-      return null;
+      return selectCurrentExecution(sorted, previous, preferredExecutionId);
     });
   };
 
@@ -170,11 +196,13 @@ export function useScriptExecution({
     if (!scriptId) {
       setExecutionHistory([]);
       setCurrentExecution(null);
+      setExecutionDetailOpen(false);
       return;
     }
 
     setExecutionHistory([]);
     setCurrentExecution(null);
+    setExecutionDetailOpen(false);
     void loadExecutionHistory(scriptId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScript?.id]);
@@ -226,10 +254,12 @@ export function useScriptExecution({
       if (response.submitMode === "ASYNC" && isExecutionActive(response.status)) {
         messageApi.success("异步执行已提交");
         await loadExecutionHistory(currentScript.id, response.id);
+        setExecutionDetailOpen(true);
         startPolling(response.id);
       } else {
         clearPolling();
         await loadExecutionHistory(currentScript.id, response.id);
+        setExecutionDetailOpen(true);
         if (response.status === "SUCCESS") {
           messageApi.success("执行完成");
         } else if (response.status === "FAILED") {
@@ -315,6 +345,9 @@ export function useScriptExecution({
       }
       await deleteExecution(record.id);
       syncExecutionState(executionHistory.filter((item) => item.id !== record.id));
+      if (currentExecution?.id === record.id && executionHistory.length <= 1) {
+        setExecutionDetailOpen(false);
+      }
       messageApi.success("删除成功");
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "删除执行记录失败";
@@ -332,6 +365,7 @@ export function useScriptExecution({
       clearPolling();
       await clearExecutions(currentScript.id);
       syncExecutionState([]);
+      setExecutionDetailOpen(false);
       messageApi.success("历史执行结果已清空");
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "清空执行历史失败";
@@ -350,6 +384,9 @@ export function useScriptExecution({
     executionHistory,
     currentExecution,
     setCurrentExecution,
+    executionDetailOpen,
+    openExecutionDetail,
+    closeExecutionDetail,
     executing,
     historyLoading,
     deletingExecutionId,

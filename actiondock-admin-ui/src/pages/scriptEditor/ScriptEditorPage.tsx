@@ -810,6 +810,9 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           onRefreshHistory={() => void execution.loadExecutionHistory(editor.currentScript!.id)}
                           onExecutionHistoryRowClick={(record) => execution.setCurrentExecution(record)}
                           onRefillCurrentExecutionInput={execution.handleRefillExecutionInput}
+                          executionDetailOpen={execution.executionDetailOpen}
+                          onOpenExecutionDetail={execution.openExecutionDetail}
+                          onCloseExecutionDetail={execution.closeExecutionDetail}
                           activeExecutionId={execution.currentExecution?.id ?? null}
                           messageApi={messageApi}
                           submitBatchExecution={(input, mode) =>
