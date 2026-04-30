@@ -5,10 +5,6 @@
   "author": "jay.wu <fjayblue@126.com>",
   "license": "MIT",
   "preferGlobal": true,
-  "repository": {
-    "type": "git",
-    "url": "git+https://gitee.com/fjay/action-dock.git"
-  },
   "bin": {
     "actiondock-server": "jdeploy-bundle/jdeploy.js"
   },
