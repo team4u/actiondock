@@ -123,6 +123,28 @@ npm i -g @actiondock/server@latest
 
 启动后服务会低频检查 npm 上是否有新版本，并在日志里输出升级提示。可通过环境变量 `ACTIONDOCK_NO_UPDATE_NOTIFIER=1` 关闭提醒。
 
+### 3. 作为系统服务运行
+
+```bash
+actiondock-server service install
+actiondock-server service start
+actiondock-server service status
+actiondock-server service stop
+actiondock-server service uninstall
+```
+
+当前实现会按平台调用本机服务管理器：
+
+- Linux: `systemd --user`
+- macOS: `launchctl` LaunchAgent
+- Windows: `sc.exe`
+
+说明：
+
+- `install` 会写入服务定义并尝试启动
+- `start` / `stop` / `status` / `uninstall` 直接操作已安装的服务
+- Windows 通常需要管理员权限
+
 ## 公开接口概览
 
 常用 API 分组如下：

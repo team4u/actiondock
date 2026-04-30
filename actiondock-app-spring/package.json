@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/server",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "ActionDock official server",
   "author": "jay.wu <fjayblue@126.com>",
   "license": "MIT",
@@ -13,7 +13,8 @@
     "actiondock-server": "jdeploy-bundle/jdeploy.js"
   },
   "files": [
-    "jdeploy-bundle"
+    "jdeploy-bundle",
+    "service-manager.js"
   ],
   "publishConfig": {
     "access": "public"
@@ -30,7 +31,7 @@
   },
   "scripts": {
     "build:jar": "mvn -pl actiondock-app-spring -am package -DskipTests -f ../pom.xml",
-    "jdeploy:package": "jdeploy package",
+    "jdeploy:package": "jdeploy package && node patch-jdeploy-bundle.js",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "npm run build:jar && npm run jdeploy:package"
   },

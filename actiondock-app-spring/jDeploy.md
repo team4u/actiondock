@@ -791,6 +791,20 @@ The GitHub Action creates:
 
 Users download the installer from `https://github.com/<owner>/<repo>/releases/latest` and run it. No Java installation is required — jDeploy bundles the appropriate JRE.
 
+### Service Commands
+
+If the app is a background service, document the service lifecycle commands that jDeploy exposes for the installed CLI entrypoint:
+
+```bash
+actiondock-server service install
+actiondock-server service start
+actiondock-server service status
+actiondock-server service stop
+actiondock-server service uninstall
+```
+
+These commands are handled by the native launcher when the command is marked with `service_controller`.
+
 ### MCP Server Auto-Registration
 
 If your app is configured as an MCP server (has `jdeploy.ai.mcp` in package.json), the jDeploy installer provides automatic AI tool integration:
