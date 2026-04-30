@@ -5,56 +5,24 @@ description: 使用 ActionDock CLI 完成脚本的作者态闭环、已发布脚
 
 # ActionDock CLI
 
-当用户提到"用 CLI"操作 ActionDock 脚本时，使用这个 skill。
+## 环境检查
 
-## 前置检查
+如果在执行actiondock过程中失败，请先检查环境是否就绪
 
-每次使用本 skill 前，必须先完成以下两项检查，确保环境就绪后再执行任何命令。
-
-### 1. 检查 CLI 是否已安装
-
-```bash
-which actiondock
-```
-
-- 如果返回路径 → CLI 已安装，继续下一步。
-- 如果无输出 → 执行安装：
-
-```bash
-npm i -g @actiondock/cli
-```
-
-安装完成后验证 `actiondock --version`，确认可用。
-
-### 2. 检查 Server 是否已安装
-
-```bash
-which actiondock-server
-```
-
-- 如果返回路径 → Server 已安装，继续。
-- 如果无输出 → 执行安装：
-
-```bash
-npm i -g @actiondock/server
-```
-
-### 3. 检查 Server 是否运行中
+### 检查 CLI 是否已安装
 
 ```bash
 actiondock script list
 ```
 
-- 如果正常返回 → Server 运行中，可以继续。
-- 如果连接失败 → 提醒用户手动启动：
+- 如果返回成功 → CLI 已安装，继续下一步。
+- 如果找不到命令 → 执行安装：
+- 如果server连接失败 → 提醒用户手动启动，等待用户确认启动后再继续：ActionDock Server 未运行，请手动启动：`actiondock-server`
 
-> ActionDock Server 未运行，请手动启动：`actiondock-server`
-
-等待用户确认启动后再继续。
-
----
-
-根据用户意图选择对应的子文档：
+```bash
+npm i -g @actiondock/cli
+npm i -g @actiondock/server
+```
 
 ## 主流程文档
 
