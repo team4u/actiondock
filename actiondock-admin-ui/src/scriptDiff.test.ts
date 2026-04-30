@@ -193,6 +193,52 @@ describe("buildScriptDiff", () => {
     expect(diff.dependencies.available).toBe(true);
   });
 
+  it("treats script dependency ids with different installed prefixes as the same target", () => {
+    const diff = buildScriptDiff(
+      toDiffTarget(
+        script({
+          scriptDependencies: [
+            {
+              scriptId: "child",
+              repositoryId: "repo-a",
+              toolId: "child-tool",
+              versionRange: ">= 1.0.0"
+            }
+          ]
+        })
+      ),
+      buildPublishDiffTarget({
+        name: "User Query",
+        type: "GROOVY",
+        packaging: "TOOL",
+        source: "return [message: 'ok']",
+        inputSchema: script().inputSchema,
+        outputSchema: script().outputSchema,
+        scriptDependencies: [
+          {
+            scriptId: "repo-a.child-tool",
+            repositoryId: "repo-a",
+            toolId: "child-tool",
+            versionRange: ">= 1.0.0"
+          }
+        ]
+      }),
+      { context: "publish" }
+    );
+
+    expect(diff.dependencies.changed).toBe(false);
+    expect(diff.dependencies.unchanged).toEqual([
+      {
+        dependencyType: "SCRIPT",
+        dependencyId: "repo-a.child-tool",
+        target: "repo-a/child-tool",
+        versionRange: ">= 1.0.0",
+        requiredActions: [],
+        risk: "LOW"
+      }
+    ]);
+  });
+
   it("warns when schema contains nested unsupported structure", () => {
     const diff = buildScriptDiff(
       toDiffTarget(script()),

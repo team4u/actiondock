@@ -518,7 +518,7 @@ function normalizePluginDependencyChange(
 }
 
 function normalizeScriptDependencyKey(dependency: ScriptDependency): string {
-  return `script:${dependency.scriptId}`;
+  return `script:${dependency.repositoryId}:${dependency.toolId}`;
 }
 
 function normalizeScriptDependencyChange(
