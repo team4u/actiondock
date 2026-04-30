@@ -38,6 +38,104 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 | 多入口调用 | 各写各的 | API 为主 | UI、REST、CLI、Agent 共用同一脚本 |
 | 审计与执行记录 | 弱 | 取决于实现 | 执行记录、日志、调试视图、触发来源内建 |
 
+## 关键优势
+
+### 脚本能力复用与跨语言编排
+
+传统脚本是孤立的，互相之间没有调用机制。ActionDock 通过 `scripts.invoke()` 把脚本变成可组合的能力单元：
+
+- **脚本间调用**：`scripts.invoke("target-id", args)` 让一个脚本成为另一个脚本的组合积木
+- **跨语言透明调用**：Groovy 调 Python、Python 调 Groovy，路由由平台处理，调用方不关心对方用什么语言
+- **循环调用检测**：自动检测并阻止脚本间的无限递归
+- **发布版本锁定**：被调脚本强制走 published 版本，调用链始终稳定
+
+传统 Java 时代复用靠 jar 依赖，脚本时代没有 jar——ActionDock 填补的就是这个空白。
+
+### Schema 一次声明，四处生效
+
+每个脚本的 `inputSchema` / `outputSchema` 不只是文档，而是驱动多个入口的元数据：
+
+- CLI 自动展平为 `--name alice` 形式的 flag，不用手写 JSON
+- Admin UI 自动生成参数填写表单
+- AI Agent 自动理解为 tool description，无需额外 prompt 工程
+- 执行前自动校验入参格式，契约违约在调用时就能发现
+
+传统脚本参数全靠 README 口头约定，而 ActionDock 的 Schema 是机器可读、自动执行的契约。
+
+### 草稿-发布-回滚，脚本也有版本控制
+
+传统脚本改了就是改了，没有后悔药。ActionDock 提供完整的脚本生命周期：
+
+- 草稿可以反复调试（`--draft` 执行），不影响线上版本
+- 发布产生不可变快照，等价于给脚本打了一个稳定 tag
+- 被调脚本和定时任务始终走 published 版本，不会因草稿改动而意外中断
+- 草稿不满意可以 discard，一键回到上次发布版
+
+比 git tag 更轻量，比手动备份更可靠。
+
+### 跨脚本共享状态 + CAS 并发安全
+
+传统方案里，同步游标、OAuth Token、水位线、批次号各自落文件或塞数据库，格式不统一，并发也不安全。
+
+ActionDock 内建 `state` 门面，脚本直接 `state.get()` / `state.put()` 即可：
+
+- `namespace + key` 组织状态，不同脚本按命名空间隔离
+- `state.cas()` 提供乐观锁（Compare-And-Swap），解决并发写入冲突
+- `secret` 标记敏感数据，日志中自动脱敏
+- `expiresAt` 支持临时数据自动过期
+- 自动追踪 `lastWriterScriptId` / `lastWriterExecutionId`，出了问题可追溯
+
+脚本不需要自己管存储，不需要选型 Redis 还是数据库，直接用就行。
+
+### 统一调用门面，插件和脚本无差别对待
+
+对脚本来说，调用一个 Java 插件和调用另一个脚本，体验完全一致：
+
+```groovy
+// 调用插件
+def result = plugins.invoke("my-plugin", "hello", [name: "world"])
+
+// 调用另一个脚本
+def result = scripts.invoke("other-script", [name: "world"])
+```
+
+调用方不关心底层是编译型插件还是解释型脚本，这是真正的面向接口组合——能力本身比实现形式更重要。
+
+### AI 参与脚本全生命周期
+
+不只是"脚本调 AI"，而是 AI 参与从开发到上线的每一步：
+
+- **生成**：AI 根据需求生成脚本源码
+- **补全**：AI 自动补全 `inputSchema` / `outputSchema`
+- **校验**：语法检查 + Schema 一致性检查
+- **调试**：`--draft` 执行 + `--response-view debug` 返回完整上下文
+- **Review**：发布前 AI 审查脚本质量
+- **诊断**：执行失败时 AI 分析原因并给出修复建议
+- **发布说明**：AI 自动生成 Release Notes
+
+CLI 的 `create/patch/validate/run --draft/publish` 命令设计天然适配 AI Agent 工作流，形成完整的自动化闭环。
+
+### 仓库化分发——脚本领域的包管理器
+
+传统做法是 Git clone 或文件共享，ActionDock 的仓库模型更接近包管理器：
+
+- **发现**：浏览仓库目录，看到每个工具的 Schema、说明和依赖
+- **安装**：一键安装到本地，自动创建 `REPOSITORY` 作用域
+- **Fork**：安装后 fork 为个人脚本，自由修改
+- **同步**：开发完成后同步回仓库，团队共享
+- **更新**：上游有变更时可拉取更新，也可选择保留本地改动
+
+脚本不再散落在各处，而是有正式的发现、安装、升级、回退流程。
+
+### 零基础设施依赖，开箱即用
+
+- 内嵌 H2 数据库，不需要额外安装 MySQL / PostgreSQL
+- Groovy 引擎内嵌 JVM，不需要额外运行时（Python 类型脚本需要 python3）
+- Docker Compose 一键启动完整服务
+- npm 一行安装即可使用（`@actiondock/server`、`@actiondock/cli`）
+
+团队不需要运维配合，5 分钟就能跑起来验证价值。
+
 ## 核心能力
 
 ### 1. 把脚本变成可治理的脚本资产
