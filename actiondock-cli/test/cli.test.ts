@@ -319,6 +319,434 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "GET" && req.url === "/api/event-sources") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "source-1",
+            key: "github.issue",
+            name: "GitHub Issue",
+            enabled: true,
+            transport: { type: "HTTP_WEBHOOK", endpointPath: "/api/event-sources/source-1/events" },
+            auth: { mode: "HMAC_SHA256" },
+            normalizationProcessor: { mode: "JSON_PATH" }
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-sources/source-1") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          id: "source-1",
+          key: "github.issue",
+          name: "GitHub Issue",
+          description: "GitHub webhook source",
+          enabled: true,
+          transport: { type: "HTTP_WEBHOOK", endpointPath: "/api/event-sources/source-1/events" },
+          auth: { mode: "HMAC_SHA256", signatureHeader: "X-Hub-Signature-256" },
+          normalizationProcessor: { mode: "JSON_PATH", jsonPath: { fields: { eventType: "$.headers.X-GitHub-Event" } } },
+          sampleContext: { body: { action: "opened" } },
+          lastReceivedAt: "2026-04-29T00:00:00"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-sources") {
+      return json(res, {
+        status: 0,
+        msg: "created",
+        data: body
+      });
+    }
+
+    if (req.method === "PUT" && req.url === "/api/event-sources/source-1") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: body
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-sources/source-1/enable") {
+      return json(res, {
+        status: 0,
+        msg: "enabled",
+        data: {
+          id: "source-1",
+          key: "github.issue",
+          name: "GitHub Issue",
+          enabled: true,
+          transport: { type: "HTTP_WEBHOOK" }
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-sources/source-1/disable") {
+      return json(res, {
+        status: 0,
+        msg: "disabled",
+        data: {
+          id: "source-1",
+          key: "github.issue",
+          name: "GitHub Issue",
+          enabled: false,
+          transport: { type: "HTTP_WEBHOOK" }
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/event-sources/source-1") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-sources/source-1/test-normalization") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          id: "normalized-1",
+          sourceId: "source-1",
+          sourceKey: "github.issue",
+          eventType: "issues",
+          eventId: "delivery-1",
+          actor: "octocat",
+          subject: "Login failed",
+          headers: body?.headers ?? {},
+          query: body?.query ?? {},
+          body: body?.body ?? {},
+          receivedAt: "2026-04-29T00:00:00"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-sources/source-1/events") {
+      return json(res, {
+        status: 0,
+        msg: "accepted",
+        data: {
+          event: {
+            id: "event-1",
+            sourceId: "source-1",
+            sourceKey: "github.issue",
+            status: "DISPATCHED",
+            eventType: "issues",
+            eventId: "delivery-1",
+            actor: "octocat",
+            subject: "Login failed",
+            rawHeaders: body?.headers ?? {},
+            rawQuery: body?.query ?? {},
+            rawBody: body?.body ?? {},
+            normalizedEvent: {
+              id: "normalized-1",
+              sourceId: "source-1",
+              sourceKey: "github.issue",
+              eventType: "issues",
+              eventId: "delivery-1",
+              actor: "octocat",
+              subject: "Login failed",
+              headers: body?.headers ?? {},
+              query: body?.query ?? {},
+              body: body?.body ?? {}
+            }
+          },
+          dispatches: [
+            {
+              id: "dispatch-1",
+              eventId: "event-1",
+              sourceId: "source-1",
+              triggerId: "trigger-1",
+              targetScriptId: "published-tool",
+              status: "EXECUTION_CREATED",
+              filterMatched: true,
+              idempotencyKey: "delivery-1",
+              mappedInput: { name: "Alice" },
+              executionId: "exec-event-1",
+              executionStatus: "SUCCESS"
+            }
+          ]
+        }
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-sources/source-1/events?limit=5") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "event-1",
+            sourceId: "source-1",
+            sourceKey: "github.issue",
+            status: "DISPATCHED",
+            eventType: "issues",
+            eventId: "delivery-1"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-triggers") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "trigger-1",
+            name: "Issue classifier",
+            enabled: true,
+            sourceId: "source-1",
+            targetScriptId: "published-tool",
+            submitMode: "ASYNC",
+            responseView: "RESULT"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-triggers/trigger-1") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          id: "trigger-1",
+          name: "Issue classifier",
+          description: "Classify incoming GitHub issues",
+          enabled: true,
+          sourceId: "source-1",
+          targetScriptId: "published-tool",
+          filterProcessor: { mode: "JSON_PATH" },
+          idempotencyProcessor: { mode: "JSON_PATH" },
+          inputProcessor: { mode: "SCRIPT_REF" },
+          submitMode: "ASYNC",
+          responseView: "RESULT",
+          lastEventId: "event-1",
+          lastExecutionId: "exec-event-1",
+          lastExecutionStatus: "SUCCESS"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-triggers") {
+      return json(res, {
+        status: 0,
+        msg: "created",
+        data: body
+      });
+    }
+
+    if (req.method === "PUT" && req.url === "/api/event-triggers/trigger-1") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: body
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-triggers/trigger-1/enable") {
+      return json(res, {
+        status: 0,
+        msg: "enabled",
+        data: {
+          id: "trigger-1",
+          name: "Issue classifier",
+          enabled: true,
+          sourceId: "source-1",
+          targetScriptId: "published-tool"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-triggers/trigger-1/disable") {
+      return json(res, {
+        status: 0,
+        msg: "disabled",
+        data: {
+          id: "trigger-1",
+          name: "Issue classifier",
+          enabled: false,
+          sourceId: "source-1",
+          targetScriptId: "published-tool"
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/event-triggers/trigger-1") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/event-triggers/trigger-1/test") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          event: body?.event,
+          filterMatched: true,
+          filterResult: {
+            success: true,
+            output: { matched: true },
+            schemaValid: true,
+            logs: [],
+            durationMs: 2
+          },
+          idempotencyResult: {
+            success: true,
+            output: { key: "delivery-1" },
+            schemaValid: true,
+            logs: [],
+            durationMs: 1
+          },
+          idempotencyKey: "delivery-1",
+          inputResult: {
+            success: true,
+            output: { name: "Alice" },
+            schemaValid: true,
+            logs: [],
+            durationMs: 5
+          },
+          mappedInput: { name: "Alice" },
+          schemaValid: true,
+          fieldErrors: [],
+          execution: body?.execute
+            ? {
+                id: "exec-event-1",
+                scriptId: "published-tool",
+                status: "SUCCESS",
+                submitMode: "ASYNC",
+                triggerSource: "EVENT",
+                eventSourceId: "source-1",
+                eventTriggerId: "trigger-1",
+                eventRecordId: "event-1",
+                eventDispatchId: "dispatch-1"
+              }
+            : null
+        }
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-triggers/trigger-1/dispatches") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "dispatch-1",
+            eventId: "event-1",
+            sourceId: "source-1",
+            triggerId: "trigger-1",
+            targetScriptId: "published-tool",
+            status: "EXECUTION_CREATED",
+            executionId: "exec-event-1"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-records") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "event-1",
+            sourceId: "source-1",
+            sourceKey: "github.issue",
+            status: "DISPATCHED",
+            eventType: "issues"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-records?sourceId=source-1") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "event-1",
+            sourceId: "source-1",
+            sourceKey: "github.issue",
+            status: "DISPATCHED",
+            eventType: "issues"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-records/event-1") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          id: "event-1",
+          sourceId: "source-1",
+          sourceKey: "github.issue",
+          status: "DISPATCHED",
+          eventType: "issues",
+          eventId: "delivery-1",
+          actor: "octocat",
+          subject: "Login failed",
+          rawHeaders: { "X-GitHub-Event": "issues" },
+          rawQuery: {},
+          rawBody: { action: "opened" },
+          normalizedEvent: {
+            id: "normalized-1",
+            sourceId: "source-1",
+            sourceKey: "github.issue",
+            eventType: "issues",
+            eventId: "delivery-1"
+          }
+        }
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/event-records/event-1/dispatches") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "dispatch-1",
+            eventId: "event-1",
+            sourceId: "source-1",
+            triggerId: "trigger-1",
+            targetScriptId: "published-tool",
+            status: "EXECUTION_CREATED",
+            executionId: "exec-event-1"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/processors/test") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          success: true,
+          output: { title: "Login failed" },
+          errorMessage: null,
+          logs: [],
+          durationMs: 4,
+          schemaValid: true,
+          fieldErrors: []
+        }
+      });
+    }
+
     if (req.method === "GET" && req.url === "/api/plugins") {
       return json(res, {
         status: 0,
@@ -740,6 +1168,377 @@ describe("CLI integration", () => {
     expect((await runCli(["schedule", "delete", "schedule-1", "--server", baseUrl, "--json"])).status).toBe(0);
   });
 
+  it("manages event sources through cli", async () => {
+    const list = await runCli(["event-source", "list", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        id: "source-1",
+        key: "github.issue"
+      })
+    ]);
+
+    const detail = await runCli(["event-source", "get", "source-1", "--server", baseUrl, "--json"]);
+    expect(detail.status).toBe(0);
+    expect(JSON.parse(detail.stdout)).toEqual(
+      expect.objectContaining({
+        id: "source-1",
+        auth: expect.objectContaining({
+          mode: "HMAC_SHA256"
+        })
+      })
+    );
+
+    const createDefinition = {
+      id: "source-2",
+      key: "custom.crm",
+      name: "Custom CRM",
+      transport: { type: "HTTP_WEBHOOK" },
+      auth: { mode: "HEADER_TOKEN", tokenHeader: "X-Token" },
+      normalizationProcessor: { mode: "JSON_PATH", jsonPath: { fields: { eventType: "$.body.type" } } }
+    };
+    const created = await runCli([
+      "event-source",
+      "create",
+      "--definition-json",
+      JSON.stringify(createDefinition),
+      "--name",
+      "Custom CRM Source",
+      "--disabled",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(created.status).toBe(0);
+    expect(JSON.parse(created.stdout)).toEqual(
+      expect.objectContaining({
+        id: "source-2",
+        name: "Custom CRM Source",
+        enabled: false
+      })
+    );
+
+    const createRequest = requests.find((item) => item.method === "POST" && item.url === "/api/event-sources");
+    expect(createRequest?.body).toEqual({
+      id: "source-2",
+      key: "custom.crm",
+      name: "Custom CRM Source",
+      transport: { type: "HTTP_WEBHOOK" },
+      auth: { mode: "HEADER_TOKEN", tokenHeader: "X-Token" },
+      normalizationProcessor: { mode: "JSON_PATH", jsonPath: { fields: { eventType: "$.body.type" } } },
+      enabled: false
+    });
+
+    const updated = await runCli([
+      "event-source",
+      "update",
+      "source-1",
+      "--definition-json",
+      '{"auth":{"secretConfigKey":"github.secret"}}',
+      "--description",
+      "Updated source",
+      "--transport-type",
+      "http_webhook",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(updated.status).toBe(0);
+    expect(JSON.parse(updated.stdout)).toEqual(
+      expect.objectContaining({
+        id: "source-1",
+        description: "Updated source"
+      })
+    );
+
+    const updateRequest = requests.find((item) => item.method === "PUT" && item.url === "/api/event-sources/source-1");
+    expect(updateRequest?.body).toEqual({
+      id: "source-1",
+      key: "github.issue",
+      name: "GitHub Issue",
+      description: "Updated source",
+      enabled: true,
+      transport: { type: "HTTP_WEBHOOK", endpointPath: "/api/event-sources/source-1/events" },
+      auth: {
+        mode: "HMAC_SHA256",
+        signatureHeader: "X-Hub-Signature-256",
+        secretConfigKey: "github.secret"
+      },
+      normalizationProcessor: { mode: "JSON_PATH", jsonPath: { fields: { eventType: "$.headers.X-GitHub-Event" } } },
+      sampleContext: { body: { action: "opened" } },
+      lastReceivedAt: "2026-04-29T00:00:00"
+    });
+
+    expect((await runCli(["event-source", "enable", "source-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["event-source", "disable", "source-1", "--server", baseUrl, "--json"])).status).toBe(0);
+
+    const normalized = await runCli([
+      "event-source",
+      "test-normalization",
+      "source-1",
+      "--payload-json",
+      '{"headers":{"X-GitHub-Event":"issues"},"body":{"action":"opened","sender":{"login":"octocat"}}}',
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(normalized.status).toBe(0);
+    expect(JSON.parse(normalized.stdout)).toEqual(
+      expect.objectContaining({
+        sourceId: "source-1",
+        eventType: "issues"
+      })
+    );
+
+    const ingested = await runCli([
+      "event-source",
+      "ingest",
+      "source-1",
+      "--payload-json",
+      '{"headers":{"X-GitHub-Event":"issues"},"body":{"action":"opened"}}',
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(ingested.status).toBe(0);
+    expect(JSON.parse(ingested.stdout)).toEqual(
+      expect.objectContaining({
+        event: expect.objectContaining({
+          id: "event-1"
+        })
+      })
+    );
+
+    const events = await runCli([
+      "event-source",
+      "events",
+      "source-1",
+      "--limit",
+      "5",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(events.status).toBe(0);
+    expect(JSON.parse(events.stdout)).toEqual([
+      expect.objectContaining({
+        id: "event-1"
+      })
+    ]);
+
+    expect((await runCli(["event-source", "delete", "source-1", "--server", baseUrl, "--json"])).status).toBe(0);
+  }, 15000);
+
+  it("manages event triggers and processor tests through cli", async () => {
+    const list = await runCli(["event-trigger", "list", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        id: "trigger-1",
+        sourceId: "source-1"
+      })
+    ]);
+
+    const detail = await runCli(["event-trigger", "get", "trigger-1", "--server", baseUrl, "--json"]);
+    expect(detail.status).toBe(0);
+    expect(JSON.parse(detail.stdout)).toEqual(
+      expect.objectContaining({
+        id: "trigger-1",
+        inputProcessor: expect.objectContaining({
+          mode: "SCRIPT_REF"
+        })
+      })
+    );
+
+    const createDefinition = {
+      id: "trigger-2",
+      name: "CRM trigger",
+      sourceId: "source-1",
+      targetScriptId: "published-tool",
+      inputProcessor: {
+        mode: "SCRIPT_REF",
+        scriptRef: {
+          scriptId: "processor-script",
+          versionMode: "PUBLISHED"
+        }
+      }
+    };
+    const created = await runCli([
+      "event-trigger",
+      "create",
+      "--definition-json",
+      JSON.stringify(createDefinition),
+      "--submit-mode",
+      "sync",
+      "--response-view",
+      "debug",
+      "--disabled",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(created.status).toBe(0);
+    expect(JSON.parse(created.stdout)).toEqual(
+      expect.objectContaining({
+        id: "trigger-2",
+        submitMode: "SYNC",
+        responseView: "DEBUG",
+        enabled: false
+      })
+    );
+
+    const createRequest = requests.find((item) => item.method === "POST" && item.url === "/api/event-triggers");
+    expect(createRequest?.body).toEqual({
+      id: "trigger-2",
+      name: "CRM trigger",
+      sourceId: "source-1",
+      targetScriptId: "published-tool",
+      inputProcessor: {
+        mode: "SCRIPT_REF",
+        scriptRef: {
+          scriptId: "processor-script",
+          versionMode: "PUBLISHED"
+        }
+      },
+      submitMode: "SYNC",
+      responseView: "DEBUG",
+      enabled: false
+    });
+
+    const updated = await runCli([
+      "event-trigger",
+      "update",
+      "trigger-1",
+      "--definition-json",
+      '{"inputProcessor":{"scriptRef":{"versionMode":"PUBLISHED"}}}',
+      "--name",
+      "Issue classifier v2",
+      "--submit-mode",
+      "sync",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(updated.status).toBe(0);
+    expect(JSON.parse(updated.stdout)).toEqual(
+      expect.objectContaining({
+        id: "trigger-1",
+        name: "Issue classifier v2",
+        submitMode: "SYNC"
+      })
+    );
+
+    const updateRequest = requests.find((item) => item.method === "PUT" && item.url === "/api/event-triggers/trigger-1");
+    expect(updateRequest?.body).toEqual({
+      id: "trigger-1",
+      name: "Issue classifier v2",
+      description: "Classify incoming GitHub issues",
+      enabled: true,
+      sourceId: "source-1",
+      targetScriptId: "published-tool",
+      filterProcessor: { mode: "JSON_PATH" },
+      idempotencyProcessor: { mode: "JSON_PATH" },
+      inputProcessor: { mode: "SCRIPT_REF", scriptRef: { versionMode: "PUBLISHED" } },
+      submitMode: "SYNC",
+      responseView: "RESULT",
+      lastEventId: "event-1",
+      lastExecutionId: "exec-event-1",
+      lastExecutionStatus: "SUCCESS"
+    });
+
+    expect((await runCli(["event-trigger", "enable", "trigger-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["event-trigger", "disable", "trigger-1", "--server", baseUrl, "--json"])).status).toBe(0);
+
+    const tested = await runCli([
+      "event-trigger",
+      "test",
+      "trigger-1",
+      "--event-json",
+      '{"sourceId":"source-1","sourceKey":"github.issue","eventType":"issues","eventId":"delivery-1","body":{"action":"opened"}}',
+      "--execute",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(tested.status).toBe(0);
+    expect(JSON.parse(tested.stdout)).toEqual(
+      expect.objectContaining({
+        filterMatched: true,
+        execution: expect.objectContaining({
+          triggerSource: "EVENT"
+        })
+      })
+    );
+
+    const dispatches = await runCli(["event-trigger", "dispatches", "trigger-1", "--server", baseUrl, "--json"]);
+    expect(dispatches.status).toBe(0);
+    expect(JSON.parse(dispatches.stdout)).toEqual([
+      expect.objectContaining({
+        id: "dispatch-1"
+      })
+    ]);
+
+    expect((await runCli(["event-trigger", "delete", "trigger-1", "--server", baseUrl, "--json"])).status).toBe(0);
+
+    const processor = await runCli([
+      "processor",
+      "test",
+      "--processor-json",
+      '{"mode":"JSON_PATH","jsonPath":{"fields":{"title":"$.body.issue.title"}}}',
+      "--context-json",
+      '{"body":{"issue":{"title":"Login failed"}}}',
+      "--expected-output-schema-json",
+      '{"type":"object","properties":{"title":{"type":"string"}}}',
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(processor.status).toBe(0);
+    expect(JSON.parse(processor.stdout)).toEqual(
+      expect.objectContaining({
+        success: true,
+        schemaValid: true
+      })
+    );
+  }, 15000);
+
+  it("lists and inspects event records through cli", async () => {
+    const list = await runCli(["event-record", "list", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        id: "event-1"
+      })
+    ]);
+
+    const filtered = await runCli(["event-record", "list", "--source-id", "source-1", "--server", baseUrl, "--json"]);
+    expect(filtered.status).toBe(0);
+    expect(JSON.parse(filtered.stdout)).toEqual([
+      expect.objectContaining({
+        sourceId: "source-1"
+      })
+    ]);
+
+    const detail = await runCli(["event-record", "get", "event-1", "--server", baseUrl, "--json"]);
+    expect(detail.status).toBe(0);
+    expect(JSON.parse(detail.stdout)).toEqual(
+      expect.objectContaining({
+        id: "event-1",
+        normalizedEvent: expect.objectContaining({
+          id: "normalized-1"
+        })
+      })
+    );
+
+    const dispatches = await runCli(["event-record", "dispatches", "event-1", "--server", baseUrl, "--json"]);
+    expect(dispatches.status).toBe(0);
+    expect(JSON.parse(dispatches.stdout)).toEqual([
+      expect.objectContaining({
+        id: "dispatch-1"
+      })
+    ]);
+  });
+
   it("invokes a plugin action with flat args and script input json", async () => {
     const result = await runCli([
       "plugin",
@@ -1006,13 +1805,7 @@ describe("CLI integration", () => {
         id: "published-tool",
         name: "Published Tool",
         type: "GROOVY",
-        status: undefined,
-        description: undefined,
-        owner: undefined,
-        tags: [],
-        publishedSnapshot: {
-          inputSchema: {}
-        }
+        published: true
       }
     ]);
   });

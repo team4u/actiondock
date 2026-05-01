@@ -123,6 +123,117 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
+    async listEventSources() {
+        return this.requestJson("/api/event-sources");
+    }
+    async getEventSource(sourceId) {
+        return this.requestJson(`/api/event-sources/${sourceId}`);
+    }
+    async createEventSource(definition) {
+        return this.requestJson("/api/event-sources", {
+            method: "POST",
+            body: JSON.stringify(definition)
+        });
+    }
+    async updateEventSource(sourceId, definition) {
+        return this.requestJson(`/api/event-sources/${sourceId}`, {
+            method: "PUT",
+            body: JSON.stringify(definition)
+        });
+    }
+    async enableEventSource(sourceId) {
+        return this.requestJson(`/api/event-sources/${sourceId}/enable`, {
+            method: "POST"
+        });
+    }
+    async disableEventSource(sourceId) {
+        return this.requestJson(`/api/event-sources/${sourceId}/disable`, {
+            method: "POST"
+        });
+    }
+    async deleteEventSource(sourceId) {
+        await this.requestJson(`/api/event-sources/${sourceId}`, {
+            method: "DELETE"
+        });
+    }
+    async testEventSourceNormalization(sourceId, payload) {
+        return this.requestJson(`/api/event-sources/${sourceId}/test-normalization`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async ingestEventSource(sourceId, payload) {
+        return this.requestJson(`/api/event-sources/${sourceId}/events`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async listEventSourceEvents(sourceId, limit) {
+        const search = new URLSearchParams();
+        if (typeof limit === "number" && limit > 0) {
+            search.set("limit", String(limit));
+        }
+        const suffix = search.size > 0 ? `?${search.toString()}` : "";
+        return this.requestJson(`/api/event-sources/${sourceId}/events${suffix}`);
+    }
+    async listEventTriggers() {
+        return this.requestJson("/api/event-triggers");
+    }
+    async getEventTrigger(triggerId) {
+        return this.requestJson(`/api/event-triggers/${triggerId}`);
+    }
+    async createEventTrigger(definition) {
+        return this.requestJson("/api/event-triggers", {
+            method: "POST",
+            body: JSON.stringify(definition)
+        });
+    }
+    async updateEventTrigger(triggerId, definition) {
+        return this.requestJson(`/api/event-triggers/${triggerId}`, {
+            method: "PUT",
+            body: JSON.stringify(definition)
+        });
+    }
+    async enableEventTrigger(triggerId) {
+        return this.requestJson(`/api/event-triggers/${triggerId}/enable`, {
+            method: "POST"
+        });
+    }
+    async disableEventTrigger(triggerId) {
+        return this.requestJson(`/api/event-triggers/${triggerId}/disable`, {
+            method: "POST"
+        });
+    }
+    async deleteEventTrigger(triggerId) {
+        await this.requestJson(`/api/event-triggers/${triggerId}`, {
+            method: "DELETE"
+        });
+    }
+    async testEventTrigger(triggerId, payload) {
+        return this.requestJson(`/api/event-triggers/${triggerId}/test`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async listEventTriggerDispatches(triggerId) {
+        return this.requestJson(`/api/event-triggers/${triggerId}/dispatches`);
+    }
+    async listEventRecords(sourceId) {
+        const suffix = sourceId ? `?${new URLSearchParams({ sourceId }).toString()}` : "";
+        return this.requestJson(`/api/event-records${suffix}`);
+    }
+    async getEventRecord(recordId) {
+        return this.requestJson(`/api/event-records/${recordId}`);
+    }
+    async listEventRecordDispatches(recordId) {
+        return this.requestJson(`/api/event-records/${recordId}/dispatches`);
+    }
+    async testProcessor(payload) {
+        return this.requestJson("/api/processors/test", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
     async listPlugins() {
         return this.requestJson("/api/plugins");
     }

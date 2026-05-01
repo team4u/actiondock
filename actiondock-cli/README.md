@@ -110,6 +110,51 @@ actiondock schedule disable schedule-1 --json
 actiondock schedule delete schedule-1 --json
 ```
 
+### Event Source
+
+```bash
+actiondock event-source list --json
+actiondock event-source get source-1 --json
+actiondock event-source create --definition-file ./event-source.json --json
+actiondock event-source update source-1 --definition-json '{"auth":{"secretConfigKey":"github.webhook.secret"}}' --json
+actiondock event-source enable source-1 --json
+actiondock event-source disable source-1 --json
+actiondock event-source test-normalization source-1 --payload-file ./incoming-event.json --json
+actiondock event-source ingest source-1 --payload-file ./incoming-event.json --json
+actiondock event-source events source-1 --limit 20 --json
+actiondock event-source delete source-1 --json
+```
+
+### Event Trigger
+
+```bash
+actiondock event-trigger list --json
+actiondock event-trigger get trigger-1 --json
+actiondock event-trigger create --definition-file ./event-trigger.json --json
+actiondock event-trigger update trigger-1 --definition-json '{"submitMode":"SYNC"}' --json
+actiondock event-trigger enable trigger-1 --json
+actiondock event-trigger disable trigger-1 --json
+actiondock event-trigger test trigger-1 --event-file ./normalized-event.json --execute --json
+actiondock event-trigger dispatches trigger-1 --json
+actiondock event-trigger delete trigger-1 --json
+```
+
+### Event Record
+
+```bash
+actiondock event-record list --json
+actiondock event-record list --source-id source-1 --json
+actiondock event-record get event-1 --json
+actiondock event-record dispatches event-1 --json
+```
+
+### Processor
+
+```bash
+actiondock processor test --processor-file ./processor.json --context-file ./processor-context.json --json
+actiondock processor test --processor-json '{"mode":"JSON_PATH","jsonPath":{"fields":{"title":"$.body.issue.title"}}}' --context-json '{"body":{"issue":{"title":"Login failed"}}}' --json
+```
+
 ### Plugin
 
 ```bash
@@ -154,6 +199,10 @@ actiondock schedule create --script-id hello-world --schedule-name hourly-sync -
 actiondock schedule update schedule-1 --replace-input --input-file ./examples/schedule-input.json --schedule-disabled --json
 actiondock plugin invoke my-plugin summarize --args-json '{"topic":"ops","filters":{"env":"prod"}}'
 actiondock plugin invoke my-plugin summarize --args-file ./examples/plugin-args.json --script-input-file ./examples/script-input.json
+actiondock event-source create --definition-file ./event-source.json --json
+actiondock event-source ingest source-1 --payload-file ./incoming-event.json --json
+actiondock event-trigger test trigger-1 --event-file ./normalized-event.json --json
+actiondock processor test --processor-file ./processor.json --context-file ./processor-context.json --json
 ```
 
 PowerShell 也建议保持单行调用，避免多行反引号和额外转义：
@@ -190,6 +239,49 @@ actiondock script publish hello-python --json
 ```
 
 `script patch` 会调用服务端的 `PATCH /api/scripts/{id}`，只允许更新 `source`、`inputSchema`、`outputSchema`，避免模型在调试时误覆盖脚本元数据。
+
+## 事件框架闭环
+
+如果你希望 AI 通过 CLI 直接创建整套事件接入链路，建议按下面的顺序执行：
+
+```bash
+actiondock script create --script-id processor-github-issue --name "GitHub Issue Processor" --type python --source-file ./processor.py --input-schema-file ./processor-input-schema.json --output-schema-file ./processor-output-schema.json --json
+actiondock script publish processor-github-issue --json
+
+actiondock event-source create --definition-file ./event-source.github-issue.json --json
+actiondock event-source test-normalization source-github-issue --payload-file ./github-event.raw.json --json
+
+actiondock event-trigger create --definition-file ./event-trigger.github-issue.json --json
+actiondock event-trigger test trigger-github-issue --event-file ./github-event.normalized.json --json
+
+actiondock event-source ingest source-github-issue --payload-file ./github-event.raw.json --json
+actiondock event-record list --source-id source-github-issue --json
+actiondock event-record dispatches event-1 --json
+```
+
+推荐把复杂事件定义都放进文件，而不是内联大段 JSON。对 AI 来说，这样更稳定，也更适合反复 patch。
+
+典型文件拆分如下：
+
+```text
+./processor.py
+./processor-input-schema.json
+./processor-output-schema.json
+./event-source.github-issue.json
+./event-trigger.github-issue.json
+./github-event.raw.json
+./github-event.normalized.json
+```
+
+其中：
+
+- `event-source ... create|update` 用完整定义对象
+- `event-trigger ... create|update` 用完整定义对象
+- `event-source test-normalization|ingest` 用原始 webhook payload
+- `event-trigger test` 用标准化后的 `NormalizedEvent`
+- `processor test` 用 `ProcessorDefinition + ProcessorContext`
+
+更新命令会先拉取当前对象，再把 `--definition-json` 或 `--definition-file` 深度合并回去，然后执行 `PUT`。这样 AI 只改局部字段时，不会把嵌套配置整体清空。
 
 ## 配置与默认值
 

@@ -4,6 +4,8 @@
 
 如果脚本需求涉及 `plugins.invoke(...)`、`scripts.invoke(...)` 或 `actiondock-ai`，补读 `references/script-runtime-calls.md`，确认源码内调用方式后再生成脚本。
 
+如果脚本用途是事件框架里的 `SCRIPT_REF` Processor，还必须补读 `references/event-framework.md`，按其中的事件输入约定来写，不要把普通业务脚本和处理器脚本混写。
+
 如果脚本是 Python，且需要额外第三方依赖，必须同时产出 `pythonRequirements`。该字段的内容等价于 `requirements.txt` 文本，并在执行前由平台安装到隔离缓存环境中。
 
 ---
@@ -59,6 +61,46 @@ return {
 - 需要 Groovy/Java 生态、`hutool`、Groovy 语法糖时，优先选 Groovy
 - 需求更接近 Python 字典处理、字符串处理，或用户明确要求 Python 时，选 Python
 - 如果用户没有指定语言，默认仍可优先生成 Groovy；如果需求明显更适合 Python，再改为 Python
+
+### 处理器脚本额外约定
+
+当脚本是事件触发器里的 `SCRIPT_REF` Processor 时，额外遵守下面约定：
+
+- 输入主对象默认从 `input.event` 读取
+- `input.event` 通常包含：
+  - `sourceId`
+  - `sourceKey`
+  - `eventType`
+  - `eventId`
+  - `actor`
+  - `subject`
+  - `headers`
+  - `query`
+  - `body`
+- 输出必须直接对齐目标脚本的 `inputSchema`
+- 如果用户没有明确要求，处理器脚本只做事件到目标脚本入参的转换，不顺手承担业务主逻辑
+
+Python 最小模板：
+
+```python
+event = input.get("event", {})
+body = event.get("body", {})
+
+return {
+    # TODO: 返回目标脚本需要的字段
+}
+```
+
+Groovy 最小模板：
+
+```groovy
+def event = input.event ?: [:]
+def body = event.body ?: [:]
+
+return [
+  // TODO: 返回目标脚本需要的字段
+]
+```
 
 ### 可用依赖
 

@@ -1,7 +1,11 @@
-import { Alert, Card, Empty, Form, Input, Radio, Select, Space, Typography } from "antd";
+import { Alert, Button, Card, Empty, Form, Input, Radio, Select, Space, Tooltip, Typography } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { ProcessorDefinition, ProcessorMode, ScriptDefinition } from "../types";
 import { parseJsonText, prettyJson } from "../utils";
+import type { ProcessorPurpose } from "./processorScriptPresets";
+import { writePreset } from "./processorScriptPresets";
 
 const { Text } = Typography;
 
@@ -13,6 +17,7 @@ interface ProcessorEditorProps {
   description?: string;
   required?: boolean;
   disabled?: boolean;
+  purpose?: ProcessorPurpose;
 }
 
 function toMode(value?: ProcessorDefinition): ProcessorMode {
@@ -26,8 +31,10 @@ export function ProcessorEditor({
   scripts,
   description,
   required = false,
-  disabled = false
+  disabled = false,
+  purpose
 }: ProcessorEditorProps) {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<ProcessorMode>(toMode(value));
   const [jsonPathText, setJsonPathText] = useState(prettyJson(value?.jsonPath?.fields));
   const [templateText, setTemplateText] = useState(prettyJson(value?.template?.template));
@@ -181,7 +188,19 @@ export function ProcessorEditor({
 
         {mode === "SCRIPT_REF" ? (
           publishedScriptOptions.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可引用的已发布脚本" />
+            <Space direction="vertical" style={{ width: "100%" }}>
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可引用的已发布脚本" />
+              <Tooltip title="创建并发布脚本后，请返回此页面选择该脚本">
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  disabled={disabled}
+                  onClick={() => { writePreset(purpose); navigate("/scripts/new"); }}
+                >
+                  新增脚本
+                </Button>
+              </Tooltip>
+            </Space>
           ) : (
             <Form.Item
               label="处理器脚本"
@@ -190,15 +209,27 @@ export function ProcessorEditor({
               help={required && !scriptId ? "请选择一个已发布脚本" : "脚本会以已发布版本同步执行"}
               style={{ marginBottom: 0 }}
             >
-              <Select
-                showSearch
-                value={scriptId || undefined}
-                disabled={disabled}
-                options={publishedScriptOptions}
-                optionFilterProp="label"
-                placeholder="选择已发布脚本"
-                onChange={emitScriptRef}
-              />
+              <Space.Compact style={{ width: "100%" }}>
+                <Select
+                  showSearch
+                  style={{ flex: 1 }}
+                  value={scriptId || undefined}
+                  disabled={disabled}
+                  options={publishedScriptOptions}
+                  optionFilterProp="label"
+                  placeholder="选择已发布脚本"
+                  onChange={emitScriptRef}
+                />
+                <Tooltip title="创建并发布脚本后，请返回此页面选择该脚本">
+                  <Button
+                    icon={<PlusOutlined />}
+                    disabled={disabled}
+                    onClick={() => { writePreset(purpose); navigate("/scripts/new"); }}
+                  >
+                    新增脚本
+                  </Button>
+                </Tooltip>
+              </Space.Compact>
             </Form.Item>
           )
         ) : null}

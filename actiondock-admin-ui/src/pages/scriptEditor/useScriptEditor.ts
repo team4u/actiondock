@@ -18,6 +18,7 @@ import {
   updateScript,
   validateScript
 } from "../../api";
+import { readAndClearPreset } from "../../components/processorScriptPresets";
 import { buildDuplicatedScriptDefinition } from "../../scriptDuplication";
 import { createEmptySchemaEditorState, deserializeSchema, deserializeSchemaJsonText, serializeSchemaEditorState } from "../../schema";
 import { extractPluginDependenciesFromSource } from "../../pluginDependencies";
@@ -48,6 +49,7 @@ export function useScriptEditor({
   const [searchParams] = useSearchParams();
   const [modal, modalContextHolder] = Modal.useModal();
   const initializedCopySourceRef = useRef<string | null>(null);
+  const initializedPresetRef = useRef(false);
 
   const [loading, setLoading] = useState(mode === "edit");
   const [saving, setSaving] = useState(false);
@@ -216,6 +218,25 @@ export function useScriptEditor({
     if (mode === "create") {
       if (!copyFromScriptId) {
         initializedCopySourceRef.current = null;
+        if (initializedPresetRef.current) return;
+        const preset = readAndClearPreset();
+        if (preset) {
+          initializedPresetRef.current = true;
+          applyCreateDraftToEditor({
+            id: "",
+            name: preset.nameHint,
+            type: "GROOVY",
+            packaging: "TOOL",
+            source: preset.source,
+            pythonRequirements: "",
+            inputSchema: preset.inputSchema,
+            outputSchema: preset.outputSchema,
+            status: "DRAFT",
+            version: 1
+          });
+          setLoading(false);
+          return;
+        }
         resetCreateEditor();
         setLoading(false);
         return;

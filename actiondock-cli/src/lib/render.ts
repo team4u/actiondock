@@ -1,10 +1,18 @@
 import { inspect } from "node:util";
 
 import type {
+  EventDispatchRecord,
+  EventIngestionView,
+  EventRecord,
+  EventSourceDefinition,
+  EventTrigger,
+  EventTriggerTestResult,
   ExecutionResponse,
+  NormalizedEvent,
   PluginConfigView,
   PluginReferenceView,
   PluginView,
+  ProcessorTestResult,
   SchemaFieldDescriptor,
   ScriptScheduleView,
   ScriptDefinition,
@@ -107,6 +115,18 @@ export function renderExecution(response: ExecutionResponse): string {
   if (response.triggerSource) {
     lines.push(`Trigger: ${response.triggerSource}`);
   }
+  if (response.eventSourceId) {
+    lines.push(`EventSource: ${response.eventSourceId}`);
+  }
+  if (response.eventTriggerId) {
+    lines.push(`EventTrigger: ${response.eventTriggerId}`);
+  }
+  if (response.eventRecordId) {
+    lines.push(`EventRecord: ${response.eventRecordId}`);
+  }
+  if (response.eventDispatchId) {
+    lines.push(`EventDispatch: ${response.eventDispatchId}`);
+  }
   if (response.errorMessage) {
     lines.push(`Error: ${response.errorMessage}`);
   }
@@ -179,6 +199,270 @@ export function renderScheduleDetail(item: ScriptScheduleView): string {
   if (item.input !== undefined) {
     lines.push("Input:");
     lines.push(indent(formatValue(item.input)));
+  }
+  return lines.join("\n");
+}
+
+export function renderEventSourceList(items: EventSourceDefinition[]): string {
+  if (items.length === 0) {
+    return "没有事件源。";
+  }
+
+  return items
+    .map((item) => {
+      const key = item.key ? ` ${item.key}` : "";
+      const name = item.name ? ` ${item.name}` : "";
+      const enabled = typeof item.enabled === "boolean" ? ` ${item.enabled ? "enabled" : "disabled"}` : "";
+      const transport = item.transport?.type ? ` ${item.transport.type}` : "";
+      return `${item.id}${key}${name}${enabled}${transport}`;
+    })
+    .join("\n");
+}
+
+export function renderEventSourceDetail(item: EventSourceDefinition): string {
+  const lines = [
+    `EventSource: ${item.id}`,
+    `Key: ${item.key ?? "-"}`,
+    `Name: ${item.name ?? "-"}`,
+    `Enabled: ${item.enabled ? "yes" : "no"}`,
+    `Transport: ${item.transport?.type ?? "-"}`
+  ];
+  if (item.transport?.endpointPath) {
+    lines.push(`EndpointPath: ${item.transport.endpointPath}`);
+  }
+  if (item.description) {
+    lines.push(`Description: ${item.description}`);
+  }
+  if (item.auth?.mode) {
+    lines.push(`Auth: ${item.auth.mode}`);
+  }
+  if (item.lastReceivedAt) {
+    lines.push(`LastReceivedAt: ${item.lastReceivedAt}`);
+  }
+  if (item.normalizationProcessor) {
+    lines.push(`Normalization: ${item.normalizationProcessor.mode ?? "-"}`);
+  }
+  if (item.sampleContext && Object.keys(item.sampleContext).length > 0) {
+    lines.push("SampleContext:");
+    lines.push(indent(formatValue(item.sampleContext)));
+  }
+  return lines.join("\n");
+}
+
+export function renderEventTriggerList(items: EventTrigger[]): string {
+  if (items.length === 0) {
+    return "没有事件触发器。";
+  }
+
+  return items
+    .map((item) => {
+      const name = item.name ? ` ${item.name}` : "";
+      const source = item.sourceId ? ` source=${item.sourceId}` : "";
+      const script = item.targetScriptId ? ` script=${item.targetScriptId}` : "";
+      const enabled = typeof item.enabled === "boolean" ? ` ${item.enabled ? "enabled" : "disabled"}` : "";
+      return `${item.id}${name}${enabled}${source}${script}`;
+    })
+    .join("\n");
+}
+
+export function renderEventTriggerDetail(item: EventTrigger): string {
+  const lines = [
+    `EventTrigger: ${item.id}`,
+    `Name: ${item.name ?? "-"}`,
+    `Enabled: ${item.enabled ? "yes" : "no"}`,
+    `Source: ${item.sourceId ?? "-"}`,
+    `TargetScript: ${item.targetScriptId ?? "-"}`,
+    `SubmitMode: ${item.submitMode ?? "-"}`,
+    `ResponseView: ${item.responseView ?? "-"}`
+  ];
+  if (item.description) {
+    lines.push(`Description: ${item.description}`);
+  }
+  if (item.filterProcessor) {
+    lines.push(`FilterProcessor: ${item.filterProcessor.mode ?? "-"}`);
+  }
+  if (item.idempotencyProcessor) {
+    lines.push(`IdempotencyProcessor: ${item.idempotencyProcessor.mode ?? "-"}`);
+  }
+  if (item.inputProcessor) {
+    lines.push(`InputProcessor: ${item.inputProcessor.mode ?? "-"}`);
+  }
+  if (item.lastEventId) {
+    lines.push(`LastEventId: ${item.lastEventId}`);
+  }
+  if (item.lastExecutionId) {
+    lines.push(`LastExecution: ${item.lastExecutionId}${item.lastExecutionStatus ? ` ${item.lastExecutionStatus}` : ""}`);
+  }
+  return lines.join("\n");
+}
+
+export function renderEventRecordList(items: EventRecord[]): string {
+  if (items.length === 0) {
+    return "没有事件记录。";
+  }
+
+  return items
+    .map((item) => {
+      const source = item.sourceKey ? ` ${item.sourceKey}` : item.sourceId ? ` ${item.sourceId}` : "";
+      const status = item.status ? ` ${item.status}` : "";
+      const eventType = item.eventType ? ` ${item.eventType}` : "";
+      return `${item.id}${source}${status}${eventType}`;
+    })
+    .join("\n");
+}
+
+export function renderEventRecordDetail(item: EventRecord): string {
+  const lines = [
+    `EventRecord: ${item.id}`,
+    `SourceId: ${item.sourceId ?? "-"}`,
+    `SourceKey: ${item.sourceKey ?? "-"}`,
+    `Status: ${item.status ?? "-"}`,
+    `EventType: ${item.eventType ?? "-"}`,
+    `EventId: ${item.eventId ?? "-"}`
+  ];
+  if (item.actor) {
+    lines.push(`Actor: ${item.actor}`);
+  }
+  if (item.subject) {
+    lines.push(`Subject: ${item.subject}`);
+  }
+  if (item.errorMessage) {
+    lines.push(`Error: ${item.errorMessage}`);
+  }
+  if (item.rawHeaders) {
+    lines.push("RawHeaders:");
+    lines.push(indent(formatValue(item.rawHeaders)));
+  }
+  if (item.rawQuery) {
+    lines.push("RawQuery:");
+    lines.push(indent(formatValue(item.rawQuery)));
+  }
+  if (item.rawBody) {
+    lines.push("RawBody:");
+    lines.push(indent(formatValue(item.rawBody)));
+  }
+  if (item.normalizedEvent) {
+    lines.push("NormalizedEvent:");
+    lines.push(indent(renderNormalizedEvent(item.normalizedEvent)));
+  }
+  return lines.join("\n");
+}
+
+export function renderEventDispatchList(items: EventDispatchRecord[]): string {
+  if (items.length === 0) {
+    return "没有事件分发记录。";
+  }
+
+  return items
+    .map((item) => {
+      const trigger = item.triggerId ? ` trigger=${item.triggerId}` : "";
+      const status = item.status ? ` ${item.status}` : "";
+      const execution = item.executionId ? ` execution=${item.executionId}` : "";
+      return `${item.id}${status}${trigger}${execution}`;
+    })
+    .join("\n");
+}
+
+export function renderEventDispatchDetail(item: EventDispatchRecord): string {
+  const lines = [
+    `EventDispatch: ${item.id}`,
+    `EventRecord: ${item.eventId ?? "-"}`,
+    `SourceId: ${item.sourceId ?? "-"}`,
+    `TriggerId: ${item.triggerId ?? "-"}`,
+    `TargetScript: ${item.targetScriptId ?? "-"}`,
+    `Status: ${item.status ?? "-"}`
+  ];
+  if (item.filterMatched !== undefined) {
+    lines.push(`FilterMatched: ${item.filterMatched ? "yes" : "no"}`);
+  }
+  if (item.idempotencyKey) {
+    lines.push(`IdempotencyKey: ${item.idempotencyKey}`);
+  }
+  if (item.executionId) {
+    lines.push(`Execution: ${item.executionId}${item.executionStatus ? ` ${item.executionStatus}` : ""}`);
+  }
+  if (item.errorMessage) {
+    lines.push(`Error: ${item.errorMessage}`);
+  }
+  if (item.mappedInput && Object.keys(item.mappedInput).length > 0) {
+    lines.push("MappedInput:");
+    lines.push(indent(formatValue(item.mappedInput)));
+  }
+  return lines.join("\n");
+}
+
+export function renderProcessorTestResult(result: ProcessorTestResult): string {
+  const lines = [
+    `Success: ${result.success ? "yes" : "no"}`,
+    `SchemaValid: ${result.schemaValid === false ? "no" : "yes"}`
+  ];
+  if (typeof result.durationMs === "number") {
+    lines.push(`DurationMs: ${result.durationMs}`);
+  }
+  if (result.errorMessage) {
+    lines.push(`Error: ${result.errorMessage}`);
+  }
+  if (result.output !== undefined) {
+    lines.push("Output:");
+    lines.push(indent(formatValue(result.output)));
+  }
+  if (result.fieldErrors && result.fieldErrors.length > 0) {
+    lines.push("FieldErrors:");
+    lines.push(indent(formatValue(result.fieldErrors)));
+  }
+  if (result.logs && result.logs.length > 0) {
+    lines.push(`Logs: ${result.logs.length}`);
+  }
+  return lines.join("\n");
+}
+
+export function renderEventTriggerTestResult(result: EventTriggerTestResult): string {
+  const lines: string[] = [];
+  if (result.event) {
+    lines.push("Event:");
+    lines.push(indent(renderNormalizedEvent(result.event)));
+  }
+  lines.push(`FilterMatched: ${result.filterMatched ? "yes" : "no"}`);
+  if (result.idempotencyKey) {
+    lines.push(`IdempotencyKey: ${result.idempotencyKey}`);
+  }
+  lines.push(`SchemaValid: ${result.schemaValid === false ? "no" : "yes"}`);
+  if (result.filterResult) {
+    lines.push("FilterResult:");
+    lines.push(indent(renderProcessorTestResult(result.filterResult)));
+  }
+  if (result.idempotencyResult) {
+    lines.push("IdempotencyResult:");
+    lines.push(indent(renderProcessorTestResult(result.idempotencyResult)));
+  }
+  if (result.inputResult) {
+    lines.push("InputResult:");
+    lines.push(indent(renderProcessorTestResult(result.inputResult)));
+  }
+  if (result.mappedInput !== undefined) {
+    lines.push("MappedInput:");
+    lines.push(indent(formatValue(result.mappedInput)));
+  }
+  if (result.fieldErrors && result.fieldErrors.length > 0) {
+    lines.push("FieldErrors:");
+    lines.push(indent(formatValue(result.fieldErrors)));
+  }
+  if (result.execution) {
+    lines.push("Execution:");
+    lines.push(indent(renderExecution(result.execution)));
+  }
+  return lines.join("\n");
+}
+
+export function renderEventIngestionResult(result: EventIngestionView): string {
+  const lines: string[] = [];
+  if (result.event) {
+    lines.push("Event:");
+    lines.push(indent(renderEventRecordDetail(result.event)));
+  }
+  lines.push(`Dispatches: ${result.dispatches?.length ?? 0}`);
+  if (result.dispatches && result.dispatches.length > 0) {
+    lines.push(indent(renderEventDispatchList(result.dispatches)));
   }
   return lines.join("\n");
 }
@@ -283,6 +567,37 @@ function formatSupplement(field: SchemaFieldDescriptor): string {
     fragments.push(field.description);
   }
   return fragments.length > 0 ? ` (${fragments.join("; ")})` : "";
+}
+
+function renderNormalizedEvent(event: NormalizedEvent): string {
+  const lines = [
+    `Id: ${event.id ?? "-"}`,
+    `SourceId: ${event.sourceId ?? "-"}`,
+    `SourceKey: ${event.sourceKey ?? "-"}`,
+    `EventType: ${event.eventType ?? "-"}`,
+    `EventId: ${event.eventId ?? "-"}`,
+    `Actor: ${event.actor ?? "-"}`,
+    `Subject: ${event.subject ?? "-"}`
+  ];
+  if (event.timestamp) {
+    lines.push(`Timestamp: ${event.timestamp}`);
+  }
+  if (event.receivedAt) {
+    lines.push(`ReceivedAt: ${event.receivedAt}`);
+  }
+  if (event.headers) {
+    lines.push("Headers:");
+    lines.push(indent(formatValue(event.headers)));
+  }
+  if (event.query) {
+    lines.push("Query:");
+    lines.push(indent(formatValue(event.query)));
+  }
+  if (event.body) {
+    lines.push("Body:");
+    lines.push(indent(formatValue(event.body)));
+  }
+  return lines.join("\n");
 }
 
 function indent(text: string): string {

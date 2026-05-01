@@ -467,6 +467,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
 
           <ProcessorEditor
             title="过滤 Processor"
+            purpose="filter"
             value={draft.filterProcessor}
             scripts={scripts}
             description="返回匹配结果，推荐输出 { matched: true/false }。"
@@ -474,6 +475,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
           />
           <ProcessorEditor
             title="幂等 Processor"
+            purpose="idempotency"
             value={draft.idempotencyProcessor}
             scripts={scripts}
             description="返回唯一 key，用来避免重复触发。"
@@ -481,6 +483,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
           />
           <ProcessorEditor
             title="Input Processor"
+            purpose="input"
             required
             value={draft.inputProcessor}
             scripts={scripts}

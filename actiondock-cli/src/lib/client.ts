@@ -7,12 +7,23 @@ import { URL } from "node:url";
 import { ActionDockCliError, isRecord } from "./error.js";
 import type {
   ApiEnvelope,
+  EventDispatchRecord,
+  EventIngestionView,
+  EventRecord,
+  EventSourceDefinition,
+  EventTrigger,
+  EventTriggerTestRequest,
+  EventTriggerTestResult,
   ExecutionResponse,
+  IncomingEventPayload,
   PluginConfigView,
   PluginInvokeRequest,
   PluginInvokeResponse,
   PluginReferenceView,
   PluginView,
+  ProcessorTestRequest,
+  ProcessorTestResult,
+  NormalizedEvent,
   ScriptScheduleUpsertRequest,
   ScriptScheduleView,
   ScriptDefinition,
@@ -175,6 +186,140 @@ export class ActionDockClient {
   async deleteSchedule(scheduleId: string): Promise<void> {
     await this.requestJson<null>(`/api/schedules/${scheduleId}`, {
       method: "DELETE"
+    });
+  }
+
+  async listEventSources(): Promise<EventSourceDefinition[]> {
+    return this.requestJson<EventSourceDefinition[]>("/api/event-sources");
+  }
+
+  async getEventSource(sourceId: string): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}`);
+  }
+
+  async createEventSource(definition: EventSourceDefinition): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>("/api/event-sources", {
+      method: "POST",
+      body: JSON.stringify(definition)
+    });
+  }
+
+  async updateEventSource(sourceId: string, definition: EventSourceDefinition): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}`, {
+      method: "PUT",
+      body: JSON.stringify(definition)
+    });
+  }
+
+  async enableEventSource(sourceId: string): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/enable`, {
+      method: "POST"
+    });
+  }
+
+  async disableEventSource(sourceId: string): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/disable`, {
+      method: "POST"
+    });
+  }
+
+  async deleteEventSource(sourceId: string): Promise<void> {
+    await this.requestJson<null>(`/api/event-sources/${sourceId}`, {
+      method: "DELETE"
+    });
+  }
+
+  async testEventSourceNormalization(sourceId: string, payload: IncomingEventPayload): Promise<NormalizedEvent> {
+    return this.requestJson<NormalizedEvent>(`/api/event-sources/${sourceId}/test-normalization`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async ingestEventSource(sourceId: string, payload: IncomingEventPayload): Promise<EventIngestionView> {
+    return this.requestJson<EventIngestionView>(`/api/event-sources/${sourceId}/events`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async listEventSourceEvents(sourceId: string, limit?: number): Promise<EventRecord[]> {
+    const search = new URLSearchParams();
+    if (typeof limit === "number" && limit > 0) {
+      search.set("limit", String(limit));
+    }
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return this.requestJson<EventRecord[]>(`/api/event-sources/${sourceId}/events${suffix}`);
+  }
+
+  async listEventTriggers(): Promise<EventTrigger[]> {
+    return this.requestJson<EventTrigger[]>("/api/event-triggers");
+  }
+
+  async getEventTrigger(triggerId: string): Promise<EventTrigger> {
+    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}`);
+  }
+
+  async createEventTrigger(definition: EventTrigger): Promise<EventTrigger> {
+    return this.requestJson<EventTrigger>("/api/event-triggers", {
+      method: "POST",
+      body: JSON.stringify(definition)
+    });
+  }
+
+  async updateEventTrigger(triggerId: string, definition: EventTrigger): Promise<EventTrigger> {
+    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}`, {
+      method: "PUT",
+      body: JSON.stringify(definition)
+    });
+  }
+
+  async enableEventTrigger(triggerId: string): Promise<EventTrigger> {
+    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}/enable`, {
+      method: "POST"
+    });
+  }
+
+  async disableEventTrigger(triggerId: string): Promise<EventTrigger> {
+    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}/disable`, {
+      method: "POST"
+    });
+  }
+
+  async deleteEventTrigger(triggerId: string): Promise<void> {
+    await this.requestJson<null>(`/api/event-triggers/${triggerId}`, {
+      method: "DELETE"
+    });
+  }
+
+  async testEventTrigger(triggerId: string, payload: EventTriggerTestRequest): Promise<EventTriggerTestResult> {
+    return this.requestJson<EventTriggerTestResult>(`/api/event-triggers/${triggerId}/test`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async listEventTriggerDispatches(triggerId: string): Promise<EventDispatchRecord[]> {
+    return this.requestJson<EventDispatchRecord[]>(`/api/event-triggers/${triggerId}/dispatches`);
+  }
+
+  async listEventRecords(sourceId?: string): Promise<EventRecord[]> {
+    const suffix = sourceId ? `?${new URLSearchParams({ sourceId }).toString()}` : "";
+    return this.requestJson<EventRecord[]>(`/api/event-records${suffix}`);
+  }
+
+  async getEventRecord(recordId: string): Promise<EventRecord> {
+    return this.requestJson<EventRecord>(`/api/event-records/${recordId}`);
+  }
+
+  async listEventRecordDispatches(recordId: string): Promise<EventDispatchRecord[]> {
+    return this.requestJson<EventDispatchRecord[]>(`/api/event-records/${recordId}/dispatches`);
+  }
+
+  async testProcessor(payload: ProcessorTestRequest): Promise<ProcessorTestResult> {
+    return this.requestJson<ProcessorTestResult>("/api/processors/test", {
+      method: "POST",
+      body: JSON.stringify(payload)
     });
   }
 

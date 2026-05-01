@@ -466,6 +466,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
 
           <ProcessorEditor
             title="标准化 Processor"
+            purpose="normalization"
             value={draft.normalizationProcessor}
             scripts={scripts}
             description="把原始请求转成统一事件结构，供后续触发器使用。"
