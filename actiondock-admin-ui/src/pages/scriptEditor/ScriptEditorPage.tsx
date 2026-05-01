@@ -30,7 +30,7 @@ import {
   message
 } from "antd";
 import type { MenuProps } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { executeScript, getExecution } from "../../api";
 import { getApiKey } from "../../auth";
@@ -97,6 +97,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
   const [messageApi, contextHolder] = message.useMessage();
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [scriptDiffDrawerOpen, setScriptDiffDrawerOpen] = useState(false);
+  const publishAutoOpenRef = useRef(false);
 
   const [scriptForm] = Form.useForm<ScriptEditorFormValues>();
   const [executionForm] = Form.useForm<Record<string, unknown>>();
@@ -312,6 +313,35 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     ensureCurrentScriptPublished: editor.ensureCurrentScriptPublished,
     messageApi
   });
+
+  const publishRequested = searchParams.get("publish") === "1";
+  useEffect(() => {
+    if (!publishRequested) {
+      publishAutoOpenRef.current = false;
+      return;
+    }
+    if (mode === "create" || editor.loading || !editor.currentScript || publishAutoOpenRef.current) {
+      return;
+    }
+
+    publishAutoOpenRef.current = true;
+    void publishToRepo.openPublishToRepositoryModal({
+      repositoryId: searchParams.get("repositoryId") ?? undefined
+    });
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("publish");
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    editor.currentScript,
+    editor.loading,
+    mode,
+    publishRequested,
+    publishToRepo,
+    searchParams,
+    setSearchParams
+  ]);
+
   const publishDiff = useMemo(() => {
     return buildPublishScriptDiff(
       editor.currentScript ?? {

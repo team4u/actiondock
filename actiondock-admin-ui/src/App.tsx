@@ -27,6 +27,9 @@ const { useBreakpoint } = Grid;
 const RepositoryDiscoveryPage = lazy(() =>
   import("./pages/RepositoryDiscoveryPage").then((module) => ({ default: module.RepositoryDiscoveryPage }))
 );
+const ReleaseCenterPage = lazy(() =>
+  import("./pages/ReleaseCenterPage").then((module) => ({ default: module.ReleaseCenterPage }))
+);
 const CapabilityPackagePublishPage = lazy(() =>
   import("./pages/CapabilityPackagePublishPage").then((module) => ({ default: module.CapabilityPackagePublishPage }))
 );
@@ -114,6 +117,9 @@ function useSystemColorMode(): ColorMode {
 }
 
 function resolveSelectedNavKey(pathname: string): string {
+  if (pathname.startsWith("/publish")) {
+    return "publish";
+  }
   if (pathname.startsWith("/packages")) {
     return "discover";
   }
@@ -148,6 +154,8 @@ function resolveTitle(selectedNavKey: string): string {
   switch (selectedNavKey) {
     case "discover":
       return "发现能力包";
+    case "publish":
+      return "发布中心";
     case "scripts":
       return "脚本库";
     case "repositories":
@@ -174,7 +182,11 @@ function AdminShell() {
   const isDark = colorMode === "dark";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const selectedNavKey = resolveSelectedNavKey(location.pathname);
-  const title = location.pathname.startsWith("/packages") ? "发布能力包" : resolveTitle(selectedNavKey);
+  const title = location.pathname.startsWith("/publish")
+    ? "发布中心"
+    : location.pathname.startsWith("/packages")
+      ? "发布能力包"
+      : resolveTitle(selectedNavKey);
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
 
@@ -193,6 +205,11 @@ function AdminShell() {
             key: "discover",
             label: "发现能力包",
             onClick: () => navigate("/discover")
+          },
+          {
+            key: "publish",
+            label: "发布中心",
+            onClick: () => navigate("/publish")
           },
           {
             key: "scripts",
@@ -262,6 +279,7 @@ function AdminShell() {
             <Routes>
               <Route path="/" element={<Navigate to="/discover" replace />} />
               <Route path="/discover" element={<RepositoryDiscoveryPage />} />
+              <Route path="/publish" element={<ReleaseCenterPage />} />
               <Route path="/packages/publish" element={<CapabilityPackagePublishPage />} />
               <Route path="/packages/:packageId/releases/new" element={<CapabilityPackagePublishPage />} />
               <Route path="/packages/:packageId/releases/:version" element={<CapabilityPackagePublishPage />} />

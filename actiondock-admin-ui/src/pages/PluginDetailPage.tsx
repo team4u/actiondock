@@ -45,6 +45,7 @@ import {
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { Col } from "../components/SafeCol";
 import { CodeEditor } from "../components/CodeEditor";
+import { RepositoryPublishBasicsForm } from "../components/RepositoryPublishBasicsForm";
 import { buildCliCommandPresets, buildCommandPresets, buildHttpCommandPresets } from "../commands";
 import { CommandPanel } from "../components/CommandPanel";
 import { ErrorDetailPanel } from "../components/ErrorDetailPanel";
@@ -160,6 +161,7 @@ export function PluginDetailPage() {
   const [publishingPlugin, setPublishingPlugin] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const publishAutoOpenRef = useRef(false);
 
   const requestedTab = searchParams.get("tab");
   const activeTab: PluginDetailTab =
@@ -422,6 +424,24 @@ export function PluginDetailPage() {
       setPublishingPlugin(false);
     }
   };
+
+  useEffect(() => {
+    const publishRequested = searchParams.get("publish") === "1";
+    if (!publishRequested) {
+      publishAutoOpenRef.current = false;
+      return;
+    }
+    if (loading || !plugin || publishAutoOpenRef.current) {
+      return;
+    }
+
+    publishAutoOpenRef.current = true;
+    void openPublishPluginModal();
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("publish");
+    setSearchParams(nextParams, { replace: true });
+  }, [loading, plugin, searchParams, setSearchParams]);
 
   const handlePublishPlugin = async () => {
     if (!plugin) {
@@ -872,56 +892,17 @@ export function PluginDetailPage() {
             发布会写入插件元数据和制品引用，并更新仓库索引。local:// 指向仓库内 JAR；目标文件不存在时会从当前已安装插件复制。SHA-256 留空时会自动计算。
           </Text>
           <Form form={publishForm} layout="vertical">
-            <Form.Item
-              label="目标仓库"
-              name="repositoryId"
-              rules={[{ required: true, message: "请选择目标仓库" }]}
-            >
-              <Select
-                options={publishRepositories.map((item) => ({
-                  value: item.id,
-                  label: item.name
-                }))}
-              />
-            </Form.Item>
-            <Space size={12} style={{ width: "100%" }} wrap>
-              <Form.Item
-                label="显示名称"
-                name="displayName"
-                rules={[{ required: true, message: "请输入显示名称" }]}
-                style={{ flex: "1 1 240px", minWidth: 220 }}
-              >
-                <Input />
-              </Form.Item>
-              <Form.Item
-                label="版本"
-                name="version"
-                rules={[{ required: true, message: "请输入版本号" }]}
-                style={{ flex: "1 1 150px", minWidth: 150 }}
-              >
-                <Input />
-              </Form.Item>
-            </Space>
-            <Space size={12} style={{ width: "100%" }} wrap>
-              <Form.Item label="维护人" name="owner" style={{ flex: "1 1 220px", minWidth: 220 }}>
-                <Input placeholder="例如 platform-team" />
-              </Form.Item>
-              <Form.Item label="风险等级" name="riskLevel" style={{ flex: "1 1 180px", minWidth: 180 }}>
-                <Select
-                  options={[
-                    { value: "LOW", label: "LOW" },
-                    { value: "MEDIUM", label: "MEDIUM" },
-                    { value: "HIGH", label: "HIGH" }
-                  ]}
-                />
-              </Form.Item>
-            </Space>
-            <Form.Item label="插件说明" name="description">
-              <Input.TextArea
-                autoSize={{ minRows: 3, maxRows: 8 }}
-                placeholder="插件自身说明，支持 Markdown 语法"
-              />
-            </Form.Item>
+            <RepositoryPublishBasicsForm
+              repositories={publishRepositories}
+              displayNameLabel="显示名称"
+              displayNamePlaceholder="例如 清理缓存"
+              versionPlaceholder="例如 1.0.0"
+              ownerPlaceholder="例如 platform-team"
+              tagsPlaceholder="输入后回车"
+              releaseNotesLabel="发布日志"
+              releaseNotesPlaceholder="本次发布的变更说明，支持 Markdown 语法"
+              showRiskLevel
+            />
             <Form.Item
               label="插件包 URI"
               name="artifactUri"
@@ -965,15 +946,6 @@ export function PluginDetailPage() {
                 <InputNumber min={0} precision={0} style={{ width: "100%" }} />
               </Form.Item>
             </Space>
-            <Form.Item label="标签" name="tags">
-              <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" />
-            </Form.Item>
-            <Form.Item label="发布日志" name="releaseNotes">
-              <Input.TextArea
-                autoSize={{ minRows: 5, maxRows: 12 }}
-                placeholder="本次发布的变更说明，支持 Markdown 语法"
-              />
-            </Form.Item>
           </Form>
         </Space>
       </Drawer>

@@ -11,8 +11,10 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.team4u.actiondock.application.ExecutionApplicationService;
+import org.team4u.actiondock.application.ExecutionPresetApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
+import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptType;
@@ -25,8 +27,12 @@ import org.team4u.actiondock.storage.jpa.repo.SpringDataExecutionEntityRepositor
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 
 import java.nio.file.Path;
+import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,6 +96,28 @@ class SharedStorageIntegrationTest {
         }
     }
 
+    @Test
+    void startupMigratesLegacyExecutionPresetTableAndBackfillsBooleanFlags() throws SQLException {
+        String dbUrl = "jdbc:h2:file:" + tempDir.resolve("legacy-preset-runtime").toAbsolutePath().toString().replace("\\", "/") + ";AUTO_SERVER=TRUE";
+        createLegacyExecutionPresetSchemaWithoutManagedAndEditable(dbUrl);
+
+        try (ConfigurableApplicationContext context = new SpringApplicationBuilder(CliLikeTestApplication.class)
+                .web(WebApplicationType.NONE)
+                .properties(runtimeProperties(dbUrl, "none"))
+                .run()) {
+            ExecutionPresetApplicationService executionPresetApplicationService = context.getBean(ExecutionPresetApplicationService.class);
+            List<ExecutionPreset> presets = executionPresetApplicationService.list("legacy-script");
+
+            assertThat(presets).singleElement().satisfies(preset -> {
+                assertThat(preset.isEditable()).isTrue();
+                assertThat(preset.isManaged()).isFalse();
+            });
+            assertThat(readAppliedVersions(dbUrl)).contains("0", "1", "2");
+            assertThat(columnExists(dbUrl, "EXECUTION_PRESET", "EDITABLE")).isTrue();
+            assertThat(columnExists(dbUrl, "EXECUTION_PRESET", "MANAGED")).isTrue();
+        }
+    }
+
     private static String[] runtimeProperties(String dbUrl, String webApplicationType) {
         return new String[] {
                 "spring.config.name=does-not-exist",
@@ -98,7 +126,11 @@ class SharedStorageIntegrationTest {
                 "spring.datasource.url=" + dbUrl,
                 "spring.datasource.driver-class-name=org.h2.Driver",
                 "spring.datasource.username=sa",
-                "spring.jpa.hibernate.ddl-auto=update",
+                "spring.jpa.hibernate.ddl-auto=validate",
+                "spring.flyway.enabled=true",
+                "spring.flyway.locations=classpath:db/migration",
+                "spring.flyway.baseline-on-migrate=true",
+                "spring.flyway.baseline-version=0",
                 "spring.h2.console.enabled=false",
                 "app.execution.async-pool-size=1"
         };
@@ -159,6 +191,49 @@ class SharedStorageIntegrationTest {
                         '[]', '[]', '[]'
                     )
                     """);
+        }
+    }
+
+    private static void createLegacyExecutionPresetSchemaWithoutManagedAndEditable(String dbUrl) throws SQLException {
+        try (var connection = DriverManager.getConnection(dbUrl, "sa", "");
+             var statement = connection.createStatement()) {
+            statement.execute("""
+                    create table execution_preset (
+                        id varchar(255) primary key,
+                        script_id varchar(255) not null,
+                        name varchar(255) not null,
+                        input_json clob,
+                        created_at timestamp,
+                        updated_at timestamp
+                    )
+                    """);
+            statement.execute("""
+                    insert into execution_preset (
+                        id, script_id, name, input_json, created_at, updated_at
+                    ) values (
+                        'preset-1', 'legacy-script', 'Legacy preset', '{}', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+                    )
+                    """);
+        }
+    }
+
+    private static List<String> readAppliedVersions(String dbUrl) throws SQLException {
+        List<String> versions = new ArrayList<>();
+        try (Connection connection = DriverManager.getConnection(dbUrl, "sa", "");
+             var statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                     "select \"version\" from \"flyway_schema_history\" order by \"installed_rank\"")) {
+            while (resultSet.next()) {
+                versions.add(resultSet.getString(1));
+            }
+        }
+        return versions;
+    }
+
+    private static boolean columnExists(String dbUrl, String tableName, String columnName) throws SQLException {
+        try (Connection connection = DriverManager.getConnection(dbUrl, "sa", "");
+             ResultSet columns = connection.getMetaData().getColumns(null, "PUBLIC", tableName, columnName)) {
+            return columns.next();
         }
     }
 

@@ -13,6 +13,7 @@ import {
 } from "antd";
 import type { FormInstance } from "antd";
 import { ScriptDiffPanel } from "../../components/diff/ScriptDiffPanel";
+import { RepositoryPublishBasicsForm } from "../../components/RepositoryPublishBasicsForm";
 import type {
   PluginDependency,
   RepositoryDefinition,
@@ -243,58 +244,26 @@ export function PublishToRepositoryModal({
             </Card>
           ) : null}
           <Form form={form} layout="vertical" onValuesChange={onValuesChange}>
-            <Form.Item
-              label="目标仓库"
-              name="repositoryId"
-              rules={[{ required: true, message: "请选择目标仓库" }]}
-            >
-              <Select
-                options={repositories.map((item) => ({
-                  value: item.id,
-                  label: item.name
-                }))}
-              />
-            </Form.Item>
-            <Space size={12} style={{ width: "100%" }} wrap>
-              <Form.Item
-                label="仓库脚本 ID"
-                name="toolId"
-                rules={[{ required: true, message: "请输入 toolId" }]}
-                style={{ flex: "1 1 220px", minWidth: 220 }}
-              >
-                <Input placeholder="例如 clear-cache" />
-              </Form.Item>
-              <Form.Item
-                label="版本"
-                name="version"
-                rules={[{ required: true, message: "请输入版本号" }]}
-                extra={renderVersionSuggestion(versionSuggestion)}
-                style={{ flex: "1 1 160px", minWidth: 160 }}
-              >
-                <Input placeholder="例如 1.0.0" />
-              </Form.Item>
-            </Space>
-            <Form.Item
-              label="显示名称"
-              name="displayName"
-              rules={[{ required: true, message: "请输入显示名称" }]}
-            >
-              <Input placeholder="例如 清理缓存" />
-            </Form.Item>
-            <Space size={12} style={{ width: "100%" }} wrap>
-              <Form.Item label="维护人" name="owner" style={{ flex: "1 1 220px", minWidth: 220 }}>
-                <Input placeholder="例如 platform-team" />
-              </Form.Item>
-              <Form.Item label="标签" name="tags" style={{ flex: "1 1 320px", minWidth: 240 }}>
-                <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" />
-              </Form.Item>
-            </Space>
-            <Form.Item label="发布日志" name="releaseNotes">
-              <Input.TextArea
-                autoSize={{ minRows: 5, maxRows: 12 }}
-                placeholder="本次发布的变更说明，支持 Markdown 语法"
-              />
-            </Form.Item>
+            <RepositoryPublishBasicsForm
+              repositories={repositories}
+              afterRepository={(
+                <Form.Item
+                  label="仓库脚本 ID"
+                  name="toolId"
+                  rules={[{ required: true, message: "请输入 toolId" }]}
+                >
+                  <Input placeholder="例如 clear-cache" />
+                </Form.Item>
+              )}
+              displayNamePlaceholder="例如 清理缓存"
+              versionExtra={renderVersionSuggestion(versionSuggestion)}
+              versionPlaceholder="例如 1.0.0"
+              ownerPlaceholder="例如 platform-team"
+              tagsPlaceholder="输入后回车"
+              releaseNotesPlaceholder="本次发布的变更说明，支持 Markdown 语法"
+              showDescription={false}
+              showRiskLevel={false}
+            />
             <Form.Item label={`定时任务模板 (${schedules.length})`} name="scheduleIds">
               <Select
                 mode="multiple"

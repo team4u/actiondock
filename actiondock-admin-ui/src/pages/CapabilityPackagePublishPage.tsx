@@ -35,6 +35,7 @@ import {
 } from "../api";
 import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
+import { RepositoryPublishBasicsForm } from "../components/RepositoryPublishBasicsForm";
 import { useDefaultOwner } from "../hooks/useDefaultOwner";
 import { getPublishableRepositories, pickDefaultPublishRepository } from "../repositoryPublish";
 import type {
@@ -292,10 +293,6 @@ export function CapabilityPackagePublishPage() {
   const watchedSource = Form.useWatch("source", form) ?? "AGENT";
   const watchedPrimaryEntryType = Form.useWatch("primaryEntryType", form) ?? "AGENT";
 
-  const repositoryOptions = useMemo(
-    () => repositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })),
-    [repositories]
-  );
   const scriptOptions = useMemo(
     () => scripts.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })),
     [scripts]
@@ -492,9 +489,6 @@ export function CapabilityPackagePublishPage() {
 
         <Card title="Step 2 · 包信息">
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            <Form.Item name="repositoryId" label="目标仓库" rules={[{ required: true, message: "请选择目标仓库" }]}>
-              <Select showSearch optionFilterProp="label" options={repositoryOptions} />
-            </Form.Item>
             <Form.Item
               name="packageId"
               label="Package ID"
@@ -503,36 +497,20 @@ export function CapabilityPackagePublishPage() {
             >
               <Input onBlur={(event) => form.setFieldValue("packageId", sanitizePackageId(event.target.value))} />
             </Form.Item>
-            <Form.Item name="displayName" label="显示名称">
-              <Input />
-            </Form.Item>
-            <Space size={12} style={{ width: "100%" }} align="start">
-              <Form.Item name="version" label="版本" rules={[{ required: true, message: "请输入版本号" }]} style={{ flex: 1 }}>
-                <Input />
-              </Form.Item>
-              <Form.Item name="owner" label="维护人" style={{ flex: 1 }}>
-                <Input />
-              </Form.Item>
-              <Form.Item name="riskLevel" label="风险等级" style={{ flex: 1 }}>
-                <Select
-                  allowClear
-                  options={[
-                    { value: "LOW", label: "LOW" },
-                    { value: "MEDIUM", label: "MEDIUM" },
-                    { value: "HIGH", label: "HIGH" }
-                  ]}
-                />
-              </Form.Item>
-            </Space>
-            <Form.Item name="tagsText" label="标签">
-              <Input placeholder="使用逗号分隔，例如 github, ai, triage" />
-            </Form.Item>
-            <Form.Item name="description" label="说明">
-              <Input.TextArea rows={4} />
-            </Form.Item>
-            <Form.Item name="releaseNotes" label="Release Notes">
-              <Input.TextArea rows={6} />
-            </Form.Item>
+            <RepositoryPublishBasicsForm
+              repositories={repositories}
+              displayNameLabel="显示名称"
+              displayNamePlaceholder="例如 智能问答包"
+              versionPlaceholder="例如 1.0.0"
+              ownerPlaceholder="例如 platform-team"
+              tagsFieldName="tagsText"
+              tagsPlaceholder="使用逗号分隔，例如 github, ai, triage"
+              tagsMode="text"
+              descriptionPlaceholder="说明能力包用途和边界"
+              releaseNotesLabel="Release Notes"
+              releaseNotesPlaceholder="本次发布的变更说明"
+              showRiskLevel
+            />
           </Space>
         </Card>
 
