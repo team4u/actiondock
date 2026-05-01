@@ -68,17 +68,23 @@ return {
 
 - 输入主对象默认从 `input.event` 读取
 - `input.event` 通常包含：
+  - `id`（事件记录 ID；`test-normalization` 时可能为空）
   - `sourceId`
   - `sourceKey`
-  - `eventType`
-  - `eventId`
-  - `actor`
-  - `subject`
+  - `eventType`（可选）
+  - `eventId`（可选）
+  - `actor`（可选）
+  - `subject`（可选）
+  - `timestamp`（可选）
   - `headers`
   - `query`
   - `body`
+  - `receivedAt`
+- `input.source` 通常包含 `id`、`key`、`name`
+- `input.trigger` 通常包含 `id`、`name`、`targetScriptId`
 - 输出必须直接对齐目标脚本的 `inputSchema`
 - 如果用户没有明确要求，处理器脚本只做事件到目标脚本入参的转换，不顺手承担业务主逻辑
+- 如果只是做 JSONPath 等价转换，直接用 `get` 组装返回值即可；字段缺失就保持 `null`，不要额外写分支
 
 Python 最小模板：
 

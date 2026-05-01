@@ -374,6 +374,34 @@ actiondock execution get <execution-id> --json
 ```
 
 返回值必须是目标脚本的入参对象，而不是整条事件对象。
+`event` 里的字段是“可取但可能为空”，不要默认每个字段都存在。
+
+`input.event` 的实际字段：
+
+- `id`：事件记录 ID，`ingest` 时通常有值，`test-normalization` 时可能为 `null`
+- `sourceId`
+- `sourceKey`
+- `eventType`：可选
+- `eventId`：可选
+- `actor`：可选
+- `subject`：可选
+- `timestamp`：可选
+- `headers`
+- `query`
+- `body`
+- `receivedAt`
+
+`input.source` 的字段：
+
+- `id`
+- `key`
+- `name`
+
+`input.trigger` 的字段：
+
+- `id`
+- `name`
+- `targetScriptId`
 
 ### 7.5 处理器脚本最小模板
 
@@ -382,7 +410,6 @@ Groovy：
 ```groovy
 def event = input.event ?: [:]
 def body = event.body ?: [:]
-
 return [
   sourceKey: event.sourceKey,
   eventType: event.eventType,
