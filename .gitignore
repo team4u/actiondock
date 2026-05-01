@@ -46,4 +46,4 @@ data/
 .cx-index.db
 .planning/
 .DS_Store
-/extensions.idx
+extensions.idx
