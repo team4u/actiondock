@@ -251,3 +251,155 @@ actiondock execution get <execution-id> --json
 - 不要在第一版使用 inline code。
 - 使用 `SCRIPT_REF` 时不要跳过脚本发布步骤。
 - 除非用户要求完整重做，不要同时改 source 和 trigger。
+
+---
+
+## 7. 可直接复用的模板
+
+### 7.1 通用 Header Token 事件源
+
+```json
+{
+  "id": "source-internal-crm",
+  "key": "internal.crm.customer-created",
+  "name": "Internal CRM Customer Created",
+  "enabled": true,
+  "transport": {
+    "type": "HTTP_WEBHOOK",
+    "contentTypes": ["application/json"]
+  },
+  "auth": {
+    "mode": "HEADER_TOKEN",
+    "tokenHeader": "X-ActionDock-Token",
+    "secretConfigKey": "internal.crm.webhook.token"
+  },
+  "normalizationProcessor": {
+    "mode": "JSON_PATH",
+    "jsonPath": {
+      "fields": {
+        "eventType": "$.body.type",
+        "eventId": "$.body.id",
+        "actor": "$.body.user.name",
+        "subject": "$.body.customer.name"
+      }
+    }
+  }
+}
+```
+
+### 7.2 GitHub Issue 事件源
+
+```json
+{
+  "id": "source-github-issue",
+  "key": "github.issue",
+  "name": "GitHub Issue",
+  "enabled": true,
+  "transport": {
+    "type": "HTTP_WEBHOOK"
+  },
+  "auth": {
+    "mode": "HMAC_SHA256",
+    "signatureHeader": "X-Hub-Signature-256",
+    "signaturePrefix": "sha256=",
+    "signaturePayload": "RAW_BODY",
+    "secretConfigKey": "github.webhook.secret"
+  },
+  "normalizationProcessor": {
+    "mode": "JSON_PATH",
+    "jsonPath": {
+      "fields": {
+        "eventType": "$.headers.X-GitHub-Event",
+        "eventId": "$.headers.X-GitHub-Delivery",
+        "actor": "$.body.sender.login",
+        "subject": "$.body.issue.title"
+      }
+    }
+  }
+}
+```
+
+### 7.3 最小事件触发器
+
+```json
+{
+  "id": "trigger-github-issue",
+  "name": "GitHub Issue 分类",
+  "enabled": true,
+  "sourceId": "source-github-issue",
+  "targetScriptId": "github-issue-classifier",
+  "filterProcessor": {
+    "mode": "JSON_PATH",
+    "jsonPath": {
+      "fields": {
+        "matched": "$.body.action"
+      }
+    }
+  },
+  "idempotencyProcessor": {
+    "mode": "JSON_PATH",
+    "jsonPath": {
+      "fields": {
+        "key": "$.eventId"
+      }
+    }
+  },
+  "inputProcessor": {
+    "mode": "SCRIPT_REF",
+    "scriptRef": {
+      "scriptId": "processor-github-issue",
+      "versionMode": "PUBLISHED"
+    }
+  },
+  "submitMode": "ASYNC",
+  "responseView": "RESULT"
+}
+```
+
+### 7.4 处理器脚本上下文
+
+`SCRIPT_REF` 处理器脚本默认拿到的是：
+
+```json
+{
+  "event": {
+    "sourceKey": "github.issue",
+    "eventType": "opened",
+    "eventId": "delivery-1",
+    "headers": {},
+    "query": {},
+    "body": {}
+  }
+}
+```
+
+返回值必须是目标脚本的入参对象，而不是整条事件对象。
+
+### 7.5 处理器脚本最小模板
+
+Groovy：
+
+```groovy
+def event = input.event ?: [:]
+def body = event.body ?: [:]
+
+return [
+  title: body.issue?.title,
+  author: body.sender?.login,
+  sourceKey: event.sourceKey
+]
+```
+
+Python：
+
+```python
+event = input.get("event", {})
+body = event.get("body", {})
+issue = body.get("issue", {})
+
+return {
+    "title": issue.get("title"),
+    "author": body.get("sender", {}).get("login"),
+    "sourceKey": event.get("sourceKey"),
+}
+```

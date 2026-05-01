@@ -180,6 +180,36 @@ pydantic>=2.7,<3
 }
 ```
 
+### 事件框架处理器脚本约定
+
+当脚本作为 `event-trigger` 的 `SCRIPT_REF` Processor 使用时，优先按下面约定生成：
+
+- 输入使用 `input.event`，不要假设有平铺字段
+- 输出必须直接对应目标脚本的 `inputSchema`
+- 复杂事件字段先从 `event.body` / `event.headers` / `event.query` 里解包
+- 脚本名建议带上用途，例如 `processor-github-issue`、`processor-crm-customer-created`
+- 处理器脚本也要先 `publish`，再写回 `event-trigger`
+
+最小模板：
+
+Groovy：
+
+```groovy
+def event = input.event ?: [:]
+return [
+  // return target script input
+]
+```
+
+Python：
+
+```python
+event = input.get("event", {})
+return {
+    # return target script input
+}
+```
+
 ### 需求分析流程
 
 1. **理解需求**：分析用户描述的业务逻辑，明确输入参数和输出结果
