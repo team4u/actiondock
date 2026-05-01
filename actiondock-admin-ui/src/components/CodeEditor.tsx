@@ -1,4 +1,7 @@
 import Editor from "@monaco-editor/react";
+import { registerGroovyLanguage } from "./monacoGroovy";
+
+registerGroovyLanguage();
 
 interface CodeEditorProps {
   value?: string;

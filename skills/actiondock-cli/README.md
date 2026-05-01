@@ -246,7 +246,7 @@ actiondock-server
 
 启动后：
 
-- 管理台：`http://localhost:5177/admin/scripts`
+- 管理台：`http://localhost:5177/admin/app/scripts`
 - API：`http://localhost:5177/api`
 
 
