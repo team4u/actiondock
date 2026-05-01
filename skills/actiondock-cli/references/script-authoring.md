@@ -189,6 +189,7 @@ pydantic>=2.7,<3
 - 复杂事件字段先从 `event.body` / `event.headers` / `event.query` 里解包
 - 脚本名建议带上用途，例如 `processor-github-issue`、`processor-crm-customer-created`
 - 处理器脚本也要先 `publish`，再写回 `event-trigger`
+- 如果只是做 JSONPath 等价转换，返回值至少保留 `sourceKey`、`eventType`、`eventId`、`actor`、`subject` 这组核心字段，再按目标脚本需要补业务字段
 
 最小模板：
 

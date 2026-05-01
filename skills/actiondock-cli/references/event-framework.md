@@ -384,9 +384,13 @@ def event = input.event ?: [:]
 def body = event.body ?: [:]
 
 return [
+  sourceKey: event.sourceKey,
+  eventType: event.eventType,
+  eventId: event.eventId,
+  actor: event.actor,
+  subject: event.subject,
   title: body.issue?.title,
-  author: body.sender?.login,
-  sourceKey: event.sourceKey
+  author: body.sender?.login
 ]
 ```
 
@@ -398,8 +402,12 @@ body = event.get("body", {})
 issue = body.get("issue", {})
 
 return {
+    "sourceKey": event.get("sourceKey"),
+    "eventType": event.get("eventType"),
+    "eventId": event.get("eventId"),
+    "actor": event.get("actor"),
+    "subject": event.get("subject"),
     "title": issue.get("title"),
     "author": body.get("sender", {}).get("login"),
-    "sourceKey": event.get("sourceKey"),
 }
 ```
