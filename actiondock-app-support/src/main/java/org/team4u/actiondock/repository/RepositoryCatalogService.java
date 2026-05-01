@@ -23,11 +23,12 @@ import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.AiDependency;
+import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
-import org.team4u.actiondock.domain.model.RepositoryAiPackageInstallation;
+import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
@@ -37,8 +38,9 @@ import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
+import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
-import org.team4u.actiondock.domain.port.RepositoryAiPackageInstallationRepository;
+import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
@@ -95,16 +97,18 @@ public class RepositoryCatalogService {
     private static final Pattern AGENT_PROFILE_LITERAL_PATTERN = Pattern.compile(
             "((?:[\"'`])?agentProfile(?:[\"'`])?\\s*:\\s*)([\"'`])([^\"'`]+)(\\2)"
     );
-    private static final String AI_PACKAGES_DIR = "ai-packages";
-    private static final String AI_PACKAGE_FILE_NAME = "ai-package.json";
     private static final String AI_PACKAGE_ENTRY_PREFIX = "cap.";
     private static final String AI_PACKAGE_INTERNAL_PREFIX = "pkg.";
+    private static final String CAPABILITY_PACKAGES_DIR = "packages";
+    private static final String CAPABILITY_PACKAGE_MANIFEST_FILE = "package.json";
+    private static final String CAPABILITY_PACKAGE_RELEASE_FILE = "release.json";
 
     private final RepositoryDefinitionRepository repositoryDefinitionRepository;
     private final RepositoryToolInstallationRepository repositoryToolInstallationRepository;
-    private final RepositoryAiPackageInstallationRepository repositoryAiPackageInstallationRepository;
+    private final CapabilityPackageInstallationRepository capabilityPackageInstallationRepository;
     private final ScriptRepository scriptRepository;
     private final ScriptScheduleRepository scriptScheduleRepository;
+    private final ExecutionPresetRepository executionPresetRepository;
     private final ConfigValueRepository configValueRepository;
     private final AiModelProfileRepository aiModelProfileRepository;
     private final AiAgentProfileRepository aiAgentProfileRepository;
@@ -117,14 +121,14 @@ public class RepositoryCatalogService {
     private final PluginArtifactResolverRegistry pluginArtifactResolverRegistry;
     private final Path repositoriesRoot;
     private final ToolRepositoryPublisher toolRepositoryPublisher;
-    private final AiPackageRepositoryPublisher aiPackageRepositoryPublisher;
     private final PluginRepositoryPublisher pluginRepositoryPublisher;
 
     public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                     RepositoryToolInstallationRepository repositoryToolInstallationRepository,
-                                    RepositoryAiPackageInstallationRepository repositoryAiPackageInstallationRepository,
+                                    CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
                                     ScriptRepository scriptRepository,
                                     ScriptScheduleRepository scriptScheduleRepository,
+                                    ExecutionPresetRepository executionPresetRepository,
                                     ConfigValueRepository configValueRepository,
                                     AiModelProfileRepository aiModelProfileRepository,
                                     AiAgentProfileRepository aiAgentProfileRepository,
@@ -136,9 +140,10 @@ public class RepositoryCatalogService {
                                     AppProperties properties) {
         this(repositoryDefinitionRepository,
                 repositoryToolInstallationRepository,
-                repositoryAiPackageInstallationRepository,
+                capabilityPackageInstallationRepository,
                 scriptRepository,
                 scriptScheduleRepository,
+                executionPresetRepository,
                 configValueRepository,
                 aiModelProfileRepository,
                 aiAgentProfileRepository,
@@ -153,9 +158,10 @@ public class RepositoryCatalogService {
 
     public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                     RepositoryToolInstallationRepository repositoryToolInstallationRepository,
-                                    RepositoryAiPackageInstallationRepository repositoryAiPackageInstallationRepository,
+                                    CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
                                     ScriptRepository scriptRepository,
                                     ScriptScheduleRepository scriptScheduleRepository,
+                                    ExecutionPresetRepository executionPresetRepository,
                                     ConfigValueRepository configValueRepository,
                                     AiModelProfileRepository aiModelProfileRepository,
                                     AiAgentProfileRepository aiAgentProfileRepository,
@@ -168,9 +174,10 @@ public class RepositoryCatalogService {
                                     PluginArtifactResolverRegistry pluginArtifactResolverRegistry) {
         this.repositoryDefinitionRepository = repositoryDefinitionRepository;
         this.repositoryToolInstallationRepository = repositoryToolInstallationRepository;
-        this.repositoryAiPackageInstallationRepository = repositoryAiPackageInstallationRepository;
+        this.capabilityPackageInstallationRepository = capabilityPackageInstallationRepository;
         this.scriptRepository = scriptRepository;
         this.scriptScheduleRepository = scriptScheduleRepository;
+        this.executionPresetRepository = executionPresetRepository;
         this.configValueRepository = configValueRepository;
         this.aiModelProfileRepository = aiModelProfileRepository;
         this.aiAgentProfileRepository = aiAgentProfileRepository;
@@ -187,7 +194,6 @@ public class RepositoryCatalogService {
                 ? AppProperties.defaultHomeDir()
                 : properties.getHomeDir()).resolve("repositories").toAbsolutePath().normalize();
         this.toolRepositoryPublisher = new ToolRepositoryPublisher(this);
-        this.aiPackageRepositoryPublisher = new AiPackageRepositoryPublisher(this);
         this.pluginRepositoryPublisher = new PluginRepositoryPublisher(this);
     }
 
@@ -290,29 +296,29 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
-    public List<RepositoryAiPackageDescriptor> listAllRepositoryAiPackages() {
-        List<RepositoryAiPackageDescriptor> packages = new ArrayList<>();
+    public List<CapabilityPackageDescriptor> listAllCapabilityPackages() {
+        List<CapabilityPackageDescriptor> packages = new ArrayList<>();
         for (RepositoryDefinition repository : listRepositories()) {
             if (!repository.isEnabled()) {
                 continue;
             }
-            packages.addAll(listRepositoryAiPackages(repository.getId()));
+            packages.addAll(listCapabilityPackages(repository.getId()));
         }
         return packages.stream()
-                .sorted(Comparator.comparing(RepositoryAiPackageDescriptor::installationId))
+                .sorted(Comparator.comparing(CapabilityPackageDescriptor::installationId))
                 .toList();
     }
 
-    public List<RepositoryAiPackageDescriptor> listRepositoryAiPackages(String repositoryId) {
+    public List<CapabilityPackageDescriptor> listCapabilityPackages(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryIndexFile index = readRepositoryIndex(repository);
-        List<RepositoryAiPackageDescriptor> packages = new ArrayList<>();
-        for (RepositoryAiPackageIndexEntry entry : safeAiPackages(index)) {
-            AiPackageFile packageFile = readAiPackageFile(repository, entry.packagePath());
-            packages.add(toAiPackageDescriptor(repository, packageFile, entry.packagePath()));
+        List<CapabilityPackageDescriptor> packages = new ArrayList<>();
+        for (CapabilityPackageIndexEntry entry : safeCapabilityPackages(index)) {
+            CapabilityPackageManifestFile manifest = readCapabilityPackageManifest(repository, entry.path());
+            packages.add(toCapabilityPackageDescriptor(repository, manifest, entry.path()));
         }
         return packages.stream()
-                .sorted(Comparator.comparing(RepositoryAiPackageDescriptor::installationId))
+                .sorted(Comparator.comparing(CapabilityPackageDescriptor::installationId))
                 .toList();
     }
 
@@ -386,23 +392,36 @@ public class RepositoryCatalogService {
         return new RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
     }
 
-    public RepositoryAiPackageDetail getRepositoryAiPackage(String repositoryId, String packageId) {
+    public CapabilityPackageDetail getCapabilityPackage(String repositoryId, String packageId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryIndexFile index = readRepositoryIndex(repository);
-        RepositoryAiPackageIndexEntry entry = safeAiPackages(index).stream()
+        CapabilityPackageIndexEntry entry = safeCapabilityPackages(index).stream()
                 .filter(item -> packageId.equals(item.id()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("仓库 AI 能力包不存在: " + packageId));
-        AiPackageFile packageFile = readAiPackageFile(repository, entry.packagePath());
+                .orElseThrow(() -> new IllegalArgumentException("仓库能力包不存在: " + packageId));
+        CapabilityPackageManifestFile manifest = readCapabilityPackageManifest(repository, entry.path());
+        CapabilityPackageReleaseFile release = readCapabilityPackageRelease(repository, manifest.latestReleasePath());
         List<ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
-                aiPackageDirectoryPath(entry.packagePath()).resolveNullable(packageFile.configTemplatePath()),
+                capabilityPackageDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.configTemplatePath()),
                 ConfigTemplateItem.class
         );
-        return new RepositoryAiPackageDetail(
-                toAiPackageDescriptor(repository, packageFile, entry.packagePath()),
+        List<ScheduleTemplateItem> scheduleTemplate = readOptionalFile(
+                repository,
+                capabilityPackageDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.scheduleTemplatePath()),
+                ScheduleTemplateItem.class
+        );
+        List<CapabilityPackagePresetTemplate> presetTemplate = readOptionalFile(
+                repository,
+                capabilityPackageDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.presetTemplatePath()),
+                CapabilityPackagePresetTemplate.class
+        );
+        return new CapabilityPackageDetail(
+                toCapabilityPackageDescriptor(repository, manifest, entry.path()),
                 configTemplate,
-                packageFile
+                scheduleTemplate,
+                presetTemplate,
+                release
         );
     }
 
@@ -678,47 +697,50 @@ public class RepositoryCatalogService {
         );
     }
 
-    public RepositoryAiPackagePublishPreview previewPublishAiPackage(String repositoryId,
-                                                                     RepositoryAiPackagePublishPreviewRequest request) {
+    public CapabilityPackagePublishPreview previewCapabilityPackage(String repositoryId,
+                                                                    CapabilityPackagePublishPreviewRequest request) {
         RepositoryDefinition repository = getRepository(repositoryId);
-        AiPackageBundle bundle = buildAiPackageBundle(
-                repository,
-                normalize(request == null ? null : request.agentProfileId(), "agentProfileId 不能为空"),
-                normalize(request == null ? null : request.packageId(), "packageId 不能为空")
-        );
-        return new RepositoryAiPackagePublishPreview(
-                bundle.entryAgentId(),
-                bundle.models().keySet().stream().sorted().toList(),
-                bundle.toolsets().keySet().stream().sorted().toList(),
-                bundle.agents().keySet().stream().sorted().toList(),
-                bundle.scripts().keySet().stream().sorted().toList(),
-                buildAiPackageConfigTemplate(bundle),
-                bundle.externalDependencies().values().stream().toList()
-        );
+        CapabilityPackageDraft draft = buildCapabilityPackageDraft(repository, request);
+        return buildCapabilityPackagePublishPreview(repository, draft);
     }
 
     public RepositoryToolDescriptor publishTool(String repositoryId, RepositoryPublishRequest request) {
         return toolRepositoryPublisher.publish(repositoryId, request);
     }
 
-    public RepositoryAiPackageDescriptor publishAiPackage(String repositoryId, RepositoryAiPackagePublishRequest request) {
-        return aiPackageRepositoryPublisher.publish(repositoryId, request);
+    public CapabilityPackageDescriptor publishCapabilityPackage(String repositoryId, CapabilityPackagePublishRequest request) {
+        WritableRepositorySession session = openWritableRepositorySession(repositoryId);
+        RepositoryDefinition repository = session.repository();
+        CapabilityPackageDraft draft = buildCapabilityPackageDraft(repository, request);
+        CapabilityPackagePublishPreview preview = buildCapabilityPackagePublishPreview(repository, draft);
+        if (preview.checks().stream().anyMatch(item -> "BLOCKER".equals(item.severity()))) {
+            throw new IllegalArgumentException("能力包存在阻断项，不能发布");
+        }
+        assertCapabilityPackageVersionAvailable(repositoryId, session.index(), draft.packageId(), draft.version());
+        Path packageRoot = session.root().resolve(CAPABILITY_PACKAGES_DIR).resolve(draft.packageId());
+        writeCapabilityPackageFiles(packageRoot, draft, preview);
+        updateCapabilityPackageIndex(session.root(), repository, draft, preview);
+        session.commitPublishedAsset(draft.packageId(), draft.version(), draft.releaseNotes());
+        return getCapabilityPackage(repositoryId, draft.packageId()).descriptor();
     }
 
-    public RepositoryAiPackageInstallResult installAiPackage(String repositoryId, String packageId) {
-        return installOrUpdateAiPackage(repositoryId, packageId, false, new LinkedHashSet<>());
+    public CapabilityPackageInstallResult installCapabilityPackage(String repositoryId, String packageId) {
+        return installOrUpdateCapabilityPackage(repositoryId, packageId, false, new LinkedHashSet<>());
     }
 
-    public RepositoryAiPackageInstallResult updateAiPackage(String repositoryId, String packageId) {
-        return installOrUpdateAiPackage(repositoryId, packageId, true, new LinkedHashSet<>());
+    public CapabilityPackageInstallResult updateCapabilityPackage(String repositoryId, String packageId) {
+        return installOrUpdateCapabilityPackage(repositoryId, packageId, true, new LinkedHashSet<>());
     }
 
-    public void uninstallAiPackage(String repositoryId, String packageId) {
-        RepositoryAiPackageInstallation installation = repositoryAiPackageInstallationRepository
-                .findByInstallationId(aiPackageInstallationId(repositoryId, packageId))
-                .orElseThrow(() -> new IllegalArgumentException("AI 能力包尚未安装: " + packageId));
-        uninstallManagedAiPackageAssets(installation);
-        repositoryAiPackageInstallationRepository.deleteByInstallationId(installation.getInstallationId());
+    public void uninstallCapabilityPackage(String repositoryId, String packageId) {
+        CapabilityPackageInstallation installation = capabilityPackageInstallationRepository
+                .findByInstallationId(capabilityPackageInstallationId(repositoryId, packageId))
+                .orElseThrow(() -> new IllegalArgumentException("能力包尚未安装: " + packageId));
+        uninstallManagedCapabilityPackageAssets(installation);
+        for (String presetId : installation.getPresetIds()) {
+            executionPresetRepository.deleteById(presetId);
+        }
+        capabilityPackageInstallationRepository.deleteByInstallationId(installation.getInstallationId());
         removeManagedConfigTemplates(repositoryId, packageId);
     }
 
@@ -836,32 +858,32 @@ public class RepositoryCatalogService {
         }
     }
 
-    private RepositoryAiPackageInstallResult installOrUpdateAiPackage(String repositoryId,
-                                                                      String packageId,
-                                                                      boolean updateOnly,
-                                                                      LinkedHashSet<String> visiting) {
-        String installationId = aiPackageInstallationId(repositoryId, packageId);
+    private CapabilityPackageInstallResult installOrUpdateCapabilityPackage(String repositoryId,
+                                                                            String packageId,
+                                                                            boolean updateOnly,
+                                                                            LinkedHashSet<String> visiting) {
+        String installationId = capabilityPackageInstallationId(repositoryId, packageId);
         if (!visiting.add(installationId)) {
-            throw new IllegalStateException("检测到 AI 能力包循环依赖: " + String.join(" -> ", visiting) + " -> " + installationId);
+            throw new IllegalStateException("检测到能力包循环依赖: " + String.join(" -> ", visiting) + " -> " + installationId);
         }
         try {
-            RepositoryAiPackageDetail detail = getRepositoryAiPackage(repositoryId, packageId);
-            RepositoryAiPackageInstallation existing = repositoryAiPackageInstallationRepository
+            CapabilityPackageDetail detail = getCapabilityPackage(repositoryId, packageId);
+            CapabilityPackageInstallation existing = capabilityPackageInstallationRepository
                     .findByInstallationId(installationId)
                     .orElse(null);
             if (updateOnly && existing == null) {
-                throw new IllegalArgumentException("AI 能力包尚未安装: " + packageId);
+                throw new IllegalArgumentException("能力包尚未安装: " + packageId);
             }
 
-            for (RepositoryAiPackageDependency dependency : detail.packageFile().externalDependencies() == null
+            for (RepositoryAiPackageDependency dependency : detail.releaseFile().externalDependencies() == null
                     ? List.<RepositoryAiPackageDependency>of()
-                    : detail.packageFile().externalDependencies()) {
+                    : detail.releaseFile().externalDependencies()) {
                 if ("AI_PACKAGE".equalsIgnoreCase(dependency.assetType())) {
-                    String dependencyInstallationId = aiPackageInstallationId(dependency.repositoryId(), dependency.assetId());
-                    if (repositoryAiPackageInstallationRepository.findByInstallationId(dependencyInstallationId).isPresent()) {
-                        installOrUpdateAiPackage(dependency.repositoryId(), dependency.assetId(), true, visiting);
+                    String dependencyInstallationId = capabilityPackageInstallationId(dependency.repositoryId(), dependency.assetId());
+                    if (capabilityPackageInstallationRepository.findByInstallationId(dependencyInstallationId).isPresent()) {
+                        installOrUpdateCapabilityPackage(dependency.repositoryId(), dependency.assetId(), true, visiting);
                     } else {
-                        installOrUpdateAiPackage(dependency.repositoryId(), dependency.assetId(), false, visiting);
+                        installOrUpdateCapabilityPackage(dependency.repositoryId(), dependency.assetId(), false, visiting);
                     }
                     continue;
                 }
@@ -874,38 +896,57 @@ public class RepositoryCatalogService {
                     }
                     continue;
                 }
-                throw new IllegalArgumentException("不支持的 AI 能力包依赖类型: " + dependency.assetType());
+                if ("PLUGIN".equalsIgnoreCase(dependency.assetType())) {
+                    PluginRegistration registration = null;
+                    try {
+                        registration = pluginRuntimeService.getRegistration(dependency.assetId());
+                    } catch (RuntimeException ignored) {
+                    }
+                    if (registration == null) {
+                        if (dependency.repositoryId() == null || dependency.repositoryId().isBlank()) {
+                            throw new IllegalArgumentException("缺少插件仓库来源，且本地未安装插件: " + dependency.assetId());
+                        }
+                        installPlugin(dependency.repositoryId(), dependency.assetId(), false);
+                    } else if (dependency.repositoryId() != null
+                            && !dependency.repositoryId().isBlank()
+                            && (!Objects.equals(registration.getRepositoryId(), dependency.repositoryId())
+                            || !Objects.equals(registration.getRepositoryPluginId(), dependency.assetId()))) {
+                        installPlugin(dependency.repositoryId(), dependency.assetId(), false);
+                    }
+                    continue;
+                }
+                throw new IllegalArgumentException("不支持的能力包依赖类型: " + dependency.assetType());
             }
 
             if (existing != null) {
-                uninstallManagedAiPackageAssets(existing);
+                uninstallManagedCapabilityPackageAssets(existing);
+                for (String presetId : existing.getPresetIds()) {
+                    executionPresetRepository.deleteById(presetId);
+                }
                 removeManagedConfigTemplates(existing.getRepositoryId(), existing.getPackageId());
             }
 
-            String entryAgentRuntimeId = aiPackageEntryAgentRuntimeId(repositoryId, packageId);
+            CapabilityPackageReleaseFile release = detail.releaseFile();
             Map<String, String> modelIdMappings = new LinkedHashMap<>();
             Map<String, String> toolsetIdMappings = new LinkedHashMap<>();
             Map<String, String> agentIdMappings = new LinkedHashMap<>();
             Map<String, String> scriptIdMappings = new LinkedHashMap<>();
-            AiPackageFile packageFile = detail.packageFile();
-            for (AiPackageModelFile model : safeModels(packageFile)) {
+            for (AiPackageModelFile model : safeModels(release)) {
                 modelIdMappings.put(model.id(), aiPackageInternalId(repositoryId, packageId, "model", model.id()));
             }
-            for (AiPackageToolsetFile toolset : safeToolsets(packageFile)) {
+            for (AiPackageToolsetFile toolset : safeToolsets(release)) {
                 toolsetIdMappings.put(toolset.id(), aiPackageInternalId(repositoryId, packageId, "toolset", toolset.id()));
             }
-            for (AiPackageAgentFile agent : safeAgents(packageFile)) {
-                agentIdMappings.put(agent.id(), Objects.equals(agent.id(), packageFile.entryAgentId())
-                        ? entryAgentRuntimeId
-                        : aiPackageInternalId(repositoryId, packageId, "agent", agent.id()));
+            for (AiPackageAgentFile agent : safeAgents(release)) {
+                agentIdMappings.put(agent.id(), aiPackageInternalId(repositoryId, packageId, "agent", agent.id()));
             }
-            for (AiPackageScriptFile script : safeScripts(packageFile)) {
+            for (AiPackageScriptFile script : safeScripts(release)) {
                 scriptIdMappings.put(script.id(), aiPackageInternalId(repositoryId, packageId, "script", script.id()));
             }
 
             LocalDateTime now = LocalDateTime.now();
             List<String> installedModelIds = new ArrayList<>();
-            for (AiPackageModelFile model : safeModels(packageFile)) {
+            for (AiPackageModelFile model : safeModels(release)) {
                 AiModelProfile profile = new AiModelProfile()
                         .setId(modelIdMappings.get(model.id()))
                         .setName(model.name())
@@ -925,7 +966,7 @@ public class RepositoryCatalogService {
             }
 
             List<String> installedToolsetIds = new ArrayList<>();
-            for (AiPackageToolsetFile toolset : safeToolsets(packageFile)) {
+            for (AiPackageToolsetFile toolset : safeToolsets(release)) {
                 List<String> toolNames = toolset.toolNames() == null ? List.of() : toolset.toolNames().stream()
                         .map(toolName -> rewriteToolName(toolName, agentIdMappings, scriptIdMappings))
                         .toList();
@@ -946,19 +987,15 @@ public class RepositoryCatalogService {
             }
 
             List<String> installedScriptIds = new ArrayList<>();
-            for (AiPackageScriptFile script : safeScripts(packageFile)) {
+            for (AiPackageScriptFile script : safeScripts(release)) {
                 String runtimeScriptId = scriptIdMappings.get(script.id());
                 ScriptDefinition definition = new ScriptDefinition()
                         .setId(runtimeScriptId)
                         .setName(script.name())
                         .setType(script.type() == null ? ScriptType.GROOVY : ScriptType.valueOf(script.type()))
                         .setPackaging(script.packaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(script.packaging()))
-                        .setSource(rewriteScriptSource(
-                                script.source(),
-                                scriptIdMappings,
-                                modelIdMappings,
-                                agentIdMappings
-                        ))
+                        .setSource(rewriteScriptSource(script.source(), scriptIdMappings, modelIdMappings, agentIdMappings))
+                        .setPythonRequirements(script.pythonRequirements())
                         .setInputSchema(script.inputSchema() == null ? Map.of() : script.inputSchema())
                         .setOutputSchema(script.outputSchema() == null ? Map.of() : script.outputSchema())
                         .setStatus(ScriptStatus.PUBLISHED)
@@ -967,6 +1004,7 @@ public class RepositoryCatalogService {
                                 .setType(script.type() == null ? ScriptType.GROOVY : ScriptType.valueOf(script.type()))
                                 .setPackaging(script.packaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(script.packaging()))
                                 .setSource(rewriteScriptSource(script.source(), scriptIdMappings, modelIdMappings, agentIdMappings))
+                                .setPythonRequirements(script.pythonRequirements())
                                 .setInputSchema(script.inputSchema() == null ? Map.of() : script.inputSchema())
                                 .setOutputSchema(script.outputSchema() == null ? Map.of() : script.outputSchema())
                                 .setAiDependencies(rewriteAiDependencies(script.aiDependencies(), modelIdMappings, agentIdMappings)))
@@ -983,7 +1021,7 @@ public class RepositoryCatalogService {
             }
 
             List<String> installedAgentIds = new ArrayList<>();
-            for (AiPackageAgentFile agent : safeAgents(packageFile)) {
+            for (AiPackageAgentFile agent : safeAgents(release)) {
                 String runtimeAgentId = agentIdMappings.get(agent.id());
                 AiAgentProfile profile = new AiAgentProfile()
                         .setId(runtimeAgentId)
@@ -1007,26 +1045,75 @@ public class RepositoryCatalogService {
                 installedAgentIds.add(runtimeAgentId);
             }
 
+            List<String> installedScheduleIds = new ArrayList<>();
+            for (ScheduleTemplateItem template : detail.scheduleTemplate()) {
+                String runtimeScriptId = scriptIdMappings.get(template.scriptId());
+                if (runtimeScriptId == null) {
+                    continue;
+                }
+                ScriptSchedule schedule = new ScriptSchedule()
+                        .setId(UUID.randomUUID().toString())
+                        .setScriptId(runtimeScriptId)
+                        .setName(template.name())
+                        .setCronExpression(template.cronExpression())
+                        .setInput(template.input() == null ? Map.of() : template.input())
+                        .setEnabled(template.enabledByDefault())
+                        .setEditable(false)
+                        .setRepositoryId(repositoryId)
+                        .setRepositoryToolId(runtimeScriptId)
+                        .setRepositoryPackageId(packageId)
+                        .setRepositoryVersion(detail.descriptor().version())
+                        .setCreatedAt(now)
+                        .setUpdatedAt(now);
+                scriptScheduleRepository.save(schedule);
+                installedScheduleIds.add(schedule.getId());
+            }
+
+            List<String> installedPresetIds = new ArrayList<>();
+            for (CapabilityPackagePresetTemplate template : detail.presetTemplate()) {
+                String runtimeScriptId = scriptIdMappings.get(template.scriptId());
+                if (runtimeScriptId == null) {
+                    continue;
+                }
+                ExecutionPreset preset = new ExecutionPreset()
+                        .setId(UUID.randomUUID().toString())
+                        .setScriptId(runtimeScriptId)
+                        .setName(template.name())
+                        .setInput(template.input() == null ? Map.of() : template.input())
+                        .setManaged(true)
+                        .setEditable(false)
+                        .setRepositoryId(repositoryId)
+                        .setRepositoryPackageId(packageId)
+                        .setRepositoryVersion(detail.descriptor().version())
+                        .setCreatedAt(now)
+                        .setUpdatedAt(now);
+                executionPresetRepository.save(preset);
+                installedPresetIds.add(preset.getId());
+            }
+
             syncConfigTemplates(repositoryId, packageId, detail.descriptor().version(), detail.configTemplate());
-            RepositoryAiPackageInstallation installation = new RepositoryAiPackageInstallation()
+            String runtimeEntryId = resolveCapabilityPackageRuntimeEntry(detail.releaseFile().entries(), agentIdMappings, scriptIdMappings);
+            CapabilityPackageInstallation installation = new CapabilityPackageInstallation()
                     .setInstallationId(installationId)
                     .setRepositoryId(repositoryId)
                     .setPackageId(packageId)
                     .setName(detail.descriptor().displayName())
                     .setVersion(detail.descriptor().version())
                     .setLatestVersion(detail.descriptor().version())
-                    .setEntryAgentId(entryAgentRuntimeId)
+                    .setEntryAgentId(runtimeEntryId)
                     .setOwner(detail.descriptor().owner())
                     .setDescription(detail.descriptor().description())
                     .setModelIds(installedModelIds)
                     .setToolsetIds(installedToolsetIds)
                     .setAgentIds(installedAgentIds)
                     .setScriptIds(installedScriptIds)
+                    .setScheduleIds(installedScheduleIds)
+                    .setPresetIds(installedPresetIds)
                     .setInstalledAt(existing == null ? now : Optional.ofNullable(existing.getInstalledAt()).orElse(now))
                     .setUpdatedAt(now);
-            return new RepositoryAiPackageInstallResult(
-                    repositoryAiPackageInstallationRepository.save(installation),
-                    detail.packageFile().externalDependencies() == null ? List.of() : detail.packageFile().externalDependencies()
+            return new CapabilityPackageInstallResult(
+                    capabilityPackageInstallationRepository.save(installation),
+                    release.externalDependencies() == null ? List.of() : release.externalDependencies()
             );
         } finally {
             visiting.remove(installationId);
@@ -1048,7 +1135,7 @@ public class RepositoryCatalogService {
         if (builder.hasAgent(agentId) || builder.isExternalAgent(agentId)) {
             return;
         }
-        RepositoryAiPackageInstallation packageInstallation = repositoryAiPackageInstallationRepository
+        CapabilityPackageInstallation packageInstallation = capabilityPackageInstallationRepository
                 .findByEntryAgentId(agentId)
                 .orElse(null);
         if (packageInstallation != null) {
@@ -1148,6 +1235,9 @@ public class RepositoryCatalogService {
         PublishedScriptSnapshot snapshot = published.getPublishedSnapshot();
         String source = snapshot == null ? published.getSource() : snapshot.getSource();
         builder.addScript(published.getId(), toAiPackageScriptFile(published));
+        for (PluginDependency dependency : published.getPluginDependencies() == null ? List.<PluginDependency>of() : published.getPluginDependencies()) {
+            collectPluginDependency(builder, dependency);
+        }
         for (String nestedScriptId : extractScriptDependenciesFromSource(source)) {
             collectScriptDependency(repository, builder, nestedScriptId);
         }
@@ -1159,6 +1249,34 @@ public class RepositoryCatalogService {
                 collectAgentDependency(repository, builder, dependency.getAgentProfile(), false);
             }
         }
+    }
+
+    private void collectPluginDependency(AiPackageBundleBuilder builder, PluginDependency dependency) {
+        if (dependency == null || dependency.getPluginId() == null || dependency.getPluginId().isBlank()) {
+            return;
+        }
+        PluginRegistration registration = null;
+        try {
+            registration = pluginRuntimeService.getRegistration(dependency.getPluginId());
+        } catch (RuntimeException ignored) {
+        }
+        String repositoryId = registration == null ? null : normalizeNullable(registration.getRepositoryId());
+        String assetId = registration == null
+                ? dependency.getPluginId()
+                : normalizeOrDefault(registration.getRepositoryPluginId(), dependency.getPluginId());
+        String version = normalizeNullable(registration == null ? null : registration.getRepositoryVersion());
+        if (version == null) {
+            version = normalizeNullable(dependency.getVersionRange());
+        }
+        if (version == null && registration != null) {
+            version = normalizeNullable(registration.getVersion());
+        }
+        builder.addExternalDependency(new RepositoryAiPackageDependency(
+                "PLUGIN",
+                repositoryId == null ? "" : repositoryId,
+                assetId,
+                version == null ? "" : version
+        ));
     }
 
     List<ConfigTemplateItem> buildAiPackageConfigTemplate(AiPackageBundle bundle) {
@@ -1196,56 +1314,393 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
-    void writeAiPackageFiles(Path packageDir,
-                             AiPackageBundle bundle,
-                             RepositoryAiPackagePublishRequest request,
-                             List<ConfigTemplateItem> configTemplates) {
-        try {
-            Files.createDirectories(packageDir);
-            if (!configTemplates.isEmpty()) {
-                writeJson(packageDir.resolve("config.template.json"), configTemplates);
+    private CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
+                                                               CapabilityPackagePublishPreviewRequest request) {
+        return buildCapabilityPackageDraft(
+                repository,
+                request == null ? null : request.packageId(),
+                request == null ? null : request.displayName(),
+                request == null ? null : request.version(),
+                request == null ? null : request.owner(),
+                request == null ? null : request.description(),
+                request == null ? null : request.releaseNotes(),
+                request == null ? null : request.tags(),
+                request == null ? null : request.riskLevel(),
+                request == null ? null : request.source(),
+                request == null ? null : request.primaryEntry(),
+                request == null ? null : request.scriptIds(),
+                request == null ? null : request.agentIds(),
+                request == null ? null : request.modelIds(),
+                request == null ? null : request.toolsetIds()
+        );
+    }
+
+    private CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
+                                                               CapabilityPackagePublishRequest request) {
+        return buildCapabilityPackageDraft(
+                repository,
+                request == null ? null : request.packageId(),
+                request == null ? null : request.displayName(),
+                request == null ? null : request.version(),
+                request == null ? null : request.owner(),
+                request == null ? null : request.description(),
+                request == null ? null : request.releaseNotes(),
+                request == null ? null : request.tags(),
+                request == null ? null : request.riskLevel(),
+                request == null ? null : request.source(),
+                request == null ? null : request.primaryEntry(),
+                request == null ? null : request.scriptIds(),
+                request == null ? null : request.agentIds(),
+                request == null ? null : request.modelIds(),
+                request == null ? null : request.toolsetIds()
+        );
+    }
+
+    private CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
+                                                               String packageIdValue,
+                                                               String displayNameValue,
+                                                               String versionValue,
+                                                               String owner,
+                                                               String descriptionValue,
+                                                               String releaseNotes,
+                                                               List<String> tags,
+                                                               String riskLevel,
+                                                               CapabilityPackageSource source,
+                                                               CapabilityPackageEntrySelection primaryEntry,
+                                                               List<String> scriptIds,
+                                                               List<String> agentIds,
+                                                               List<String> modelIds,
+                                                               List<String> toolsetIds) {
+        String packageId = normalize(packageIdValue, "packageId 不能为空");
+        String version = normalize(versionValue, "version 不能为空");
+        CapabilityPackageSource sourceType = source == null ? CapabilityPackageSource.MANUAL : source;
+        CapabilityPackageEntrySelection entry = primaryEntry;
+        if (entry == null) {
+            throw new IllegalArgumentException("primaryEntry 不能为空");
+        }
+        String entryType = normalize(entry.type(), "entry.type 不能为空").toUpperCase(Locale.ROOT);
+        String entryTargetId = normalize(entry.targetId(), "entry.targetId 不能为空");
+        String builderEntryAgentId = "AGENT".equals(entryType) ? entryTargetId : packageId + ".entry";
+        AiPackageBundleBuilder builder = new AiPackageBundleBuilder(repository, packageId, builderEntryAgentId);
+
+        if ("AGENT".equals(entryType)) {
+            collectAgentDependency(repository, builder, entryTargetId, true);
+        } else if ("SCRIPT".equals(entryType)) {
+            collectScriptDependency(repository, builder, entryTargetId);
+        } else {
+            throw new IllegalArgumentException("当前仅支持 AGENT / SCRIPT 入口");
+        }
+        for (String scriptId : scriptIds == null ? List.<String>of() : scriptIds) {
+            collectScriptDependency(repository, builder, normalize(scriptId, "scriptId 不能为空"));
+        }
+        for (String agentId : agentIds == null ? List.<String>of() : agentIds) {
+            collectAgentDependency(repository, builder, normalize(agentId, "agentId 不能为空"), false);
+        }
+        for (String modelId : modelIds == null ? List.<String>of() : modelIds) {
+            collectModelDependency(builder, normalize(modelId, "modelId 不能为空"));
+        }
+        for (String toolsetId : toolsetIds == null ? List.<String>of() : toolsetIds) {
+            collectToolsetDependency(repository, builder, normalize(toolsetId, "toolsetId 不能为空"));
+        }
+
+        AiPackageBundle bundle = builder.build();
+        List<ConfigTemplateItem> configTemplate = buildAiPackageConfigTemplate(bundle);
+        List<ScheduleTemplateItem> scheduleTemplate = buildCapabilityPackageScheduleTemplate(bundle);
+        List<CapabilityPackagePresetTemplate> presetTemplate = buildCapabilityPackagePresetTemplate(bundle);
+        List<CapabilityPackageEntryFile> entries = buildCapabilityPackageEntries(entry, bundle, scriptIds, agentIds);
+        String displayName = normalizeOrDefault(displayNameValue, resolveCapabilityPackageDisplayName(entry, bundle));
+        String description = normalizeNullable(descriptionValue == null ? resolveCapabilityPackageDescription(entry, bundle) : descriptionValue);
+        return new CapabilityPackageDraft(
+                packageId,
+                displayName,
+                version,
+                normalizeNullable(owner),
+                description,
+                normalizeNullable(releaseNotes),
+                tags == null ? List.of() : tags.stream().map(this::normalizeNullable).filter(Objects::nonNull).distinct().toList(),
+                normalizeNullable(riskLevel),
+                sourceType,
+                entries,
+                bundle,
+                configTemplate,
+                scheduleTemplate,
+                presetTemplate
+        );
+    }
+
+    private List<CapabilityPackageEntryFile> buildCapabilityPackageEntries(CapabilityPackageEntrySelection primaryEntry,
+                                                                           AiPackageBundle bundle,
+                                                                           List<String> scriptIds,
+                                                                           List<String> agentIds) {
+        LinkedHashMap<String, CapabilityPackageEntryFile> entries = new LinkedHashMap<>();
+        addCapabilityPackageEntry(entries, primaryEntry);
+        for (String scriptId : scriptIds == null ? List.<String>of() : scriptIds) {
+            ScriptDefinition script = scriptRepository.findById(scriptId).orElse(null);
+            if (script != null) {
+                entries.putIfAbsent("SCRIPT:" + scriptId, new CapabilityPackageEntryFile(
+                        "SCRIPT",
+                        scriptId,
+                        script.getName(),
+                        "script:" + scriptId
+                ));
             }
-            writeJson(packageDir.resolve(AI_PACKAGE_FILE_NAME), new AiPackageFile(
+        }
+        for (String agentId : agentIds == null ? List.<String>of() : agentIds) {
+            AiAgentProfile agent = aiAgentProfileRepository.findById(agentId).orElse(null);
+            if (agent != null) {
+                entries.putIfAbsent("AGENT:" + agentId, new CapabilityPackageEntryFile(
+                        "AGENT",
+                        agentId,
+                        agent.getName(),
+                        "agent:" + agentId
+                ));
+            }
+        }
+        if (entries.isEmpty()) {
+            if (!bundle.agents().isEmpty()) {
+                AiPackageAgentFile agent = bundle.agents().values().iterator().next();
+                entries.put("AGENT:" + agent.id(), new CapabilityPackageEntryFile("AGENT", agent.id(), agent.name(), "agent:" + agent.id()));
+            } else if (!bundle.scripts().isEmpty()) {
+                AiPackageScriptFile script = bundle.scripts().values().iterator().next();
+                entries.put("SCRIPT:" + script.id(), new CapabilityPackageEntryFile("SCRIPT", script.id(), script.name(), "script:" + script.id()));
+            }
+        }
+        return new ArrayList<>(entries.values());
+    }
+
+    private void addCapabilityPackageEntry(Map<String, CapabilityPackageEntryFile> entries,
+                                           CapabilityPackageEntrySelection selection) {
+        if (selection == null) {
+            return;
+        }
+        String type = normalize(selection.type(), "entry.type 不能为空").toUpperCase(Locale.ROOT);
+        String targetId = normalize(selection.targetId(), "entry.targetId 不能为空");
+        String displayName = normalizeNullable(selection.displayName());
+        if ("AGENT".equals(type)) {
+            AiAgentProfile agent = aiAgentProfileRepository.findById(targetId)
+                    .orElseThrow(() -> new IllegalArgumentException("AI Agent Profile 不存在: " + targetId));
+            entries.put(type + ":" + targetId, new CapabilityPackageEntryFile(type, targetId, normalizeOrDefault(displayName, agent.getName()), "agent:" + targetId));
+            return;
+        }
+        if ("SCRIPT".equals(type)) {
+            ScriptDefinition script = scriptRepository.findById(targetId)
+                    .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + targetId));
+            entries.put(type + ":" + targetId, new CapabilityPackageEntryFile(type, targetId, normalizeOrDefault(displayName, script.getName()), "script:" + targetId));
+            return;
+        }
+        throw new IllegalArgumentException("当前仅支持 AGENT / SCRIPT 入口");
+    }
+
+    private String resolveCapabilityPackageDisplayName(CapabilityPackageEntrySelection entry, AiPackageBundle bundle) {
+        if (entry != null && entry.displayName() != null && !entry.displayName().isBlank()) {
+            return entry.displayName().trim();
+        }
+        if (entry != null && "AGENT".equalsIgnoreCase(entry.type())) {
+            return normalizeOrDefault(bundle.entryAgentName(), entry.targetId());
+        }
+        if (entry != null && "SCRIPT".equalsIgnoreCase(entry.type())) {
+            ScriptDefinition script = scriptRepository.findById(entry.targetId()).orElse(null);
+            if (script != null) {
+                return script.getName();
+            }
+        }
+        return normalizeOrDefault(bundle.entryAgentName(), "Capability Package");
+    }
+
+    private String resolveCapabilityPackageDescription(CapabilityPackageEntrySelection entry, AiPackageBundle bundle) {
+        if (entry != null && "AGENT".equalsIgnoreCase(entry.type())) {
+            return normalizeNullable(bundle.entryAgentDescription());
+        }
+        if (entry != null && "SCRIPT".equalsIgnoreCase(entry.type())) {
+            ScriptDefinition script = scriptRepository.findById(entry.targetId()).orElse(null);
+            return script == null ? null : normalizeNullable(script.getDescription());
+        }
+        return normalizeNullable(bundle.entryAgentDescription());
+    }
+
+    private List<ScheduleTemplateItem> buildCapabilityPackageScheduleTemplate(AiPackageBundle bundle) {
+        List<ScheduleTemplateItem> templates = new ArrayList<>();
+        for (String scriptId : bundle.scripts().keySet()) {
+            for (ScriptSchedule schedule : scriptScheduleRepository.findByScriptId(scriptId)) {
+                templates.add(new ScheduleTemplateItem(
+                        schedule.getId(),
+                        schedule.getScriptId(),
+                        schedule.getName(),
+                        schedule.getCronExpression(),
+                        schedule.getInput(),
+                        schedule.isEnabled()
+                ));
+            }
+        }
+        return templates.stream()
+                .sorted(Comparator.comparing(ScheduleTemplateItem::name))
+                .toList();
+    }
+
+    private List<CapabilityPackagePresetTemplate> buildCapabilityPackagePresetTemplate(AiPackageBundle bundle) {
+        List<CapabilityPackagePresetTemplate> templates = new ArrayList<>();
+        for (String scriptId : bundle.scripts().keySet()) {
+            for (ExecutionPreset preset : executionPresetRepository.findByScriptId(scriptId)) {
+                templates.add(new CapabilityPackagePresetTemplate(
+                        preset.getId(),
+                        scriptId,
+                        preset.getName(),
+                        preset.getInput()
+                ));
+            }
+        }
+        return templates.stream()
+                .sorted(Comparator.comparing(CapabilityPackagePresetTemplate::name))
+                .toList();
+    }
+
+    private CapabilityPackagePublishPreview buildCapabilityPackagePublishPreview(RepositoryDefinition repository,
+                                                                                CapabilityPackageDraft draft) {
+        CapabilityPackageDetail currentPackage = null;
+        try {
+            currentPackage = getCapabilityPackage(repository.getId(), draft.packageId());
+        } catch (IllegalArgumentException ignored) {
+        }
+        List<CapabilityPackageCheck> checks = new ArrayList<>();
+        if (draft.entries().isEmpty()) {
+            checks.add(new CapabilityPackageCheck("BLOCKER", "ENTRY_MISSING", "缺少主入口"));
+        }
+        if (draft.releaseNotes() == null || draft.releaseNotes().isBlank()) {
+            checks.add(new CapabilityPackageCheck("WARNING", "RELEASE_NOTES_EMPTY", "未填写 release notes"));
+        }
+        for (RepositoryAiPackageDependency dependency : draft.bundle().externalDependencies().values()) {
+            if ((dependency.version() == null || dependency.version().isBlank())
+                    && !"AI_PACKAGE".equalsIgnoreCase(dependency.assetType())) {
+                checks.add(new CapabilityPackageCheck("BLOCKER", "DEPENDENCY_VERSION_MISSING", "存在未声明版本的外部依赖: " + dependency.assetId()));
+            } else if ("PLUGIN".equalsIgnoreCase(dependency.assetType())
+                    && (dependency.repositoryId() == null || dependency.repositoryId().isBlank())) {
+                checks.add(new CapabilityPackageCheck("WARNING", "PLUGIN_EXTERNAL_ONLY", "插件依赖缺少仓库来源，安装时需要本地已存在: " + dependency.assetId()));
+            }
+        }
+        checks.add(new CapabilityPackageCheck("INFO", "ASSET_SUMMARY",
+                "包含 " + draft.bundle().scripts().size() + " 个脚本 / " + draft.bundle().agents().size() + " 个 Agent / "
+                        + draft.bundle().toolsets().size() + " 个工具集 / " + draft.bundle().models().size() + " 个模型"));
+
+        List<String> currentEntryKeys = currentPackage == null
+                ? List.of()
+                : currentPackage.releaseFile().entries().stream().map(item -> item.type() + ":" + item.id()).toList();
+        List<String> nextEntryKeys = draft.entries().stream().map(item -> item.type() + ":" + item.id()).toList();
+        List<String> addedEntries = nextEntryKeys.stream().filter(item -> !currentEntryKeys.contains(item)).toList();
+        List<String> removedEntries = currentEntryKeys.stream().filter(item -> !nextEntryKeys.contains(item)).toList();
+        List<String> changedAssets = new ArrayList<>();
+        if (currentPackage == null || !Objects.equals(currentPackage.releaseFile().scripts().stream().map(AiPackageScriptFile::id).sorted().toList(),
+                draft.bundle().scripts().keySet().stream().sorted().toList())) {
+            changedAssets.add("scripts");
+        }
+        if (currentPackage == null || !Objects.equals(currentPackage.releaseFile().agents().stream().map(AiPackageAgentFile::id).sorted().toList(),
+                draft.bundle().agents().keySet().stream().sorted().toList())) {
+            changedAssets.add("agents");
+        }
+        if (currentPackage == null || !Objects.equals(currentPackage.releaseFile().toolsets().stream().map(AiPackageToolsetFile::id).sorted().toList(),
+                draft.bundle().toolsets().keySet().stream().sorted().toList())) {
+            changedAssets.add("toolsets");
+        }
+        if (currentPackage == null || !Objects.equals(currentPackage.releaseFile().models().stream().map(AiPackageModelFile::id).sorted().toList(),
+                draft.bundle().models().keySet().stream().sorted().toList())) {
+            changedAssets.add("models");
+        }
+
+        return new CapabilityPackagePublishPreview(
+                draft.packageId(),
+                draft.version(),
+                draft.entries(),
+                draft.bundle().models().keySet().stream().sorted().toList(),
+                draft.bundle().toolsets().keySet().stream().sorted().toList(),
+                draft.bundle().agents().keySet().stream().sorted().toList(),
+                draft.bundle().scripts().keySet().stream().sorted().toList(),
+                draft.configTemplate(),
+                draft.scheduleTemplate(),
+                draft.presetTemplate(),
+                draft.bundle().externalDependencies().values().stream().toList(),
+                checks,
+                new CapabilityPackageDiffSummary(
+                        currentPackage == null ? "INITIAL" : "COMPARE",
+                        addedEntries,
+                        removedEntries,
+                        changedAssets
+                )
+        );
+    }
+
+    private void writeCapabilityPackageFiles(Path packageRoot,
+                                             CapabilityPackageDraft draft,
+                                             CapabilityPackagePublishPreview preview) {
+        try {
+            Path versionsDir = packageRoot.resolve("versions").resolve(draft.version());
+            Files.createDirectories(versionsDir);
+            if (!draft.configTemplate().isEmpty()) {
+                writeJson(versionsDir.resolve("config.template.json"), draft.configTemplate());
+            }
+            if (!draft.scheduleTemplate().isEmpty()) {
+                writeJson(versionsDir.resolve("schedules.template.json"), draft.scheduleTemplate());
+            }
+            if (!draft.presetTemplate().isEmpty()) {
+                writeJson(versionsDir.resolve("presets.template.json"), draft.presetTemplate());
+            }
+            String latestReleasePath = CAPABILITY_PACKAGES_DIR + "/" + draft.packageId() + "/versions/" + draft.version() + "/" + CAPABILITY_PACKAGE_RELEASE_FILE;
+            writeJson(versionsDir.resolve(CAPABILITY_PACKAGE_RELEASE_FILE), new CapabilityPackageReleaseFile(
                     1,
-                    normalize(request.packageId(), "packageId 不能为空"),
-                    normalizeOrDefault(request.displayName(), bundle.entryAgentName()),
-                    normalize(request.version(), "version 不能为空"),
-                    normalizeNullable(bundle.entryAgentDescription()),
-                    normalizeNullable(request.releaseNotes()),
-                    normalizeNullable(request.owner()),
-                    request.tags() == null ? List.of() : request.tags(),
-                    bundle.entryAgentId(),
-                    new ArrayList<>(bundle.models().values()),
-                    new ArrayList<>(bundle.toolsets().values()),
-                    new ArrayList<>(bundle.agents().values()),
-                    new ArrayList<>(bundle.scripts().values()),
-                    bundle.externalDependencies().values().stream().toList(),
-                    configTemplates.isEmpty() ? null : "config.template.json"
+                    draft.packageId(),
+                    draft.displayName(),
+                    draft.version(),
+                    draft.description(),
+                    draft.releaseNotes(),
+                    draft.owner(),
+                    draft.tags(),
+                    draft.riskLevel(),
+                    draft.source().name(),
+                    draft.entries(),
+                    new ArrayList<>(draft.bundle().models().values()),
+                    new ArrayList<>(draft.bundle().toolsets().values()),
+                    new ArrayList<>(draft.bundle().agents().values()),
+                    new ArrayList<>(draft.bundle().scripts().values()),
+                    draft.bundle().externalDependencies().values().stream().toList(),
+                    draft.configTemplate().isEmpty() ? null : "config.template.json",
+                    draft.scheduleTemplate().isEmpty() ? null : "schedules.template.json",
+                    draft.presetTemplate().isEmpty() ? null : "presets.template.json"
+            ));
+            writeJson(packageRoot.resolve(CAPABILITY_PACKAGE_MANIFEST_FILE), new CapabilityPackageManifestFile(
+                    1,
+                    draft.packageId(),
+                    draft.displayName(),
+                    draft.version(),
+                    draft.description(),
+                    draft.releaseNotes(),
+                    draft.owner(),
+                    draft.tags(),
+                    draft.riskLevel(),
+                    draft.entries(),
+                    latestReleasePath
             ));
         } catch (IOException exception) {
-            throw new IllegalStateException("写入仓库 AI 能力包文件失败", exception);
+            throw new IllegalStateException("写入能力包文件失败", exception);
         }
     }
 
-    void updateRepositoryAiPackageIndex(Path root,
-                                        RepositoryDefinition repository,
-                                        AiPackageBundle bundle,
-                                        RepositoryAiPackagePublishRequest request) {
+    private void updateCapabilityPackageIndex(Path root,
+                                              RepositoryDefinition repository,
+                                              CapabilityPackageDraft draft,
+                                              CapabilityPackagePublishPreview preview) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
                 : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
-        List<RepositoryAiPackageIndexEntry> entries = new ArrayList<>(safeAiPackages(current));
-        RepositoryAiPackageIndexEntry next = new RepositoryAiPackageIndexEntry(
-                normalize(request.packageId(), "packageId 不能为空"),
-                normalizeOrDefault(request.displayName(), bundle.entryAgentName()),
-                normalize(request.version(), "version 不能为空"),
-                normalizeNullable(bundle.entryAgentDescription()),
-                normalizeNullable(request.releaseNotes()),
-                AI_PACKAGES_DIR + "/" + normalize(request.packageId(), "packageId 不能为空") + "/" + AI_PACKAGE_FILE_NAME
+        List<CapabilityPackageIndexEntry> entries = new ArrayList<>(safeCapabilityPackages(current));
+        CapabilityPackageIndexEntry next = new CapabilityPackageIndexEntry(
+                draft.packageId(),
+                draft.displayName(),
+                draft.version(),
+                draft.description(),
+                draft.releaseNotes(),
+                CAPABILITY_PACKAGES_DIR + "/" + draft.packageId() + "/" + CAPABILITY_PACKAGE_MANIFEST_FILE
         );
-        entries.removeIf(item -> normalize(request.packageId(), "packageId 不能为空").equals(item.id()));
+        entries.removeIf(item -> draft.packageId().equals(item.id()));
         entries.add(next);
-        entries.sort(Comparator.comparing(RepositoryAiPackageIndexEntry::id));
+        entries.sort(Comparator.comparing(CapabilityPackageIndexEntry::id));
         writeJson(root.resolve(REPOSITORY_INDEX_FILE), new RepositoryIndexFile(
                 1,
                 repository.getName(),
@@ -1256,7 +1711,7 @@ public class RepositoryCatalogService {
         ));
     }
 
-    private void uninstallManagedAiPackageAssets(RepositoryAiPackageInstallation installation) {
+    private void uninstallManagedCapabilityPackageAssets(CapabilityPackageInstallation installation) {
         for (String scriptId : installation.getScriptIds()) {
             scriptScheduleRepository.deleteByScriptId(scriptId);
             scriptRepository.deleteById(scriptId);
@@ -1282,7 +1737,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private String aiPackageInstallationId(String repositoryId, String packageId) {
+    private String capabilityPackageInstallationId(String repositoryId, String packageId) {
         return normalize(repositoryId, "repositoryId 不能为空") + ":" + normalize(packageId, "packageId 不能为空");
     }
 
@@ -1940,7 +2395,7 @@ public class RepositoryCatalogService {
     List<ScheduleTemplateItem> buildScheduleTemplate(List<ScriptSchedule> schedules) {
         List<ScheduleTemplateItem> templates = new ArrayList<>();
         for (ScriptSchedule schedule : schedules == null ? List.<ScriptSchedule>of() : schedules) {
-            templates.add(new ScheduleTemplateItem(schedule.getId(), schedule.getName(), schedule.getCronExpression(), schedule.getInput(), false));
+            templates.add(new ScheduleTemplateItem(schedule.getId(), schedule.getScriptId(), schedule.getName(), schedule.getCronExpression(), schedule.getInput(), false));
         }
         return templates;
     }
@@ -1986,7 +2441,7 @@ public class RepositoryCatalogService {
                 normalizeNullable(repository.getDescription()),
                 entries,
                 new ArrayList<>(safePlugins(current)),
-                new ArrayList<>(safeAiPackages(current))
+                new ArrayList<>(safeCapabilityPackages(current))
         ));
     }
 
@@ -2017,7 +2472,7 @@ public class RepositoryCatalogService {
                 normalizeNullable(repository.getDescription()),
                 new ArrayList<>(safeTools(current)),
                 entries,
-                new ArrayList<>(safeAiPackages(current))
+                new ArrayList<>(safeCapabilityPackages(current))
         ));
     }
 
@@ -2140,27 +2595,29 @@ public class RepositoryCatalogService {
         );
     }
 
-    private RepositoryAiPackageDescriptor toAiPackageDescriptor(RepositoryDefinition repository, AiPackageFile packageFile, String packagePath) {
-        String packageId = normalize(packageFile.id(), "AI 能力包 ID 不能为空");
-        String installationId = aiPackageInstallationId(repository.getId(), packageId);
-        RepositoryAiPackageInstallation installation = repositoryAiPackageInstallationRepository.findByInstallationId(installationId).orElse(null);
-        return new RepositoryAiPackageDescriptor(
+    private CapabilityPackageDescriptor toCapabilityPackageDescriptor(RepositoryDefinition repository,
+                                                                      CapabilityPackageManifestFile manifest,
+                                                                      String manifestPath) {
+        String packageId = normalize(manifest.packageId(), "能力包 ID 不能为空");
+        String installationId = capabilityPackageInstallationId(repository.getId(), packageId);
+        CapabilityPackageInstallation installation = capabilityPackageInstallationRepository.findByInstallationId(installationId).orElse(null);
+        return new CapabilityPackageDescriptor(
                 repository.getId(),
                 packageId,
                 installationId,
-                packageFile.name(),
-                packageFile.version(),
-                packageFile.description(),
-                packageFile.releaseNotes(),
-                packageFile.owner(),
-                packageFile.tags() == null ? List.of() : packageFile.tags(),
-                packageFile.entryAgentId(),
-                installation == null ? null : installation.getEntryAgentId(),
-                packagePath,
-                packageFile.configTemplatePath() == null ? null : resolveRelative(packagePath, packageFile.configTemplatePath()),
+                manifest.displayName(),
+                manifest.latestVersion(),
+                manifest.description(),
+                manifest.releaseNotes(),
+                manifest.owner(),
+                manifest.tags() == null ? List.of() : manifest.tags(),
+                manifest.riskLevel(),
+                manifest.entries() == null ? List.of() : manifest.entries(),
+                manifestPath,
+                manifest.latestReleasePath(),
                 installation != null,
                 installation == null ? null : installation.getVersion(),
-                installation != null && !Objects.equals(installation.getVersion(), packageFile.version()),
+                installation != null && !Objects.equals(installation.getVersion(), manifest.latestVersion()),
                 "TRUSTED".equalsIgnoreCase(repository.getTrustLevel()),
                 normalizeOrDefault(repository.getUsage(), "DISTRIBUTION")
         );
@@ -2220,6 +2677,7 @@ public class RepositoryCatalogService {
                 published.getDescription(),
                 published.getTags(),
                 snapshot == null ? published.getSource() : snapshot.getSource(),
+                snapshot == null ? published.getPythonRequirements() : snapshot.getPythonRequirements(),
                 snapshot == null ? published.getInputSchema() : snapshot.getInputSchema(),
                 snapshot == null ? published.getOutputSchema() : snapshot.getOutputSchema(),
                 published.getPluginDependencies(),
@@ -2307,6 +2765,20 @@ public class RepositoryCatalogService {
                     .setRequired(dependency.isRequired()));
         }
         return rewritten;
+    }
+
+    private String resolveCapabilityPackageRuntimeEntry(List<CapabilityPackageEntryFile> entries,
+                                                        Map<String, String> agentIdMappings,
+                                                        Map<String, String> scriptIdMappings) {
+        for (CapabilityPackageEntryFile entry : entries == null ? List.<CapabilityPackageEntryFile>of() : entries) {
+            if ("AGENT".equalsIgnoreCase(entry.type())) {
+                return agentIdMappings.getOrDefault(entry.id(), entry.id());
+            }
+            if ("SCRIPT".equalsIgnoreCase(entry.type())) {
+                return scriptIdMappings.getOrDefault(entry.id(), entry.id());
+            }
+        }
+        return null;
     }
 
     private LinkedHashSet<AiCapability> readCapabilities(List<String> capabilities) {
@@ -2475,11 +2947,18 @@ public class RepositoryCatalogService {
         return readJson(resolveRepositoryRoot(repository).resolve(pluginPath), PluginFile.class);
     }
 
-    private AiPackageFile readAiPackageFile(RepositoryDefinition repository, String packagePath) {
+    private CapabilityPackageManifestFile readCapabilityPackageManifest(RepositoryDefinition repository, String manifestPath) {
         if ("HTTP".equals(repository.getType())) {
-            return readHttpJson(joinHttpPath(repository.getUrl(), packagePath), AiPackageFile.class);
+            return readHttpJson(joinHttpPath(repository.getUrl(), manifestPath), CapabilityPackageManifestFile.class);
         }
-        return readJson(resolveRepositoryRoot(repository).resolve(packagePath), AiPackageFile.class);
+        return readJson(resolveRepositoryRoot(repository).resolve(manifestPath), CapabilityPackageManifestFile.class);
+    }
+
+    private CapabilityPackageReleaseFile readCapabilityPackageRelease(RepositoryDefinition repository, String releasePath) {
+        if ("HTTP".equals(repository.getType())) {
+            return readHttpJson(joinHttpPath(repository.getUrl(), releasePath), CapabilityPackageReleaseFile.class);
+        }
+        return readJson(resolveRepositoryRoot(repository).resolve(releasePath), CapabilityPackageReleaseFile.class);
     }
 
     private String readRepositoryFile(RepositoryDefinition repository, Path path) {
@@ -2536,7 +3015,11 @@ public class RepositoryCatalogService {
     }
 
     static void assertLatestRepositoryMetadata(String raw, Class<?> type, String source) {
-        if (type != RepositoryIndexFile.class && type != ToolFile.class && type != PluginFile.class && type != AiPackageFile.class) {
+        if (type != RepositoryIndexFile.class
+                && type != ToolFile.class
+                && type != PluginFile.class
+                && type != CapabilityPackageManifestFile.class
+                && type != CapabilityPackageReleaseFile.class) {
             return;
         }
         JsonNode root;
@@ -2551,7 +3034,7 @@ public class RepositoryCatalogService {
         if (type == RepositoryIndexFile.class) {
             assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("tools"), source, "tools");
             assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("plugins"), source, "plugins");
-            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("aiPackages"), source, "aiPackages");
+            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("packages"), source, "packages");
             return;
         }
         assertReleaseNotesField(root, source, "releaseNotes");
@@ -2621,7 +3104,7 @@ public class RepositoryCatalogService {
             Files.createDirectories(root);
             Files.createDirectories(root.resolve("tools"));
             Files.createDirectories(root.resolve("plugins"));
-            Files.createDirectories(root.resolve(AI_PACKAGES_DIR));
+            Files.createDirectories(root.resolve(CAPABILITY_PACKAGES_DIR));
         } catch (IOException exception) {
             throw new IllegalStateException("初始化仓库目录失败: " + root, exception);
         }
@@ -2723,23 +3206,23 @@ public class RepositoryCatalogService {
         return index == null || index.plugins() == null ? List.of() : index.plugins();
     }
 
-    private List<RepositoryAiPackageIndexEntry> safeAiPackages(RepositoryIndexFile index) {
-        return index == null || index.aiPackages() == null ? List.of() : index.aiPackages();
+    private List<CapabilityPackageIndexEntry> safeCapabilityPackages(RepositoryIndexFile index) {
+        return index == null || index.packages() == null ? List.of() : index.packages();
     }
 
-    private List<AiPackageModelFile> safeModels(AiPackageFile file) {
+    private List<AiPackageModelFile> safeModels(CapabilityPackageReleaseFile file) {
         return file == null || file.models() == null ? List.of() : file.models();
     }
 
-    private List<AiPackageToolsetFile> safeToolsets(AiPackageFile file) {
+    private List<AiPackageToolsetFile> safeToolsets(CapabilityPackageReleaseFile file) {
         return file == null || file.toolsets() == null ? List.of() : file.toolsets();
     }
 
-    private List<AiPackageAgentFile> safeAgents(AiPackageFile file) {
+    private List<AiPackageAgentFile> safeAgents(CapabilityPackageReleaseFile file) {
         return file == null || file.agents() == null ? List.of() : file.agents();
     }
 
-    private List<AiPackageScriptFile> safeScripts(AiPackageFile file) {
+    private List<AiPackageScriptFile> safeScripts(CapabilityPackageReleaseFile file) {
         return file == null || file.scripts() == null ? List.of() : file.scripts();
     }
 
@@ -2771,13 +3254,13 @@ public class RepositoryCatalogService {
         }
     }
 
-    static void assertAiPackageVersionAvailable(String repositoryId,
-                                                RepositoryIndexFile index,
-                                                String packageId,
-                                                String version) {
-        for (RepositoryAiPackageIndexEntry entry : index == null || index.aiPackages() == null ? List.<RepositoryAiPackageIndexEntry>of() : index.aiPackages()) {
+    static void assertCapabilityPackageVersionAvailable(String repositoryId,
+                                                        RepositoryIndexFile index,
+                                                        String packageId,
+                                                        String version) {
+        for (CapabilityPackageIndexEntry entry : index == null || index.packages() == null ? List.<CapabilityPackageIndexEntry>of() : index.packages()) {
             if (Objects.equals(packageId, entry.id()) && Objects.equals(version, entry.version())) {
-                throw new RepositoryVersionExistsException("AI_PACKAGE", repositoryId, packageId, version);
+                throw new RepositoryVersionExistsException("CAPABILITY_PACKAGE", repositoryId, packageId, version);
             }
         }
     }
@@ -2786,7 +3269,7 @@ public class RepositoryCatalogService {
         return new RelativeRepositoryPath(Path.of(toolPath).getParent().toString().replace('\\', '/'));
     }
 
-    private RelativeRepositoryPath aiPackageDirectoryPath(String packagePath) {
+    private RelativeRepositoryPath capabilityPackageDirectoryPath(String packagePath) {
         return new RelativeRepositoryPath(Path.of(packagePath).getParent().toString().replace('\\', '/'));
     }
 
@@ -2883,7 +3366,15 @@ public class RepositoryCatalogService {
     ) {
     }
 
-    public record RepositoryAiPackageDescriptor(
+    public record RepositoryAiPackageDependency(
+            String assetType,
+            String repositoryId,
+            String assetId,
+            String version
+    ) {
+    }
+
+    public record CapabilityPackageDescriptor(
             String repositoryId,
             String packageId,
             String installationId,
@@ -2893,10 +3384,10 @@ public class RepositoryCatalogService {
             String releaseNotes,
             String owner,
             List<String> tags,
-            String packageEntryAgentId,
-            String installedEntryAgentId,
-            String packagePath,
-            String configTemplatePath,
+            String riskLevel,
+            List<CapabilityPackageEntryFile> entries,
+            String manifestPath,
+            String releasePath,
             boolean installed,
             String installedVersion,
             boolean updateAvailable,
@@ -2905,53 +3396,108 @@ public class RepositoryCatalogService {
     ) {
     }
 
-    public record RepositoryAiPackageDetail(
-            RepositoryAiPackageDescriptor descriptor,
+    public record CapabilityPackageDetail(
+            CapabilityPackageDescriptor descriptor,
             List<ConfigTemplateItem> configTemplate,
-            AiPackageFile packageFile
+            List<ScheduleTemplateItem> scheduleTemplate,
+            List<CapabilityPackagePresetTemplate> presetTemplate,
+            CapabilityPackageReleaseFile releaseFile
     ) {
     }
 
-    public record RepositoryAiPackagePublishPreviewRequest(
-            String agentProfileId,
-            String packageId
+    public record CapabilityPackagePublishPreviewRequest(
+            String packageId,
+            String displayName,
+            String version,
+            String owner,
+            String description,
+            String releaseNotes,
+            List<String> tags,
+            String riskLevel,
+            CapabilityPackageSource source,
+            CapabilityPackageEntrySelection primaryEntry,
+            List<String> scriptIds,
+            List<String> agentIds,
+            List<String> modelIds,
+            List<String> toolsetIds
     ) {
     }
 
-    public record RepositoryAiPackagePublishPreview(
-            String entryAgentId,
+    public record CapabilityPackagePublishRequest(
+            String packageId,
+            String displayName,
+            String version,
+            String owner,
+            String description,
+            String releaseNotes,
+            List<String> tags,
+            String riskLevel,
+            CapabilityPackageSource source,
+            CapabilityPackageEntrySelection primaryEntry,
+            List<String> scriptIds,
+            List<String> agentIds,
+            List<String> modelIds,
+            List<String> toolsetIds
+    ) {
+    }
+
+    public record CapabilityPackagePublishPreview(
+            String packageId,
+            String version,
+            List<CapabilityPackageEntryFile> entries,
             List<String> modelIds,
             List<String> toolsetIds,
             List<String> agentIds,
             List<String> scriptIds,
             List<ConfigTemplateItem> configTemplate,
-            List<RepositoryAiPackageDependency> externalDependencies
+            List<ScheduleTemplateItem> scheduleTemplate,
+            List<CapabilityPackagePresetTemplate> presetTemplate,
+            List<RepositoryAiPackageDependency> externalDependencies,
+            List<CapabilityPackageCheck> checks,
+            CapabilityPackageDiffSummary diff
     ) {
     }
 
-    public record RepositoryAiPackagePublishRequest(
-            String agentProfileId,
-            String packageId,
-            String displayName,
-            String version,
-            String owner,
-            String releaseNotes,
-            List<String> tags
-    ) {
-    }
-
-    public record RepositoryAiPackageInstallResult(
-            RepositoryAiPackageInstallation installation,
+    public record CapabilityPackageInstallResult(
+            CapabilityPackageInstallation installation,
             List<RepositoryAiPackageDependency> resolvedDependencies
     ) {
     }
 
-    public record RepositoryAiPackageDependency(
-            String assetType,
-            String repositoryId,
-            String assetId,
-            String version
+    public record CapabilityPackageEntrySelection(
+            String type,
+            String targetId,
+            String displayName
     ) {
+    }
+
+    public record CapabilityPackagePresetTemplate(
+            String id,
+            String scriptId,
+            String name,
+            Map<String, Object> input
+    ) {
+    }
+
+    public record CapabilityPackageCheck(
+            String severity,
+            String code,
+            String message
+    ) {
+    }
+
+    public record CapabilityPackageDiffSummary(
+            String comparisonMode,
+            List<String> addedEntries,
+            List<String> removedEntries,
+            List<String> changedAssets
+    ) {
+    }
+
+    public enum CapabilityPackageSource {
+        AGENT,
+        SCRIPT,
+        MANUAL
     }
 
     public record DevelopmentSyncRequest(String scriptId) {
@@ -3025,7 +3571,7 @@ public class RepositoryCatalogService {
                                       String description,
                                       List<RepositoryIndexEntry> tools,
                                       List<RepositoryPluginIndexEntry> plugins,
-                                      List<RepositoryAiPackageIndexEntry> aiPackages) {
+                                      List<CapabilityPackageIndexEntry> packages) {
     }
 
     public record RepositoryIndexEntry(String id,
@@ -3045,12 +3591,68 @@ public class RepositoryCatalogService {
                                              String pluginPath) {
     }
 
-    public record RepositoryAiPackageIndexEntry(String id,
-                                                String name,
-                                                String version,
+    public record CapabilityPackageIndexEntry(String id,
+                                              String name,
+                                              String version,
+                                              String description,
+                                              String releaseNotes,
+                                              String path) {
+    }
+
+    public record CapabilityPackageManifestFile(int schemaVersion,
+                                                String packageId,
+                                                String displayName,
+                                                String latestVersion,
                                                 String description,
                                                 String releaseNotes,
-                                                String packagePath) {
+                                                String owner,
+                                                List<String> tags,
+                                                String riskLevel,
+                                                List<CapabilityPackageEntryFile> entries,
+                                                String latestReleasePath) {
+    }
+
+    public record CapabilityPackageReleaseFile(int schemaVersion,
+                                               String packageId,
+                                               String displayName,
+                                               String version,
+                                               String description,
+                                               String releaseNotes,
+                                               String owner,
+                                               List<String> tags,
+                                               String riskLevel,
+                                               String sourceType,
+                                               List<CapabilityPackageEntryFile> entries,
+                                               List<AiPackageModelFile> models,
+                                               List<AiPackageToolsetFile> toolsets,
+                                               List<AiPackageAgentFile> agents,
+                                               List<AiPackageScriptFile> scripts,
+                                               List<RepositoryAiPackageDependency> externalDependencies,
+                                               String configTemplatePath,
+                                               String scheduleTemplatePath,
+                                               String presetTemplatePath) {
+    }
+
+    public record CapabilityPackageEntryFile(String type,
+                                             String id,
+                                             String displayName,
+                                             String target) {
+    }
+
+    private record CapabilityPackageDraft(String packageId,
+                                          String displayName,
+                                          String version,
+                                          String owner,
+                                          String description,
+                                          String releaseNotes,
+                                          List<String> tags,
+                                          String riskLevel,
+                                          CapabilityPackageSource source,
+                                          List<CapabilityPackageEntryFile> entries,
+                                          AiPackageBundle bundle,
+                                          List<ConfigTemplateItem> configTemplate,
+                                          List<ScheduleTemplateItem> scheduleTemplate,
+                                          List<CapabilityPackagePresetTemplate> presetTemplate) {
     }
 
     public record ToolFile(int toolVersion,
@@ -3085,23 +3687,6 @@ public class RepositoryCatalogService {
                              List<String> tags,
                              PluginArtifactRef artifact,
                              String riskLevel) {
-    }
-
-    public record AiPackageFile(int packageFileVersion,
-                                String id,
-                                String name,
-                                String version,
-                                String description,
-                                String releaseNotes,
-                                String owner,
-                                List<String> tags,
-                                String entryAgentId,
-                                List<AiPackageModelFile> models,
-                                List<AiPackageToolsetFile> toolsets,
-                                List<AiPackageAgentFile> agents,
-                                List<AiPackageScriptFile> scripts,
-                                List<RepositoryAiPackageDependency> externalDependencies,
-                                String configTemplatePath) {
     }
 
     public record AiPackageModelFile(String id,
@@ -3146,6 +3731,7 @@ public class RepositoryCatalogService {
                                       String description,
                                       List<String> tags,
                                       String source,
+                                      String pythonRequirements,
                                       Map<String, Object> inputSchema,
                                       Map<String, Object> outputSchema,
                                       List<PluginDependency> pluginDependencies,
@@ -3161,6 +3747,7 @@ public class RepositoryCatalogService {
     }
 
     public record ScheduleTemplateItem(String id,
+                                       String scriptId,
                                        String name,
                                        String cronExpression,
                                        Map<String, Object> input,
@@ -3284,6 +3871,7 @@ public class RepositoryCatalogService {
                     file.description(),
                     file.tags(),
                     file.source(),
+                    file.pythonRequirements(),
                     file.inputSchema(),
                     file.outputSchema(),
                     file.pluginDependencies(),

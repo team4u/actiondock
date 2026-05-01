@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Button,
   Card,
@@ -19,8 +19,12 @@ import {
 } from "@ant-design/icons";
 import JSZip from "jszip";
 import {
+  createEventSource,
+  createEventTrigger,
   listScripts,
   listSchedules,
+  listEventSources,
+  listEventTriggers,
   listConfigValues,
   listSharedStateNamespaces,
   listSharedState,
@@ -36,6 +40,8 @@ import {
   updateSchedule,
   createConfigValue,
   updateConfigValue,
+  updateEventSource,
+  updateEventTrigger,
   createSharedState,
   updateSharedState,
   createRepository,
@@ -56,6 +62,8 @@ import {
 import type {
   ScriptDefinition,
   ScriptSchedule,
+  EventSourceDefinition,
+  EventTrigger,
   ConfigValue,
   ExecutionPreset,
   RepositoryDefinition,
@@ -118,6 +126,8 @@ export function DataBackupPanel() {
   const [dataCounts, setDataCounts] = useState<{
     scripts: number;
     schedules: number;
+    eventSources: number;
+    eventTriggers: number;
     configValues: number;
     presets: number;
     repositories: number;
@@ -135,9 +145,11 @@ export function DataBackupPanel() {
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDataCounts = useCallback(async () => {
-    const [scripts, schedules, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
+    const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
       listScripts(),
       listSchedules(),
+      listEventSources(),
+      listEventTriggers(),
       listConfigValues(),
       listRepositories(),
       listPlugins(),
@@ -158,6 +170,8 @@ export function DataBackupPanel() {
     setDataCounts({
       scripts: scripts.length,
       schedules: schedules.length,
+      eventSources: eventSources.length,
+      eventTriggers: eventTriggers.length,
       configValues: configValues.length,
       presets: presetCount,
       repositories: repositories.length,
@@ -169,12 +183,20 @@ export function DataBackupPanel() {
     });
   }, []);
 
+  useEffect(() => {
+    loadDataCounts().catch(() => {
+      // ignore initial overview errors
+    });
+  }, [loadDataCounts]);
+
   const handleBackup = useCallback(async () => {
     setBackupLoading(true);
     try {
-      const [scripts, schedules, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
+      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
         listScripts(),
         listSchedules(),
+        listEventSources(),
+        listEventTriggers(),
         listConfigValues(),
         listRepositories(),
         listPlugins(),
@@ -214,6 +236,8 @@ export function DataBackupPanel() {
         {
           scripts,
           schedules,
+          eventSources,
+          eventTriggers,
           configValues,
           executionPresets: allPresets,
           repositories,
@@ -298,9 +322,11 @@ export function DataBackupPanel() {
         pluginFiles.set(path, blob);
       }
 
-      const [scripts, schedules, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
+      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
         listScripts(),
         listSchedules(),
+        listEventSources(),
+        listEventTriggers(),
         listConfigValues(),
         listRepositories(),
         listPlugins(),
@@ -325,6 +351,8 @@ export function DataBackupPanel() {
       const analysisResult = analyzeBackupBundle(bundle, {
         scripts,
         schedules,
+        eventSources,
+        eventTriggers,
         configValues,
         executionPresets: allPresets,
         repositories,
@@ -355,273 +383,321 @@ export function DataBackupPanel() {
     const bundle = pendingBundle;
     const pluginFiles = pendingPluginFiles ?? new Map<string, Blob>();
 
-    const [currentScripts, currentSchedules, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets] = await Promise.all([
-      listScripts(),
-      listSchedules(),
-      listConfigValues(),
-      listRepositories(),
-      listPlugins(),
-      listAllSharedStateSummaries(),
-      listAiModels(),
-      listAiAgents(),
-      listAiToolsets()
-    ]);
+    try {
+      const [currentScripts, currentSchedules, currentEventSources, currentEventTriggers, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets] = await Promise.all([
+        listScripts(),
+        listSchedules(),
+        listEventSources(),
+        listEventTriggers(),
+        listConfigValues(),
+        listRepositories(),
+        listPlugins(),
+        listAllSharedStateSummaries(),
+        listAiModels(),
+        listAiAgents(),
+        listAiToolsets()
+      ]);
 
-    const currentScriptIds = new Set(currentScripts.map(s => s.id));
-    const currentScheduleIds = new Set(currentSchedules.map(s => s.id));
-    const currentConfigKeys = new Set(currentConfigValues.map(c => c.key));
-    const currentRepoIds = new Set(currentRepositories.map(r => r.id));
-    const currentPluginIds = new Set(currentPlugins.map(p => p.pluginId));
-    const currentSharedStateKeys = new Set(currentSharedStates.map(item => buildSharedStateBackupKey(item)));
+      const currentScriptIds = new Set(currentScripts.map(s => s.id));
+      const currentScheduleIds = new Set(currentSchedules.map(s => s.id));
+      const currentEventSourceIds = new Set(currentEventSources.map(s => s.id));
+      const currentEventTriggerIds = new Set(currentEventTriggers.map(t => t.id));
+      const currentConfigKeys = new Set(currentConfigValues.map(c => c.key));
+      const currentRepoIds = new Set(currentRepositories.map(r => r.id));
+      const currentPluginIds = new Set(currentPlugins.map(p => p.pluginId));
+      const currentSharedStateKeys = new Set(currentSharedStates.map(item => buildSharedStateBackupKey(item)));
 
-    const currentPresets: ExecutionPreset[] = [];
-    await Promise.all(
-      currentScripts.map(async s => {
-        try {
-          const presets = await listPresets(s.id);
-          currentPresets.push(...presets);
-        } catch { /* skip */ }
-      })
-    );
-    const currentPresetIds = new Set(currentPresets.map(p => p.id));
-
-    const currentAiModelIds = new Set(currentAiModels.map(m => m.id));
-    const currentAiAgentIds = new Set(currentAiAgents.map(a => a.id));
-    const currentAiToolsetIds = new Set(currentAiToolsets.map(t => t.id));
-
-    // 1. Config Values
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const item of bundle.data.configValues) {
-        try {
-          const payload = {
-            key: item.key,
-            value: item.value ?? "",
-            description: item.description,
-            secret: item.secret ?? false
-          };
-          if (currentConfigKeys.has(item.key)) {
-            await updateConfigValue(item.key, payload);
-          } else {
-            await createConfigValue(payload);
+      const currentPresets: ExecutionPreset[] = [];
+      await Promise.all(
+        currentScripts.map(async s => {
+          try {
+            const presets = await listPresets(s.id);
+            currentPresets.push(...presets);
+          } catch {
+            // skip
           }
-          succeeded++;
-        } catch (e) {
-          errors.push(`${item.key}: ${e instanceof Error ? e.message : "未知错误"}`);
-        }
-      }
-      results.push({ type: "配置值", succeeded, failed: errors.length, errors });
-    }
+        })
+      );
+      const currentPresetIds = new Set(currentPresets.map(p => p.id));
 
-    // 2. Shared States
-    {
-      let succeeded = 0;
-      let skipped = 0;
-      const errors: string[] = [];
-      for (const item of bundle.data.sharedStates) {
-        const payload = toSharedStateRestorePayload(item);
-        if (!payload) {
-          skipped++;
-          continue;
-        }
-        try {
-          if (currentSharedStateKeys.has(buildSharedStateBackupKey(item))) {
-            await updateSharedState(payload);
-          } else {
-            await createSharedState(payload);
+      const currentAiModelIds = new Set(currentAiModels.map(m => m.id));
+      const currentAiAgentIds = new Set(currentAiAgents.map(a => a.id));
+      const currentAiToolsetIds = new Set(currentAiToolsets.map(t => t.id));
+
+      // 1. Config Values
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const item of bundle.data.configValues) {
+          try {
+            const payload = {
+              key: item.key,
+              value: item.value ?? "",
+              description: item.description,
+              secret: item.secret ?? false
+            };
+            if (currentConfigKeys.has(item.key)) {
+              await updateConfigValue(item.key, payload);
+            } else {
+              await createConfigValue(payload);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${item.key}: ${e instanceof Error ? e.message : "未知错误"}`);
           }
-          succeeded++;
-        } catch (e) {
-          errors.push(`${item.namespace}/${item.key}: ${e instanceof Error ? e.message : "未知错误"}`);
         }
+        results.push({ type: "配置值", succeeded, failed: errors.length, errors });
       }
-      results.push({ type: "共享状态", succeeded, failed: errors.length, skipped, errors });
-    }
 
-    // 3. Repositories
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const repo of bundle.data.repositories) {
-        try {
-          if (currentRepoIds.has(repo.id)) {
-            await updateRepository(repo.id, repo);
-          } else {
-            await createRepository(repo);
-          }
-          succeeded++;
-        } catch (e) {
-          errors.push(`${repo.name}: ${e instanceof Error ? e.message : "未知错误"}`);
-        }
-      }
-      results.push({ type: "仓库", succeeded, failed: errors.length, errors });
-    }
-
-    // 4. Scripts
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const script of bundle.data.scripts) {
-        try {
-          if (currentScriptIds.has(script.id)) {
-            await updateScript(script.id, script);
-          } else {
-            await createScript(script);
-          }
-          succeeded++;
-        } catch (e) {
-          errors.push(`${script.name}: ${e instanceof Error ? e.message : "未知错误"}`);
-        }
-      }
-      results.push({ type: "脚本", succeeded, failed: errors.length, errors });
-    }
-
-    // 5. Execution Presets
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const preset of bundle.data.executionPresets) {
-        try {
-          const payload = { name: preset.name, input: preset.input };
-          if (currentPresetIds.has(preset.id)) {
-            await updatePreset(preset.scriptId, preset.id, payload);
-          } else {
-            await createPreset(preset.scriptId, payload);
-          }
-          succeeded++;
-        } catch (e) {
-          errors.push(`${preset.name}: ${e instanceof Error ? e.message : "未知错误"}`);
-        }
-      }
-      results.push({ type: "执行预设", succeeded, failed: errors.length, errors });
-    }
-
-    // 6. Schedules
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const schedule of bundle.data.schedules) {
-        try {
-          const payload = {
-            scriptId: schedule.scriptId,
-            name: schedule.name,
-            cronExpression: schedule.cronExpression,
-            input: schedule.input,
-            enabled: schedule.enabled
-          };
-          if (currentScheduleIds.has(schedule.id)) {
-            await updateSchedule(schedule.id, payload);
-          } else {
-            await createSchedule(payload);
-          }
-          succeeded++;
-        } catch (e) {
-          errors.push(`${schedule.name}: ${e instanceof Error ? e.message : "未知错误"}`);
-        }
-      }
-      results.push({ type: "定时任务", succeeded, failed: errors.length, errors });
-    }
-
-    // 7. Plugins (uninstall then install)
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const plugin of bundle.data.plugins) {
-        try {
-          const jarEntry = Array.from(pluginFiles.entries()).find(([path]) => {
-            const fileName = path.replace("plugins/", "");
-            return fileName === plugin.fileName || fileName === `${plugin.pluginId}.jar`;
-          });
-
-          if (!jarEntry) {
-            errors.push(`${plugin.name}: ZIP 中未找到插件文件`);
+      // 2. Shared States
+      {
+        let succeeded = 0;
+        let skipped = 0;
+        const errors: string[] = [];
+        for (const item of bundle.data.sharedStates) {
+          const payload = toSharedStateRestorePayload(item);
+          if (!payload) {
+            skipped++;
             continue;
           }
-
-          const jarBlob = jarEntry[1];
-
-          if (currentPluginIds.has(plugin.pluginId)) {
-            await uninstallPlugin(plugin.pluginId, true);
-          }
-
-          const jarFile = new File([jarBlob], plugin.fileName, { type: "application/java-archive" });
-          await installPlugin(jarFile);
-
-          if (plugin.configurable && plugin.config) {
-            try {
-              await updatePluginConfig(plugin.pluginId, plugin.config);
-            } catch {
-              // config restore is non-fatal
+          try {
+            if (currentSharedStateKeys.has(buildSharedStateBackupKey(item))) {
+              await updateSharedState(payload);
+            } else {
+              await createSharedState(payload);
             }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${item.namespace}/${item.key}: ${e instanceof Error ? e.message : "未知错误"}`);
           }
-
-          succeeded++;
-        } catch (e) {
-          errors.push(`${plugin.name}: ${e instanceof Error ? e.message : "未知错误"}`);
         }
+        results.push({ type: "共享状态", succeeded, failed: errors.length, skipped, errors });
       }
-      results.push({ type: "插件", succeeded, failed: errors.length, errors });
-    }
 
-    // 8. AI Models
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const model of bundle.data.aiModels) {
-        try {
-          const { createdAt, updatedAt, ...payload } = model;
-          await saveAiModel({ ...payload, id: currentAiModelIds.has(model.id) ? model.id : "" });
-          succeeded++;
-        } catch (e) {
-          errors.push(`${model.name}: ${e instanceof Error ? e.message : "未知错误"}`);
-        }
-      }
-      results.push({ type: "AI 模型", succeeded, failed: errors.length, errors });
-    }
-
-    // 9. AI Agents
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const agent of bundle.data.aiAgents) {
-        try {
-          const { createdAt, updatedAt, ...payload } = agent;
-          await saveAiAgent({ ...payload, id: currentAiAgentIds.has(agent.id) ? agent.id : "" });
-          succeeded++;
-        } catch (e) {
-          errors.push(`${agent.name}: ${e instanceof Error ? e.message : "未知错误"}`);
-        }
-      }
-      results.push({ type: "AI Agent", succeeded, failed: errors.length, errors });
-    }
-
-    // 10. AI Toolsets
-    {
-      let succeeded = 0;
-      const errors: string[] = [];
-      for (const toolset of bundle.data.aiToolsets) {
-        try {
-          const { createdAt, updatedAt, ...payload } = toolset;
-          if (currentAiToolsetIds.has(toolset.id)) {
-            await updateAiToolset(toolset.id, payload);
-          } else {
-            await createAiToolset(payload);
+      // 3. Repositories
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const repo of bundle.data.repositories) {
+          try {
+            if (currentRepoIds.has(repo.id)) {
+              await updateRepository(repo.id, repo);
+            } else {
+              await createRepository(repo);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${repo.name}: ${e instanceof Error ? e.message : "未知错误"}`);
           }
-          succeeded++;
-        } catch (e) {
-          errors.push(`${toolset.name}: ${e instanceof Error ? e.message : "未知错误"}`);
         }
+        results.push({ type: "仓库", succeeded, failed: errors.length, errors });
       }
-      results.push({ type: "AI 工具集", succeeded, failed: errors.length, errors });
-    }
 
-    setPendingBundle(null);
-    setPendingPluginFiles(null);
-    setRestoreResults(results);
-    setRestoreLoading(false);
-    loadDataCounts();
-  }, [pendingBundle, pendingPluginFiles, analysis, loadDataCounts]);
+      // 4. Scripts
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const script of bundle.data.scripts) {
+          try {
+            if (currentScriptIds.has(script.id)) {
+              await updateScript(script.id, script);
+            } else {
+              await createScript(script);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${script.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "脚本", succeeded, failed: errors.length, errors });
+      }
+
+      // 5. Execution Presets
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const preset of bundle.data.executionPresets) {
+          try {
+            const payload = { name: preset.name, input: preset.input };
+            if (currentPresetIds.has(preset.id)) {
+              await updatePreset(preset.scriptId, preset.id, payload);
+            } else {
+              await createPreset(preset.scriptId, payload);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${preset.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "执行预设", succeeded, failed: errors.length, errors });
+      }
+
+      // 6. Schedules
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const schedule of bundle.data.schedules) {
+          try {
+            const payload = {
+              scriptId: schedule.scriptId,
+              name: schedule.name,
+              cronExpression: schedule.cronExpression,
+              input: schedule.input,
+              enabled: schedule.enabled
+            };
+            if (currentScheduleIds.has(schedule.id)) {
+              await updateSchedule(schedule.id, payload);
+            } else {
+              await createSchedule(payload);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${schedule.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "定时任务", succeeded, failed: errors.length, errors });
+      }
+
+      // 6.5 Event Sources
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const item of bundle.data.eventSources) {
+          try {
+            if (currentEventSourceIds.has(item.id)) {
+              await updateEventSource(item.id, item);
+            } else {
+              await createEventSource(item);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${item.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "事件源", succeeded, failed: errors.length, errors });
+      }
+
+      // 6.6 Event Triggers
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const item of bundle.data.eventTriggers) {
+          try {
+            if (currentEventTriggerIds.has(item.id)) {
+              await updateEventTrigger(item.id, item);
+            } else {
+              await createEventTrigger(item);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${item.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "事件触发器", succeeded, failed: errors.length, errors });
+      }
+
+      // 7. Plugins (uninstall then install)
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const plugin of bundle.data.plugins) {
+          try {
+            const jarEntry = Array.from(pluginFiles.entries()).find(([path]) => {
+              const fileName = path.replace("plugins/", "");
+              return fileName === plugin.fileName || fileName === `${plugin.pluginId}.jar`;
+            });
+
+            if (!jarEntry) {
+              errors.push(`${plugin.name}: ZIP 中未找到插件文件`);
+              continue;
+            }
+
+            const jarBlob = jarEntry[1];
+
+            if (currentPluginIds.has(plugin.pluginId)) {
+              await uninstallPlugin(plugin.pluginId, true);
+            }
+
+            const jarFile = new File([jarBlob], plugin.fileName, { type: "application/java-archive" });
+            await installPlugin(jarFile);
+
+            if (plugin.configurable && plugin.config) {
+              try {
+                await updatePluginConfig(plugin.pluginId, plugin.config);
+              } catch {
+                // config restore is non-fatal
+              }
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${plugin.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "插件", succeeded, failed: errors.length, errors });
+      }
+
+      // 8. AI Models
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const model of bundle.data.aiModels) {
+          try {
+            const { createdAt, updatedAt, ...payload } = model;
+            await saveAiModel({ ...payload, id: currentAiModelIds.has(model.id) ? model.id : "" });
+            succeeded++;
+          } catch (e) {
+            errors.push(`${model.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "AI 模型", succeeded, failed: errors.length, errors });
+      }
+
+      // 9. AI Agents
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const agent of bundle.data.aiAgents) {
+          try {
+            const { createdAt, updatedAt, ...payload } = agent;
+            await saveAiAgent({ ...payload, id: currentAiAgentIds.has(agent.id) ? agent.id : "" });
+            succeeded++;
+          } catch (e) {
+            errors.push(`${agent.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "AI Agent", succeeded, failed: errors.length, errors });
+      }
+
+      // 10. AI Toolsets
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const toolset of bundle.data.aiToolsets) {
+          try {
+            const { createdAt, updatedAt, ...payload } = toolset;
+            if (currentAiToolsetIds.has(toolset.id)) {
+              await updateAiToolset(toolset.id, payload);
+            } else {
+              await createAiToolset(payload);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${toolset.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "AI 工具集", succeeded, failed: errors.length, errors });
+      }
+
+      setPendingBundle(null);
+      setPendingPluginFiles(null);
+      setRestoreResults(results);
+      await loadDataCounts();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "恢复失败");
+    } finally {
+      setRestoreLoading(false);
+    }
+  }, [pendingBundle, pendingPluginFiles, analysis, loadDataCounts, messageApi]);
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -636,6 +712,8 @@ export function DataBackupPanel() {
             <Descriptions size="small" column={3} bordered>
               <Descriptions.Item label="脚本">{dataCounts.scripts}</Descriptions.Item>
               <Descriptions.Item label="定时任务">{dataCounts.schedules}</Descriptions.Item>
+              <Descriptions.Item label="事件源">{dataCounts.eventSources}</Descriptions.Item>
+              <Descriptions.Item label="事件触发器">{dataCounts.eventTriggers}</Descriptions.Item>
               <Descriptions.Item label="配置值">{dataCounts.configValues}</Descriptions.Item>
               <Descriptions.Item label="执行预设">{dataCounts.presets}</Descriptions.Item>
               <Descriptions.Item label="仓库">{dataCounts.repositories}</Descriptions.Item>
@@ -765,6 +843,20 @@ export function DataBackupPanel() {
                 <Text type="success">新建 {analysis.schedules.create}</Text>
                 {" / "}
                 <Text type="warning">覆盖 {analysis.schedules.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="事件源">
+                <Text>共 {analysis.eventSources.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.eventSources.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.eventSources.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="事件触发器">
+                <Text>共 {analysis.eventTriggers.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.eventTriggers.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.eventTriggers.overwrite}</Text>
               </Descriptions.Item>
               <Descriptions.Item label="配置值">
                 <Text>共 {analysis.configValues.total} 条</Text>

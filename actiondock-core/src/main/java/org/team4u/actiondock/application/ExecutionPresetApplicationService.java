@@ -69,6 +69,7 @@ public class ExecutionPresetApplicationService {
         } else {
             target = getById(preset.getId());
             ensurePresetBelongsToScript(target, scriptId);
+            ensureEditable(target);
         }
 
         target.setScriptId(scriptId)
@@ -89,6 +90,7 @@ public class ExecutionPresetApplicationService {
     public void delete(String scriptId, String presetId) {
         ExecutionPreset preset = getById(presetId);
         ensurePresetBelongsToScript(preset, scriptId);
+        ensureEditable(preset);
         executionPresetRepository.deleteById(presetId);
     }
 
@@ -104,6 +106,12 @@ public class ExecutionPresetApplicationService {
     private void ensurePresetBelongsToScript(ExecutionPreset preset, String scriptId) {
         if (!preset.getScriptId().equals(scriptId)) {
             throw new IllegalArgumentException("Preset does not belong to script: " + preset.getId());
+        }
+    }
+
+    private void ensureEditable(ExecutionPreset preset) {
+        if (!preset.isEditable()) {
+            throw new IllegalArgumentException("托管预设不允许直接修改: " + preset.getId());
         }
     }
 

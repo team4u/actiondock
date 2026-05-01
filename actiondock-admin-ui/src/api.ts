@@ -19,13 +19,24 @@ import type {
   ConfigValue,
   ConfigValueDetail,
   ConfigValueRequest,
+  CapabilityPackageDescriptor,
+  CapabilityPackageDetail,
+  CapabilityPackageInstallResult,
+  CapabilityPackagePublishPreview,
+  CapabilityPackagePublishPreviewRequest,
+  CapabilityPackagePublishRequest,
   DevelopmentStatus,
-  RepositoryAiPackageDescriptor,
-  RepositoryAiPackageDetail,
-  RepositoryAiPackageInstallResult,
-  RepositoryAiPackagePublishPreview,
-  RepositoryAiPackagePublishPreviewRequest,
-  RepositoryAiPackagePublishRequest,
+  EventDispatchRecord,
+  EventIngestionResponse,
+  EventRecord,
+  EventSourceDefinition,
+  EventTrigger,
+  EventTriggerTestRequest,
+  EventTriggerTestResult,
+  IncomingEventPayload,
+  NormalizedEvent,
+  ProcessorTestRequest,
+  ProcessorTestResult,
   RepositoryDefinition,
   RepositoryInstallRequest,
   RepositoryPluginDescriptor,
@@ -395,6 +406,138 @@ export function updateSchedule(id: string, payload: ScriptScheduleUpsertRequest)
   });
 }
 
+export function listEventSources(): Promise<EventSourceDefinition[]> {
+  return request<EventSourceDefinition[]>("/api/event-sources");
+}
+
+export function getEventSource(id: string): Promise<EventSourceDefinition> {
+  return request<EventSourceDefinition>(`/api/event-sources/${id}`);
+}
+
+export function createEventSource(payload: Omit<EventSourceDefinition, "id"> | Partial<EventSourceDefinition>): Promise<EventSourceDefinition> {
+  return request<EventSourceDefinition>("/api/event-sources", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateEventSource(id: string, payload: Omit<EventSourceDefinition, "id"> | Partial<EventSourceDefinition>): Promise<EventSourceDefinition> {
+  return request<EventSourceDefinition>(`/api/event-sources/${id}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteEventSource(id: string): Promise<void> {
+  return request<void>(`/api/event-sources/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export function enableEventSource(id: string): Promise<EventSourceDefinition> {
+  return request<EventSourceDefinition>(`/api/event-sources/${id}/enable`, {
+    method: "POST"
+  });
+}
+
+export function disableEventSource(id: string): Promise<EventSourceDefinition> {
+  return request<EventSourceDefinition>(`/api/event-sources/${id}/disable`, {
+    method: "POST"
+  });
+}
+
+export function testEventSourceNormalization(id: string, payload: IncomingEventPayload): Promise<NormalizedEvent> {
+  return request<NormalizedEvent>(`/api/event-sources/${id}/test-normalization`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listEventSourceEvents(id: string): Promise<EventRecord[]> {
+  return request<EventRecord[]>(`/api/event-sources/${id}/events`);
+}
+
+export function listEventTriggers(): Promise<EventTrigger[]> {
+  return request<EventTrigger[]>("/api/event-triggers");
+}
+
+export function getEventTrigger(id: string): Promise<EventTrigger> {
+  return request<EventTrigger>(`/api/event-triggers/${id}`);
+}
+
+export function createEventTrigger(payload: Omit<EventTrigger, "id"> | Partial<EventTrigger>): Promise<EventTrigger> {
+  return request<EventTrigger>("/api/event-triggers", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateEventTrigger(id: string, payload: Omit<EventTrigger, "id"> | Partial<EventTrigger>): Promise<EventTrigger> {
+  return request<EventTrigger>(`/api/event-triggers/${id}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteEventTrigger(id: string): Promise<void> {
+  return request<void>(`/api/event-triggers/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export function enableEventTrigger(id: string): Promise<EventTrigger> {
+  return request<EventTrigger>(`/api/event-triggers/${id}/enable`, {
+    method: "POST"
+  });
+}
+
+export function disableEventTrigger(id: string): Promise<EventTrigger> {
+  return request<EventTrigger>(`/api/event-triggers/${id}/disable`, {
+    method: "POST"
+  });
+}
+
+export function testEventTrigger(id: string, payload: EventTriggerTestRequest): Promise<EventTriggerTestResult> {
+  return request<EventTriggerTestResult>(`/api/event-triggers/${id}/test`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listEventTriggerDispatches(id: string): Promise<EventDispatchRecord[]> {
+  return request<EventDispatchRecord[]>(`/api/event-triggers/${id}/dispatches`);
+}
+
+export function listEventRecords(sourceId?: string): Promise<EventRecord[]> {
+  const params = new URLSearchParams();
+  if (sourceId) {
+    params.set("sourceId", sourceId);
+  }
+  return request<EventRecord[]>(params.size > 0 ? `/api/event-records?${params.toString()}` : "/api/event-records");
+}
+
+export function getEventRecord(id: string): Promise<EventRecord> {
+  return request<EventRecord>(`/api/event-records/${id}`);
+}
+
+export function listEventRecordDispatches(id: string): Promise<EventDispatchRecord[]> {
+  return request<EventDispatchRecord[]>(`/api/event-records/${id}/dispatches`);
+}
+
+export function testProcessor(payload: ProcessorTestRequest): Promise<ProcessorTestResult> {
+  return request<ProcessorTestResult>("/api/processors/test", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
 export function enableSchedule(id: string): Promise<ScriptSchedule> {
   return request<ScriptSchedule>(`/api/schedules/${id}/enable`, {
     method: "POST"
@@ -670,8 +813,8 @@ export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
   return request<RepositoryToolDescriptor[]>("/api/repositories/tools");
 }
 
-export function listRepositoryAiPackages(): Promise<RepositoryAiPackageDescriptor[]> {
-  return request<RepositoryAiPackageDescriptor[]>("/api/repositories/ai-packages");
+export function listCapabilityPackages(): Promise<CapabilityPackageDescriptor[]> {
+  return request<CapabilityPackageDescriptor[]>("/api/repositories/packages");
 }
 
 export function listRepositoryPlugins(): Promise<RepositoryPluginDescriptor[]> {
@@ -686,16 +829,16 @@ export function listPluginsByRepository(id: string): Promise<RepositoryPluginDes
   return request<RepositoryPluginDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/plugins`);
 }
 
-export function listAiPackagesByRepository(id: string): Promise<RepositoryAiPackageDescriptor[]> {
-  return request<RepositoryAiPackageDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/ai-packages`);
+export function listCapabilityPackagesByRepository(id: string): Promise<CapabilityPackageDescriptor[]> {
+  return request<CapabilityPackageDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/packages`);
 }
 
 export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
   return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}`);
 }
 
-export function getRepositoryAiPackage(repositoryId: string, packageId: string): Promise<RepositoryAiPackageDetail> {
-  return request<RepositoryAiPackageDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}`);
+export function getCapabilityPackage(repositoryId: string, packageId: string): Promise<CapabilityPackageDetail> {
+  return request<CapabilityPackageDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/${encodeURIComponent(packageId)}`);
 }
 
 export function installRepositoryTool(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<void> {
@@ -778,22 +921,22 @@ export function publishRepositoryTool(repositoryId: string, payload: RepositoryP
   });
 }
 
-export function previewRepositoryAiPackagePublish(
+export function previewCapabilityPackagePublish(
   repositoryId: string,
-  payload: RepositoryAiPackagePublishPreviewRequest
-): Promise<RepositoryAiPackagePublishPreview> {
-  return request<RepositoryAiPackagePublishPreview>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-ai-package-preview`, {
+  payload: CapabilityPackagePublishPreviewRequest
+): Promise<CapabilityPackagePublishPreview> {
+  return request<CapabilityPackagePublishPreview>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/preview`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
   });
 }
 
-export function publishRepositoryAiPackage(
+export function publishCapabilityPackage(
   repositoryId: string,
-  payload: RepositoryAiPackagePublishRequest
-): Promise<RepositoryAiPackageDescriptor> {
-  return request<RepositoryAiPackageDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-ai-package`, {
+  payload: CapabilityPackagePublishRequest
+): Promise<CapabilityPackageDescriptor> {
+  return request<CapabilityPackageDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/publish`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -818,20 +961,20 @@ export function publishRepositoryPlugin(repositoryId: string, payload: Repositor
   });
 }
 
-export function installRepositoryAiPackage(repositoryId: string, packageId: string): Promise<RepositoryAiPackageInstallResult> {
-  return request<RepositoryAiPackageInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}/install`, {
+export function installCapabilityPackage(repositoryId: string, packageId: string): Promise<CapabilityPackageInstallResult> {
+  return request<CapabilityPackageInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/${encodeURIComponent(packageId)}/install`, {
     method: "POST"
   });
 }
 
-export function updateRepositoryAiPackage(repositoryId: string, packageId: string): Promise<RepositoryAiPackageInstallResult> {
-  return request<RepositoryAiPackageInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}/update`, {
+export function updateCapabilityPackage(repositoryId: string, packageId: string): Promise<CapabilityPackageInstallResult> {
+  return request<CapabilityPackageInstallResult>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/${encodeURIComponent(packageId)}/update`, {
     method: "POST"
   });
 }
 
-export function uninstallRepositoryAiPackage(repositoryId: string, packageId: string): Promise<void> {
-  return request<void>(`/api/repositories/${encodeURIComponent(repositoryId)}/ai-packages/${encodeURIComponent(packageId)}`, {
+export function uninstallCapabilityPackage(repositoryId: string, packageId: string): Promise<void> {
+  return request<void>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/${encodeURIComponent(packageId)}`, {
     method: "DELETE"
   });
 }

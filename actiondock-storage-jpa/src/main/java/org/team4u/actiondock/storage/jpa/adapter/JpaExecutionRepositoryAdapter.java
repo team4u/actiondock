@@ -84,6 +84,10 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setScheduleId(record.getScheduleId());
         entity.setAgentRunId(record.getAgentRunId());
         entity.setAgentStepId(record.getAgentStepId());
+        entity.setEventSourceId(record.getEventSourceId());
+        entity.setEventTriggerId(record.getEventTriggerId());
+        entity.setEventRecordId(record.getEventRecordId());
+        entity.setEventDispatchId(record.getEventDispatchId());
         entity.setInputJson(jsonCodec.write(record.getInput()));
         entity.setOutputJson(jsonCodec.write(record.getOutput()));
         entity.setLogsJson(jsonCodec.write(record.getLogs()));
@@ -117,6 +121,10 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
                 .setScheduleId(entity.getScheduleId())
                 .setAgentRunId(entity.getAgentRunId())
                 .setAgentStepId(entity.getAgentStepId())
+                .setEventSourceId(entity.getEventSourceId())
+                .setEventTriggerId(entity.getEventTriggerId())
+                .setEventRecordId(entity.getEventRecordId())
+                .setEventDispatchId(entity.getEventDispatchId())
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
                 .setOutput(jsonCodec.readMap(entity.getOutputJson()))
                 .setLogs(jsonCodec.readList(entity.getLogsJson(), ExecutionLogEntry.class))

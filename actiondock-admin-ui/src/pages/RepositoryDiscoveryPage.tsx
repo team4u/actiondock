@@ -1,5 +1,6 @@
 import {
   DownloadOutlined,
+  PlusOutlined,
   ReloadOutlined,
   SyncOutlined
 } from "@ant-design/icons";
@@ -16,26 +17,26 @@ import {
   Space,
   Spin,
   Table,
-  Tag,
   Tabs,
+  Tag,
   Typography,
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ApiError,
   developRepositoryTool,
-  getRepositoryAiPackage,
+  getCapabilityPackage,
   getRepositoryTool,
-  installRepositoryAiPackage,
+  installCapabilityPackage,
   installRepositoryTool,
+  listCapabilityPackages,
   listRepositories,
-  listRepositoryAiPackages,
   listRepositoryTools,
-  uninstallRepositoryAiPackage,
-  updateRepositoryAiPackage,
+  uninstallCapabilityPackage,
+  updateCapabilityPackage,
   updateRepositoryTool
 } from "../api";
 import { CodeEditor } from "../components/CodeEditor";
@@ -46,18 +47,18 @@ import { getScriptTypeLabel } from "../components/domain/typeLabels";
 import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
+import { useColorMode } from "../contexts/ColorModeContext";
 import type {
+  CapabilityPackageDescriptor,
+  CapabilityPackageDetail,
   PluginDependency,
   RepositoryAiPackageDependency,
-  RepositoryAiPackageDescriptor,
-  RepositoryAiPackageDetail,
   RepositoryDefinition,
-  ScriptDependency,
   RepositoryToolDescriptor,
-  RepositoryToolDetail
+  RepositoryToolDetail,
+  ScriptDependency
 } from "../types";
 import { getErrorMessage } from "../utils";
-import { useColorMode } from "../contexts/ColorModeContext";
 
 const { Text } = Typography;
 
@@ -136,13 +137,34 @@ function renderScriptDependencies(dependencies: ScriptDependency[]) {
   );
 }
 
+function renderExternalDependencies(dependencies: RepositoryAiPackageDependency[]) {
+  if (dependencies.length === 0) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该能力包没有外部依赖" />;
+  }
+
+  return (
+    <Table<RepositoryAiPackageDependency>
+      rowKey={(item) => `${item.assetType}:${item.repositoryId}:${item.assetId}`}
+      size="small"
+      pagination={false}
+      dataSource={dependencies}
+      columns={[
+        { title: "类型", dataIndex: "assetType", key: "assetType" },
+        { title: "仓库", dataIndex: "repositoryId", key: "repositoryId", render: (value?: string) => value || "-" },
+        { title: "资产", dataIndex: "assetId", key: "assetId" },
+        { title: "版本", dataIndex: "version", key: "version", render: (value?: string) => value || "-" }
+      ]}
+    />
+  );
+}
+
 export function RepositoryDiscoveryPage() {
   const navigate = useNavigate();
   const colorMode = useColorMode();
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [tools, setTools] = useState<RepositoryToolDescriptor[]>([]);
-  const [packages, setPackages] = useState<RepositoryAiPackageDescriptor[]>([]);
+  const [packages, setPackages] = useState<CapabilityPackageDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -151,7 +173,7 @@ export function RepositoryDiscoveryPage() {
   const [packageActionKey, setPackageActionKey] = useState<string | null>(null);
   const [packageDetailOpen, setPackageDetailOpen] = useState(false);
   const [packageDetailLoading, setPackageDetailLoading] = useState(false);
-  const [packageDetail, setPackageDetail] = useState<RepositoryAiPackageDetail | null>(null);
+  const [packageDetail, setPackageDetail] = useState<CapabilityPackageDetail | null>(null);
   const [searchText, setSearchText] = useState("");
   const [repositoryFilter, setRepositoryFilter] = useState<string>("ALL");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
@@ -166,7 +188,7 @@ export function RepositoryDiscoveryPage() {
       const [repositoryData, toolData, packageData] = await Promise.all([
         listRepositories(),
         listRepositoryTools(),
-        listRepositoryAiPackages()
+        listCapabilityPackages()
       ]);
       setRepositories(repositoryData);
       setTools(toolData);
@@ -246,7 +268,8 @@ export function RepositoryDiscoveryPage() {
         item.packageId,
         item.description ?? "",
         item.owner ?? "",
-        item.repositoryId
+        item.repositoryId,
+        ...item.tags
       ].join(" ").toLowerCase();
       return keyword.split(/\s+/).every((part) => haystack.includes(part));
     });
@@ -265,14 +288,14 @@ export function RepositoryDiscoveryPage() {
     }
   };
 
-  const openPackageDetail = async (descriptor: RepositoryAiPackageDescriptor) => {
+  const openPackageDetail = async (descriptor: CapabilityPackageDescriptor) => {
     setPackageDetailOpen(true);
     setPackageDetailLoading(true);
     try {
-      setPackageDetail(await getRepositoryAiPackage(descriptor.repositoryId, descriptor.packageId));
+      setPackageDetail(await getCapabilityPackage(descriptor.repositoryId, descriptor.packageId));
     } catch (error) {
       setPackageDetail(null);
-      messageApi.error(getErrorMessage(error, "加载 AI 能力包详情失败"));
+      messageApi.error(getErrorMessage(error, "加载能力包详情失败"));
     } finally {
       setPackageDetailLoading(false);
     }
@@ -298,7 +321,7 @@ export function RepositoryDiscoveryPage() {
     const scheduleCount = detailForAction.scheduleTemplate.length;
 
     await modal.confirm({
-      title: action === "install" ? "安装脚本" : "更新脚本",
+      title: action === "install" ? "安装脚本资产" : "更新脚本资产",
       okText: action === "install" ? "安装" : "更新",
       cancelText: "取消",
       content: (
@@ -308,7 +331,7 @@ export function RepositoryDiscoveryPage() {
           </Text>
           {scheduleCount > 0 ? (
             <Checkbox onChange={(event) => { installSchedules = event.target.checked; }}>
-              同时创建 {scheduleCount} 个定时任务模板（创建后默认停用）
+              同时创建 {scheduleCount} 个定时任务模板
             </Checkbox>
           ) : (
             <Text type="secondary">该脚本没有定时任务模板。</Text>
@@ -355,7 +378,7 @@ export function RepositoryDiscoveryPage() {
           installPluginDependencies
         });
       }
-      messageApi.success(action === "install" ? "脚本已安装到本机" : "脚本已更新");
+      messageApi.success(action === "install" ? "脚本资产已安装" : "脚本资产已更新");
       await loadData();
       if (detailOpen) {
         await openDetail(descriptor);
@@ -401,67 +424,93 @@ export function RepositoryDiscoveryPage() {
     }
   };
 
-  const handlePackageInstall = async (descriptor: RepositoryAiPackageDescriptor, action: "install" | "update") => {
+  const handlePackageInstall = async (descriptor: CapabilityPackageDescriptor, action: InstallAction) => {
+    const detailForAction = packageDetail?.descriptor.repositoryId === descriptor.repositoryId
+      && packageDetail?.descriptor.packageId === descriptor.packageId
+      ? packageDetail
+      : await getCapabilityPackage(descriptor.repositoryId, descriptor.packageId).catch((error) => {
+        messageApi.error(getErrorMessage(error, "读取能力包发布计划失败"));
+        return null;
+      });
+
+    if (!detailForAction) {
+      return;
+    }
+
     await modal.confirm({
-      title: action === "install" ? "安装 AI 能力包" : "更新 AI 能力包",
+      title: action === "install" ? "安装能力包" : "更新能力包",
       okText: action === "install" ? "安装" : "更新",
       cancelText: "取消",
       content: (
-        <Space direction="vertical" size={8} style={{ width: "100%" }}>
-          <Text>{descriptor.displayName} 将作为独立 AI 能力安装到本机。</Text>
-          <Text code>{descriptor.repositoryId}/{descriptor.packageId}</Text>
+        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Text>{descriptor.displayName} 将以整包方式安装到本机。</Text>
+          <Text code>{descriptor.repositoryId}/{descriptor.packageId}@{descriptor.version}</Text>
+          <Descriptions bordered size="small" column={2}>
+            <Descriptions.Item label="入口">{detailForAction.releaseFile.entries.map((item) => item.displayName).join(", ") || "-"}</Descriptions.Item>
+            <Descriptions.Item label="脚本">{detailForAction.releaseFile.scripts.length}</Descriptions.Item>
+            <Descriptions.Item label="Agent">{detailForAction.releaseFile.agents.length}</Descriptions.Item>
+            <Descriptions.Item label="工具集">{detailForAction.releaseFile.toolsets.length}</Descriptions.Item>
+            <Descriptions.Item label="模型">{detailForAction.releaseFile.models.length}</Descriptions.Item>
+            <Descriptions.Item label="配置模板">{detailForAction.configTemplate.length}</Descriptions.Item>
+            <Descriptions.Item label="定时任务模板">{detailForAction.scheduleTemplate.length}</Descriptions.Item>
+            <Descriptions.Item label="执行预设">{detailForAction.presetTemplate.length}</Descriptions.Item>
+          </Descriptions>
+          {!descriptor.trusted ? (
+            <Text type="warning">当前来源仓库未标记为可信，安装前请先检查闭包、配置模板和依赖。</Text>
+          ) : null}
         </Space>
       )
     });
+
     setPackageActionKey(`${action}:${descriptor.repositoryId}:${descriptor.packageId}`);
     try {
       if (action === "install") {
-        await installRepositoryAiPackage(descriptor.repositoryId, descriptor.packageId);
+        await installCapabilityPackage(descriptor.repositoryId, descriptor.packageId);
       } else {
-        await updateRepositoryAiPackage(descriptor.repositoryId, descriptor.packageId);
+        await updateCapabilityPackage(descriptor.repositoryId, descriptor.packageId);
       }
-      messageApi.success(action === "install" ? "AI 能力包已安装" : "AI 能力包已更新");
+      messageApi.success(action === "install" ? "能力包已安装" : "能力包已更新");
       await loadData();
       if (packageDetailOpen) {
         await openPackageDetail(descriptor);
       }
     } catch (error) {
-      messageApi.error(getErrorMessage(error, action === "install" ? "安装 AI 能力包失败" : "更新 AI 能力包失败"));
+      messageApi.error(getErrorMessage(error, action === "install" ? "安装能力包失败" : "更新能力包失败"));
     } finally {
       setPackageActionKey(null);
     }
   };
 
-  const handlePackageUninstall = async (descriptor: RepositoryAiPackageDescriptor) => {
+  const handlePackageUninstall = async (descriptor: CapabilityPackageDescriptor) => {
     await modal.confirm({
-      title: "卸载 AI 能力包",
+      title: "卸载能力包",
       okText: "卸载",
       okButtonProps: { danger: true },
       cancelText: "取消",
       content: (
         <Space direction="vertical" size={8} style={{ width: "100%" }}>
-          <Text>将删除该能力包安装出的入口 Agent、内部工具集、模型和脚本。</Text>
+          <Text>将删除该能力包安装出的脚本、Agent、工具集、模型、定时任务和执行预设。</Text>
           <Text code>{descriptor.repositoryId}/{descriptor.packageId}</Text>
         </Space>
       )
     });
     setPackageActionKey(`uninstall:${descriptor.repositoryId}:${descriptor.packageId}`);
     try {
-      await uninstallRepositoryAiPackage(descriptor.repositoryId, descriptor.packageId);
-      messageApi.success("AI 能力包已卸载");
+      await uninstallCapabilityPackage(descriptor.repositoryId, descriptor.packageId);
+      messageApi.success("能力包已卸载");
       setPackageDetailOpen(false);
       setPackageDetail(null);
       await loadData();
     } catch (error) {
-      messageApi.error(getErrorMessage(error, "卸载 AI 能力包失败"));
+      messageApi.error(getErrorMessage(error, "卸载能力包失败"));
     } finally {
       setPackageActionKey(null);
     }
   };
 
-  const columns: ColumnsType<RepositoryToolDescriptor> = [
+  const toolColumns: ColumnsType<RepositoryToolDescriptor> = [
     {
-      title: "脚本",
+      title: "脚本资产",
       key: "tool",
       render: (_value: unknown, record) => (
         <Space wrap size={[8, 8]}>
@@ -565,7 +614,7 @@ export function RepositoryDiscoveryPage() {
     }
   ];
 
-  const packageColumns: ColumnsType<RepositoryAiPackageDescriptor> = [
+  const capabilityPackageColumns: ColumnsType<CapabilityPackageDescriptor> = [
     {
       title: "能力包",
       key: "package",
@@ -577,10 +626,21 @@ export function RepositoryDiscoveryPage() {
       )
     },
     {
-      title: "入口 Agent",
-      key: "entryAgent",
-      width: 220,
-      render: (_value: unknown, record) => <Text code>{record.installedEntryAgentId || `cap.${record.repositoryId}.${record.packageId}`}</Text>
+      title: "入口",
+      key: "entries",
+      width: 260,
+      render: (_value: unknown, record) => (
+        <Space direction="vertical" size={2}>
+          {record.entries.length > 0 ? (
+            <>
+              <Text code>{record.entries[0].target}</Text>
+              {record.entries.length > 1 ? <Text type="secondary">共 {record.entries.length} 个入口</Text> : null}
+            </>
+          ) : (
+            <Text type="secondary">未声明</Text>
+          )}
+        </Space>
+      )
     },
     {
       title: "版本",
@@ -636,19 +696,58 @@ export function RepositoryDiscoveryPage() {
     }
   ];
 
+  const packageDrawerActions = packageDetail ? (
+    <Space>
+      {packageDetail.descriptor.installed ? (
+        <>
+          <Button
+            type={packageDetail.descriptor.updateAvailable ? "primary" : "default"}
+            ghost={packageDetail.descriptor.updateAvailable}
+            disabled={!packageDetail.descriptor.updateAvailable}
+            loading={packageActionKey === `update:${packageDetail.descriptor.repositoryId}:${packageDetail.descriptor.packageId}`}
+            onClick={() => void handlePackageInstall(packageDetail.descriptor, "update")}
+          >
+            {packageDetail.descriptor.updateAvailable ? "更新能力包" : "已安装"}
+          </Button>
+          <Button
+            danger
+            loading={packageActionKey === `uninstall:${packageDetail.descriptor.repositoryId}:${packageDetail.descriptor.packageId}`}
+            onClick={() => void handlePackageUninstall(packageDetail.descriptor)}
+          >
+            卸载
+          </Button>
+        </>
+      ) : (
+        <Button
+          type="primary"
+          icon={<DownloadOutlined />}
+          loading={packageActionKey === `install:${packageDetail.descriptor.repositoryId}:${packageDetail.descriptor.packageId}`}
+          onClick={() => void handlePackageInstall(packageDetail.descriptor, "install")}
+        >
+          安装能力包
+        </Button>
+      )}
+    </Space>
+  ) : null;
+
   return (
     <>
       {contextHolder}
       {modalContextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title="发现脚本"
-          meta={<Text type="secondary">聚合展示所有已添加仓库中的脚本。安装只是把定义同步到本机，执行仍在你的机器上完成。</Text>}
-          actions={
-            <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
-              刷新目录
-            </Button>
-          }
+          title="发现能力包"
+          meta={<Text type="secondary">优先按能力包发现、安装和升级。底层脚本资产仍可单独查看和同步，但不再是主分发入口。</Text>}
+          actions={(
+            <Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/packages/publish")}>
+                发布能力包
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
+                刷新目录
+              </Button>
+            </Space>
+          )}
         />
 
         <Card>
@@ -656,8 +755,8 @@ export function RepositoryDiscoveryPage() {
             <Input.Search
               allowClear
               value={searchText}
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSearchText(event.target.value)}
-              placeholder="搜索名称、toolId、来源或维护人"
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setSearchText(event.target.value)}
+              placeholder="搜索能力包、脚本、来源仓库或维护人"
               style={{ minWidth: 220, flex: "1 1 280px" }}
             />
             <Select
@@ -667,16 +766,6 @@ export function RepositoryDiscoveryPage() {
               options={[
                 { value: "ALL", label: "全部仓库" },
                 ...repositories.map((item) => ({ value: item.id, label: item.name }))
-              ]}
-            />
-            <Select
-              value={typeFilter}
-              onChange={setTypeFilter}
-              style={{ minWidth: 130 }}
-              options={[
-                { value: "ALL", label: "全部类型" },
-                { value: "PYTHON", label: "Python" },
-                { value: "GROOVY", label: "Groovy" }
               ]}
             />
             <Select
@@ -699,50 +788,74 @@ export function RepositoryDiscoveryPage() {
                 { value: "UNTRUSTED", label: "未信任仓库" }
               ]}
             />
+            <Select
+              value={typeFilter}
+              onChange={setTypeFilter}
+              style={{ minWidth: 130 }}
+              options={[
+                { value: "ALL", label: "全部脚本类型" },
+                { value: "PYTHON", label: "Python" },
+                { value: "GROOVY", label: "Groovy" }
+              ]}
+            />
           </Space>
         </Card>
 
         <Card>
-          <Table<RepositoryToolDescriptor>
-            rowKey={(item: RepositoryToolDescriptor) => `${item.repositoryId}:${item.toolId}`}
-            loading={loading}
-            columns={columns}
-            dataSource={filteredTools}
-            scroll={{ x: 1200 }}
-            pagination={{ pageSize: 10, showSizeChanger: true }}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="当前没有可发现的脚本。先到仓库管理页添加并同步仓库。"
-                />
-              )
-            }}
-          />
-        </Card>
-
-        <Card title="AI 能力包">
-          <Table<RepositoryAiPackageDescriptor>
-            rowKey={(item: RepositoryAiPackageDescriptor) => `${item.repositoryId}:${item.packageId}`}
-            loading={loading}
-            columns={packageColumns}
-            dataSource={filteredPackages}
-            scroll={{ x: 900 }}
-            pagination={{ pageSize: 10, showSizeChanger: true }}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="当前没有可发现的 AI 能力包。"
-                />
-              )
-            }}
+          <Tabs
+            defaultActiveKey="packages"
+            items={[
+              {
+                key: "packages",
+                label: `能力包 (${filteredPackages.length})`,
+                children: (
+                  <Table<CapabilityPackageDescriptor>
+                    rowKey={(item) => `${item.repositoryId}:${item.packageId}`}
+                    loading={loading}
+                    columns={capabilityPackageColumns}
+                    dataSource={filteredPackages}
+                    scroll={{ x: 960 }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="当前没有可发现的能力包。"
+                        />
+                      )
+                    }}
+                  />
+                )
+              },
+              {
+                key: "tools",
+                label: `底层脚本资产 (${filteredTools.length})`,
+                children: (
+                  <Table<RepositoryToolDescriptor>
+                    rowKey={(item) => `${item.repositoryId}:${item.toolId}`}
+                    loading={loading}
+                    columns={toolColumns}
+                    dataSource={filteredTools}
+                    scroll={{ x: 1200 }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="当前没有可发现的脚本资产。先到仓库管理页添加并同步仓库。"
+                        />
+                      )
+                    }}
+                  />
+                )
+              }
+            ]}
           />
         </Card>
       </Space>
 
       <Drawer
-        title={detail?.descriptor.displayName || "脚本详情"}
+        title={detail?.descriptor.displayName || "脚本资产详情"}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         width={920}
@@ -871,22 +984,22 @@ export function RepositoryDiscoveryPage() {
                         }
                       ]}
                     />
-	                  ) : (
-	                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有配置模板" />
-	                  )
-	                },
-	                {
-	                  key: "scripts",
-	                  label: `脚本依赖 (${detail.descriptor.scriptDependencies.length})`,
-	                  children: renderScriptDependencies(detail.descriptor.scriptDependencies)
-	                },
-	                {
-	                  key: "plugins",
-	                  label: `插件依赖 (${detail.descriptor.pluginDependencies.length})`,
-	                  children: renderPluginDependencies(detail.descriptor.pluginDependencies)
-	                },
-	                {
-	                  key: "schedules",
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有配置模板" />
+                  )
+                },
+                {
+                  key: "scripts",
+                  label: `脚本依赖 (${detail.descriptor.scriptDependencies.length})`,
+                  children: renderScriptDependencies(detail.descriptor.scriptDependencies)
+                },
+                {
+                  key: "plugins",
+                  label: `插件依赖 (${detail.descriptor.pluginDependencies.length})`,
+                  children: renderPluginDependencies(detail.descriptor.pluginDependencies)
+                },
+                {
+                  key: "schedules",
                   label: `定时模板 (${detail.scheduleTemplate.length})`,
                   children: detail.scheduleTemplate.length > 0 ? (
                     <Table
@@ -896,6 +1009,12 @@ export function RepositoryDiscoveryPage() {
                       dataSource={detail.scheduleTemplate}
                       columns={[
                         { title: "名称", dataIndex: "name", key: "name" },
+                        {
+                          title: "绑定脚本",
+                          dataIndex: "scriptId",
+                          key: "scriptId",
+                          render: (value: string) => <Text code>{value}</Text>
+                        },
                         { title: "Cron", dataIndex: "cronExpression", key: "cronExpression" },
                         {
                           title: "默认状态",
@@ -916,18 +1035,19 @@ export function RepositoryDiscoveryPage() {
       </Drawer>
 
       <Drawer
-        title={packageDetail?.descriptor.displayName || "AI 能力包详情"}
+        title={packageDetail?.descriptor.displayName || "能力包详情"}
         open={packageDetailOpen}
         onClose={() => setPackageDetailOpen(false)}
-        width={920}
+        width={980}
         destroyOnHidden
+        extra={packageDrawerActions}
       >
         {packageDetailLoading ? (
           <div className="page-loading">
             <Spin size="large" />
           </div>
         ) : !packageDetail ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="AI 能力包详情加载失败" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="能力包详情加载失败" />
         ) : (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Descriptions
@@ -936,18 +1056,22 @@ export function RepositoryDiscoveryPage() {
               column={2}
               items={[
                 { key: "package", label: "能力包 ID", children: <Text code>{packageDetail.descriptor.repositoryId}/{packageDetail.descriptor.packageId}</Text> },
-                { key: "entry", label: "入口 Agent", children: <Text code>{packageDetail.descriptor.installedEntryAgentId || `cap.${packageDetail.descriptor.repositoryId}.${packageDetail.descriptor.packageId}`}</Text> },
-                { key: "version", label: "远端版本", children: packageDetail.descriptor.version },
+                { key: "version", label: "发布版本", children: packageDetail.descriptor.version },
                 { key: "installedVersion", label: "本机版本", children: packageDetail.descriptor.installedVersion || "-" },
                 { key: "owner", label: "维护人", children: packageDetail.descriptor.owner || "-" },
-                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={packageDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> }
+                { key: "entry", label: "主入口", children: packageDetail.releaseFile.entries[0] ? <Text code>{packageDetail.releaseFile.entries[0].target}</Text> : "-" },
+                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={packageDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
+                { key: "risk", label: "风险等级", children: <RiskLevelTag level={packageDetail.descriptor.riskLevel} /> },
+                { key: "sourceType", label: "发布来源", children: packageDetail.releaseFile.sourceType }
               ]}
             />
+
             <Space wrap size={[8, 8]}>
               {packageDetail.descriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
               {packageDetail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
               {packageDetail.descriptor.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
             </Space>
+
             <Tabs
               items={[
                 {
@@ -974,14 +1098,31 @@ export function RepositoryDiscoveryPage() {
                 },
                 {
                   key: "assets",
-                  label: "打包内容",
+                  label: "发布资产",
                   children: (
-                    <Descriptions bordered size="small" column={2}>
-                      <Descriptions.Item label="模型">{packageDetail.packageFile.models.map((item) => item.id).join(", ") || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="工具集">{packageDetail.packageFile.toolsets.map((item) => item.id).join(", ") || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="Agent">{packageDetail.packageFile.agents.map((item) => item.id).join(", ") || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="脚本">{packageDetail.packageFile.scripts.map((item) => item.id).join(", ") || "-"}</Descriptions.Item>
-                    </Descriptions>
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                      <Descriptions bordered size="small" column={4}>
+                        <Descriptions.Item label="入口">{packageDetail.releaseFile.entries.length}</Descriptions.Item>
+                        <Descriptions.Item label="脚本">{packageDetail.releaseFile.scripts.length}</Descriptions.Item>
+                        <Descriptions.Item label="Agent">{packageDetail.releaseFile.agents.length}</Descriptions.Item>
+                        <Descriptions.Item label="工具集">{packageDetail.releaseFile.toolsets.length}</Descriptions.Item>
+                        <Descriptions.Item label="模型">{packageDetail.releaseFile.models.length}</Descriptions.Item>
+                        <Descriptions.Item label="配置模板">{packageDetail.configTemplate.length}</Descriptions.Item>
+                        <Descriptions.Item label="定时任务">{packageDetail.scheduleTemplate.length}</Descriptions.Item>
+                        <Descriptions.Item label="执行预设">{packageDetail.presetTemplate.length}</Descriptions.Item>
+                      </Descriptions>
+                      <Table
+                        rowKey={(item) => `${item.type}:${item.id}`}
+                        size="small"
+                        pagination={false}
+                        dataSource={packageDetail.releaseFile.entries}
+                        columns={[
+                          { title: "入口类型", dataIndex: "type", key: "type", width: 120 },
+                          { title: "名称", dataIndex: "displayName", key: "displayName" },
+                          { title: "目标", dataIndex: "target", key: "target", render: (value: string) => <Text code>{value}</Text> }
+                        ]}
+                      />
+                    </Space>
                   )
                 },
                 {
@@ -1005,6 +1146,16 @@ export function RepositoryDiscoveryPage() {
                           dataIndex: "label",
                           key: "label",
                           render: (value?: string) => value || "-"
+                        },
+                        {
+                          title: "要求",
+                          key: "required",
+                          render: (_value: unknown, record) => (
+                            <Space wrap size={[6, 6]}>
+                              {record.required ? <Tag color="blue">必填</Tag> : <Tag>可选</Tag>}
+                              {record.secret ? <Tag color="gold">SECRET</Tag> : <Tag>{record.type}</Tag>}
+                            </Space>
+                          )
                         }
                       ]}
                     />
@@ -1013,24 +1164,53 @@ export function RepositoryDiscoveryPage() {
                   )
                 },
                 {
-                  key: "dependencies",
-                  label: `外部依赖 (${packageDetail.packageFile.externalDependencies.length})`,
-                  children: packageDetail.packageFile.externalDependencies.length > 0 ? (
+                  key: "schedules",
+                  label: `定时任务 (${packageDetail.scheduleTemplate.length})`,
+                  children: packageDetail.scheduleTemplate.length > 0 ? (
                     <Table
-                      rowKey={(item: RepositoryAiPackageDependency) => `${item.assetType}:${item.repositoryId}:${item.assetId}`}
+                      rowKey="id"
                       size="small"
                       pagination={false}
-                      dataSource={packageDetail.packageFile.externalDependencies}
+                      dataSource={packageDetail.scheduleTemplate}
                       columns={[
-                        { title: "类型", dataIndex: "assetType", key: "assetType" },
-                        { title: "仓库", dataIndex: "repositoryId", key: "repositoryId" },
-                        { title: "资产", dataIndex: "assetId", key: "assetId" },
-                        { title: "版本", dataIndex: "version", key: "version" }
+                        { title: "名称", dataIndex: "name", key: "name" },
+                        { title: "脚本", dataIndex: "scriptId", key: "scriptId", render: (value: string) => <Text code>{value}</Text> },
+                        { title: "Cron", dataIndex: "cronExpression", key: "cronExpression" },
+                        {
+                          title: "默认状态",
+                          dataIndex: "enabledByDefault",
+                          key: "enabledByDefault",
+                          render: (value: boolean) => value ? <Tag color="processing">默认启用</Tag> : <Tag>默认停用</Tag>
+                        }
                       ]}
                     />
                   ) : (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该能力包没有外部依赖" />
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该能力包没有定时任务模板" />
                   )
+                },
+                {
+                  key: "presets",
+                  label: `执行预设 (${packageDetail.presetTemplate.length})`,
+                  children: packageDetail.presetTemplate.length > 0 ? (
+                    <Table
+                      rowKey="id"
+                      size="small"
+                      pagination={false}
+                      dataSource={packageDetail.presetTemplate}
+                      columns={[
+                        { title: "预设 ID", dataIndex: "id", key: "id", render: (value: string) => <Text code>{value}</Text> },
+                        { title: "名称", dataIndex: "name", key: "name" },
+                        { title: "脚本", dataIndex: "scriptId", key: "scriptId", render: (value: string) => <Text code>{value}</Text> }
+                      ]}
+                    />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该能力包没有执行预设模板" />
+                  )
+                },
+                {
+                  key: "dependencies",
+                  label: `外部依赖 (${packageDetail.releaseFile.externalDependencies.length})`,
+                  children: renderExternalDependencies(packageDetail.releaseFile.externalDependencies)
                 }
               ]}
             />

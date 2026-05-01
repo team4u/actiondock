@@ -17,6 +17,11 @@ public class ExecutionPresetViewMapper {
                 preset.getScriptId(),
                 preset.getName(),
                 preset.getInput(),
+                preset.isManaged(),
+                preset.isEditable(),
+                preset.getRepositoryId(),
+                preset.getRepositoryPackageId(),
+                preset.getRepositoryVersion(),
                 preset.getCreatedAt(),
                 preset.getUpdatedAt()
         );

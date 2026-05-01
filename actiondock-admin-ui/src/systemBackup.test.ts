@@ -13,6 +13,8 @@ describe("systemBackup shared state support", () => {
     const backup = buildBackupJson({
       scripts: [],
       schedules: [],
+      eventSources: [],
+      eventTriggers: [],
       configValues: [],
       executionPresets: [],
       repositories: [],
@@ -65,6 +67,8 @@ describe("systemBackup shared state support", () => {
       data: {
         scripts: [],
         schedules: [],
+        eventSources: [],
+        eventTriggers: [],
         configValues: [],
         executionPresets: [],
         repositories: [],
@@ -86,6 +90,8 @@ describe("systemBackup shared state support", () => {
       data: {
         scripts: [],
         schedules: [],
+        eventSources: [],
+        eventTriggers: [],
         configValues: [],
         executionPresets: [],
         repositories: [],
@@ -140,6 +146,8 @@ describe("systemBackup shared state support", () => {
       data: {
         scripts: [],
         schedules: [],
+        eventSources: [],
+        eventTriggers: [],
         configValues: [],
         executionPresets: [],
         repositories: [],
@@ -164,6 +172,8 @@ describe("systemBackup shared state support", () => {
     const bundle = buildBackupJson({
       scripts: [],
       schedules: [],
+      eventSources: [],
+      eventTriggers: [],
       configValues: [],
       executionPresets: [],
       repositories: [],
@@ -206,6 +216,8 @@ describe("systemBackup shared state support", () => {
     const analysis = analyzeBackupBundle(bundle, {
       scripts: [],
       schedules: [],
+      eventSources: [],
+      eventTriggers: [],
       configValues: [],
       executionPresets: [],
       repositories: [],

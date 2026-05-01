@@ -41,6 +41,7 @@ public class ScriptScheduleEntity {
     private boolean editable = true;
     private String repositoryId;
     private String repositoryToolId;
+    private String repositoryPackageId;
     private String repositoryVersion;
 
     private LocalDateTime lastTriggeredAt;
@@ -121,6 +122,14 @@ public class ScriptScheduleEntity {
 
     public void setRepositoryToolId(String repositoryToolId) {
         this.repositoryToolId = repositoryToolId;
+    }
+
+    public String getRepositoryPackageId() {
+        return repositoryPackageId;
+    }
+
+    public void setRepositoryPackageId(String repositoryPackageId) {
+        this.repositoryPackageId = repositoryPackageId;
     }
 
     public String getRepositoryVersion() {

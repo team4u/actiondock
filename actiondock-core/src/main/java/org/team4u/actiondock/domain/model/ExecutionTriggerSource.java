@@ -8,5 +8,6 @@ package org.team4u.actiondock.domain.model;
 public enum ExecutionTriggerSource {
     MANUAL,
     SCHEDULED,
-    AI_TOOL
+    AI_TOOL,
+    EVENT
 }

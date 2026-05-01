@@ -32,7 +32,9 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return !path.startsWith("/api/");
+        return !path.startsWith("/api/")
+                || ("POST".equalsIgnoreCase(request.getMethod())
+                && path.matches("^/api/event-sources/[^/]+/events$"));
     }
 
     /**

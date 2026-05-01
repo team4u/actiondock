@@ -18,6 +18,11 @@ public class ExecutionPreset {
     private String scriptId;
     private String name;
     private Map<String, Object> input = new LinkedHashMap<>();
+    private boolean managed;
+    private boolean editable = true;
+    private String repositoryId;
+    private String repositoryPackageId;
+    private String repositoryVersion;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -54,6 +59,51 @@ public class ExecutionPreset {
 
     public ExecutionPreset setInput(Map<String, Object> input) {
         this.input = input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
+        return this;
+    }
+
+    public boolean isManaged() {
+        return managed;
+    }
+
+    public ExecutionPreset setManaged(boolean managed) {
+        this.managed = managed;
+        return this;
+    }
+
+    public boolean isEditable() {
+        return editable;
+    }
+
+    public ExecutionPreset setEditable(boolean editable) {
+        this.editable = editable;
+        return this;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public ExecutionPreset setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+        return this;
+    }
+
+    public String getRepositoryPackageId() {
+        return repositoryPackageId;
+    }
+
+    public ExecutionPreset setRepositoryPackageId(String repositoryPackageId) {
+        this.repositoryPackageId = repositoryPackageId;
+        return this;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public ExecutionPreset setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
         return this;
     }
 

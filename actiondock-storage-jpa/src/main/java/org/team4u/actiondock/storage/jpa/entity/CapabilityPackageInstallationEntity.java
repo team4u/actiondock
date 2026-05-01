@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "repository_ai_package_installation")
-public class RepositoryAiPackageInstallationEntity {
+public class CapabilityPackageInstallationEntity {
     @Id
     private String installationId;
     private String repositoryId;
@@ -29,6 +29,10 @@ public class RepositoryAiPackageInstallationEntity {
     private String agentIdsJson;
     @Lob
     private String scriptIdsJson;
+    @Lob
+    private String scheduleIdsJson;
+    @Lob
+    private String presetIdsJson;
     private LocalDateTime installedAt;
     private LocalDateTime updatedAt;
 
@@ -134,6 +138,22 @@ public class RepositoryAiPackageInstallationEntity {
 
     public void setScriptIdsJson(String scriptIdsJson) {
         this.scriptIdsJson = scriptIdsJson;
+    }
+
+    public String getScheduleIdsJson() {
+        return scheduleIdsJson;
+    }
+
+    public void setScheduleIdsJson(String scheduleIdsJson) {
+        this.scheduleIdsJson = scheduleIdsJson;
+    }
+
+    public String getPresetIdsJson() {
+        return presetIdsJson;
+    }
+
+    public void setPresetIdsJson(String presetIdsJson) {
+        this.presetIdsJson = presetIdsJson;
     }
 
     public LocalDateTime getInstalledAt() {

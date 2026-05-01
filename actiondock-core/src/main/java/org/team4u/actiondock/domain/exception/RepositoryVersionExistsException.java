@@ -23,6 +23,9 @@ public class RepositoryVersionExistsException extends IllegalArgumentException {
         if ("PLUGIN".equals(assetKind)) {
             return "插件";
         }
+        if ("CAPABILITY_PACKAGE".equals(assetKind)) {
+            return "能力包";
+        }
         if ("AI_PACKAGE".equals(assetKind)) {
             return "AI 能力包";
         }

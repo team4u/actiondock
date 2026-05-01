@@ -359,8 +359,11 @@ actiondock script publish hello-world --json
 
 根文档负责回答“它是什么、为什么值得引入、怎么最快试起来”。具体实现细节按模块拆分：
 
+如果你只关心事件框架，先看 [事件框架配置指南](docs/event-framework.md)。
+
 | 模块 | 说明 |
 |------|------|
+| [事件框架配置指南](docs/event-framework.md) | Event Source / Event Trigger / Processor / Event Record 的完整配置与排障流程 |
 | [actiondock-app-spring](actiondock-app-spring/README.md) | Spring Boot Web 入口、REST API、管理台挂载方式 |
 | [actiondock-admin-ui](actiondock-admin-ui/README.md) | React 管理台、页面结构、前端开发方式 |
 | [actiondock-cli](actiondock-cli/README.md) | Node.js CLI，面向终端和 AI 的扁平命令入口 |

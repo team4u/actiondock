@@ -32,6 +32,11 @@ import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.application.ExecutionPresetApplicationService;
+import org.team4u.actiondock.application.EventIngestionApplicationService;
+import org.team4u.actiondock.application.EventRecordApplicationService;
+import org.team4u.actiondock.application.EventSourceApplicationService;
+import org.team4u.actiondock.application.EventTriggerApplicationService;
+import org.team4u.actiondock.application.ProcessorApplicationService;
 import org.team4u.actiondock.application.ScheduleApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.application.ScriptInvocationService;
@@ -39,12 +44,17 @@ import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
+import org.team4u.actiondock.domain.port.EventDispatchRepository;
+import org.team4u.actiondock.domain.port.EventRecordRepository;
+import org.team4u.actiondock.domain.port.EventSourceRepository;
+import org.team4u.actiondock.domain.port.EventTriggerRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
+import org.team4u.actiondock.domain.port.ProcessorEngine;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
-import org.team4u.actiondock.domain.port.RepositoryAiPackageInstallationRepository;
+import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -53,6 +63,7 @@ import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
+import org.team4u.actiondock.processor.DefaultProcessorEngine;
 import org.team4u.actiondock.repository.HttpPluginArtifactResolver;
 import org.team4u.actiondock.repository.LocalPluginArtifactResolver;
 import org.team4u.actiondock.repository.PluginArtifactResolver;
@@ -246,6 +257,61 @@ public class RuntimeConfiguration {
     }
 
     @Bean
+    public ProcessorEngine processorEngine(ScriptInvocationService scriptInvocationService,
+                                           ConfigValueApplicationService configValueApplicationService) {
+        return new DefaultProcessorEngine(scriptInvocationService, configValueApplicationService);
+    }
+
+    @Bean
+    public ProcessorApplicationService processorApplicationService(ProcessorEngine processorEngine) {
+        return new ProcessorApplicationService(processorEngine);
+    }
+
+    @Bean
+    public EventSourceApplicationService eventSourceApplicationService(EventSourceRepository eventSourceRepository,
+                                                                       ProcessorEngine processorEngine) {
+        return new EventSourceApplicationService(eventSourceRepository, processorEngine);
+    }
+
+    @Bean
+    public EventTriggerApplicationService eventTriggerApplicationService(EventTriggerRepository eventTriggerRepository,
+                                                                         EventSourceRepository eventSourceRepository,
+                                                                         EventDispatchRepository eventDispatchRepository,
+                                                                         ScriptRepository scriptRepository,
+                                                                         ProcessorEngine processorEngine,
+                                                                         ExecutionApplicationService executionApplicationService) {
+        return new EventTriggerApplicationService(
+                eventTriggerRepository,
+                eventSourceRepository,
+                eventDispatchRepository,
+                scriptRepository,
+                processorEngine,
+                executionApplicationService
+        );
+    }
+
+    @Bean
+    public EventIngestionApplicationService eventIngestionApplicationService(EventSourceApplicationService eventSourceApplicationService,
+                                                                             EventTriggerApplicationService eventTriggerApplicationService,
+                                                                             EventRecordRepository eventRecordRepository,
+                                                                             EventDispatchRepository eventDispatchRepository,
+                                                                             ConfigValueApplicationService configValueApplicationService) {
+        return new EventIngestionApplicationService(
+                eventSourceApplicationService,
+                eventTriggerApplicationService,
+                eventRecordRepository,
+                eventDispatchRepository,
+                configValueApplicationService
+        );
+    }
+
+    @Bean
+    public EventRecordApplicationService eventRecordApplicationService(EventRecordRepository eventRecordRepository,
+                                                                       EventDispatchRepository eventDispatchRepository) {
+        return new EventRecordApplicationService(eventRecordRepository, eventDispatchRepository);
+    }
+
+    @Bean
     public ExecutionPresetApplicationService executionPresetApplicationService(ExecutionPresetRepository executionPresetRepository) {
         return new ExecutionPresetApplicationService(executionPresetRepository);
     }
@@ -268,9 +334,10 @@ public class RuntimeConfiguration {
     @Bean
     public RepositoryCatalogService repositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                                              RepositoryToolInstallationRepository repositoryToolInstallationRepository,
-                                                             RepositoryAiPackageInstallationRepository repositoryAiPackageInstallationRepository,
+                                                             CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
                                                              ScriptRepository scriptRepository,
                                                              ScriptScheduleRepository scriptScheduleRepository,
+                                                             ExecutionPresetRepository executionPresetRepository,
                                                              ConfigValueRepository configValueRepository,
                                                              AiModelProfileRepository aiModelProfileRepository,
                                                              AiAgentProfileRepository aiAgentProfileRepository,
@@ -284,9 +351,10 @@ public class RuntimeConfiguration {
         return new RepositoryCatalogService(
                 repositoryDefinitionRepository,
                 repositoryToolInstallationRepository,
-                repositoryAiPackageInstallationRepository,
+                capabilityPackageInstallationRepository,
                 scriptRepository,
                 scriptScheduleRepository,
+                executionPresetRepository,
                 configValueRepository,
                 aiModelProfileRepository,
                 aiAgentProfileRepository,

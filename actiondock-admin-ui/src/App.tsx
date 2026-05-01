@@ -27,6 +27,9 @@ const { useBreakpoint } = Grid;
 const RepositoryDiscoveryPage = lazy(() =>
   import("./pages/RepositoryDiscoveryPage").then((module) => ({ default: module.RepositoryDiscoveryPage }))
 );
+const CapabilityPackagePublishPage = lazy(() =>
+  import("./pages/CapabilityPackagePublishPage").then((module) => ({ default: module.CapabilityPackagePublishPage }))
+);
 const ScriptLibraryPage = lazy(() =>
   import("./pages/ScriptLibraryPage").then((module) => ({ default: module.ScriptLibraryPage }))
 );
@@ -47,6 +50,9 @@ const PluginDetailPage = lazy(() =>
 );
 const ScheduleManagementPage = lazy(() =>
   import("./pages/ScheduleManagementPage").then((module) => ({ default: module.ScheduleManagementPage }))
+);
+const TriggerCenterPage = lazy(() =>
+  import("./pages/TriggerCenterPage").then((module) => ({ default: module.TriggerCenterPage }))
 );
 const ScheduleEditorPage = lazy(() =>
   import("./pages/ScheduleEditorPage").then((module) => ({ default: module.ScheduleEditorPage }))
@@ -108,11 +114,17 @@ function useSystemColorMode(): ColorMode {
 }
 
 function resolveSelectedNavKey(pathname: string): string {
+  if (pathname.startsWith("/packages")) {
+    return "discover";
+  }
   if (pathname.startsWith("/plugins")) {
     return "plugins";
   }
+  if (pathname.startsWith("/triggers")) {
+    return "triggers";
+  }
   if (pathname.startsWith("/schedules")) {
-    return "schedules";
+    return "triggers";
   }
   if (pathname.startsWith("/settings")) {
     return "settings";
@@ -135,7 +147,7 @@ function resolveSelectedNavKey(pathname: string): string {
 function resolveTitle(selectedNavKey: string): string {
   switch (selectedNavKey) {
     case "discover":
-      return "发现脚本";
+      return "发现能力包";
     case "scripts":
       return "脚本库";
     case "repositories":
@@ -146,8 +158,8 @@ function resolveTitle(selectedNavKey: string): string {
       return "系统配置";
     case "ai":
       return "AI 能力";
-    case "schedules":
-      return "定时任务";
+    case "triggers":
+      return "触发器";
     default:
       return "脚本库";
   }
@@ -162,7 +174,7 @@ function AdminShell() {
   const isDark = colorMode === "dark";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const selectedNavKey = resolveSelectedNavKey(location.pathname);
-  const title = resolveTitle(selectedNavKey);
+  const title = location.pathname.startsWith("/packages") ? "发布能力包" : resolveTitle(selectedNavKey);
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
 
@@ -179,7 +191,7 @@ function AdminShell() {
         items={[
           {
             key: "discover",
-            label: "发现脚本",
+            label: "发现能力包",
             onClick: () => navigate("/discover")
           },
           {
@@ -198,9 +210,9 @@ function AdminShell() {
             onClick: () => navigate("/plugins")
           },
           {
-            key: "schedules",
-            label: "定时任务",
-            onClick: () => navigate("/schedules")
+            key: "triggers",
+            label: "触发器",
+            onClick: () => navigate("/triggers")
           },
           {
             key: "ai",
@@ -250,9 +262,12 @@ function AdminShell() {
             <Routes>
               <Route path="/" element={<Navigate to="/discover" replace />} />
               <Route path="/discover" element={<RepositoryDiscoveryPage />} />
+              <Route path="/packages/publish" element={<CapabilityPackagePublishPage />} />
+              <Route path="/packages/:packageId/releases/new" element={<CapabilityPackagePublishPage />} />
+              <Route path="/packages/:packageId/releases/:version" element={<CapabilityPackagePublishPage />} />
               <Route path="/repositories" element={<RepositoryManagementPage />} />
               <Route path="/scripts" element={<ScriptLibraryPage />} />
-              <Route path="/schedules" element={<ScheduleManagementPage />} />
+              <Route path="/triggers" element={<TriggerCenterPage />} />
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />

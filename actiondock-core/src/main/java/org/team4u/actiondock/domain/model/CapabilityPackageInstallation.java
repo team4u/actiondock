@@ -5,9 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 本地已安装的 AI 能力包记录。
+ * 本地已安装的能力包记录。
  */
-public class RepositoryAiPackageInstallation {
+public class CapabilityPackageInstallation {
     private String installationId;
     private String repositoryId;
     private String packageId;
@@ -21,6 +21,8 @@ public class RepositoryAiPackageInstallation {
     private List<String> toolsetIds = new ArrayList<>();
     private List<String> agentIds = new ArrayList<>();
     private List<String> scriptIds = new ArrayList<>();
+    private List<String> scheduleIds = new ArrayList<>();
+    private List<String> presetIds = new ArrayList<>();
     private LocalDateTime installedAt;
     private LocalDateTime updatedAt;
 
@@ -28,7 +30,7 @@ public class RepositoryAiPackageInstallation {
         return installationId;
     }
 
-    public RepositoryAiPackageInstallation setInstallationId(String installationId) {
+    public CapabilityPackageInstallation setInstallationId(String installationId) {
         this.installationId = installationId;
         return this;
     }
@@ -37,7 +39,7 @@ public class RepositoryAiPackageInstallation {
         return repositoryId;
     }
 
-    public RepositoryAiPackageInstallation setRepositoryId(String repositoryId) {
+    public CapabilityPackageInstallation setRepositoryId(String repositoryId) {
         this.repositoryId = repositoryId;
         return this;
     }
@@ -46,7 +48,7 @@ public class RepositoryAiPackageInstallation {
         return packageId;
     }
 
-    public RepositoryAiPackageInstallation setPackageId(String packageId) {
+    public CapabilityPackageInstallation setPackageId(String packageId) {
         this.packageId = packageId;
         return this;
     }
@@ -55,7 +57,7 @@ public class RepositoryAiPackageInstallation {
         return name;
     }
 
-    public RepositoryAiPackageInstallation setName(String name) {
+    public CapabilityPackageInstallation setName(String name) {
         this.name = name;
         return this;
     }
@@ -64,7 +66,7 @@ public class RepositoryAiPackageInstallation {
         return version;
     }
 
-    public RepositoryAiPackageInstallation setVersion(String version) {
+    public CapabilityPackageInstallation setVersion(String version) {
         this.version = version;
         return this;
     }
@@ -73,7 +75,7 @@ public class RepositoryAiPackageInstallation {
         return latestVersion;
     }
 
-    public RepositoryAiPackageInstallation setLatestVersion(String latestVersion) {
+    public CapabilityPackageInstallation setLatestVersion(String latestVersion) {
         this.latestVersion = latestVersion;
         return this;
     }
@@ -82,7 +84,7 @@ public class RepositoryAiPackageInstallation {
         return entryAgentId;
     }
 
-    public RepositoryAiPackageInstallation setEntryAgentId(String entryAgentId) {
+    public CapabilityPackageInstallation setEntryAgentId(String entryAgentId) {
         this.entryAgentId = entryAgentId;
         return this;
     }
@@ -91,7 +93,7 @@ public class RepositoryAiPackageInstallation {
         return owner;
     }
 
-    public RepositoryAiPackageInstallation setOwner(String owner) {
+    public CapabilityPackageInstallation setOwner(String owner) {
         this.owner = owner;
         return this;
     }
@@ -100,7 +102,7 @@ public class RepositoryAiPackageInstallation {
         return description;
     }
 
-    public RepositoryAiPackageInstallation setDescription(String description) {
+    public CapabilityPackageInstallation setDescription(String description) {
         this.description = description;
         return this;
     }
@@ -109,7 +111,7 @@ public class RepositoryAiPackageInstallation {
         return List.copyOf(modelIds);
     }
 
-    public RepositoryAiPackageInstallation setModelIds(List<String> modelIds) {
+    public CapabilityPackageInstallation setModelIds(List<String> modelIds) {
         this.modelIds = modelIds == null ? new ArrayList<>() : new ArrayList<>(modelIds);
         return this;
     }
@@ -118,7 +120,7 @@ public class RepositoryAiPackageInstallation {
         return List.copyOf(toolsetIds);
     }
 
-    public RepositoryAiPackageInstallation setToolsetIds(List<String> toolsetIds) {
+    public CapabilityPackageInstallation setToolsetIds(List<String> toolsetIds) {
         this.toolsetIds = toolsetIds == null ? new ArrayList<>() : new ArrayList<>(toolsetIds);
         return this;
     }
@@ -127,7 +129,7 @@ public class RepositoryAiPackageInstallation {
         return List.copyOf(agentIds);
     }
 
-    public RepositoryAiPackageInstallation setAgentIds(List<String> agentIds) {
+    public CapabilityPackageInstallation setAgentIds(List<String> agentIds) {
         this.agentIds = agentIds == null ? new ArrayList<>() : new ArrayList<>(agentIds);
         return this;
     }
@@ -136,8 +138,26 @@ public class RepositoryAiPackageInstallation {
         return List.copyOf(scriptIds);
     }
 
-    public RepositoryAiPackageInstallation setScriptIds(List<String> scriptIds) {
+    public CapabilityPackageInstallation setScriptIds(List<String> scriptIds) {
         this.scriptIds = scriptIds == null ? new ArrayList<>() : new ArrayList<>(scriptIds);
+        return this;
+    }
+
+    public List<String> getScheduleIds() {
+        return List.copyOf(scheduleIds);
+    }
+
+    public CapabilityPackageInstallation setScheduleIds(List<String> scheduleIds) {
+        this.scheduleIds = scheduleIds == null ? new ArrayList<>() : new ArrayList<>(scheduleIds);
+        return this;
+    }
+
+    public List<String> getPresetIds() {
+        return List.copyOf(presetIds);
+    }
+
+    public CapabilityPackageInstallation setPresetIds(List<String> presetIds) {
+        this.presetIds = presetIds == null ? new ArrayList<>() : new ArrayList<>(presetIds);
         return this;
     }
 
@@ -145,7 +165,7 @@ public class RepositoryAiPackageInstallation {
         return installedAt;
     }
 
-    public RepositoryAiPackageInstallation setInstalledAt(LocalDateTime installedAt) {
+    public CapabilityPackageInstallation setInstalledAt(LocalDateTime installedAt) {
         this.installedAt = installedAt;
         return this;
     }
@@ -154,7 +174,7 @@ public class RepositoryAiPackageInstallation {
         return updatedAt;
     }
 
-    public RepositoryAiPackageInstallation setUpdatedAt(LocalDateTime updatedAt) {
+    public CapabilityPackageInstallation setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
         return this;
     }

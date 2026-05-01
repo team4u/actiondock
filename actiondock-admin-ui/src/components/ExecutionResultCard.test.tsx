@@ -62,23 +62,6 @@ describe("ExecutionResultCard", () => {
     expect(html).not.toContain("回填本次输入");
   });
 
-  it("shows AI diagnose only for failed executions", () => {
-    const failedExecution: ExecutionRecord = {
-      ...execution,
-      status: "FAILED",
-      errorMessage: "boom"
-    };
-    const failedHtml = renderToStaticMarkup(
-      <ExecutionResultCard execution={failedExecution} onAiDiagnose={() => undefined} />
-    );
-    const successHtml = renderToStaticMarkup(
-      <ExecutionResultCard execution={execution} onAiDiagnose={() => undefined} />
-    );
-
-    expect(failedHtml).toContain("AI 诊断");
-    expect(successHtml).not.toContain("AI 诊断");
-  });
-
   it("prefers inputOverride for input preview", () => {
     const html = renderToStaticMarkup(
       <ExecutionResultCard

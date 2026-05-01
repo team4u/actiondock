@@ -107,20 +107,20 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
     }
 
-    @GetMapping("/ai-packages")
-    public ApiResponse<List<RepositoryCatalogService.RepositoryAiPackageDescriptor>> listAllAiPackages() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositoryAiPackages());
+    @GetMapping("/packages")
+    public ApiResponse<List<RepositoryCatalogService.CapabilityPackageDescriptor>> listAllPackages() {
+        return ApiResponse.success(repositoryCatalogService.listAllCapabilityPackages());
     }
 
-    @GetMapping("/{id}/ai-packages")
-    public ApiResponse<List<RepositoryCatalogService.RepositoryAiPackageDescriptor>> listRepositoryAiPackages(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositoryAiPackages(id));
+    @GetMapping("/{id}/packages")
+    public ApiResponse<List<RepositoryCatalogService.CapabilityPackageDescriptor>> listRepositoryPackages(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listCapabilityPackages(id));
     }
 
-    @GetMapping("/{id}/ai-packages/{packageId}")
-    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageDetail> aiPackageDetail(@PathVariable String id,
-                                                                                           @PathVariable String packageId) {
-        return ApiResponse.success(repositoryCatalogService.getRepositoryAiPackage(id, packageId));
+    @GetMapping("/{id}/packages/{packageId}")
+    public ApiResponse<RepositoryCatalogService.CapabilityPackageDetail> capabilityPackageDetail(@PathVariable String id,
+                                                                                                 @PathVariable String packageId) {
+        return ApiResponse.success(repositoryCatalogService.getCapabilityPackage(id, packageId));
     }
 
     @GetMapping("/plugins")
@@ -240,18 +240,18 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.publishTool(id, request), "发布完成");
     }
 
-    @PostMapping("/{id}/publish-ai-package-preview")
-    public ApiResponse<RepositoryCatalogService.RepositoryAiPackagePublishPreview> previewPublishAiPackage(
+    @PostMapping("/{id}/packages/preview")
+    public ApiResponse<RepositoryCatalogService.CapabilityPackagePublishPreview> previewCapabilityPackage(
             @PathVariable String id,
-            @RequestBody RepositoryCatalogService.RepositoryAiPackagePublishPreviewRequest request) {
-        return ApiResponse.success(repositoryCatalogService.previewPublishAiPackage(id, request));
+            @RequestBody RepositoryCatalogService.CapabilityPackagePublishPreviewRequest request) {
+        return ApiResponse.success(repositoryCatalogService.previewCapabilityPackage(id, request));
     }
 
-    @PostMapping("/{id}/publish-ai-package")
-    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageDescriptor> publishAiPackage(
+    @PostMapping("/{id}/packages/publish")
+    public ApiResponse<RepositoryCatalogService.CapabilityPackageDescriptor> publishCapabilityPackage(
             @PathVariable String id,
-            @RequestBody RepositoryCatalogService.RepositoryAiPackagePublishRequest request) {
-        return ApiResponse.success(repositoryCatalogService.publishAiPackage(id, request), "AI 能力包发布完成");
+            @RequestBody RepositoryCatalogService.CapabilityPackagePublishRequest request) {
+        return ApiResponse.success(repositoryCatalogService.publishCapabilityPackage(id, request), "能力包发布完成");
     }
 
     @PostMapping("/publish-config-preview")
@@ -266,22 +266,22 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.publishPlugin(id, request), "插件发布完成");
     }
 
-    @PostMapping("/{id}/ai-packages/{packageId}/install")
-    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageInstallResult> installAiPackage(@PathVariable String id,
-                                                                                                   @PathVariable String packageId) {
-        return ApiResponse.success(repositoryCatalogService.installAiPackage(id, packageId), "AI 能力包安装完成");
+    @PostMapping("/{id}/packages/{packageId}/install")
+    public ApiResponse<RepositoryCatalogService.CapabilityPackageInstallResult> installCapabilityPackage(@PathVariable String id,
+                                                                                                          @PathVariable String packageId) {
+        return ApiResponse.success(repositoryCatalogService.installCapabilityPackage(id, packageId), "能力包安装完成");
     }
 
-    @PostMapping("/{id}/ai-packages/{packageId}/update")
-    public ApiResponse<RepositoryCatalogService.RepositoryAiPackageInstallResult> updateAiPackage(@PathVariable String id,
-                                                                                                  @PathVariable String packageId) {
-        return ApiResponse.success(repositoryCatalogService.updateAiPackage(id, packageId), "AI 能力包更新完成");
+    @PostMapping("/{id}/packages/{packageId}/update")
+    public ApiResponse<RepositoryCatalogService.CapabilityPackageInstallResult> updateCapabilityPackage(@PathVariable String id,
+                                                                                                         @PathVariable String packageId) {
+        return ApiResponse.success(repositoryCatalogService.updateCapabilityPackage(id, packageId), "能力包更新完成");
     }
 
-    @DeleteMapping("/{id}/ai-packages/{packageId}")
-    public ApiResponse<Void> uninstallAiPackage(@PathVariable String id,
-                                                @PathVariable String packageId) {
-        repositoryCatalogService.uninstallAiPackage(id, packageId);
-        return ApiResponse.success(null, "AI 能力包已卸载");
+    @DeleteMapping("/{id}/packages/{packageId}")
+    public ApiResponse<Void> uninstallCapabilityPackage(@PathVariable String id,
+                                                        @PathVariable String packageId) {
+        repositoryCatalogService.uninstallCapabilityPackage(id, packageId);
+        return ApiResponse.success(null, "能力包已卸载");
     }
 }

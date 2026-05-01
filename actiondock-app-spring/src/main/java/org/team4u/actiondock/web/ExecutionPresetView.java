@@ -13,6 +13,11 @@ public record ExecutionPresetView(
         String scriptId,
         String name,
         Map<String, Object> input,
+        boolean managed,
+        boolean editable,
+        String repositoryId,
+        String repositoryPackageId,
+        String repositoryVersion,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

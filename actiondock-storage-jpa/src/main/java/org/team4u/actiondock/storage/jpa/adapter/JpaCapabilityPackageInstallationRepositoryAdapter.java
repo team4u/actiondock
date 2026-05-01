@@ -2,43 +2,43 @@ package org.team4u.actiondock.storage.jpa.adapter;
 
 import org.springframework.stereotype.Component;
 
-import org.team4u.actiondock.domain.model.RepositoryAiPackageInstallation;
+import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
+import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
-import org.team4u.actiondock.domain.port.RepositoryAiPackageInstallationRepository;
-import org.team4u.actiondock.storage.jpa.entity.RepositoryAiPackageInstallationEntity;
-import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryAiPackageInstallationRepository;
+import org.team4u.actiondock.storage.jpa.entity.CapabilityPackageInstallationEntity;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataCapabilityPackageInstallationRepository;
 
 import java.util.List;
 import java.util.Optional;
 
 @Component
-public class JpaRepositoryAiPackageInstallationRepositoryAdapter implements RepositoryAiPackageInstallationRepository {
-    private final SpringDataRepositoryAiPackageInstallationRepository repository;
+public class JpaCapabilityPackageInstallationRepositoryAdapter implements CapabilityPackageInstallationRepository {
+    private final SpringDataCapabilityPackageInstallationRepository repository;
     private final JsonCodec jsonCodec;
 
-    public JpaRepositoryAiPackageInstallationRepositoryAdapter(SpringDataRepositoryAiPackageInstallationRepository repository,
-                                                              JsonCodec jsonCodec) {
+    public JpaCapabilityPackageInstallationRepositoryAdapter(SpringDataCapabilityPackageInstallationRepository repository,
+                                                             JsonCodec jsonCodec) {
         this.repository = repository;
         this.jsonCodec = jsonCodec;
     }
 
     @Override
-    public RepositoryAiPackageInstallation save(RepositoryAiPackageInstallation installation) {
+    public CapabilityPackageInstallation save(CapabilityPackageInstallation installation) {
         return toDomain(repository.save(toEntity(installation)));
     }
 
     @Override
-    public Optional<RepositoryAiPackageInstallation> findByInstallationId(String installationId) {
+    public Optional<CapabilityPackageInstallation> findByInstallationId(String installationId) {
         return repository.findById(installationId).map(this::toDomain);
     }
 
     @Override
-    public Optional<RepositoryAiPackageInstallation> findByEntryAgentId(String entryAgentId) {
+    public Optional<CapabilityPackageInstallation> findByEntryAgentId(String entryAgentId) {
         return repository.findByEntryAgentId(entryAgentId).map(this::toDomain);
     }
 
     @Override
-    public List<RepositoryAiPackageInstallation> findAll() {
+    public List<CapabilityPackageInstallation> findAll() {
         return repository.findAll().stream().map(this::toDomain).toList();
     }
 
@@ -47,8 +47,8 @@ public class JpaRepositoryAiPackageInstallationRepositoryAdapter implements Repo
         repository.deleteById(installationId);
     }
 
-    private RepositoryAiPackageInstallationEntity toEntity(RepositoryAiPackageInstallation installation) {
-        RepositoryAiPackageInstallationEntity entity = new RepositoryAiPackageInstallationEntity();
+    private CapabilityPackageInstallationEntity toEntity(CapabilityPackageInstallation installation) {
+        CapabilityPackageInstallationEntity entity = new CapabilityPackageInstallationEntity();
         entity.setInstallationId(installation.getInstallationId());
         entity.setRepositoryId(installation.getRepositoryId());
         entity.setPackageId(installation.getPackageId());
@@ -62,13 +62,15 @@ public class JpaRepositoryAiPackageInstallationRepositoryAdapter implements Repo
         entity.setToolsetIdsJson(jsonCodec.write(installation.getToolsetIds()));
         entity.setAgentIdsJson(jsonCodec.write(installation.getAgentIds()));
         entity.setScriptIdsJson(jsonCodec.write(installation.getScriptIds()));
+        entity.setScheduleIdsJson(jsonCodec.write(installation.getScheduleIds()));
+        entity.setPresetIdsJson(jsonCodec.write(installation.getPresetIds()));
         entity.setInstalledAt(installation.getInstalledAt());
         entity.setUpdatedAt(installation.getUpdatedAt());
         return entity;
     }
 
-    private RepositoryAiPackageInstallation toDomain(RepositoryAiPackageInstallationEntity entity) {
-        return new RepositoryAiPackageInstallation()
+    private CapabilityPackageInstallation toDomain(CapabilityPackageInstallationEntity entity) {
+        return new CapabilityPackageInstallation()
                 .setInstallationId(entity.getInstallationId())
                 .setRepositoryId(entity.getRepositoryId())
                 .setPackageId(entity.getPackageId())
@@ -82,6 +84,8 @@ public class JpaRepositoryAiPackageInstallationRepositoryAdapter implements Repo
                 .setToolsetIds(jsonCodec.readList(entity.getToolsetIdsJson(), String.class))
                 .setAgentIds(jsonCodec.readList(entity.getAgentIdsJson(), String.class))
                 .setScriptIds(jsonCodec.readList(entity.getScriptIdsJson(), String.class))
+                .setScheduleIds(jsonCodec.readList(entity.getScheduleIdsJson(), String.class))
+                .setPresetIds(jsonCodec.readList(entity.getPresetIdsJson(), String.class))
                 .setInstalledAt(entity.getInstalledAt())
                 .setUpdatedAt(entity.getUpdatedAt());
     }

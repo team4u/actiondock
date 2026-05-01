@@ -6,6 +6,9 @@ type StandaloneThemeData = Parameters<typeof import("monaco-editor").editor.defi
 let registered = false;
 
 export function registerGroovyLanguage() {
+  if (typeof window === "undefined") {
+    return;
+  }
   if (registered) return;
   registered = true;
 

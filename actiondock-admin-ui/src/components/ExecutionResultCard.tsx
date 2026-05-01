@@ -1,4 +1,3 @@
-import { RobotOutlined } from "@ant-design/icons";
 import {
   Button,
   Card,
@@ -30,8 +29,6 @@ export interface ExecutionResultCardProps {
   pollingExecutionId?: string | null;
   emptyDescription?: string;
   errorTitle?: string;
-  aiDiagnoseTo?: string;
-  onAiDiagnose?: () => void;
 }
 
 function getTriggerSourceLabel(source: string): string {
@@ -42,6 +39,8 @@ function getTriggerSourceLabel(source: string): string {
       return "定时";
     case "AI_TOOL":
       return "AI 工具";
+    case "EVENT":
+      return "事件";
     default:
       return source;
   }
@@ -73,8 +72,6 @@ export function ExecutionResultCard({
   showTriggerSource = false,
   pollingExecutionId,
   errorTitle = "执行失败",
-  aiDiagnoseTo,
-  onAiDiagnose
 }: ExecutionResultCardProps) {
   const inputValue = inputOverride ?? (hasInput(execution) ? execution.input : undefined);
   const hasOutputSchema = Boolean(outputSchema && Object.keys(outputSchema).length > 0);
@@ -115,12 +112,25 @@ export function ExecutionResultCard({
           {showTriggerSource ? (
             <div className="execution-result-card__meta-item">
               <Text type="secondary">触发</Text>
-              <Tag color={execution.triggerSource === "SCHEDULED" ? "blue" : execution.triggerSource === "AI_TOOL" ? "cyan" : "default"}>
+              <Tag color={
+                execution.triggerSource === "SCHEDULED"
+                  ? "blue"
+                  : execution.triggerSource === "AI_TOOL"
+                    ? "cyan"
+                    : execution.triggerSource === "EVENT"
+                      ? "purple"
+                      : "default"
+              }>
                 {getTriggerSourceLabel(execution.triggerSource)}
               </Tag>
               {execution.scheduleId ? (
                 <Text code className="execution-result-card__meta-code">
                   {execution.scheduleId}
+                </Text>
+              ) : null}
+              {"eventRecordId" in execution && execution.eventRecordId ? (
+                <Text code className="execution-result-card__meta-code">
+                  {execution.eventRecordId}
                 </Text>
               ) : null}
             </div>
@@ -139,11 +149,6 @@ export function ExecutionResultCard({
           message={execution.errorMessage}
           detail={execution.errorDetail}
         />
-
-        {execution.status === "FAILED" && onAiDiagnose ? (
-            <Button icon={<RobotOutlined />} onClick={onAiDiagnose}>AI 诊断</Button>
-        ) : null}
-
         <Tabs
           defaultActiveKey="output"
           items={[

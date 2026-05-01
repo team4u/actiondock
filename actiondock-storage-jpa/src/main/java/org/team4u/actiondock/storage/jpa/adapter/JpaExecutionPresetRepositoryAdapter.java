@@ -58,6 +58,11 @@ public class JpaExecutionPresetRepositoryAdapter implements ExecutionPresetRepos
         entity.setScriptId(preset.getScriptId());
         entity.setName(preset.getName());
         entity.setInputJson(jsonCodec.write(preset.getInput()));
+        entity.setManaged(preset.isManaged());
+        entity.setEditable(preset.isEditable());
+        entity.setRepositoryId(preset.getRepositoryId());
+        entity.setRepositoryPackageId(preset.getRepositoryPackageId());
+        entity.setRepositoryVersion(preset.getRepositoryVersion());
         entity.setCreatedAt(preset.getCreatedAt());
         entity.setUpdatedAt(preset.getUpdatedAt());
         return entity;
@@ -69,6 +74,11 @@ public class JpaExecutionPresetRepositoryAdapter implements ExecutionPresetRepos
                 .setScriptId(entity.getScriptId())
                 .setName(entity.getName())
                 .setInput(jsonCodec.readMap(entity.getInputJson()))
+                .setManaged(entity.isManaged())
+                .setEditable(entity.isEditable())
+                .setRepositoryId(entity.getRepositoryId())
+                .setRepositoryPackageId(entity.getRepositoryPackageId())
+                .setRepositoryVersion(entity.getRepositoryVersion())
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());
     }

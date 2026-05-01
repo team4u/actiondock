@@ -32,6 +32,18 @@ public class ExecutionPresetEntity {
     @Lob
     private String inputJson;
 
+    @Column(nullable = false)
+    private boolean managed;
+
+    @Column(nullable = false)
+    private boolean editable = true;
+
+    private String repositoryId;
+
+    private String repositoryPackageId;
+
+    private String repositoryVersion;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -66,6 +78,46 @@ public class ExecutionPresetEntity {
 
     public void setInputJson(String inputJson) {
         this.inputJson = inputJson;
+    }
+
+    public boolean isManaged() {
+        return managed;
+    }
+
+    public void setManaged(boolean managed) {
+        this.managed = managed;
+    }
+
+    public boolean isEditable() {
+        return editable;
+    }
+
+    public void setEditable(boolean editable) {
+        this.editable = editable;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public void setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+    }
+
+    public String getRepositoryPackageId() {
+        return repositoryPackageId;
+    }
+
+    public void setRepositoryPackageId(String repositoryPackageId) {
+        this.repositoryPackageId = repositoryPackageId;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public void setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
     }
 
     public LocalDateTime getCreatedAt() {

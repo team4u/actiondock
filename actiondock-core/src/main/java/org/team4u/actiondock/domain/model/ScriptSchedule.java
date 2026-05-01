@@ -22,6 +22,7 @@ public class ScriptSchedule {
     private boolean editable = true;
     private String repositoryId;
     private String repositoryToolId;
+    private String repositoryPackageId;
     private String repositoryVersion;
     private LocalDateTime lastTriggeredAt;
     private String lastExecutionId;
@@ -106,6 +107,15 @@ public class ScriptSchedule {
 
     public ScriptSchedule setRepositoryToolId(String repositoryToolId) {
         this.repositoryToolId = repositoryToolId;
+        return this;
+    }
+
+    public String getRepositoryPackageId() {
+        return repositoryPackageId;
+    }
+
+    public ScriptSchedule setRepositoryPackageId(String repositoryPackageId) {
+        this.repositoryPackageId = repositoryPackageId;
         return this;
     }
 

@@ -2,6 +2,7 @@ package org.team4u.actiondock.web;
 
 import org.team4u.actiondock.application.InvalidExecutionInputException;
 import org.team4u.actiondock.application.ErrorDetailSupport;
+import org.team4u.actiondock.application.EventAuthenticationException;
 import org.team4u.actiondock.application.InvalidPythonRequirementsException;
 import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
@@ -70,6 +71,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(
                 ErrorDetailSupport.summarize(exception),
                 400,
+                ErrorDetailSupport.describe(exception)
+        ));
+    }
+
+    @ExceptionHandler(EventAuthenticationException.class)
+    public ResponseEntity<ApiResponse<ErrorDetail>> handleEventAuthentication(EventAuthenticationException exception) {
+        return ResponseEntity.status(401).body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                401,
                 ErrorDetailSupport.describe(exception)
         ));
     }

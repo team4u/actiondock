@@ -5,7 +5,7 @@ export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "DEVELOPMENT" | "
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
-export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED" | "AI_TOOL";
+export type ExecutionTriggerSource = "MANUAL" | "SCHEDULED" | "AI_TOOL" | "EVENT";
 export type ExecutionLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 export type AiCapability = "CHAT" | "STRUCTURED_OUTPUT" | "EMBEDDING" | "AGENT_RUN";
 export type AiProvider = "AGENTSCOPE";
@@ -248,6 +248,10 @@ export interface ExecutionRecord {
   scheduleId?: string;
   agentRunId?: string;
   agentStepId?: string;
+  eventSourceId?: string;
+  eventTriggerId?: string;
+  eventRecordId?: string;
+  eventDispatchId?: string;
   input: Record<string, unknown>;
   output: Record<string, unknown>;
   logs: ExecutionLogEntry[];
@@ -284,6 +288,10 @@ export interface ExecutionResponse {
   scheduleId?: string;
   agentRunId?: string;
   agentStepId?: string;
+  eventSourceId?: string;
+  eventTriggerId?: string;
+  eventRecordId?: string;
+  eventDispatchId?: string;
   output: Record<string, unknown>;
   logs: ExecutionLogEntry[];
   errorMessage?: string;
@@ -326,6 +334,198 @@ export interface ScriptScheduleUpsertRequest {
   cronExpression: string;
   input: Record<string, unknown>;
   enabled: boolean;
+}
+
+export type ProcessorMode = "JSON_PATH" | "TEMPLATE" | "SCRIPT_REF" | "INLINE_CODE" | "PLUGIN_REF";
+export type EventSourceTransportType = "HTTP_WEBHOOK";
+export type EventSourceAuthMode = "NONE" | "HEADER_TOKEN" | "QUERY_TOKEN" | "HMAC_SHA256";
+export type EventRecordStatus = "RECEIVED" | "AUTH_FAILED" | "NORMALIZED" | "IGNORED" | "DUPLICATE" | "DISPATCHED" | "FAILED";
+export type EventDispatchStatus =
+  | "FILTERED_OUT"
+  | "DUPLICATE"
+  | "MAPPING_FAILED"
+  | "VALIDATION_FAILED"
+  | "EXECUTION_CREATED"
+  | "EXECUTION_FAILED";
+
+export interface JsonPathProcessorConfig {
+  fields: Record<string, string>;
+}
+
+export interface TemplateProcessorConfig {
+  engine: "MUSTACHE";
+  template: Record<string, unknown>;
+}
+
+export interface ScriptRefProcessorConfig {
+  scriptId: string;
+  versionMode: "PUBLISHED";
+}
+
+export interface ProcessorDefinition {
+  mode: ProcessorMode;
+  jsonPath?: JsonPathProcessorConfig;
+  template?: TemplateProcessorConfig;
+  scriptRef?: ScriptRefProcessorConfig;
+  outputSchema?: Record<string, unknown>;
+  description?: string;
+}
+
+export interface EventSourceTransport {
+  type: EventSourceTransportType;
+  endpointPath?: string;
+  contentTypes?: string[];
+}
+
+export interface EventSourceAuthConfig {
+  mode: EventSourceAuthMode;
+  tokenHeader?: string;
+  tokenQueryParam?: string;
+  signatureHeader?: string;
+  signaturePrefix?: string;
+  signaturePayload?: "RAW_BODY" | "TIMESTAMP_DOT_RAW_BODY";
+  timestampHeader?: string;
+  maxSkewSeconds?: number;
+  secretConfigKey?: string;
+}
+
+export interface NormalizedEvent {
+  id?: string;
+  sourceId?: string;
+  sourceKey?: string;
+  eventType?: string;
+  eventId?: string;
+  actor?: string;
+  subject?: string;
+  timestamp?: string;
+  headers: Record<string, unknown>;
+  query: Record<string, unknown>;
+  body: Record<string, unknown>;
+  receivedAt?: string;
+}
+
+export interface EventSourceDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  transport: EventSourceTransport;
+  auth?: EventSourceAuthConfig;
+  normalizationProcessor?: ProcessorDefinition;
+  sampleContext?: Record<string, unknown>;
+  lastReceivedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EventTrigger {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  sourceId: string;
+  targetScriptId: string;
+  filterProcessor?: ProcessorDefinition;
+  idempotencyProcessor?: ProcessorDefinition;
+  inputProcessor?: ProcessorDefinition;
+  submitMode: SubmitMode;
+  responseView?: ExecutionResponseView;
+  lastEventId?: string;
+  lastTriggeredAt?: string;
+  lastExecutionId?: string;
+  lastExecutionStatus?: ExecutionStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EventRecord {
+  id: string;
+  sourceId: string;
+  sourceKey: string;
+  status: EventRecordStatus;
+  eventType?: string;
+  eventId?: string;
+  actor?: string;
+  subject?: string;
+  rawHeaders: Record<string, unknown>;
+  rawQuery: Record<string, unknown>;
+  rawBody: Record<string, unknown>;
+  normalizedEvent?: NormalizedEvent;
+  errorMessage?: string;
+  createdAt?: string;
+}
+
+export interface EventDispatchRecord {
+  id: string;
+  eventId: string;
+  sourceId: string;
+  triggerId: string;
+  targetScriptId: string;
+  status: EventDispatchStatus;
+  filterMatched?: boolean;
+  idempotencyKey?: string;
+  mappedInput?: Record<string, unknown>;
+  executionId?: string;
+  executionStatus?: ExecutionStatus;
+  errorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface IncomingEventPayload {
+  headers?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+  rawBody?: string;
+  contentType?: string;
+}
+
+export interface ProcessorTestRequest {
+  processor: ProcessorDefinition;
+  context: {
+    event?: Record<string, unknown>;
+    headers?: Record<string, unknown>;
+    query?: Record<string, unknown>;
+    body?: Record<string, unknown>;
+    source?: Record<string, unknown>;
+    trigger?: Record<string, unknown>;
+    variables?: Record<string, unknown>;
+  };
+  expectedOutputSchema?: Record<string, unknown>;
+}
+
+export interface ProcessorTestResult {
+  success: boolean;
+  output?: Record<string, unknown>;
+  errorMessage?: string;
+  logs?: ExecutionLogEntry[];
+  durationMs?: number;
+  schemaValid?: boolean;
+  fieldErrors?: ValidationFieldError[];
+}
+
+export interface EventTriggerTestRequest {
+  event: NormalizedEvent;
+  execute?: boolean;
+}
+
+export interface EventTriggerTestResult {
+  event: NormalizedEvent;
+  filterMatched: boolean;
+  filterResult?: ProcessorTestResult;
+  idempotencyResult?: ProcessorTestResult;
+  idempotencyKey?: string;
+  inputResult?: ProcessorTestResult;
+  mappedInput?: Record<string, unknown>;
+  schemaValid: boolean;
+  fieldErrors?: ValidationFieldError[];
+  execution?: ExecutionRecord;
+}
+
+export interface EventIngestionResponse {
+  event: EventRecord;
+  dispatches: EventDispatchRecord[];
 }
 
 export interface ApiResponse<T> {
@@ -643,6 +843,7 @@ export interface RepositoryConfigTemplateItem {
 
 export interface RepositoryScheduleTemplateItem {
   id: string;
+  scriptId: string;
   name: string;
   cronExpression: string;
   input: Record<string, unknown>;
@@ -662,27 +863,6 @@ export interface RepositoryAiPackageDependency {
   repositoryId: string;
   assetId: string;
   version: string;
-}
-
-export interface RepositoryAiPackageDescriptor {
-  repositoryId: string;
-  packageId: string;
-  installationId: string;
-  displayName: string;
-  version: string;
-  description?: string;
-  releaseNotes?: string;
-  owner?: string;
-  tags: string[];
-  packageEntryAgentId: string;
-  installedEntryAgentId?: string;
-  packagePath: string;
-  configTemplatePath?: string;
-  installed: boolean;
-  installedVersion?: string;
-  updateAvailable: boolean;
-  trusted: boolean;
-  repositoryUsage?: RepositoryUsage;
 }
 
 export interface RepositoryAiPackageModelFile {
@@ -731,62 +911,138 @@ export interface RepositoryAiPackageScriptFile {
   description?: string;
   tags: string[];
   source: string;
+  pythonRequirements?: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
   pluginDependencies: PluginDependency[];
   aiDependencies: AiDependency[];
 }
 
-export interface RepositoryAiPackageFile {
-  packageFileVersion: number;
+
+export type CapabilityPackageSource = "AGENT" | "SCRIPT" | "MANUAL";
+export type CapabilityPackageEntryType = "AGENT" | "SCRIPT";
+export type CapabilityPackageCheckSeverity = "BLOCKER" | "WARNING" | "INFO";
+
+export interface CapabilityPackageEntryFile {
+  type: CapabilityPackageEntryType;
   id: string;
+  displayName: string;
+  target: string;
+}
+
+export interface CapabilityPackagePresetTemplate {
+  id: string;
+  scriptId: string;
   name: string;
+  input: Record<string, unknown>;
+}
+
+export interface CapabilityPackageDescriptor {
+  repositoryId: string;
+  packageId: string;
+  installationId: string;
+  displayName: string;
   version: string;
   description?: string;
   releaseNotes?: string;
   owner?: string;
   tags: string[];
-  entryAgentId: string;
+  riskLevel?: string;
+  entries: CapabilityPackageEntryFile[];
+  manifestPath: string;
+  releasePath: string;
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
+  trusted: boolean;
+  repositoryUsage?: RepositoryUsage;
+}
+
+export interface CapabilityPackageReleaseFile {
+  schemaVersion: number;
+  packageId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  riskLevel?: string;
+  sourceType: CapabilityPackageSource;
+  entries: CapabilityPackageEntryFile[];
   models: RepositoryAiPackageModelFile[];
   toolsets: RepositoryAiPackageToolsetFile[];
   agents: RepositoryAiPackageAgentFile[];
   scripts: RepositoryAiPackageScriptFile[];
   externalDependencies: RepositoryAiPackageDependency[];
   configTemplatePath?: string;
+  scheduleTemplatePath?: string;
+  presetTemplatePath?: string;
 }
 
-export interface RepositoryAiPackageDetail {
-  descriptor: RepositoryAiPackageDescriptor;
+export interface CapabilityPackageDetail {
+  descriptor: CapabilityPackageDescriptor;
   configTemplate: RepositoryConfigTemplateItem[];
-  packageFile: RepositoryAiPackageFile;
+  scheduleTemplate: RepositoryScheduleTemplateItem[];
+  presetTemplate: CapabilityPackagePresetTemplate[];
+  releaseFile: CapabilityPackageReleaseFile;
 }
 
-export interface RepositoryAiPackagePublishPreviewRequest {
-  agentProfileId: string;
+export interface CapabilityPackageEntrySelection {
+  type: CapabilityPackageEntryType;
+  targetId: string;
+  displayName?: string;
+}
+
+export interface CapabilityPackagePublishPreviewRequest {
   packageId: string;
+  displayName?: string;
+  version: string;
+  owner?: string;
+  description?: string;
+  releaseNotes?: string;
+  tags?: string[];
+  riskLevel?: string;
+  source: CapabilityPackageSource;
+  primaryEntry: CapabilityPackageEntrySelection;
+  scriptIds?: string[];
+  agentIds?: string[];
+  modelIds?: string[];
+  toolsetIds?: string[];
 }
 
-export interface RepositoryAiPackagePublishPreview {
-  entryAgentId: string;
+export interface CapabilityPackagePublishRequest extends CapabilityPackagePublishPreviewRequest {}
+
+export interface CapabilityPackageCheck {
+  severity: CapabilityPackageCheckSeverity;
+  code: string;
+  message: string;
+}
+
+export interface CapabilityPackageDiffSummary {
+  comparisonMode: "INITIAL" | "COMPARE";
+  addedEntries: string[];
+  removedEntries: string[];
+  changedAssets: string[];
+}
+
+export interface CapabilityPackagePublishPreview {
+  packageId: string;
+  version: string;
+  entries: CapabilityPackageEntryFile[];
   modelIds: string[];
   toolsetIds: string[];
   agentIds: string[];
   scriptIds: string[];
   configTemplate: RepositoryConfigTemplateItem[];
+  scheduleTemplate: RepositoryScheduleTemplateItem[];
+  presetTemplate: CapabilityPackagePresetTemplate[];
   externalDependencies: RepositoryAiPackageDependency[];
+  checks: CapabilityPackageCheck[];
+  diff: CapabilityPackageDiffSummary;
 }
 
-export interface RepositoryAiPackagePublishRequest {
-  agentProfileId: string;
-  packageId: string;
-  displayName?: string;
-  version: string;
-  owner?: string;
-  releaseNotes?: string;
-  tags?: string[];
-}
-
-export interface RepositoryAiPackageInstallResult {
+export interface CapabilityPackageInstallResult {
   installation: {
     installationId: string;
     repositoryId: string;
@@ -794,13 +1050,15 @@ export interface RepositoryAiPackageInstallResult {
     name: string;
     version: string;
     latestVersion?: string;
-    entryAgentId: string;
+    entryAgentId?: string;
     owner?: string;
     description?: string;
     modelIds: string[];
     toolsetIds: string[];
     agentIds: string[];
     scriptIds: string[];
+    scheduleIds: string[];
+    presetIds: string[];
     installedAt?: string;
     updatedAt?: string;
   };
@@ -929,6 +1187,11 @@ export interface ExecutionPreset {
   scriptId: string;
   name: string;
   input: Record<string, unknown>;
+  managed?: boolean;
+  editable?: boolean;
+  repositoryId?: string;
+  repositoryPackageId?: string;
+  repositoryVersion?: string;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -34,6 +34,10 @@ public class ExecutionEntity {
     private String scheduleId;
     private String agentRunId;
     private String agentStepId;
+    private String eventSourceId;
+    private String eventTriggerId;
+    private String eventRecordId;
+    private String eventDispatchId;
 
     @Lob
     private String inputJson;
@@ -75,6 +79,14 @@ public class ExecutionEntity {
     public void setAgentRunId(String agentRunId) { this.agentRunId = agentRunId; }
     public String getAgentStepId() { return agentStepId; }
     public void setAgentStepId(String agentStepId) { this.agentStepId = agentStepId; }
+    public String getEventSourceId() { return eventSourceId; }
+    public void setEventSourceId(String eventSourceId) { this.eventSourceId = eventSourceId; }
+    public String getEventTriggerId() { return eventTriggerId; }
+    public void setEventTriggerId(String eventTriggerId) { this.eventTriggerId = eventTriggerId; }
+    public String getEventRecordId() { return eventRecordId; }
+    public void setEventRecordId(String eventRecordId) { this.eventRecordId = eventRecordId; }
+    public String getEventDispatchId() { return eventDispatchId; }
+    public void setEventDispatchId(String eventDispatchId) { this.eventDispatchId = eventDispatchId; }
     public String getInputJson() { return inputJson; }
     public void setInputJson(String inputJson) { this.inputJson = inputJson; }
     public String getOutputJson() { return outputJson; }

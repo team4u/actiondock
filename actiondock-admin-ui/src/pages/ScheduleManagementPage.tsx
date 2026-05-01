@@ -40,7 +40,11 @@ import { formatDateTime, getExecutionStatusColor, getErrorMessage } from "../uti
 
 const { Text } = Typography;
 
-export function ScheduleManagementPage() {
+interface ScheduleManagementPageProps {
+  embedded?: boolean;
+}
+
+export function ScheduleManagementPage({ embedded = false }: ScheduleManagementPageProps) {
   const navigate = useNavigate();
   const [schedules, setSchedules] = useState<ScriptSchedule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,34 +353,60 @@ export function ScheduleManagementPage() {
         onChange={(event) => void handleImportChange(event)}
       />
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <PageHeader
-          title="定时任务"
-          actions={
-            <>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
-                新建任务
-              </Button>
-              <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
-                导入任务
-              </Button>
-              <Button icon={<DownloadOutlined />} disabled={loading || importing || schedules.length === 0} onClick={handleExportAll}>
-                导出全部
-              </Button>
-              <Button
-                icon={<DownloadOutlined />}
-                type="primary"
-                ghost
-                disabled={loading || importing || selectedScheduleIds.length === 0}
-                onClick={handleExportSelected}
-              >
-                导出选中
-              </Button>
-              <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
-                刷新
-              </Button>
-            </>
-          }
-        />
+        {!embedded ? (
+          <PageHeader
+            title="定时任务"
+            actions={
+              <>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
+                  新建任务
+                </Button>
+                <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
+                  导入任务
+                </Button>
+                <Button icon={<DownloadOutlined />} disabled={loading || importing || schedules.length === 0} onClick={handleExportAll}>
+                  导出全部
+                </Button>
+                <Button
+                  icon={<DownloadOutlined />}
+                  type="primary"
+                  ghost
+                  disabled={loading || importing || selectedScheduleIds.length === 0}
+                  onClick={handleExportSelected}
+                >
+                  导出选中
+                </Button>
+                <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
+                  刷新
+                </Button>
+              </>
+            }
+          />
+        ) : (
+          <Space wrap>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/schedules/new")}>
+              新建任务
+            </Button>
+            <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>
+              导入任务
+            </Button>
+            <Button icon={<DownloadOutlined />} disabled={loading || importing || schedules.length === 0} onClick={handleExportAll}>
+              导出全部
+            </Button>
+            <Button
+              icon={<DownloadOutlined />}
+              type="primary"
+              ghost
+              disabled={loading || importing || selectedScheduleIds.length === 0}
+              onClick={handleExportSelected}
+            >
+              导出选中
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
+              刷新
+            </Button>
+          </Space>
+        )}
         <Card>
 
           {schedules.length === 0 ? (

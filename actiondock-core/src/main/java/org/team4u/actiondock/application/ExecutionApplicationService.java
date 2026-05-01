@@ -1,6 +1,7 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ExecutionRecord;
+import org.team4u.actiondock.domain.model.ExecutionSubmissionMetadata;
 import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
@@ -70,7 +71,7 @@ public class ExecutionApplicationService {
      */
     public ExecutionRecord execute(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
         ScriptDefinition scriptDefinition = getScript(scriptId);
-        return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
+        return execute(scriptDefinition, input, submitMode, ExecutionSubmissionMetadata.manual());
     }
 
     /**
@@ -86,7 +87,7 @@ public class ExecutionApplicationService {
      */
     public ExecutionRecord executePublished(String scriptId, Map<String, Object> input, SubmitMode submitMode) {
         ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
-        return execute(scriptDefinition, input, submitMode, ExecutionTriggerSource.MANUAL, null);
+        return execute(scriptDefinition, input, submitMode, ExecutionSubmissionMetadata.manual());
     }
 
     /**
@@ -107,7 +108,9 @@ public class ExecutionApplicationService {
                                             SubmitMode submitMode,
                                             ExecutionTriggerSource triggerSource,
                                             String scheduleId) {
-        return executePublished(scriptId, input, submitMode, triggerSource, scheduleId, null, null);
+        return executePublished(scriptId, input, submitMode, new ExecutionSubmissionMetadata()
+                .setTriggerSource(triggerSource)
+                .setScheduleId(scheduleId));
     }
 
     public ExecutionRecord executePublished(String scriptId,
@@ -117,8 +120,19 @@ public class ExecutionApplicationService {
                                             String scheduleId,
                                             String agentRunId,
                                             String agentStepId) {
+        return executePublished(scriptId, input, submitMode, new ExecutionSubmissionMetadata()
+                .setTriggerSource(triggerSource)
+                .setScheduleId(scheduleId)
+                .setAgentRunId(agentRunId)
+                .setAgentStepId(agentStepId));
+    }
+
+    public ExecutionRecord executePublished(String scriptId,
+                                            Map<String, Object> input,
+                                            SubmitMode submitMode,
+                                            ExecutionSubmissionMetadata metadata) {
         ScriptDefinition scriptDefinition = getPublishedScript(scriptId);
-        return execute(scriptDefinition, input, submitMode, triggerSource, scheduleId, agentRunId, agentStepId);
+        return execute(scriptDefinition, input, submitMode, metadata);
     }
 
     private ExecutionRecord execute(ScriptDefinition scriptDefinition,
@@ -126,7 +140,9 @@ public class ExecutionApplicationService {
                                     SubmitMode submitMode,
                                     ExecutionTriggerSource triggerSource,
                                     String scheduleId) {
-        return execute(scriptDefinition, input, submitMode, triggerSource, scheduleId, null, null);
+        return execute(scriptDefinition, input, submitMode, new ExecutionSubmissionMetadata()
+                .setTriggerSource(triggerSource)
+                .setScheduleId(scheduleId));
     }
 
     private ExecutionRecord execute(ScriptDefinition scriptDefinition,
@@ -136,19 +152,35 @@ public class ExecutionApplicationService {
                                     String scheduleId,
                                     String agentRunId,
                                     String agentStepId) {
+        return execute(scriptDefinition, input, submitMode, new ExecutionSubmissionMetadata()
+                .setTriggerSource(triggerSource)
+                .setScheduleId(scheduleId)
+                .setAgentRunId(agentRunId)
+                .setAgentStepId(agentStepId));
+    }
+
+    private ExecutionRecord execute(ScriptDefinition scriptDefinition,
+                                    Map<String, Object> input,
+                                    SubmitMode submitMode,
+                                    ExecutionSubmissionMetadata metadata) {
         Map<String, Object> payload = ExecutionInputNormalizer.normalizeMap(
                 configValueApplicationService.resolveMap(input)
         );
         scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
+        ExecutionSubmissionMetadata executionMetadata = metadata == null ? ExecutionSubmissionMetadata.manual() : metadata;
 
         ExecutionRecord record = new ExecutionRecord()
                 .setId(UUID.randomUUID().toString())
                 .setScriptId(scriptDefinition.getId())
                 .setSubmitMode(submitMode == null ? SubmitMode.SYNC : submitMode)
-                .setTriggerSource(triggerSource)
-                .setScheduleId(scheduleId)
-                .setAgentRunId(agentRunId)
-                .setAgentStepId(agentStepId)
+                .setTriggerSource(executionMetadata.getTriggerSource())
+                .setScheduleId(executionMetadata.getScheduleId())
+                .setAgentRunId(executionMetadata.getAgentRunId())
+                .setAgentStepId(executionMetadata.getAgentStepId())
+                .setEventSourceId(executionMetadata.getEventSourceId())
+                .setEventTriggerId(executionMetadata.getEventTriggerId())
+                .setEventRecordId(executionMetadata.getEventRecordId())
+                .setEventDispatchId(executionMetadata.getEventDispatchId())
                 .setInput(payload)
                 .setCreatedAt(LocalDateTime.now());
 
