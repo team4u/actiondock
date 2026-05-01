@@ -7,8 +7,6 @@
 - `event-record`
 - `processor test`
 
-这是给 AI 用的操作手册，不是给人看的说明文档。
-
 ## 加载顺序
 
 1. 如果要用 `SCRIPT_REF`，同时读取 `references/script-authoring.md`。
