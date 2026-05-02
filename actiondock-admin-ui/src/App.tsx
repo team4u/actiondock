@@ -147,7 +147,7 @@ function resolveSelectedNavKey(pathname: string): string {
 function resolveTitle(selectedNavKey: string): string {
   switch (selectedNavKey) {
     case "discover":
-      return "发现能力包";
+      return "发现";
     case "scripts":
       return "脚本库";
     case "repositories":
@@ -193,7 +193,7 @@ function AdminShell() {
         items={[
           {
             key: "discover",
-            label: "发现能力包",
+            label: "发现",
             onClick: () => navigate("/discover")
           },
           {

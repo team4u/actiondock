@@ -736,8 +736,8 @@ export function RepositoryDiscoveryPage() {
       {modalContextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title="发现能力包"
-          meta={<Text type="secondary">优先按能力包发现、安装和升级。底层脚本资产仍可单独查看和同步，但不再是主分发入口。</Text>}
+          title="发现"
+          meta={<Text type="secondary">发现脚本和能力包，支持安装、升级与同步。</Text>}
           actions={(
             <Space>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/packages/publish")}>
@@ -803,8 +803,30 @@ export function RepositoryDiscoveryPage() {
 
         <Card>
           <Tabs
-            defaultActiveKey="packages"
+            defaultActiveKey="scripts"
             items={[
+              {
+                key: "scripts",
+                label: `脚本 (${filteredTools.length})`,
+                children: (
+                  <Table<RepositoryToolDescriptor>
+                    rowKey={(item) => `${item.repositoryId}:${item.toolId}`}
+                    loading={loading}
+                    columns={toolColumns}
+                    dataSource={filteredTools}
+                    scroll={{ x: 1200 }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="当前没有可发现的脚本。先到仓库管理页添加并同步仓库。"
+                        />
+                      )
+                    }}
+                  />
+                )
+              },
               {
                 key: "packages",
                 label: `能力包 (${filteredPackages.length})`,
@@ -821,28 +843,6 @@ export function RepositoryDiscoveryPage() {
                         <Empty
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
                           description="当前没有可发现的能力包。"
-                        />
-                      )
-                    }}
-                  />
-                )
-              },
-              {
-                key: "tools",
-                label: `底层脚本资产 (${filteredTools.length})`,
-                children: (
-                  <Table<RepositoryToolDescriptor>
-                    rowKey={(item) => `${item.repositoryId}:${item.toolId}`}
-                    loading={loading}
-                    columns={toolColumns}
-                    dataSource={filteredTools}
-                    scroll={{ x: 1200 }}
-                    pagination={{ pageSize: 10, showSizeChanger: true }}
-                    locale={{
-                      emptyText: (
-                        <Empty
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description="当前没有可发现的脚本资产。先到仓库管理页添加并同步仓库。"
                         />
                       )
                     }}
