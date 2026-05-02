@@ -1,5 +1,6 @@
 package org.team4u.actiondock.web.ai;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -62,6 +63,12 @@ public class AiAgentRuntimeController {
     @PostMapping("/runs/{runId}/cancel")
     public ApiResponse<Void> cancelRun(@PathVariable String runId) {
         aiAgentRuntime.cancel(runId);
+        return ApiResponse.success(null);
+    }
+
+    @DeleteMapping("/runs/{runId}")
+    public ApiResponse<Void> deleteRun(@PathVariable String runId) {
+        aiAgentRuntime.deleteRun(runId);
         return ApiResponse.success(null);
     }
 }

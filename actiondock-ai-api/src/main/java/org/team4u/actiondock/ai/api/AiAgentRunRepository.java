@@ -7,4 +7,5 @@ public interface AiAgentRunRepository {
     AiAgentRunRecord save(AiAgentRunRecord run);
     Optional<AiAgentRunRecord> findById(String id);
     List<AiAgentRunRecord> findAll();
+    void deleteById(String id);
 }

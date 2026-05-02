@@ -568,12 +568,14 @@ class AiRuntimePolicyTest {
         public AiAgentRunRecord save(AiAgentRunRecord run) { values.put(run.getId(), run); return run; }
         public Optional<AiAgentRunRecord> findById(String id) { return Optional.ofNullable(values.get(id)); }
         public List<AiAgentRunRecord> findAll() { return new ArrayList<>(values.values()); }
+        public void deleteById(String id) { values.remove(id); }
     }
 
     private static final class InMemoryAiAgentStepRepository implements AiAgentStepRepository {
         private final Map<String, AiAgentStep> values = new LinkedHashMap<>();
         public AiAgentStep save(AiAgentStep step) { values.put(step.id(), step); return step; }
         public List<AiAgentStep> findByRunId(String runId) { return values.values().stream().filter(step -> runId.equals(step.runId())).toList(); }
+        public void deleteByRunId(String runId) { values.entrySet().removeIf(e -> runId.equals(e.getValue().runId())); }
     }
 
     private static final class RecordingExecutor implements Executor {

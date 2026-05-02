@@ -38,6 +38,11 @@ public class JpaAiAgentRunRepositoryAdapter implements AiAgentRunRepository {
         return repository.findAllByOrderByStartedAtDesc().stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public void deleteById(String id) {
+        repository.deleteById(id);
+    }
+
     private AiAgentRunEntity toEntity(AiAgentRunRecord run) {
         AiAgentRunEntity entity = new AiAgentRunEntity();
         entity.setId(run.getId());

@@ -136,6 +136,16 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
         return runRepository.findAll();
     }
 
+    public void deleteRun(String runId) {
+        AiAgentRunRecord run = runRepository.findById(runId)
+                .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
+        if (!isTerminalStatus(run.getStatus())) {
+            throw new IllegalStateException("运行进行中，无法删除: " + run.getStatus());
+        }
+        stepRepository.deleteByRunId(runId);
+        runRepository.deleteById(runId);
+    }
+
     private PreparedRun prepareRun(AiAgentRunRequest request, AiAgentRunContext context, boolean asyncSubmission) {
         if (request == null || request.agentProfile() == null || request.agentProfile().isBlank()) {
             throw new IllegalArgumentException("AI Agent Profile 不能为空");

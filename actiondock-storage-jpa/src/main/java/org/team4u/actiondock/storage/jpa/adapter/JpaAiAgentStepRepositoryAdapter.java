@@ -32,6 +32,11 @@ public class JpaAiAgentStepRepositoryAdapter implements AiAgentStepRepository {
         return repository.findByRunIdOrderByStepIndexAsc(runId).stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public void deleteByRunId(String runId) {
+        repository.deleteByRunId(runId);
+    }
+
     private AiAgentStepEntity toEntity(AiAgentStep step) {
         AiAgentStepEntity entity = new AiAgentStepEntity();
         entity.setId(step.id());

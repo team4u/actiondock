@@ -382,6 +382,12 @@ export function cancelAiRun(id: string): Promise<void> {
   });
 }
 
+export function deleteAiRun(id: string): Promise<void> {
+  return request<void>(`/api/ai/agents/runs/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
 export function listSchedules(): Promise<ScriptSchedule[]> {
   return request<ScriptSchedule[]>("/api/schedules");
 }
