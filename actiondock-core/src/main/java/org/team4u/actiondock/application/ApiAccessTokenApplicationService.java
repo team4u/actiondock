@@ -82,7 +82,7 @@ public class ApiAccessTokenApplicationService {
         if (token == null || !token.isEnabled()) {
             return false;
         }
-        if (!hash(rawToken).equals(token.getTokenHash())) {
+        if (!constantTimeEquals(hashBytes(rawToken), token.getTokenHash())) {
             return false;
         }
         token.setLastUsedAt(LocalDateTime.now())
@@ -123,11 +123,26 @@ public class ApiAccessTokenApplicationService {
     }
 
     private String hash(String rawToken) {
+        return HexFormat.of().formatHex(hashBytes(rawToken));
+    }
+
+    private byte[] hashBytes(String rawToken) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(rawToken.getBytes(StandardCharsets.UTF_8)));
+            return MessageDigest.getInstance("SHA-256")
+                    .digest(rawToken.getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("当前 JRE 不支持 SHA-256", exception);
+        }
+    }
+
+    private boolean constantTimeEquals(byte[] actual, String expectedHex) {
+        if (actual == null || expectedHex == null || expectedHex.isBlank()) {
+            return false;
+        }
+        try {
+            return MessageDigest.isEqual(actual, HexFormat.of().parseHex(expectedHex));
+        } catch (IllegalArgumentException exception) {
+            return false;
         }
     }
 

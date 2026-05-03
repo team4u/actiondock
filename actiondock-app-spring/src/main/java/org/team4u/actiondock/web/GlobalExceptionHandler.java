@@ -4,6 +4,8 @@ import org.team4u.actiondock.application.InvalidExecutionInputException;
 import org.team4u.actiondock.application.ErrorDetailSupport;
 import org.team4u.actiondock.application.EventAuthenticationException;
 import org.team4u.actiondock.application.InvalidPythonRequirementsException;
+import org.team4u.actiondock.application.WebhookRequestHeadersTooLargeException;
+import org.team4u.actiondock.application.WebhookRequestPayloadTooLargeException;
 import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
@@ -80,6 +82,24 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(401).body(ApiResponse.error(
                 ErrorDetailSupport.summarize(exception),
                 401,
+                ErrorDetailSupport.describe(exception)
+        ));
+    }
+
+    @ExceptionHandler(WebhookRequestPayloadTooLargeException.class)
+    public ResponseEntity<ApiResponse<ErrorDetail>> handleWebhookRequestPayloadTooLarge(WebhookRequestPayloadTooLargeException exception) {
+        return ResponseEntity.status(413).body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                413,
+                ErrorDetailSupport.describe(exception)
+        ));
+    }
+
+    @ExceptionHandler(WebhookRequestHeadersTooLargeException.class)
+    public ResponseEntity<ApiResponse<ErrorDetail>> handleWebhookRequestHeadersTooLarge(WebhookRequestHeadersTooLargeException exception) {
+        return ResponseEntity.status(431).body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                431,
                 ErrorDetailSupport.describe(exception)
         ));
     }

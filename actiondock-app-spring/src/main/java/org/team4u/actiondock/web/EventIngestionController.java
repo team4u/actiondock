@@ -1,6 +1,5 @@
 package org.team4u.actiondock.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,12 +19,9 @@ import java.util.Map;
 @RequestMapping("/api/event-sources")
 public class EventIngestionController {
     private final EventIngestionApplicationService eventIngestionApplicationService;
-    private final ObjectMapper objectMapper;
 
-    public EventIngestionController(EventIngestionApplicationService eventIngestionApplicationService,
-                                    ObjectMapper objectMapper) {
+    public EventIngestionController(EventIngestionApplicationService eventIngestionApplicationService) {
         this.eventIngestionApplicationService = eventIngestionApplicationService;
-        this.objectMapper = objectMapper;
     }
 
     @PostMapping(path = "/{id}/events", consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.ALL_VALUE})
@@ -35,7 +31,6 @@ public class EventIngestionController {
         EventIngestionResult result = eventIngestionApplicationService.ingest(id, new IncomingEventPayload()
                 .setHeaders(readHeaders(request))
                 .setQuery(readQuery(request))
-                .setBody(readBody(rawBody))
                 .setRawBody(rawBody)
                 .setContentType(request.getContentType()));
         return ApiResponse.success(new EventIngestionView(result.getEventRecord(), result.getDispatches()), "已接收");
@@ -66,17 +61,5 @@ public class EventIngestionController {
             }
         });
         return query;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> readBody(String rawBody) {
-        if (rawBody == null || rawBody.isBlank()) {
-            return Map.of();
-        }
-        try {
-            return objectMapper.readValue(rawBody, Map.class);
-        } catch (Exception exception) {
-            throw new IllegalArgumentException("请求体必须是 JSON 对象", exception);
-        }
     }
 }
