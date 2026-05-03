@@ -294,14 +294,14 @@ public class RuntimeConfiguration {
     public EventIngestionApplicationService eventIngestionApplicationService(EventSourceApplicationService eventSourceApplicationService,
                                                                              EventTriggerApplicationService eventTriggerApplicationService,
                                                                              EventRecordRepository eventRecordRepository,
-                                                                             EventDispatchRepository eventDispatchRepository,
-                                                                             ConfigValueApplicationService configValueApplicationService) {
+                                                                             ConfigValueApplicationService configValueApplicationService,
+                                                                             JsonCodec jsonCodec) {
         return new EventIngestionApplicationService(
                 eventSourceApplicationService,
                 eventTriggerApplicationService,
                 eventRecordRepository,
-                eventDispatchRepository,
-                configValueApplicationService
+                configValueApplicationService,
+                jsonCodec
         );
     }
 
