@@ -2937,28 +2937,28 @@ public class RepositoryCatalogService {
         if ("HTTP".equals(repository.getType())) {
             return readHttpJson(joinHttpPath(repository.getUrl(), toolPath), ToolFile.class);
         }
-        return readJson(resolveRepositoryRoot(repository).resolve(toolPath), ToolFile.class);
+        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), toolPath), ToolFile.class);
     }
 
     private PluginFile readPluginFile(RepositoryDefinition repository, String pluginPath) {
         if ("HTTP".equals(repository.getType())) {
             return readHttpJson(joinHttpPath(repository.getUrl(), pluginPath), PluginFile.class);
         }
-        return readJson(resolveRepositoryRoot(repository).resolve(pluginPath), PluginFile.class);
+        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), pluginPath), PluginFile.class);
     }
 
     private CapabilityPackageManifestFile readCapabilityPackageManifest(RepositoryDefinition repository, String manifestPath) {
         if ("HTTP".equals(repository.getType())) {
             return readHttpJson(joinHttpPath(repository.getUrl(), manifestPath), CapabilityPackageManifestFile.class);
         }
-        return readJson(resolveRepositoryRoot(repository).resolve(manifestPath), CapabilityPackageManifestFile.class);
+        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), manifestPath), CapabilityPackageManifestFile.class);
     }
 
     private CapabilityPackageReleaseFile readCapabilityPackageRelease(RepositoryDefinition repository, String releasePath) {
         if ("HTTP".equals(repository.getType())) {
             return readHttpJson(joinHttpPath(repository.getUrl(), releasePath), CapabilityPackageReleaseFile.class);
         }
-        return readJson(resolveRepositoryRoot(repository).resolve(releasePath), CapabilityPackageReleaseFile.class);
+        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), releasePath), CapabilityPackageReleaseFile.class);
     }
 
     private String readRepositoryFile(RepositoryDefinition repository, Path path) {
@@ -2966,7 +2966,7 @@ public class RepositoryCatalogService {
             return readHttpText(joinHttpPath(repository.getUrl(), path.toString().replace('\\', '/')));
         }
         try {
-            return Files.readString(resolveRepositoryRoot(repository).resolve(path), StandardCharsets.UTF_8);
+            return Files.readString(safeResolveRepositoryPath(resolveRepositoryRoot(repository), path.toString()), StandardCharsets.UTF_8);
         } catch (IOException exception) {
             throw new IllegalStateException("读取仓库文件失败: " + path, exception);
         }
@@ -2977,7 +2977,7 @@ public class RepositoryCatalogService {
             return readHttpBytes(joinHttpPath(repository.getUrl(), path.toString().replace('\\', '/')));
         }
         try {
-            return Files.readAllBytes(resolveRepositoryRoot(repository).resolve(path));
+            return Files.readAllBytes(safeResolveRepositoryPath(resolveRepositoryRoot(repository), path.toString()));
         } catch (IOException exception) {
             throw new IllegalStateException("读取仓库文件失败: " + path, exception);
         }
@@ -2996,6 +2996,31 @@ public class RepositoryCatalogService {
             return Path.of(repository.getUrl());
         }
         return repositoriesRoot.resolve(repository.getId());
+    }
+
+    /**
+     * 安全地解析仓库相对路径，防止路径遍历攻击。
+     * <p>
+     * 拒绝绝对路径、空路径、包含 {@code ..} 的路径，
+     * 并通过 normalize/toRealPath 确认解析后仍在仓库根目录下。
+     */
+    private Path safeResolveRepositoryPath(Path root, String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("仓库文件路径不能为空");
+        }
+        if (relativePath.contains("..")) {
+            throw new IllegalArgumentException("仓库文件路径不允许包含 ..: " + relativePath);
+        }
+        Path parsed = Path.of(relativePath);
+        if (parsed.isAbsolute()) {
+            throw new IllegalArgumentException("仓库文件路径不允许使用绝对路径: " + relativePath);
+        }
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        Path target = normalizedRoot.resolve(parsed).normalize();
+        if (!target.startsWith(normalizedRoot)) {
+            throw new IllegalArgumentException("仓库文件越界访问被拒绝: " + relativePath);
+        }
+        return target;
     }
 
     private <T> T readJson(Path path, Class<T> type) {
@@ -3187,8 +3212,22 @@ public class RepositoryCatalogService {
         while (normalizedBase.endsWith("/")) {
             normalizedBase = normalizedBase.substring(0, normalizedBase.length() - 1);
         }
+        validateHttpRelativePath(relativePath);
         String normalizedRelative = relativePath.startsWith("/") ? relativePath.substring(1) : relativePath;
         return normalizedBase + "/" + normalizedRelative;
+    }
+
+    private void validateHttpRelativePath(String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("仓库文件路径不能为空");
+        }
+        if (relativePath.contains("..")) {
+            throw new IllegalArgumentException("仓库文件路径不允许包含 ..: " + relativePath);
+        }
+        Path parsed = Path.of(relativePath);
+        if (parsed.isAbsolute()) {
+            throw new IllegalArgumentException("仓库文件路径不允许使用绝对路径: " + relativePath);
+        }
     }
 
     private String resolveRelative(String toolPath, String nestedPath) {
@@ -3910,14 +3949,30 @@ public class RepositoryCatalogService {
 
     private record RelativeRepositoryPath(String value) {
         private Path resolve(String child) {
-            return Path.of(value).resolve(child);
+            validateNoTraversal(child);
+            Path resolved = Path.of(value).resolve(child).normalize();
+            if (!resolved.startsWith(Path.of(value).normalize())) {
+                throw new IllegalArgumentException("仓库文件越界访问被拒绝: " + child);
+            }
+            return resolved;
         }
 
         private RelativeRepositoryPath resolveNullable(String child) {
             if (child == null || child.isBlank()) {
                 return null;
             }
-            return new RelativeRepositoryPath(Path.of(value).resolve(child).toString().replace('\\', '/'));
+            validateNoTraversal(child);
+            Path resolved = Path.of(value).resolve(child).normalize();
+            if (!resolved.startsWith(Path.of(value).normalize())) {
+                throw new IllegalArgumentException("仓库文件越界访问被拒绝: " + child);
+            }
+            return new RelativeRepositoryPath(resolved.toString().replace('\\', '/'));
+        }
+
+        private void validateNoTraversal(String path) {
+            if (path != null && path.contains("..")) {
+                throw new IllegalArgumentException("仓库文件路径不允许包含 ..: " + path);
+            }
         }
     }
 
