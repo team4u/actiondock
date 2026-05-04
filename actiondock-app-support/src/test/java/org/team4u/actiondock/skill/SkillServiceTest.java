@@ -269,6 +269,31 @@ class SkillServiceTest {
     }
 
     @Test
+    void runtimeSkillReadsManagedContentAndTextResourcesOnlyWhenEnabled() throws Exception {
+        SkillService service = createService();
+        SkillTarget target = saveTarget(service, "ActionDock Agent", "ACTIONDOCK_AGENT", "target-a");
+        service.installFromZip(
+                List.of(target.getId()),
+                "sample-skill.zip",
+                sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "guide")
+        );
+        Files.write(tempDir.resolve("managed-skills").resolve("sample-skill").resolve("image.png"), new byte[] {1, 2, 3});
+
+        SkillService.RuntimeSkill runtimeSkill = service.requireRuntimeSkill("sample-skill");
+
+        assertThat(runtimeSkill.skillId()).isEqualTo("sample-skill");
+        assertThat(runtimeSkill.displayName()).isEqualTo("Sample Skill");
+        assertThat(runtimeSkill.skillContent()).contains("Sample Skill");
+        assertThat(runtimeSkill.resources()).containsEntry("references/guide.txt", "guide");
+        assertThat(runtimeSkill.resources()).doesNotContainKeys("SKILL.md", "skill.json", ".actiondock-skill-install.json", "image.png");
+
+        service.disableSkill("sample-skill");
+        assertThatThrownBy(() -> service.requireRuntimeSkill("sample-skill"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未启用");
+    }
+
+    @Test
     void validateDirectoryStillRejectsTraversalPreview() throws Exception {
         SkillService service = createService();
         SkillTarget target = saveTarget(service, "Claude", "CLAUDE", "target-a");

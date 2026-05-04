@@ -29,6 +29,8 @@ import io.agentscope.core.model.GeminiChatModel;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.model.OllamaChatModel;
 import io.agentscope.core.model.StructuredOutputReminder;
+import io.agentscope.core.skill.AgentSkill;
+import io.agentscope.core.skill.SkillBox;
 import io.agentscope.core.tool.AgentTool;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.Toolkit;
@@ -37,6 +39,8 @@ import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiAgentRunContext;
 import org.team4u.actiondock.ai.api.AiAgentRunRequest;
 import org.team4u.actiondock.ai.api.AiAgentRunResult;
+import org.team4u.actiondock.ai.api.AiAgentSkill;
+import org.team4u.actiondock.ai.api.AiAgentSkillRegistry;
 import org.team4u.actiondock.ai.api.AiAgentStep;
 import org.team4u.actiondock.ai.api.AiCallContext;
 import org.team4u.actiondock.ai.api.AiChatRequest;
@@ -75,9 +79,15 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final AiSecretResolver secretResolver;
+    private final AiAgentSkillRegistry skillRegistry;
 
     public AgentScopeAiProviderClient(AiSecretResolver secretResolver) {
+        this(secretResolver, null);
+    }
+
+    public AgentScopeAiProviderClient(AiSecretResolver secretResolver, AiAgentSkillRegistry skillRegistry) {
         this.secretResolver = Objects.requireNonNull(secretResolver);
+        this.skillRegistry = skillRegistry;
     }
 
     @Override
@@ -159,12 +169,14 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         AtomicInteger stepIndex = new AtomicInteger();
         List<AiAgentStep> steps = Collections.synchronizedList(new ArrayList<>());
         Toolkit toolkit = buildToolkit(agentProfile, request, context, toolRegistry, stepIndex, steps, observer == null ? AiAgentRunObserver.NOOP : observer);
+        SkillBox skillBox = buildSkillBox(agentProfile, toolkit);
         ReActAgent agent = ReActAgent.builder()
                 .name(agentProfile.getId())
                 .description(agentProfile.getName())
                 .sysPrompt(agentProfile.getSystemPrompt())
                 .model(model)
                 .toolkit(toolkit)
+                .skillBox(skillBox)
                 .hook(new ProgressHook(observer == null ? AiAgentRunObserver.NOOP : observer))
                 .maxIters(intOption(options, "maxIters", 6))
                 .generateOptions(buildGenerateOptions(modelProfile, options, true))
@@ -217,6 +229,28 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 observer
         )));
         return toolkit;
+    }
+
+    private SkillBox buildSkillBox(AiAgentProfile agentProfile, Toolkit toolkit) {
+        SkillBox skillBox = new SkillBox(toolkit);
+        if (skillRegistry == null || agentProfile == null || agentProfile.getSkillIds().isEmpty()) {
+            return skillBox;
+        }
+        for (String skillId : agentProfile.getSkillIds()) {
+            if (skillId == null || skillId.isBlank()) {
+                continue;
+            }
+            AiAgentSkill runtimeSkill = skillRegistry.requireSkill(skillId);
+            AgentSkill agentSkill = AgentSkill.builder()
+                    .name(runtimeSkill.displayName())
+                    .description(runtimeSkill.description())
+                    .skillContent(runtimeSkill.skillContent())
+                    .resources(runtimeSkill.resources())
+                    .source(runtimeSkill.source())
+                    .build();
+            skillBox.registerSkill(agentSkill);
+        }
+        return skillBox;
     }
 
     private final class ActionDockAgentTool implements AgentTool {

@@ -1156,6 +1156,7 @@ public class RepositoryCatalogService {
                                 .map(toolName -> rewriteToolName(toolName, agentIdMappings, scriptIdMappings))
                                 .toList())
                         .setDirectToolOptions(rewriteToolOptions(agent.directToolOptions(), agentIdMappings, scriptIdMappings))
+                        .setSkillIds(agent.skillIds() == null ? List.of() : agent.skillIds())
                         .setOptions(agent.options() == null ? Map.of() : agent.options())
                         .setEnabled(agent.enabled())
                         .setCreatedAt(now)
@@ -2815,6 +2816,7 @@ public class RepositoryCatalogService {
                 profile.getToolsetIds(),
                 profile.getDirectToolNames(),
                 profile.getDirectToolOptions(),
+                profile.getSkillIds(),
                 profile.getOptions(),
                 profile.isEnabled()
         );
@@ -4073,6 +4075,7 @@ public class RepositoryCatalogService {
                                      List<String> toolsetIds,
                                      List<String> directToolNames,
                                      Map<String, Map<String, Object>> directToolOptions,
+                                     List<String> skillIds,
                                      Map<String, Object> options,
                                      boolean enabled) {
     }
@@ -4206,6 +4209,7 @@ public class RepositoryCatalogService {
                     file.toolsetIds(),
                     file.directToolNames(),
                     file.directToolOptions(),
+                    file.skillIds(),
                     file.options(),
                     file.enabled()
             ));

@@ -3,6 +3,8 @@ package org.team4u.actiondock.ai;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
+import org.team4u.actiondock.ai.api.AiAgentSkill;
+import org.team4u.actiondock.ai.api.AiAgentSkillRegistry;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProvider;
@@ -69,6 +71,38 @@ class AiProfileManagementServiceTest {
         assertThatThrownBy(() -> service.save(agent("agent", "model", List.of("missing-tools"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("AI 工具集不存在: missing-tools");
+    }
+
+    @Test
+    void agentSaveValidatesConfiguredSkills() {
+        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
+        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
+        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
+        models.save(model("model"));
+        AiAgentSkillRegistry skillRegistry = org.mockito.Mockito.mock(AiAgentSkillRegistry.class);
+        org.mockito.Mockito.when(skillRegistry.requireSkill("skill-a"))
+                .thenReturn(new AiAgentSkill("skill-a", "Skill A", "Skill A", "content", Map.of(), "/tmp/skill-a"));
+        AiAgentProfileService service = new AiAgentProfileService(agents, models, toolsets, null, skillRegistry);
+
+        service.save(agent("agent", "model", List.of()).setSkillIds(List.of("skill-a")));
+
+        org.mockito.Mockito.verify(skillRegistry).requireSkill("skill-a");
+    }
+
+    @Test
+    void agentSaveRejectsUnavailableSkill() {
+        InMemoryAiModelProfileRepository models = new InMemoryAiModelProfileRepository();
+        InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
+        InMemoryAiToolsetRepository toolsets = new InMemoryAiToolsetRepository();
+        models.save(model("model"));
+        AiAgentSkillRegistry skillRegistry = org.mockito.Mockito.mock(AiAgentSkillRegistry.class);
+        org.mockito.Mockito.when(skillRegistry.requireSkill("missing-skill"))
+                .thenThrow(new IllegalArgumentException("Skill 不存在: missing-skill"));
+        AiAgentProfileService service = new AiAgentProfileService(agents, models, toolsets, null, skillRegistry);
+
+        assertThatThrownBy(() -> service.save(agent("agent", "model", List.of()).setSkillIds(List.of("missing-skill"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Skill 不存在: missing-skill");
     }
 
     @Test

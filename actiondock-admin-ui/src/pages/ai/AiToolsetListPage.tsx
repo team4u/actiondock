@@ -44,7 +44,7 @@ export function AiToolsetListPage() {
     );
   }, [toolsets, searchText]);
 
-  const referencingAgents = (toolsetId: string) => agents.filter((agent) => agent.toolsetIds.includes(toolsetId));
+  const referencingAgents = (toolsetId: string) => agents.filter((agent) => (agent.toolsetIds ?? []).includes(toolsetId));
 
   const handleDelete = async (toolset: AiToolset) => {
     setDeletingId(toolset.id);

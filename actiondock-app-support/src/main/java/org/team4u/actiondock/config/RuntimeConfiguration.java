@@ -10,6 +10,8 @@ import org.team4u.actiondock.ai.agentscope.AgentScopeAiProviderClient;
 import org.team4u.actiondock.ai.agentscope.AgentScopeBuiltinAiTools;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiAgentRunRepository;
+import org.team4u.actiondock.ai.api.AiAgentSkill;
+import org.team4u.actiondock.ai.api.AiAgentSkillRegistry;
 import org.team4u.actiondock.ai.api.AiAgentStepRepository;
 import org.team4u.actiondock.ai.api.AiCallLogRepository;
 import org.team4u.actiondock.ai.api.AiGateway;
@@ -126,8 +128,23 @@ public class RuntimeConfiguration {
     }
 
     @Bean
-    public AiProviderClient aiProviderClient(AiSecretResolver secretResolver) {
-        return new AgentScopeAiProviderClient(secretResolver);
+    public AiAgentSkillRegistry aiAgentSkillRegistry(SkillService skillService) {
+        return skillId -> {
+            SkillService.RuntimeSkill skill = skillService.requireRuntimeSkill(skillId);
+            return new AiAgentSkill(
+                    skill.skillId(),
+                    skill.displayName(),
+                    skill.description(),
+                    skill.skillContent(),
+                    skill.resources(),
+                    skill.source()
+            );
+        };
+    }
+
+    @Bean
+    public AiProviderClient aiProviderClient(AiSecretResolver secretResolver, AiAgentSkillRegistry skillRegistry) {
+        return new AgentScopeAiProviderClient(secretResolver, skillRegistry);
     }
 
     @Bean
@@ -140,8 +157,9 @@ public class RuntimeConfiguration {
     public AiAgentProfileService aiAgentProfileService(AiAgentProfileRepository repository,
                                                        AiModelProfileRepository modelProfileRepository,
                                                        AiToolsetRepository toolsetRepository,
-                                                       AiToolRegistryImpl toolRegistry) {
-        return new AiAgentProfileService(repository, modelProfileRepository, toolsetRepository, toolRegistry);
+                                                       AiToolRegistryImpl toolRegistry,
+                                                       AiAgentSkillRegistry skillRegistry) {
+        return new AiAgentProfileService(repository, modelProfileRepository, toolsetRepository, toolRegistry, skillRegistry);
     }
 
     @Bean

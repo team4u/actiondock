@@ -55,6 +55,7 @@ public class JpaAiAgentProfileRepositoryAdapter implements AiAgentProfileReposit
         entity.setToolsetIdsJson(jsonCodec.write(profile.getToolsetIds()));
         entity.setDirectToolNamesJson(jsonCodec.write(profile.getDirectToolNames()));
         entity.setDirectToolOptionsJson(jsonCodec.write(profile.getDirectToolOptions()));
+        entity.setSkillIdsJson(jsonCodec.write(profile.getSkillIds()));
         entity.setOptionsJson(jsonCodec.write(profile.getOptions()));
         entity.setEnabled(profile.isEnabled());
         entity.setCreatedAt(profile.getCreatedAt());
@@ -73,6 +74,7 @@ public class JpaAiAgentProfileRepositoryAdapter implements AiAgentProfileReposit
                 .setToolsetIds(jsonCodec.readList(entity.getToolsetIdsJson(), String.class))
                 .setDirectToolNames(jsonCodec.readList(entity.getDirectToolNamesJson(), String.class))
                 .setDirectToolOptions(readToolOptions(entity.getDirectToolOptionsJson()))
+                .setSkillIds(jsonCodec.readList(entity.getSkillIdsJson(), String.class))
                 .setOptions(jsonCodec.readMap(entity.getOptionsJson()))
                 .setEnabled(entity.isEnabled())
                 .setCreatedAt(entity.getCreatedAt())

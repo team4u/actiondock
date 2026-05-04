@@ -43,7 +43,8 @@ export function AiAgentProfileListPage() {
     const keyword = searchText.trim().toLowerCase();
     if (!keyword) return agents;
     return agents.filter((item) =>
-      [item.id, item.name, item.description ?? "", item.modelProfileId, item.systemPrompt ?? "", ...item.toolsetIds, ...item.directToolNames]
+      [item.id, item.name, item.description ?? "", item.modelProfileId, item.systemPrompt ?? "", ...(item.toolsetIds ?? []), ...(item.directToolNames ?? [])]
+        .concat(item.skillIds ?? [])
         .some((field) => field.toLowerCase().includes(keyword))
     );
   }, [agents, searchText]);
@@ -88,8 +89,9 @@ export function AiAgentProfileListPage() {
         const summary = getAgentToolSummary(item, toolsets, tools);
         return (
           <Space size={[4, 4]} wrap>
-            {item.toolsetIds.map((toolsetId) => <Tag key={`${item.id}-${toolsetId}`}>{toolsetId}</Tag>)}
-            {item.directToolNames.length > 0 ? <Tag color="blue">{item.directToolNames.length} 个直接工具</Tag> : null}
+            {(item.toolsetIds ?? []).map((toolsetId) => <Tag key={`${item.id}-${toolsetId}`}>{toolsetId}</Tag>)}
+            {(item.directToolNames ?? []).length > 0 ? <Tag color="blue">{item.directToolNames.length} 个直接工具</Tag> : null}
+            {(item.skillIds ?? []).length > 0 ? <Tag color="cyan">{item.skillIds.length} 个 Skill</Tag> : null}
             {summary.mergedToolCount > 0 ? <Tag color="green">{summary.mergedToolCount} 个自动合并</Tag> : null}
             {summary.conflicts.length > 0 ? <Tag color="red">{summary.conflicts.length} 个冲突</Tag> : null}
           </Space>

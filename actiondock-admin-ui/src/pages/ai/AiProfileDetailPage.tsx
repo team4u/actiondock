@@ -12,6 +12,7 @@ import {
   getAiModel,
   listConfigValues,
   listAiModels,
+  listSkills,
   listAiTools,
   listAiToolsets,
   startAiAgentRun,
@@ -37,7 +38,8 @@ import type {
   AiTool,
   AiToolExecutionResult,
   AiToolset,
-  ConfigValue
+  ConfigValue,
+  Skill
 } from "../../types";
 import { formatDateTime, parseJsonText, prettyJson } from "../../utils";
 
@@ -64,6 +66,7 @@ interface AgentFormValues {
   modelProfileId: string;
   systemPrompt?: string;
   toolsetIds: string[];
+  skillIds: string[];
   enabled: boolean;
   optionsJson: string;
 }
@@ -253,6 +256,7 @@ export function AiAgentProfileDetailPage() {
   const [models, setModels] = useState<AiModelProfile[]>([]);
   const [toolsets, setToolsets] = useState<AiToolset[]>([]);
   const [tools, setTools] = useState<AiTool[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [directToolNames, setDirectToolNames] = useState<string[]>([]);
   const [directToolOptions, setDirectToolOptions] = useState<ToolConfigMap>({});
   const [managerOpen, setManagerOpen] = useState(false);
@@ -272,13 +276,15 @@ export function AiAgentProfileDetailPage() {
   const [testRun, setTestRun] = useState<AiAgentRunSnapshot | null>(null);
   const activeTab = searchParams.get("tab") === "test" ? "test" : "config";
   const watchedToolsetIds = Form.useWatch("toolsetIds", form) ?? [];
+  const watchedSkillIds = Form.useWatch("skillIds", form) ?? [];
 
   useEffect(() => {
-    void Promise.all([listAiModels(), listAiToolsets(), listAiTools()])
-      .then(([nextModels, nextToolsets, nextTools]) => {
+    void Promise.all([listAiModels(), listAiToolsets(), listAiTools(), listSkills()])
+      .then(([nextModels, nextToolsets, nextTools, nextSkills]) => {
         setModels(nextModels);
         setToolsets(nextToolsets);
         setTools(nextTools);
+        setSkills(nextSkills);
       })
       .catch((error) => messageApi.error(error instanceof ApiError ? error.message : "加载 Agent 配置元数据失败"));
   }, [messageApi]);
@@ -291,6 +297,7 @@ export function AiAgentProfileDetailPage() {
         description: "",
         modelProfileId: "",
         toolsetIds: [],
+        skillIds: [],
         enabled: true,
         optionsJson: prettyJson({ maxIters: 6, timeoutSeconds: 120 })
       });
@@ -319,6 +326,7 @@ export function AiAgentProfileDetailPage() {
         modelProfileId: profile.modelProfileId,
         systemPrompt: profile.systemPrompt,
         toolsetIds: profile.toolsetIds,
+        skillIds: profile.skillIds ?? [],
         enabled: profile.enabled,
         optionsJson: prettyJson(profile.options)
       });
@@ -381,6 +389,22 @@ export function AiAgentProfileDetailPage() {
       disabled: !item.enabled
     })),
     [toolsets]
+  );
+  const skillOptions = useMemo(
+    () => skills.map((item) => ({
+      value: item.skillId,
+      label: `${item.skillId}${item.displayName ? ` (${item.displayName})` : ""}${item.enabledTargetCount > 0 ? "" : " - 未启用"}`,
+      disabled: item.enabledTargetCount <= 0
+    })),
+    [skills]
+  );
+  const missingSkillIds = useMemo(
+    () => watchedSkillIds.filter((skillId) => !skills.some((skill) => skill.skillId === skillId)),
+    [skills, watchedSkillIds]
+  );
+  const disabledSkillIds = useMemo(
+    () => watchedSkillIds.filter((skillId) => skills.some((skill) => skill.skillId === skillId && skill.enabledTargetCount <= 0)),
+    [skills, watchedSkillIds]
   );
   const filteredTools = useMemo(() => filterAiToolsForPicker(tools, toolQuery), [toolQuery, tools]);
   const resolution = useMemo(
@@ -535,6 +559,9 @@ export function AiAgentProfileDetailPage() {
       if (resolution.conflicts.length > 0) {
         throw new Error("当前 Agent 工具存在冲突，请先处理后再保存");
       }
+      if (missingSkillIds.length > 0 || disabledSkillIds.length > 0) {
+        throw new Error("当前 Agent Skill 引用不可用，请先处理缺失或未启用的 Skill");
+      }
       const profile: AiAgentProfile = {
         id: values.id.trim(),
         name: values.name.trim(),
@@ -545,6 +572,7 @@ export function AiAgentProfileDetailPage() {
         toolsetIds: values.toolsetIds ?? [],
         directToolNames: Array.from(new Set(directToolNames)),
         directToolOptions: buildToolOptionsPayload(Array.from(new Set(directToolNames)), directToolOptions),
+        skillIds: Array.from(new Set(values.skillIds ?? [])),
         enabled: values.enabled,
         options: parseJsonText(values.optionsJson, "运行参数")
       };
@@ -631,6 +659,32 @@ export function AiAgentProfileDetailPage() {
                     <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
                     <Form.Item name="modelProfileId" label="模型 Profile" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={modelOptions} /></Form.Item>
                     <Form.Item name="toolsetIds" hidden><Select mode="multiple" optionFilterProp="label" options={toolsetOptions} /></Form.Item>
+                    <Form.Item name="skillIds" label="Skills">
+                      <Select
+                        mode="multiple"
+                        allowClear
+                        showSearch
+                        optionFilterProp="label"
+                        placeholder="选择已安装且启用的 Skill"
+                        options={skillOptions}
+                      />
+                    </Form.Item>
+                    {missingSkillIds.length > 0 ? (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="存在缺失 Skill"
+                        description={<Space size={[8, 8]} wrap>{missingSkillIds.map((skillId) => <Tag key={skillId}>{skillId}</Tag>)}</Space>}
+                      />
+                    ) : null}
+                    {disabledSkillIds.length > 0 ? (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="存在未启用 Skill"
+                        description={<Space size={[8, 8]} wrap>{disabledSkillIds.map((skillId) => <Tag key={skillId}>{skillId}</Tag>)}</Space>}
+                      />
+                    ) : null}
                     <Form.Item name="systemPrompt" label="System Prompt"><Input.TextArea rows={6} /></Form.Item>
                     <Form.Item name="optionsJson" label="运行参数 JSON"><Input.TextArea rows={5} /></Form.Item>
                   </Form>

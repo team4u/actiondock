@@ -2,10 +2,12 @@ package org.team4u.actiondock.ai.core;
 
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
+import org.team4u.actiondock.ai.api.AiAgentSkillRegistry;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public class AiAgentProfileService {
@@ -16,6 +18,7 @@ public class AiAgentProfileService {
     private final AiModelProfileRepository modelProfileRepository;
     private final AiToolsetRepository toolsetRepository;
     private final AiToolRegistryImpl toolRegistry;
+    private final AiAgentSkillRegistry skillRegistry;
 
     public AiAgentProfileService(AiAgentProfileRepository repository, AiModelProfileRepository modelProfileRepository) {
         this(repository, modelProfileRepository, null, null);
@@ -31,10 +34,19 @@ public class AiAgentProfileService {
                                  AiModelProfileRepository modelProfileRepository,
                                  AiToolsetRepository toolsetRepository,
                                  AiToolRegistryImpl toolRegistry) {
+        this(repository, modelProfileRepository, toolsetRepository, toolRegistry, null);
+    }
+
+    public AiAgentProfileService(AiAgentProfileRepository repository,
+                                 AiModelProfileRepository modelProfileRepository,
+                                 AiToolsetRepository toolsetRepository,
+                                 AiToolRegistryImpl toolRegistry,
+                                 AiAgentSkillRegistry skillRegistry) {
         this.repository = repository;
         this.modelProfileRepository = modelProfileRepository;
         this.toolsetRepository = toolsetRepository;
         this.toolRegistry = toolRegistry;
+        this.skillRegistry = skillRegistry;
     }
 
     public List<AiAgentProfile> list() {
@@ -97,6 +109,14 @@ public class AiAgentProfileService {
                 if (toolsetRepository.findById(toolsetId).isEmpty()) {
                     throw new IllegalArgumentException("AI 工具集不存在: " + toolsetId);
                 }
+            }
+        }
+        for (String skillId : new LinkedHashSet<>(profile.getSkillIds())) {
+            if (skillId == null || skillId.isBlank()) {
+                throw new IllegalArgumentException("Agent Skill ID 不能为空");
+            }
+            if (skillRegistry != null) {
+                skillRegistry.requireSkill(skillId);
             }
         }
     }

@@ -219,12 +219,14 @@ export function buildBackupJson(
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
-    skillTargets: SkillTarget[];
-    skills: SkillBackupEntry[];
+    skillTargets?: SkillTarget[];
+    skills?: SkillBackupEntry[];
   },
   options?: { includeSecretValues?: boolean }
 ): SystemBackupBundleV1 {
   const includeSecretValues = options?.includeSecretValues ?? false;
+  const skillTargets = data.skillTargets ?? [];
+  const skills = data.skills ?? [];
   const pluginEntries: PluginBackupEntry[] = data.plugins.map(p => ({
     pluginId: p.pluginId,
     fileName: p.fileName ?? `${p.pluginId}.jar`,
@@ -239,7 +241,7 @@ export function buildBackupJson(
     config: p.configurable ? data.pluginConfigs.get(p.pluginId) : undefined
   }));
 
-  const skillTargetEntries: SkillTargetBackupEntry[] = data.skillTargets.map(t => ({
+  const skillTargetEntries: SkillTargetBackupEntry[] = skillTargets.map(t => ({
     id: t.id,
     name: t.name,
     type: t.type,
@@ -273,7 +275,7 @@ export function buildBackupJson(
       aiAgents: [...data.aiAgents].sort((a, b) => a.id.localeCompare(b.id)),
       aiToolsets: [...data.aiToolsets].sort((a, b) => a.id.localeCompare(b.id)),
       skillTargets: skillTargetEntries.sort((a, b) => a.id.localeCompare(b.id)),
-      skills: [...data.skills].sort((a, b) => a.skillId.localeCompare(b.skillId))
+      skills: [...skills].sort((a, b) => a.skillId.localeCompare(b.skillId))
     }
   };
 }
@@ -371,8 +373,8 @@ export function analyzeBackupBundle(
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
-    skillTargets: SkillTarget[];
-    skills: Skill[];
+    skillTargets?: SkillTarget[];
+    skills?: Skill[];
   }
 ): BackupAnalysis {
   const analyze = <T extends { id: string }>(
@@ -430,7 +432,9 @@ export function analyzeBackupBundle(
     }
   }
 
-  const currentSkillTargetIds = new Set(current.skillTargets.map(t => t.id));
+  const currentSkillTargets = current.skillTargets ?? [];
+  const currentSkills = current.skills ?? [];
+  const currentSkillTargetIds = new Set(currentSkillTargets.map(t => t.id));
   let skillTargetCreate = 0;
   let skillTargetOverwrite = 0;
   for (const item of bundle.data.skillTargets) {
@@ -441,7 +445,7 @@ export function analyzeBackupBundle(
     }
   }
 
-  const currentSkillIds = new Set(current.skills.map(s => s.skillId));
+  const currentSkillIds = new Set(currentSkills.map(s => s.skillId));
   let skillCreate = 0;
   let skillOverwrite = 0;
   for (const item of bundle.data.skills) {

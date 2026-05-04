@@ -85,7 +85,7 @@ export function AiOverviewPage() {
   const missingModelAgents = agents.filter((agent) => !modelIds.has(agent.modelProfileId));
   const invalidToolAgents = agents.filter((agent) => {
     const summary = getAgentToolSummary(agent, toolsets, tools);
-    return agent.toolsetIds.some((toolsetId) => !toolsetIds.has(toolsetId))
+    return (agent.toolsetIds ?? []).some((toolsetId) => !toolsetIds.has(toolsetId))
       || summary.missingToolNames.length > 0
       || summary.conflicts.length > 0;
   });

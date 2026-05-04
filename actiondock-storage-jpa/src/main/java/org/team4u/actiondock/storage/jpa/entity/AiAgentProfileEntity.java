@@ -30,6 +30,8 @@ public class AiAgentProfileEntity {
     @Lob
     private String directToolOptionsJson;
     @Lob
+    private String skillIdsJson;
+    @Lob
     private String optionsJson;
     private boolean enabled = true;
     private LocalDateTime createdAt;
@@ -53,6 +55,8 @@ public class AiAgentProfileEntity {
     public void setDirectToolNamesJson(String directToolNamesJson) { this.directToolNamesJson = directToolNamesJson; }
     public String getDirectToolOptionsJson() { return directToolOptionsJson; }
     public void setDirectToolOptionsJson(String directToolOptionsJson) { this.directToolOptionsJson = directToolOptionsJson; }
+    public String getSkillIdsJson() { return skillIdsJson; }
+    public void setSkillIdsJson(String skillIdsJson) { this.skillIdsJson = skillIdsJson; }
     public String getOptionsJson() { return optionsJson; }
     public void setOptionsJson(String optionsJson) { this.optionsJson = optionsJson; }
     public boolean isEnabled() { return enabled; }

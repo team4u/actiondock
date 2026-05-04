@@ -16,6 +16,7 @@ public class AiAgentProfile {
     private List<String> toolsetIds = new ArrayList<>();
     private List<String> directToolNames = new ArrayList<>();
     private Map<String, Map<String, Object>> directToolOptions = new LinkedHashMap<>();
+    private List<String> skillIds = new ArrayList<>();
     private Map<String, Object> options = new LinkedHashMap<>();
     private boolean enabled = true;
     private LocalDateTime createdAt;
@@ -39,6 +40,8 @@ public class AiAgentProfile {
     public AiAgentProfile setDirectToolNames(List<String> directToolNames) { this.directToolNames = directToolNames == null ? new ArrayList<>() : new ArrayList<>(directToolNames); return this; }
     public Map<String, Map<String, Object>> getDirectToolOptions() { return copyOptions(directToolOptions); }
     public AiAgentProfile setDirectToolOptions(Map<String, Map<String, Object>> directToolOptions) { this.directToolOptions = copyOptions(directToolOptions); return this; }
+    public List<String> getSkillIds() { return List.copyOf(skillIds); }
+    public AiAgentProfile setSkillIds(List<String> skillIds) { this.skillIds = skillIds == null ? new ArrayList<>() : new ArrayList<>(skillIds); return this; }
     public Map<String, Object> getOptions() { return Map.copyOf(options); }
     public AiAgentProfile setOptions(Map<String, Object> options) { this.options = options == null ? new LinkedHashMap<>() : new LinkedHashMap<>(options); return this; }
     public boolean isEnabled() { return enabled; }

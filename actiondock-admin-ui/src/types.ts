@@ -127,6 +127,7 @@ export interface AiAgentProfile {
   toolsetIds: string[];
   directToolNames: string[];
   directToolOptions: Record<string, Record<string, unknown>>;
+  skillIds: string[];
   options: Record<string, unknown>;
   enabled: boolean;
   createdAt?: string;
@@ -899,6 +900,7 @@ export interface RepositoryAiPackageAgentFile {
   toolsetIds: string[];
   directToolNames: string[];
   directToolOptions: Record<string, Record<string, unknown>>;
+  skillIds: string[];
   options: Record<string, unknown>;
   enabled: boolean;
 }

@@ -269,6 +269,30 @@ public class SkillService {
         return toSkillListItem(requireManagedSkill(skillId));
     }
 
+    public RuntimeSkill requireRuntimeSkill(String skillId) {
+        initializeManagedSkillStorage();
+        ManagedSkill skill = requireManagedSkill(skillId);
+        SkillListItem item = toSkillListItem(skill);
+        if (item.enabledTargetCount() <= 0) {
+            throw new IllegalArgumentException("Skill 未启用，不能配置到 Agent: " + skillId);
+        }
+        Path managedPath = resolveManagedPath(skillId);
+        Path entrypoint = managedPath.resolve("SKILL.md");
+        if (Files.notExists(entrypoint)) {
+            throw new IllegalArgumentException("Skill 受管副本不存在，不能配置到 Agent: " + skillId);
+        }
+        String content = readString(entrypoint);
+        Map<String, String> resources = readRuntimeSkillResources(managedPath);
+        return new RuntimeSkill(
+                skill.getSkillId(),
+                normalizeOrDefault(skill.getDisplayName(), skill.getSkillId()),
+                normalizeOrDefault(skill.getDescription(), skill.getSkillId()),
+                content,
+                resources,
+                managedPath.toString()
+        );
+    }
+
     public SkillListItem disableSkill(String skillId) {
         initializeManagedSkillStorage();
         List<SkillInstallation> deployments = skillInstallationRepository.findBySkillId(skillId);
@@ -1231,6 +1255,28 @@ public class SkillService {
         return target;
     }
 
+    private Map<String, String> readRuntimeSkillResources(Path managedPath) {
+        Map<String, String> resources = new LinkedHashMap<>();
+        try (var stream = Files.walk(managedPath)) {
+            for (Path file : stream.filter(Files::isRegularFile).sorted().toList()) {
+                if (Files.isSymbolicLink(file)) {
+                    throw new IllegalArgumentException("Skill 不允许包含符号链接: " + file);
+                }
+                String relative = managedPath.relativize(file).toString().replace('\\', '/');
+                if ("SKILL.md".equals(relative) || "skill.json".equals(relative) || INSTALL_MARKER_FILE.equals(relative)) {
+                    continue;
+                }
+                String contentType = detectContentType(file);
+                if (isTextFile(file, contentType)) {
+                    resources.put(relative, Files.readString(file, StandardCharsets.UTF_8));
+                }
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("读取 Agent Skill 资源失败: " + managedPath, exception);
+        }
+        return resources;
+    }
+
     private long fileSize(Path path) {
         try {
             return Files.size(path);
@@ -1536,6 +1582,14 @@ public class SkillService {
                                 List<SkillDeploymentView> targets,
                                 LocalDateTime installedAt,
                                 LocalDateTime updatedAt) {
+    }
+
+    public record RuntimeSkill(String skillId,
+                               String displayName,
+                               String description,
+                               String skillContent,
+                               Map<String, String> resources,
+                               String source) {
     }
 
     public record SkillScanItem(String id,
