@@ -34,6 +34,7 @@ import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { PageHeader } from "../components/PageHeader";
 import { SkillFileBrowser } from "../components/SkillFileBrowser";
 import { useColorMode } from "../contexts/ColorModeContext";
+import { buildSkillManagementSearch } from "../skillRouting";
 import type { SkillFilePreview, SkillScanDetail, SkillScanItem, SkillTarget } from "../types";
 import { getErrorMessage } from "../utils";
 
@@ -236,8 +237,8 @@ export function ScanSkillsPage() {
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
           title={target ? `扫描：${target.name}` : "目标目录扫描"}
-          onBack={() => navigate("/skills")}
-          backLabel="返回管理"
+          onBack={() => navigate(`/skills${buildSkillManagementSearch("targets")}`)}
+          backLabel="返回目标目录"
           meta={target ? `目录 ${target.rootPath}` : "查看目标目录下发现的 Skill。"}
           actions={
             <Button icon={<ReloadOutlined />} loading={scanLoading} onClick={() => void loadScan()}>

@@ -26,8 +26,8 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   createSkillTarget,
   deleteSkill,
@@ -41,6 +41,11 @@ import {
 } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
+import {
+  buildSkillManagementSearch,
+  resolveSkillManagementTab,
+  type SkillManagementTab
+} from "../skillRouting";
 import type { Skill, SkillSyncResult, SkillTarget } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
@@ -68,6 +73,8 @@ interface TargetFormValues {
 
 export function SkillManagementPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = useMemo(() => resolveSkillManagementTab(searchParams), [searchParams]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [targets, setTargets] = useState<SkillTarget[]>([]);
   const [loading, setLoading] = useState(true);
@@ -356,6 +363,11 @@ export function SkillManagementPage() {
     preserveSelectedRowKeys: true
   };
 
+  const handleTabChange = (key: string) => {
+    const nextTab = key as SkillManagementTab;
+    setSearchParams(buildSkillManagementSearch(nextTab), { replace: true });
+  };
+
   return (
     <>
       {contextHolder}
@@ -379,7 +391,8 @@ export function SkillManagementPage() {
 
         <Card>
           <Tabs
-            defaultActiveKey="skills"
+            activeKey={activeTab}
+            onChange={handleTabChange}
             items={[
               {
                 key: "skills",
