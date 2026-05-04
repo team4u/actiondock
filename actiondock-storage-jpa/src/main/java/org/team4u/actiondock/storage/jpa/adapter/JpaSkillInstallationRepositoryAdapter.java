@@ -1,6 +1,7 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.team4u.actiondock.domain.model.SkillInstallation;
 import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.storage.jpa.entity.SkillInstallationEntity;
@@ -53,6 +54,7 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
     }
 
     @Override
+    @Transactional
     public void deleteBySkillIdAndTargetId(String skillId, String targetId) {
         repository.deleteBySkillIdAndTargetId(skillId, targetId);
     }
