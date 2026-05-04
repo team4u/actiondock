@@ -21,6 +21,7 @@ bin
 !.github/workflows/**
 jdeploy
 jdeploy-bundle
+actiondock-cli/runtime/
 
 ### IntelliJ IDEA ###
 .idea

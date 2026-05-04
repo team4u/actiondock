@@ -29,17 +29,17 @@ class ServerUpdateNotifier {
     @EventListener(ApplicationReadyEvent.class)
     void onApplicationReady() {
         Thread.ofVirtual()
-                .name("actiondock-server-update-check")
+                .name("actiondock-update-check")
                 .start(this::checkAndLog);
     }
 
     void checkAndLog() {
         updateNotificationService.checkForUpdate(new UpdateNotificationRequest(
                         "server",
-                        "@actiondock/server",
-                        "ActionDock Server",
+                        "actiondock",
+                        "ActionDock",
                         CURRENT_VERSION,
-                        "npm i -g @actiondock/server@latest",
+                        "npm i -g actiondock@latest",
                         Path.of(System.getProperty("user.home")),
                         System.getenv()
                 ))

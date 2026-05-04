@@ -1,15 +1,20 @@
 {
-  "name": "@actiondock/cli",
-  "version": "0.1.7",
-  "description": "ActionDock command line interface",
+  "name": "actiondock",
+  "version": "0.1.0",
+  "description": "ActionDock local automation runtime, CLI, server, admin UI, and desktop tray app",
   "license": "MIT",
   "type": "module",
+  "preferGlobal": true,
   "bin": {
-    "actiondock": "./bin/run.js"
+    "actiondock": "./bin/run.js",
+    "actiondock-runtime": "jdeploy-bundle/jdeploy.js",
+    "actiondock-desktop-runtime": "jdeploy-bundle/jdeploy.js"
   },
   "files": [
     "bin",
     "dist",
+    "runtime/actiondock-app-spring.jar",
+    "jdeploy-bundle",
     "README.md"
   ],
   "publishConfig": {
@@ -20,19 +25,30 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist",
+    "clean": "node ./scripts/clean.mjs",
     "dev": "NODE_OPTIONS='--import tsx' node ./bin/dev.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:runtime": "node ./scripts/build-runtime.mjs",
+    "jdeploy:package": "jdeploy package",
+    "pack:dry-run": "npm pack --dry-run",
+    "prepack": "npm run build && npm run build:runtime && npm run jdeploy:package"
   },
   "dependencies": {
     "@oclif/core": "^4.10.6",
     "@oclif/plugin-autocomplete": "^3.2.46",
-    "@oclif/plugin-warn-if-update-available": "^3.1.61"
+    "@oclif/plugin-warn-if-update-available": "^3.1.61",
+    "command-exists-promise": "^2.0.2",
+    "node-fetch": "2.6.7",
+    "shelljs": "^0.8.4",
+    "tar": "^4.4.8",
+    "yauzl": "^2.10.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "jdeploy": "^6.1.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
+    "vite": "^6.4.1",
     "vitest": "^4.0.3"
   },
   "oclif": {
@@ -44,11 +60,57 @@
       "timeoutInDays": 1,
       "frequency": 1,
       "frequencyUnit": "days",
-      "message": "ActionDock CLI update available from <%= config.version %> to <%= latest %>. Run: npm install -g @actiondock/cli@latest"
+      "message": "ActionDock update available from <%= config.version %> to <%= latest %>. Run: npm install -g actiondock@latest"
     },
     "plugins": [
       "@oclif/plugin-autocomplete",
       "@oclif/plugin-warn-if-update-available"
     ]
+  },
+  "jdeploy": {
+    "javaVersion": "21",
+    "jar": "runtime/actiondock-app-spring.jar",
+    "title": "ActionDock",
+    "args": [
+      "-Dfile.encoding=UTF-8"
+    ],
+    "commands": {
+      "actiondock-runtime": {
+        "description": "ActionDock local runtime service",
+        "args": [
+          "--actiondock-runtime"
+        ],
+        "implements": [
+          "service_controller",
+          "updater",
+          "uninstaller"
+        ],
+        "embedPlist": true
+      },
+      "actiondock-desktop-runtime": {
+        "description": "ActionDock desktop tray runtime",
+        "args": [
+          "--actiondock-desktop"
+        ],
+        "implements": [
+          "launcher"
+        ]
+      }
+    },
+    "helper": {
+      "actions": [
+        {
+          "label": "Open Admin Console",
+          "description": "Open ActionDock admin console",
+          "url": "http://127.0.0.1:5177/admin/app/scripts"
+        },
+        {
+          "label": "Health Check",
+          "description": "Open ActionDock health endpoint",
+          "url": "http://127.0.0.1:5177/actuator/health"
+        }
+      ]
+    },
+    "singleton": true
   }
 }

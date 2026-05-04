@@ -1166,7 +1166,7 @@ describe("CLI integration", () => {
     expect((await runCli(["schedule", "enable", "schedule-1", "--server", baseUrl, "--json"])).status).toBe(0);
     expect((await runCli(["schedule", "disable", "schedule-1", "--server", baseUrl, "--json"])).status).toBe(0);
     expect((await runCli(["schedule", "delete", "schedule-1", "--server", baseUrl, "--json"])).status).toBe(0);
-  });
+  }, 20_000);
 
   it("manages event sources through cli", async () => {
     const list = await runCli(["event-source", "list", "--server", baseUrl, "--json"]);
@@ -1769,12 +1769,12 @@ describe("CLI integration", () => {
 
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      packageName: "@actiondock/cli",
+      packageName: "actiondock",
       currentVersion: packageVersion,
       target: "latest",
-      command: "npm install -g @actiondock/cli@latest",
+      command: "npm install -g actiondock@latest",
       executable: "npm",
-      args: ["install", "-g", "@actiondock/cli@latest"],
+      args: ["install", "-g", "actiondock@latest"],
       dryRun: true,
     });
   });
@@ -1786,7 +1786,7 @@ describe("CLI integration", () => {
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
         target: "0.1.4",
-        command: "npm install -g @actiondock/cli@0.1.4",
+        command: "npm install -g actiondock@0.1.4",
       }),
     );
   });

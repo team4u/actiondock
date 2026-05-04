@@ -26,7 +26,7 @@ export default class SelfUpdateCommand extends BaseCommand {
     const { args, flags } = await this.parse(SelfUpdateCommand);
 
     try {
-      const packageName = typeof this.config.pjson.name === "string" ? this.config.pjson.name : "@actiondock/cli";
+      const packageName = typeof this.config.pjson.name === "string" ? this.config.pjson.name : "actiondock";
       const currentVersion = this.config.version;
       const target = resolveSelfUpdateTarget(args.target);
       const plan = buildSelfUpdatePlan({ packageName, target });

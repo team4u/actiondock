@@ -132,7 +132,7 @@ CLI 的 `create/patch/validate/run --draft/publish` 命令设计天然适配 AI 
 - 内嵌 H2 数据库，不需要额外安装 MySQL / PostgreSQL
 - Groovy 引擎内嵌 JVM，不需要额外运行时（Python 类型脚本需要 python3）
 - Docker Compose 一键启动完整服务
-- npm 一行安装即可使用（`@actiondock/server`、`@actiondock/cli`）
+- npm 一行安装即可使用（`actiondock`）
 
 团队不需要运维配合，5 分钟就能跑起来验证价值。
 
@@ -284,40 +284,139 @@ actiondock script run hello-groovy --name alice --json
 
 ## 分发形态
 
-### 服务端
+### 单包 npm 分发
 
-对外发布名为 `@actiondock/server`：
+对外发布名为 `actiondock`：
 
 ```bash
-npm i -g @actiondock/server
-actiondock-server
+npm install -g actiondock
+actiondock --help
+actiondock desktop
+actiondock server
+actiondock service status
 ```
 
-发布 npm 包：
+`actiondock desktop` 启动或复用本机 Spring runtime，打开管理台，并常驻系统托盘。`actiondock server` 在前台启动本机服务。`actiondock service ...` 通过 jDeploy service controller 管理后台服务生命周期。
+
+#### 本地打包检查
+
+所有 npm 打包和发布操作都在 `actiondock-cli/` 目录执行。虽然目录名仍是 `actiondock-cli`，但发布包名是 `actiondock`。
+
+要求：
+
+- Node.js 18 或更高版本
+- JDK 21
+- Maven
+- npm registry 登录状态有效：`npm whoami`
+
+标准检查流程：
 
 ```bash
-cd actiondock-app-spring
+cd actiondock-cli
+npm ci
+npm run prepack
 npm run pack:dry-run
+```
+
+`npm run prepack` 会完成完整产物构建：
+
+- 编译 oclif CLI 到 `dist/`
+- Maven 构建 `actiondock-app-spring.jar`
+- Maven 自动构建 `actiondock-admin-ui` 并打进 jar
+- 复制 jar 到 `runtime/actiondock-app-spring.jar`
+- 生成 `jdeploy-bundle/`
+
+`npm run pack:dry-run` 用来确认 npm 包内容。必须包含：
+
+```text
+bin/**
+dist/**
+runtime/actiondock-app-spring.jar
+jdeploy-bundle/**
+package.json
+README.md
+```
+
+不应该包含：
+
+```text
+src/**
+test/**
+node_modules/**
+actiondock-app-spring/target/**
+actiondock-admin-ui/node_modules/**
+```
+
+#### 发布 npm 包
+
+先确认 `actiondock-cli/package.json` 里的 `version` 已经是要发布的版本。
+
+推荐发布流程：
+
+```bash
+cd actiondock-cli
+npm ci
+npm run prepack
+npm run pack:dry-run
+npm publish --access public --ignore-scripts
+```
+
+这里使用 `--ignore-scripts` 是为了避免 `npm publish` 再次自动执行 `prepack`，因为前面已经显式构建并检查过产物。
+
+如果你想用 npm 生命周期一条命令完成构建和发布，也可以执行：
+
+```bash
+cd actiondock-cli
+npm ci
 npm publish --access public
 ```
 
-### 桌面安装包
+这种方式会在发布前自动跑 `prepack`，耗时更长，但流程更短。
 
-发布 GitHub Release 或推送 `v*` tag 后，`.github/workflows/jdeploy.yml` 会构建桌面安装包：
+发布后验证：
+
+```bash
+npm view actiondock name version
+npm install -g actiondock@latest
+actiondock --help
+actiondock server
+```
+
+#### 发布 jDeploy 桌面安装包
+
+发布 GitHub Release 或推送 `v*` tag 后，`.github/workflows/jdeploy.yml` 会从统一 npm 包目录构建 runtime 和 jDeploy bundle，并上传桌面安装包。
+
+推荐使用 GitHub Release：
 
 ```bash
 gh release create v0.3.5 --target main --title "v0.3.5" --notes "ActionDock desktop release"
 ```
 
-用户从 GitHub Releases 下载 `.exe`、`.dmg` 或 Linux 安装包，安装后双击 `ActionDock` 即可打开管理台并使用托盘入口。
-
-### CLI
-
-CLI 子项目发布名为 `@actiondock/cli`：
+也可以推送 tag 触发：
 
 ```bash
-npm i -g @actiondock/cli
-actiondock --help
+git tag v0.3.5
+git push origin v0.3.5
+```
+
+CI 会执行：
+
+```text
+cd actiondock-cli
+npm ci
+npm run prepack
+```
+
+然后用 jDeploy 生成 Windows、macOS、Linux 安装包。
+
+#### 不再发布的包
+
+不要再发布：
+
+```text
+@actiondock/cli
+@actiondock/server
+actiondock-server
 ```
 
 CLI 的价值不只是“把 API 搬到终端”，而是把脚本 `Schema` 展平为更适合人和 Agent 调用的参数形式：
@@ -366,7 +465,7 @@ actiondock script publish hello-world --json
 | [事件框架配置指南](docs/event-framework.md) | Event Source / Event Trigger / Processor / Event Record 的完整配置与排障流程 |
 | [actiondock-app-spring](actiondock-app-spring/README.md) | Spring Boot Web 入口、REST API、管理台挂载方式 |
 | [actiondock-admin-ui](actiondock-admin-ui/README.md) | React 管理台、页面结构、前端开发方式 |
-| [actiondock-cli](actiondock-cli/README.md) | Node.js CLI，面向终端和 AI 的扁平命令入口 |
+| [actiondock-cli](actiondock-cli/README.md) | `actiondock` npm 发布包源码，包含 CLI、runtime bridge 和 jDeploy 分发配置 |
 | [actiondock-core](actiondock-core/README.md) | 脚本平台核心领域模型、执行模型、仓库与发布规则 |
 | [actiondock-app-support](actiondock-app-support/README.md) | 运行时装配、脚本引擎、插件运行时、仓库解析与默认配置 |
 | [actiondock-plugin-api](actiondock-plugin-api/README.md) | PF4J 插件 SPI、Manifest 协议、脚本侧调用上下文 |

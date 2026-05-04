@@ -49,6 +49,22 @@ public class DesktopApplicationLauncher {
         System.setProperty("java.awt.headless", "false");
 
         DesktopLaunchSettings settings = DesktopLaunchSettings.from(args);
+        URI adminUri = settings.adminUri(ADMIN_PATH);
+
+        try (DesktopInstanceLock lock = acquireDesktopInstanceLock(settings.port())) {
+            if (lock == null) {
+                openBrowser(adminUri);
+                return;
+            }
+
+            launchWithLock(args, settings);
+        } catch (IOException ex) {
+            LOGGER.log(Level.WARNING, "Unable to acquire desktop instance lock", ex);
+            launchWithLock(args, settings);
+        }
+    }
+
+    private void launchWithLock(String[] args, DesktopLaunchSettings settings) {
         if (settings.canProbeExistingServer() && serverProbe.isActionDockRunning(settings.adminRootUri())) {
             URI adminUri = settings.adminUri(ADMIN_PATH);
             openBrowser(adminUri);
@@ -60,16 +76,21 @@ public class DesktopApplicationLauncher {
         ConfigurableApplicationContext context = startSpringApplication(args);
         URI adminUri = settings.withPort(resolveActualPort(context, settings.port())).adminUri(ADMIN_PATH);
         openBrowser(adminUri);
-        showDesktopControls(adminUri, () -> {
+        DesktopControl control = showDesktopControls(adminUri, () -> {
             context.close();
             exit(0);
         });
+        control.awaitExit();
     }
 
     ConfigurableApplicationContext startSpringApplication(String[] args) {
         SpringApplication application = new SpringApplication(applicationClass);
         application.setHeadless(false);
         return application.run(args);
+    }
+
+    DesktopInstanceLock acquireDesktopInstanceLock(int port) throws IOException {
+        return DesktopInstanceLock.tryAcquire(port);
     }
 
     private DesktopControl showDesktopControls(URI adminUri, Runnable quitAction) {

@@ -9,28 +9,28 @@ describe("self update helpers", () => {
 
   it("builds npm install command for unix-like platforms", () => {
     const plan = buildSelfUpdatePlan({
-      packageName: "@actiondock/cli",
+      packageName: "actiondock",
       target: "latest",
       platform: "linux",
     });
 
     expect(plan).toEqual({
       executable: "npm",
-      args: ["install", "-g", "@actiondock/cli@latest"],
-      packageName: "@actiondock/cli",
+      args: ["install", "-g", "actiondock@latest"],
+      packageName: "actiondock",
       target: "latest",
-      command: "npm install -g @actiondock/cli@latest",
+      command: "npm install -g actiondock@latest",
     });
   });
 
   it("uses npm on windows", () => {
     const plan = buildSelfUpdatePlan({
-      packageName: "@actiondock/cli",
+      packageName: "actiondock",
       target: "0.1.4",
       platform: "win32",
     });
 
     expect(plan.executable).toBe("npm");
-    expect(plan.command).toBe("npm install -g @actiondock/cli@0.1.4");
+    expect(plan.command).toBe("npm install -g actiondock@0.1.4");
   });
 });

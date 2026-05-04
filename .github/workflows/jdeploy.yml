@@ -36,17 +36,27 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: actiondock-admin-ui/package-lock.json
+          cache-dependency-path: |
+            actiondock-cli/package-lock.json
+            actiondock-admin-ui/package-lock.json
 
-      - name: Build application jar
-        run: mvn -pl actiondock-app-spring -am package -DskipTests --batch-mode --no-transfer-progress
+      - name: Install package dependencies
+        working-directory: actiondock-cli
+        run: npm ci
 
-      - name: Stage jDeploy project at repository root
+      - name: Build unified jDeploy package
+        working-directory: actiondock-cli
+        run: npm run prepack
+
+      - name: Stage unified jDeploy package at repository root
         run: |
-          mkdir -p target
-          cp actiondock-app-spring/package.json package.json
-          cp actiondock-app-spring/README.md README.md
-          cp actiondock-app-spring/target/actiondock-app-spring.jar target/actiondock-app-spring.jar
+          rm -rf bin dist runtime jdeploy-bundle package.json README.md
+          cp actiondock-cli/package.json package.json
+          cp actiondock-cli/README.md README.md
+          cp -R actiondock-cli/bin bin
+          cp -R actiondock-cli/dist dist
+          cp -R actiondock-cli/runtime runtime
+          cp -R actiondock-cli/jdeploy-bundle jdeploy-bundle
 
       - name: Build and upload desktop installers
         uses: shannah/jdeploy@master

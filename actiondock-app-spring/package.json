@@ -1,49 +1,11 @@
 {
-  "name": "@actiondock/server",
+  "private": true,
+  "name": "actiondock-app-spring-internal",
   "version": "0.3.4",
-  "description": "ActionDock official server",
+  "description": "ActionDock internal Spring runtime module",
   "author": "jay.wu <fjayblue@126.com>",
   "license": "MIT",
-  "preferGlobal": true,
-  "bin": {
-    "actiondock-server": "jdeploy-bundle/jdeploy.js"
-  },
-  "files": [
-    "jdeploy-bundle"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "dependencies": {
-    "command-exists-promise": "^2.0.2",
-    "node-fetch": "2.6.7",
-    "shelljs": "^0.8.4",
-    "tar": "^4.4.8",
-    "yauzl": "^2.10.0"
-  },
-  "devDependencies": {
-    "jdeploy": "^6.1.3"
-  },
   "scripts": {
-    "build:jar": "mvn -pl actiondock-app-spring -am package -DskipTests -f ../pom.xml",
-    "jdeploy:package": "jdeploy package",
-    "pack:dry-run": "npm pack --dry-run",
-    "prepack": "npm run build:jar && npm run jdeploy:package"
-  },
-  "jdeploy": {
-    "javaVersion": "21",
-    "jar": "target/actiondock-app-spring.jar",
-    "args": [
-      "-Dfile.encoding=UTF-8"
-    ],
-    "title": "ActionDock",
-    "commands": {
-      "actiondock-server": {
-        "description": "ActionDock official server",
-        "implements": [
-          "updater"
-        ]
-      }
-    }
+    "build:jar": "mvn -pl actiondock-app-spring -am package -DskipTests -f ../pom.xml"
   }
 }

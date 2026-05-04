@@ -94,10 +94,10 @@ class UpdateNotificationServiceTest {
     private UpdateNotificationService.UpdateNotificationRequest request(String currentVersion, Map<String, String> environment) {
         return new UpdateNotificationService.UpdateNotificationRequest(
                 "server",
-                "actiondock-server",
-                "ActionDock Server",
+                "actiondock",
+                "ActionDock",
                 currentVersion,
-                "npm i -g actiondock-server@latest",
+                "npm i -g actiondock@latest",
                 tempHome,
                 environment
         );

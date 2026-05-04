@@ -16,21 +16,43 @@ import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 import org.team4u.actiondock.web.ScriptController;
 
-@SpringBootApplication(scanBasePackageClasses = {ScriptController.class, SampleDataInitializer.class})
-@EntityScan(basePackageClasses = ScriptEntity.class)
-@EnableJpaRepositories(basePackageClasses = SpringDataScriptEntityRepository.class)
-@Import({RuntimeConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class, ScheduleConfiguration.class})
+import java.util.Arrays;
+import java.util.Set;
+
 /**
  * ActionDock 运行时应用入口。
  *
  * @author jay.wu
  */
+@SpringBootApplication(scanBasePackageClasses = {ScriptController.class, SampleDataInitializer.class})
+@EntityScan(basePackageClasses = ScriptEntity.class)
+@EnableJpaRepositories(basePackageClasses = SpringDataScriptEntityRepository.class)
+@Import({RuntimeConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class, ScheduleConfiguration.class})
 public class RuntimeApplication {
+    private static final String DESKTOP_ARG = "--actiondock-desktop";
+    private static final String RUNTIME_ARG = "--actiondock-runtime";
+    private static final Set<String> INTERNAL_ARGS = Set.of(DESKTOP_ARG, RUNTIME_ARG);
+
     public static void main(String[] args) {
-        if (DesktopApplicationLauncher.isGuiMode()) {
-            new DesktopApplicationLauncher(RuntimeApplication.class).launch(args);
+        if (DesktopApplicationLauncher.isGuiMode() || hasArg(args, DESKTOP_ARG)) {
+            new DesktopApplicationLauncher(RuntimeApplication.class).launch(removeInternalArgs(args));
             return;
         }
-        SpringApplication.run(RuntimeApplication.class, args);
+
+        SpringApplication.run(RuntimeApplication.class, removeInternalArgs(args));
+    }
+
+    private static boolean hasArg(String[] args, String expected) {
+        return args != null && Arrays.asList(args).contains(expected);
+    }
+
+    private static String[] removeInternalArgs(String[] args) {
+        if (args == null || args.length == 0) {
+            return args;
+        }
+
+        return Arrays.stream(args)
+                .filter(arg -> !INTERNAL_ARGS.contains(arg))
+                .toArray(String[]::new);
     }
 }

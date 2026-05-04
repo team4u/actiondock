@@ -9,12 +9,12 @@ const DEFAULT_SERVER_URL = "http://127.0.0.1:5177";
 
 function configDir(): string {
   if (process.platform === "win32") {
-    return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "actiondock-cli");
+    return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "actiondock");
   }
   if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "actiondock-cli");
+    return path.join(os.homedir(), "Library", "Application Support", "actiondock");
   }
-  return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), "actiondock-cli");
+  return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), "actiondock");
 }
 
 export function configPath(): string {
