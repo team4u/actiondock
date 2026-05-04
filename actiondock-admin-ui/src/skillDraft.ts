@@ -12,8 +12,8 @@ export type SkillDraftSession =
     skillId: string;
   }
   | {
-    source: "INSTALLATION_REF";
-    installationId: string;
+    source: "INSTALLED_SKILL_REF";
+    skillId: string;
   };
 
 function encodeBase64(bytes: Uint8Array): string {

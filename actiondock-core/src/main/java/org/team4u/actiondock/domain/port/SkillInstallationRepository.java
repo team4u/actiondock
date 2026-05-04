@@ -10,6 +10,8 @@ public interface SkillInstallationRepository {
 
     Optional<SkillInstallation> findByInstallationId(String installationId);
 
+    Optional<SkillInstallation> findBySkillIdAndTargetId(String skillId, String targetId);
+
     List<SkillInstallation> findAll();
 
     List<SkillInstallation> findBySkillId(String skillId);
@@ -17,4 +19,6 @@ public interface SkillInstallationRepository {
     List<SkillInstallation> findByTargetId(String targetId);
 
     void deleteByInstallationId(String installationId);
+
+    void deleteBySkillIdAndTargetId(String skillId, String targetId);
 }

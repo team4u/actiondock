@@ -12,7 +12,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.team4u.actiondock.domain.model.SkillInstallation;
 import org.team4u.actiondock.skill.SkillService;
 
 import java.io.IOException;
@@ -28,40 +27,40 @@ public class SkillController {
     }
 
     @GetMapping
-    public ApiResponse<List<SkillInstallation>> list() {
-        return ApiResponse.success(skillService.listInstallations());
+    public ApiResponse<List<SkillService.SkillListItem>> list() {
+        return ApiResponse.success(skillService.listSkills());
     }
 
-    @GetMapping("/{installationId}")
-    public ApiResponse<SkillInstallation> get(@PathVariable String installationId) {
-        return ApiResponse.success(skillService.getInstallation(installationId));
+    @GetMapping("/{skillId}")
+    public ApiResponse<SkillService.SkillListItem> get(@PathVariable String skillId) {
+        return ApiResponse.success(skillService.getSkill(skillId));
     }
 
-    @GetMapping("/{installationId}/detail")
-    public ApiResponse<SkillService.SkillDetail> detail(@PathVariable String installationId) {
-        return ApiResponse.success(skillService.getInstallationDetail(installationId));
+    @GetMapping("/{skillId}/detail")
+    public ApiResponse<SkillService.SkillDetail> detail(@PathVariable String skillId) {
+        return ApiResponse.success(skillService.getSkillDetail(skillId));
     }
 
-    @GetMapping("/{installationId}/archive")
-    public ResponseEntity<byte[]> archive(@PathVariable String installationId) {
-        SkillService.SkillArchive archive = skillService.exportInstallationArchive(installationId);
+    @GetMapping("/{skillId}/archive")
+    public ResponseEntity<byte[]> archive(@PathVariable String skillId) {
+        SkillService.SkillArchive archive = skillService.exportSkillArchive(skillId);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + archive.fileName() + "\"")
                 .body(archive.content());
     }
 
-    @GetMapping("/{installationId}/preview")
-    public ApiResponse<SkillService.SkillFilePreview> preview(@PathVariable String installationId,
+    @GetMapping("/{skillId}/preview")
+    public ApiResponse<SkillService.SkillFilePreview> preview(@PathVariable String skillId,
                                                               @RequestParam String path) {
-        return ApiResponse.success(skillService.previewInstallationFile(installationId, path));
+        return ApiResponse.success(skillService.previewSkillFile(skillId, path));
     }
 
-    @PostMapping("/import")
-    public ApiResponse<SkillInstallation> importZip(@RequestParam("targetId") String targetId,
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<SkillService.SkillListItem> importZip(@RequestParam("targetIds") List<String> targetIds,
                                                     @RequestParam("file") MultipartFile file) throws IOException {
         return ApiResponse.success(
-                skillService.installFromZip(targetId, file.getOriginalFilename(), file.getBytes()),
+                skillService.installFromZip(targetIds, file.getOriginalFilename(), file.getBytes()),
                 "Skill 安装成功"
         );
     }
@@ -77,18 +76,18 @@ public class SkillController {
     }
 
     @PostMapping("/install-directory")
-    public ApiResponse<SkillInstallation> installDirectory(@RequestBody SkillDirectoryInstallRequest request) {
+    public ApiResponse<SkillService.SkillListItem> installDirectory(@RequestBody SkillDirectoryInstallRequest request) {
         return ApiResponse.success(
-                skillService.installFromDirectory(request.getTargetId(), request.getDirectory()),
+                skillService.installFromDirectory(request.getTargetIds(), request.getDirectory()),
                 "Skill 安装成功"
         );
     }
 
     @PostMapping("/draft-install")
-    public ApiResponse<SkillInstallation> installDraft(@RequestBody SkillDraftInstallRequest request) {
+    public ApiResponse<SkillService.SkillListItem> installDraft(@RequestBody SkillDraftInstallRequest request) {
         return ApiResponse.success(
                 skillService.installDraft(
-                        request.getTargetId(),
+                        request.getTargetIds(),
                         new SkillService.SkillDraftRequest(
                                 request.getRepositoryId(),
                                 request.getSkillId(),
@@ -106,43 +105,49 @@ public class SkillController {
     }
 
     @PostMapping(value = "/draft-install-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<SkillInstallation> installDraftArchive(@RequestParam("targetId") String targetId,
+    public ApiResponse<SkillService.SkillListItem> installDraftArchive(@RequestParam("targetIds") List<String> targetIds,
                                                               @RequestParam(value = "repositoryId", required = false) String repositoryId,
                                                               @RequestParam("archive") MultipartFile archive) throws IOException {
         return ApiResponse.success(
-                skillService.installArchive(targetId, repositoryId, archive.getOriginalFilename(), archive.getBytes()),
+                skillService.installArchive(targetIds, repositoryId, archive.getOriginalFilename(), archive.getBytes()),
                 "Skill 安装成功"
         );
     }
 
-    @PostMapping("/{installationId}/update")
-    public ApiResponse<SkillInstallation> update(@PathVariable String installationId,
+    @PostMapping("/{skillId}/update")
+    public ApiResponse<SkillService.SkillListItem> update(@PathVariable String skillId,
                                                  @RequestBody SkillDirectoryRequest request) {
         return ApiResponse.success(
-                skillService.updateInstallation(installationId, request.getDirectory()),
+                skillService.updateSkill(skillId, request.getDirectory()),
                 "Skill 更新成功"
         );
     }
 
-    @PostMapping("/{installationId}/disable")
-    public ApiResponse<SkillInstallation> disable(@PathVariable String installationId) {
+    @PostMapping("/{skillId}/disable")
+    public ApiResponse<SkillService.SkillListItem> disable(@PathVariable String skillId) {
         return ApiResponse.success(
-                skillService.disableInstallation(installationId),
+                skillService.disableSkill(skillId),
                 "Skill 已停用"
         );
     }
 
-    @PostMapping("/{installationId}/restore")
-    public ApiResponse<SkillInstallation> restore(@PathVariable String installationId) {
+    @PostMapping("/{skillId}/restore")
+    public ApiResponse<SkillService.SkillListItem> restore(@PathVariable String skillId) {
         return ApiResponse.success(
-                skillService.restoreInstallation(installationId),
+                skillService.restoreSkill(skillId),
                 "Skill 已恢复"
         );
     }
 
-    @DeleteMapping("/{installationId}")
-    public ApiResponse<Void> uninstall(@PathVariable String installationId) {
-        skillService.uninstall(installationId);
+    @DeleteMapping("/{skillId}")
+    public ApiResponse<Void> uninstall(@PathVariable String skillId) {
+        skillService.uninstallSkill(skillId);
         return ApiResponse.success(null, "Skill 已卸载");
+    }
+
+    @DeleteMapping("/{skillId}/targets/{targetId}")
+    public ApiResponse<Void> removeTarget(@PathVariable String skillId, @PathVariable String targetId) {
+        skillService.removeSkillFromTarget(skillId, targetId);
+        return ApiResponse.success(null, "Skill 已从目标移除");
     }
 }

@@ -9,8 +9,10 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
-import org.team4u.actiondock.domain.model.SkillInstallation;
 import org.team4u.actiondock.skill.SkillService;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -48,7 +50,7 @@ class SkillControllerTest {
 
     @Test
     void archiveReturnsBinaryDownload() throws Exception {
-        when(skillService.exportInstallationArchive("skill-1"))
+        when(skillService.exportSkillArchive("skill-1"))
                 .thenReturn(new SkillService.SkillArchive("skill-1.zip", "zip-content".getBytes()));
 
         mockMvc.perform(get("/api/skills/skill-1/archive"))
@@ -59,17 +61,32 @@ class SkillControllerTest {
 
     @Test
     void draftInstallArchiveDelegatesToSkillService() throws Exception {
-        when(skillService.installArchive(eq("target-1"), eq("repo-1"), eq("draft.zip"), any()))
-                .thenReturn(new SkillInstallation().setInstallationId("skill@target").setSkillId("skill"));
+        when(skillService.installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("draft.zip"), any()))
+                .thenReturn(new SkillService.SkillListItem(
+                        "skill",
+                        "repo-1",
+                        "1.0.0",
+                        "digest",
+                        "Skill",
+                        "desc",
+                        2,
+                        0,
+                        List.of(
+                                new SkillService.SkillDeploymentView("target-1", "/targets/one", "/targets/one/skill", true, LocalDateTime.now(), LocalDateTime.now()),
+                                new SkillService.SkillDeploymentView("target-2", "/targets/two", "/targets/two/skill", true, LocalDateTime.now(), LocalDateTime.now())
+                        ),
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                ));
 
         mockMvc.perform(multipart("/api/skills/draft-install-archive")
                         .file(new MockMultipartFile("archive", "draft.zip", MediaType.APPLICATION_OCTET_STREAM_VALUE, "zip".getBytes()))
-                        .param("targetId", "target-1")
+                        .param("targetIds", "target-1", "target-2")
                         .param("repositoryId", "repo-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.installationId").value("skill@target"))
-                .andExpect(jsonPath("$.data.skillId").value("skill"));
+                .andExpect(jsonPath("$.data.skillId").value("skill"))
+                .andExpect(jsonPath("$.data.targets[0].targetId").value("target-1"));
 
-        verify(skillService).installArchive(eq("target-1"), eq("repo-1"), eq("draft.zip"), any());
+        verify(skillService).installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("draft.zip"), any());
     }
 }

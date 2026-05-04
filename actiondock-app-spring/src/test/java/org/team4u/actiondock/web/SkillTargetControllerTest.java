@@ -44,25 +44,24 @@ class SkillTargetControllerTest {
 
     @Test
     void syncInstallationsDelegatesToSkillService() throws Exception {
-        when(skillService.syncInstallationsToTarget(eq("target-1"), eq(List.of("skill-a@source", "skill-b@source"))))
+        when(skillService.syncSkillsToTarget(eq("target-1"), eq(List.of("skill-a", "skill-b"))))
                 .thenReturn(new SkillService.SkillSyncResponse(
                         "target-1",
                         List.of(
-                                new SkillService.SkillSyncResult("skill-a@source", "skill-a", "target-1", "SUCCESS", "Skill 已同步", null)
+                                new SkillService.SkillSyncResult("skill-a", "target-1", "SUCCESS", "Skill 已同步", null)
                         )
                 ));
 
         mockMvc.perform(post("/api/skill-targets/target-1/sync-installations")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"installationIds":["skill-a@source","skill-b@source"]}
+                                {"skillIds":["skill-a","skill-b"]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.targetId").value("target-1"))
-                .andExpect(jsonPath("$.data.results[0].installationId").value("skill-a@source"))
                 .andExpect(jsonPath("$.data.results[0].skillId").value("skill-a"))
                 .andExpect(jsonPath("$.data.results[0].status").value("SUCCESS"));
 
-        verify(skillService).syncInstallationsToTarget(eq("target-1"), eq(List.of("skill-a@source", "skill-b@source")));
+        verify(skillService).syncSkillsToTarget(eq("target-1"), eq(List.of("skill-a", "skill-b")));
     }
 }

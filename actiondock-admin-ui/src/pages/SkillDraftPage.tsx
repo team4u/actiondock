@@ -52,7 +52,7 @@ const { Paragraph, Text } = Typography;
 
 interface PublishFormValues {
   repositoryId?: string;
-  targetId?: string;
+  targetIds?: string[];
   version: string;
   releaseNotes?: string;
 }
@@ -363,7 +363,7 @@ export function SkillDraftPage() {
         setTargets(targetData.filter((item) => item.enabled));
         form.setFieldsValue({
           repositoryId: repositoryData.find((item) => item.enabled && item.usage !== "DEVELOPMENT")?.id ?? repositoryData[0]?.id,
-          targetId: targetData.find((item) => item.enabled)?.id
+          targetIds: targetData.filter((item) => item.enabled).map((item) => item.id)
         });
       } catch (error) {
         messageApi.error(getErrorMessage(error, "加载 Skill 草稿元数据失败"));
@@ -395,8 +395,8 @@ export function SkillDraftPage() {
           archive = await downloadRepositorySkillArchive(session.repositoryId, session.skillId);
           archiveName = `${session.skillId}.zip`;
         } else {
-          archive = await downloadInstalledSkillArchive(session.installationId);
-          archiveName = `${session.installationId}.zip`;
+          archive = await downloadInstalledSkillArchive(session.skillId);
+          archiveName = `${session.skillId}.zip`;
         }
         const file = archive instanceof File ? archive : new File([archive], archiveName, { type: "application/zip" });
         const parsed = await parseSkillArchive(file);
@@ -564,14 +564,14 @@ export function SkillDraftPage() {
       return;
     }
     const values = await form.validateFields();
-    if (!values.targetId) {
-      messageApi.warning("请选择 SkillTarget");
+    if (!values.targetIds?.length) {
+      messageApi.warning("请选择至少一个 SkillTarget");
       return;
     }
     setInstalling(true);
     try {
       await installSkillDraftArchive({
-        targetId: values.targetId,
+        targetIds: values.targetIds,
         repositoryId: values.repositoryId,
         archive: parsedArchive.file
       });
@@ -636,8 +636,8 @@ export function SkillDraftPage() {
                     <Form.Item label="仓库" name="repositoryId" style={{ minWidth: 300 }}>
                       <Select allowClear options={repositoryOptions} placeholder="选择发布仓库" />
                     </Form.Item>
-                    <Form.Item label="安装目标" name="targetId" style={{ minWidth: 300 }}>
-                      <Select allowClear options={targetOptions} placeholder="选择 SkillTarget" />
+                    <Form.Item label="安装目标" name="targetIds" style={{ minWidth: 300 }}>
+                      <Select mode="multiple" allowClear options={targetOptions} placeholder="选择 SkillTarget" />
                     </Form.Item>
                   </Space>
                   <Space style={{ width: "100%" }} wrap align="start">

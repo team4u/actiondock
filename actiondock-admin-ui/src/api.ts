@@ -66,7 +66,8 @@ import type {
   SharedStateDetail,
   SharedStateRequest,
   SharedStateSummary,
-  SkillInstallation,
+  Skill,
+  SkillDeployment,
   SkillArchiveEntry,
   SkillDetail,
   SkillFilePreview,
@@ -1040,25 +1041,25 @@ export function publishRepositorySkillArchive(
   });
 }
 
-export function listSkills(): Promise<SkillInstallation[]> {
-  return request<SkillInstallation[]>("/api/skills");
+export function listSkills(): Promise<Skill[]> {
+  return request<Skill[]>("/api/skills");
 }
 
-export function getSkill(installationId: string): Promise<SkillInstallation> {
-  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}`);
+export function getSkill(skillId: string): Promise<Skill> {
+  return request<Skill>(`/api/skills/${encodeURIComponent(skillId)}`);
 }
 
-export function getSkillDetail(installationId: string): Promise<SkillDetail> {
-  return request<SkillDetail>(`/api/skills/${encodeURIComponent(installationId)}/detail`);
+export function getSkillDetail(skillId: string): Promise<SkillDetail> {
+  return request<SkillDetail>(`/api/skills/${encodeURIComponent(skillId)}/detail`);
 }
 
-export function downloadInstalledSkillArchive(installationId: string): Promise<Blob> {
-  return requestBlob(`/api/skills/${encodeURIComponent(installationId)}/archive`);
+export function downloadInstalledSkillArchive(skillId: string): Promise<Blob> {
+  return requestBlob(`/api/skills/${encodeURIComponent(skillId)}/archive`);
 }
 
-export function previewSkillFile(installationId: string, path: string): Promise<SkillFilePreview> {
+export function previewSkillFile(skillId: string, path: string): Promise<SkillFilePreview> {
   const params = new URLSearchParams({ path });
-  return request<SkillFilePreview>(`/api/skills/${encodeURIComponent(installationId)}/preview?${params.toString()}`);
+  return request<SkillFilePreview>(`/api/skills/${encodeURIComponent(skillId)}/preview?${params.toString()}`);
 }
 
 export async function validateSkillArchive(file: File): Promise<SkillValidationResult> {
@@ -1070,26 +1071,26 @@ export async function validateSkillArchive(file: File): Promise<SkillValidationR
   });
 }
 
-export async function importSkill(targetId: string, file: File): Promise<SkillInstallation> {
+export async function importSkill(targetIds: string[], file: File): Promise<Skill> {
   const formData = new FormData();
-  formData.append("targetId", targetId);
+  targetIds.forEach((targetId) => formData.append("targetIds", targetId));
   formData.append("file", file);
-  return request<SkillInstallation>("/api/skills/import", {
+  return request<Skill>("/api/skills/import", {
     method: "POST",
     body: formData
   });
 }
 
-export function installSkillDirectory(targetId: string, directory: string): Promise<SkillInstallation> {
-  return request<SkillInstallation>("/api/skills/install-directory", {
+export function installSkillDirectory(targetIds: string[], directory: string): Promise<Skill> {
+  return request<Skill>("/api/skills/install-directory", {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ targetId, directory })
+    body: JSON.stringify({ targetIds, directory })
   });
 }
 
 export function installSkillDraft(payload: {
-  targetId: string;
+  targetIds: string[];
   repositoryId?: string;
   skillId: string;
   displayName: string;
@@ -1099,8 +1100,8 @@ export function installSkillDraft(payload: {
   tags?: string[];
   riskLevel?: string;
   content: string;
-}): Promise<SkillInstallation> {
-  return request<SkillInstallation>("/api/skills/draft-install", {
+}): Promise<Skill> {
+  return request<Skill>("/api/skills/draft-install", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -1108,44 +1109,50 @@ export function installSkillDraft(payload: {
 }
 
 export function installSkillDraftArchive(payload: {
-  targetId: string;
+  targetIds: string[];
   repositoryId?: string;
   archive: File | Blob;
-}): Promise<SkillInstallation> {
+}): Promise<Skill> {
   const formData = new FormData();
-  formData.append("targetId", payload.targetId);
+  payload.targetIds.forEach((targetId) => formData.append("targetIds", targetId));
   if (payload.repositoryId?.trim()) {
     formData.append("repositoryId", payload.repositoryId.trim());
   }
   formData.append("archive", payload.archive);
-  return request<SkillInstallation>("/api/skills/draft-install-archive", {
+  return request<Skill>("/api/skills/draft-install-archive", {
     method: "POST",
     body: formData
   });
 }
 
-export function updateSkill(installationId: string, directory: string): Promise<SkillInstallation> {
-  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}/update`, {
+export function updateSkill(skillId: string, directory: string): Promise<Skill> {
+  return request<Skill>(`/api/skills/${encodeURIComponent(skillId)}/update`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify({ directory })
   });
 }
 
-export function disableSkill(installationId: string): Promise<SkillInstallation> {
-  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}/disable`, {
+export function disableSkill(skillId: string): Promise<Skill> {
+  return request<Skill>(`/api/skills/${encodeURIComponent(skillId)}/disable`, {
     method: "POST"
   });
 }
 
-export function restoreSkill(installationId: string): Promise<SkillInstallation> {
-  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}/restore`, {
+export function restoreSkill(skillId: string): Promise<Skill> {
+  return request<Skill>(`/api/skills/${encodeURIComponent(skillId)}/restore`, {
     method: "POST"
   });
 }
 
-export function deleteSkill(installationId: string): Promise<void> {
-  return request<void>(`/api/skills/${encodeURIComponent(installationId)}`, {
+export function deleteSkill(skillId: string): Promise<void> {
+  return request<void>(`/api/skills/${encodeURIComponent(skillId)}`, {
+    method: "DELETE"
+  });
+}
+
+export function removeSkillFromTarget(skillId: string, targetId: string): Promise<void> {
+  return request<void>(`/api/skills/${encodeURIComponent(skillId)}/targets/${encodeURIComponent(targetId)}`, {
     method: "DELETE"
   });
 }
@@ -1204,11 +1211,11 @@ export function deleteScanDirectory(targetId: string, directoryId: string): Prom
   });
 }
 
-export function syncSkillInstallationsToTarget(targetId: string, installationIds: string[]): Promise<SkillSyncResponse> {
+export function syncSkillInstallationsToTarget(targetId: string, skillIds: string[]): Promise<SkillSyncResponse> {
   return request<SkillSyncResponse>(`/api/skill-targets/${encodeURIComponent(targetId)}/sync-installations`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ installationIds })
+    body: JSON.stringify({ skillIds })
   });
 }
 

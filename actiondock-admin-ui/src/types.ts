@@ -1129,29 +1129,35 @@ export interface RepositorySkillPublishRequest {
   content: string;
 }
 
-export interface SkillInstallation {
-  installationId: string;
-  skillId: string;
-  repositoryId?: string;
-  version: string;
+export interface SkillDeployment {
   targetId: string;
   targetPath: string;
   installedPath: string;
-  digest: string;
-  displayName?: string;
-  description?: string;
   enabled: boolean;
   installedAt?: string;
   updatedAt?: string;
 }
 
+export interface Skill {
+  skillId: string;
+  repositoryId?: string;
+  version: string;
+  digest: string;
+  displayName?: string;
+  description?: string;
+  enabledTargetCount: number;
+  disabledTargetCount: number;
+  targets: SkillDeployment[];
+  installedAt?: string;
+  updatedAt?: string;
+}
+
 export interface SkillSyncResult {
-  installationId: string;
   skillId: string;
   targetId: string;
   status: "SUCCESS" | "SKIPPED" | "FAILED" | string;
   message: string;
-  createdInstallation?: SkillInstallation;
+  createdDeployment?: SkillDeployment;
 }
 
 export interface SkillSyncResponse {
@@ -1160,7 +1166,7 @@ export interface SkillSyncResponse {
 }
 
 export interface SkillDetail {
-  installation: SkillInstallation;
+  skill: Skill;
   managedPath: string;
   files: SkillFileNode[];
 }
@@ -1205,7 +1211,7 @@ export interface SkillScanItem {
   name?: string;
   description?: string;
   managed: boolean;
-  installationId?: string;
+  skillId?: string;
   enabled?: boolean;
   version?: string;
 }
@@ -1216,7 +1222,7 @@ export interface SkillScanDetail {
   name?: string;
   description?: string;
   managed: boolean;
-  installationId?: string;
+  skillId?: string;
   enabled?: boolean;
   version?: string;
   files: SkillFileNode[];

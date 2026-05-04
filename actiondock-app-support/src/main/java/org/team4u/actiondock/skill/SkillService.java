@@ -1,17 +1,19 @@
 package org.team4u.actiondock.skill;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.team4u.actiondock.config.AppProperties;
+import org.team4u.actiondock.domain.model.ManagedSkill;
 import org.team4u.actiondock.domain.model.SkillInstallation;
 import org.team4u.actiondock.domain.model.SkillTarget;
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.domain.port.ManagedSkillRepository;
 import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.domain.port.SkillTargetRepository;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileVisitResult;
@@ -28,6 +30,7 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,15 +56,19 @@ public class SkillService {
     private static final long MAX_IMAGE_PREVIEW_BYTES = 2L * 1024L * 1024L;
 
     private final SkillTargetRepository skillTargetRepository;
+    private final ManagedSkillRepository managedSkillRepository;
     private final SkillInstallationRepository skillInstallationRepository;
     private final JsonCodec jsonCodec;
     private final Path managedSkillsRoot;
+    private volatile boolean storageInitialized;
 
     public SkillService(SkillTargetRepository skillTargetRepository,
+                        ManagedSkillRepository managedSkillRepository,
                         SkillInstallationRepository skillInstallationRepository,
                         JsonCodec jsonCodec,
                         AppProperties properties) {
         this.skillTargetRepository = skillTargetRepository;
+        this.managedSkillRepository = managedSkillRepository;
         this.skillInstallationRepository = skillInstallationRepository;
         this.jsonCodec = jsonCodec;
         String root = properties == null || properties.getSkills().getDir() == null || properties.getSkills().getDir().isBlank()
@@ -101,22 +108,23 @@ public class SkillService {
 
     public void deleteTarget(String id) {
         SkillTarget target = requireTarget(id);
-        List<SkillInstallation> installations = skillInstallationRepository.findByTargetId(target.getId());
-        if (!installations.isEmpty()) {
+        List<SkillInstallation> deployments = skillInstallationRepository.findByTargetId(target.getId());
+        if (!deployments.isEmpty()) {
             throw new IllegalArgumentException("目标目录仍有已安装 Skill，不能删除: " + target.getName());
         }
         skillTargetRepository.deleteById(id);
     }
 
     public List<SkillScanItem> scanTarget(String targetId) {
+        initializeManagedSkillStorage();
         SkillTarget target = requireTarget(targetId);
         Path root = resolveTargetRoot(target.getRootPath());
         try {
             if (Files.notExists(root)) {
                 Files.createDirectories(root);
             }
-            Map<String, SkillInstallation> pathToInstallation = skillInstallationRepository.findByTargetId(targetId).stream()
-                    .collect(Collectors.toMap(SkillInstallation::getInstalledPath, i -> i, (a, b) -> a));
+            Map<String, SkillInstallation> pathToDeployment = skillInstallationRepository.findByTargetId(targetId).stream()
+                    .collect(Collectors.toMap(SkillInstallation::getInstalledPath, item -> item, (left, right) -> left));
             List<SkillScanItem> items = new ArrayList<>();
             try (var stream = Files.list(root)) {
                 for (Path child : stream.filter(Files::isDirectory).sorted().toList()) {
@@ -126,25 +134,23 @@ public class SkillService {
                     }
                     String content = Files.readString(skillMd, StandardCharsets.UTF_8);
                     Frontmatter frontmatter = parseFrontmatter(content);
-                    boolean managed = Files.exists(child.resolve(INSTALL_MARKER_FILE));
-                    String installationId = null;
-                    Boolean enabled = null;
-                    String version = null;
-                    if (managed) {
-                        SkillInstallation installation = pathToInstallation.get(child.toString());
-                        if (installation != null) {
-                            installationId = installation.getInstallationId();
-                            enabled = installation.isEnabled();
-                            version = installation.getVersion();
-                        }
-                    }
+                    SkillInstallation deployment = pathToDeployment.get(child.toString());
+                    Map<String, Object> marker = readInstallMarker(child);
+                    boolean managed = deployment != null || marker != null;
+                    String skillId = deployment != null
+                            ? deployment.getSkillId()
+                            : markerString(marker, "skillId");
+                    Boolean enabled = deployment != null ? deployment.isEnabled() : null;
+                    String version = deployment != null
+                            ? deployment.getVersion()
+                            : markerString(marker, "version");
                     items.add(new SkillScanItem(
                             child.getFileName().toString(),
                             child.toString(),
                             frontmatter.name(),
                             frontmatter.description(),
                             managed,
-                            installationId,
+                            skillId,
                             enabled,
                             version
                     ));
@@ -157,32 +163,28 @@ public class SkillService {
     }
 
     public SkillScanDetail getScanItemDetail(String targetId, String directoryId) {
+        initializeManagedSkillStorage();
         SkillTarget target = requireTarget(targetId);
         Path root = resolveTargetRoot(target.getRootPath());
         Path dir = resolveScanDirectory(root, directoryId);
         String content = readString(dir.resolve("SKILL.md"));
         Frontmatter frontmatter = parseFrontmatter(content);
-        boolean managed = Files.exists(dir.resolve(INSTALL_MARKER_FILE));
-        String installationId = null;
-        Boolean enabled = null;
-        String version = null;
-        if (managed) {
-            Map<String, SkillInstallation> pathToInstallation = skillInstallationRepository.findByTargetId(targetId).stream()
-                    .collect(Collectors.toMap(SkillInstallation::getInstalledPath, i -> i, (a, b) -> a));
-            SkillInstallation installation = pathToInstallation.get(dir.toString());
-            if (installation != null) {
-                installationId = installation.getInstallationId();
-                enabled = installation.isEnabled();
-                version = installation.getVersion();
-            }
-        }
+        SkillInstallation deployment = skillInstallationRepository.findByTargetId(targetId).stream()
+                .filter(item -> Objects.equals(item.getInstalledPath(), dir.toString()))
+                .findFirst()
+                .orElse(null);
+        Map<String, Object> marker = readInstallMarker(dir);
+        boolean managed = deployment != null || marker != null;
+        String skillId = deployment != null ? deployment.getSkillId() : markerString(marker, "skillId");
+        Boolean enabled = deployment != null ? deployment.isEnabled() : null;
+        String version = deployment != null ? deployment.getVersion() : markerString(marker, "version");
         return new SkillScanDetail(
                 dir.getFileName().toString(),
                 dir.toString(),
                 frontmatter.name(),
                 frontmatter.description(),
                 managed,
-                installationId,
+                skillId,
                 enabled,
                 version,
                 buildFileTree(dir, dir)
@@ -205,7 +207,10 @@ public class SkillService {
                     detectContentType(file),
                     fileSize(file),
                     "DIRECTORY",
-                    null, null, null, false
+                    null,
+                    null,
+                    null,
+                    false
             );
         }
         String relative = dir.relativize(file).toString().replace('\\', '/');
@@ -251,100 +256,78 @@ public class SkillService {
         deleteQuietly(dir);
     }
 
-    private Path resolveScanDirectory(Path root, String directoryId) {
-        String normalized = normalize(directoryId, "目录 ID 不能为空");
-        Path dir = root.resolve(normalized).toAbsolutePath().normalize();
-        if (!dir.startsWith(root)) {
-            throw new IllegalArgumentException("目录路径越界: " + directoryId);
-        }
-        if (Files.notExists(dir) || !Files.isDirectory(dir)) {
-            throw new IllegalArgumentException("目录不存在: " + directoryId);
-        }
-        if (Files.notExists(dir.resolve("SKILL.md"))) {
-            throw new IllegalArgumentException("不是有效的 Skill 目录: " + directoryId);
-        }
-        return dir;
-    }
-
-    private Path resolveScanFile(Path scanDir, String relativePath) {
-        String normalized = normalize(relativePath, "Skill 文件路径不能为空");
-        if (normalized.startsWith("/")) {
-            throw new IllegalArgumentException("Skill 文件路径非法: " + normalized);
-        }
-        Path target = scanDir.resolve(normalized).normalize();
-        if (!target.startsWith(scanDir)) {
-            throw new IllegalArgumentException("Skill 文件路径越界: " + normalized);
-        }
-        return target;
-    }
-
-    public List<SkillInstallation> listInstallations() {
-        return skillInstallationRepository.findAll().stream()
-                .sorted(Comparator.comparing(SkillInstallation::getInstalledAt, Comparator.nullsLast(Comparator.reverseOrder())))
+    public List<SkillListItem> listSkills() {
+        initializeManagedSkillStorage();
+        return managedSkillRepository.findAll().stream()
+                .map(this::toSkillListItem)
+                .sorted(Comparator.comparing(SkillListItem::updatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
-    public SkillInstallation getInstallation(String installationId) {
-        return skillInstallationRepository.findByInstallationId(installationId)
-                .orElseThrow(() -> new IllegalArgumentException("Skill 安装记录不存在: " + installationId));
+    public SkillListItem getSkill(String skillId) {
+        initializeManagedSkillStorage();
+        return toSkillListItem(requireManagedSkill(skillId));
     }
 
-    public SkillInstallation disableInstallation(String installationId) {
-        SkillInstallation installation = getInstallation(installationId);
-        Path installedPath = Path.of(installation.getInstalledPath()).toAbsolutePath().normalize();
-        if (Files.exists(installedPath) && Files.notExists(installedPath.resolve(INSTALL_MARKER_FILE))) {
-            throw new IllegalArgumentException("仅允许停用 ActionDock 受管 Skill: " + installation.getInstalledPath());
+    public SkillListItem disableSkill(String skillId) {
+        initializeManagedSkillStorage();
+        List<SkillInstallation> deployments = skillInstallationRepository.findBySkillId(skillId);
+        if (deployments.isEmpty()) {
+            throw new IllegalArgumentException("Skill 未安装到任何目标: " + skillId);
         }
-        deleteQuietly(installedPath);
-        return skillInstallationRepository.save(new SkillInstallation()
-                .setInstallationId(installation.getInstallationId())
-                .setSkillId(installation.getSkillId())
-                .setRepositoryId(installation.getRepositoryId())
-                .setVersion(installation.getVersion())
-                .setTargetId(installation.getTargetId())
-                .setTargetPath(installation.getTargetPath())
-                .setInstalledPath(installation.getInstalledPath())
-                .setDigest(installation.getDigest())
-                .setDisplayName(installation.getDisplayName())
-                .setDescription(installation.getDescription())
-                .setEnabled(false)
-                .setInstalledAt(installation.getInstalledAt())
-                .setUpdatedAt(LocalDateTime.now()));
+        for (SkillInstallation deployment : deployments) {
+            Path installedPath = Path.of(deployment.getInstalledPath()).toAbsolutePath().normalize();
+            if (Files.exists(installedPath) && Files.notExists(installedPath.resolve(INSTALL_MARKER_FILE))) {
+                throw new IllegalArgumentException("仅允许停用 ActionDock 受管 Skill: " + deployment.getInstalledPath());
+            }
+            deleteQuietly(installedPath);
+            skillInstallationRepository.save(copyDeployment(deployment)
+                    .setEnabled(false)
+                    .setUpdatedAt(LocalDateTime.now()));
+        }
+        return getSkill(skillId);
     }
 
-    public SkillInstallation restoreInstallation(String installationId) {
-        SkillInstallation installation = getInstallation(installationId);
-        Path managedPath = resolveManagedPath(installation);
+    public SkillListItem restoreSkill(String skillId) {
+        initializeManagedSkillStorage();
+        ManagedSkill skill = requireManagedSkill(skillId);
+        Path managedPath = resolveManagedPath(skillId);
         if (Files.notExists(managedPath.resolve("SKILL.md"))) {
-            throw new IllegalArgumentException("Skill 受管副本不存在，无法恢复: " + installation.getSkillId());
+            throw new IllegalArgumentException("Skill 受管副本不存在，无法恢复: " + skillId);
         }
-        SkillValidationResult validation = validateDirectory(managedPath, installation.getSkillId(), false);
-        return installValidatedDirectory(installation.getTargetId(), managedPath, validation, installation.getRepositoryId(), installation);
+        SkillValidationResult validation = validateDirectory(managedPath, skillId, false);
+        for (SkillInstallation deployment : skillInstallationRepository.findBySkillId(skillId)) {
+            deployManagedSkillToTarget(skill, deployment.getTargetId(), validation, deployment);
+        }
+        return getSkill(skillId);
     }
 
-    public SkillDetail getInstallationDetail(String installationId) {
-        SkillInstallation installation = getInstallation(installationId);
-        Path managedPath = resolveManagedPath(installation);
+    public SkillDetail getSkillDetail(String skillId) {
+        initializeManagedSkillStorage();
+        ManagedSkill skill = requireManagedSkill(skillId);
+        Path managedPath = resolveManagedPath(skillId);
         return new SkillDetail(
-                installation,
+                toSkillListItem(skill),
                 managedPath.toString(),
                 Files.exists(managedPath) ? buildFileTree(managedPath, managedPath) : List.of()
         );
     }
 
-    public SkillArchive exportInstallationArchive(String installationId) {
-        SkillInstallation installation = getInstallation(installationId);
-        Path managedPath = resolveManagedPath(installation);
-        SkillValidationResult validation = validateSkillDirectory(managedPath, installation.getSkillId(), false, jsonCodec);
+    public SkillArchive exportSkillArchive(String skillId) {
+        initializeManagedSkillStorage();
+        ManagedSkill skill = requireManagedSkill(skillId);
+        Path managedPath = resolveManagedPath(skillId);
+        SkillValidationResult validation = validateSkillDirectory(managedPath, skillId, false, jsonCodec);
         return new SkillArchive(
-                validation.skillId() + ".zip",
-                buildArchive(managedPath, validation, validation.version(), jsonCodec)
+                skillId + ".zip",
+                buildArchive(managedPath, validation, skill.getVersion(), jsonCodec)
         );
     }
 
-    public SkillFilePreview previewInstallationFile(String installationId, String relativePath) {
-        SkillInstallation installation = getInstallation(installationId);
-        Path managedPath = resolveManagedPath(installation);
+    public SkillFilePreview previewSkillFile(String skillId, String relativePath) {
+        initializeManagedSkillStorage();
+        requireManagedSkill(skillId);
+        Path managedPath = resolveManagedPath(skillId);
         Path target = resolveManagedFile(managedPath, relativePath);
         if (Files.notExists(target)) {
             throw new IllegalArgumentException("Skill 文件不存在: " + relativePath);
@@ -382,14 +365,13 @@ public class SkillService {
         }
         String text = readString(target);
         boolean truncated = text.length() > MAX_TEXT_PREVIEW_CHARS;
-        String previewType = resolvePreviewType(target);
         return new SkillFilePreview(
                 relative,
                 target.getFileName().toString(),
                 false,
                 contentType,
                 size,
-                previewType,
+                resolvePreviewType(target),
                 resolveLanguage(target),
                 truncated ? text.substring(0, MAX_TEXT_PREVIEW_CHARS) : text,
                 null,
@@ -427,7 +409,7 @@ public class SkillService {
         return packageDirectory(path);
     }
 
-    public SkillInstallation installFromZip(String targetId, String fileName, byte[] content) {
+    public SkillListItem installFromZip(List<String> targetIds, String fileName, byte[] content) {
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("Skill 压缩包不能为空");
         }
@@ -438,19 +420,19 @@ public class SkillService {
         try {
             unzipToDirectory(content, tempDir);
             SkillValidationResult validation = validateDirectory(tempDir, normalizeArchiveFallbackId(fileName), false);
-            return installValidatedDirectory(targetId, tempDir, validation, null);
+            return installValidatedDirectory(targetIds, tempDir, validation, null);
         } finally {
             deleteQuietly(tempDir);
         }
     }
 
-    public SkillInstallation installFromDirectory(String targetId, String directory) {
+    public SkillListItem installFromDirectory(List<String> targetIds, String directory) {
         Path path = resolveDirectoryPath(directory);
         SkillValidationResult validation = validateDirectory(path);
-        return installValidatedDirectory(targetId, path, validation, null);
+        return installValidatedDirectory(targetIds, path, validation, null);
     }
 
-    public SkillInstallation installArchive(String targetId, String repositoryId, String fileName, byte[] content) {
+    public SkillListItem installArchive(List<String> targetIds, String repositoryId, String fileName, byte[] content) {
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("Skill 压缩包不能为空");
         }
@@ -461,13 +443,13 @@ public class SkillService {
         try {
             unzipToDirectory(content, tempDir);
             SkillValidationResult validation = validateSkillDirectory(tempDir, normalizeArchiveFallbackId(fileName), false, jsonCodec);
-            return installValidatedDirectory(targetId, tempDir, validation, repositoryId);
+            return installValidatedDirectory(targetIds, tempDir, validation, repositoryId);
         } finally {
             deleteQuietly(tempDir);
         }
     }
 
-    public SkillInstallation installDraft(String targetId, SkillDraftRequest request) {
+    public SkillListItem installDraft(List<String> targetIds, SkillDraftRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Skill 草稿不能为空");
         }
@@ -488,7 +470,7 @@ public class SkillService {
             )), StandardCharsets.UTF_8);
             Files.writeString(tempDir.resolve("SKILL.md"), normalize(request.content(), "SKILL.md 内容不能为空"), StandardCharsets.UTF_8);
             SkillValidationResult validation = validateDirectory(tempDir, request.skillId(), false);
-            return installValidatedDirectory(targetId, tempDir, validation, request.repositoryId());
+            return installValidatedDirectory(targetIds, tempDir, validation, request.repositoryId());
         } catch (IOException exception) {
             throw new IllegalStateException("写入 Skill 草稿失败", exception);
         } finally {
@@ -496,128 +478,154 @@ public class SkillService {
         }
     }
 
-    public SkillInstallation updateInstallation(String installationId, String directory) {
-        SkillInstallation existing = getInstallation(installationId);
+    public SkillListItem updateSkill(String skillId, String directory) {
+        initializeManagedSkillStorage();
+        ManagedSkill existingSkill = requireManagedSkill(skillId);
+        List<SkillInstallation> deployments = skillInstallationRepository.findBySkillId(skillId);
+        if (deployments.isEmpty()) {
+            throw new IllegalArgumentException("Skill 未安装到任何目标: " + skillId);
+        }
         Path path = resolveDirectoryPath(directory);
         SkillValidationResult validation = validateDirectory(path);
-        return installValidatedDirectory(existing.getTargetId(), path, validation, existing.getRepositoryId(), existing);
+        if (!Objects.equals(validation.skillId(), skillId)) {
+            throw new IllegalArgumentException("更新目录中的 skillId 与目标 Skill 不一致");
+        }
+        return installValidatedDirectory(
+                deployments.stream().map(SkillInstallation::getTargetId).toList(),
+                path,
+                validation,
+                existingSkill.getRepositoryId()
+        );
     }
 
-    public SkillSyncResponse syncInstallationsToTarget(String targetId, List<String> installationIds) {
+    public SkillSyncResponse syncSkillsToTarget(String targetId, List<String> skillIds) {
+        initializeManagedSkillStorage();
         requireTarget(targetId);
-        List<String> normalizedIds = installationIds == null ? List.of() : installationIds.stream()
-                .map(id -> normalize(id, "installationId 不能为空"))
+        List<String> normalizedIds = skillIds == null ? List.of() : skillIds.stream()
+                .map(id -> normalize(id, "skillId 不能为空"))
                 .distinct()
                 .toList();
         List<SkillSyncResult> results = new ArrayList<>();
-        for (String installationId : normalizedIds) {
-            SkillInstallation source = getInstallation(installationId);
-            if (targetId.equals(source.getTargetId())) {
-                results.add(new SkillSyncResult(
-                        installationId,
-                        source.getSkillId(),
-                        targetId,
-                        "SKIPPED",
-                        "来源 Skill 已安装在当前目标，无需同步",
-                        null
-                ));
+        for (String skillId : normalizedIds) {
+            if (skillInstallationRepository.findBySkillIdAndTargetId(skillId, targetId).isPresent()) {
+                results.add(new SkillSyncResult(skillId, targetId, "SKIPPED", "Skill 已安装在当前目标，无需同步", null));
                 continue;
             }
-            Path managedPath = resolveManagedPath(source);
+            ManagedSkill skill = requireManagedSkill(skillId);
+            Path managedPath = resolveManagedPath(skillId);
             if (Files.notExists(managedPath.resolve("SKILL.md"))) {
-                results.add(new SkillSyncResult(
-                        installationId,
-                        source.getSkillId(),
-                        targetId,
-                        "FAILED",
-                        "来源 Skill 受管副本不存在",
-                        null
-                ));
+                results.add(new SkillSyncResult(skillId, targetId, "FAILED", "Skill 受管副本不存在", null));
                 continue;
             }
             Path targetRoot = resolveTargetRoot(requireTarget(targetId).getRootPath());
-            Path targetDirectory = targetRoot.resolve(source.getSkillId()).toAbsolutePath().normalize();
+            Path targetDirectory = targetRoot.resolve(skillId).toAbsolutePath().normalize();
             if (Files.exists(targetDirectory) && Files.notExists(targetDirectory.resolve(INSTALL_MARKER_FILE))) {
-                results.add(new SkillSyncResult(
-                        installationId,
-                        source.getSkillId(),
-                        targetId,
-                        "SKIPPED",
-                        "目标中已存在同名未受管目录，已跳过",
-                        null
-                ));
+                results.add(new SkillSyncResult(skillId, targetId, "SKIPPED", "目标中已存在同名未受管目录，已跳过", null));
                 continue;
             }
             try {
-                SkillValidationResult validation = validateDirectory(managedPath, source.getSkillId(), false);
-                SkillInstallation created = installValidatedDirectory(targetId, managedPath, validation, source.getRepositoryId());
-                results.add(new SkillSyncResult(
-                        installationId,
-                        source.getSkillId(),
-                        targetId,
-                        "SUCCESS",
-                        "Skill 已同步",
-                        created
-                ));
+                SkillValidationResult validation = validateDirectory(managedPath, skillId, false);
+                SkillInstallation created = deployManagedSkillToTarget(skill, targetId, validation, null);
+                results.add(new SkillSyncResult(skillId, targetId, "SUCCESS", "Skill 已同步", toDeploymentView(created)));
             } catch (RuntimeException exception) {
-                results.add(new SkillSyncResult(
-                        installationId,
-                        source.getSkillId(),
-                        targetId,
-                        "FAILED",
-                        exception.getMessage(),
-                        null
-                ));
+                results.add(new SkillSyncResult(skillId, targetId, "FAILED", exception.getMessage(), null));
             }
         }
         return new SkillSyncResponse(targetId, results);
     }
 
-    public void uninstall(String installationId) {
-        SkillInstallation installation = getInstallation(installationId);
-        Path installedPath = Path.of(installation.getInstalledPath()).toAbsolutePath().normalize();
-        if (Files.notExists(installedPath.resolve(INSTALL_MARKER_FILE))) {
-            throw new IllegalArgumentException("仅允许卸载 ActionDock 受管 Skill: " + installation.getInstalledPath());
+    public void uninstallSkill(String skillId) {
+        initializeManagedSkillStorage();
+        requireManagedSkill(skillId);
+        for (SkillInstallation deployment : skillInstallationRepository.findBySkillId(skillId)) {
+            deleteInstalledPath(deployment);
+            skillInstallationRepository.deleteBySkillIdAndTargetId(skillId, deployment.getTargetId());
         }
-        deleteQuietly(installedPath);
-        skillInstallationRepository.deleteByInstallationId(installationId);
+        deleteQuietly(resolveManagedPath(skillId));
+        managedSkillRepository.deleteBySkillId(skillId);
     }
 
-    private SkillInstallation installValidatedDirectory(String targetId,
-                                                        Path sourceDirectory,
-                                                        SkillValidationResult validation,
-                                                        String repositoryId) {
-        return installValidatedDirectory(targetId, sourceDirectory, validation, repositoryId, null);
+    public void removeSkillFromTarget(String skillId, String targetId) {
+        initializeManagedSkillStorage();
+        requireManagedSkill(skillId);
+        SkillInstallation deployment = skillInstallationRepository.findBySkillIdAndTargetId(skillId, targetId)
+                .orElseThrow(() -> new IllegalArgumentException("Skill 未安装到目标: " + skillId + " -> " + targetId));
+        deleteInstalledPath(deployment);
+        skillInstallationRepository.deleteBySkillIdAndTargetId(skillId, targetId);
+        if (skillInstallationRepository.findBySkillId(skillId).isEmpty()) {
+            deleteQuietly(resolveManagedPath(skillId));
+            managedSkillRepository.deleteBySkillId(skillId);
+        }
     }
 
-    private SkillInstallation installValidatedDirectory(String targetId,
-                                                        Path sourceDirectory,
-                                                        SkillValidationResult validation,
-                                                        String repositoryId,
-                                                        SkillInstallation existing) {
+    private SkillListItem installValidatedDirectory(List<String> targetIds,
+                                                    Path sourceDirectory,
+                                                    SkillValidationResult validation,
+                                                    String repositoryId) {
+        initializeManagedSkillStorage();
+        List<String> normalizedTargetIds = normalizeTargetIds(targetIds);
+        String skillId = validation.skillId();
+        ManagedSkill existingSkill = managedSkillRepository.findBySkillId(skillId).orElse(null);
+        ManagedSkill savedSkill = writeManagedSkillCopy(sourceDirectory, validation, repositoryId, existingSkill);
+        LinkedHashSet<String> allTargetIds = new LinkedHashSet<>(normalizedTargetIds);
+        skillInstallationRepository.findBySkillId(skillId).stream()
+                .map(SkillInstallation::getTargetId)
+                .forEach(allTargetIds::add);
+        for (String targetId : allTargetIds) {
+            SkillInstallation existingDeployment = skillInstallationRepository.findBySkillIdAndTargetId(skillId, targetId).orElse(null);
+            deployManagedSkillToTarget(savedSkill, targetId, validation, existingDeployment);
+        }
+        return getSkill(skillId);
+    }
+
+    private ManagedSkill writeManagedSkillCopy(Path sourceDirectory,
+                                               SkillValidationResult validation,
+                                               String repositoryId,
+                                               ManagedSkill existingSkill) {
+        Path normalizedSourceDirectory = normalizeSkillRoot(sourceDirectory);
+        Path managedDir = resolveManagedPath(validation.skillId());
+        Path tempManagedDir = managedDir.getParent().resolve(managedDir.getFileName() + ".tmp-" + UUID.randomUUID());
+        try {
+            Files.createDirectories(managedDir.getParent());
+            copyDirectory(normalizedSourceDirectory, tempManagedDir);
+            deleteQuietly(tempManagedDir.resolve(INSTALL_MARKER_FILE));
+            deleteQuietly(managedDir);
+            moveAtomically(tempManagedDir, managedDir);
+            LocalDateTime now = LocalDateTime.now();
+            return managedSkillRepository.save(new ManagedSkill()
+                    .setSkillId(validation.skillId())
+                    .setRepositoryId(repositoryId)
+                    .setVersion(validation.version())
+                    .setDigest(validation.digest())
+                    .setDisplayName(validation.displayName())
+                    .setDescription(validation.description())
+                    .setInstalledAt(existingSkill == null ? now : Optional.ofNullable(existingSkill.getInstalledAt()).orElse(now))
+                    .setUpdatedAt(now));
+        } catch (IOException exception) {
+            deleteQuietly(tempManagedDir);
+            throw new IllegalStateException("安装 Skill 失败", exception);
+        }
+    }
+
+    private SkillInstallation deployManagedSkillToTarget(ManagedSkill skill,
+                                                         String targetId,
+                                                         SkillValidationResult validation,
+                                                         SkillInstallation existingDeployment) {
         SkillTarget target = requireTarget(targetId);
         if (!target.isEnabled()) {
             throw new IllegalArgumentException("SkillTarget 已禁用: " + target.getName());
         }
         Path targetRoot = resolveTargetRoot(target.getRootPath());
         ensureDirectoryWritable(targetRoot);
-        Path normalizedSourceDirectory = normalizeSkillRoot(sourceDirectory);
-
-        String skillId = validation.skillId();
-        String installationId = existing == null
-                ? skillId + "@" + targetId
-                : existing.getInstallationId();
-        Path managedDir = managedSkillsRoot.resolve(targetId).resolve(skillId).toAbsolutePath().normalize();
-        Path tempManagedDir = managedDir.getParent().resolve(managedDir.getFileName() + ".tmp-" + UUID.randomUUID());
-        Path finalTargetDir = targetRoot.resolve(skillId).toAbsolutePath().normalize();
+        Path managedDir = resolveManagedPath(skill.getSkillId());
+        Path finalTargetDir = targetRoot.resolve(skill.getSkillId()).toAbsolutePath().normalize();
+        Path tempFinalDir = targetRoot.resolve(skill.getSkillId() + ".tmp-" + UUID.randomUUID()).toAbsolutePath().normalize();
         Path backupDir = finalTargetDir.getParent().resolve(finalTargetDir.getFileName() + ".bak-" + UUID.randomUUID());
+        String installationId = skill.getSkillId() + "@" + targetId;
         try {
-            Files.createDirectories(managedDir.getParent());
             Files.createDirectories(targetRoot);
-            copyDirectory(normalizedSourceDirectory, tempManagedDir);
-            writeInstallMarker(tempManagedDir, installationId, repositoryId, validation);
-            Path tempFinalDir = targetRoot.resolve(skillId + ".tmp-" + UUID.randomUUID()).toAbsolutePath().normalize();
-            copyDirectory(tempManagedDir, tempFinalDir);
+            copyDirectory(managedDir, tempFinalDir);
+            writeInstallMarker(tempFinalDir, installationId, skill.getRepositoryId(), validation);
             if (Files.exists(finalTargetDir)) {
                 if (Files.notExists(finalTargetDir.resolve(INSTALL_MARKER_FILE))) {
                     throw new IllegalArgumentException("目标目录已存在且不是 ActionDock 受管 Skill: " + finalTargetDir);
@@ -625,28 +633,176 @@ public class SkillService {
                 moveAtomically(finalTargetDir, backupDir);
             }
             moveAtomically(tempFinalDir, finalTargetDir);
-            deleteQuietly(managedDir);
-            moveAtomically(tempManagedDir, managedDir);
             deleteQuietly(backupDir);
             LocalDateTime now = LocalDateTime.now();
             return skillInstallationRepository.save(new SkillInstallation()
                     .setInstallationId(installationId)
-                    .setSkillId(validation.skillId())
-                    .setRepositoryId(repositoryId)
-                    .setVersion(validation.version())
+                    .setSkillId(skill.getSkillId())
+                    .setRepositoryId(skill.getRepositoryId())
+                    .setVersion(skill.getVersion())
                     .setTargetId(target.getId())
                     .setTargetPath(target.getRootPath())
                     .setInstalledPath(finalTargetDir.toString())
-                    .setDigest(validation.digest())
-                    .setDisplayName(validation.displayName())
-                    .setDescription(validation.description())
+                    .setDigest(skill.getDigest())
+                    .setDisplayName(skill.getDisplayName())
+                    .setDescription(skill.getDescription())
                     .setEnabled(true)
-                    .setInstalledAt(existing == null ? now : Optional.ofNullable(existing.getInstalledAt()).orElse(now))
+                    .setInstalledAt(existingDeployment == null ? now : Optional.ofNullable(existingDeployment.getInstalledAt()).orElse(now))
                     .setUpdatedAt(now));
         } catch (IOException exception) {
-            deleteQuietly(tempManagedDir);
+            deleteQuietly(tempFinalDir);
             throw new IllegalStateException("安装 Skill 失败", exception);
         }
+    }
+
+    private List<String> normalizeTargetIds(List<String> targetIds) {
+        List<String> normalized = targetIds == null ? List.of() : targetIds.stream()
+                .map(id -> normalize(id, "targetId 不能为空"))
+                .distinct()
+                .toList();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("至少需要一个 SkillTarget");
+        }
+        return normalized;
+    }
+
+    private SkillListItem toSkillListItem(ManagedSkill skill) {
+        List<SkillDeploymentView> targets = skillInstallationRepository.findBySkillId(skill.getSkillId()).stream()
+                .map(this::toDeploymentView)
+                .sorted(Comparator.comparing(SkillDeploymentView::targetId, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .toList();
+        int enabledCount = (int) targets.stream().filter(SkillDeploymentView::enabled).count();
+        return new SkillListItem(
+                skill.getSkillId(),
+                skill.getRepositoryId(),
+                skill.getVersion(),
+                skill.getDigest(),
+                skill.getDisplayName(),
+                skill.getDescription(),
+                enabledCount,
+                targets.size() - enabledCount,
+                targets,
+                skill.getInstalledAt(),
+                skill.getUpdatedAt()
+        );
+    }
+
+    private SkillDeploymentView toDeploymentView(SkillInstallation deployment) {
+        return new SkillDeploymentView(
+                deployment.getTargetId(),
+                deployment.getTargetPath(),
+                deployment.getInstalledPath(),
+                deployment.isEnabled(),
+                deployment.getInstalledAt(),
+                deployment.getUpdatedAt()
+        );
+    }
+
+    private SkillInstallation copyDeployment(SkillInstallation deployment) {
+        return new SkillInstallation()
+                .setInstallationId(deployment.getInstallationId())
+                .setSkillId(deployment.getSkillId())
+                .setRepositoryId(deployment.getRepositoryId())
+                .setVersion(deployment.getVersion())
+                .setTargetId(deployment.getTargetId())
+                .setTargetPath(deployment.getTargetPath())
+                .setInstalledPath(deployment.getInstalledPath())
+                .setDigest(deployment.getDigest())
+                .setDisplayName(deployment.getDisplayName())
+                .setDescription(deployment.getDescription())
+                .setEnabled(deployment.isEnabled())
+                .setInstalledAt(deployment.getInstalledAt())
+                .setUpdatedAt(deployment.getUpdatedAt());
+    }
+
+    private void deleteInstalledPath(SkillInstallation deployment) {
+        Path installedPath = Path.of(deployment.getInstalledPath()).toAbsolutePath().normalize();
+        if (Files.exists(installedPath) && Files.notExists(installedPath.resolve(INSTALL_MARKER_FILE))) {
+            throw new IllegalArgumentException("仅允许卸载 ActionDock 受管 Skill: " + deployment.getInstalledPath());
+        }
+        deleteQuietly(installedPath);
+    }
+
+    private void initializeManagedSkillStorage() {
+        if (storageInitialized) {
+            return;
+        }
+        synchronized (this) {
+            if (storageInitialized) {
+                return;
+            }
+            try {
+                Files.createDirectories(managedSkillsRoot);
+            } catch (IOException exception) {
+                throw new IllegalStateException("初始化 Skill 受管目录失败", exception);
+            }
+            for (ManagedSkill skill : managedSkillRepository.findAll()) {
+                Path canonical = resolveManagedPath(skill.getSkillId());
+                List<Path> legacyPaths = skillInstallationRepository.findBySkillId(skill.getSkillId()).stream()
+                        .map(this::resolveLegacyManagedPath)
+                        .filter(path -> Files.exists(path.resolve("SKILL.md")))
+                        .sorted(Comparator.comparing(this::safeLastModified).reversed())
+                        .toList();
+                if (Files.notExists(canonical.resolve("SKILL.md")) && !legacyPaths.isEmpty()) {
+                    Path source = legacyPaths.get(0);
+                    Path temp = canonical.getParent().resolve(canonical.getFileName() + ".tmp-" + UUID.randomUUID());
+                    try {
+                        copyDirectory(source, temp);
+                        deleteQuietly(temp.resolve(INSTALL_MARKER_FILE));
+                        deleteQuietly(canonical);
+                        moveAtomically(temp, canonical);
+                    } catch (IOException exception) {
+                        deleteQuietly(temp);
+                        throw new IllegalStateException("迁移旧 Skill 受管副本失败: " + skill.getSkillId(), exception);
+                    }
+                }
+                for (Path legacy : legacyPaths) {
+                    if (!legacy.equals(canonical)) {
+                        deleteQuietly(legacy);
+                    }
+                }
+            }
+            storageInitialized = true;
+        }
+    }
+
+    private long safeLastModified(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toMillis();
+        } catch (IOException exception) {
+            return 0L;
+        }
+    }
+
+    private Path resolveLegacyManagedPath(SkillInstallation deployment) {
+        return managedSkillsRoot.resolve(deployment.getTargetId()).resolve(deployment.getSkillId()).toAbsolutePath().normalize();
+    }
+
+    private Path resolveScanDirectory(Path root, String directoryId) {
+        String normalized = normalize(directoryId, "目录 ID 不能为空");
+        Path dir = root.resolve(normalized).toAbsolutePath().normalize();
+        if (!dir.startsWith(root)) {
+            throw new IllegalArgumentException("目录路径越界: " + directoryId);
+        }
+        if (Files.notExists(dir) || !Files.isDirectory(dir)) {
+            throw new IllegalArgumentException("目录不存在: " + directoryId);
+        }
+        if (Files.notExists(dir.resolve("SKILL.md"))) {
+            throw new IllegalArgumentException("不是有效的 Skill 目录: " + directoryId);
+        }
+        return dir;
+    }
+
+    private Path resolveScanFile(Path scanDir, String relativePath) {
+        String normalized = normalize(relativePath, "Skill 文件路径不能为空");
+        if (normalized.startsWith("/")) {
+            throw new IllegalArgumentException("Skill 文件路径非法: " + normalized);
+        }
+        Path target = scanDir.resolve(normalized).normalize();
+        if (!target.startsWith(scanDir)) {
+            throw new IllegalArgumentException("Skill 文件路径越界: " + normalized);
+        }
+        return target;
     }
 
     private SkillValidationResult validateDirectory(Path directory, String fallbackId, boolean requireManifest) {
@@ -911,6 +1067,7 @@ public class SkillService {
             List<Path> files;
             try (var stream = Files.walk(directory)) {
                 files = stream.filter(Files::isRegularFile)
+                        .filter(path -> !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
                         .sorted()
                         .toList();
             }
@@ -988,10 +1145,10 @@ public class SkillService {
         );
     }
 
-    private Path resolveManagedPath(SkillInstallation installation) {
-        Path managedPath = managedSkillsRoot.resolve(installation.getTargetId()).resolve(installation.getSkillId()).toAbsolutePath().normalize();
+    private Path resolveManagedPath(String skillId) {
+        Path managedPath = managedSkillsRoot.resolve(skillId).toAbsolutePath().normalize();
         if (!managedPath.startsWith(managedSkillsRoot)) {
-            throw new IllegalStateException("Skill 受管目录非法: " + installation.getInstallationId());
+            throw new IllegalStateException("Skill 受管目录非法: " + skillId);
         }
         return managedPath;
     }
@@ -1101,6 +1258,11 @@ public class SkillService {
                 .orElseThrow(() -> new IllegalArgumentException("SkillTarget 不存在: " + id));
     }
 
+    private ManagedSkill requireManagedSkill(String skillId) {
+        return managedSkillRepository.findBySkillId(skillId)
+                .orElseThrow(() -> new IllegalArgumentException("Skill 不存在: " + skillId));
+    }
+
     private Path resolveTargetRoot(String rootPath) {
         String expandedPath = expandHomeShortcut(rootPath);
         Path path = Path.of(expandedPath).toAbsolutePath().normalize();
@@ -1167,6 +1329,10 @@ public class SkillService {
             return;
         }
         try {
+            if (Files.isRegularFile(path)) {
+                Files.deleteIfExists(path);
+                return;
+            }
             Files.walkFileTree(path, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
@@ -1239,6 +1405,22 @@ public class SkillService {
         )).getBytes(StandardCharsets.UTF_8);
     }
 
+    private Map<String, Object> readInstallMarker(Path directory) {
+        Path markerPath = directory.resolve(INSTALL_MARKER_FILE);
+        if (Files.notExists(markerPath)) {
+            return null;
+        }
+        return jsonCodec.read(readString(markerPath), LinkedHashMap.class);
+    }
+
+    private String markerString(Map<String, Object> marker, String key) {
+        if (marker == null) {
+            return null;
+        }
+        Object value = marker.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
     private record Frontmatter(String name, String description) {
     }
 
@@ -1271,12 +1453,33 @@ public class SkillService {
                                      String directory) {
     }
 
+    public record SkillDeploymentView(String targetId,
+                                      String targetPath,
+                                      String installedPath,
+                                      boolean enabled,
+                                      LocalDateTime installedAt,
+                                      LocalDateTime updatedAt) {
+    }
+
+    public record SkillListItem(String skillId,
+                                String repositoryId,
+                                String version,
+                                String digest,
+                                String displayName,
+                                String description,
+                                int enabledTargetCount,
+                                int disabledTargetCount,
+                                List<SkillDeploymentView> targets,
+                                LocalDateTime installedAt,
+                                LocalDateTime updatedAt) {
+    }
+
     public record SkillScanItem(String id,
                                 String path,
                                 String name,
                                 String description,
                                 boolean managed,
-                                String installationId,
+                                String skillId,
                                 Boolean enabled,
                                 String version) {
     }
@@ -1286,13 +1489,13 @@ public class SkillService {
                                   String name,
                                   String description,
                                   boolean managed,
-                                  String installationId,
+                                  String skillId,
                                   Boolean enabled,
                                   String version,
                                   List<SkillFileNode> files) {
     }
 
-    public record SkillDetail(SkillInstallation installation,
+    public record SkillDetail(SkillListItem skill,
                               String managedPath,
                               List<SkillFileNode> files) {
     }
@@ -1324,12 +1527,11 @@ public class SkillService {
                                     List<SkillSyncResult> results) {
     }
 
-    public record SkillSyncResult(String installationId,
-                                  String skillId,
+    public record SkillSyncResult(String skillId,
                                   String targetId,
                                   String status,
                                   String message,
-                                  SkillInstallation createdInstallation) {
+                                  SkillDeploymentView createdDeployment) {
     }
 
     public record SkillDraftRequest(String repositoryId,

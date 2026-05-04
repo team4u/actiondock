@@ -22,12 +22,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   deleteScanDirectory,
-  deleteSkill,
   getScanItemDetail,
   getSkillDetail,
   listSkillTargets,
   previewScanItemFile,
   previewSkillFile,
+  removeSkillFromTarget,
   scanSkillTarget
 } from "../api";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
@@ -77,11 +77,11 @@ export function ScanSkillsPage() {
   }, [loadScan]);
 
   const handleScanUninstall = async (item: SkillScanItem) => {
-    if (!item.installationId || !targetId) return;
+    if (!item.skillId || !targetId) return;
     setActionLoading(item.path);
     try {
-      await deleteSkill(item.installationId);
-      messageApi.success(`${item.name || item.id} 已卸载`);
+      await removeSkillFromTarget(item.skillId, targetId);
+      messageApi.success(`${item.name || item.id} 已从当前目标移除`);
       await loadScan();
     } catch (error) {
       messageApi.error(getErrorMessage(error, "卸载失败"));
@@ -110,17 +110,17 @@ export function ScanSkillsPage() {
     setDetailLoading(true);
     setDetailData(null);
     try {
-      if (item.managed && item.installationId) {
-        const detail = await getSkillDetail(item.installationId);
+      if (item.managed && item.skillId) {
+        const detail = await getSkillDetail(item.skillId);
         setDetailData({
           id: item.id,
           path: item.path,
-          name: detail.installation.displayName || item.name,
-          description: detail.installation.description || item.description,
+          name: detail.skill.displayName || item.name,
+          description: detail.skill.description || item.description,
           managed: true,
-          installationId: item.installationId,
-          enabled: detail.installation.enabled,
-          version: detail.installation.version,
+          skillId: item.skillId,
+          enabled: detail.skill.enabledTargetCount > 0,
+          version: detail.skill.version,
           files: detail.files
         });
       } else {
@@ -135,8 +135,8 @@ export function ScanSkillsPage() {
 
   const detailPreviewFile = useCallback(async (path: string): Promise<SkillFilePreview | null> => {
     if (!detailItem || !targetId) return null;
-    if (detailItem.managed && detailItem.installationId) {
-      return previewSkillFile(detailItem.installationId, path);
+    if (detailItem.managed && detailItem.skillId) {
+      return previewSkillFile(detailItem.skillId, path);
     }
     return previewScanItemFile(targetId, detailItem.id, path);
   }, [detailItem, targetId]);
@@ -198,7 +198,7 @@ export function ScanSkillsPage() {
               </Button>
               <ConfirmDangerAction
                 title={`卸载 ${record.name || record.id}？`}
-                description="仅会删除 ActionDock 受管安装目录。"
+                description="仅会把该 Skill 从当前目标移除。"
                 okText="卸载"
                 onConfirm={() => void handleScanUninstall(record)}
               >
@@ -298,11 +298,17 @@ export function ScanSkillsPage() {
               )}
             </Descriptions>
 
-            {detailData.managed && detailData.installationId && (
-              <Button size="small" onClick={() => navigate(`/skills/${encodeURIComponent(detailData.installationId!)}`)}>
+            {(() => {
+              const managedSkillId = detailData.managed ? detailData.skillId : undefined;
+              if (!managedSkillId) {
+                return null;
+              }
+              return (
+                <Button size="small" onClick={() => navigate(`/skills/${encodeURIComponent(managedSkillId)}`)}>
                 查看完整安装详情
-              </Button>
-            )}
+                </Button>
+              );
+            })()}
 
             <SkillFileBrowser
               files={detailData.files}

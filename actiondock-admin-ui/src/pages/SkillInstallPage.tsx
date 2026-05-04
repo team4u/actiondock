@@ -70,28 +70,6 @@ export function SkillInstallPage() {
     return targetIds;
   };
 
-  const summarizeBatchResult = (
-    results: PromiseSettledResult<unknown>[],
-    successMessage: string,
-    failurePrefix: string
-  ) => {
-    const fulfilled = results.filter((item) => item.status === "fulfilled").length;
-    const rejected = results.filter((item) => item.status === "rejected");
-    if (rejected.length === 0) {
-      messageApi.success(`${successMessage}，共 ${fulfilled} 个目标`);
-      navigate("/skills");
-      return;
-    }
-    const reasons = rejected
-      .map((item) => getErrorMessage(item.reason))
-      .filter((item, index, array) => array.indexOf(item) === index);
-    if (fulfilled > 0) {
-      messageApi.warning(`${successMessage} ${fulfilled} 个目标，失败 ${rejected.length} 个：${reasons.join("；")}`);
-      return;
-    }
-    messageApi.error(`${failurePrefix}：${reasons.join("；")}`);
-  };
-
   const handleUploadFile = async (file?: File) => {
     if (!file) {
       return;
@@ -103,8 +81,9 @@ export function SkillInstallPage() {
     setInstalling(true);
     try {
       const validation = await validateSkillArchive(file);
-      const results = await Promise.allSettled(selectedTargetIds.map((targetId) => importSkill(targetId, file)));
-      summarizeBatchResult(results, `Skill 已安装：${validation.displayName}`, "导入 Skill 失败");
+      await importSkill(selectedTargetIds, file);
+      messageApi.success(`Skill 已安装：${validation.displayName}，共 ${selectedTargetIds.length} 个目标`);
+      navigate("/skills");
     } catch (error) {
       messageApi.error(getErrorMessage(error, "导入 Skill 失败"));
     } finally {
@@ -144,9 +123,10 @@ export function SkillInstallPage() {
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
       const archive = new File([blob], archiveName, { type: "application/zip" });
       const validation = await validateSkillArchive(archive);
-      const results = await Promise.allSettled(selectedTargetIds.map((targetId) => importSkill(targetId, archive)));
       messageApi.destroy("skill-folder-upload");
-      summarizeBatchResult(results, `Skill 已安装：${validation.displayName}`, "从文件夹安装 Skill 失败");
+      await importSkill(selectedTargetIds, archive);
+      messageApi.success(`Skill 已安装：${validation.displayName}，共 ${selectedTargetIds.length} 个目标`);
+      navigate("/skills");
     } catch (error) {
       messageApi.destroy("skill-folder-upload");
       messageApi.error(getErrorMessage(error, "从文件夹安装 Skill 失败"));
@@ -166,8 +146,9 @@ export function SkillInstallPage() {
     }
     setInstalling(true);
     try {
-      const results = await Promise.allSettled(selectedTargetIds.map((targetId) => installSkillDirectory(targetId, directory.trim())));
-      summarizeBatchResult(results, "Skill 已安装", "从本地目录安装 Skill 失败");
+      await installSkillDirectory(selectedTargetIds, directory.trim());
+      messageApi.success(`Skill 已安装，共 ${selectedTargetIds.length} 个目标`);
+      navigate("/skills");
     } catch (error) {
       messageApi.error(getErrorMessage(error, "从本地目录安装 Skill 失败"));
     } finally {

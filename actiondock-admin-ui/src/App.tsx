@@ -308,7 +308,7 @@ function AdminShell() {
               <Route path="/skills/install" element={<SkillInstallPage />} />
               <Route path="/skills/draft" element={<SkillDraftPage />} />
               <Route path="/skills/scan/:targetId" element={<ScanSkillsPage />} />
-              <Route path="/skills/:installationId" element={<SkillDetailPage />} />
+              <Route path="/skills/:skillId" element={<SkillDetailPage />} />
               <Route path="/ai" element={<AiOverviewPage />} />
               <Route path="/ai/models" element={<AiModelProfileListPage />} />
               <Route path="/ai/models/new" element={<AiModelProfileDetailPage />} />

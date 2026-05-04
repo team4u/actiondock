@@ -74,7 +74,7 @@ public class SkillTargetController {
     public ApiResponse<SkillService.SkillSyncResponse> syncInstallations(@PathVariable String targetId,
                                                                          @RequestBody SkillTargetSyncRequest request) {
         return ApiResponse.success(
-                skillService.syncInstallationsToTarget(targetId, request == null ? List.of() : request.getInstallationIds()),
+                skillService.syncSkillsToTarget(targetId, request == null ? List.of() : request.getSkillIds()),
                 "Skill 同步完成"
         );
     }

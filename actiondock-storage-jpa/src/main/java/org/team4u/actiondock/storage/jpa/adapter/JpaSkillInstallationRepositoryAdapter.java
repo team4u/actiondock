@@ -28,6 +28,11 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
     }
 
     @Override
+    public Optional<SkillInstallation> findBySkillIdAndTargetId(String skillId, String targetId) {
+        return repository.findBySkillIdAndTargetId(skillId, targetId).map(this::toDomain);
+    }
+
+    @Override
     public List<SkillInstallation> findAll() {
         return repository.findAll().stream().map(this::toDomain).toList();
     }
@@ -45,6 +50,11 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
     @Override
     public void deleteByInstallationId(String installationId) {
         repository.deleteById(installationId);
+    }
+
+    @Override
+    public void deleteBySkillIdAndTargetId(String skillId, String targetId) {
+        repository.deleteBySkillIdAndTargetId(skillId, targetId);
     }
 
     private SkillInstallationEntity toEntity(SkillInstallation installation) {

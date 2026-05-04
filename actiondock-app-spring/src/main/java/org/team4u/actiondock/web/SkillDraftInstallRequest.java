@@ -3,7 +3,7 @@ package org.team4u.actiondock.web;
 import java.util.List;
 
 public class SkillDraftInstallRequest {
-    private String targetId;
+    private List<String> targetIds;
     private String repositoryId;
     private String skillId;
     private String displayName;
@@ -14,12 +14,12 @@ public class SkillDraftInstallRequest {
     private String riskLevel;
     private String content;
 
-    public String getTargetId() {
-        return targetId;
+    public List<String> getTargetIds() {
+        return targetIds;
     }
 
-    public void setTargetId(String targetId) {
-        this.targetId = targetId;
+    public void setTargetIds(List<String> targetIds) {
+        this.targetIds = targetIds;
     }
 
     public String getRepositoryId() {

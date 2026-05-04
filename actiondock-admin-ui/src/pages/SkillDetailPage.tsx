@@ -1,4 +1,5 @@
 import {
+  DeleteOutlined,
   ReloadOutlined,
   RocketOutlined,
   StopOutlined,
@@ -10,39 +11,41 @@ import {
   Descriptions,
   Empty,
   Space,
+  Table,
   Tag,
   Typography,
   message
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { disableSkill, getSkillDetail, previewSkillFile, restoreSkill } from "../api";
+import { disableSkill, getSkillDetail, previewSkillFile, removeSkillFromTarget, restoreSkill } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { SkillFileBrowser } from "../components/SkillFileBrowser";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { writeSkillDraftSession } from "../skillDraft";
-import type { SkillDetail, SkillFilePreview } from "../types";
+import type { SkillDeployment, SkillDetail, SkillFilePreview } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
 
 export function SkillDetailPage() {
   const navigate = useNavigate();
-  const { installationId } = useParams();
+  const { skillId } = useParams<{ skillId: string }>();
   const colorMode = useColorMode();
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [disabling, setDisabling] = useState(false);
+  const [acting, setActing] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDetail = async () => {
-    if (!installationId) {
+    if (!skillId) {
       return;
     }
     setLoading(true);
     try {
-      setDetail(await getSkillDetail(installationId));
+      setDetail(await getSkillDetail(skillId));
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载 Skill 详情失败"));
     } finally {
@@ -52,67 +55,129 @@ export function SkillDetailPage() {
 
   useEffect(() => {
     void loadDetail();
-  }, [installationId]);
+  }, [skillId]);
 
   const handlePreviewFile = useCallback(async (path: string): Promise<SkillFilePreview | null> => {
-    if (!installationId) {
+    if (!skillId) {
       return null;
     }
-    return previewSkillFile(installationId, path);
-  }, [installationId]);
+    return previewSkillFile(skillId, path);
+  }, [skillId]);
 
   const handleDisable = async () => {
-    if (!installationId || !detail?.installation.enabled) {
+    if (!skillId || !detail || detail.skill.enabledTargetCount === 0) {
       return;
     }
-    setDisabling(true);
+    setActing(true);
     try {
-      const installation = await disableSkill(installationId);
-      setDetail((current) => current ? { ...current, installation } : current);
+      const skill = await disableSkill(skillId);
+      setDetail((current) => current ? { ...current, skill } : current);
       messageApi.success("Skill 已停用");
     } catch (error) {
       messageApi.error(getErrorMessage(error, "停用 Skill 失败"));
     } finally {
-      setDisabling(false);
+      setActing(false);
     }
   };
 
   const handleRestore = async () => {
-    if (!installationId || detail?.installation.enabled) {
+    if (!skillId || !detail || detail.skill.enabledTargetCount > 0) {
       return;
     }
-    setDisabling(true);
+    setActing(true);
     try {
-      const installation = await restoreSkill(installationId);
-      setDetail((current) => current ? { ...current, installation } : current);
+      const skill = await restoreSkill(skillId);
+      setDetail((current) => current ? { ...current, skill } : current);
       messageApi.success("Skill 已恢复");
     } catch (error) {
       messageApi.error(getErrorMessage(error, "恢复 Skill 失败"));
     } finally {
-      setDisabling(false);
+      setActing(false);
+    }
+  };
+
+  const handleRemoveTarget = async (targetId: string) => {
+    if (!skillId) {
+      return;
+    }
+    setActing(true);
+    try {
+      await removeSkillFromTarget(skillId, targetId);
+      await loadDetail();
+      messageApi.success(`已从目标 ${targetId} 移除`);
+      if (detail && detail.skill.targets.length === 1) {
+        navigate("/skills");
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "移除目标失败"));
+    } finally {
+      setActing(false);
     }
   };
 
   const handlePublish = async () => {
-    if (!installationId || !detail) {
+    if (!skillId || !detail) {
       return;
     }
     writeSkillDraftSession({
-      source: "INSTALLATION_REF",
-      installationId
+      source: "INSTALLED_SKILL_REF",
+      skillId
     });
     navigate("/skills/draft");
   };
+
+  const targetColumns: ColumnsType<SkillDeployment> = [
+    { title: "目标", dataIndex: "targetId", key: "targetId" },
+    {
+      title: "目标目录",
+      dataIndex: "targetPath",
+      key: "targetPath",
+      render: (value: string) => <Text code>{value}</Text>
+    },
+    {
+      title: "安装路径",
+      dataIndex: "installedPath",
+      key: "installedPath",
+      render: (value: string) => <Text code>{value}</Text>
+    },
+    {
+      title: "状态",
+      key: "enabled",
+      render: (_value, record) => (record.enabled ? <Tag color="processing">启用</Tag> : <Tag>停用</Tag>)
+    },
+    {
+      title: "更新时间",
+      key: "updatedAt",
+      width: 180,
+      render: (_value, record) => formatDateTime(record.updatedAt)
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_value, record) => (
+        <Button
+          size="small"
+          danger
+          icon={<DeleteOutlined />}
+          loading={acting}
+          onClick={() => void handleRemoveTarget(record.targetId)}
+        >
+          移除
+        </Button>
+      )
+    }
+  ];
 
   return (
     <>
       {contextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title={detail?.installation.displayName || detail?.installation.skillId || "Skill 详情"}
+          title={detail?.skill.displayName || detail?.skill.skillId || "Skill 详情"}
           onBack={() => navigate("/skills")}
           backLabel="返回管理"
-          meta={detail?.installation.description || "查看安装信息、受管副本内容与文件预览。"}
+          meta={detail?.skill.description || "查看唯一受管副本、文件预览与多目标部署。"}
           actions={
             <>
               <Button icon={<ReloadOutlined />} onClick={() => void loadDetail()} loading={loading}>
@@ -121,12 +186,12 @@ export function SkillDetailPage() {
               <Button icon={<RocketOutlined />} onClick={() => void handlePublish()}>
                 发布到仓库
               </Button>
-              {detail?.installation.enabled ? (
-                <Button icon={<StopOutlined />} loading={disabling} onClick={() => void handleDisable()}>
+              {detail?.skill.enabledTargetCount ? (
+                <Button icon={<StopOutlined />} loading={acting} onClick={() => void handleDisable()}>
                   停用
                 </Button>
               ) : (
-                <Button icon={<UndoOutlined />} loading={disabling} onClick={() => void handleRestore()}>
+                <Button icon={<UndoOutlined />} loading={acting} onClick={() => void handleRestore()}>
                   恢复
                 </Button>
               )}
@@ -140,15 +205,29 @@ export function SkillDetailPage() {
           ) : (
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
               <Descriptions column={{ xs: 1, md: 2, xl: 4 }} size="small">
-                <Descriptions.Item label="skillId"><Text code>{detail.installation.skillId}</Text></Descriptions.Item>
-                <Descriptions.Item label="版本">{detail.installation.version}</Descriptions.Item>
-                <Descriptions.Item label="状态">{detail.installation.enabled ? <Tag color="processing">启用</Tag> : <Tag>停用</Tag>}</Descriptions.Item>
-                <Descriptions.Item label="来源">{detail.installation.repositoryId || "本地导入"}</Descriptions.Item>
-                <Descriptions.Item label="目标目录"><Text code>{detail.installation.targetPath}</Text></Descriptions.Item>
-                <Descriptions.Item label="安装路径"><Text code>{detail.installation.installedPath}</Text></Descriptions.Item>
+                <Descriptions.Item label="skillId"><Text code>{detail.skill.skillId}</Text></Descriptions.Item>
+                <Descriptions.Item label="版本">{detail.skill.version}</Descriptions.Item>
+                <Descriptions.Item label="状态">
+                  <Space wrap size={[4, 4]}>
+                    {detail.skill.enabledTargetCount > 0 ? <Tag color="processing">启用 {detail.skill.enabledTargetCount}</Tag> : <Tag>全部停用</Tag>}
+                    {detail.skill.disabledTargetCount > 0 ? <Tag>停用 {detail.skill.disabledTargetCount}</Tag> : null}
+                  </Space>
+                </Descriptions.Item>
+                <Descriptions.Item label="来源">{detail.skill.repositoryId || "本地导入"}</Descriptions.Item>
+                <Descriptions.Item label="部署目标">{detail.skill.targets.length}</Descriptions.Item>
                 <Descriptions.Item label="受管副本"><Text code>{detail.managedPath}</Text></Descriptions.Item>
-                <Descriptions.Item label="更新时间">{formatDateTime(detail.installation.updatedAt)}</Descriptions.Item>
+                <Descriptions.Item label="摘要"><Text code>{detail.skill.digest}</Text></Descriptions.Item>
+                <Descriptions.Item label="更新时间">{formatDateTime(detail.skill.updatedAt)}</Descriptions.Item>
               </Descriptions>
+
+              <Table<SkillDeployment>
+                rowKey="targetId"
+                title={() => "目标部署"}
+                columns={targetColumns}
+                dataSource={detail.skill.targets}
+                pagination={false}
+                scroll={{ x: 980 }}
+              />
 
               <SkillFileBrowser
                 files={detail.files}

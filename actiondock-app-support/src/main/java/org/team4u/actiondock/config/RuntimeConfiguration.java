@@ -51,6 +51,7 @@ import org.team4u.actiondock.domain.port.EventTriggerRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.domain.port.ManagedSkillRepository;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ProcessorEngine;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
@@ -373,10 +374,11 @@ public class RuntimeConfiguration {
 
     @Bean
     public SkillService skillService(SkillTargetRepository skillTargetRepository,
+                                     ManagedSkillRepository managedSkillRepository,
                                      SkillInstallationRepository skillInstallationRepository,
                                      JsonCodec jsonCodec,
                                      AppProperties properties) {
-        return new SkillService(skillTargetRepository, skillInstallationRepository, jsonCodec, properties);
+        return new SkillService(skillTargetRepository, managedSkillRepository, skillInstallationRepository, jsonCodec, properties);
     }
 
     @Bean
