@@ -73,7 +73,7 @@ import { resolveSchemaFields } from "../schema";
 import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
 import { buildPluginSkillExample } from "../skillExamples";
-import { writeInlineSkillDraftSession } from "../skillDraft";
+import { writeInlineSkillPublishSession } from "../skillPublishSession";
 import { getErrorMessage, parseJsonText, prettyJson } from "../utils";
 import { useCopyMessage } from "../hooks/useCopyMessage";
 
@@ -291,7 +291,7 @@ export function PluginDetailPage() {
   };
 
   const handleCopyCommand = useCopyMessage(messageApi, "命令已复制", "复制命令失败");
-  const openSkillDraft = useCallback(async (value: string) => {
+  const openSkillPublish = useCallback(async (value: string) => {
     if (!plugin || !currentAction) {
       return;
     }
@@ -307,8 +307,8 @@ export function PluginDetailPage() {
       entrypointPath: "SKILL.md"
     }, null, 2));
     const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-    await writeInlineSkillDraftSession(`${skillId}.zip`, archive);
-    navigate("/skills/draft");
+    await writeInlineSkillPublishSession(`${skillId}.zip`, archive);
+    navigate("/skills/publish");
   }, [currentAction, navigate, plugin]);
 
   const handleConfigModeChange = (nextMode: string) => {
@@ -883,7 +883,7 @@ export function PluginDetailPage() {
                       <SkillExamplePanel
                         value={skillExample}
                         onCopy={(value) => void handleCopyCommand(value, "Skill 已复制", "复制 Skill 失败")}
-                        onOpenDraft={openSkillDraft}
+                        onOpenPublish={openSkillPublish}
                       />
 	                  </Space>
 	                ) : (

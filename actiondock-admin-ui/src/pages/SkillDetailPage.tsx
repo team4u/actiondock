@@ -1,5 +1,6 @@
 import {
   DeleteOutlined,
+  EditOutlined,
   ReloadOutlined,
   RocketOutlined,
   StopOutlined,
@@ -10,6 +11,8 @@ import {
   Card,
   Descriptions,
   Empty,
+  Input,
+  Modal,
   Space,
   Table,
   Tag,
@@ -19,11 +22,11 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { disableSkill, getSkillDetail, previewSkillFile, removeSkillFromTarget, restoreSkill } from "../api";
+import { disableSkill, getSkillDetail, previewSkillFile, removeSkillFromTarget, restoreSkill, updateSkillVersion } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { SkillFileBrowser } from "../components/SkillFileBrowser";
 import { useColorMode } from "../contexts/ColorModeContext";
-import { writeSkillDraftSession } from "../skillDraft";
+import { writeSkillPublishSession } from "../skillPublishSession";
 import type { SkillDeployment, SkillDetail, SkillFilePreview } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
@@ -37,6 +40,8 @@ export function SkillDetailPage() {
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  const [versionDraft, setVersionDraft] = useState("");
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDetail = async () => {
@@ -119,11 +124,38 @@ export function SkillDetailPage() {
     if (!skillId || !detail) {
       return;
     }
-    writeSkillDraftSession({
+    writeSkillPublishSession({
       source: "INSTALLED_SKILL_REF",
       skillId
     });
-    navigate("/skills/draft");
+    navigate("/skills/publish");
+  };
+
+  const openVersionModal = () => {
+    setVersionDraft(detail?.skill.version ?? "");
+    setVersionModalOpen(true);
+  };
+
+  const handleUpdateVersion = async () => {
+    if (!skillId) {
+      return;
+    }
+    const nextVersion = versionDraft.trim();
+    if (!nextVersion) {
+      messageApi.warning("请输入版本号");
+      return;
+    }
+    setActing(true);
+    try {
+      const skill = await updateSkillVersion(skillId, nextVersion);
+      setDetail((current) => current ? { ...current, skill } : current);
+      setVersionModalOpen(false);
+      messageApi.success("Skill 版本已更新");
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "更新 Skill 版本失败"));
+    } finally {
+      setActing(false);
+    }
   };
 
   const targetColumns: ColumnsType<SkillDeployment> = [
@@ -186,6 +218,9 @@ export function SkillDetailPage() {
               <Button icon={<RocketOutlined />} onClick={() => void handlePublish()}>
                 发布到仓库
               </Button>
+              <Button icon={<EditOutlined />} onClick={openVersionModal} disabled={!detail}>
+                编辑版本
+              </Button>
               {detail?.skill.enabledTargetCount ? (
                 <Button icon={<StopOutlined />} loading={acting} onClick={() => void handleDisable()}>
                   停用
@@ -238,6 +273,20 @@ export function SkillDetailPage() {
             </Space>
           )}
         </Card>
+        <Modal
+          title="编辑本地版本"
+          open={versionModalOpen}
+          onCancel={() => setVersionModalOpen(false)}
+          onOk={() => void handleUpdateVersion()}
+          confirmLoading={acting}
+          okText="保存"
+          cancelText="取消"
+        >
+          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            <Text type="secondary">版本会保存为 ActionDock 本地受管元数据；发布时将读取这个本地版本。</Text>
+            <Input value={versionDraft} onChange={(event) => setVersionDraft(event.target.value)} placeholder="例如 1.2.0" />
+          </Space>
+        </Modal>
       </Space>
     </>
   );

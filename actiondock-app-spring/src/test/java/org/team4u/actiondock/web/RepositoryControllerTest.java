@@ -58,7 +58,7 @@ class RepositoryControllerTest {
 
     @Test
     void publishSkillArchiveDelegatesToRepositoryService() throws Exception {
-        when(repositoryCatalogService.publishSkillArchive(eq("repo-1"), eq("1.2.0"), eq("notes"), eq("draft.zip"), any()))
+        when(repositoryCatalogService.publishSkillArchive(eq("repo-1"), eq("notes"), eq("skill.zip"), any()))
                 .thenReturn(new RepositoryCatalogService.RepositorySkillDescriptor(
                         "repo-1",
                         "skill-1",
@@ -77,14 +77,13 @@ class RepositoryControllerTest {
                 ));
 
         mockMvc.perform(multipart("/api/repositories/repo-1/publish-skill-archive")
-                        .file(new MockMultipartFile("archive", "draft.zip", MediaType.APPLICATION_OCTET_STREAM_VALUE, "zip".getBytes()))
-                        .param("version", "1.2.0")
+                        .file(new MockMultipartFile("archive", "skill.zip", MediaType.APPLICATION_OCTET_STREAM_VALUE, "zip".getBytes()))
                         .param("releaseNotes", "notes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.repositoryId").value("repo-1"))
                 .andExpect(jsonPath("$.data.skillId").value("skill-1"))
                 .andExpect(jsonPath("$.data.version").value("1.2.0"));
 
-        verify(repositoryCatalogService).publishSkillArchive(eq("repo-1"), eq("1.2.0"), eq("notes"), eq("draft.zip"), any());
+        verify(repositoryCatalogService).publishSkillArchive(eq("repo-1"), eq("notes"), eq("skill.zip"), any());
     }
 }

@@ -298,19 +298,12 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.publishPlugin(id, request), "插件发布完成");
     }
 
-    @PostMapping("/{id}/publish-skill")
-    public ApiResponse<RepositoryCatalogService.RepositorySkillDescriptor> publishSkill(@PathVariable String id,
-                                                                                         @RequestBody RepositoryCatalogService.RepositorySkillPublishRequest request) {
-        return ApiResponse.success(repositoryCatalogService.publishSkill(id, request), "Skill 发布完成");
-    }
-
     @PostMapping(value = "/{id}/publish-skill-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<RepositoryCatalogService.RepositorySkillDescriptor> publishSkillArchive(@PathVariable String id,
-                                                                                                @RequestParam("version") String version,
                                                                                                 @RequestParam(value = "releaseNotes", required = false) String releaseNotes,
                                                                                                 @RequestParam("archive") MultipartFile archive) throws IOException {
         return ApiResponse.success(
-                repositoryCatalogService.publishSkillArchive(id, version, releaseNotes, archive.getOriginalFilename(), archive.getBytes()),
+                repositoryCatalogService.publishSkillArchive(id, releaseNotes, archive.getOriginalFilename(), archive.getBytes()),
                 "Skill 发布完成"
         );
     }

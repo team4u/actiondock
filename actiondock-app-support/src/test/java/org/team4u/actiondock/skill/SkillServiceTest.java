@@ -88,6 +88,75 @@ class SkillServiceTest {
     }
 
     @Test
+    void updateSkillWithoutManifestKeepsExistingLocalVersion() throws Exception {
+        SkillService service = createService();
+        SkillTarget target = saveTarget(service, "Claude", "CLAUDE", "target-a");
+        service.installFromZip(
+                List.of(target.getId()),
+                "sample-skill.zip",
+                sampleArchive("sample-skill", "1.5.0", "Old Skill", "Old", "old")
+        );
+
+        Path updateDir = tempDir.resolve("standard-update");
+        writeStandardSkillDirectory(updateDir, "New Skill", "New", "new");
+
+        SkillService.SkillListItem updated = service.updateSkill("sample-skill", updateDir.toString());
+
+        assertThat(updated.version()).isEqualTo("1.5.0");
+        assertThat(updated.displayName()).isEqualTo("New Skill");
+        assertThat(updated.targets()).allSatisfy(deployment -> {
+            Path installedPath = Path.of(deployment.installedPath());
+            assertThat(Files.readString(installedPath.resolve("SKILL.md"))).contains("new");
+            assertThat(Files.readString(installedPath.resolve(".actiondock-skill-install.json"))).contains("\"version\":\"1.5.0\"");
+            assertThat(Files.readString(installedPath.resolve("skill.json"))).contains("\"version\":\"1.5.0\"");
+        });
+        assertThat(Files.readString(tempDir.resolve("managed-skills").resolve("sample-skill").resolve("skill.json")))
+                .contains("\"version\":\"1.5.0\"");
+    }
+
+    @Test
+    void updateSkillVersionChangesManagedMetadataWithoutChangingSkillContent() throws Exception {
+        SkillService service = createService();
+        SkillTarget target = saveTarget(service, "Claude", "CLAUDE", "target-a");
+        service.installFromZip(
+                List.of(target.getId()),
+                "sample-skill.zip",
+                sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "hello")
+        );
+
+        SkillService.SkillListItem updated = service.updateSkillVersion("sample-skill", "1.1.0");
+
+        assertThat(updated.version()).isEqualTo("1.1.0");
+        assertThat(updated.targets()).allSatisfy(deployment ->
+                assertThat(Files.readString(Path.of(deployment.installedPath()).resolve(".actiondock-skill-install.json")))
+                        .contains("\"version\":\"1.1.0\""));
+        assertThat(updated.targets()).allSatisfy(deployment ->
+                assertThat(Files.readString(Path.of(deployment.installedPath()).resolve("skill.json")))
+                        .contains("\"version\":\"1.1.0\""));
+        assertThat(Files.readString(tempDir.resolve("managed-skills").resolve("sample-skill").resolve("SKILL.md"))).contains("hello");
+        assertThat(Files.readString(tempDir.resolve("managed-skills").resolve("sample-skill").resolve("skill.json")))
+                .contains("\"version\":\"1.1.0\"");
+    }
+
+    @Test
+    void installStandardSkillArchiveDoesNotRequireActionDockManifest() throws Exception {
+        SkillService service = createService();
+        SkillTarget target = saveTarget(service, "Claude", "CLAUDE", "target-a");
+
+        SkillService.SkillListItem skill = service.installFromZip(
+                List.of(target.getId()),
+                "standard-skill.zip",
+                standardArchive("standard-skill", "Standard Skill", "Standard", "body")
+        );
+
+        assertThat(skill.skillId()).isEqualTo("standard-skill");
+        assertThat(skill.version()).isEqualTo("1.0.0");
+        assertThat(Files.readString(tempDir.resolve("managed-skills").resolve("standard-skill").resolve("skill.json")))
+                .contains("\"skillId\":\"standard-skill\"")
+                .contains("\"version\":\"1.0.0\"");
+    }
+
+    @Test
     void disableAndRestoreOperateOnAllTargets() throws Exception {
         SkillService service = createService();
         SkillTarget targetA = saveTarget(service, "Claude", "CLAUDE", "target-a");
@@ -274,6 +343,40 @@ class SkillServiceTest {
                 """.formatted(displayName, description, body).trim());
         Files.createDirectories(directory.resolve("references"));
         Files.writeString(directory.resolve("references/guide.txt"), body);
+    }
+
+    private void writeStandardSkillDirectory(Path directory,
+                                             String displayName,
+                                             String description,
+                                             String body) throws Exception {
+        Files.createDirectories(directory);
+        Files.writeString(directory.resolve("SKILL.md"), """
+                ---
+                name: %s
+                description: %s
+                ---
+
+                %s
+                """.formatted(displayName, description, body).trim());
+        Files.createDirectories(directory.resolve("references"));
+        Files.writeString(directory.resolve("references/guide.txt"), body);
+    }
+
+    private byte[] standardArchive(String skillId,
+                                   String displayName,
+                                   String description,
+                                   String body) throws Exception {
+        return createZip(Map.of(
+                skillId + "/SKILL.md", """
+                        ---
+                        name: %s
+                        description: %s
+                        ---
+
+                        %s
+                        """.formatted(displayName, description, body).trim(),
+                skillId + "/references/guide.txt", body
+        ));
     }
 
     private byte[] createZip(Map<String, String> files) throws Exception {

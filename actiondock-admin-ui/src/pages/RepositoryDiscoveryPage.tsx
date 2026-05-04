@@ -65,7 +65,7 @@ import type {
   ScriptDependency
 } from "../types";
 import { getErrorMessage } from "../utils";
-import { writeInlineSkillDraftSession, writeSkillDraftSession } from "../skillDraft";
+import { writeInlineSkillPublishSession, writeSkillPublishSession } from "../skillPublishSession";
 
 const { Text } = Typography;
 
@@ -806,14 +806,14 @@ export function RepositoryDiscoveryPage() {
                   entrypointPath: "SKILL.md"
                 }, null, 2));
                 const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-                await writeInlineSkillDraftSession(`${detail.descriptor.skillId}.zip`, archive);
-                navigate("/skills/draft");
+                await writeInlineSkillPublishSession(`${detail.descriptor.skillId}.zip`, archive);
+                navigate("/skills/publish");
               })
               .catch((error) => {
                 messageApi.error(getErrorMessage(error, "加载 Skill 详情失败"));
               })}
           >
-            草稿
+            发布 Skill
           </Button>
         </Space>
       )
@@ -1373,15 +1373,15 @@ export function RepositoryDiscoveryPage() {
           <Button
             type="primary"
             onClick={() => {
-              writeSkillDraftSession({
+              writeSkillPublishSession({
                 source: "REPOSITORY_REF",
                 repositoryId: skillDetail.descriptor.repositoryId,
                 skillId: skillDetail.descriptor.skillId
               });
-              navigate("/skills/draft");
+              navigate("/skills/publish");
             }}
           >
-            打开草稿
+            打开发布页
           </Button>
         ) : null}
       >

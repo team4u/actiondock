@@ -20,6 +20,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -60,8 +61,8 @@ class SkillControllerTest {
     }
 
     @Test
-    void draftInstallArchiveDelegatesToSkillService() throws Exception {
-        when(skillService.installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("draft.zip"), any()))
+    void installArchiveDelegatesToSkillService() throws Exception {
+        when(skillService.installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("skill.zip"), any()))
                 .thenReturn(new SkillService.SkillListItem(
                         "skill",
                         "repo-1",
@@ -79,14 +80,40 @@ class SkillControllerTest {
                         LocalDateTime.now()
                 ));
 
-        mockMvc.perform(multipart("/api/skills/draft-install-archive")
-                        .file(new MockMultipartFile("archive", "draft.zip", MediaType.APPLICATION_OCTET_STREAM_VALUE, "zip".getBytes()))
+        mockMvc.perform(multipart("/api/skills/install-archive")
+                        .file(new MockMultipartFile("archive", "skill.zip", MediaType.APPLICATION_OCTET_STREAM_VALUE, "zip".getBytes()))
                         .param("targetIds", "target-1", "target-2")
                         .param("repositoryId", "repo-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.skillId").value("skill"))
                 .andExpect(jsonPath("$.data.targets[0].targetId").value("target-1"));
 
-        verify(skillService).installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("draft.zip"), any());
+        verify(skillService).installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("skill.zip"), any());
+    }
+
+    @Test
+    void updateVersionDelegatesToSkillService() throws Exception {
+        when(skillService.updateSkillVersion("skill-1", "1.2.0"))
+                .thenReturn(new SkillService.SkillListItem(
+                        "skill-1",
+                        "repo-1",
+                        "1.2.0",
+                        "digest",
+                        "Skill",
+                        "desc",
+                        1,
+                        0,
+                        List.of(new SkillService.SkillDeploymentView("target-1", "/targets/one", "/targets/one/skill", true, LocalDateTime.now(), LocalDateTime.now())),
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                ));
+
+        mockMvc.perform(post("/api/skills/skill-1/version")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":\"1.2.0\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.version").value("1.2.0"));
+
+        verify(skillService).updateSkillVersion("skill-1", "1.2.0");
     }
 }

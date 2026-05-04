@@ -83,29 +83,8 @@ public class SkillController {
         );
     }
 
-    @PostMapping("/draft-install")
-    public ApiResponse<SkillService.SkillListItem> installDraft(@RequestBody SkillDraftInstallRequest request) {
-        return ApiResponse.success(
-                skillService.installDraft(
-                        request.getTargetIds(),
-                        new SkillService.SkillDraftRequest(
-                                request.getRepositoryId(),
-                                request.getSkillId(),
-                                request.getDisplayName(),
-                                request.getVersion(),
-                                request.getOwner(),
-                                request.getDescription(),
-                                request.getTags(),
-                                request.getRiskLevel(),
-                                request.getContent()
-                        )
-                ),
-                "Skill 安装成功"
-        );
-    }
-
-    @PostMapping(value = "/draft-install-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<SkillService.SkillListItem> installDraftArchive(@RequestParam("targetIds") List<String> targetIds,
+    @PostMapping(value = "/install-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<SkillService.SkillListItem> installArchive(@RequestParam("targetIds") List<String> targetIds,
                                                               @RequestParam(value = "repositoryId", required = false) String repositoryId,
                                                               @RequestParam("archive") MultipartFile archive) throws IOException {
         return ApiResponse.success(
@@ -120,6 +99,15 @@ public class SkillController {
         return ApiResponse.success(
                 skillService.updateSkill(skillId, request.getDirectory()),
                 "Skill 更新成功"
+        );
+    }
+
+    @PostMapping("/{skillId}/version")
+    public ApiResponse<SkillService.SkillListItem> updateVersion(@PathVariable String skillId,
+                                                                 @RequestBody SkillVersionUpdateRequest request) {
+        return ApiResponse.success(
+                skillService.updateSkillVersion(skillId, request.getVersion()),
+                "Skill 版本已更新"
         );
     }
 

@@ -6,13 +6,13 @@ const { Paragraph, Text } = Typography;
 export function SkillExamplePanel({
   description,
   onCopy,
-  onOpenDraft,
+  onOpenPublish,
   title,
   value,
 }: {
   description?: string;
   onCopy: (value: string) => void;
-  onOpenDraft?: (value: string) => void;
+  onOpenPublish?: (value: string) => void;
   title?: string;
   value: string;
 }) {
@@ -28,8 +28,8 @@ export function SkillExamplePanel({
           ) : null}
         </div>
         <Space>
-          {onOpenDraft ? (
-            <Button icon={<EditOutlined />} onClick={() => onOpenDraft(value)} disabled={!value}>
+          {onOpenPublish ? (
+            <Button icon={<EditOutlined />} onClick={() => onOpenPublish(value)} disabled={!value}>
               保存为 Skill
             </Button>
           ) : null}

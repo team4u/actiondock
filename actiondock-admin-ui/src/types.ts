@@ -1117,18 +1117,6 @@ export interface RepositorySkillDetail {
   content: string;
 }
 
-export interface RepositorySkillPublishRequest {
-  skillId: string;
-  displayName: string;
-  version: string;
-  owner?: string;
-  description: string;
-  releaseNotes?: string;
-  tags?: string[];
-  riskLevel?: string;
-  content: string;
-}
-
 export interface SkillDeployment {
   targetId: string;
   targetPath: string;
@@ -1239,6 +1227,7 @@ export interface SkillValidationResult {
   entrypointPath: string;
   digest: string;
   warnings: string[];
+  manifestPresent?: boolean;
 }
 
 export interface SkillPackageResult {

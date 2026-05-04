@@ -1,6 +1,6 @@
-const STORAGE_KEY = "actiondock_skill_draft";
+const STORAGE_KEY = "actiondock_skill_publish";
 
-export type SkillDraftSession =
+export type SkillPublishSession =
   | {
     source: "INLINE_ARCHIVE";
     archiveName: string;
@@ -35,32 +35,32 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
-export function writeSkillDraftSession(value: SkillDraftSession): void {
+export function writeSkillPublishSession(value: SkillPublishSession): void {
   window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(value));
 }
 
-export async function writeInlineSkillDraftSession(archiveName: string, archive: Blob): Promise<void> {
+export async function writeInlineSkillPublishSession(archiveName: string, archive: Blob): Promise<void> {
   const buffer = await archive.arrayBuffer();
-  writeSkillDraftSession({
+  writeSkillPublishSession({
     source: "INLINE_ARCHIVE",
     archiveName,
     archiveBase64: encodeBase64(new Uint8Array(buffer))
   });
 }
 
-export function readSkillDraftSession(): SkillDraftSession | null {
+export function readSkillPublishSession(): SkillPublishSession | null {
   const raw = window.sessionStorage.getItem(STORAGE_KEY);
   if (!raw) {
     return null;
   }
   try {
-    return JSON.parse(raw) as SkillDraftSession;
+    return JSON.parse(raw) as SkillPublishSession;
   } catch {
     return null;
   }
 }
 
-export function readInlineSkillDraftArchive(session: SkillDraftSession): File | null {
+export function readInlineSkillPublishArchive(session: SkillPublishSession): File | null {
   if (session.source !== "INLINE_ARCHIVE") {
     return null;
   }
@@ -75,6 +75,6 @@ export function readInlineSkillDraftArchive(session: SkillDraftSession): File | 
   }
 }
 
-export function clearSkillDraftSession(): void {
+export function clearSkillPublishSession(): void {
   window.sessionStorage.removeItem(STORAGE_KEY);
 }

@@ -44,7 +44,6 @@ import type {
   RepositoryPluginInstallResult,
   RepositorySkillDescriptor,
   RepositorySkillDetail,
-  RepositorySkillPublishRequest,
   RepositoryPluginPublishRequest,
   RepositoryPublishConfigPreview,
   RepositoryPublishConfigPreviewRequest,
@@ -1017,20 +1016,11 @@ export function publishRepositoryPlugin(repositoryId: string, payload: Repositor
   });
 }
 
-export function publishRepositorySkill(repositoryId: string, payload: RepositorySkillPublishRequest): Promise<RepositorySkillDescriptor> {
-  return request<RepositorySkillDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-skill`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
 export function publishRepositorySkillArchive(
   repositoryId: string,
-  payload: { version: string; releaseNotes?: string; archive: File | Blob }
+  payload: { releaseNotes?: string; archive: File | Blob }
 ): Promise<RepositorySkillDescriptor> {
   const formData = new FormData();
-  formData.append("version", payload.version);
   if (payload.releaseNotes?.trim()) {
     formData.append("releaseNotes", payload.releaseNotes.trim());
   }
@@ -1089,26 +1079,7 @@ export function installSkillDirectory(targetIds: string[], directory: string): P
   });
 }
 
-export function installSkillDraft(payload: {
-  targetIds: string[];
-  repositoryId?: string;
-  skillId: string;
-  displayName: string;
-  version: string;
-  owner?: string;
-  description: string;
-  tags?: string[];
-  riskLevel?: string;
-  content: string;
-}): Promise<Skill> {
-  return request<Skill>("/api/skills/draft-install", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function installSkillDraftArchive(payload: {
+export function installSkillArchive(payload: {
   targetIds: string[];
   repositoryId?: string;
   archive: File | Blob;
@@ -1119,7 +1090,7 @@ export function installSkillDraftArchive(payload: {
     formData.append("repositoryId", payload.repositoryId.trim());
   }
   formData.append("archive", payload.archive);
-  return request<Skill>("/api/skills/draft-install-archive", {
+  return request<Skill>("/api/skills/install-archive", {
     method: "POST",
     body: formData
   });
@@ -1130,6 +1101,14 @@ export function updateSkill(skillId: string, directory: string): Promise<Skill> 
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify({ directory })
+  });
+}
+
+export function updateSkillVersion(skillId: string, version: string): Promise<Skill> {
+  return request<Skill>(`/api/skills/${encodeURIComponent(skillId)}/version`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ version })
   });
 }
 

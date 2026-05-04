@@ -54,8 +54,8 @@ const SkillManagementPage = lazy(() =>
 const SkillInstallPage = lazy(() =>
   import("./pages/SkillInstallPage").then((module) => ({ default: module.SkillInstallPage }))
 );
-const SkillDraftPage = lazy(() =>
-  import("./pages/SkillDraftPage").then((module) => ({ default: module.SkillDraftPage }))
+const SkillPublishPage = lazy(() =>
+  import("./pages/SkillPublishPage").then((module) => ({ default: module.SkillPublishPage }))
 );
 const SkillDetailPage = lazy(() =>
   import("./pages/SkillDetailPage").then((module) => ({ default: module.SkillDetailPage }))
@@ -196,6 +196,8 @@ function AdminShell() {
   const selectedNavKey = resolveSelectedNavKey(location.pathname);
   const title = location.pathname.startsWith("/packages")
     ? "发布能力包"
+    : location.pathname.startsWith("/skills/publish")
+      ? "发布 Skill"
     : location.pathname.startsWith("/skills/install")
       ? "安装 Skill"
       : /^\/skills\/scan\//.test(location.pathname)
@@ -306,7 +308,7 @@ function AdminShell() {
               <Route path="/plugins" element={<PluginManagementPage />} />
               <Route path="/skills" element={<SkillManagementPage />} />
               <Route path="/skills/install" element={<SkillInstallPage />} />
-              <Route path="/skills/draft" element={<SkillDraftPage />} />
+              <Route path="/skills/publish" element={<SkillPublishPage />} />
               <Route path="/skills/scan/:targetId" element={<ScanSkillsPage />} />
               <Route path="/skills/:skillId" element={<SkillDetailPage />} />
               <Route path="/ai" element={<AiOverviewPage />} />

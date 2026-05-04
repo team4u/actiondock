@@ -812,38 +812,7 @@ public class RepositoryCatalogService {
         return pluginRepositoryPublisher.publish(repositoryId, request);
     }
 
-    public RepositorySkillDescriptor publishSkill(String repositoryId, RepositorySkillPublishRequest request) {
-        RepositoryDefinition repository = getRepository(repositoryId);
-        if ("HTTP".equals(repository.getType())) {
-            throw new IllegalArgumentException("HTTP 仓库暂不支持发布");
-        }
-        Path tempDir = null;
-        try {
-            tempDir = Files.createTempDirectory(repositoriesRoot, "skill-publish-legacy-");
-            Files.writeString(tempDir.resolve("SKILL.md"), normalize(request.content(), "SKILL.md 内容不能为空"), StandardCharsets.UTF_8);
-            Files.writeString(tempDir.resolve(SKILL_MANIFEST_FILE), jsonCodec.write(new SkillService.SkillManifestFile(
-                    1,
-                    normalize(request.skillId(), "skillId 不能为空"),
-                    normalize(request.displayName(), "displayName 不能为空"),
-                    normalize(request.version(), "version 不能为空"),
-                    normalize(request.description(), "description 不能为空"),
-                    normalizeNullable(request.owner()),
-                    request.tags() == null ? List.of() : request.tags(),
-                    normalizeNullable(request.riskLevel()),
-                    "SKILL.md",
-                    null
-            )), StandardCharsets.UTF_8);
-            SkillService.SkillValidationResult validation = SkillService.validateSkillDirectory(tempDir, request.skillId(), true, jsonCodec);
-            return publishSkillDirectory(repository, SkillService.locateSkillRoot(tempDir), validation, request.version(), request.releaseNotes());
-        } catch (IOException exception) {
-            throw new IllegalStateException("写入 Skill 仓库文件失败", exception);
-        } finally {
-            deleteQuietly(tempDir);
-        }
-    }
-
     public RepositorySkillDescriptor publishSkillArchive(String repositoryId,
-                                                         String version,
                                                          String releaseNotes,
                                                          String fileName,
                                                          byte[] content) {
@@ -856,8 +825,8 @@ public class RepositoryCatalogService {
             tempDir = Files.createTempDirectory(repositoriesRoot, "skill-publish-archive-");
             SkillService.unzipArchive(content, tempDir);
             Path skillRoot = SkillService.locateSkillRoot(tempDir);
-            SkillService.SkillValidationResult validation = SkillService.validateSkillDirectory(skillRoot, fileName, true, jsonCodec);
-            return publishSkillDirectory(repository, skillRoot, validation, version, releaseNotes);
+            SkillService.SkillValidationResult validation = SkillService.validateSkillDirectory(skillRoot, fileName, false, jsonCodec);
+            return publishSkillDirectory(repository, skillRoot, validation, releaseNotes);
         } catch (IOException exception) {
             throw new IllegalStateException("写入 Skill 仓库文件失败", exception);
         } finally {
@@ -868,9 +837,8 @@ public class RepositoryCatalogService {
     private RepositorySkillDescriptor publishSkillDirectory(RepositoryDefinition repository,
                                                             Path skillRoot,
                                                             SkillService.SkillValidationResult validation,
-                                                            String version,
                                                             String releaseNotes) {
-        String normalizedVersion = normalize(version, "version 不能为空");
+        String normalizedVersion = normalize(validation.version(), "version 不能为空");
         String skillId = normalize(validation.skillId(), "skillId 不能为空");
         Path root = resolveRepositoryRoot(repository);
         ensureRepositoryWorkspace(root, repository, jsonCodec);
@@ -3916,19 +3884,6 @@ public class RepositoryCatalogService {
     public record RepositoryPluginInstallResult(
             PluginView plugin,
             List<RepositoryPluginConflict> conflicts
-    ) {
-    }
-
-    public record RepositorySkillPublishRequest(
-            String skillId,
-            String displayName,
-            String version,
-            String owner,
-            String description,
-            String releaseNotes,
-            List<String> tags,
-            String riskLevel,
-            String content
     ) {
     }
 
