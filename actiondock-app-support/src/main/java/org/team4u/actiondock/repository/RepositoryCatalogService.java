@@ -3403,23 +3403,18 @@ public class RepositoryCatalogService {
         runGit(workdir, command, false);
     }
 
+    private static final long GIT_TIMEOUT_SECONDS = 60;
+
     private void runGit(Path workdir, List<String> command, boolean ignoreNothingToCommit) {
-        ProcessBuilder builder = new ProcessBuilder(command);
-        builder.directory(workdir.toFile());
-        try {
-            Process process = builder.start();
-            String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                if (ignoreNothingToCommit && stderr.toLowerCase(Locale.ROOT).contains("nothing to commit")) {
-                    return;
-                }
-                throw new IllegalStateException("Git 命令失败: " + String.join(" ", command) + "\n" + stdout + stderr);
+        GitResult result = executeGitCommand(workdir, command);
+        if (result.timedOut()) {
+            throw new IllegalStateException("Git 命令超时（" + GIT_TIMEOUT_SECONDS + "s）: " + String.join(" ", command));
+        }
+        if (result.exitCode() != 0) {
+            if (ignoreNothingToCommit && result.stderr().toLowerCase(Locale.ROOT).contains("nothing to commit")) {
+                return;
             }
-        } catch (IOException | InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("执行 Git 命令失败: " + String.join(" ", command), exception);
+            throw new IllegalStateException("Git 命令失败: " + String.join(" ", command) + "\n" + result.stdout() + result.stderr());
         }
     }
 
@@ -3428,19 +3423,36 @@ public class RepositoryCatalogService {
     }
 
     private String runGitOutput(Path workdir, List<String> command) {
+        GitResult result = executeGitCommand(workdir, command);
+        if (result.timedOut()) {
+            throw new IllegalStateException("Git 命令超时（" + GIT_TIMEOUT_SECONDS + "s）: " + String.join(" ", command));
+        }
+        if (result.exitCode() != 0) {
+            throw new IllegalStateException("Git 命令失败: " + String.join(" ", command) + "\n" + result.stdout() + result.stderr());
+        }
+        return result.stdout();
+    }
+
+    private record GitResult(int exitCode, String stdout, String stderr, boolean timedOut) {
+    }
+
+    private GitResult executeGitCommand(Path workdir, List<String> command) {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workdir.toFile());
         try {
             Process process = builder.start();
+            boolean finished = process.waitFor(GIT_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
             String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                throw new IllegalStateException("Git 命令失败: " + String.join(" ", command) + "\n" + stdout + stderr);
+            if (!finished) {
+                process.destroyForcibly();
+                process.waitFor();
             }
-            return stdout;
-        } catch (IOException | InterruptedException exception) {
+            return new GitResult(finished ? process.exitValue() : -1, stdout, stderr, !finished);
+        } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            throw new IllegalStateException("执行 Git 命令被中断: " + String.join(" ", command), exception);
+        } catch (IOException exception) {
             throw new IllegalStateException("执行 Git 命令失败: " + String.join(" ", command), exception);
         }
     }

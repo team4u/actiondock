@@ -11,8 +11,8 @@ import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 插件视图映射器，将领域模型转换为 API 响应视图。
@@ -21,7 +21,7 @@ import java.util.logging.Logger;
  */
 class PluginViewMapper {
 
-    private static final Logger LOGGER = Logger.getLogger(PluginViewMapper.class.getName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(PluginViewMapper.class);
 
     PluginView toPluginView(PluginRegistration registration, DefaultPluginManager pluginManager) {
         PluginWrapper wrapper = pluginManager.getPlugin(registration.getPluginId());
@@ -63,7 +63,7 @@ class PluginViewMapper {
         try {
             manifest = PluginManifestLoader.load(plugin.getClass(), pluginId);
         } catch (IllegalArgumentException exception) {
-            LOGGER.log(Level.WARNING, "System plugin reference manifest missing: {0}", pluginId);
+            LOGGER.warn("System plugin reference manifest missing: {}", pluginId);
             return null;
         }
         return new PluginReferenceView()

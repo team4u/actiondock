@@ -321,7 +321,7 @@ public class GithubSkillCollectionService {
                     throw new IllegalArgumentException("GitHub 仓库归档包含非法路径: " + entry.getName());
                 }
                 Path target = directory.resolve(entryName).normalize();
-                if (!target.startsWith(directory)) {
+                if (!target.toAbsolutePath().startsWith(directory.toAbsolutePath())) {
                     throw new IllegalArgumentException("GitHub 仓库归档越界写入被拒绝: " + entry.getName());
                 }
                 if (entry.isDirectory()) {

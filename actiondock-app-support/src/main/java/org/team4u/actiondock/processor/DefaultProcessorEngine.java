@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DefaultProcessorEngine implements ProcessorEngine {
     private static final Configuration JSON_PATH_CONFIGURATION = Configuration.builder()
@@ -35,6 +36,7 @@ public class DefaultProcessorEngine implements ProcessorEngine {
     private final ScriptInvocationService scriptInvocationService;
     private final ConfigValueApplicationService configValueApplicationService;
     private final MustacheFactory mustacheFactory = new DefaultMustacheFactory();
+    private final ConcurrentHashMap<String, Mustache> templateCache = new ConcurrentHashMap<>();
 
     public DefaultProcessorEngine(ScriptInvocationService scriptInvocationService,
                                   ConfigValueApplicationService configValueApplicationService) {
@@ -138,7 +140,8 @@ public class DefaultProcessorEngine implements ProcessorEngine {
             return rendered;
         }
         if (value instanceof String text) {
-            Mustache mustache = mustacheFactory.compile(new StringReader(text), "processor-template");
+            Mustache mustache = templateCache.computeIfAbsent(text,
+                    key -> mustacheFactory.compile(new StringReader(key), "processor-template"));
             StringWriter writer = new StringWriter();
             mustache.execute(writer, scope);
             return writer.toString();

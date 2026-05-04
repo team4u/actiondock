@@ -92,7 +92,7 @@ import java.util.List;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AppProperties.class)
 public class RuntimeConfiguration {
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public Executor executionExecutor(AppProperties properties) {
         return Executors.newFixedThreadPool(properties.getExecution().getAsyncPoolSize());
     }
@@ -235,7 +235,8 @@ public class RuntimeConfiguration {
                                      AppProperties properties,
                                      PluginRuntimeService pluginRuntimeService,
                                      ScriptInvocationService scriptInvocationService,
-                                     SharedStateApplicationService sharedStateApplicationService) {
+                                     SharedStateApplicationService sharedStateApplicationService,
+                                     @Qualifier("executionExecutor") Executor executionExecutor) {
         return new RoutingScriptEngine(
                 new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService),
                 new PythonScriptEngine(
@@ -243,7 +244,8 @@ public class RuntimeConfiguration {
                         properties.getExecution().getPython(),
                         pluginRuntimeService,
                         scriptInvocationService,
-                        sharedStateApplicationService
+                        sharedStateApplicationService,
+                        executionExecutor
                 )
         );
     }

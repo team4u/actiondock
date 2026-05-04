@@ -1083,7 +1083,7 @@ public class SkillService {
                         throw new IllegalArgumentException("Skill 压缩包包含非法路径: " + entry.getName());
                     }
                     Path target = directory.resolve(entryName).normalize();
-                    if (!target.startsWith(directory)) {
+                    if (!target.toAbsolutePath().startsWith(directory.toAbsolutePath())) {
                         throw new IllegalArgumentException("Skill 压缩包越界写入被拒绝: " + entry.getName());
                     }
                     if (entry.isDirectory()) {

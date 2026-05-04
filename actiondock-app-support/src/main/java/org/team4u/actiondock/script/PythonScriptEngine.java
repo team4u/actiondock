@@ -34,6 +34,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -72,6 +74,7 @@ public class PythonScriptEngine implements ScriptEngine {
     private final PluginRuntimeService pluginRuntimeService;
     private final ScriptInvocationService scriptInvocationService;
     private final SharedStateApplicationService sharedStateApplicationService;
+    private final Executor asyncExecutor;
 
     public PythonScriptEngine(JsonCodec jsonCodec, AppProperties.Python properties) {
         this(
@@ -107,6 +110,15 @@ public class PythonScriptEngine implements ScriptEngine {
                               PluginRuntimeService pluginRuntimeService,
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService) {
+        this(jsonCodec, properties, pluginRuntimeService, scriptInvocationService, sharedStateApplicationService, null);
+    }
+
+    public PythonScriptEngine(JsonCodec jsonCodec,
+                              AppProperties.Python properties,
+                              PluginRuntimeService pluginRuntimeService,
+                              ScriptInvocationService scriptInvocationService,
+                              SharedStateApplicationService sharedStateApplicationService,
+                              Executor asyncExecutor) {
         this.jsonCodec = Objects.requireNonNull(jsonCodec);
         this.properties = Objects.requireNonNull(properties);
         this.pluginRuntimeService = pluginRuntimeService == null
@@ -118,6 +130,7 @@ public class PythonScriptEngine implements ScriptEngine {
         this.sharedStateApplicationService = sharedStateApplicationService == null
                 ? SharedStateApplicationService.disabled()
                 : sharedStateApplicationService;
+        this.asyncExecutor = asyncExecutor == null ? ForkJoinPool.commonPool() : asyncExecutor;
     }
 
     /**
@@ -236,14 +249,14 @@ public class PythonScriptEngine implements ScriptEngine {
         processBuilder.command(command);
         processBuilder.environment().put("ACTIONDOCK_CONFIG_JSON", configJson == null ? "{}" : configJson);
         Process process = processBuilder.start();
-        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()));
+        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()), asyncExecutor);
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
                 readErrorStream(
                         process.getErrorStream(),
                         logConsumer == null ? event -> { } : logConsumer,
                         process.getOutputStream(),
                         invocationBridge
-                ));
+                ), asyncExecutor);
 
         try (OutputStream stdinStream = process.getOutputStream()) {
             if (stdin != null) {
