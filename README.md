@@ -333,6 +333,7 @@ bin/**
 dist/**
 runtime/actiondock-app-spring.jar
 jdeploy-bundle/**
+jdeploy-bundle/jdeploy.cjs
 package.json
 README.md
 ```

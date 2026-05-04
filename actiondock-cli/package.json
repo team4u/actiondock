@@ -1,14 +1,14 @@
 {
   "name": "actiondock",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ActionDock local automation runtime, CLI, server, admin UI, and desktop tray app",
   "license": "MIT",
   "type": "module",
   "preferGlobal": true,
   "bin": {
     "actiondock": "./bin/run.js",
-    "actiondock-runtime": "jdeploy-bundle/jdeploy.js",
-    "actiondock-desktop-runtime": "jdeploy-bundle/jdeploy.js"
+    "actiondock-runtime": "./bin/actiondock-runtime.cjs",
+    "actiondock-desktop-runtime": "./bin/actiondock-desktop-runtime.cjs"
   },
   "files": [
     "bin",
@@ -29,7 +29,7 @@
     "dev": "NODE_OPTIONS='--import tsx' node ./bin/dev.js",
     "test": "vitest run",
     "build:runtime": "node ./scripts/build-runtime.mjs",
-    "jdeploy:package": "jdeploy package",
+    "jdeploy:package": "jdeploy package && node ./scripts/patch-jdeploy-bundle.mjs",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "npm run build && npm run build:runtime && npm run jdeploy:package"
   },

@@ -53,7 +53,7 @@ Self-update uses the unified package name:
 
 ```bash
 actiondock self-update --dry-run
-actiondock self-update 0.1.0 --dry-run
+actiondock self-update 0.1.1 --dry-run
 ```
 
 ## Local Development
@@ -121,6 +121,7 @@ bin/**
 dist/**
 runtime/actiondock-app-spring.jar
 jdeploy-bundle/**
+jdeploy-bundle/jdeploy.cjs
 package.json
 README.md
 ```
