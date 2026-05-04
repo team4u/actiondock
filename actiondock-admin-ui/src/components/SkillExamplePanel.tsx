@@ -1,4 +1,4 @@
-import { CopyOutlined } from "@ant-design/icons";
+import { CopyOutlined, EditOutlined } from "@ant-design/icons";
 import { Button, Space, Typography } from "antd";
 
 const { Paragraph, Text } = Typography;
@@ -6,11 +6,13 @@ const { Paragraph, Text } = Typography;
 export function SkillExamplePanel({
   description,
   onCopy,
+  onOpenDraft,
   title,
   value,
 }: {
   description?: string;
   onCopy: (value: string) => void;
+  onOpenDraft?: (value: string) => void;
   title?: string;
   value: string;
 }) {
@@ -26,6 +28,11 @@ export function SkillExamplePanel({
           ) : null}
         </div>
         <Space>
+          {onOpenDraft ? (
+            <Button icon={<EditOutlined />} onClick={() => onOpenDraft(value)} disabled={!value}>
+              保存为 Skill
+            </Button>
+          ) : null}
           <Button icon={<CopyOutlined />} onClick={() => onCopy(value)} disabled={!value}>
             复制 Skill
           </Button>

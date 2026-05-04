@@ -25,6 +25,7 @@ import {
   Typography,
   message
 } from "antd";
+import JSZip from "jszip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getApiKey } from "../auth";
@@ -72,6 +73,7 @@ import { resolveSchemaFields } from "../schema";
 import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
 import { buildPluginSkillExample } from "../skillExamples";
+import { writeInlineSkillDraftSession } from "../skillDraft";
 import { getErrorMessage, parseJsonText, prettyJson } from "../utils";
 import { useCopyMessage } from "../hooks/useCopyMessage";
 
@@ -289,6 +291,25 @@ export function PluginDetailPage() {
   };
 
   const handleCopyCommand = useCopyMessage(messageApi, "命令已复制", "复制命令失败");
+  const openSkillDraft = useCallback(async (value: string) => {
+    if (!plugin || !currentAction) {
+      return;
+    }
+    const skillId = `actiondock-plugin-${plugin.pluginId}-${currentAction.action}`.replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase();
+    const zip = new JSZip();
+    zip.file(`${skillId}/SKILL.md`, value);
+    zip.file(`${skillId}/skill.json`, JSON.stringify({
+      schemaVersion: 1,
+      skillId,
+      displayName: `${plugin.name || plugin.pluginId} ${currentAction.action}`,
+      version: "1.0.0",
+      description: `复用 ${plugin.pluginId}.${currentAction.action} 的 Skill`,
+      entrypointPath: "SKILL.md"
+    }, null, 2));
+    const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+    await writeInlineSkillDraftSession(`${skillId}.zip`, archive);
+    navigate("/skills/draft");
+  }, [currentAction, navigate, plugin]);
 
   const handleConfigModeChange = (nextMode: string) => {
     if (!currentConfig) {
@@ -862,6 +883,7 @@ export function PluginDetailPage() {
                       <SkillExamplePanel
                         value={skillExample}
                         onCopy={(value) => void handleCopyCommand(value, "Skill 已复制", "复制 Skill 失败")}
+                        onOpenDraft={openSkillDraft}
                       />
 	                  </Space>
 	                ) : (

@@ -17,6 +17,7 @@ import java.util.List;
 public class AppProperties {
     private String homeDir = defaultHomeDir();
     private final Plugins plugins = new Plugins();
+    private final Skills skills = new Skills();
     private final Repositories repositories = new Repositories();
     private final Execution execution = new Execution();
     private final Schedules schedules = new Schedules();
@@ -43,6 +44,10 @@ public class AppProperties {
         return repositories;
     }
 
+    public Skills getSkills() {
+        return skills;
+    }
+
     public Schedules getSchedules() {
         return schedules;
     }
@@ -61,6 +66,10 @@ public class AppProperties {
 
     public static String defaultPluginsDir() {
         return Path.of(defaultHomeDir(), "plugins").toString();
+    }
+
+    public static String defaultSkillsDir() {
+        return Path.of(defaultHomeDir(), "skills").toString();
     }
 
     public static class Execution {
@@ -87,6 +96,18 @@ public class AppProperties {
 
     public static class Plugins {
         private String dir = defaultPluginsDir();
+
+        public String getDir() {
+            return dir;
+        }
+
+        public void setDir(String dir) {
+            this.dir = dir;
+        }
+    }
+
+    public static class Skills {
+        private String dir = defaultSkillsDir();
 
         public String getDir() {
             return dir;

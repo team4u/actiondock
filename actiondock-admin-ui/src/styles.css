@@ -225,6 +225,69 @@ a {
   line-height: 1.6;
 }
 
+.skill-install-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.skill-install-panel {
+  padding: 14px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+}
+
+.skill-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.skill-detail-sidebar,
+.skill-detail-preview {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
+}
+
+.skill-detail-sidebar .ant-tree {
+  background: transparent;
+  margin-top: 8px;
+}
+
+.skill-detail-preview__loading {
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skill-preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.skill-preview-panel--image {
+  align-items: flex-start;
+}
+
+.skill-preview-panel--image .ant-image-img {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 900px) {
+  .skill-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .error-detail-panel__stack-trace {
   margin: 0;
   padding: 12px;

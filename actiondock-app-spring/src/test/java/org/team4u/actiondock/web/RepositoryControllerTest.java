@@ -1,0 +1,90 @@
+package org.team4u.actiondock.web;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+import org.team4u.actiondock.RuntimeApplication;
+import org.team4u.actiondock.repository.RepositoryCatalogService;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest(
+        classes = RuntimeApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.config.name=does-not-exist",
+                "server.port=0",
+                "spring.datasource.url=jdbc:h2:mem:repository-controller;DB_CLOSE_DELAY=-1",
+                "spring.datasource.driver-class-name=org.h2.Driver",
+                "spring.datasource.username=sa",
+                "spring.jpa.hibernate.ddl-auto=create-drop",
+                "spring.jpa.open-in-view=false",
+                "spring.h2.console.enabled=false",
+                "app.execution.async-pool-size=1"
+        }
+)
+@AutoConfigureMockMvc
+class RepositoryControllerTest {
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private RepositoryCatalogService repositoryCatalogService;
+
+    @Test
+    void skillArchiveReturnsBinaryDownload() throws Exception {
+        when(repositoryCatalogService.exportRepositorySkillArchive("repo-1", "skill-1"))
+                .thenReturn(new RepositoryCatalogService.RepositoryBinaryArchive("skill-1.zip", "zip-content".getBytes()));
+
+        mockMvc.perform(get("/api/repositories/repo-1/skills/skill-1/archive"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"skill-1.zip\""))
+                .andExpect(content().bytes("zip-content".getBytes()));
+    }
+
+    @Test
+    void publishSkillArchiveDelegatesToRepositoryService() throws Exception {
+        when(repositoryCatalogService.publishSkillArchive(eq("repo-1"), eq("1.2.0"), eq("notes"), eq("draft.zip"), any()))
+                .thenReturn(new RepositoryCatalogService.RepositorySkillDescriptor(
+                        "repo-1",
+                        "skill-1",
+                        "Skill 1",
+                        "1.2.0",
+                        "desc",
+                        null,
+                        null,
+                        java.util.List.of(),
+                        "skills/skill-1/skill.json",
+                        "skills/skill-1/SKILL.md",
+                        "digest",
+                        null,
+                        true,
+                        "DISTRIBUTION"
+                ));
+
+        mockMvc.perform(multipart("/api/repositories/repo-1/publish-skill-archive")
+                        .file(new MockMultipartFile("archive", "draft.zip", MediaType.APPLICATION_OCTET_STREAM_VALUE, "zip".getBytes()))
+                        .param("version", "1.2.0")
+                        .param("releaseNotes", "notes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.repositoryId").value("repo-1"))
+                .andExpect(jsonPath("$.data.skillId").value("skill-1"))
+                .andExpect(jsonPath("$.data.version").value("1.2.0"));
+
+        verify(repositoryCatalogService).publishSkillArchive(eq("repo-1"), eq("1.2.0"), eq("notes"), eq("draft.zip"), any());
+    }
+}

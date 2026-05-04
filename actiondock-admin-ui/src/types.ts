@@ -1095,6 +1095,144 @@ export interface RepositoryPluginDetail {
   plugin: Record<string, unknown>;
 }
 
+export interface RepositorySkillDescriptor {
+  repositoryId: string;
+  skillId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string | null;
+  owner?: string;
+  tags: string[];
+  manifestPath: string;
+  entrypointPath: string;
+  digest?: string;
+  riskLevel?: string;
+  trusted: boolean;
+  repositoryUsage?: RepositoryUsage;
+}
+
+export interface RepositorySkillDetail {
+  descriptor: RepositorySkillDescriptor;
+  content: string;
+}
+
+export interface RepositorySkillPublishRequest {
+  skillId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  description: string;
+  releaseNotes?: string;
+  tags?: string[];
+  riskLevel?: string;
+  content: string;
+}
+
+export interface SkillInstallation {
+  installationId: string;
+  skillId: string;
+  repositoryId?: string;
+  version: string;
+  targetId: string;
+  targetPath: string;
+  installedPath: string;
+  digest: string;
+  displayName?: string;
+  description?: string;
+  enabled: boolean;
+  installedAt?: string;
+  updatedAt?: string;
+}
+
+export interface SkillDetail {
+  installation: SkillInstallation;
+  managedPath: string;
+  files: SkillFileNode[];
+}
+
+export interface SkillFileNode {
+  name: string;
+  path: string;
+  directory: boolean;
+  size?: number;
+  children: SkillFileNode[];
+}
+
+export type SkillFilePreviewType = "TEXT" | "MARKDOWN" | "IMAGE" | "DIRECTORY" | "UNSUPPORTED";
+
+export interface SkillFilePreview {
+  path: string;
+  name: string;
+  directory: boolean;
+  contentType: string;
+  size: number;
+  previewType: SkillFilePreviewType;
+  language?: string;
+  textContent?: string;
+  dataUrl?: string;
+  truncated: boolean;
+}
+
+export interface SkillTarget {
+  id: string;
+  name: string;
+  type: "CODEX" | "CLAUDE" | "GEMINI" | "CODEBUDDY" | "CUSTOM" | "ACTIONDOCK_AGENT" | string;
+  rootPath: string;
+  enabled: boolean;
+  writable: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SkillScanItem {
+  id: string;
+  path: string;
+  name?: string;
+  description?: string;
+  managed: boolean;
+  installationId?: string;
+  enabled?: boolean;
+  version?: string;
+}
+
+export interface SkillScanDetail {
+  id: string;
+  path: string;
+  name?: string;
+  description?: string;
+  managed: boolean;
+  installationId?: string;
+  enabled?: boolean;
+  version?: string;
+  files: SkillFileNode[];
+}
+
+export interface SkillValidationResult {
+  skillId: string;
+  displayName: string;
+  version: string;
+  description: string;
+  owner?: string;
+  tags: string[];
+  riskLevel?: string;
+  entrypointPath: string;
+  digest: string;
+  warnings: string[];
+}
+
+export interface SkillPackageResult {
+  validation: SkillValidationResult;
+  directory: string;
+}
+
+export interface SkillArchiveEntry {
+  path: string;
+  directory: boolean;
+  size?: number;
+  contentType?: string;
+}
+
 export interface RepositoryPluginInstallResult {
   plugin: PluginView;
   conflicts: RepositoryPluginConflict[];

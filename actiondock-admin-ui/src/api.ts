@@ -42,6 +42,9 @@ import type {
   RepositoryPluginDescriptor,
   RepositoryPluginInstallRequest,
   RepositoryPluginInstallResult,
+  RepositorySkillDescriptor,
+  RepositorySkillDetail,
+  RepositorySkillPublishRequest,
   RepositoryPluginPublishRequest,
   RepositoryPublishConfigPreview,
   RepositoryPublishConfigPreviewRequest,
@@ -63,6 +66,15 @@ import type {
   SharedStateDetail,
   SharedStateRequest,
   SharedStateSummary,
+  SkillInstallation,
+  SkillArchiveEntry,
+  SkillDetail,
+  SkillFilePreview,
+  SkillPackageResult,
+  SkillScanDetail,
+  SkillScanItem,
+  SkillTarget,
+  SkillValidationResult,
   ScriptSchedule,
   ScriptScheduleUpsertRequest,
   ScriptDefinition
@@ -116,6 +128,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError("接口返回格式不正确", 500);
   }
   return payload.data as T;
+}
+
+async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const token = getApiKey();
+  const headers = new Headers(init?.headers ?? {});
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const response = await fetch(path, {
+    ...init,
+    headers
+  });
+  if (response.status === 401) {
+    emitAuthRequired();
+    throw new ApiError("访问令牌无效或缺失", 401);
+  }
+  if (!response.ok) {
+    throw new ApiError("请求失败", response.status);
+  }
+  return response.blob();
 }
 
 export function listScripts(): Promise<ScriptDefinition[]> {
@@ -827,12 +859,20 @@ export function listRepositoryPlugins(): Promise<RepositoryPluginDescriptor[]> {
   return request<RepositoryPluginDescriptor[]>("/api/repositories/plugins");
 }
 
+export function listRepositorySkills(): Promise<RepositorySkillDescriptor[]> {
+  return request<RepositorySkillDescriptor[]>("/api/repositories/skills");
+}
+
 export function listToolsByRepository(id: string): Promise<RepositoryToolDescriptor[]> {
   return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/tools`);
 }
 
 export function listPluginsByRepository(id: string): Promise<RepositoryPluginDescriptor[]> {
   return request<RepositoryPluginDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/plugins`);
+}
+
+export function listSkillsByRepository(id: string): Promise<RepositorySkillDescriptor[]> {
+  return request<RepositorySkillDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/skills`);
 }
 
 export function listCapabilityPackagesByRepository(id: string): Promise<CapabilityPackageDescriptor[]> {
@@ -845,6 +885,14 @@ export function getRepositoryTool(repositoryId: string, toolId: string): Promise
 
 export function getCapabilityPackage(repositoryId: string, packageId: string): Promise<CapabilityPackageDetail> {
   return request<CapabilityPackageDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/${encodeURIComponent(packageId)}`);
+}
+
+export function getRepositorySkill(repositoryId: string, skillId: string): Promise<RepositorySkillDetail> {
+  return request<RepositorySkillDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/skills/${encodeURIComponent(skillId)}`);
+}
+
+export function downloadRepositorySkillArchive(repositoryId: string, skillId: string): Promise<Blob> {
+  return requestBlob(`/api/repositories/${encodeURIComponent(repositoryId)}/skills/${encodeURIComponent(skillId)}/archive`);
 }
 
 export function installRepositoryTool(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<void> {
@@ -964,6 +1012,194 @@ export function publishRepositoryPlugin(repositoryId: string, payload: Repositor
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
+  });
+}
+
+export function publishRepositorySkill(repositoryId: string, payload: RepositorySkillPublishRequest): Promise<RepositorySkillDescriptor> {
+  return request<RepositorySkillDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-skill`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function publishRepositorySkillArchive(
+  repositoryId: string,
+  payload: { version: string; releaseNotes?: string; archive: File | Blob }
+): Promise<RepositorySkillDescriptor> {
+  const formData = new FormData();
+  formData.append("version", payload.version);
+  if (payload.releaseNotes?.trim()) {
+    formData.append("releaseNotes", payload.releaseNotes.trim());
+  }
+  formData.append("archive", payload.archive);
+  return request<RepositorySkillDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/publish-skill-archive`, {
+    method: "POST",
+    body: formData
+  });
+}
+
+export function listSkills(): Promise<SkillInstallation[]> {
+  return request<SkillInstallation[]>("/api/skills");
+}
+
+export function getSkill(installationId: string): Promise<SkillInstallation> {
+  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}`);
+}
+
+export function getSkillDetail(installationId: string): Promise<SkillDetail> {
+  return request<SkillDetail>(`/api/skills/${encodeURIComponent(installationId)}/detail`);
+}
+
+export function downloadInstalledSkillArchive(installationId: string): Promise<Blob> {
+  return requestBlob(`/api/skills/${encodeURIComponent(installationId)}/archive`);
+}
+
+export function previewSkillFile(installationId: string, path: string): Promise<SkillFilePreview> {
+  const params = new URLSearchParams({ path });
+  return request<SkillFilePreview>(`/api/skills/${encodeURIComponent(installationId)}/preview?${params.toString()}`);
+}
+
+export async function validateSkillArchive(file: File): Promise<SkillValidationResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request<SkillValidationResult>("/api/skills/validate", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export async function importSkill(targetId: string, file: File): Promise<SkillInstallation> {
+  const formData = new FormData();
+  formData.append("targetId", targetId);
+  formData.append("file", file);
+  return request<SkillInstallation>("/api/skills/import", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export function installSkillDirectory(targetId: string, directory: string): Promise<SkillInstallation> {
+  return request<SkillInstallation>("/api/skills/install-directory", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ targetId, directory })
+  });
+}
+
+export function installSkillDraft(payload: {
+  targetId: string;
+  repositoryId?: string;
+  skillId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  description: string;
+  tags?: string[];
+  riskLevel?: string;
+  content: string;
+}): Promise<SkillInstallation> {
+  return request<SkillInstallation>("/api/skills/draft-install", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function installSkillDraftArchive(payload: {
+  targetId: string;
+  repositoryId?: string;
+  archive: File | Blob;
+}): Promise<SkillInstallation> {
+  const formData = new FormData();
+  formData.append("targetId", payload.targetId);
+  if (payload.repositoryId?.trim()) {
+    formData.append("repositoryId", payload.repositoryId.trim());
+  }
+  formData.append("archive", payload.archive);
+  return request<SkillInstallation>("/api/skills/draft-install-archive", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export function updateSkill(installationId: string, directory: string): Promise<SkillInstallation> {
+  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}/update`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ directory })
+  });
+}
+
+export function disableSkill(installationId: string): Promise<SkillInstallation> {
+  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}/disable`, {
+    method: "POST"
+  });
+}
+
+export function restoreSkill(installationId: string): Promise<SkillInstallation> {
+  return request<SkillInstallation>(`/api/skills/${encodeURIComponent(installationId)}/restore`, {
+    method: "POST"
+  });
+}
+
+export function deleteSkill(installationId: string): Promise<void> {
+  return request<void>(`/api/skills/${encodeURIComponent(installationId)}`, {
+    method: "DELETE"
+  });
+}
+
+export function packageSkillDirectory(directory: string): Promise<SkillPackageResult> {
+  return request<SkillPackageResult>("/api/skills/package", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ directory })
+  });
+}
+
+export function listSkillTargets(): Promise<SkillTarget[]> {
+  return request<SkillTarget[]>("/api/skill-targets");
+}
+
+export function createSkillTarget(payload: SkillTarget): Promise<SkillTarget> {
+  return request<SkillTarget>("/api/skill-targets", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateSkillTarget(id: string, payload: SkillTarget): Promise<SkillTarget> {
+  return request<SkillTarget>(`/api/skill-targets/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteSkillTarget(id: string): Promise<void> {
+  return request<void>(`/api/skill-targets/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
+export function scanSkillTarget(id: string): Promise<SkillScanItem[]> {
+  return request<SkillScanItem[]>(`/api/skill-targets/${encodeURIComponent(id)}/scan`, {
+    method: "POST"
+  });
+}
+
+export function getScanItemDetail(targetId: string, directoryId: string): Promise<SkillScanDetail> {
+  return request<SkillScanDetail>(`/api/skill-targets/${encodeURIComponent(targetId)}/scan/${encodeURIComponent(directoryId)}`);
+}
+
+export function previewScanItemFile(targetId: string, directoryId: string, path: string): Promise<SkillFilePreview> {
+  return request<SkillFilePreview>(`/api/skill-targets/${encodeURIComponent(targetId)}/scan/${encodeURIComponent(directoryId)}/preview?path=${encodeURIComponent(path)}`);
+}
+
+export function deleteScanDirectory(targetId: string, directoryId: string): Promise<void> {
+  return request<void>(`/api/skill-targets/${encodeURIComponent(targetId)}/scan/${encodeURIComponent(directoryId)}`, {
+    method: "DELETE"
   });
 }
 

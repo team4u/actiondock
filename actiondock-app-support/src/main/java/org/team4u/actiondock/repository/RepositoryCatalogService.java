@@ -47,6 +47,7 @@ import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginView;
+import org.team4u.actiondock.skill.SkillService;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -55,8 +56,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
@@ -102,6 +107,8 @@ public class RepositoryCatalogService {
     private static final String CAPABILITY_PACKAGES_DIR = "packages";
     private static final String CAPABILITY_PACKAGE_MANIFEST_FILE = "package.json";
     private static final String CAPABILITY_PACKAGE_RELEASE_FILE = "release.json";
+    private static final String SKILLS_DIR = "skills";
+    private static final String SKILL_MANIFEST_FILE = "skill.json";
 
     private final RepositoryDefinitionRepository repositoryDefinitionRepository;
     private final RepositoryToolInstallationRepository repositoryToolInstallationRepository;
@@ -335,6 +342,19 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
+    public List<RepositorySkillDescriptor> listAllRepositorySkills() {
+        List<RepositorySkillDescriptor> skills = new ArrayList<>();
+        for (RepositoryDefinition repository : listRepositories()) {
+            if (!repository.isEnabled()) {
+                continue;
+            }
+            skills.addAll(listRepositorySkills(repository.getId()));
+        }
+        return skills.stream()
+                .sorted(Comparator.comparing(RepositorySkillDescriptor::skillId))
+                .toList();
+    }
+
     public List<RepositoryPluginDescriptor> listRepositoryPlugins(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryIndexFile index = readRepositoryIndex(repository);
@@ -348,6 +368,19 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
+    public List<RepositorySkillDescriptor> listRepositorySkills(String repositoryId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryIndexFile index = readRepositoryIndex(repository);
+        List<RepositorySkillDescriptor> skills = new ArrayList<>();
+        for (RepositorySkillIndexEntry entry : safeSkills(index)) {
+            SkillFile skill = readSkillFile(repository, entry.skillPath());
+            skills.add(toSkillDescriptor(repository, skill, entry.skillPath()));
+        }
+        return skills.stream()
+                .sorted(Comparator.comparing(RepositorySkillDescriptor::skillId))
+                .toList();
+    }
+
     public RepositoryPluginDetail getRepositoryPlugin(String repositoryId, String pluginId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryIndexFile index = readRepositoryIndex(repository);
@@ -357,6 +390,37 @@ public class RepositoryCatalogService {
                 .orElseThrow(() -> new IllegalArgumentException("仓库插件不存在: " + pluginId));
         PluginFile plugin = readPluginFile(repository, entry.pluginPath());
         return new RepositoryPluginDetail(toPluginDescriptor(repository, plugin, entry.pluginPath()), plugin);
+    }
+
+    public RepositorySkillDetail getRepositorySkill(String repositoryId, String skillId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryIndexFile index = readRepositoryIndex(repository);
+        RepositorySkillIndexEntry entry = safeSkills(index).stream()
+                .filter(item -> skillId.equals(item.id()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("仓库 Skill 不存在: " + skillId));
+        SkillFile skill = readSkillFile(repository, entry.skillPath());
+        String content = readRepositoryFile(repository, skillDirectoryPath(entry.skillPath()).resolve(skill.entrypointPath()));
+        return new RepositorySkillDetail(toSkillDescriptor(repository, skill, entry.skillPath()), content);
+    }
+
+    public RepositoryBinaryArchive exportRepositorySkillArchive(String repositoryId, String skillId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        if ("HTTP".equals(repository.getType())) {
+            throw new IllegalArgumentException("HTTP 仓库暂不支持导出 Skill 归档");
+        }
+        RepositoryIndexFile index = readRepositoryIndex(repository);
+        RepositorySkillIndexEntry entry = safeSkills(index).stream()
+                .filter(item -> skillId.equals(item.id()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("仓库 Skill 不存在: " + skillId));
+        SkillFile skill = readSkillFile(repository, entry.skillPath());
+        Path skillRoot = safeResolveRepositoryPath(resolveRepositoryRoot(repository), skillDirectoryPath(entry.skillPath()).value());
+        SkillService.SkillValidationResult validation = SkillService.validateSkillDirectory(skillRoot, skill.skillId(), true, jsonCodec);
+        return new RepositoryBinaryArchive(
+                validation.skillId() + ".zip",
+                SkillService.buildArchive(skillRoot, validation, validation.version(), jsonCodec)
+        );
     }
 
     public RepositoryPluginInstallResult installPlugin(String repositoryId, String pluginId, boolean force) {
@@ -746,6 +810,93 @@ public class RepositoryCatalogService {
 
     public RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryPluginPublishRequest request) {
         return pluginRepositoryPublisher.publish(repositoryId, request);
+    }
+
+    public RepositorySkillDescriptor publishSkill(String repositoryId, RepositorySkillPublishRequest request) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        if ("HTTP".equals(repository.getType())) {
+            throw new IllegalArgumentException("HTTP 仓库暂不支持发布");
+        }
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory(repositoriesRoot, "skill-publish-legacy-");
+            Files.writeString(tempDir.resolve("SKILL.md"), normalize(request.content(), "SKILL.md 内容不能为空"), StandardCharsets.UTF_8);
+            Files.writeString(tempDir.resolve(SKILL_MANIFEST_FILE), jsonCodec.write(new SkillService.SkillManifestFile(
+                    1,
+                    normalize(request.skillId(), "skillId 不能为空"),
+                    normalize(request.displayName(), "displayName 不能为空"),
+                    normalize(request.version(), "version 不能为空"),
+                    normalize(request.description(), "description 不能为空"),
+                    normalizeNullable(request.owner()),
+                    request.tags() == null ? List.of() : request.tags(),
+                    normalizeNullable(request.riskLevel()),
+                    "SKILL.md",
+                    null
+            )), StandardCharsets.UTF_8);
+            SkillService.SkillValidationResult validation = SkillService.validateSkillDirectory(tempDir, request.skillId(), true, jsonCodec);
+            return publishSkillDirectory(repository, SkillService.locateSkillRoot(tempDir), validation, request.version(), request.releaseNotes());
+        } catch (IOException exception) {
+            throw new IllegalStateException("写入 Skill 仓库文件失败", exception);
+        } finally {
+            deleteQuietly(tempDir);
+        }
+    }
+
+    public RepositorySkillDescriptor publishSkillArchive(String repositoryId,
+                                                         String version,
+                                                         String releaseNotes,
+                                                         String fileName,
+                                                         byte[] content) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        if ("HTTP".equals(repository.getType())) {
+            throw new IllegalArgumentException("HTTP 仓库暂不支持发布");
+        }
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory(repositoriesRoot, "skill-publish-archive-");
+            SkillService.unzipArchive(content, tempDir);
+            Path skillRoot = SkillService.locateSkillRoot(tempDir);
+            SkillService.SkillValidationResult validation = SkillService.validateSkillDirectory(skillRoot, fileName, true, jsonCodec);
+            return publishSkillDirectory(repository, skillRoot, validation, version, releaseNotes);
+        } catch (IOException exception) {
+            throw new IllegalStateException("写入 Skill 仓库文件失败", exception);
+        } finally {
+            deleteQuietly(tempDir);
+        }
+    }
+
+    private RepositorySkillDescriptor publishSkillDirectory(RepositoryDefinition repository,
+                                                            Path skillRoot,
+                                                            SkillService.SkillValidationResult validation,
+                                                            String version,
+                                                            String releaseNotes) {
+        String normalizedVersion = normalize(version, "version 不能为空");
+        String skillId = normalize(validation.skillId(), "skillId 不能为空");
+        Path root = resolveRepositoryRoot(repository);
+        ensureRepositoryWorkspace(root, repository, jsonCodec);
+        assertSkillVersionAvailable(repository.getId(), readRepositoryIndexFile(root, repository), skillId, normalizedVersion);
+        Path skillDir = root.resolve(SKILLS_DIR).resolve(skillId);
+        Path tempSkillDir = skillDir.getParent().resolve(skillId + ".tmp-" + UUID.randomUUID());
+        Path backupDir = skillDir.getParent().resolve(skillId + ".bak-" + UUID.randomUUID());
+        try {
+            Files.createDirectories(skillDir.getParent());
+            copyDirectory(skillRoot, tempSkillDir);
+            deleteQuietly(tempSkillDir.resolve(".actiondock-skill-install.json"));
+            SkillService.writeManifest(tempSkillDir, validation, normalizedVersion, jsonCodec);
+            if (Files.exists(skillDir)) {
+                moveAtomically(skillDir, backupDir);
+            }
+            moveAtomically(tempSkillDir, skillDir);
+            deleteQuietly(backupDir);
+            updateRepositorySkillIndex(root, repository, validation, normalizedVersion, releaseNotes);
+        } catch (IOException exception) {
+            deleteQuietly(tempSkillDir);
+            throw new IllegalStateException("写入 Skill 仓库文件失败", exception);
+        }
+        if ("GIT".equals(repository.getType())) {
+            commitAndPush(repository, skillId, normalizedVersion, releaseNotes);
+        }
+        return getRepositorySkill(repository.getId(), skillId).descriptor();
     }
 
     WritableRepositorySession openWritableRepositorySession(String repositoryId) {
@@ -1688,7 +1839,7 @@ public class RepositoryCatalogService {
                                               CapabilityPackagePublishPreview preview) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
-                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
         List<CapabilityPackageIndexEntry> entries = new ArrayList<>(safeCapabilityPackages(current));
         CapabilityPackageIndexEntry next = new CapabilityPackageIndexEntry(
                 draft.packageId(),
@@ -1707,6 +1858,38 @@ public class RepositoryCatalogService {
                 normalizeNullable(repository.getDescription()),
                 new ArrayList<>(safeTools(current)),
                 new ArrayList<>(safePlugins(current)),
+                entries,
+                new ArrayList<>(safeSkills(current))
+        ));
+    }
+
+    private void updateRepositorySkillIndex(Path root,
+                                            RepositoryDefinition repository,
+                                            SkillService.SkillValidationResult validation,
+                                            String version,
+                                            String releaseNotes) {
+        RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
+                ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        List<RepositorySkillIndexEntry> entries = new ArrayList<>(safeSkills(current));
+        RepositorySkillIndexEntry next = new RepositorySkillIndexEntry(
+                validation.skillId(),
+                normalize(validation.displayName(), "displayName 不能为空"),
+                normalize(version, "version 不能为空"),
+                normalizeNullable(validation.description()),
+                normalizeNullable(releaseNotes),
+                SKILLS_DIR + "/" + validation.skillId() + "/" + SKILL_MANIFEST_FILE
+        );
+        entries.removeIf(item -> validation.skillId().equals(item.id()));
+        entries.add(next);
+        entries.sort(Comparator.comparing(RepositorySkillIndexEntry::id));
+        writeJson(root.resolve(REPOSITORY_INDEX_FILE), new RepositoryIndexFile(
+                1,
+                repository.getName(),
+                normalizeNullable(repository.getDescription()),
+                new ArrayList<>(safeTools(current)),
+                new ArrayList<>(safePlugins(current)),
+                new ArrayList<>(safeCapabilityPackages(current)),
                 entries
         ));
     }
@@ -2421,7 +2604,7 @@ public class RepositoryCatalogService {
                                RepositoryPublishRequest request) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
-                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
         List<RepositoryIndexEntry> entries = new ArrayList<>(current.tools() == null ? List.of() : current.tools());
         RepositoryIndexEntry next = new RepositoryIndexEntry(
                 toolId,
@@ -2441,7 +2624,8 @@ public class RepositoryCatalogService {
                 normalizeNullable(repository.getDescription()),
                 entries,
                 new ArrayList<>(safePlugins(current)),
-                new ArrayList<>(safeCapabilityPackages(current))
+                new ArrayList<>(safeCapabilityPackages(current)),
+                new ArrayList<>(safeSkills(current))
         ));
     }
 
@@ -2453,7 +2637,7 @@ public class RepositoryCatalogService {
                                      String version) {
         RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
-                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
         List<RepositoryPluginIndexEntry> entries = new ArrayList<>(safePlugins(current));
         RepositoryPluginIndexEntry next = new RepositoryPluginIndexEntry(
                 pluginId,
@@ -2472,7 +2656,8 @@ public class RepositoryCatalogService {
                 normalizeNullable(repository.getDescription()),
                 new ArrayList<>(safeTools(current)),
                 entries,
-                new ArrayList<>(safeCapabilityPackages(current))
+                new ArrayList<>(safeCapabilityPackages(current)),
+                new ArrayList<>(safeSkills(current))
         ));
     }
 
@@ -2880,6 +3065,25 @@ public class RepositoryCatalogService {
         );
     }
 
+    private RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, SkillFile skill, String skillPath) {
+        return new RepositorySkillDescriptor(
+                repository.getId(),
+                normalize(skill.skillId(), "skillId 不能为空"),
+                normalizeOrDefault(skill.displayName(), skill.skillId()),
+                normalize(skill.version(), "version 不能为空"),
+                normalizeNullable(skill.description()),
+                null,
+                normalizeNullable(skill.owner()),
+                skill.tags() == null ? List.of() : skill.tags(),
+                skillPath,
+                resolveRelative(skillPath, normalizeOrDefault(skill.entrypointPath(), "SKILL.md")),
+                normalizeNullable(skill.digest()),
+                normalizeNullable(skill.riskLevel()),
+                "TRUSTED".equalsIgnoreCase(repository.getTrustLevel()),
+                repository.getUsage()
+        );
+    }
+
     private int dependentToolCount(String pluginId) {
         int count = 0;
         for (ScriptDefinition script : scriptRepository.findAll()) {
@@ -2947,6 +3151,13 @@ public class RepositoryCatalogService {
         return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), pluginPath), PluginFile.class);
     }
 
+    private SkillFile readSkillFile(RepositoryDefinition repository, String skillPath) {
+        if ("HTTP".equals(repository.getType())) {
+            return readHttpJson(joinHttpPath(repository.getUrl(), skillPath), SkillFile.class);
+        }
+        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), skillPath), SkillFile.class);
+    }
+
     private CapabilityPackageManifestFile readCapabilityPackageManifest(RepositoryDefinition repository, String manifestPath) {
         if ("HTTP".equals(repository.getType())) {
             return readHttpJson(joinHttpPath(repository.getUrl(), manifestPath), CapabilityPackageManifestFile.class);
@@ -2969,6 +3180,59 @@ public class RepositoryCatalogService {
             return Files.readString(safeResolveRepositoryPath(resolveRepositoryRoot(repository), path.toString()), StandardCharsets.UTF_8);
         } catch (IOException exception) {
             throw new IllegalStateException("读取仓库文件失败: " + path, exception);
+        }
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        Files.walkFileTree(source, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                Path relative = source.relativize(dir);
+                Path targetDir = target.resolve(relative.toString()).normalize();
+                Files.createDirectories(targetDir);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (Files.isSymbolicLink(file)) {
+                    throw new IllegalArgumentException("Skill 不允许包含符号链接: " + file);
+                }
+                Path relative = source.relativize(file);
+                Path targetFile = target.resolve(relative.toString()).normalize();
+                Files.copy(file, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private void moveAtomically(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void deleteQuietly(Path path) {
+        if (path == null || Files.notExists(path)) {
+            return;
+        }
+        try {
+            Files.walkFileTree(path, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Files.deleteIfExists(file);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    Files.deleteIfExists(dir);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException ignored) {
         }
     }
 
@@ -3043,6 +3307,7 @@ public class RepositoryCatalogService {
         if (type != RepositoryIndexFile.class
                 && type != ToolFile.class
                 && type != PluginFile.class
+                && type != SkillFile.class
                 && type != CapabilityPackageManifestFile.class
                 && type != CapabilityPackageReleaseFile.class) {
             return;
@@ -3060,6 +3325,7 @@ public class RepositoryCatalogService {
             assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("tools"), source, "tools");
             assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("plugins"), source, "plugins");
             assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("packages"), source, "packages");
+            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("skills"), source, "skills");
             return;
         }
         assertReleaseNotesField(root, source, "releaseNotes");
@@ -3130,6 +3396,7 @@ public class RepositoryCatalogService {
             Files.createDirectories(root.resolve("tools"));
             Files.createDirectories(root.resolve("plugins"));
             Files.createDirectories(root.resolve(CAPABILITY_PACKAGES_DIR));
+            Files.createDirectories(root.resolve(SKILLS_DIR));
         } catch (IOException exception) {
             throw new IllegalStateException("初始化仓库目录失败: " + root, exception);
         }
@@ -3151,6 +3418,7 @@ public class RepositoryCatalogService {
                 1,
                 repositoryName != null ? repositoryName : repositoryId,
                 trimToNull(repository == null ? null : repository.getDescription()),
+                new ArrayList<>(),
                 new ArrayList<>(),
                 new ArrayList<>(),
                 new ArrayList<>()
@@ -3249,6 +3517,10 @@ public class RepositoryCatalogService {
         return index == null || index.packages() == null ? List.of() : index.packages();
     }
 
+    private List<RepositorySkillIndexEntry> safeSkills(RepositoryIndexFile index) {
+        return index == null || index.skills() == null ? List.of() : index.skills();
+    }
+
     private List<AiPackageModelFile> safeModels(CapabilityPackageReleaseFile file) {
         return file == null || file.models() == null ? List.of() : file.models();
     }
@@ -3268,7 +3540,7 @@ public class RepositoryCatalogService {
     RepositoryIndexFile readRepositoryIndexFile(Path root, RepositoryDefinition repository) {
         return Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
-                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
     }
 
     static void assertToolVersionAvailable(String repositoryId,
@@ -3304,8 +3576,23 @@ public class RepositoryCatalogService {
         }
     }
 
+    static void assertSkillVersionAvailable(String repositoryId,
+                                            RepositoryIndexFile index,
+                                            String skillId,
+                                            String version) {
+        for (RepositorySkillIndexEntry entry : index == null || index.skills() == null ? List.<RepositorySkillIndexEntry>of() : index.skills()) {
+            if (Objects.equals(skillId, entry.id()) && Objects.equals(version, entry.version())) {
+                throw new RepositoryVersionExistsException("SKILL", repositoryId, skillId, version);
+            }
+        }
+    }
+
     private RelativeRepositoryPath toolDirectoryPath(String toolPath) {
         return new RelativeRepositoryPath(Path.of(toolPath).getParent().toString().replace('\\', '/'));
+    }
+
+    private RelativeRepositoryPath skillDirectoryPath(String skillPath) {
+        return new RelativeRepositoryPath(Path.of(skillPath).getParent().toString().replace('\\', '/'));
     }
 
     private RelativeRepositoryPath capabilityPackageDirectoryPath(String packagePath) {
@@ -3583,6 +3870,36 @@ public class RepositoryCatalogService {
     ) {
     }
 
+    public record RepositorySkillDescriptor(
+            String repositoryId,
+            String skillId,
+            String displayName,
+            String version,
+            String description,
+            String releaseNotes,
+            String owner,
+            List<String> tags,
+            String manifestPath,
+            String entrypointPath,
+            String digest,
+            String riskLevel,
+            boolean trusted,
+            String repositoryUsage
+    ) {
+    }
+
+    public record RepositorySkillDetail(
+            RepositorySkillDescriptor descriptor,
+            String content
+    ) {
+    }
+
+    public record RepositoryBinaryArchive(
+            String fileName,
+            byte[] content
+    ) {
+    }
+
     public record RepositoryPluginPublishRequest(
             String pluginId,
             String displayName,
@@ -3602,6 +3919,19 @@ public class RepositoryCatalogService {
     ) {
     }
 
+    public record RepositorySkillPublishRequest(
+            String skillId,
+            String displayName,
+            String version,
+            String owner,
+            String description,
+            String releaseNotes,
+            List<String> tags,
+            String riskLevel,
+            String content
+    ) {
+    }
+
     public record RepositoryPublishConfigItem(String key, String publishMode) {
     }
 
@@ -3610,7 +3940,16 @@ public class RepositoryCatalogService {
                                       String description,
                                       List<RepositoryIndexEntry> tools,
                                       List<RepositoryPluginIndexEntry> plugins,
-                                      List<CapabilityPackageIndexEntry> packages) {
+                                      List<CapabilityPackageIndexEntry> packages,
+                                      List<RepositorySkillIndexEntry> skills) {
+        public RepositoryIndexFile(int repositoryVersion,
+                                   String name,
+                                   String description,
+                                   List<RepositoryIndexEntry> tools,
+                                   List<RepositoryPluginIndexEntry> plugins,
+                                   List<CapabilityPackageIndexEntry> packages) {
+            this(repositoryVersion, name, description, tools, plugins, packages, List.of());
+        }
     }
 
     public record RepositoryIndexEntry(String id,
@@ -3638,6 +3977,14 @@ public class RepositoryCatalogService {
                                               String path) {
     }
 
+    public record RepositorySkillIndexEntry(String id,
+                                            String name,
+                                            String version,
+                                            String description,
+                                            String releaseNotes,
+                                            String skillPath) {
+    }
+
     public record CapabilityPackageManifestFile(int schemaVersion,
                                                 String packageId,
                                                 String displayName,
@@ -3649,6 +3996,18 @@ public class RepositoryCatalogService {
                                                 String riskLevel,
                                                 List<CapabilityPackageEntryFile> entries,
                                                 String latestReleasePath) {
+    }
+
+    public record SkillFile(int schemaVersion,
+                            String skillId,
+                            String displayName,
+                            String version,
+                            String description,
+                            String owner,
+                            List<String> tags,
+                            String riskLevel,
+                            String entrypointPath,
+                            String digest) {
     }
 
     public record CapabilityPackageReleaseFile(int schemaVersion,

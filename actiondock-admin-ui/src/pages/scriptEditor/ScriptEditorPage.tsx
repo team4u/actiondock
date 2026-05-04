@@ -30,6 +30,7 @@ import {
   message
 } from "antd";
 import type { MenuProps } from "antd";
+import JSZip from "jszip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { executeScript, getExecution } from "../../api";
@@ -58,6 +59,7 @@ import {
 import { formatDateTime, parseJsonText } from "../../utils";
 import { useCopyMessage } from "../../hooks/useCopyMessage";
 import { buildScriptSkillExample } from "../../skillExamples";
+import { writeInlineSkillDraftSession } from "../../skillDraft";
 import { DevelopmentSyncTag } from "../../components/domain/DevelopmentSyncTag";
 import { ScriptDiffDrawer } from "../../components/diff/ScriptDiffDrawer";
 import { ScriptDiffSummary } from "../../components/diff/ScriptDiffSummary";
@@ -266,6 +268,26 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     commandInput,
     executeCommandPresets
   ]);
+
+  const openSkillDraft = async (value: string) => {
+    if (!editor.currentScript) {
+      return;
+    }
+    const skillId = `actiondock-script-${editor.currentScript.id}`.replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase();
+    const zip = new JSZip();
+    zip.file(`${skillId}/SKILL.md`, value);
+    zip.file(`${skillId}/skill.json`, JSON.stringify({
+      schemaVersion: 1,
+      skillId,
+      displayName: editor.currentScript.name || editor.currentScript.id,
+      version: "1.0.0",
+      description: editor.currentScript.description || `执行 ${editor.currentScript.id}`,
+      entrypointPath: "SKILL.md"
+    }, null, 2));
+    const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+    await writeInlineSkillDraftSession(`${skillId}.zip`, archive);
+    navigate("/skills/draft");
+  };
 
   const previewInputSchemaText = formatSchemaEditorState(editor.inputSchemaState);
   const previewOutputSchemaText = formatSchemaEditorState(editor.outputSchemaState);
@@ -804,6 +826,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           skillExample={skillExample}
                           toolContractResponseExample={toolContractResponseExample}
                           onCopy={handleCopyCommand}
+                          onOpenSkillDraft={openSkillDraft}
                         />
                       )
                     },

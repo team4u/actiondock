@@ -7,12 +7,18 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -128,15 +134,41 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.listAllRepositoryPlugins());
     }
 
+    @GetMapping("/skills")
+    public ApiResponse<List<RepositoryCatalogService.RepositorySkillDescriptor>> listAllSkills() {
+        return ApiResponse.success(repositoryCatalogService.listAllRepositorySkills());
+    }
+
     @GetMapping("/{id}/plugins")
     public ApiResponse<List<RepositoryCatalogService.RepositoryPluginDescriptor>> listRepositoryPlugins(@PathVariable String id) {
         return ApiResponse.success(repositoryCatalogService.listRepositoryPlugins(id));
+    }
+
+    @GetMapping("/{id}/skills")
+    public ApiResponse<List<RepositoryCatalogService.RepositorySkillDescriptor>> listRepositorySkills(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listRepositorySkills(id));
     }
 
     @GetMapping("/{id}/plugins/{pluginId}")
     public ApiResponse<RepositoryCatalogService.RepositoryPluginDetail> pluginDetail(@PathVariable String id,
                                                                                      @PathVariable String pluginId) {
         return ApiResponse.success(repositoryCatalogService.getRepositoryPlugin(id, pluginId));
+    }
+
+    @GetMapping("/{id}/skills/{skillId}")
+    public ApiResponse<RepositoryCatalogService.RepositorySkillDetail> skillDetail(@PathVariable String id,
+                                                                                   @PathVariable String skillId) {
+        return ApiResponse.success(repositoryCatalogService.getRepositorySkill(id, skillId));
+    }
+
+    @GetMapping("/{id}/skills/{skillId}/archive")
+    public ResponseEntity<byte[]> skillArchive(@PathVariable String id,
+                                               @PathVariable String skillId) {
+        RepositoryCatalogService.RepositoryBinaryArchive archive = repositoryCatalogService.exportRepositorySkillArchive(id, skillId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + archive.fileName() + "\"")
+                .body(archive.content());
     }
 
     @PostMapping("/{id}/plugins/{pluginId}/install")
@@ -264,6 +296,23 @@ public class RepositoryController {
     public ApiResponse<RepositoryCatalogService.RepositoryPluginDescriptor> publishPlugin(@PathVariable String id,
                                                                                          @RequestBody RepositoryCatalogService.RepositoryPluginPublishRequest request) {
         return ApiResponse.success(repositoryCatalogService.publishPlugin(id, request), "插件发布完成");
+    }
+
+    @PostMapping("/{id}/publish-skill")
+    public ApiResponse<RepositoryCatalogService.RepositorySkillDescriptor> publishSkill(@PathVariable String id,
+                                                                                         @RequestBody RepositoryCatalogService.RepositorySkillPublishRequest request) {
+        return ApiResponse.success(repositoryCatalogService.publishSkill(id, request), "Skill 发布完成");
+    }
+
+    @PostMapping(value = "/{id}/publish-skill-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<RepositoryCatalogService.RepositorySkillDescriptor> publishSkillArchive(@PathVariable String id,
+                                                                                                @RequestParam("version") String version,
+                                                                                                @RequestParam(value = "releaseNotes", required = false) String releaseNotes,
+                                                                                                @RequestParam("archive") MultipartFile archive) throws IOException {
+        return ApiResponse.success(
+                repositoryCatalogService.publishSkillArchive(id, version, releaseNotes, archive.getOriginalFilename(), archive.getBytes()),
+                "Skill 发布完成"
+        );
     }
 
     @PostMapping("/{id}/packages/{packageId}/install")

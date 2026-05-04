@@ -93,6 +93,26 @@ describe("api request auth handling", () => {
     expect(headers.get("Authorization")).toBe("Bearer secret-token");
   });
 
+  it("downloads binary archives with Authorization header", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Blob(["archive"]), {
+        status: 200,
+        headers: { "content-type": "application/octet-stream" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { downloadInstalledSkillArchive } = await import("./api");
+    const blob = await downloadInstalledSkillArchive("skill-1");
+
+    expect(blob).toBeInstanceOf(Blob);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/skills/skill-1/archive");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = new Headers(init?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer secret-token");
+  });
+
   it("loads plugin references from the dedicated stable endpoint", async () => {
     getApiKeyMock.mockReturnValue("secret-token");
     const fetchMock = vi.fn().mockResolvedValue(

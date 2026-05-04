@@ -48,6 +48,21 @@ const PluginManagementPage = lazy(() =>
 const PluginDetailPage = lazy(() =>
   import("./pages/PluginDetailPage").then((module) => ({ default: module.PluginDetailPage }))
 );
+const SkillManagementPage = lazy(() =>
+  import("./pages/SkillManagementPage").then((module) => ({ default: module.SkillManagementPage }))
+);
+const SkillInstallPage = lazy(() =>
+  import("./pages/SkillInstallPage").then((module) => ({ default: module.SkillInstallPage }))
+);
+const SkillDraftPage = lazy(() =>
+  import("./pages/SkillDraftPage").then((module) => ({ default: module.SkillDraftPage }))
+);
+const SkillDetailPage = lazy(() =>
+  import("./pages/SkillDetailPage").then((module) => ({ default: module.SkillDetailPage }))
+);
+const ScanSkillsPage = lazy(() =>
+  import("./pages/ScanSkillsPage").then((module) => ({ default: module.ScanSkillsPage }))
+);
 const ScheduleManagementPage = lazy(() =>
   import("./pages/ScheduleManagementPage").then((module) => ({ default: module.ScheduleManagementPage }))
 );
@@ -120,6 +135,9 @@ function resolveSelectedNavKey(pathname: string): string {
   if (pathname.startsWith("/plugins")) {
     return "plugins";
   }
+  if (pathname.startsWith("/skills")) {
+    return "skills";
+  }
   if (pathname.startsWith("/triggers")) {
     return "triggers";
   }
@@ -154,6 +172,8 @@ function resolveTitle(selectedNavKey: string): string {
       return "仓库管理";
     case "plugins":
       return "插件管理";
+    case "skills":
+      return "Skill 管理";
     case "settings":
       return "系统配置";
     case "ai":
@@ -176,6 +196,12 @@ function AdminShell() {
   const selectedNavKey = resolveSelectedNavKey(location.pathname);
   const title = location.pathname.startsWith("/packages")
     ? "发布能力包"
+    : location.pathname.startsWith("/skills/install")
+      ? "安装 Skill"
+      : /^\/skills\/scan\//.test(location.pathname)
+        ? "目标目录扫描"
+        : /^\/skills\/[^/]+$/.test(location.pathname)
+          ? "Skill 详情"
     : resolveTitle(selectedNavKey);
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
@@ -210,6 +236,11 @@ function AdminShell() {
             key: "plugins",
             label: "插件管理",
             onClick: () => navigate("/plugins")
+          },
+          {
+            key: "skills",
+            label: "Skill 管理",
+            onClick: () => navigate("/skills")
           },
           {
             key: "triggers",
@@ -273,6 +304,11 @@ function AdminShell() {
               <Route path="/schedules/new" element={<ScheduleEditorPage mode="create" colorMode={colorMode} />} />
               <Route path="/schedules/:id" element={<ScheduleEditorPage mode="edit" colorMode={colorMode} />} />
               <Route path="/plugins" element={<PluginManagementPage />} />
+              <Route path="/skills" element={<SkillManagementPage />} />
+              <Route path="/skills/install" element={<SkillInstallPage />} />
+              <Route path="/skills/draft" element={<SkillDraftPage />} />
+              <Route path="/skills/scan/:targetId" element={<ScanSkillsPage />} />
+              <Route path="/skills/:installationId" element={<SkillDetailPage />} />
               <Route path="/ai" element={<AiOverviewPage />} />
               <Route path="/ai/models" element={<AiModelProfileListPage />} />
               <Route path="/ai/models/new" element={<AiModelProfileDetailPage />} />

@@ -60,6 +60,8 @@ import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
+import org.team4u.actiondock.domain.port.SkillInstallationRepository;
+import org.team4u.actiondock.domain.port.SkillTargetRepository;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
@@ -72,6 +74,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.script.GroovyScriptEngine;
 import org.team4u.actiondock.script.PythonScriptEngine;
 import org.team4u.actiondock.script.RoutingScriptEngine;
+import org.team4u.actiondock.skill.SkillService;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -366,6 +369,14 @@ public class RuntimeConfiguration {
                 properties,
                 pluginArtifactResolverRegistry
         );
+    }
+
+    @Bean
+    public SkillService skillService(SkillTargetRepository skillTargetRepository,
+                                     SkillInstallationRepository skillInstallationRepository,
+                                     JsonCodec jsonCodec,
+                                     AppProperties properties) {
+        return new SkillService(skillTargetRepository, skillInstallationRepository, jsonCodec, properties);
     }
 
     @Bean

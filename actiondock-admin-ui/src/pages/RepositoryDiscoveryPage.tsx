@@ -1,4 +1,5 @@
 import {
+  CopyOutlined,
   DownloadOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -22,6 +23,7 @@ import {
   Typography,
   message
 } from "antd";
+import JSZip from "jszip";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -29,11 +31,13 @@ import {
   ApiError,
   developRepositoryTool,
   getCapabilityPackage,
+  getRepositorySkill,
   getRepositoryTool,
   installCapabilityPackage,
   installRepositoryTool,
   listCapabilityPackages,
   listRepositories,
+  listRepositorySkills,
   listRepositoryTools,
   uninstallCapabilityPackage,
   updateCapabilityPackage,
@@ -54,11 +58,14 @@ import type {
   PluginDependency,
   RepositoryAiPackageDependency,
   RepositoryDefinition,
+  RepositorySkillDescriptor,
+  RepositorySkillDetail,
   RepositoryToolDescriptor,
   RepositoryToolDetail,
   ScriptDependency
 } from "../types";
 import { getErrorMessage } from "../utils";
+import { writeInlineSkillDraftSession, writeSkillDraftSession } from "../skillDraft";
 
 const { Text } = Typography;
 
@@ -165,6 +172,7 @@ export function RepositoryDiscoveryPage() {
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [tools, setTools] = useState<RepositoryToolDescriptor[]>([]);
   const [packages, setPackages] = useState<CapabilityPackageDescriptor[]>([]);
+  const [skills, setSkills] = useState<RepositorySkillDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -174,6 +182,9 @@ export function RepositoryDiscoveryPage() {
   const [packageDetailOpen, setPackageDetailOpen] = useState(false);
   const [packageDetailLoading, setPackageDetailLoading] = useState(false);
   const [packageDetail, setPackageDetail] = useState<CapabilityPackageDetail | null>(null);
+  const [skillDetailOpen, setSkillDetailOpen] = useState(false);
+  const [skillDetailLoading, setSkillDetailLoading] = useState(false);
+  const [skillDetail, setSkillDetail] = useState<RepositorySkillDetail | null>(null);
   const [searchText, setSearchText] = useState("");
   const [repositoryFilter, setRepositoryFilter] = useState<string>("ALL");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
@@ -185,14 +196,16 @@ export function RepositoryDiscoveryPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [repositoryData, toolData, packageData] = await Promise.all([
+      const [repositoryData, toolData, packageData, skillData] = await Promise.all([
         listRepositories(),
         listRepositoryTools(),
-        listCapabilityPackages()
+        listCapabilityPackages(),
+        listRepositorySkills()
       ]);
       setRepositories(repositoryData);
       setTools(toolData);
       setPackages(packageData);
+      setSkills(skillData);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载仓库目录失败"));
     } finally {
@@ -275,6 +288,32 @@ export function RepositoryDiscoveryPage() {
     });
   }, [installFilter, packages, repositoryFilter, searchText, trustFilter]);
 
+  const filteredSkills = useMemo(() => {
+    const keyword = searchText.trim().toLowerCase();
+    return skills.filter((item) => {
+      if (repositoryFilter !== "ALL" && item.repositoryId !== repositoryFilter) {
+        return false;
+      }
+      if (trustFilter === "TRUSTED" && !item.trusted) {
+        return false;
+      }
+      if (trustFilter === "UNTRUSTED" && item.trusted) {
+        return false;
+      }
+      if (!keyword) {
+        return true;
+      }
+      const haystack = [
+        item.displayName,
+        item.skillId,
+        item.description ?? "",
+        item.owner ?? "",
+        item.repositoryId
+      ].join(" ").toLowerCase();
+      return keyword.split(/\s+/).every((part) => haystack.includes(part));
+    });
+  }, [repositoryFilter, searchText, skills, trustFilter]);
+
   const openDetail = async (descriptor: RepositoryToolDescriptor) => {
     setDetailOpen(true);
     setDetailLoading(true);
@@ -298,6 +337,26 @@ export function RepositoryDiscoveryPage() {
       messageApi.error(getErrorMessage(error, "加载能力包详情失败"));
     } finally {
       setPackageDetailLoading(false);
+    }
+  };
+
+  const fetchSkillDetail = async (descriptor: RepositorySkillDescriptor) => {
+    if (skillDetail?.descriptor.repositoryId === descriptor.repositoryId && skillDetail.descriptor.skillId === descriptor.skillId) {
+      return skillDetail;
+    }
+    return getRepositorySkill(descriptor.repositoryId, descriptor.skillId);
+  };
+
+  const openSkillDetail = async (descriptor: RepositorySkillDescriptor) => {
+    setSkillDetailOpen(true);
+    setSkillDetailLoading(true);
+    try {
+      setSkillDetail(await fetchSkillDetail(descriptor));
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载 Skill 详情失败"));
+      setSkillDetail(null);
+    } finally {
+      setSkillDetailLoading(false);
     }
   };
 
@@ -696,6 +755,71 @@ export function RepositoryDiscoveryPage() {
     }
   ];
 
+  const skillColumns: ColumnsType<RepositorySkillDescriptor> = [
+    {
+      title: "Skill",
+      key: "skill",
+      render: (_value, record) => (
+        <Space direction="vertical" size={2}>
+          <TableLinkCell onClick={() => void openSkillDetail(record)}>{record.displayName}</TableLinkCell>
+          <Text code>{record.repositoryId}/{record.skillId}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "版本",
+      dataIndex: "version",
+      key: "version",
+      width: 140
+    },
+    {
+      title: "说明",
+      dataIndex: "description",
+      key: "description",
+      render: (value?: string) => value || <Text type="secondary">-</Text>
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 180,
+      render: (_value, record) => (
+        <Space wrap size={[4, 4]}>
+          <Button size="small" onClick={() => void openSkillDetail(record)}>
+            查看
+          </Button>
+          <Button
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => void fetchSkillDetail(record)
+              .then(async (detail) => {
+                const zip = new JSZip();
+                zip.file(`${detail.descriptor.skillId}/SKILL.md`, detail.content);
+                zip.file(`${detail.descriptor.skillId}/skill.json`, JSON.stringify({
+                  schemaVersion: 1,
+                  skillId: detail.descriptor.skillId,
+                  displayName: detail.descriptor.displayName,
+                  version: detail.descriptor.version,
+                  description: detail.descriptor.description || detail.descriptor.displayName,
+                  owner: detail.descriptor.owner,
+                  tags: detail.descriptor.tags,
+                  riskLevel: detail.descriptor.riskLevel,
+                  entrypointPath: "SKILL.md"
+                }, null, 2));
+                const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+                await writeInlineSkillDraftSession(`${detail.descriptor.skillId}.zip`, archive);
+                navigate("/skills/draft");
+              })
+              .catch((error) => {
+                messageApi.error(getErrorMessage(error, "加载 Skill 详情失败"));
+              })}
+          >
+            草稿
+          </Button>
+        </Space>
+      )
+    }
+  ];
+
   const packageDrawerActions = packageDetail ? (
     <Space>
       {packageDetail.descriptor.installed ? (
@@ -843,6 +967,28 @@ export function RepositoryDiscoveryPage() {
                         <Empty
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
                           description="当前没有可发现的能力包。"
+                        />
+                      )
+                    }}
+                  />
+                )
+              },
+              {
+                key: "skills",
+                label: `Skills (${filteredSkills.length})`,
+                children: (
+                  <Table<RepositorySkillDescriptor>
+                    rowKey={(item) => `${item.repositoryId}:${item.skillId}`}
+                    loading={loading}
+                    columns={skillColumns}
+                    dataSource={filteredSkills}
+                    scroll={{ x: 900 }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="当前没有可发现的 Skill。"
                         />
                       )
                     }}
@@ -1213,6 +1359,65 @@ export function RepositoryDiscoveryPage() {
                   children: renderExternalDependencies(packageDetail.releaseFile.externalDependencies)
                 }
               ]}
+            />
+          </Space>
+        )}
+      </Drawer>
+      <Drawer
+        title={skillDetail?.descriptor.displayName || "Skill 详情"}
+        open={skillDetailOpen}
+        onClose={() => setSkillDetailOpen(false)}
+        width={860}
+        destroyOnHidden
+        extra={skillDetail ? (
+          <Button
+            type="primary"
+            onClick={() => {
+              writeSkillDraftSession({
+                source: "REPOSITORY_REF",
+                repositoryId: skillDetail.descriptor.repositoryId,
+                skillId: skillDetail.descriptor.skillId
+              });
+              navigate("/skills/draft");
+            }}
+          >
+            打开草稿
+          </Button>
+        ) : null}
+      >
+        {skillDetailLoading ? (
+          <div className="page-loading">
+            <Spin size="large" />
+          </div>
+        ) : !skillDetail ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Skill 详情加载失败" />
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Descriptions
+              bordered
+              size="small"
+              column={2}
+              items={[
+                { key: "skillId", label: "Skill ID", children: <Text code>{skillDetail.descriptor.skillId}</Text> },
+                { key: "repo", label: "来源仓库", children: skillDetail.descriptor.repositoryId },
+                { key: "version", label: "版本", children: skillDetail.descriptor.version },
+                { key: "owner", label: "维护人", children: skillDetail.descriptor.owner || "-" },
+                { key: "risk", label: "风险等级", children: <RiskLevelTag level={skillDetail.descriptor.riskLevel} /> },
+                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={skillDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> }
+              ]}
+            />
+            <MarkdownDescription
+              value={skillDetail.descriptor.description}
+              emptyText="该 Skill 没有填写说明。"
+              className="markdown-description--panel"
+            />
+            <CodeEditor
+              height="480px"
+              language="markdown"
+              value={skillDetail.content}
+              onChange={() => undefined}
+              theme={editorTheme}
+              readOnly={true}
             />
           </Space>
         )}

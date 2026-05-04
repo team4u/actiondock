@@ -23,6 +23,7 @@ interface ScriptCommandsTabProps {
   skillExample: string;
   toolContractResponseExample: Record<string, unknown> | undefined;
   onCopy: (value: string, successText?: string, errorText?: string) => void | Promise<boolean>;
+  onOpenSkillDraft?: (value: string) => void;
 }
 
 export function ScriptCommandsTab({
@@ -37,7 +38,8 @@ export function ScriptCommandsTab({
   hasOutputSchema,
   skillExample,
   toolContractResponseExample,
-  onCopy
+  onCopy,
+  onOpenSkillDraft
 }: ScriptCommandsTabProps) {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
@@ -129,6 +131,7 @@ export function ScriptCommandsTab({
                 <SkillExamplePanel
                   value={skillExample}
                   onCopy={(value) => void onCopy(value, "Skill 已复制", "复制 Skill 失败")}
+                  onOpenDraft={onOpenSkillDraft}
                 />
               </Space>
             )
