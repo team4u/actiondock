@@ -17,6 +17,7 @@ import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
+import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositoryToolService;
 
@@ -34,13 +35,16 @@ public class RepositoryController {
     private final RepositoryCatalogService repositoryCatalogService;
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryToolService repositoryToolService;
+    private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
 
     public RepositoryController(RepositoryCatalogService repositoryCatalogService,
                                 RepositoryPluginService repositoryPluginService,
-                                RepositoryToolService repositoryToolService) {
+                                RepositoryToolService repositoryToolService,
+                                RepositoryCapabilityPackageService repositoryCapabilityPackageService) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryToolService = repositoryToolService;
+        this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
     }
 
     /**
@@ -284,14 +288,14 @@ public class RepositoryController {
     public ApiResponse<RepositoryCatalogService.CapabilityPackagePublishPreview> previewCapabilityPackage(
             @PathVariable String id,
             @RequestBody RepositoryCatalogService.CapabilityPackagePublishPreviewRequest request) {
-        return ApiResponse.success(repositoryCatalogService.previewCapabilityPackage(id, request));
+        return ApiResponse.success(repositoryCapabilityPackageService.previewCapabilityPackage(id, request));
     }
 
     @PostMapping("/{id}/packages/publish")
     public ApiResponse<RepositoryCatalogService.CapabilityPackageDescriptor> publishCapabilityPackage(
             @PathVariable String id,
             @RequestBody RepositoryCatalogService.CapabilityPackagePublishRequest request) {
-        return ApiResponse.success(repositoryCatalogService.publishCapabilityPackage(id, request), "能力包发布完成");
+        return ApiResponse.success(repositoryCapabilityPackageService.publishCapabilityPackage(id, request), "能力包发布完成");
     }
 
     @PostMapping("/publish-config-preview")
@@ -319,19 +323,19 @@ public class RepositoryController {
     @PostMapping("/{id}/packages/{packageId}/install")
     public ApiResponse<RepositoryCatalogService.CapabilityPackageInstallResult> installCapabilityPackage(@PathVariable String id,
                                                                                                           @PathVariable String packageId) {
-        return ApiResponse.success(repositoryCatalogService.installCapabilityPackage(id, packageId), "能力包安装完成");
+        return ApiResponse.success(repositoryCapabilityPackageService.installCapabilityPackage(id, packageId), "能力包安装完成");
     }
 
     @PostMapping("/{id}/packages/{packageId}/update")
     public ApiResponse<RepositoryCatalogService.CapabilityPackageInstallResult> updateCapabilityPackage(@PathVariable String id,
                                                                                                          @PathVariable String packageId) {
-        return ApiResponse.success(repositoryCatalogService.updateCapabilityPackage(id, packageId), "能力包更新完成");
+        return ApiResponse.success(repositoryCapabilityPackageService.updateCapabilityPackage(id, packageId), "能力包更新完成");
     }
 
     @DeleteMapping("/{id}/packages/{packageId}")
     public ApiResponse<Void> uninstallCapabilityPackage(@PathVariable String id,
                                                         @PathVariable String packageId) {
-        repositoryCatalogService.uninstallCapabilityPackage(id, packageId);
+        repositoryCapabilityPackageService.uninstallCapabilityPackage(id, packageId);
         return ApiResponse.success(null, "能力包已卸载");
     }
 }

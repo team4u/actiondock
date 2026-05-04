@@ -514,60 +514,6 @@ public class RepositoryCatalogService {
         );
     }
 
-    public RepositoryToolInstallation installTool(String repositoryId, String toolId, boolean installSchedules) {
-        return toolService.installTool(repositoryId, toolId, installSchedules);
-    }
-
-    public RepositoryToolInstallation installTool(String repositoryId,
-                                                 String toolId,
-                                                 boolean installSchedules,
-                                                 boolean installPluginDependencies,
-                                                 boolean forcePluginUpgrade) {
-        return toolService.installTool(repositoryId, toolId, installSchedules, installPluginDependencies, forcePluginUpgrade);
-    }
-
-    public RepositoryToolInstallation installTool(String repositoryId,
-                                                  String toolId,
-                                                  boolean installSchedules,
-                                                  boolean installScriptDependencies,
-                                                  boolean installPluginDependencies,
-                                                  boolean forcePluginUpgrade) {
-        return toolService.installTool(repositoryId, toolId, installSchedules, installScriptDependencies, installPluginDependencies, forcePluginUpgrade);
-    }
-
-    public RepositoryToolInstallation updateTool(String repositoryId, String toolId, boolean installSchedules) {
-        return toolService.updateTool(repositoryId, toolId, installSchedules);
-    }
-
-    public RepositoryToolInstallation updateTool(String repositoryId,
-                                                String toolId,
-                                                boolean installSchedules,
-                                                boolean installPluginDependencies,
-                                                boolean forcePluginUpgrade) {
-        return toolService.updateTool(repositoryId, toolId, installSchedules, installPluginDependencies, forcePluginUpgrade);
-    }
-
-    public RepositoryToolInstallation updateTool(String repositoryId,
-                                                 String toolId,
-                                                 boolean installSchedules,
-                                                 boolean installScriptDependencies,
-                                                 boolean installPluginDependencies,
-                                                 boolean forcePluginUpgrade) {
-        return toolService.updateTool(repositoryId, toolId, installSchedules, installScriptDependencies, installPluginDependencies, forcePluginUpgrade);
-    }
-
-    public ScriptDefinition syncToolForDevelopment(String repositoryId, String toolId, DevelopmentSyncRequest request) {
-        return toolService.syncToolForDevelopment(repositoryId, toolId, request);
-    }
-
-    public DevelopmentStatus getDevelopmentStatus(String scriptId) {
-        return toolService.getDevelopmentStatus(scriptId);
-    }
-
-    public ScriptDefinition pullDevelopmentScript(String scriptId, boolean force) {
-        return toolService.pullDevelopmentScript(scriptId, force);
-    }
-
     boolean isRemoteChanged(ScriptDefinition script, ToolSourceState state) {
         return !Objects.equals(script.getSourceCommit(), state.commit())
                 || !Objects.equals(script.getSourceDigest(), state.digest());
@@ -607,43 +553,6 @@ public class RepositoryCatalogService {
         }
         normalize(script.getRepositoryId(), "开发脚本缺少来源仓库");
         normalize(script.getRepositoryToolId(), "开发脚本缺少来源工具");
-    }
-
-    public void uninstallTool(String installedScriptId) {
-        toolService.uninstallTool(installedScriptId);
-    }
-
-    public ScriptDefinition forkTool(String installedScriptId, String newId, String newName) {
-        return toolService.forkTool(installedScriptId, newId, newName);
-    }
-
-    public RepositoryPublishConfigPreview previewPublishConfig(RepositoryPublishConfigPreviewRequest request) {
-        return toolService.previewPublishConfig(request);
-    }
-
-    public CapabilityPackagePublishPreview previewCapabilityPackage(String repositoryId,
-                                                                    CapabilityPackagePublishPreviewRequest request) {
-        return capabilityPackageService.previewCapabilityPackage(repositoryId, request);
-    }
-
-    public RepositoryToolDescriptor publishTool(String repositoryId, RepositoryPublishRequest request) {
-        return toolService.publishTool(repositoryId, request);
-    }
-
-    public CapabilityPackageDescriptor publishCapabilityPackage(String repositoryId, CapabilityPackagePublishRequest request) {
-        return capabilityPackageService.publishCapabilityPackage(repositoryId, request);
-    }
-
-    public CapabilityPackageInstallResult installCapabilityPackage(String repositoryId, String packageId) {
-        return capabilityPackageService.installCapabilityPackage(repositoryId, packageId);
-    }
-
-    public CapabilityPackageInstallResult updateCapabilityPackage(String repositoryId, String packageId) {
-        return capabilityPackageService.updateCapabilityPackage(repositoryId, packageId);
-    }
-
-    public void uninstallCapabilityPackage(String repositoryId, String packageId) {
-        capabilityPackageService.uninstallCapabilityPackage(repositoryId, packageId);
     }
 
     public RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryPluginPublishRequest request) {
@@ -767,9 +676,9 @@ public class RepositoryCatalogService {
                 if ("TOOL".equalsIgnoreCase(dependency.assetType())) {
                     String installedScriptId = dependency.repositoryId() + "." + dependency.assetId();
                     if (scriptRepository.findById(installedScriptId).isPresent()) {
-                        updateTool(dependency.repositoryId(), dependency.assetId(), false, false, false);
+                        toolService.updateTool(dependency.repositoryId(), dependency.assetId(), false, false, false);
                     } else {
-                        installTool(dependency.repositoryId(), dependency.assetId(), false, false, false);
+                        toolService.installTool(dependency.repositoryId(), dependency.assetId(), false, false, false);
                     }
                     continue;
                 }
