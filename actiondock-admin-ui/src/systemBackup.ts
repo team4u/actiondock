@@ -12,7 +12,9 @@ import type {
   AiToolset,
   SharedStateDetail,
   SharedStateRequest,
-  SharedStateSummary
+  SharedStateSummary,
+  Skill,
+  SkillTarget
 } from "./types";
 import {
   parseScriptDefinition,
@@ -44,6 +46,27 @@ export interface SharedStateBackupEntry {
   value?: unknown;
 }
 
+export interface SkillTargetBackupEntry {
+  id: string;
+  name: string;
+  type: string;
+  rootPath: string;
+  enabled: boolean;
+  writable: boolean;
+}
+
+export interface SkillBackupEntry {
+  skillId: string;
+  repositoryId?: string;
+  version: string;
+  digest: string;
+  displayName?: string;
+  description?: string;
+  fileName: string;
+  targetIds: string[];
+  disabledTargetIds: string[];
+}
+
 export interface SystemBackupBundleV1 {
   version: 1;
   type: "actiondock-system-backup";
@@ -61,6 +84,8 @@ export interface SystemBackupBundleV1 {
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
+    skillTargets: SkillTargetBackupEntry[];
+    skills: SkillBackupEntry[];
   };
 }
 
@@ -77,6 +102,8 @@ export interface BackupAnalysis {
   aiModels: { total: number; create: number; overwrite: number };
   aiAgents: { total: number; create: number; overwrite: number };
   aiToolsets: { total: number; create: number; overwrite: number };
+  skillTargets: { total: number; create: number; overwrite: number };
+  skills: { total: number; create: number; overwrite: number };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -192,6 +219,8 @@ export function buildBackupJson(
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
+    skillTargets: SkillTarget[];
+    skills: SkillBackupEntry[];
   },
   options?: { includeSecretValues?: boolean }
 ): SystemBackupBundleV1 {
@@ -208,6 +237,15 @@ export function buildBackupJson(
     configurable: p.configurable,
     actions: p.actions.map(a => ({ action: a.action, title: a.title, description: a.description })),
     config: p.configurable ? data.pluginConfigs.get(p.pluginId) : undefined
+  }));
+
+  const skillTargetEntries: SkillTargetBackupEntry[] = data.skillTargets.map(t => ({
+    id: t.id,
+    name: t.name,
+    type: t.type,
+    rootPath: t.rootPath,
+    enabled: t.enabled,
+    writable: t.writable
   }));
 
   return {
@@ -233,7 +271,9 @@ export function buildBackupJson(
       ),
       aiModels: [...data.aiModels].sort((a, b) => a.id.localeCompare(b.id)),
       aiAgents: [...data.aiAgents].sort((a, b) => a.id.localeCompare(b.id)),
-      aiToolsets: [...data.aiToolsets].sort((a, b) => a.id.localeCompare(b.id))
+      aiToolsets: [...data.aiToolsets].sort((a, b) => a.id.localeCompare(b.id)),
+      skillTargets: skillTargetEntries.sort((a, b) => a.id.localeCompare(b.id)),
+      skills: [...data.skills].sort((a, b) => a.skillId.localeCompare(b.skillId))
     }
   };
 }
@@ -301,12 +341,18 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
   const aiToolsets = Array.isArray(data.aiToolsets)
     ? (data.aiToolsets as AiToolset[])
     : [];
+  const skillTargets = Array.isArray(data.skillTargets)
+    ? (data.skillTargets as SkillTargetBackupEntry[])
+    : [];
+  const skills = Array.isArray(data.skills)
+    ? (data.skills as SkillBackupEntry[])
+    : [];
 
   return {
     version: 1,
     type: "actiondock-system-backup",
     exportedAt: parsed.exportedAt as string,
-    data: { scripts, schedules, eventSources, eventTriggers, configValues, executionPresets, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets }
+    data: { scripts, schedules, eventSources, eventTriggers, configValues, executionPresets, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills }
   };
 }
 
@@ -325,6 +371,8 @@ export function analyzeBackupBundle(
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
     aiToolsets: AiToolset[];
+    skillTargets: SkillTarget[];
+    skills: Skill[];
   }
 ): BackupAnalysis {
   const analyze = <T extends { id: string }>(
@@ -382,6 +430,28 @@ export function analyzeBackupBundle(
     }
   }
 
+  const currentSkillTargetIds = new Set(current.skillTargets.map(t => t.id));
+  let skillTargetCreate = 0;
+  let skillTargetOverwrite = 0;
+  for (const item of bundle.data.skillTargets) {
+    if (currentSkillTargetIds.has(item.id)) {
+      skillTargetOverwrite++;
+    } else {
+      skillTargetCreate++;
+    }
+  }
+
+  const currentSkillIds = new Set(current.skills.map(s => s.skillId));
+  let skillCreate = 0;
+  let skillOverwrite = 0;
+  for (const item of bundle.data.skills) {
+    if (currentSkillIds.has(item.skillId)) {
+      skillOverwrite++;
+    } else {
+      skillCreate++;
+    }
+  }
+
   return {
     scripts: analyze(bundle.data.scripts, current.scripts),
     schedules: analyze(bundle.data.schedules, current.schedules),
@@ -399,11 +469,38 @@ export function analyzeBackupBundle(
     },
     aiModels: analyze(bundle.data.aiModels, current.aiModels),
     aiAgents: analyze(bundle.data.aiAgents, current.aiAgents),
-    aiToolsets: analyze(bundle.data.aiToolsets, current.aiToolsets)
+    aiToolsets: analyze(bundle.data.aiToolsets, current.aiToolsets),
+    skillTargets: { total: bundle.data.skillTargets.length, create: skillTargetCreate, overwrite: skillTargetOverwrite },
+    skills: { total: bundle.data.skills.length, create: skillCreate, overwrite: skillOverwrite }
   };
 }
 
 export function formatBackupFileName(now = new Date()): string {
   const stamp = formatExportStamp(now);
   return `actiondock-backup-${stamp}.zip`;
+}
+
+export function buildSkillBackupEntry(
+  skill: Skill,
+  skillFileName: string
+): SkillBackupEntry {
+  const targetIds: string[] = [];
+  const disabledTargetIds: string[] = [];
+  for (const deployment of skill.targets) {
+    targetIds.push(deployment.targetId);
+    if (!deployment.enabled) {
+      disabledTargetIds.push(deployment.targetId);
+    }
+  }
+  return {
+    skillId: skill.skillId,
+    repositoryId: skill.repositoryId,
+    version: skill.version,
+    digest: skill.digest,
+    displayName: skill.displayName,
+    description: skill.description,
+    fileName: skillFileName,
+    targetIds,
+    disabledTargetIds
+  };
 }

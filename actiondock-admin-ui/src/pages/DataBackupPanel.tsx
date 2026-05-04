@@ -57,7 +57,16 @@ import {
   saveAiAgent,
   listAiToolsets,
   createAiToolset,
-  updateAiToolset
+  updateAiToolset,
+  listSkills,
+  downloadInstalledSkillArchive,
+  listSkillTargets,
+  createSkillTarget,
+  updateSkillTarget,
+  deleteSkill,
+  installSkillArchive,
+  disableSkill,
+  restoreSkill
 } from "../api";
 import type {
   ScriptDefinition,
@@ -71,12 +80,15 @@ import type {
   SharedStateSummary,
   AiModelProfile,
   AiAgentProfile,
-  AiToolset
+  AiToolset,
+  Skill,
+  SkillTarget
 } from "../types";
 import {
   buildSharedStateBackupEntry,
   buildSharedStateBackupKey,
   buildBackupJson,
+  buildSkillBackupEntry,
   parseBackupJson,
   analyzeBackupBundle,
   formatBackupFileName,
@@ -84,7 +96,8 @@ import {
   toSharedStateRestorePayload,
   type SystemBackupBundleV1,
   type BackupAnalysis,
-  type SharedStateBackupEntry
+  type SharedStateBackupEntry,
+  type SkillBackupEntry
 } from "../systemBackup";
 
 const { Text } = Typography;
@@ -136,16 +149,19 @@ export function DataBackupPanel() {
     aiModels: number;
     aiAgents: number;
     aiToolsets: number;
+    skillTargets: number;
+    skills: number;
   } | null>(null);
   const [analysis, setAnalysis] = useState<BackupAnalysis | null>(null);
   const [pendingBundle, setPendingBundle] = useState<SystemBackupBundleV1 | null>(null);
   const [pendingPluginFiles, setPendingPluginFiles] = useState<Map<string, Blob> | null>(null);
+  const [pendingSkillFiles, setPendingSkillFiles] = useState<Map<string, Blob> | null>(null);
   const [restoreResults, setRestoreResults] = useState<RestoreResult[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDataCounts = useCallback(async () => {
-    const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
+    const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
       listScripts(),
       listSchedules(),
       listEventSources(),
@@ -156,7 +172,9 @@ export function DataBackupPanel() {
       listAllSharedStateSummaries(),
       listAiModels(),
       listAiAgents(),
-      listAiToolsets()
+      listAiToolsets(),
+      listSkillTargets(),
+      listSkills()
     ]);
     let presetCount = 0;
     for (const script of scripts) {
@@ -179,7 +197,9 @@ export function DataBackupPanel() {
       sharedStates: sharedStates.length,
       aiModels: aiModels.length,
       aiAgents: aiAgents.length,
-      aiToolsets: aiToolsets.length
+      aiToolsets: aiToolsets.length,
+      skillTargets: skillTargets.length,
+      skills: skills.length
     });
   }, []);
 
@@ -192,7 +212,7 @@ export function DataBackupPanel() {
   const handleBackup = useCallback(async () => {
     setBackupLoading(true);
     try {
-      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
+      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
         listScripts(),
         listSchedules(),
         listEventSources(),
@@ -203,7 +223,9 @@ export function DataBackupPanel() {
         buildSharedStateBackupEntries(includeSecrets),
         listAiModels(),
         listAiAgents(),
-        listAiToolsets()
+        listAiToolsets(),
+        listSkillTargets(),
+        listSkills()
       ]);
 
       const allPresets: ExecutionPreset[] = [];
@@ -232,6 +254,21 @@ export function DataBackupPanel() {
           })
       );
 
+      const skillArchives = new Map<string, { blob: Blob; fileName: string }>();
+      const skillEntries: SkillBackupEntry[] = [];
+      await Promise.all(
+        skills.map(async skill => {
+          try {
+            const blob = await downloadInstalledSkillArchive(skill.skillId);
+            const fileName = `${skill.skillId}.zip`;
+            skillArchives.set(skill.skillId, { blob, fileName });
+            skillEntries.push(buildSkillBackupEntry(skill, fileName));
+          } catch {
+            // skip skills whose archives can't be downloaded
+          }
+        })
+      );
+
       const backupJson = buildBackupJson(
         {
           scripts,
@@ -246,7 +283,9 @@ export function DataBackupPanel() {
           sharedStates,
           aiModels,
           aiAgents,
-          aiToolsets
+          aiToolsets,
+          skillTargets,
+          skills: skillEntries
         },
         { includeSecretValues: includeSecrets }
       );
@@ -269,6 +308,10 @@ export function DataBackupPanel() {
       const pluginsFolder = zip.folder("plugins");
       for (const [_, jar] of pluginJars) {
         pluginsFolder!.file(jar.fileName, jar.blob);
+      }
+      const skillsFolder = zip.folder("skills");
+      for (const [_, archive] of skillArchives) {
+        skillsFolder!.file(archive.fileName, archive.blob);
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -322,7 +365,17 @@ export function DataBackupPanel() {
         pluginFiles.set(path, blob);
       }
 
-      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets] = await Promise.all([
+      const skillFiles = new Map<string, Blob>();
+      const skillZipEntries = Object.entries(zip.files).filter(
+        ([path]) => path.startsWith("skills/") && !zip.files[path].dir
+      );
+      for (const [path, entry] of skillZipEntries) {
+        const blob = await entry.async("blob");
+        skillFiles.set(path, blob);
+      }
+      setPendingSkillFiles(skillFiles);
+
+      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
         listScripts(),
         listSchedules(),
         listEventSources(),
@@ -333,7 +386,9 @@ export function DataBackupPanel() {
         listAllSharedStateSummaries(),
         listAiModels(),
         listAiAgents(),
-        listAiToolsets()
+        listAiToolsets(),
+        listSkillTargets(),
+        listSkills()
       ]);
 
       const allPresets: ExecutionPreset[] = [];
@@ -360,7 +415,9 @@ export function DataBackupPanel() {
         sharedStates,
         aiModels,
         aiAgents,
-        aiToolsets
+        aiToolsets,
+        skillTargets,
+        skills
       });
 
       setPendingBundle(bundle);
@@ -382,9 +439,10 @@ export function DataBackupPanel() {
     const results: RestoreResult[] = [];
     const bundle = pendingBundle;
     const pluginFiles = pendingPluginFiles ?? new Map<string, Blob>();
+    const skillFiles = pendingSkillFiles ?? new Map<string, Blob>();
 
     try {
-      const [currentScripts, currentSchedules, currentEventSources, currentEventTriggers, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets] = await Promise.all([
+      const [currentScripts, currentSchedules, currentEventSources, currentEventTriggers, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets, currentSkillTargets, currentSkills] = await Promise.all([
         listScripts(),
         listSchedules(),
         listEventSources(),
@@ -395,7 +453,9 @@ export function DataBackupPanel() {
         listAllSharedStateSummaries(),
         listAiModels(),
         listAiAgents(),
-        listAiToolsets()
+        listAiToolsets(),
+        listSkillTargets(),
+        listSkills()
       ]);
 
       const currentScriptIds = new Set(currentScripts.map(s => s.id));
@@ -406,6 +466,8 @@ export function DataBackupPanel() {
       const currentRepoIds = new Set(currentRepositories.map(r => r.id));
       const currentPluginIds = new Set(currentPlugins.map(p => p.pluginId));
       const currentSharedStateKeys = new Set(currentSharedStates.map(item => buildSharedStateBackupKey(item)));
+      const currentSkillTargetIds = new Set(currentSkillTargets.map(t => t.id));
+      const currentSkillIds = new Set(currentSkills.map(s => s.skillId));
 
       const currentPresets: ExecutionPreset[] = [];
       await Promise.all(
@@ -688,8 +750,80 @@ export function DataBackupPanel() {
         results.push({ type: "AI 工具集", succeeded, failed: errors.length, errors });
       }
 
+      // 11. Skill Targets
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const target of bundle.data.skillTargets) {
+          try {
+            const payload: SkillTarget = {
+              id: target.id,
+              name: target.name,
+              type: target.type,
+              rootPath: target.rootPath,
+              enabled: target.enabled,
+              writable: target.writable
+            };
+            if (currentSkillTargetIds.has(target.id)) {
+              await updateSkillTarget(target.id, payload);
+            } else {
+              await createSkillTarget(payload);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${target.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "Skill 目标", succeeded, failed: errors.length, errors });
+      }
+
+      // 12. Skills
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const skill of bundle.data.skills) {
+          try {
+            const archiveEntry = Array.from(skillFiles.entries()).find(([path]) => {
+              const fileName = path.replace("skills/", "");
+              return fileName === skill.fileName || fileName === `${skill.skillId}.zip`;
+            });
+
+            if (!archiveEntry) {
+              errors.push(`${skill.displayName ?? skill.skillId}: ZIP 中未找到技能文件`);
+              continue;
+            }
+
+            if (currentSkillIds.has(skill.skillId)) {
+              await deleteSkill(skill.skillId);
+            }
+
+            const archiveBlob = archiveEntry[1];
+            const archiveFile = new File([archiveBlob], skill.fileName, { type: "application/zip" });
+            await installSkillArchive({
+              targetIds: skill.targetIds,
+              repositoryId: skill.repositoryId,
+              archive: archiveFile
+            });
+
+            if (skill.disabledTargetIds.length > 0 && skill.disabledTargetIds.length === skill.targetIds.length) {
+              try {
+                await disableSkill(skill.skillId);
+              } catch {
+                // disable is non-fatal
+              }
+            }
+
+            succeeded++;
+          } catch (e) {
+            errors.push(`${skill.displayName ?? skill.skillId}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "Skill", succeeded, failed: errors.length, errors });
+      }
+
       setPendingBundle(null);
       setPendingPluginFiles(null);
+      setPendingSkillFiles(null);
       setRestoreResults(results);
       await loadDataCounts();
     } catch (error) {
@@ -697,7 +831,7 @@ export function DataBackupPanel() {
     } finally {
       setRestoreLoading(false);
     }
-  }, [pendingBundle, pendingPluginFiles, analysis, loadDataCounts, messageApi]);
+  }, [pendingBundle, pendingPluginFiles, pendingSkillFiles, analysis, loadDataCounts, messageApi]);
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -722,6 +856,8 @@ export function DataBackupPanel() {
               <Descriptions.Item label="AI 模型">{dataCounts.aiModels}</Descriptions.Item>
               <Descriptions.Item label="AI Agent">{dataCounts.aiAgents}</Descriptions.Item>
               <Descriptions.Item label="AI 工具集">{dataCounts.aiToolsets}</Descriptions.Item>
+              <Descriptions.Item label="Skill 目标">{dataCounts.skillTargets}</Descriptions.Item>
+              <Descriptions.Item label="Skill">{dataCounts.skills}</Descriptions.Item>
             </Descriptions>
           )}
 
@@ -818,6 +954,7 @@ export function DataBackupPanel() {
           setAnalysis(null);
           setPendingBundle(null);
           setPendingPluginFiles(null);
+          setPendingSkillFiles(null);
         }}
         confirmLoading={restoreLoading}
         width={600}
@@ -919,6 +1056,20 @@ export function DataBackupPanel() {
                 <Text type="success">新建 {analysis.aiToolsets.create}</Text>
                 {" / "}
                 <Text type="warning">覆盖 {analysis.aiToolsets.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Skill 目标">
+                <Text>共 {analysis.skillTargets.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.skillTargets.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.skillTargets.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Skill">
+                <Text>共 {analysis.skills.total} 个</Text>
+                <br />
+                <Text type="success">新建 {analysis.skills.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.skills.overwrite}</Text>
               </Descriptions.Item>
             </Descriptions>
           </Space>
