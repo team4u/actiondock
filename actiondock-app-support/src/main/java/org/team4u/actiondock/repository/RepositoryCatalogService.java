@@ -433,7 +433,7 @@ public class RepositoryCatalogService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("仓库 Skill 不存在: " + skillId));
         SkillFile skill = readSkillFile(repository, entry.skillPath());
-        String content = readRepositoryFile(repository, skillDirectoryPath(entry.skillPath()).resolve(skill.entrypointPath()));
+        String content = readRepositoryFile(repository, parentDirectoryPath(entry.skillPath()).resolve(skill.entrypointPath()));
         return new RepositorySkillDetail(toSkillDescriptor(repository, skill, entry.skillPath()), content);
     }
 
@@ -448,7 +448,7 @@ public class RepositoryCatalogService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("仓库 Skill 不存在: " + skillId));
         SkillFile skill = readSkillFile(repository, entry.skillPath());
-        Path skillRoot = safeResolveRepositoryPath(resolveRepositoryRoot(repository), skillDirectoryPath(entry.skillPath()).value());
+        Path skillRoot = safeResolveRepositoryPath(resolveRepositoryRoot(repository), parentDirectoryPath(entry.skillPath()).value());
         SkillService.SkillValidationResult validation = SkillService.validateSkillDirectory(skillRoot, skill.skillId(), true, jsonCodec);
         return new RepositoryBinaryArchive(
                 validation.skillId() + ".zip",
@@ -466,18 +466,18 @@ public class RepositoryCatalogService {
         ToolFile tool = readToolFile(repository, entry.toolPath());
         List<ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
-                toolDirectoryPath(entry.toolPath()).resolveNullable(tool.configTemplatePath()),
+                parentDirectoryPath(entry.toolPath()).resolveNullable(tool.configTemplatePath()),
                 ConfigTemplateItem.class
         );
         List<ScheduleTemplateItem> scheduleTemplate = readOptionalFile(
                 repository,
-                toolDirectoryPath(entry.toolPath()).resolveNullable(tool.scheduleTemplatePath()),
+                parentDirectoryPath(entry.toolPath()).resolveNullable(tool.scheduleTemplatePath()),
                 ScheduleTemplateItem.class
         );
-        String source = readRepositoryFile(repository, toolDirectoryPath(entry.toolPath()).resolve(tool.sourcePath()));
+        String source = readRepositoryFile(repository, parentDirectoryPath(entry.toolPath()).resolve(tool.sourcePath()));
         String pythonRequirements = tool.pythonRequirementsPath() == null || tool.pythonRequirementsPath().isBlank()
                 ? null
-                : readRepositoryFile(repository, toolDirectoryPath(entry.toolPath()).resolve(tool.pythonRequirementsPath()));
+                : readRepositoryFile(repository, parentDirectoryPath(entry.toolPath()).resolve(tool.pythonRequirementsPath()));
         return new RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
     }
 
@@ -492,17 +492,17 @@ public class RepositoryCatalogService {
         CapabilityPackageReleaseFile release = readCapabilityPackageRelease(repository, manifest.latestReleasePath());
         List<ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
-                capabilityPackageDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.configTemplatePath()),
+                parentDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.configTemplatePath()),
                 ConfigTemplateItem.class
         );
         List<ScheduleTemplateItem> scheduleTemplate = readOptionalFile(
                 repository,
-                capabilityPackageDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.scheduleTemplatePath()),
+                parentDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.scheduleTemplatePath()),
                 ScheduleTemplateItem.class
         );
         List<CapabilityPackagePresetTemplate> presetTemplate = readOptionalFile(
                 repository,
-                capabilityPackageDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.presetTemplatePath()),
+                parentDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.presetTemplatePath()),
                 CapabilityPackagePresetTemplate.class
         );
         return new CapabilityPackageDetail(
@@ -1579,7 +1579,7 @@ public class RepositoryCatalogService {
         String toolPath = findRepositoryToolPath(repository, detail.descriptor().toolId());
         String digest = computeToolDigest(detail);
         String commit = "GIT".equals(repository.getType()) ? gitHead(resolveRepositoryRoot(repository)) : null;
-        return new ToolSourceState(toolDirectoryPath(toolPath).value(), commit, digest);
+        return new ToolSourceState(parentDirectoryPath(toolPath).value(), commit, digest);
     }
 
     private String findRepositoryToolPath(RepositoryDefinition repository, String toolId) {
@@ -1603,7 +1603,7 @@ public class RepositoryCatalogService {
         values.put("owner", descriptor.owner());
         values.put("tags", descriptor.tags());
         values.put("scriptDependencies", descriptor.scriptDependencies());
-       values.put("pluginDependencies", descriptor.pluginDependencies());
+        values.put("pluginDependencies", descriptor.pluginDependencies());
         values.put("source", detail.source());
         values.put("pythonRequirements", detail.pythonRequirements());
         values.put("inputSchema", readSchema(descriptor.repositoryId(), descriptor.inputSchemaPath()));
@@ -1943,8 +1943,8 @@ public class RepositoryCatalogService {
         if (developmentScript != null) {
             ToolSourceState state = resolveToolSourceState(repository, new RepositoryToolDetail(
                     toDescriptorWithoutDevelopment(repository, tool, toolPath),
-                    readRepositoryFile(repository, toolDirectoryPath(toolPath).resolve(tool.sourcePath())),
-                    tool.pythonRequirementsPath() == null ? null : readRepositoryFile(repository, toolDirectoryPath(toolPath).resolve(tool.pythonRequirementsPath())),
+                    readRepositoryFile(repository, parentDirectoryPath(toolPath).resolve(tool.sourcePath())),
+                    tool.pythonRequirementsPath() == null ? null : readRepositoryFile(repository, parentDirectoryPath(toolPath).resolve(tool.pythonRequirementsPath())),
                     List.of(),
                     List.of()
             ));
@@ -2359,39 +2359,31 @@ public class RepositoryCatalogService {
         return readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class);
     }
 
-    private ToolFile readToolFile(RepositoryDefinition repository, String toolPath) {
+    private <T> T readRepositoryJsonFile(RepositoryDefinition repository, String relativePath, Class<T> type) {
         if ("HTTP".equals(repository.getType())) {
-            return readHttpJson(joinHttpPath(repository.getUrl(), toolPath), ToolFile.class);
+            return readHttpJson(joinHttpPath(repository.getUrl(), relativePath), type);
         }
-        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), toolPath), ToolFile.class);
+        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), relativePath), type);
+    }
+
+    private ToolFile readToolFile(RepositoryDefinition repository, String toolPath) {
+        return readRepositoryJsonFile(repository, toolPath, ToolFile.class);
     }
 
     private PluginFile readPluginFile(RepositoryDefinition repository, String pluginPath) {
-        if ("HTTP".equals(repository.getType())) {
-            return readHttpJson(joinHttpPath(repository.getUrl(), pluginPath), PluginFile.class);
-        }
-        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), pluginPath), PluginFile.class);
+        return readRepositoryJsonFile(repository, pluginPath, PluginFile.class);
     }
 
     private SkillFile readSkillFile(RepositoryDefinition repository, String skillPath) {
-        if ("HTTP".equals(repository.getType())) {
-            return readHttpJson(joinHttpPath(repository.getUrl(), skillPath), SkillFile.class);
-        }
-        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), skillPath), SkillFile.class);
+        return readRepositoryJsonFile(repository, skillPath, SkillFile.class);
     }
 
     private CapabilityPackageManifestFile readCapabilityPackageManifest(RepositoryDefinition repository, String manifestPath) {
-        if ("HTTP".equals(repository.getType())) {
-            return readHttpJson(joinHttpPath(repository.getUrl(), manifestPath), CapabilityPackageManifestFile.class);
-        }
-        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), manifestPath), CapabilityPackageManifestFile.class);
+        return readRepositoryJsonFile(repository, manifestPath, CapabilityPackageManifestFile.class);
     }
 
     private CapabilityPackageReleaseFile readCapabilityPackageRelease(RepositoryDefinition repository, String releasePath) {
-        if ("HTTP".equals(repository.getType())) {
-            return readHttpJson(joinHttpPath(repository.getUrl(), releasePath), CapabilityPackageReleaseFile.class);
-        }
-        return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), releasePath), CapabilityPackageReleaseFile.class);
+        return readRepositoryJsonFile(repository, releasePath, CapabilityPackageReleaseFile.class);
     }
 
     private String readRepositoryFile(RepositoryDefinition repository, Path path) {
@@ -2571,10 +2563,10 @@ public class RepositoryCatalogService {
         }
     }
 
-    private String readHttpText(String url) {
+    private <T> T executeHttpGet(String url, HttpResponse.BodyHandler<T> bodyHandler) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            HttpResponse<T> response = httpClient.send(request, bodyHandler);
             if (response.statusCode() >= 400) {
                 throw new IllegalArgumentException("HTTP 仓库访问失败: " + response.statusCode());
             }
@@ -2585,18 +2577,12 @@ public class RepositoryCatalogService {
         }
     }
 
+    private String readHttpText(String url) {
+        return executeHttpGet(url, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
     private byte[] readHttpBytes(String url) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
-        try {
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            if (response.statusCode() >= 400) {
-                throw new IllegalArgumentException("HTTP 仓库访问失败: " + response.statusCode());
-            }
-            return response.body();
-        } catch (IOException | InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("访问 HTTP 仓库失败: " + url, exception);
-        }
+        return executeHttpGet(url, HttpResponse.BodyHandlers.ofByteArray());
     }
 
     private Map<String, Object> readJsonObject(String content) {
@@ -2739,36 +2725,40 @@ public class RepositoryCatalogService {
         return Path.of(toolPath).getParent().resolve(nestedPath).toString().replace('\\', '/');
     }
 
+    private static <T> List<T> nullSafeList(List<T> list) {
+        return list == null ? List.of() : list;
+    }
+
     List<RepositoryIndexEntry> safeTools(RepositoryIndexFile index) {
-        return index == null || index.tools() == null ? List.of() : index.tools();
+        return nullSafeList(index == null ? null : index.tools());
     }
 
     List<RepositoryPluginIndexEntry> safePlugins(RepositoryIndexFile index) {
-        return index == null || index.plugins() == null ? List.of() : index.plugins();
+        return nullSafeList(index == null ? null : index.plugins());
     }
 
     List<CapabilityPackageIndexEntry> safeCapabilityPackages(RepositoryIndexFile index) {
-        return index == null || index.packages() == null ? List.of() : index.packages();
+        return nullSafeList(index == null ? null : index.packages());
     }
 
     List<RepositorySkillIndexEntry> safeSkills(RepositoryIndexFile index) {
-        return index == null || index.skills() == null ? List.of() : index.skills();
+        return nullSafeList(index == null ? null : index.skills());
     }
 
     private List<AiPackageModelFile> safeModels(CapabilityPackageReleaseFile file) {
-        return file == null || file.models() == null ? List.of() : file.models();
+        return nullSafeList(file == null ? null : file.models());
     }
 
     private List<AiPackageToolsetFile> safeToolsets(CapabilityPackageReleaseFile file) {
-        return file == null || file.toolsets() == null ? List.of() : file.toolsets();
+        return nullSafeList(file == null ? null : file.toolsets());
     }
 
     private List<AiPackageAgentFile> safeAgents(CapabilityPackageReleaseFile file) {
-        return file == null || file.agents() == null ? List.of() : file.agents();
+        return nullSafeList(file == null ? null : file.agents());
     }
 
     private List<AiPackageScriptFile> safeScripts(CapabilityPackageReleaseFile file) {
-        return file == null || file.scripts() == null ? List.of() : file.scripts();
+        return nullSafeList(file == null ? null : file.scripts());
     }
 
     RepositoryIndexFile readRepositoryIndexFile(Path root, RepositoryDefinition repository) {
@@ -2781,45 +2771,42 @@ public class RepositoryCatalogService {
                                              RepositoryIndexFile index,
                                              String pluginId,
                                              String version) {
-        for (RepositoryPluginIndexEntry entry : index == null || index.plugins() == null ? List.<RepositoryPluginIndexEntry>of() : index.plugins()) {
-            if (Objects.equals(pluginId, entry.id()) && Objects.equals(version, entry.version())) {
-                throw new RepositoryVersionExistsException("PLUGIN", repositoryId, pluginId, version);
-            }
-        }
+        assertVersionAvailable("PLUGIN", repositoryId, index == null ? null : index.plugins(), pluginId, version, RepositoryPluginIndexEntry::id, RepositoryPluginIndexEntry::version);
     }
 
     static void assertCapabilityPackageVersionAvailable(String repositoryId,
                                                         RepositoryIndexFile index,
                                                         String packageId,
                                                         String version) {
-        for (CapabilityPackageIndexEntry entry : index == null || index.packages() == null ? List.<CapabilityPackageIndexEntry>of() : index.packages()) {
-            if (Objects.equals(packageId, entry.id()) && Objects.equals(version, entry.version())) {
-                throw new RepositoryVersionExistsException("CAPABILITY_PACKAGE", repositoryId, packageId, version);
-            }
-        }
+        assertVersionAvailable("CAPABILITY_PACKAGE", repositoryId, index == null ? null : index.packages(), packageId, version, CapabilityPackageIndexEntry::id, CapabilityPackageIndexEntry::version);
     }
 
     static void assertSkillVersionAvailable(String repositoryId,
                                             RepositoryIndexFile index,
                                             String skillId,
                                             String version) {
-        for (RepositorySkillIndexEntry entry : index == null || index.skills() == null ? List.<RepositorySkillIndexEntry>of() : index.skills()) {
-            if (Objects.equals(skillId, entry.id()) && Objects.equals(version, entry.version())) {
-                throw new RepositoryVersionExistsException("SKILL", repositoryId, skillId, version);
+        assertVersionAvailable("SKILL", repositoryId, index == null ? null : index.skills(), skillId, version, RepositorySkillIndexEntry::id, RepositorySkillIndexEntry::version);
+    }
+
+    private static <T> void assertVersionAvailable(String assetType,
+                                                   String repositoryId,
+                                                   List<T> entries,
+                                                   String assetId,
+                                                   String version,
+                                                   java.util.function.Function<T, String> idExtractor,
+                                                   java.util.function.Function<T, String> versionExtractor) {
+        if (entries == null) {
+            return;
+        }
+        for (T entry : entries) {
+            if (Objects.equals(assetId, idExtractor.apply(entry)) && Objects.equals(version, versionExtractor.apply(entry))) {
+                throw new RepositoryVersionExistsException(assetType, repositoryId, assetId, version);
             }
         }
     }
 
-    private RelativeRepositoryPath toolDirectoryPath(String toolPath) {
-        return new RelativeRepositoryPath(Path.of(toolPath).getParent().toString().replace('\\', '/'));
-    }
-
-    private RelativeRepositoryPath skillDirectoryPath(String skillPath) {
-        return new RelativeRepositoryPath(Path.of(skillPath).getParent().toString().replace('\\', '/'));
-    }
-
-    private RelativeRepositoryPath capabilityPackageDirectoryPath(String packagePath) {
-        return new RelativeRepositoryPath(Path.of(packagePath).getParent().toString().replace('\\', '/'));
+    private RelativeRepositoryPath parentDirectoryPath(String filePath) {
+        return new RelativeRepositoryPath(Path.of(filePath).getParent().toString().replace('\\', '/'));
     }
 
     String normalize(String value, String message) {
@@ -2834,7 +2821,7 @@ public class RepositoryCatalogService {
     }
 
     String normalizeNullable(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
+        return trimToNull(value);
     }
 
     public record RepositoryToolDescriptor(
