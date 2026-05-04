@@ -69,4 +69,13 @@ public class SkillTargetController {
         skillService.deleteUnmanagedScanDirectory(targetId, directoryId);
         return ApiResponse.success(null, "目录已删除");
     }
+
+    @PostMapping("/{targetId}/sync-installations")
+    public ApiResponse<SkillService.SkillSyncResponse> syncInstallations(@PathVariable String targetId,
+                                                                         @RequestBody SkillTargetSyncRequest request) {
+        return ApiResponse.success(
+                skillService.syncInstallationsToTarget(targetId, request == null ? List.of() : request.getInstallationIds()),
+                "Skill 同步完成"
+        );
+    }
 }

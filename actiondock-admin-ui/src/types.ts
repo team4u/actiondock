@@ -1145,6 +1145,20 @@ export interface SkillInstallation {
   updatedAt?: string;
 }
 
+export interface SkillSyncResult {
+  installationId: string;
+  skillId: string;
+  targetId: string;
+  status: "SUCCESS" | "SKIPPED" | "FAILED" | string;
+  message: string;
+  createdInstallation?: SkillInstallation;
+}
+
+export interface SkillSyncResponse {
+  targetId: string;
+  results: SkillSyncResult[];
+}
+
 export interface SkillDetail {
   installation: SkillInstallation;
   managedPath: string;

@@ -242,6 +242,142 @@ class SkillServiceTest {
     }
 
     @Test
+    void syncInstallationsToTargetCreatesInstallationFromManagedCopy() throws Exception {
+        SkillService service = createService();
+        SkillTarget sourceTarget = service.saveTarget(new SkillTarget()
+                .setName("Source")
+                .setType("CLAUDE")
+                .setRootPath(tempDir.resolve("source-target").toString()));
+        SkillTarget target = service.saveTarget(new SkillTarget()
+                .setName("Target")
+                .setType("CODEX")
+                .setRootPath(tempDir.resolve("target-root").toString()));
+
+        byte[] archive = createZip(Map.of(
+                "sample-skill/skill.json", """
+                        {"schemaVersion":1,"skillId":"sample-skill","displayName":"Sample Skill","version":"1.0.0","description":"Sample","entrypoint":"SKILL.md"}
+                        """.trim(),
+                "sample-skill/SKILL.md", """
+                        ---
+                        name: Sample Skill
+                        description: Sample
+                        ---
+
+                        Hello.
+                        """.trim()
+        ));
+
+        SkillInstallation sourceInstallation = service.installFromZip(sourceTarget.getId(), "sample-skill.zip", archive);
+
+        SkillService.SkillSyncResponse response = service.syncInstallationsToTarget(target.getId(), List.of(sourceInstallation.getInstallationId()));
+
+        assertThat(response.targetId()).isEqualTo(target.getId());
+        assertThat(response.results()).hasSize(1);
+        SkillService.SkillSyncResult result = response.results().get(0);
+        assertThat(result.status()).isEqualTo("SUCCESS");
+        assertThat(result.createdInstallation()).isNotNull();
+        assertThat(result.createdInstallation().getTargetId()).isEqualTo(target.getId());
+        assertThat(Path.of(result.createdInstallation().getInstalledPath()).resolve("SKILL.md")).exists();
+    }
+
+    @Test
+    void syncInstallationsToTargetSkipsUnmanagedConflicts() throws Exception {
+        SkillService service = createService();
+        SkillTarget sourceTarget = service.saveTarget(new SkillTarget()
+                .setName("Source")
+                .setType("CLAUDE")
+                .setRootPath(tempDir.resolve("source-target").toString()));
+        SkillTarget target = service.saveTarget(new SkillTarget()
+                .setName("Target")
+                .setType("CODEX")
+                .setRootPath(tempDir.resolve("target-root").toString()));
+
+        byte[] archive = createZip(Map.of(
+                "sample-skill/skill.json", """
+                        {"schemaVersion":1,"skillId":"sample-skill","displayName":"Sample Skill","version":"1.0.0","description":"Sample","entrypoint":"SKILL.md"}
+                        """.trim(),
+                "sample-skill/SKILL.md", """
+                        ---
+                        name: Sample Skill
+                        description: Sample
+                        ---
+
+                        Hello.
+                        """.trim()
+        ));
+
+        SkillInstallation sourceInstallation = service.installFromZip(sourceTarget.getId(), "sample-skill.zip", archive);
+        Path unmanagedTargetDir = Path.of(target.getRootPath()).resolve("sample-skill");
+        Files.createDirectories(unmanagedTargetDir);
+        Files.writeString(unmanagedTargetDir.resolve("SKILL.md"), """
+                ---
+                name: Conflict Skill
+                description: Conflict
+                ---
+
+                Conflict.
+                """.trim());
+
+        SkillService.SkillSyncResponse response = service.syncInstallationsToTarget(target.getId(), List.of(sourceInstallation.getInstallationId()));
+
+        assertThat(response.results()).hasSize(1);
+        assertThat(response.results().get(0).status()).isEqualTo("SKIPPED");
+        assertThat(response.results().get(0).message()).contains("未受管目录");
+        assertThat(service.listInstallations()).hasSize(1);
+    }
+
+    @Test
+    void syncInstallationsToTargetOverwritesManagedInstallations() throws Exception {
+        SkillService service = createService();
+        SkillTarget sourceTarget = service.saveTarget(new SkillTarget()
+                .setName("Source")
+                .setType("CLAUDE")
+                .setRootPath(tempDir.resolve("source-target").toString()));
+        SkillTarget target = service.saveTarget(new SkillTarget()
+                .setName("Target")
+                .setType("CODEX")
+                .setRootPath(tempDir.resolve("target-root").toString()));
+
+        byte[] oldArchive = createZip(Map.of(
+                "sample-skill/skill.json", """
+                        {"schemaVersion":1,"skillId":"sample-skill","displayName":"Old Skill","version":"1.0.0","description":"Old","entrypoint":"SKILL.md"}
+                        """.trim(),
+                "sample-skill/SKILL.md", """
+                        ---
+                        name: Old Skill
+                        description: Old
+                        ---
+
+                        old
+                        """.trim()
+        ));
+        byte[] newArchive = createZip(Map.of(
+                "sample-skill/skill.json", """
+                        {"schemaVersion":1,"skillId":"sample-skill","displayName":"New Skill","version":"2.0.0","description":"New","entrypoint":"SKILL.md"}
+                        """.trim(),
+                "sample-skill/SKILL.md", """
+                        ---
+                        name: New Skill
+                        description: New
+                        ---
+
+                        new
+                        """.trim()
+        ));
+
+        SkillInstallation sourceInstallation = service.installFromZip(sourceTarget.getId(), "sample-skill.zip", newArchive);
+        SkillInstallation targetInstallation = service.installFromZip(target.getId(), "sample-skill-old.zip", oldArchive);
+
+        SkillService.SkillSyncResponse response = service.syncInstallationsToTarget(target.getId(), List.of(sourceInstallation.getInstallationId()));
+
+        assertThat(response.results()).hasSize(1);
+        assertThat(response.results().get(0).status()).isEqualTo("SUCCESS");
+        SkillInstallation refreshed = service.getInstallation(targetInstallation.getInstallationId());
+        assertThat(refreshed.getVersion()).isEqualTo("2.0.0");
+        assertThat(refreshed.getDisplayName()).isEqualTo("New Skill");
+    }
+
+    @Test
     void previewInstallationFileRejectsTraversalAndSupportsTextPreview() throws Exception {
         SkillService service = createService();
         SkillTarget target = service.saveTarget(new SkillTarget()

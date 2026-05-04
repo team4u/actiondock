@@ -503,6 +503,76 @@ public class SkillService {
         return installValidatedDirectory(existing.getTargetId(), path, validation, existing.getRepositoryId(), existing);
     }
 
+    public SkillSyncResponse syncInstallationsToTarget(String targetId, List<String> installationIds) {
+        requireTarget(targetId);
+        List<String> normalizedIds = installationIds == null ? List.of() : installationIds.stream()
+                .map(id -> normalize(id, "installationId 不能为空"))
+                .distinct()
+                .toList();
+        List<SkillSyncResult> results = new ArrayList<>();
+        for (String installationId : normalizedIds) {
+            SkillInstallation source = getInstallation(installationId);
+            if (targetId.equals(source.getTargetId())) {
+                results.add(new SkillSyncResult(
+                        installationId,
+                        source.getSkillId(),
+                        targetId,
+                        "SKIPPED",
+                        "来源 Skill 已安装在当前目标，无需同步",
+                        null
+                ));
+                continue;
+            }
+            Path managedPath = resolveManagedPath(source);
+            if (Files.notExists(managedPath.resolve("SKILL.md"))) {
+                results.add(new SkillSyncResult(
+                        installationId,
+                        source.getSkillId(),
+                        targetId,
+                        "FAILED",
+                        "来源 Skill 受管副本不存在",
+                        null
+                ));
+                continue;
+            }
+            Path targetRoot = resolveTargetRoot(requireTarget(targetId).getRootPath());
+            Path targetDirectory = targetRoot.resolve(source.getSkillId()).toAbsolutePath().normalize();
+            if (Files.exists(targetDirectory) && Files.notExists(targetDirectory.resolve(INSTALL_MARKER_FILE))) {
+                results.add(new SkillSyncResult(
+                        installationId,
+                        source.getSkillId(),
+                        targetId,
+                        "SKIPPED",
+                        "目标中已存在同名未受管目录，已跳过",
+                        null
+                ));
+                continue;
+            }
+            try {
+                SkillValidationResult validation = validateDirectory(managedPath, source.getSkillId(), false);
+                SkillInstallation created = installValidatedDirectory(targetId, managedPath, validation, source.getRepositoryId());
+                results.add(new SkillSyncResult(
+                        installationId,
+                        source.getSkillId(),
+                        targetId,
+                        "SUCCESS",
+                        "Skill 已同步",
+                        created
+                ));
+            } catch (RuntimeException exception) {
+                results.add(new SkillSyncResult(
+                        installationId,
+                        source.getSkillId(),
+                        targetId,
+                        "FAILED",
+                        exception.getMessage(),
+                        null
+                ));
+            }
+        }
+        return new SkillSyncResponse(targetId, results);
+    }
+
     public void uninstall(String installationId) {
         SkillInstallation installation = getInstallation(installationId);
         Path installedPath = Path.of(installation.getInstalledPath()).toAbsolutePath().normalize();
@@ -1248,6 +1318,18 @@ public class SkillService {
 
     public record SkillArchive(String fileName,
                                byte[] content) {
+    }
+
+    public record SkillSyncResponse(String targetId,
+                                    List<SkillSyncResult> results) {
+    }
+
+    public record SkillSyncResult(String installationId,
+                                  String skillId,
+                                  String targetId,
+                                  String status,
+                                  String message,
+                                  SkillInstallation createdInstallation) {
     }
 
     public record SkillDraftRequest(String repositoryId,

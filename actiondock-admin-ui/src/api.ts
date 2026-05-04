@@ -73,6 +73,7 @@ import type {
   SkillPackageResult,
   SkillScanDetail,
   SkillScanItem,
+  SkillSyncResponse,
   SkillTarget,
   SkillValidationResult,
   ScriptSchedule,
@@ -1200,6 +1201,14 @@ export function previewScanItemFile(targetId: string, directoryId: string, path:
 export function deleteScanDirectory(targetId: string, directoryId: string): Promise<void> {
   return request<void>(`/api/skill-targets/${encodeURIComponent(targetId)}/scan/${encodeURIComponent(directoryId)}`, {
     method: "DELETE"
+  });
+}
+
+export function syncSkillInstallationsToTarget(targetId: string, installationIds: string[]): Promise<SkillSyncResponse> {
+  return request<SkillSyncResponse>(`/api/skill-targets/${encodeURIComponent(targetId)}/sync-installations`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ installationIds })
   });
 }
 

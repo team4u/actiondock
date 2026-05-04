@@ -4,6 +4,7 @@ import {
   ReloadOutlined,
   ScanOutlined,
   StopOutlined,
+  SyncOutlined,
   UndoOutlined
 } from "@ant-design/icons";
 import {
@@ -24,6 +25,7 @@ import {
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { TableRowSelection } from "antd/es/table/interface";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -34,12 +36,13 @@ import {
   listSkillTargets,
   listSkills,
   restoreSkill,
+  syncSkillInstallationsToTarget,
   updateSkillTarget
 } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
-import type { SkillInstallation, SkillTarget } from "../types";
-import { getErrorMessage } from "../utils";
+import type { SkillInstallation, SkillSyncResult, SkillTarget } from "../types";
+import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
 
@@ -75,6 +78,9 @@ export function SkillManagementPage() {
   const [form] = Form.useForm<TargetFormValues>();
   const [editingTarget, setEditingTarget] = useState<SkillTarget | null>(null);
   const [targetDrawerOpen, setTargetDrawerOpen] = useState(false);
+  const [syncTarget, setSyncTarget] = useState<SkillTarget | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [selectedSyncInstallationIds, setSelectedSyncInstallationIds] = useState<React.Key[]>([]);
 
   const applyTypeTemplate = (nextType: string) => {
     const nextTemplate = buildSkillTargetPathTemplate(nextType);
@@ -102,6 +108,26 @@ export function SkillManagementPage() {
     void loadData();
   }, []);
 
+  const syncCandidateMap = skills
+    .filter((skill) => skill.targetId !== syncTarget?.id)
+    .reduce<Map<string, SkillInstallation>>((map, installation) => {
+      const current = map.get(installation.skillId);
+      if (!current) {
+        map.set(installation.skillId, installation);
+        return map;
+      }
+      const currentUpdated = current.updatedAt ?? "";
+      const nextUpdated = installation.updatedAt ?? "";
+      if (nextUpdated.localeCompare(currentUpdated) > 0) {
+        map.set(installation.skillId, installation);
+      }
+      return map;
+    }, new Map());
+
+  const syncCandidateList = Array.from(syncCandidateMap.values()).sort((left, right) =>
+    (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "")
+  );
+
   const targetColumns: ColumnsType<SkillTarget> = [
     { title: "名称", dataIndex: "name", key: "name" },
     { title: "类型", dataIndex: "type", key: "type", width: 140 },
@@ -127,6 +153,9 @@ export function SkillManagementPage() {
       render: (_value, record) => (
         <Space wrap>
           <Button size="small" onClick={() => openEditTarget(record)}>编辑</Button>
+          <Button size="small" icon={<SyncOutlined />} onClick={() => openSyncTarget(record)}>
+            同步 Skill
+          </Button>
           <Button size="small" icon={<ScanOutlined />} onClick={() => navigate(`/skills/scan/${encodeURIComponent(record.id)}`)}>
             扫描
           </Button>
@@ -234,6 +263,11 @@ export function SkillManagementPage() {
     setTargetDrawerOpen(true);
   };
 
+  const openSyncTarget = (target: SkillTarget) => {
+    setSyncTarget(target);
+    setSelectedSyncInstallationIds([]);
+  };
+
   const handleSaveTarget = async () => {
     const values = await form.validateFields();
     setSavingTarget(true);
@@ -305,6 +339,56 @@ export function SkillManagementPage() {
         await loadData();
       }
     });
+  };
+
+  const handleSyncInstallations = async () => {
+    if (!syncTarget || selectedSyncInstallationIds.length === 0) {
+      return;
+    }
+    setSyncing(true);
+    try {
+      const response = await syncSkillInstallationsToTarget(
+        syncTarget.id,
+        selectedSyncInstallationIds.map((id) => String(id))
+      );
+      const successCount = response.results.filter((item) => item.status === "SUCCESS").length;
+      const skippedCount = response.results.filter((item) => item.status === "SKIPPED").length;
+      const failedCount = response.results.filter((item) => item.status === "FAILED").length;
+      await loadData();
+      setSyncTarget(null);
+      setSelectedSyncInstallationIds([]);
+      if (skippedCount > 0 || failedCount > 0) {
+        await modal.info({
+          title: `同步完成：${successCount} 个成功，${skippedCount} 个跳过，${failedCount} 个失败`,
+          width: 720,
+          content: (
+            <Space direction="vertical" size={8} style={{ width: "100%", marginTop: 12 }}>
+              {response.results.map((item: SkillSyncResult) => (
+                <Alert
+                  key={`${item.installationId}:${item.targetId}`}
+                  type={item.status === "SUCCESS" ? "success" : item.status === "SKIPPED" ? "warning" : "error"}
+                  showIcon
+                  message={`${item.skillId} · ${item.status}`}
+                  description={item.message}
+                />
+              ))}
+            </Space>
+          )
+        });
+      } else {
+        messageApi.success(`Skill 同步完成，成功 ${successCount} 个`);
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "同步 Skill 失败"));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const syncRowSelection: TableRowSelection<SkillInstallation> = {
+    selectedRowKeys: selectedSyncInstallationIds,
+    onChange: (nextSelectedRowKeys) => setSelectedSyncInstallationIds(nextSelectedRowKeys),
+    preserveSelectedRowKeys: true
   };
 
   return (
@@ -409,6 +493,83 @@ export function SkillManagementPage() {
             message="统一只支持 ~ 表示用户目录。选择内置类型时会自动填入推荐路径模板，仍可手工修改。"
           />
         </Form>
+      </Drawer>
+
+      <Drawer
+        title={syncTarget ? `同步到目标：${syncTarget.name}` : "同步 Skill"}
+        open={syncTarget !== null}
+        onClose={() => {
+          setSyncTarget(null);
+          setSelectedSyncInstallationIds([]);
+        }}
+        width={860}
+        destroyOnHidden
+        extra={
+          <Button
+            type="primary"
+            icon={<SyncOutlined />}
+            loading={syncing}
+            disabled={selectedSyncInstallationIds.length === 0}
+            onClick={() => void handleSyncInstallations()}
+          >
+            同步所选
+          </Button>
+        }
+      >
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          {syncTarget && (
+            <Alert
+              showIcon
+              type="info"
+              message={`将已安装 Skill 同步到 ${syncTarget.name}`}
+              description={`目标目录：${syncTarget.rootPath}。同 skillId 的受管 Skill 会默认覆盖，未受管同名目录会跳过。`}
+            />
+          )}
+          <Table<SkillInstallation>
+            rowKey="installationId"
+            dataSource={syncCandidateList}
+            rowSelection={syncRowSelection}
+            pagination={{ pageSize: 8, responsive: true }}
+            locale={{
+              emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可同步的已安装 Skill" />
+            }}
+            columns={[
+              {
+                title: "Skill",
+                key: "skill",
+                render: (_value, record) => (
+                  <Space direction="vertical" size={0}>
+                    <Text strong>{record.displayName || record.skillId}</Text>
+                    <Text type="secondary" code>{record.skillId}</Text>
+                  </Space>
+                )
+              },
+              {
+                title: "版本",
+                dataIndex: "version",
+                key: "version",
+                width: 120
+              },
+              {
+                title: "来源目标",
+                key: "sourceTarget",
+                render: (_value, record) => (
+                  <Space direction="vertical" size={0}>
+                    <Text>{record.targetId}</Text>
+                    <Text type="secondary" code>{record.targetPath}</Text>
+                  </Space>
+                )
+              },
+              {
+                title: "更新时间",
+                key: "updatedAt",
+                width: 180,
+                render: (_value, record) => formatDateTime(record.updatedAt)
+              }
+            ]}
+            scroll={{ x: 760 }}
+          />
+        </Space>
       </Drawer>
     </>
   );
