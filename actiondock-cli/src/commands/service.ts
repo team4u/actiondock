@@ -1,7 +1,8 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../lib/command.js";
-import { runRuntimeCommand } from "../lib/runtime.js";
+import { ActionDockCliError } from "../lib/error.js";
+import { runServiceAction, type ServiceAction } from "../lib/service.js";
 
 const ALLOWED_ACTIONS = new Set([
   "install",
@@ -46,12 +47,15 @@ export default class ServiceCommand extends BaseCommand {
       this.error(`Unsupported service action: ${action}`, { exit: 2 });
     }
 
-    const exitCode = await runRuntimeCommand("actiondock-runtime", [
-      "service",
-      action,
-      ...argv.slice(1),
-    ]);
+    try {
+      const exitCode = await runServiceAction(action as ServiceAction, argv.slice(1));
+      this.exit(exitCode);
+    } catch (error) {
+      if (error instanceof ActionDockCliError) {
+        this.handleError(error);
+      }
 
-    this.exit(exitCode);
+      throw error;
+    }
   }
 }

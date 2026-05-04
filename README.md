@@ -296,7 +296,7 @@ actiondock server
 actiondock service status
 ```
 
-`actiondock desktop` 启动或复用本机 Spring runtime，打开管理台，并常驻系统托盘。`actiondock server` 在前台启动本机服务。`actiondock service ...` 通过 jDeploy service controller 管理后台服务生命周期。
+`actiondock desktop` 启动或复用本机 Spring runtime，打开管理台，并常驻系统托盘。`actiondock server` 在前台启动本机服务。`actiondock service ...` 在 macOS 上管理用户级 LaunchAgent，在 Linux 上管理用户级 systemd service。
 
 #### 本地打包检查
 

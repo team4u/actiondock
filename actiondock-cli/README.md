@@ -3,8 +3,8 @@
 This directory contains the npm package published as `actiondock`.
 
 The package provides the existing oclif CLI plus the local Java/Spring runtime,
-desktop tray launcher, and jDeploy service controller bridge. End users install
-one package and use one public command:
+desktop tray launcher, and user-level service management. End users install one
+package and use one public command:
 
 ```bash
 npm install -g actiondock
@@ -25,8 +25,8 @@ actiondock service uninstall
 
 `actiondock desktop` starts or reuses the local runtime, opens the admin console,
 and keeps a tray control surface alive. `actiondock server` runs the Spring
-runtime in the foreground. `actiondock service ...` forwards lifecycle commands
-to jDeploy's service controller.
+runtime in the foreground. `actiondock service ...` manages a user LaunchAgent
+on macOS and a user systemd service on Linux.
 
 The internal commands `actiondock-runtime` and `actiondock-desktop-runtime` are
 implementation details used by the CLI bridge and are not public API.
@@ -53,7 +53,7 @@ Self-update uses the unified package name:
 
 ```bash
 actiondock self-update --dry-run
-actiondock self-update 0.1.1 --dry-run
+actiondock self-update 0.1.2 --dry-run
 ```
 
 ## Local Development
