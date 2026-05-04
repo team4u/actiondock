@@ -75,6 +75,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.script.GroovyScriptEngine;
 import org.team4u.actiondock.script.PythonScriptEngine;
 import org.team4u.actiondock.script.RoutingScriptEngine;
+import org.team4u.actiondock.skill.GithubSkillCollectionService;
 import org.team4u.actiondock.skill.SkillService;
 
 import java.util.concurrent.Executor;
@@ -379,6 +380,11 @@ public class RuntimeConfiguration {
                                      JsonCodec jsonCodec,
                                      AppProperties properties) {
         return new SkillService(skillTargetRepository, managedSkillRepository, skillInstallationRepository, jsonCodec, properties);
+    }
+
+    @Bean
+    public GithubSkillCollectionService githubSkillCollectionService(SkillService skillService, JsonCodec jsonCodec) {
+        return new GithubSkillCollectionService(skillService, jsonCodec);
     }
 
     @Bean

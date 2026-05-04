@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
+import org.team4u.actiondock.skill.GithubSkillCollectionService;
 import org.team4u.actiondock.skill.SkillService;
 
 import java.time.LocalDateTime;
@@ -48,6 +49,9 @@ class SkillControllerTest {
 
     @MockBean
     private SkillService skillService;
+
+    @MockBean
+    private GithubSkillCollectionService githubSkillCollectionService;
 
     @Test
     void archiveReturnsBinaryDownload() throws Exception {
@@ -89,6 +93,72 @@ class SkillControllerTest {
                 .andExpect(jsonPath("$.data.targets[0].targetId").value("target-1"));
 
         verify(skillService).installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("skill.zip"), any());
+    }
+
+    @Test
+    void scanGithubCollectionDelegatesToService() throws Exception {
+        when(githubSkillCollectionService.scan("https://github.com/acme/skills"))
+                .thenReturn(new GithubSkillCollectionService.GithubSkillScanResponse(
+                        "https://github.com/acme/skills",
+                        "acme",
+                        "skills",
+                        "main",
+                        "skills",
+                        List.of(new GithubSkillCollectionService.GithubSkillScanItem(
+                                "skill-a",
+                                "Skill A",
+                                "1.0.0",
+                                "desc",
+                                "skills/skill-a",
+                                "digest",
+                                List.of()
+                        ))
+                ));
+
+        mockMvc.perform(post("/api/skills/github/scan")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"https://github.com/acme/skills\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.owner").value("acme"))
+                .andExpect(jsonPath("$.data.skills[0].path").value("skills/skill-a"));
+
+        verify(githubSkillCollectionService).scan("https://github.com/acme/skills");
+    }
+
+    @Test
+    void installGithubCollectionDelegatesToService() throws Exception {
+        when(githubSkillCollectionService.install(
+                eq("https://github.com/acme/skills"),
+                eq(List.of("target-1")),
+                eq(List.of("skills/skill-a"))
+        )).thenReturn(new GithubSkillCollectionService.GithubSkillInstallResponse(
+                "https://github.com/acme/skills",
+                "acme",
+                "skills",
+                "main",
+                "skills",
+                List.of(new GithubSkillCollectionService.GithubSkillInstallResult(
+                        "skills/skill-a",
+                        "skill-a",
+                        "SUCCESS",
+                        "Skill 已安装",
+                        null
+                ))
+        ));
+
+        mockMvc.perform(post("/api/skills/github/install")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"url":"https://github.com/acme/skills","targetIds":["target-1"],"skillPaths":["skills/skill-a"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.results[0].status").value("SUCCESS"));
+
+        verify(githubSkillCollectionService).install(
+                eq("https://github.com/acme/skills"),
+                eq(List.of("target-1")),
+                eq(List.of("skills/skill-a"))
+        );
     }
 
     @Test

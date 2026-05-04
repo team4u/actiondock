@@ -238,6 +238,10 @@ a {
   background: linear-gradient(180deg, var(--app-card-start), var(--app-card-end));
 }
 
+.skill-install-panel--wide {
+  width: 100%;
+}
+
 .skill-detail-layout {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);

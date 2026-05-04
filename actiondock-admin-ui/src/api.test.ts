@@ -113,6 +113,52 @@ describe("api request auth handling", () => {
     expect(headers.get("Authorization")).toBe("Bearer secret-token");
   });
 
+  it("scans GitHub skill collections through the stable endpoint", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 0, msg: "ok", data: { skills: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { scanGithubSkillCollection } = await import("./api");
+    await scanGithubSkillCollection("https://github.com/acme/skills");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/skills/github/scan");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({ url: "https://github.com/acme/skills" });
+  });
+
+  it("installs selected GitHub skills through the stable endpoint", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 0, msg: "ok", data: { results: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { installGithubSkillCollection } = await import("./api");
+    await installGithubSkillCollection({
+      url: "https://github.com/acme/skills",
+      targetIds: ["target-1"],
+      skillPaths: ["skills/alpha"]
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/skills/github/install");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      url: "https://github.com/acme/skills",
+      targetIds: ["target-1"],
+      skillPaths: ["skills/alpha"]
+    });
+  });
+
   it("loads plugin references from the dedicated stable endpoint", async () => {
     getApiKeyMock.mockReturnValue("secret-token");
     const fetchMock = vi.fn().mockResolvedValue(

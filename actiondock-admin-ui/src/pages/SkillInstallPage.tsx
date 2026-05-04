@@ -1,6 +1,7 @@
 import {
   CheckCircleOutlined,
   FolderOpenOutlined,
+  GithubOutlined,
   UploadOutlined
 } from "@ant-design/icons";
 import {
@@ -11,20 +12,25 @@ import {
   Input,
   Select,
   Space,
+  Table,
+  Tag,
   Typography,
   message
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import JSZip from "jszip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   importSkill,
+  installGithubSkillCollection,
   installSkillDirectory,
   listSkillTargets,
+  scanGithubSkillCollection,
   validateSkillArchive
 } from "../api";
 import { PageHeader } from "../components/PageHeader";
-import type { SkillTarget } from "../types";
+import type { GithubSkillInstallResponse, GithubSkillScanItem, GithubSkillScanResponse, SkillTarget } from "../types";
 import { getErrorMessage } from "../utils";
 
 const { Paragraph, Text } = Typography;
@@ -34,8 +40,13 @@ export function SkillInstallPage() {
   const [targets, setTargets] = useState<SkillTarget[]>([]);
   const [targetIds, setTargetIds] = useState<string[]>([]);
   const [directory, setDirectory] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [githubScan, setGithubScan] = useState<GithubSkillScanResponse | null>(null);
+  const [selectedGithubSkillPaths, setSelectedGithubSkillPaths] = useState<string[]>([]);
+  const [githubInstallResult, setGithubInstallResult] = useState<GithubSkillInstallResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [installing, setInstalling] = useState(false);
+  const [githubScanning, setGithubScanning] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -60,6 +71,44 @@ export function SkillInstallPage() {
   const targetOptions = useMemo(
     () => targets.map((item) => ({ value: item.id, label: `${item.name} (${item.type})` })),
     [targets]
+  );
+
+  const githubSkillColumns: ColumnsType<GithubSkillScanItem> = useMemo(
+    () => [
+      {
+        title: "Skill",
+        dataIndex: "displayName",
+        key: "displayName",
+        render: (value: string, record) => (
+          <Space direction="vertical" size={2}>
+            <Text strong>{value || record.skillId}</Text>
+            <Text type="secondary" code>{record.path}</Text>
+          </Space>
+        )
+      },
+      {
+        title: "版本",
+        dataIndex: "version",
+        key: "version",
+        width: 120,
+        render: (value?: string) => value ? <Tag color="blue">{value}</Tag> : <Text type="secondary">-</Text>
+      },
+      {
+        title: "描述",
+        dataIndex: "description",
+        key: "description",
+        ellipsis: true,
+        render: (value?: string) => value || <Text type="secondary">无描述</Text>
+      },
+      {
+        title: "提示",
+        dataIndex: "warnings",
+        key: "warnings",
+        width: 160,
+        render: (warnings: string[]) => warnings?.length ? <Tag color="gold">{warnings.length} 条警告</Tag> : <Tag>正常</Tag>
+      }
+    ],
+    []
   );
 
   const ensureTargets = (): string[] | null => {
@@ -156,6 +205,63 @@ export function SkillInstallPage() {
     }
   };
 
+  const handleScanGithubCollection = async () => {
+    if (!githubUrl.trim()) {
+      messageApi.warning("请输入 GitHub 仓库或目录链接");
+      return;
+    }
+    setGithubScanning(true);
+    setGithubScan(null);
+    setSelectedGithubSkillPaths([]);
+    setGithubInstallResult(null);
+    try {
+      const scan = await scanGithubSkillCollection(githubUrl.trim());
+      setGithubScan(scan);
+      setSelectedGithubSkillPaths(scan.skills.map((item) => item.path));
+      messageApi.success(`已扫描到 ${scan.skills.length} 个 Skill`);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "扫描 GitHub Skill 集合失败"));
+    } finally {
+      setGithubScanning(false);
+    }
+  };
+
+  const handleInstallGithubCollection = async () => {
+    const selectedTargetIds = ensureTargets();
+    if (!selectedTargetIds) {
+      return;
+    }
+    if (!githubUrl.trim()) {
+      messageApi.warning("请输入 GitHub 仓库或目录链接");
+      return;
+    }
+    if (selectedGithubSkillPaths.length === 0) {
+      messageApi.warning("请选择至少一个 GitHub Skill");
+      return;
+    }
+    setInstalling(true);
+    setGithubInstallResult(null);
+    try {
+      const result = await installGithubSkillCollection({
+        url: githubUrl.trim(),
+        targetIds: selectedTargetIds,
+        skillPaths: selectedGithubSkillPaths
+      });
+      setGithubInstallResult(result);
+      const successCount = result.results.filter((item) => item.status === "SUCCESS").length;
+      const failedCount = result.results.filter((item) => item.status === "FAILED").length;
+      if (failedCount > 0) {
+        messageApi.warning(`GitHub Skill 安装完成：成功 ${successCount}，失败 ${failedCount}`);
+      } else {
+        messageApi.success(`GitHub Skill 已安装：成功 ${successCount}`);
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "安装 GitHub Skill 集合失败"));
+    } finally {
+      setInstalling(false);
+    }
+  };
+
   return (
     <>
       {contextHolder}
@@ -187,7 +293,7 @@ export function SkillInstallPage() {
           title="安装 Skill"
           onBack={() => navigate("/skills")}
           backLabel="返回管理"
-          meta="先选择目标，再从 zip、文件夹或本地目录安装。"
+          meta="先选择目标，再从 GitHub、zip、文件夹或本地目录安装。"
         />
 
         <Card loading={loading}>
@@ -211,6 +317,79 @@ export function SkillInstallPage() {
                   style={{ width: "100%", maxWidth: 420 }}
                 />
               </Space>
+              <section className="skill-install-panel skill-install-panel--wide">
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Space direction="vertical" size={4}>
+                    <Text strong>从 GitHub 集合安装</Text>
+                    <Paragraph type="secondary">
+                      支持公开 GitHub 仓库根链接，或指向集合目录的 <Text code>/tree/ref/path</Text> 链接；系统会先扫描目录下的 Skill，再按选择安装。
+                    </Paragraph>
+                  </Space>
+                  <Space.Compact style={{ width: "100%" }}>
+                    <Input
+                      value={githubUrl}
+                      placeholder="https://github.com/owner/repo 或 https://github.com/owner/repo/tree/main/skills"
+                      onChange={(event) => setGithubUrl(event.target.value)}
+                      onPressEnter={() => void handleScanGithubCollection()}
+                    />
+                    <Button icon={<GithubOutlined />} loading={githubScanning} onClick={() => void handleScanGithubCollection()}>
+                      扫描
+                    </Button>
+                  </Space.Compact>
+                  {githubScan ? (
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                      <Text type="secondary">
+                        来源：<Text code>{githubScan.owner}/{githubScan.repo}#{githubScan.ref}</Text>，集合目录 <Text code>{githubScan.rootPath}</Text>
+                      </Text>
+                      <Table<GithubSkillScanItem>
+                        rowKey="path"
+                        size="small"
+                        columns={githubSkillColumns}
+                        dataSource={githubScan.skills}
+                        pagination={false}
+                        rowSelection={{
+                          selectedRowKeys: selectedGithubSkillPaths,
+                          onChange: (keys) => setSelectedGithubSkillPaths(keys.map(String))
+                        }}
+                        scroll={{ x: true }}
+                      />
+                      <Space wrap>
+                        <Button
+                          type="primary"
+                          loading={installing}
+                          disabled={selectedGithubSkillPaths.length === 0}
+                          onClick={() => void handleInstallGithubCollection()}
+                        >
+                          安装选中的 {selectedGithubSkillPaths.length} 个 Skill
+                        </Button>
+                        <Button onClick={() => setSelectedGithubSkillPaths(githubScan.skills.map((item) => item.path))}>
+                          全选
+                        </Button>
+                        <Button onClick={() => setSelectedGithubSkillPaths([])}>
+                          清空
+                        </Button>
+                      </Space>
+                    </Space>
+                  ) : null}
+                  {githubInstallResult ? (
+                    <Alert
+                      showIcon
+                      type={githubInstallResult.results.some((item) => item.status === "FAILED") ? "warning" : "success"}
+                      message="GitHub Skill 安装结果"
+                      description={(
+                        <Space direction="vertical" size={4}>
+                          {githubInstallResult.results.map((item) => (
+                            <Text key={item.path}>
+                              <Tag color={item.status === "SUCCESS" ? "green" : item.status === "FAILED" ? "red" : "default"}>{item.status}</Tag>
+                              <Text code>{item.path}</Text> {item.message}
+                            </Text>
+                          ))}
+                        </Space>
+                      )}
+                    />
+                  ) : null}
+                </Space>
+              </section>
               <div className="skill-install-grid">
                 <section className="skill-install-panel">
                   <Space direction="vertical" size={12} style={{ width: "100%" }}>

@@ -1153,6 +1153,42 @@ export interface SkillSyncResponse {
   results: SkillSyncResult[];
 }
 
+export interface GithubSkillScanItem {
+  skillId: string;
+  displayName: string;
+  version?: string;
+  description?: string;
+  path: string;
+  digest?: string;
+  warnings: string[];
+}
+
+export interface GithubSkillScanResponse {
+  sourceUrl: string;
+  owner: string;
+  repo: string;
+  ref: string;
+  rootPath: string;
+  skills: GithubSkillScanItem[];
+}
+
+export interface GithubSkillInstallResult {
+  path: string;
+  skillId?: string;
+  status: "SUCCESS" | "SKIPPED" | "FAILED" | string;
+  message: string;
+  skill?: Skill;
+}
+
+export interface GithubSkillInstallResponse {
+  sourceUrl: string;
+  owner: string;
+  repo: string;
+  ref: string;
+  rootPath: string;
+  results: GithubSkillInstallResult[];
+}
+
 export interface SkillDetail {
   skill: Skill;
   managedPath: string;

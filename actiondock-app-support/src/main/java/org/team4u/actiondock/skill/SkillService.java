@@ -427,9 +427,13 @@ public class SkillService {
     }
 
     public SkillListItem installFromDirectory(List<String> targetIds, String directory) {
+        return installFromDirectory(targetIds, directory, null);
+    }
+
+    public SkillListItem installFromDirectory(List<String> targetIds, String directory, String repositoryId) {
         Path path = resolveDirectoryPath(directory);
         SkillValidationResult validation = validateDirectory(path);
-        return installValidatedDirectory(targetIds, path, validation, null);
+        return installValidatedDirectory(targetIds, path, validation, normalizeNullable(repositoryId));
     }
 
     public SkillListItem installArchive(List<String> targetIds, String repositoryId, String fileName, byte[] content) {

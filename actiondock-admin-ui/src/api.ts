@@ -33,6 +33,8 @@ import type {
   EventTrigger,
   EventTriggerTestRequest,
   EventTriggerTestResult,
+  GithubSkillInstallResponse,
+  GithubSkillScanResponse,
   IncomingEventPayload,
   NormalizedEvent,
   ProcessorTestRequest,
@@ -1076,6 +1078,26 @@ export function installSkillDirectory(targetIds: string[], directory: string): P
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify({ targetIds, directory })
+  });
+}
+
+export function scanGithubSkillCollection(url: string): Promise<GithubSkillScanResponse> {
+  return request<GithubSkillScanResponse>("/api/skills/github/scan", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ url })
+  });
+}
+
+export function installGithubSkillCollection(payload: {
+  url: string;
+  targetIds: string[];
+  skillPaths: string[];
+}): Promise<GithubSkillInstallResponse> {
+  return request<GithubSkillInstallResponse>("/api/skills/github/install", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
   });
 }
 

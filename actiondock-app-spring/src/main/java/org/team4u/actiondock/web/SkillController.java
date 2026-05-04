@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.team4u.actiondock.skill.GithubSkillCollectionService;
 import org.team4u.actiondock.skill.SkillService;
 
 import java.io.IOException;
@@ -21,9 +22,12 @@ import java.util.List;
 @RequestMapping("/api/skills")
 public class SkillController {
     private final SkillService skillService;
+    private final GithubSkillCollectionService githubSkillCollectionService;
 
-    public SkillController(SkillService skillService) {
+    public SkillController(SkillService skillService,
+                           GithubSkillCollectionService githubSkillCollectionService) {
         this.skillService = skillService;
+        this.githubSkillCollectionService = githubSkillCollectionService;
     }
 
     @GetMapping
@@ -80,6 +84,19 @@ public class SkillController {
         return ApiResponse.success(
                 skillService.installFromDirectory(request.getTargetIds(), request.getDirectory()),
                 "Skill 安装成功"
+        );
+    }
+
+    @PostMapping("/github/scan")
+    public ApiResponse<GithubSkillCollectionService.GithubSkillScanResponse> scanGithubCollection(@RequestBody GithubSkillScanRequest request) {
+        return ApiResponse.success(githubSkillCollectionService.scan(request.getUrl()));
+    }
+
+    @PostMapping("/github/install")
+    public ApiResponse<GithubSkillCollectionService.GithubSkillInstallResponse> installGithubCollection(@RequestBody GithubSkillInstallRequest request) {
+        return ApiResponse.success(
+                githubSkillCollectionService.install(request.getUrl(), request.getTargetIds(), request.getSkillPaths()),
+                "GitHub Skill 安装完成"
         );
     }
 
