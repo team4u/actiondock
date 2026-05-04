@@ -12,51 +12,53 @@ import java.util.List;
 import java.util.Objects;
 
 final class ToolRepositoryPublisher {
-    private final RepositoryCatalogService service;
+    private final RepositoryCatalogService catalog;
+    private final RepositoryToolService toolService;
 
-    ToolRepositoryPublisher(RepositoryCatalogService service) {
-        this.service = service;
+    ToolRepositoryPublisher(RepositoryCatalogService catalog, RepositoryToolService toolService) {
+        this.catalog = catalog;
+        this.toolService = toolService;
     }
 
     RepositoryCatalogService.RepositoryToolDescriptor publish(String repositoryId,
                                                               RepositoryCatalogService.RepositoryPublishRequest request) {
-        WritableRepositorySession session = service.openWritableRepositorySession(repositoryId);
+        WritableRepositorySession session = catalog.openWritableRepositorySession(repositoryId);
         RepositoryDefinition repository = session.repository();
 
-        ScriptDefinition sourceScript = service.scriptApplicationService().get(service.normalize(request.scriptId(), "scriptId 不能为空"));
+        ScriptDefinition sourceScript = catalog.scriptApplicationService().get(catalog.normalize(request.scriptId(), "scriptId 不能为空"));
         if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
                 && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
                 && !request.force()) {
-            service.assertDevelopmentPublishSafe(sourceScript, repository);
+            toolService.assertDevelopmentPublishSafe(sourceScript, repository);
         }
 
-        ScriptDefinition script = service.scriptApplicationService().getPublished(sourceScript.getId());
-        service.assertPackagingConstraints(script);
+        ScriptDefinition script = catalog.scriptApplicationService().getPublished(sourceScript.getId());
+        catalog.assertPackagingConstraints(script);
 
-        String toolId = service.normalize(request.toolId(), "toolId 不能为空");
-        String version = service.normalize(request.version(), "version 不能为空");
-        List<ScriptSchedule> selectedSchedules = service.resolvePublishSchedules(script.getId(), request.scheduleIds());
-        List<ScriptDependency> scriptDependencies = service.resolveToolScriptDependencies(repositoryId, script, request);
+        String toolId = catalog.normalize(request.toolId(), "toolId 不能为空");
+        String version = catalog.normalize(request.version(), "version 不能为空");
+        List<ScriptSchedule> selectedSchedules = toolService.resolvePublishSchedules(script.getId(), request.scheduleIds());
+        List<ScriptDependency> scriptDependencies = toolService.resolveToolScriptDependencies(repositoryId, script, request);
         PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
         RepositoryPublishConfigResolver.PublishConfigResolution configResolution = RepositoryPublishConfigResolver.resolve(
                 snapshot == null ? script.getSource() : snapshot.getSource(),
                 selectedSchedules.stream().map(ScriptSchedule::getInput).toList(),
-                service.configValueRepository().findAll()
+                catalog.configValueRepository().findAll()
         );
-        List<RepositoryCatalogService.ConfigTemplateItem> configTemplates = service.buildConfigTemplate(configResolution, request.configItems());
-        List<RepositoryCatalogService.ScheduleTemplateItem> scheduleTemplates = service.buildScheduleTemplate(selectedSchedules);
+        List<RepositoryCatalogService.ConfigTemplateItem> configTemplates = toolService.buildConfigTemplate(configResolution, request.configItems());
+        List<RepositoryCatalogService.ScheduleTemplateItem> scheduleTemplates = toolService.buildScheduleTemplate(selectedSchedules);
 
-        RepositoryCatalogService.assertToolVersionAvailable(repositoryId, session.index(), toolId, version);
+        RepositoryToolService.assertToolVersionAvailable(repositoryId, session.index(), toolId, version);
         Path toolDir = session.root().resolve("tools").resolve(toolId);
-        service.writeToolFiles(toolDir, toolId, script, request, configTemplates, scheduleTemplates, scriptDependencies);
-        service.updateRepositoryIndex(session.root(), repository, toolId, script, request);
+        toolService.writeToolFiles(toolDir, toolId, script, request, configTemplates, scheduleTemplates, scriptDependencies);
+        toolService.updateRepositoryIndex(session.root(), repository, toolId, script, request);
         session.commitPublishedAsset(toolId, version, request.releaseNotes());
 
-        RepositoryCatalogService.RepositoryToolDetail publishedDetail = service.getRepositoryTool(repositoryId, toolId);
+        RepositoryCatalogService.RepositoryToolDetail publishedDetail = catalog.getRepositoryTool(repositoryId, toolId);
         if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
                 && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
                 && Objects.equals(sourceScript.getRepositoryToolId(), toolId)) {
-            service.updateDevelopmentSourceMetadata(sourceScript, repository, publishedDetail);
+            toolService.updateDevelopmentSourceMetadata(sourceScript, repository, publishedDetail);
         }
         return publishedDetail.descriptor();
     }

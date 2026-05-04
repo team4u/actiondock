@@ -90,10 +90,12 @@ class GithubSkillCollectionServiceTest {
         TestJsonCodec jsonCodec = new TestJsonCodec();
         AppProperties properties = new AppProperties();
         properties.getSkills().setDir(tempDir.resolve("managed-skills").toString());
+        InMemorySkillTargetRepository targetRepository = new InMemorySkillTargetRepository();
+        InMemorySkillInstallationRepository installationRepository = new InMemorySkillInstallationRepository();
         SkillService skillService = new SkillService(
-                new InMemorySkillTargetRepository(),
+                targetRepository,
                 new InMemoryManagedSkillRepository(),
-                new InMemorySkillInstallationRepository(),
+                installationRepository,
                 jsonCodec,
                 properties
         );
@@ -102,7 +104,12 @@ class GithubSkillCollectionServiceTest {
                 jsonCodec,
                 (owner, repo, ref) -> archive
         );
-        return new TestRuntime(skillService, githubSkills, tempDir);
+        SkillTargetService targetService = new SkillTargetService(
+                targetRepository,
+                installationRepository,
+                skillService
+        );
+        return new TestRuntime(skillService, githubSkills, tempDir, targetService);
     }
 
     private byte[] githubArchive(Map<String, String> files) throws Exception {
@@ -134,9 +141,9 @@ class GithubSkillCollectionServiceTest {
                 """.formatted(skillId, displayName, version, description).trim();
     }
 
-    private record TestRuntime(SkillService skillService, GithubSkillCollectionService githubSkills, Path root) {
+    private record TestRuntime(SkillService skillService, GithubSkillCollectionService githubSkills, Path root, SkillTargetService targetService) {
         private SkillTarget saveTarget(String name, String type, String folder) {
-            return skillService.saveTarget(new SkillTarget()
+            return targetService.saveTarget(new SkillTarget()
                     .setName(name)
                     .setType(type)
                     .setRootPath(root.resolve(folder).toString()));

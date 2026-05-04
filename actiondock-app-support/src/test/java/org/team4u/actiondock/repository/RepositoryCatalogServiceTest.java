@@ -75,7 +75,7 @@ class RepositoryCatalogServiceTest {
                 return plugins.invoke("plugin-b", "run")
                 """;
 
-        var dependencies = RepositoryCatalogService.extractPluginDependenciesFromSource(
+        var dependencies = RepositoryToolService.extractPluginDependenciesFromSource(
                 source,
                 Map.of("plugin-a", "1.2.3", "plugin-b", "0.4.0")
         );
@@ -98,7 +98,7 @@ class RepositoryCatalogServiceTest {
                 return plugins.invoke("plugin-b", "run")
                 """;
 
-        var dependencies = RepositoryCatalogService.extractPluginDependenciesFromSource(
+        var dependencies = RepositoryToolService.extractPluginDependenciesFromSource(
                 source,
                 Map.of("plugin-a", "1.2.3", "plugin-b", "0.4.0")
         );
@@ -376,7 +376,7 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatThrownBy(() -> RepositoryCatalogService.assertToolVersionAvailable(
+        assertThatThrownBy(() -> RepositoryToolService.assertToolVersionAvailable(
                 "repo-1",
                 index,
                 "demo-tool",
@@ -407,9 +407,9 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatCode(() -> RepositoryCatalogService.assertToolVersionAvailable("repo-1", index, "demo-tool", "1.0.1"))
+        assertThatCode(() -> RepositoryToolService.assertToolVersionAvailable("repo-1", index, "demo-tool", "1.0.1"))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> RepositoryCatalogService.assertToolVersionAvailable("repo-1", index, "other-tool", "1.0.0"))
+        assertThatCode(() -> RepositoryToolService.assertToolVersionAvailable("repo-1", index, "other-tool", "1.0.0"))
                 .doesNotThrowAnyException();
     }
 

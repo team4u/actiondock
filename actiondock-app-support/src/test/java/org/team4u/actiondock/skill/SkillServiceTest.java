@@ -36,7 +36,7 @@ class SkillServiceTest {
     void saveTargetExpandsTildePrefix() {
         SkillService service = createService();
 
-        SkillTarget saved = service.saveTarget(new SkillTarget()
+        SkillTarget saved = createTargetService(service).saveTarget(new SkillTarget()
                 .setName("Codex")
                 .setType("CODEX")
                 .setRootPath("~/.codex/skills"));
@@ -188,7 +188,7 @@ class SkillServiceTest {
                 sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "hello")
         );
 
-        SkillService.SkillSyncResponse response = service.syncSkillsToTarget(target.getId(), List.of("sample-skill"));
+        SkillService.SkillSyncResponse response = createTargetService(service).syncSkillsToTarget(target.getId(), List.of("sample-skill"));
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo("SUCCESS");
@@ -217,7 +217,7 @@ class SkillServiceTest {
                 conflict
                 """.trim());
 
-        SkillService.SkillSyncResponse response = service.syncSkillsToTarget(target.getId(), List.of("sample-skill"));
+        SkillService.SkillSyncResponse response = createTargetService(service).syncSkillsToTarget(target.getId(), List.of("sample-skill"));
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo("SKIPPED");
@@ -309,21 +309,36 @@ class SkillServiceTest {
     }
 
     private SkillTarget saveTarget(SkillService service, String name, String type, String folder) {
-        return service.saveTarget(new SkillTarget()
+        return saveTarget(createTargetService(service), name, type, folder);
+    }
+
+    private SkillTarget saveTarget(SkillTargetService targetService, String name, String type, String folder) {
+        return targetService.saveTarget(new SkillTarget()
                 .setName(name)
                 .setType(type)
                 .setRootPath(tempDir.resolve(folder).toString()));
     }
 
+    private final InMemorySkillTargetRepository targetRepository = new InMemorySkillTargetRepository();
+    private final InMemorySkillInstallationRepository installationRepository = new InMemorySkillInstallationRepository();
+
     private SkillService createService() {
         AppProperties properties = new AppProperties();
         properties.getSkills().setDir(tempDir.resolve("managed-skills").toString());
         return new SkillService(
-                new InMemorySkillTargetRepository(),
+                targetRepository,
                 new InMemoryManagedSkillRepository(),
-                new InMemorySkillInstallationRepository(),
+                installationRepository,
                 new TestJsonCodec(),
                 properties
+        );
+    }
+
+    private SkillTargetService createTargetService(SkillService skillService) {
+        return new SkillTargetService(
+                targetRepository,
+                installationRepository,
+                skillService
         );
     }
 

@@ -74,11 +74,15 @@ import org.team4u.actiondock.repository.LocalPluginArtifactResolver;
 import org.team4u.actiondock.repository.PluginArtifactResolver;
 import org.team4u.actiondock.repository.PluginArtifactResolverRegistry;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
+import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
+import org.team4u.actiondock.repository.RepositoryPluginService;
+import org.team4u.actiondock.repository.RepositoryToolService;
 import org.team4u.actiondock.script.GroovyScriptEngine;
 import org.team4u.actiondock.script.PythonScriptEngine;
 import org.team4u.actiondock.script.RoutingScriptEngine;
 import org.team4u.actiondock.skill.GithubSkillCollectionService;
 import org.team4u.actiondock.skill.SkillService;
+import org.team4u.actiondock.skill.SkillTargetService;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -394,12 +398,60 @@ public class RuntimeConfiguration {
     }
 
     @Bean
+    public RepositoryPluginService repositoryPluginService(RepositoryCatalogService repositoryCatalogService,
+                                                            PluginRuntimeService pluginRuntimeService,
+                                                            ScriptRepository scriptRepository,
+                                                            PluginArtifactResolverRegistry pluginArtifactResolverRegistry) {
+        return new RepositoryPluginService(repositoryCatalogService, pluginRuntimeService, scriptRepository, pluginArtifactResolverRegistry);
+    }
+
+    @Bean
+    public RepositoryToolService repositoryToolService(RepositoryCatalogService repositoryCatalogService,
+                                                        RepositoryPluginService repositoryPluginService,
+                                                        ScriptApplicationService scriptApplicationService,
+                                                        ScriptRepository scriptRepository,
+                                                        ScriptScheduleRepository scriptScheduleRepository,
+                                                        RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+                                                        ConfigValueRepository configValueRepository,
+                                                        PluginRuntimeService pluginRuntimeService) {
+        return new RepositoryToolService(
+                repositoryCatalogService,
+                repositoryPluginService,
+                scriptApplicationService,
+                scriptRepository,
+                scriptScheduleRepository,
+                repositoryToolInstallationRepository,
+                configValueRepository,
+                pluginRuntimeService
+        );
+    }
+
+    @Bean
+    public RepositoryCapabilityPackageService repositoryCapabilityPackageService(
+            RepositoryCatalogService repositoryCatalogService,
+            CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
+            ExecutionPresetRepository executionPresetRepository) {
+        return new RepositoryCapabilityPackageService(
+                repositoryCatalogService,
+                capabilityPackageInstallationRepository,
+                executionPresetRepository
+        );
+    }
+
+    @Bean
     public SkillService skillService(SkillTargetRepository skillTargetRepository,
                                      ManagedSkillRepository managedSkillRepository,
                                      SkillInstallationRepository skillInstallationRepository,
                                      JsonCodec jsonCodec,
                                      AppProperties properties) {
         return new SkillService(skillTargetRepository, managedSkillRepository, skillInstallationRepository, jsonCodec, properties);
+    }
+
+    @Bean
+    public SkillTargetService skillTargetService(SkillTargetRepository skillTargetRepository,
+                                                  SkillInstallationRepository skillInstallationRepository,
+                                                  SkillService skillService) {
+        return new SkillTargetService(skillTargetRepository, skillInstallationRepository, skillService);
     }
 
     @Bean

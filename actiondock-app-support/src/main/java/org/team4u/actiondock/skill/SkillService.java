@@ -1,7 +1,6 @@
 package org.team4u.actiondock.skill;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ManagedSkill;
 import org.team4u.actiondock.domain.model.SkillInstallation;
@@ -11,9 +10,7 @@ import org.team4u.actiondock.domain.port.ManagedSkillRepository;
 import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.domain.port.SkillTargetRepository;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileVisitResult;
@@ -22,13 +19,10 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -37,21 +31,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
 /**
  * 本地 Skill 目标与安装服务。
  */
 public class SkillService {
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
-    private static final Pattern FRONTMATTER_PATTERN = Pattern.compile("^---\\s*\\n(.*?)\\n---\\s*(?:\\n|$)", Pattern.DOTALL);
-    private static final String INSTALL_MARKER_FILE = ".actiondock-skill-install.json";
-    private static final long MAX_ARCHIVE_SIZE = 25L * 1024L * 1024L;
     private static final int MAX_TEXT_PREVIEW_CHARS = 200_000;
     private static final long MAX_IMAGE_PREVIEW_BYTES = 2L * 1024L * 1024L;
 
@@ -77,183 +61,11 @@ public class SkillService {
         this.managedSkillsRoot = Path.of(root).toAbsolutePath().normalize();
     }
 
-    public List<SkillTarget> listTargets() {
-        return skillTargetRepository.findAll().stream()
-                .sorted(Comparator.comparing(SkillTarget::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
-                .toList();
-    }
-
-    public SkillTarget saveTarget(SkillTarget request) {
-        SkillTarget target = request == null ? new SkillTarget() : request;
-        String id = normalizeOrDefault(target.getId(), UUID.randomUUID().toString());
-        String name = normalize(target.getName(), "SkillTarget 名称不能为空");
-        String type = normalizeOrDefault(target.getType(), "CUSTOM").toUpperCase(Locale.ROOT);
-        if (!List.of("CODEX", "CLAUDE", "GEMINI", "CODEBUDDY", "CUSTOM", "ACTIONDOCK_AGENT").contains(type)) {
-            throw new IllegalArgumentException("SkillTarget type 仅支持 CODEX / CLAUDE / GEMINI / CODEBUDDY / CUSTOM / ACTIONDOCK_AGENT");
-        }
-        Path rootPath = resolveTargetRoot(normalize(target.getRootPath(), "SkillTarget rootPath 不能为空"));
-        boolean writable = ensureDirectoryWritable(rootPath);
-        LocalDateTime now = LocalDateTime.now();
-        SkillTarget existing = skillTargetRepository.findById(id).orElse(null);
-        return skillTargetRepository.save(new SkillTarget()
-                .setId(id)
-                .setName(name)
-                .setType(type)
-                .setRootPath(rootPath.toString())
-                .setEnabled(target.isEnabled() || existing == null)
-                .setWritable(writable)
-                .setCreatedAt(existing == null ? now : existing.getCreatedAt())
-                .setUpdatedAt(now));
-    }
-
-    public void deleteTarget(String id) {
-        SkillTarget target = requireTarget(id);
-        List<SkillInstallation> deployments = skillInstallationRepository.findByTargetId(target.getId());
-        if (!deployments.isEmpty()) {
-            throw new IllegalArgumentException("目标目录仍有已安装 Skill，不能删除: " + target.getName());
-        }
-        skillTargetRepository.deleteById(id);
-    }
-
-    public List<SkillScanItem> scanTarget(String targetId) {
-        initializeManagedSkillStorage();
-        SkillTarget target = requireTarget(targetId);
-        Path root = resolveTargetRoot(target.getRootPath());
-        try {
-            if (Files.notExists(root)) {
-                Files.createDirectories(root);
-            }
-            Map<String, SkillInstallation> pathToDeployment = skillInstallationRepository.findByTargetId(targetId).stream()
-                    .collect(Collectors.toMap(SkillInstallation::getInstalledPath, item -> item, (left, right) -> left));
-            List<SkillScanItem> items = new ArrayList<>();
-            try (var stream = Files.list(root)) {
-                for (Path child : stream.filter(Files::isDirectory).sorted().toList()) {
-                    Path skillMd = child.resolve("SKILL.md");
-                    if (Files.notExists(skillMd)) {
-                        continue;
-                    }
-                    String content = Files.readString(skillMd, StandardCharsets.UTF_8);
-                    Frontmatter frontmatter = parseFrontmatter(content);
-                    SkillInstallation deployment = pathToDeployment.get(child.toString());
-                    Map<String, Object> marker = readInstallMarker(child);
-                    boolean managed = deployment != null || marker != null;
-                    String skillId = deployment != null
-                            ? deployment.getSkillId()
-                            : markerString(marker, "skillId");
-                    Boolean enabled = deployment != null ? deployment.isEnabled() : null;
-                    String version = deployment != null
-                            ? deployment.getVersion()
-                            : markerString(marker, "version");
-                    items.add(new SkillScanItem(
-                            child.getFileName().toString(),
-                            child.toString(),
-                            frontmatter.name(),
-                            frontmatter.description(),
-                            managed,
-                            skillId,
-                            enabled,
-                            version
-                    ));
-                }
-            }
-            return items;
-        } catch (IOException exception) {
-            throw new IllegalStateException("扫描 Skill 目标失败: " + target.getRootPath(), exception);
-        }
-    }
-
-    public SkillScanDetail getScanItemDetail(String targetId, String directoryId) {
-        initializeManagedSkillStorage();
-        SkillTarget target = requireTarget(targetId);
-        Path root = resolveTargetRoot(target.getRootPath());
-        Path dir = resolveScanDirectory(root, directoryId);
-        String content = readString(dir.resolve("SKILL.md"));
-        Frontmatter frontmatter = parseFrontmatter(content);
-        SkillInstallation deployment = skillInstallationRepository.findByTargetId(targetId).stream()
-                .filter(item -> Objects.equals(item.getInstalledPath(), dir.toString()))
-                .findFirst()
-                .orElse(null);
-        Map<String, Object> marker = readInstallMarker(dir);
-        boolean managed = deployment != null || marker != null;
-        String skillId = deployment != null ? deployment.getSkillId() : markerString(marker, "skillId");
-        Boolean enabled = deployment != null ? deployment.isEnabled() : null;
-        String version = deployment != null ? deployment.getVersion() : markerString(marker, "version");
-        return new SkillScanDetail(
-                dir.getFileName().toString(),
-                dir.toString(),
-                frontmatter.name(),
-                frontmatter.description(),
-                managed,
-                skillId,
-                enabled,
-                version,
-                buildFileTree(dir, dir)
-        );
-    }
-
-    public SkillFilePreview previewScanItemFile(String targetId, String directoryId, String relativePath) {
-        SkillTarget skillTarget = requireTarget(targetId);
-        Path root = resolveTargetRoot(skillTarget.getRootPath());
-        Path dir = resolveScanDirectory(root, directoryId);
-        Path file = resolveScanFile(dir, relativePath);
-        if (Files.notExists(file)) {
-            throw new IllegalArgumentException("Skill 文件不存在: " + relativePath);
-        }
-        if (Files.isDirectory(file)) {
-            return new SkillFilePreview(
-                    dir.relativize(file).toString().replace('\\', '/'),
-                    file.getFileName().toString(),
-                    true,
-                    detectContentType(file),
-                    fileSize(file),
-                    "DIRECTORY",
-                    null,
-                    null,
-                    null,
-                    false
-            );
-        }
-        String relative = dir.relativize(file).toString().replace('\\', '/');
-        String contentType = detectContentType(file);
-        long size = fileSize(file);
-        if (isImageFile(contentType)) {
-            if (size > MAX_IMAGE_PREVIEW_BYTES) {
-                return new SkillFilePreview(relative, file.getFileName().toString(), false, contentType, size, "UNSUPPORTED", null, null, null, true);
-            }
-            try {
-                String dataUrl = "data:" + contentType + ";base64," + Base64.getEncoder().encodeToString(Files.readAllBytes(file));
-                return new SkillFilePreview(relative, file.getFileName().toString(), false, contentType, size, "IMAGE", null, null, dataUrl, false);
-            } catch (IOException exception) {
-                throw new IllegalStateException("读取 Skill 文件失败: " + relativePath, exception);
-            }
-        }
-        if (!isTextFile(file, contentType)) {
-            return new SkillFilePreview(relative, file.getFileName().toString(), false, contentType, size, "UNSUPPORTED", null, null, null, false);
-        }
-        String text = readString(file);
-        boolean truncated = text.length() > MAX_TEXT_PREVIEW_CHARS;
-        return new SkillFilePreview(
-                relative,
-                file.getFileName().toString(),
-                false,
-                contentType,
-                size,
-                resolvePreviewType(file),
-                resolveLanguage(file),
-                truncated ? text.substring(0, MAX_TEXT_PREVIEW_CHARS) : text,
-                null,
-                truncated
-        );
-    }
-
-    public void deleteUnmanagedScanDirectory(String targetId, String directoryId) {
-        SkillTarget target = requireTarget(targetId);
-        Path root = resolveTargetRoot(target.getRootPath());
-        Path dir = resolveScanDirectory(root, directoryId);
-        if (Files.exists(dir.resolve(INSTALL_MARKER_FILE))) {
-            throw new IllegalArgumentException("受管 Skill 目录请使用卸载功能: " + directoryId);
-        }
-        deleteQuietly(dir);
+    /**
+     * 返回 JSON 编解码器，供同包内的 {@link SkillTargetService} 读取安装标记使用。
+     */
+    JsonCodec getJsonCodec() {
+        return jsonCodec;
     }
 
     public List<SkillListItem> listSkills() {
@@ -281,12 +93,12 @@ public class SkillService {
         if (Files.notExists(entrypoint)) {
             throw new IllegalArgumentException("Skill 受管副本不存在，不能配置到 Agent: " + skillId);
         }
-        String content = readString(entrypoint);
+        String content = SkillFileUtils.readString(entrypoint);
         Map<String, String> resources = readRuntimeSkillResources(managedPath);
         return new RuntimeSkill(
                 skill.getSkillId(),
-                normalizeOrDefault(skill.getDisplayName(), skill.getSkillId()),
-                normalizeOrDefault(skill.getDescription(), skill.getSkillId()),
+                SkillFileUtils.normalizeOrDefault(skill.getDisplayName(), skill.getSkillId()),
+                SkillFileUtils.normalizeOrDefault(skill.getDescription(), skill.getSkillId()),
                 content,
                 resources,
                 managedPath.toString()
@@ -301,10 +113,10 @@ public class SkillService {
         }
         for (SkillInstallation deployment : deployments) {
             Path installedPath = Path.of(deployment.getInstalledPath()).toAbsolutePath().normalize();
-            if (Files.exists(installedPath) && Files.notExists(installedPath.resolve(INSTALL_MARKER_FILE))) {
+            if (Files.exists(installedPath) && Files.notExists(installedPath.resolve(SkillFileUtils.INSTALL_MARKER_FILE))) {
                 throw new IllegalArgumentException("仅允许停用 ActionDock 受管 Skill: " + deployment.getInstalledPath());
             }
-            deleteQuietly(installedPath);
+            SkillFileUtils.deleteQuietly(installedPath);
             skillInstallationRepository.save(copyDeployment(deployment)
                     .setEnabled(false)
                     .setUpdatedAt(LocalDateTime.now()));
@@ -333,7 +145,7 @@ public class SkillService {
         return new SkillDetail(
                 toSkillListItem(skill),
                 managedPath.toString(),
-                Files.exists(managedPath) ? buildFileTree(managedPath, managedPath) : List.of()
+                Files.exists(managedPath) ? SkillFileUtils.buildFileTree(managedPath, managedPath) : List.of()
         );
     }
 
@@ -361,8 +173,8 @@ public class SkillService {
                     managedPath.relativize(target).toString().replace('\\', '/'),
                     target.getFileName().toString(),
                     true,
-                    detectContentType(target),
-                    fileSize(target),
+                    SkillFileUtils.detectContentType(target),
+                    SkillFileUtils.fileSize(target),
                     "DIRECTORY",
                     null,
                     null,
@@ -371,9 +183,9 @@ public class SkillService {
             );
         }
         String relative = managedPath.relativize(target).toString().replace('\\', '/');
-        String contentType = detectContentType(target);
-        long size = fileSize(target);
-        if (isImageFile(contentType)) {
+        String contentType = SkillFileUtils.detectContentType(target);
+        long size = SkillFileUtils.fileSize(target);
+        if (SkillFileUtils.isImageFile(contentType)) {
             if (size > MAX_IMAGE_PREVIEW_BYTES) {
                 return new SkillFilePreview(relative, target.getFileName().toString(), false, contentType, size, "UNSUPPORTED", null, null, null, true);
             }
@@ -384,10 +196,10 @@ public class SkillService {
                 throw new IllegalStateException("读取 Skill 文件失败: " + relativePath, exception);
             }
         }
-        if (!isTextFile(target, contentType)) {
+        if (!SkillFileUtils.isTextFile(target, contentType)) {
             return new SkillFilePreview(relative, target.getFileName().toString(), false, contentType, size, "UNSUPPORTED", null, null, null, false);
         }
-        String text = readString(target);
+        String text = SkillFileUtils.readString(target);
         boolean truncated = text.length() > MAX_TEXT_PREVIEW_CHARS;
         return new SkillFilePreview(
                 relative,
@@ -407,15 +219,15 @@ public class SkillService {
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("Skill 压缩包不能为空");
         }
-        if (content.length > MAX_ARCHIVE_SIZE) {
+        if (content.length > SkillFileUtils.MAX_ARCHIVE_SIZE) {
             throw new IllegalArgumentException("Skill 压缩包过大，超过 25MB");
         }
         Path tempDir = createTempDir("skill-validate");
         try {
-            unzipToDirectory(content, tempDir);
-            return validateDirectory(tempDir, normalizeArchiveFallbackId(fileName), false);
+            SkillFileUtils.unzipArchive(content, tempDir);
+            return validateDirectory(tempDir, SkillFileUtils.normalizeArchiveFallbackId(fileName), false);
         } finally {
-            deleteQuietly(tempDir);
+            SkillFileUtils.deleteQuietly(tempDir);
         }
     }
 
@@ -437,16 +249,16 @@ public class SkillService {
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("Skill 压缩包不能为空");
         }
-        if (content.length > MAX_ARCHIVE_SIZE) {
+        if (content.length > SkillFileUtils.MAX_ARCHIVE_SIZE) {
             throw new IllegalArgumentException("Skill 压缩包过大，超过 25MB");
         }
         Path tempDir = createTempDir("skill-import");
         try {
-            unzipToDirectory(content, tempDir);
-            SkillValidationResult validation = validateDirectory(tempDir, normalizeArchiveFallbackId(fileName), false);
+            SkillFileUtils.unzipArchive(content, tempDir);
+            SkillValidationResult validation = validateDirectory(tempDir, SkillFileUtils.normalizeArchiveFallbackId(fileName), false);
             return installValidatedDirectory(targetIds, tempDir, validation, null);
         } finally {
-            deleteQuietly(tempDir);
+            SkillFileUtils.deleteQuietly(tempDir);
         }
     }
 
@@ -457,23 +269,23 @@ public class SkillService {
     public SkillListItem installFromDirectory(List<String> targetIds, String directory, String repositoryId) {
         Path path = resolveDirectoryPath(directory);
         SkillValidationResult validation = validateDirectory(path);
-        return installValidatedDirectory(targetIds, path, validation, normalizeNullable(repositoryId));
+        return installValidatedDirectory(targetIds, path, validation, SkillFileUtils.normalizeNullable(repositoryId));
     }
 
     public SkillListItem installArchive(List<String> targetIds, String repositoryId, String fileName, byte[] content) {
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("Skill 压缩包不能为空");
         }
-        if (content.length > MAX_ARCHIVE_SIZE) {
+        if (content.length > SkillFileUtils.MAX_ARCHIVE_SIZE) {
             throw new IllegalArgumentException("Skill 压缩包过大，超过 25MB");
         }
         Path tempDir = createTempDir("skill-install-archive");
         try {
-            unzipToDirectory(content, tempDir);
-            SkillValidationResult validation = validateSkillDirectory(tempDir, normalizeArchiveFallbackId(fileName), false, jsonCodec);
+            SkillFileUtils.unzipArchive(content, tempDir);
+            SkillValidationResult validation = validateSkillDirectory(tempDir, SkillFileUtils.normalizeArchiveFallbackId(fileName), false, jsonCodec);
             return installValidatedDirectory(targetIds, tempDir, validation, repositoryId);
         } finally {
-            deleteQuietly(tempDir);
+            SkillFileUtils.deleteQuietly(tempDir);
         }
     }
 
@@ -500,7 +312,7 @@ public class SkillService {
     public SkillListItem updateSkillVersion(String skillId, String version) {
         initializeManagedSkillStorage();
         ManagedSkill existingSkill = requireManagedSkill(skillId);
-        String normalizedVersion = normalize(version, "version 不能为空");
+        String normalizedVersion = SkillFileUtils.normalize(version, "version 不能为空");
         Path managedPath = resolveManagedPath(skillId);
         if (Files.notExists(managedPath.resolve("SKILL.md"))) {
             throw new IllegalArgumentException("Skill 受管副本不存在: " + skillId);
@@ -526,7 +338,7 @@ public class SkillService {
                     .setDigest(digest)
                     .setUpdatedAt(now));
             Path installedPath = Path.of(deployment.getInstalledPath()).toAbsolutePath().normalize();
-            if (Files.exists(installedPath) && Files.exists(installedPath.resolve(INSTALL_MARKER_FILE))) {
+            if (Files.exists(installedPath) && Files.exists(installedPath.resolve(SkillFileUtils.INSTALL_MARKER_FILE))) {
                 try {
                     writeManifest(installedPath, versionedValidation, normalizedVersion, jsonCodec);
                     writeInstallMarker(installedPath, deployment.getInstallationId(), saved.getRepositoryId(), versionedValidation);
@@ -538,42 +350,6 @@ public class SkillService {
         return getSkill(skillId);
     }
 
-    public SkillSyncResponse syncSkillsToTarget(String targetId, List<String> skillIds) {
-        initializeManagedSkillStorage();
-        requireTarget(targetId);
-        List<String> normalizedIds = skillIds == null ? List.of() : skillIds.stream()
-                .map(id -> normalize(id, "skillId 不能为空"))
-                .distinct()
-                .toList();
-        List<SkillSyncResult> results = new ArrayList<>();
-        for (String skillId : normalizedIds) {
-            if (skillInstallationRepository.findBySkillIdAndTargetId(skillId, targetId).isPresent()) {
-                results.add(new SkillSyncResult(skillId, targetId, "SKIPPED", "Skill 已安装在当前目标，无需同步", null));
-                continue;
-            }
-            ManagedSkill skill = requireManagedSkill(skillId);
-            Path managedPath = resolveManagedPath(skillId);
-            if (Files.notExists(managedPath.resolve("SKILL.md"))) {
-                results.add(new SkillSyncResult(skillId, targetId, "FAILED", "Skill 受管副本不存在", null));
-                continue;
-            }
-            Path targetRoot = resolveTargetRoot(requireTarget(targetId).getRootPath());
-            Path targetDirectory = targetRoot.resolve(skillId).toAbsolutePath().normalize();
-            if (Files.exists(targetDirectory) && Files.notExists(targetDirectory.resolve(INSTALL_MARKER_FILE))) {
-                results.add(new SkillSyncResult(skillId, targetId, "SKIPPED", "目标中已存在同名未受管目录，已跳过", null));
-                continue;
-            }
-            try {
-                SkillValidationResult validation = validateDirectory(managedPath, skillId, false);
-                SkillInstallation created = deployManagedSkillToTarget(skill, targetId, validation, null);
-                results.add(new SkillSyncResult(skillId, targetId, "SUCCESS", "Skill 已同步", toDeploymentView(created)));
-            } catch (RuntimeException exception) {
-                results.add(new SkillSyncResult(skillId, targetId, "FAILED", exception.getMessage(), null));
-            }
-        }
-        return new SkillSyncResponse(targetId, results);
-    }
-
     public void uninstallSkill(String skillId) {
         initializeManagedSkillStorage();
         requireManagedSkill(skillId);
@@ -581,7 +357,7 @@ public class SkillService {
             deleteInstalledPath(deployment);
             skillInstallationRepository.deleteBySkillIdAndTargetId(skillId, deployment.getTargetId());
         }
-        deleteQuietly(resolveManagedPath(skillId));
+        SkillFileUtils.deleteQuietly(resolveManagedPath(skillId));
         managedSkillRepository.deleteBySkillId(skillId);
     }
 
@@ -593,7 +369,7 @@ public class SkillService {
         deleteInstalledPath(deployment);
         skillInstallationRepository.deleteBySkillIdAndTargetId(skillId, targetId);
         if (skillInstallationRepository.findBySkillId(skillId).isEmpty()) {
-            deleteQuietly(resolveManagedPath(skillId));
+            SkillFileUtils.deleteQuietly(resolveManagedPath(skillId));
             managedSkillRepository.deleteBySkillId(skillId);
         }
     }
@@ -627,7 +403,7 @@ public class SkillService {
                                                SkillValidationResult validation,
                                                String repositoryId,
                                                ManagedSkill existingSkill) {
-        Path normalizedSourceDirectory = normalizeSkillRoot(sourceDirectory);
+        Path normalizedSourceDirectory = SkillFileUtils.locateSkillRoot(sourceDirectory);
         String managedVersion = resolveManagedVersion(validation, existingSkill);
         SkillValidationResult managedValidation = copyValidationWithVersion(validation, managedVersion);
         Path managedDir = resolveManagedPath(validation.skillId());
@@ -635,8 +411,8 @@ public class SkillService {
         try {
             Files.createDirectories(managedDir.getParent());
             copyDirectory(normalizedSourceDirectory, tempManagedDir);
-            deleteQuietly(tempManagedDir.resolve(INSTALL_MARKER_FILE));
-            deleteQuietly(managedDir);
+            SkillFileUtils.deleteQuietly(tempManagedDir.resolve(SkillFileUtils.INSTALL_MARKER_FILE));
+            SkillFileUtils.deleteQuietly(managedDir);
             moveAtomically(tempManagedDir, managedDir);
             writeManifest(managedDir, managedValidation, managedVersion, jsonCodec);
             LocalDateTime now = LocalDateTime.now();
@@ -650,12 +426,12 @@ public class SkillService {
                     .setInstalledAt(existingSkill == null ? now : Optional.ofNullable(existingSkill.getInstalledAt()).orElse(now))
                     .setUpdatedAt(now));
         } catch (IOException exception) {
-            deleteQuietly(tempManagedDir);
+            SkillFileUtils.deleteQuietly(tempManagedDir);
             throw new IllegalStateException("安装 Skill 失败", exception);
         }
     }
 
-    private SkillInstallation deployManagedSkillToTarget(ManagedSkill skill,
+    SkillInstallation deployManagedSkillToTarget(ManagedSkill skill,
                                                          String targetId,
                                                          SkillValidationResult validation,
                                                          SkillInstallation existingDeployment) {
@@ -675,13 +451,13 @@ public class SkillService {
             copyDirectory(managedDir, tempFinalDir);
             writeInstallMarker(tempFinalDir, installationId, skill.getRepositoryId(), validation);
             if (Files.exists(finalTargetDir)) {
-                if (Files.notExists(finalTargetDir.resolve(INSTALL_MARKER_FILE))) {
+                if (Files.notExists(finalTargetDir.resolve(SkillFileUtils.INSTALL_MARKER_FILE))) {
                     throw new IllegalArgumentException("目标目录已存在且不是 ActionDock 受管 Skill: " + finalTargetDir);
                 }
                 moveAtomically(finalTargetDir, backupDir);
             }
             moveAtomically(tempFinalDir, finalTargetDir);
-            deleteQuietly(backupDir);
+            SkillFileUtils.deleteQuietly(backupDir);
             LocalDateTime now = LocalDateTime.now();
             return skillInstallationRepository.save(new SkillInstallation()
                     .setInstallationId(installationId)
@@ -698,14 +474,14 @@ public class SkillService {
                     .setInstalledAt(existingDeployment == null ? now : Optional.ofNullable(existingDeployment.getInstalledAt()).orElse(now))
                     .setUpdatedAt(now));
         } catch (IOException exception) {
-            deleteQuietly(tempFinalDir);
+            SkillFileUtils.deleteQuietly(tempFinalDir);
             throw new IllegalStateException("安装 Skill 失败", exception);
         }
     }
 
     private List<String> normalizeTargetIds(List<String> targetIds) {
         List<String> normalized = targetIds == null ? List.of() : targetIds.stream()
-                .map(id -> normalize(id, "targetId 不能为空"))
+                .map(id -> SkillFileUtils.normalize(id, "targetId 不能为空"))
                 .distinct()
                 .toList();
         if (normalized.isEmpty()) {
@@ -765,12 +541,12 @@ public class SkillService {
 
     private String resolveManagedVersion(SkillValidationResult validation, ManagedSkill existingSkill) {
         if (validation.manifestPresent()) {
-            return normalize(validation.version(), "version 不能为空");
+            return SkillFileUtils.normalize(validation.version(), "version 不能为空");
         }
-        if (existingSkill != null && normalizeNullable(existingSkill.getVersion()) != null) {
-            return normalizeNullable(existingSkill.getVersion());
+        if (existingSkill != null && SkillFileUtils.normalizeNullable(existingSkill.getVersion()) != null) {
+            return SkillFileUtils.normalizeNullable(existingSkill.getVersion());
         }
-        return normalize(validation.version(), "version 不能为空");
+        return SkillFileUtils.normalize(validation.version(), "version 不能为空");
     }
 
     private static SkillValidationResult copyValidationWithVersion(SkillValidationResult validation, String version) {
@@ -781,7 +557,7 @@ public class SkillService {
         return new SkillValidationResult(
                 validation.skillId(),
                 validation.displayName(),
-                normalize(version, "version 不能为空"),
+                SkillFileUtils.normalize(version, "version 不能为空"),
                 validation.description(),
                 validation.owner(),
                 validation.tags(),
@@ -795,13 +571,13 @@ public class SkillService {
 
     private void deleteInstalledPath(SkillInstallation deployment) {
         Path installedPath = Path.of(deployment.getInstalledPath()).toAbsolutePath().normalize();
-        if (Files.exists(installedPath) && Files.notExists(installedPath.resolve(INSTALL_MARKER_FILE))) {
+        if (Files.exists(installedPath) && Files.notExists(installedPath.resolve(SkillFileUtils.INSTALL_MARKER_FILE))) {
             throw new IllegalArgumentException("仅允许卸载 ActionDock 受管 Skill: " + deployment.getInstalledPath());
         }
-        deleteQuietly(installedPath);
+        SkillFileUtils.deleteQuietly(installedPath);
     }
 
-    private void initializeManagedSkillStorage() {
+    void initializeManagedSkillStorage() {
         if (storageInitialized) {
             return;
         }
@@ -826,17 +602,17 @@ public class SkillService {
                     Path temp = canonical.getParent().resolve(canonical.getFileName() + ".tmp-" + UUID.randomUUID());
                     try {
                         copyDirectory(source, temp);
-                        deleteQuietly(temp.resolve(INSTALL_MARKER_FILE));
-                        deleteQuietly(canonical);
+                        SkillFileUtils.deleteQuietly(temp.resolve(SkillFileUtils.INSTALL_MARKER_FILE));
+                        SkillFileUtils.deleteQuietly(canonical);
                         moveAtomically(temp, canonical);
                     } catch (IOException exception) {
-                        deleteQuietly(temp);
+                        SkillFileUtils.deleteQuietly(temp);
                         throw new IllegalStateException("迁移旧 Skill 受管副本失败: " + skill.getSkillId(), exception);
                     }
                 }
                 for (Path legacy : legacyPaths) {
                     if (!legacy.equals(canonical)) {
-                        deleteQuietly(legacy);
+                        SkillFileUtils.deleteQuietly(legacy);
                     }
                 }
             }
@@ -856,34 +632,7 @@ public class SkillService {
         return managedSkillsRoot.resolve(deployment.getTargetId()).resolve(deployment.getSkillId()).toAbsolutePath().normalize();
     }
 
-    private Path resolveScanDirectory(Path root, String directoryId) {
-        String normalized = normalize(directoryId, "目录 ID 不能为空");
-        Path dir = root.resolve(normalized).toAbsolutePath().normalize();
-        if (!dir.startsWith(root)) {
-            throw new IllegalArgumentException("目录路径越界: " + directoryId);
-        }
-        if (Files.notExists(dir) || !Files.isDirectory(dir)) {
-            throw new IllegalArgumentException("目录不存在: " + directoryId);
-        }
-        if (Files.notExists(dir.resolve("SKILL.md"))) {
-            throw new IllegalArgumentException("不是有效的 Skill 目录: " + directoryId);
-        }
-        return dir;
-    }
-
-    private Path resolveScanFile(Path scanDir, String relativePath) {
-        String normalized = normalize(relativePath, "Skill 文件路径不能为空");
-        if (normalized.startsWith("/")) {
-            throw new IllegalArgumentException("Skill 文件路径非法: " + normalized);
-        }
-        Path target = scanDir.resolve(normalized).normalize();
-        if (!target.startsWith(scanDir)) {
-            throw new IllegalArgumentException("Skill 文件路径越界: " + normalized);
-        }
-        return target;
-    }
-
-    private SkillValidationResult validateDirectory(Path directory, String fallbackId, boolean requireManifest) {
+    SkillValidationResult validateDirectory(Path directory, String fallbackId, boolean requireManifest) {
         return validateSkillDirectory(directory, fallbackId, requireManifest, jsonCodec);
     }
 
@@ -891,216 +640,36 @@ public class SkillService {
                                                                String fallbackId,
                                                                boolean requireManifest,
                                                                JsonCodec jsonCodec) {
-        Path root = normalizeSkillRoot(directory);
-        Path manifestPath = root.resolve("skill.json");
-        Path skillMdPath = root.resolve("SKILL.md");
-        if (Files.notExists(skillMdPath)) {
-            throw new IllegalArgumentException("Skill 缺少 SKILL.md");
-        }
-        String content = readString(skillMdPath);
-        Frontmatter frontmatter = parseFrontmatter(content);
-        SkillManifestFile manifest = Files.exists(manifestPath)
-                ? jsonCodec.read(readString(manifestPath), SkillManifestFile.class)
-                : null;
-        if (requireManifest && manifest == null) {
-            throw new IllegalArgumentException("Skill 缺少 skill.json");
-        }
-        String skillId = manifest == null
-                ? normalizeOrDefault(normalizeNullable(fallbackId), slugify(frontmatter.name()))
-                : normalize(manifest.skillId(), "skillId 不能为空");
-        String displayName = manifest == null
-                ? normalizeOrDefault(frontmatter.name(), skillId)
-                : normalize(manifest.displayName(), "displayName 不能为空");
-        String version = manifest == null
-                ? "1.0.0"
-                : normalize(manifest.version(), "version 不能为空");
-        String description = manifest == null
-                ? normalize(frontmatter.description(), "frontmatter description 不能为空")
-                : normalize(manifest.description(), "description 不能为空");
-        List<String> warnings = new ArrayList<>();
-        if (frontmatter.name() != null && !Objects.equals(slugify(frontmatter.name()), skillId)) {
-            warnings.add("frontmatter name 规范化后与 skillId 不一致");
-        }
-        if (content.length() > 100_000) {
-            warnings.add("SKILL.md 较大，建议拆分 references");
-        }
-        return new SkillValidationResult(
-                skillId,
-                displayName,
-                version,
-                description,
-                manifest == null ? null : manifest.owner(),
-                manifest == null || manifest.tags() == null ? List.of() : manifest.tags(),
-                manifest == null ? null : manifest.riskLevel(),
-                manifest == null ? "SKILL.md" : normalizeOrDefault(manifest.entrypointPath(), "SKILL.md"),
-                digestDirectory(root),
-                warnings,
-                manifest != null
-        );
+        return SkillFileUtils.validateSkillDirectory(directory, fallbackId, requireManifest, jsonCodec);
     }
 
     public static Path locateSkillRoot(Path directory) {
-        return normalizeSkillRoot(directory);
+        return SkillFileUtils.locateSkillRoot(directory);
     }
 
     public static byte[] buildArchive(Path directory,
                                       SkillValidationResult validation,
                                       String manifestVersion,
                                       JsonCodec jsonCodec) {
-        Path root = normalizeSkillRoot(directory);
-        String version = normalize(manifestVersion, "version 不能为空");
-        String digest = computePublishDigest(root, validation, version, jsonCodec);
-        byte[] manifestBytes = buildManifestBytes(validation, version, digest, jsonCodec);
-        String rootPrefix = validation.skillId() + "/";
-        try (ByteArrayOutputStream output = new ByteArrayOutputStream();
-             ZipOutputStream zip = new ZipOutputStream(output, StandardCharsets.UTF_8)) {
-            zip.putNextEntry(new ZipEntry(rootPrefix + "skill.json"));
-            zip.write(manifestBytes);
-            zip.closeEntry();
-            try (var stream = Files.walk(root)) {
-                for (Path file : stream.filter(Files::isRegularFile).sorted().toList()) {
-                    if (Files.isSymbolicLink(file)) {
-                        throw new IllegalArgumentException("Skill 不允许包含符号链接: " + file);
-                    }
-                    String relative = root.relativize(file).toString().replace('\\', '/');
-                    if (INSTALL_MARKER_FILE.equals(relative) || "skill.json".equals(relative)) {
-                        continue;
-                    }
-                    zip.putNextEntry(new ZipEntry(rootPrefix + relative));
-                    zip.write(Files.readAllBytes(file));
-                    zip.closeEntry();
-                }
-            }
-            zip.finish();
-            return output.toByteArray();
-        } catch (IOException exception) {
-            throw new IllegalStateException("打包 Skill 归档失败", exception);
-        }
+        return SkillFileUtils.buildArchive(directory, validation, manifestVersion, jsonCodec);
     }
 
     public static String computePublishDigest(Path directory,
                                               SkillValidationResult validation,
                                               String manifestVersion,
                                               JsonCodec jsonCodec) {
-        Path root = normalizeSkillRoot(directory);
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            boolean manifestSeen = false;
-            try (var stream = Files.walk(root)) {
-                for (Path file : stream.filter(Files::isRegularFile).sorted().toList()) {
-                    if (Files.isSymbolicLink(file)) {
-                        throw new IllegalArgumentException("Skill 不允许包含符号链接: " + file);
-                    }
-                    String relative = root.relativize(file).toString().replace('\\', '/');
-                    if (INSTALL_MARKER_FILE.equals(relative)) {
-                        continue;
-                    }
-                    digest.update(relative.getBytes(StandardCharsets.UTF_8));
-                    digest.update((byte) 0);
-                    if ("skill.json".equals(relative)) {
-                        manifestSeen = true;
-                        digest.update(buildManifestBytes(validation, manifestVersion, null, jsonCodec));
-                    } else {
-                        digest.update(Files.readAllBytes(file));
-                    }
-                    digest.update((byte) 0);
-                }
-            }
-            if (!manifestSeen) {
-                digest.update("skill.json".getBytes(StandardCharsets.UTF_8));
-                digest.update((byte) 0);
-                digest.update(buildManifestBytes(validation, manifestVersion, null, jsonCodec));
-                digest.update((byte) 0);
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException | IOException exception) {
-            throw new IllegalStateException("计算 Skill 发布摘要失败", exception);
-        }
+        return SkillFileUtils.computePublishDigest(directory, validation, manifestVersion, jsonCodec);
     }
 
     public static void unzipArchive(byte[] content, Path directory) {
-        if (content == null || content.length == 0) {
-            throw new IllegalArgumentException("Skill 压缩包不能为空");
-        }
-        if (content.length > MAX_ARCHIVE_SIZE) {
-            throw new IllegalArgumentException("Skill 压缩包过大，超过 25MB");
-        }
-        unzipToDirectory(content, directory);
+        SkillFileUtils.unzipArchive(content, directory);
     }
 
     public static void writeManifest(Path directory,
                                      SkillValidationResult validation,
                                      String manifestVersion,
                                      JsonCodec jsonCodec) {
-        String version = normalize(manifestVersion, "version 不能为空");
-        String digest = computePublishDigest(directory, validation, version, jsonCodec);
-        try {
-            Files.write(directory.resolve("skill.json"), buildManifestBytes(validation, version, digest, jsonCodec));
-        } catch (IOException exception) {
-            throw new IllegalStateException("写入 Skill 清单失败", exception);
-        }
-    }
-
-    private static Path normalizeSkillRoot(Path directory) {
-        Path root = directory == null ? null : directory.toAbsolutePath().normalize();
-        if (root == null || Files.notExists(root)) {
-            throw new IllegalArgumentException("Skill 目录不存在");
-        }
-        if (Files.isRegularFile(root)) {
-            throw new IllegalArgumentException("Skill 目录必须是文件夹");
-        }
-        Path direct = root.resolve("SKILL.md");
-        if (Files.exists(direct)) {
-            return root;
-        }
-        try (var stream = Files.list(root)) {
-            List<Path> candidates = stream
-                    .filter(Files::isDirectory)
-                    .filter(path -> Files.exists(path.resolve("SKILL.md")))
-                    .toList();
-            if (candidates.size() == 1) {
-                return candidates.get(0);
-            }
-        } catch (IOException exception) {
-            throw new IllegalStateException("读取 Skill 目录失败", exception);
-        }
-        throw new IllegalArgumentException("Skill 目录中未找到 SKILL.md");
-    }
-
-    private static void unzipToDirectory(byte[] content, Path directory) {
-        try {
-            Files.createDirectories(directory);
-            try (InputStream inputStream = new java.io.ByteArrayInputStream(content);
-                 ZipInputStream zipInputStream = new ZipInputStream(inputStream, StandardCharsets.UTF_8)) {
-                ZipEntry entry;
-                long totalBytes = 0L;
-                while ((entry = zipInputStream.getNextEntry()) != null) {
-                    if (entry.getName() == null || entry.getName().isBlank()) {
-                        continue;
-                    }
-                    String entryName = entry.getName().replace('\\', '/');
-                    if (entryName.startsWith("/") || entryName.contains("../") || entryName.contains("..\\")) {
-                        throw new IllegalArgumentException("Skill 压缩包包含非法路径: " + entry.getName());
-                    }
-                    Path target = directory.resolve(entryName).normalize();
-                    if (!target.toAbsolutePath().startsWith(directory.toAbsolutePath())) {
-                        throw new IllegalArgumentException("Skill 压缩包越界写入被拒绝: " + entry.getName());
-                    }
-                    if (entry.isDirectory()) {
-                        Files.createDirectories(target);
-                        continue;
-                    }
-                    Files.createDirectories(target.getParent());
-                    totalBytes += Math.max(0L, entry.getSize());
-                    if (totalBytes > MAX_ARCHIVE_SIZE) {
-                        throw new IllegalArgumentException("Skill 压缩包解压后过大，超过 25MB");
-                    }
-                    Files.copy(zipInputStream, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-        } catch (IOException exception) {
-            throw new IllegalStateException("解压 Skill 压缩包失败", exception);
-        }
+        SkillFileUtils.writeManifest(directory, validation, manifestVersion, jsonCodec);
     }
 
     private void copyDirectory(Path source, Path target) throws IOException {
@@ -1145,94 +714,26 @@ public class SkillService {
         marker.put("version", validation.version());
         marker.put("digest", validation.digest());
         marker.put("installedAt", LocalDateTime.now().toString());
-        Files.writeString(directory.resolve(INSTALL_MARKER_FILE), jsonCodec.write(marker), StandardCharsets.UTF_8);
+        Files.writeString(directory.resolve(SkillFileUtils.INSTALL_MARKER_FILE), jsonCodec.write(marker), StandardCharsets.UTF_8);
     }
 
-    private static String digestDirectory(Path directory) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            List<Path> files;
-            try (var stream = Files.walk(directory)) {
-                files = stream.filter(Files::isRegularFile)
-                        .filter(path -> !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
-                        .sorted()
-                        .toList();
-            }
-            for (Path file : files) {
-                if (Files.isSymbolicLink(file)) {
-                    throw new IllegalArgumentException("Skill 不允许包含符号链接: " + file);
-                }
-                digest.update(directory.relativize(file).toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8));
-                digest.update((byte) 0);
-                digest.update(Files.readAllBytes(file));
-                digest.update((byte) 0);
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException | IOException exception) {
-            throw new IllegalStateException("计算 Skill 摘要失败", exception);
+    private Map<String, Object> readInstallMarker(Path directory) {
+        Path markerPath = directory.resolve(SkillFileUtils.INSTALL_MARKER_FILE);
+        if (Files.notExists(markerPath)) {
+            return null;
         }
+        return jsonCodec.read(SkillFileUtils.readString(markerPath), LinkedHashMap.class);
     }
 
-    private static Frontmatter parseFrontmatter(String content) {
-        Matcher matcher = FRONTMATTER_PATTERN.matcher(content == null ? "" : content);
-        if (!matcher.find()) {
-            throw new IllegalArgumentException("SKILL.md 缺少 frontmatter");
+    private String markerString(Map<String, Object> marker, String key) {
+        if (marker == null) {
+            return null;
         }
-        String raw = matcher.group(1);
-        String name = null;
-        String description = null;
-        for (String line : raw.split("\\r?\\n")) {
-            int index = line.indexOf(':');
-            if (index <= 0) {
-                continue;
-            }
-            String key = line.substring(0, index).trim();
-            String value = line.substring(index + 1).trim();
-            if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
-                value = value.substring(1, value.length() - 1);
-            }
-            if ("name".equals(key)) {
-                name = normalizeNullable(value);
-            } else if ("description".equals(key)) {
-                description = normalizeNullable(value);
-            }
-        }
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("SKILL.md frontmatter 缺少 name");
-        }
-        if (description == null || description.isBlank()) {
-            throw new IllegalArgumentException("SKILL.md frontmatter 缺少 description");
-        }
-        return new Frontmatter(name, description);
+        Object value = marker.get(key);
+        return value == null ? null : String.valueOf(value);
     }
 
-    private List<SkillFileNode> buildFileTree(Path root, Path current) {
-        try (var stream = Files.list(current)) {
-            return stream
-                    .filter(path -> !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
-                    .sorted(Comparator
-                            .comparing((Path path) -> !Files.isDirectory(path))
-                            .thenComparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
-                    .map(path -> toFileNode(root, path))
-                    .toList();
-        } catch (IOException exception) {
-            throw new IllegalStateException("读取 Skill 文件树失败: " + current, exception);
-        }
-    }
-
-    private SkillFileNode toFileNode(Path root, Path path) {
-        boolean directory = Files.isDirectory(path);
-        String relativePath = root.relativize(path).toString().replace('\\', '/');
-        return new SkillFileNode(
-                path.getFileName().toString(),
-                relativePath,
-                directory,
-                directory ? null : fileSize(path),
-                directory ? buildFileTree(root, path) : List.of()
-        );
-    }
-
-    private Path resolveManagedPath(String skillId) {
+    Path resolveManagedPath(String skillId) {
         Path managedPath = managedSkillsRoot.resolve(skillId).toAbsolutePath().normalize();
         if (!managedPath.startsWith(managedSkillsRoot)) {
             throw new IllegalStateException("Skill 受管目录非法: " + skillId);
@@ -1241,7 +742,7 @@ public class SkillService {
     }
 
     private Path resolveManagedFile(Path managedPath, String relativePath) {
-        String normalized = normalize(relativePath, "Skill 文件路径不能为空");
+        String normalized = SkillFileUtils.normalize(relativePath, "Skill 文件路径不能为空");
         if (normalized.startsWith("/")) {
             throw new IllegalArgumentException("Skill 文件路径非法: " + normalized);
         }
@@ -1249,7 +750,7 @@ public class SkillService {
         if (!target.startsWith(managedPath)) {
             throw new IllegalArgumentException("Skill 文件路径越界: " + normalized);
         }
-        if (target.getFileName() != null && INSTALL_MARKER_FILE.equals(target.getFileName().toString())) {
+        if (target.getFileName() != null && SkillFileUtils.INSTALL_MARKER_FILE.equals(target.getFileName().toString())) {
             throw new IllegalArgumentException("Skill 文件不可预览: " + normalized);
         }
         return target;
@@ -1263,11 +764,11 @@ public class SkillService {
                     throw new IllegalArgumentException("Skill 不允许包含符号链接: " + file);
                 }
                 String relative = managedPath.relativize(file).toString().replace('\\', '/');
-                if ("SKILL.md".equals(relative) || "skill.json".equals(relative) || INSTALL_MARKER_FILE.equals(relative)) {
+                if ("SKILL.md".equals(relative) || "skill.json".equals(relative) || SkillFileUtils.INSTALL_MARKER_FILE.equals(relative)) {
                     continue;
                 }
-                String contentType = detectContentType(file);
-                if (isTextFile(file, contentType)) {
+                String contentType = SkillFileUtils.detectContentType(file);
+                if (SkillFileUtils.isTextFile(file, contentType)) {
                     resources.put(relative, Files.readString(file, StandardCharsets.UTF_8));
                 }
             }
@@ -1275,66 +776,6 @@ public class SkillService {
             throw new IllegalStateException("读取 Agent Skill 资源失败: " + managedPath, exception);
         }
         return resources;
-    }
-
-    private long fileSize(Path path) {
-        try {
-            return Files.size(path);
-        } catch (IOException exception) {
-            throw new IllegalStateException("读取 Skill 文件大小失败: " + path, exception);
-        }
-    }
-
-    private String detectContentType(Path path) {
-        try {
-            String contentType = Files.probeContentType(path);
-            if (contentType != null && !contentType.isBlank()) {
-                return contentType;
-            }
-        } catch (IOException ignored) {
-        }
-        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (fileName.endsWith(".md")) {
-            return "text/markdown";
-        }
-        if (fileName.endsWith(".json")) {
-            return "application/json";
-        }
-        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
-            return "application/yaml";
-        }
-        if (fileName.endsWith(".txt")) {
-            return "text/plain";
-        }
-        if (fileName.endsWith(".png")) {
-            return "image/png";
-        }
-        if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
-            return "image/jpeg";
-        }
-        if (fileName.endsWith(".gif")) {
-            return "image/gif";
-        }
-        if (fileName.endsWith(".webp")) {
-            return "image/webp";
-        }
-        return "application/octet-stream";
-    }
-
-    private boolean isTextFile(Path path, String contentType) {
-        if (contentType.startsWith("text/")) {
-            return true;
-        }
-        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return fileName.endsWith(".md")
-                || fileName.endsWith(".json")
-                || fileName.endsWith(".yaml")
-                || fileName.endsWith(".yml")
-                || fileName.endsWith(".txt");
-    }
-
-    private boolean isImageFile(String contentType) {
-        return contentType.startsWith("image/");
     }
 
     private String resolvePreviewType(Path path) {
@@ -1362,14 +803,14 @@ public class SkillService {
         return "plaintext";
     }
 
+    ManagedSkill requireManagedSkill(String skillId) {
+        return managedSkillRepository.findBySkillId(skillId)
+                .orElseThrow(() -> new IllegalArgumentException("Skill 不存在: " + skillId));
+    }
+
     private SkillTarget requireTarget(String id) {
         return skillTargetRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("SkillTarget 不存在: " + id));
-    }
-
-    private ManagedSkill requireManagedSkill(String skillId) {
-        return managedSkillRepository.findBySkillId(skillId)
-                .orElseThrow(() -> new IllegalArgumentException("Skill 不存在: " + skillId));
     }
 
     private Path resolveTargetRoot(String rootPath) {
@@ -1377,29 +818,6 @@ public class SkillService {
         Path path = Path.of(expandedPath).toAbsolutePath().normalize();
         if (!path.isAbsolute()) {
             throw new IllegalArgumentException("SkillTarget rootPath 必须是绝对路径");
-        }
-        return path;
-    }
-
-    private String expandHomeShortcut(String input) {
-        String value = normalize(input, "SkillTarget rootPath 不能为空");
-        if (value.contains("${") || value.contains("$") || value.contains("%")) {
-            throw new IllegalArgumentException("SkillTarget rootPath 仅支持使用 ~ 表示用户目录");
-        }
-        String userHome = System.getProperty("user.home");
-        if ("~".equals(value)) {
-            value = userHome;
-        } else if (value.startsWith("~/") || value.startsWith("~\\")) {
-            value = userHome + value.substring(1);
-        }
-        return value;
-    }
-
-    private Path resolveDirectoryPath(String directory) {
-        String expandedPath = expandHomeShortcut(normalize(directory, "Skill 目录不能为空"));
-        Path path = Path.of(expandedPath).toAbsolutePath().normalize();
-        if (!path.isAbsolute()) {
-            throw new IllegalArgumentException("Skill 目录必须是绝对路径");
         }
         return path;
     }
@@ -1416,6 +834,29 @@ public class SkillService {
         }
     }
 
+    private String expandHomeShortcut(String input) {
+        String value = SkillFileUtils.normalize(input, "SkillTarget rootPath 不能为空");
+        if (value.contains("${") || value.contains("$") || value.contains("%")) {
+            throw new IllegalArgumentException("SkillTarget rootPath 仅支持使用 ~ 表示用户目录");
+        }
+        String userHome = System.getProperty("user.home");
+        if ("~".equals(value)) {
+            value = userHome;
+        } else if (value.startsWith("~/") || value.startsWith("~\\")) {
+            value = userHome + value.substring(1);
+        }
+        return value;
+    }
+
+    private Path resolveDirectoryPath(String directory) {
+        String expandedPath = expandHomeShortcut(SkillFileUtils.normalize(directory, "Skill 目录不能为空"));
+        Path path = Path.of(expandedPath).toAbsolutePath().normalize();
+        if (!path.isAbsolute()) {
+            throw new IllegalArgumentException("Skill 目录必须是绝对路径");
+        }
+        return path;
+    }
+
     private Path createTempDir(String prefix) {
         try {
             Files.createDirectories(managedSkillsRoot);
@@ -1423,114 +864,6 @@ public class SkillService {
         } catch (IOException exception) {
             throw new IllegalStateException("创建临时 Skill 目录失败", exception);
         }
-    }
-
-    private static String readString(Path path) {
-        try {
-            return Files.readString(path, StandardCharsets.UTF_8);
-        } catch (IOException exception) {
-            throw new IllegalStateException("读取文件失败: " + path, exception);
-        }
-    }
-
-    private static void deleteQuietly(Path path) {
-        if (path == null || Files.notExists(path)) {
-            return;
-        }
-        try {
-            if (Files.isRegularFile(path)) {
-                Files.deleteIfExists(path);
-                return;
-            }
-            Files.walkFileTree(path, new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    Files.deleteIfExists(file);
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                    Files.deleteIfExists(dir);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        } catch (IOException ignored) {
-        }
-    }
-
-    private static String slugify(String value) {
-        String normalized = normalizeOrDefault(value, "skill")
-                .trim()
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-+|-+$", "");
-        return normalized.isBlank() ? "skill" : normalized;
-    }
-
-    private static String normalize(String value, String message) {
-        String normalized = normalizeNullable(value);
-        if (normalized == null) {
-            throw new IllegalArgumentException(message);
-        }
-        return normalized;
-    }
-
-    private static String normalizeNullable(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    private static String normalizeOrDefault(String value, String defaultValue) {
-        String normalized = normalizeNullable(value);
-        return normalized == null ? defaultValue : normalized;
-    }
-
-    private static String normalizeArchiveFallbackId(String fileName) {
-        String normalized = normalizeNullable(fileName);
-        if (normalized == null) {
-            return null;
-        }
-        if (normalized.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            normalized = normalized.substring(0, normalized.length() - 4);
-        }
-        return normalizeNullable(normalized);
-    }
-
-    private static byte[] buildManifestBytes(SkillValidationResult validation,
-                                             String version,
-                                             String digest,
-                                             JsonCodec jsonCodec) {
-        return jsonCodec.write(new SkillManifestFile(
-                1,
-                validation.skillId(),
-                validation.displayName(),
-                normalize(version, "version 不能为空"),
-                validation.description(),
-                validation.owner(),
-                validation.tags() == null ? List.of() : validation.tags(),
-                validation.riskLevel(),
-                normalizeOrDefault(validation.entrypointPath(), "SKILL.md"),
-                digest
-        )).getBytes(StandardCharsets.UTF_8);
-    }
-
-    private Map<String, Object> readInstallMarker(Path directory) {
-        Path markerPath = directory.resolve(INSTALL_MARKER_FILE);
-        if (Files.notExists(markerPath)) {
-            return null;
-        }
-        return jsonCodec.read(readString(markerPath), LinkedHashMap.class);
-    }
-
-    private String markerString(Map<String, Object> marker, String key) {
-        if (marker == null) {
-            return null;
-        }
-        Object value = marker.get(key);
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private record Frontmatter(String name, String description) {
     }
 
     public record SkillManifestFile(int schemaVersion,

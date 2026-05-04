@@ -19,7 +19,6 @@ import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ConfigPublishMode;
 import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
-import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.AiDependency;
@@ -87,14 +86,8 @@ import java.util.regex.Pattern;
 public class RepositoryCatalogService {
     private static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
     private static final ObjectMapper METADATA_OBJECT_MAPPER = new ObjectMapper();
-    private static final Pattern PLUGIN_INVOKE_PATTERN = Pattern.compile(
-            "plugins\\s*\\.\\s*invoke\\s*\\(\\s*([\"'`])([^\"'`]+)\\1\\s*,\\s*([\"'`])([^\"'`]+)\\3"
-    );
     private static final Pattern SCRIPT_INVOKE_PATTERN = Pattern.compile(
             "scripts\\s*\\.\\s*invoke\\s*\\(\\s*([\"'`])([^\"'`]+)\\1"
-    );
-    private static final Pattern SCRIPT_INVOKE_ANY_PATTERN = Pattern.compile(
-            "scripts\\s*\\.\\s*invoke\\s*\\("
     );
     private static final Pattern MODEL_PROFILE_LITERAL_PATTERN = Pattern.compile(
             "((?:[\"'`])?modelProfile(?:[\"'`])?\\s*:\\s*)([\"'`])([^\"'`]+)(\\2)"
@@ -127,8 +120,10 @@ public class RepositoryCatalogService {
     private final HttpClient httpClient;
     private final PluginArtifactResolverRegistry pluginArtifactResolverRegistry;
     private final Path repositoriesRoot;
-    private final ToolRepositoryPublisher toolRepositoryPublisher;
     private final PluginRepositoryPublisher pluginRepositoryPublisher;
+    private final RepositoryPluginService pluginService;
+    private RepositoryToolService toolService;
+    private RepositoryCapabilityPackageService capabilityPackageService;
 
     public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                     RepositoryToolInstallationRepository repositoryToolInstallationRepository,
@@ -160,7 +155,8 @@ public class RepositoryCatalogService {
                 pluginRuntimeService,
                 jsonCodec,
                 properties,
-                new PluginArtifactResolverRegistry(List.of(new LocalPluginArtifactResolver(), new HttpPluginArtifactResolver())));
+                new PluginArtifactResolverRegistry(List.of(new LocalPluginArtifactResolver(), new HttpPluginArtifactResolver())),
+                null);
     }
 
     public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
@@ -179,6 +175,42 @@ public class RepositoryCatalogService {
                                     JsonCodec jsonCodec,
                                     AppProperties properties,
                                     PluginArtifactResolverRegistry pluginArtifactResolverRegistry) {
+        this(repositoryDefinitionRepository,
+                repositoryToolInstallationRepository,
+                capabilityPackageInstallationRepository,
+                scriptRepository,
+                scriptScheduleRepository,
+                executionPresetRepository,
+                configValueRepository,
+                aiModelProfileRepository,
+                aiAgentProfileRepository,
+                aiToolsetRepository,
+                scriptApplicationService,
+                configValueApplicationService,
+                pluginRuntimeService,
+                jsonCodec,
+                properties,
+                pluginArtifactResolverRegistry,
+                null);
+    }
+
+    public RepositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
+                                    RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+                                    CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
+                                    ScriptRepository scriptRepository,
+                                    ScriptScheduleRepository scriptScheduleRepository,
+                                    ExecutionPresetRepository executionPresetRepository,
+                                    ConfigValueRepository configValueRepository,
+                                    AiModelProfileRepository aiModelProfileRepository,
+                                    AiAgentProfileRepository aiAgentProfileRepository,
+                                    AiToolsetRepository aiToolsetRepository,
+                                    ScriptApplicationService scriptApplicationService,
+                                    ConfigValueApplicationService configValueApplicationService,
+                                    PluginRuntimeService pluginRuntimeService,
+                                    JsonCodec jsonCodec,
+                                    AppProperties properties,
+                                    PluginArtifactResolverRegistry pluginArtifactResolverRegistry,
+                                    RepositoryPluginService pluginService) {
         this.repositoryDefinitionRepository = repositoryDefinitionRepository;
         this.repositoryToolInstallationRepository = repositoryToolInstallationRepository;
         this.capabilityPackageInstallationRepository = capabilityPackageInstallationRepository;
@@ -200,8 +232,9 @@ public class RepositoryCatalogService {
         this.repositoriesRoot = Path.of(properties == null || properties.getHomeDir() == null || properties.getHomeDir().isBlank()
                 ? AppProperties.defaultHomeDir()
                 : properties.getHomeDir()).resolve("repositories").toAbsolutePath().normalize();
-        this.toolRepositoryPublisher = new ToolRepositoryPublisher(this);
         this.pluginRepositoryPublisher = new PluginRepositoryPublisher(this);
+        this.pluginService = pluginService != null ? pluginService
+                : new RepositoryPluginService(this, this.pluginRuntimeService, scriptRepository, this.pluginArtifactResolverRegistry);
     }
 
     public List<RepositoryDefinition> listRepositories() {
@@ -423,14 +456,6 @@ public class RepositoryCatalogService {
         );
     }
 
-    public RepositoryPluginInstallResult installPlugin(String repositoryId, String pluginId, boolean force) {
-        return installOrUpdatePlugin(repositoryId, pluginId, false, force);
-    }
-
-    public RepositoryPluginInstallResult updatePlugin(String repositoryId, String pluginId, boolean force) {
-        return installOrUpdatePlugin(repositoryId, pluginId, true, force);
-    }
-
     public RepositoryToolDetail getRepositoryTool(String repositoryId, String toolId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryIndexFile index = readRepositoryIndex(repository);
@@ -490,7 +515,7 @@ public class RepositoryCatalogService {
     }
 
     public RepositoryToolInstallation installTool(String repositoryId, String toolId, boolean installSchedules) {
-        return installTool(repositoryId, toolId, installSchedules, false, false, false);
+        return toolService.installTool(repositoryId, toolId, installSchedules);
     }
 
     public RepositoryToolInstallation installTool(String repositoryId,
@@ -498,7 +523,7 @@ public class RepositoryCatalogService {
                                                  boolean installSchedules,
                                                  boolean installPluginDependencies,
                                                  boolean forcePluginUpgrade) {
-        return installTool(repositoryId, toolId, installSchedules, false, installPluginDependencies, forcePluginUpgrade);
+        return toolService.installTool(repositoryId, toolId, installSchedules, installPluginDependencies, forcePluginUpgrade);
     }
 
     public RepositoryToolInstallation installTool(String repositoryId,
@@ -507,20 +532,11 @@ public class RepositoryCatalogService {
                                                   boolean installScriptDependencies,
                                                   boolean installPluginDependencies,
                                                   boolean forcePluginUpgrade) {
-        return installOrUpdateTool(
-                repositoryId,
-                toolId,
-                installSchedules,
-                false,
-                installScriptDependencies,
-                installPluginDependencies,
-                forcePluginUpgrade,
-                new LinkedHashSet<>()
-        );
+        return toolService.installTool(repositoryId, toolId, installSchedules, installScriptDependencies, installPluginDependencies, forcePluginUpgrade);
     }
 
     public RepositoryToolInstallation updateTool(String repositoryId, String toolId, boolean installSchedules) {
-        return updateTool(repositoryId, toolId, installSchedules, false, false, false);
+        return toolService.updateTool(repositoryId, toolId, installSchedules);
     }
 
     public RepositoryToolInstallation updateTool(String repositoryId,
@@ -528,7 +544,7 @@ public class RepositoryCatalogService {
                                                 boolean installSchedules,
                                                 boolean installPluginDependencies,
                                                 boolean forcePluginUpgrade) {
-        return updateTool(repositoryId, toolId, installSchedules, false, installPluginDependencies, forcePluginUpgrade);
+        return toolService.updateTool(repositoryId, toolId, installSchedules, installPluginDependencies, forcePluginUpgrade);
     }
 
     public RepositoryToolInstallation updateTool(String repositoryId,
@@ -537,93 +553,31 @@ public class RepositoryCatalogService {
                                                  boolean installScriptDependencies,
                                                  boolean installPluginDependencies,
                                                  boolean forcePluginUpgrade) {
-        return installOrUpdateTool(
-                repositoryId,
-                toolId,
-                installSchedules,
-                true,
-                installScriptDependencies,
-                installPluginDependencies,
-                forcePluginUpgrade,
-                new LinkedHashSet<>()
-        );
+        return toolService.updateTool(repositoryId, toolId, installSchedules, installScriptDependencies, installPluginDependencies, forcePluginUpgrade);
     }
 
     public ScriptDefinition syncToolForDevelopment(String repositoryId, String toolId, DevelopmentSyncRequest request) {
-        RepositoryDefinition repository = getRepository(repositoryId);
-        ensureDevelopmentRepository(repository);
-        RepositoryToolDetail detail = getRepositoryTool(repositoryId, toolId);
-        String scriptId = normalizeOrDefault(request == null ? null : request.scriptId(), detail.descriptor().toolId());
-        ScriptDefinition existing = scriptRepository.findById(scriptId).orElse(null);
-        if (existing != null && existing.getScope() != ScriptScope.DEVELOPMENT) {
-            throw new IllegalArgumentException("脚本 ID 已存在，请指定其他开发脚本 ID: " + scriptId);
-        }
-        if (existing != null) {
-            return pullDevelopmentScript(scriptId, false);
-        }
-        ToolSourceState state = resolveToolSourceState(repository, detail);
-        return saveDevelopmentScript(scriptId, existing, detail, state);
+        return toolService.syncToolForDevelopment(repositoryId, toolId, request);
     }
 
     public DevelopmentStatus getDevelopmentStatus(String scriptId) {
-        ScriptDefinition script = scriptApplicationService.get(scriptId);
-        ensureDevelopmentScript(script);
-        RepositoryDefinition repository = getRepository(script.getRepositoryId());
-        RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
-        ToolSourceState state = resolveToolSourceState(repository, detail);
-        String localDigest = computeDevelopmentLocalDigest(script);
-        String syncState = resolveDevelopmentSyncState(script, localDigest, state);
-        boolean remoteChanged = isRemoteChanged(script, state);
-        boolean dirty = isLocalChanged(script, localDigest);
-        return new DevelopmentStatus(
-                script.getId(),
-                script.getRepositoryId(),
-                script.getRepositoryToolId(),
-                script.getRepositoryVersion(),
-                script.getSourceCommit(),
-                state.commit(),
-                script.getSourceDigest(),
-                localDigest,
-                state.digest(),
-                dirty,
-                remoteChanged,
-                syncState,
-                detail.descriptor().version(),
-                script.getSourceSyncedAt()
-        );
+        return toolService.getDevelopmentStatus(scriptId);
     }
 
     public ScriptDefinition pullDevelopmentScript(String scriptId, boolean force) {
-        ScriptDefinition script = scriptApplicationService.get(scriptId);
-        ensureDevelopmentScript(script);
-        RepositoryDefinition repository = getRepository(script.getRepositoryId());
-        syncRepository(repository.getId());
-        RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
-        ToolSourceState state = resolveToolSourceState(repository, detail);
-        String localDigest = computeDevelopmentLocalDigest(script);
-        String syncState = resolveDevelopmentSyncState(script, localDigest, state);
-        if ("SYNCED".equals(syncState)) {
-            return script;
-        }
-        if ("LOCAL_CHANGES".equals(syncState) && !force) {
-            return script;
-        }
-        if ("DIVERGED".equals(syncState) && !force) {
-            throw new DevelopmentConflictException(script.getId(), script.getRepositoryId(), script.getRepositoryToolId());
-        }
-        return saveDevelopmentScript(script.getId(), script, detail, state);
+        return toolService.pullDevelopmentScript(scriptId, force);
     }
 
-    private boolean isRemoteChanged(ScriptDefinition script, ToolSourceState state) {
+    boolean isRemoteChanged(ScriptDefinition script, ToolSourceState state) {
         return !Objects.equals(script.getSourceCommit(), state.commit())
                 || !Objects.equals(script.getSourceDigest(), state.digest());
     }
 
-    private boolean isLocalChanged(ScriptDefinition script, String localDigest) {
+    boolean isLocalChanged(ScriptDefinition script, String localDigest) {
         return !Objects.equals(script.getSourceDigest(), localDigest);
     }
 
-    private String resolveDevelopmentSyncState(ScriptDefinition script, String localDigest, ToolSourceState remoteState) {
+    String resolveDevelopmentSyncState(ScriptDefinition script, String localDigest, ToolSourceState remoteState) {
         boolean localChanged = isLocalChanged(script, localDigest);
         boolean remoteChanged = isRemoteChanged(script, remoteState);
         if (localChanged && remoteChanged) {
@@ -638,7 +592,7 @@ public class RepositoryCatalogService {
         return "SYNCED";
     }
 
-    private void ensureDevelopmentRepository(RepositoryDefinition repository) {
+    void ensureDevelopmentRepository(RepositoryDefinition repository) {
         if (!"DEVELOPMENT".equalsIgnoreCase(repository.getUsage())) {
             throw new IllegalArgumentException("仓库不是开发仓库: " + repository.getId());
         }
@@ -647,7 +601,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void ensureDevelopmentScript(ScriptDefinition script) {
+    void ensureDevelopmentScript(ScriptDefinition script) {
         if (script.getScope() != ScriptScope.DEVELOPMENT) {
             throw new IllegalArgumentException("脚本不是开发仓库脚本: " + script.getId());
         }
@@ -655,157 +609,41 @@ public class RepositoryCatalogService {
         normalize(script.getRepositoryToolId(), "开发脚本缺少来源工具");
     }
 
-    private ScriptDefinition saveDevelopmentScript(String scriptId,
-                                                   ScriptDefinition existing,
-                                                   RepositoryToolDetail detail,
-                                                   ToolSourceState state) {
-        LocalDateTime now = LocalDateTime.now();
-        ScriptPackaging packaging = resolvePackaging(detail.descriptor().packaging());
-        Map<String, Object> inputSchema = readSchema(detail.descriptor().repositoryId(), detail.descriptor().inputSchemaPath());
-        Map<String, Object> outputSchema = readSchema(detail.descriptor().repositoryId(), detail.descriptor().outputSchemaPath());
-        ScriptDefinition definition = new ScriptDefinition()
-                .setId(scriptId)
-                .setName(detail.descriptor().displayName())
-                .setType(ScriptType.valueOf(detail.descriptor().type()))
-                .setPackaging(packaging)
-                .setSource(detail.source())
-                .setPythonRequirements(detail.pythonRequirements())
-                .setInputSchema(inputSchema)
-                .setOutputSchema(outputSchema)
-                .setStatus(ScriptStatus.PUBLISHED)
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
-                        .setName(detail.descriptor().displayName())
-                        .setType(ScriptType.valueOf(detail.descriptor().type()))
-                        .setPackaging(packaging)
-                        .setSource(detail.source())
-                        .setPythonRequirements(detail.pythonRequirements())
-                        .setInputSchema(inputSchema)
-                        .setOutputSchema(outputSchema)
-                        .setScriptDependencies(detail.descriptor().scriptDependencies()))
-                .setVersion(existing == null ? 1 : existing.getVersion())
-                .setScope(ScriptScope.DEVELOPMENT)
-                .setRepositoryId(detail.descriptor().repositoryId())
-                .setRepositoryToolId(detail.descriptor().toolId())
-                .setRepositoryVersion(detail.descriptor().version())
-                .setSourcePath(state.path())
-                .setSourceCommit(state.commit())
-                .setSourceDigest(state.digest())
-                .setSourceSyncedAt(now)
-                .setDirty(false)
-                .setEditable(true)
-                .setOwner(detail.descriptor().owner())
-                .setDescription(detail.descriptor().description())
-                .setTags(detail.descriptor().tags())
-                .setScriptDependencies(detail.descriptor().scriptDependencies())
-                .setPluginDependencies(detail.descriptor().pluginDependencies())
-                .setCreatedAt(existing == null ? now : existing.getCreatedAt())
-                .setUpdatedAt(now);
-        return scriptRepository.save(definition);
-    }
-
-    void assertDevelopmentPublishSafe(ScriptDefinition script, RepositoryDefinition repository) {
-        RepositoryToolDetail detail = getRepositoryTool(repository.getId(), script.getRepositoryToolId());
-        ToolSourceState state = resolveToolSourceState(repository, detail);
-        String syncState = resolveDevelopmentSyncState(script, computeDevelopmentLocalDigest(script), state);
-        if ("REMOTE_CHANGES".equals(syncState) || "DIVERGED".equals(syncState)) {
-            throw new DevelopmentConflictException(script.getId(), script.getRepositoryId(), script.getRepositoryToolId());
-        }
-    }
-
-    void updateDevelopmentSourceMetadata(ScriptDefinition sourceScript,
-                                         RepositoryDefinition repository,
-                                         RepositoryToolDetail detail) {
-        ToolSourceState state = resolveToolSourceState(repository, detail);
-        ScriptDefinition updated = scriptApplicationService.get(sourceScript.getId())
-                .setRepositoryVersion(detail.descriptor().version())
-                .setSourcePath(state.path())
-                .setSourceCommit(state.commit())
-                .setSourceDigest(state.digest())
-                .setSourceSyncedAt(LocalDateTime.now())
-                .setDirty(false);
-        scriptRepository.save(updated);
-    }
-
     public void uninstallTool(String installedScriptId) {
-        ScriptDefinition definition = scriptRepository.findById(installedScriptId)
-                .orElseThrow(() -> new IllegalArgumentException("已安装工具不存在: " + installedScriptId));
-        if (definition.getScope() != ScriptScope.REPOSITORY) {
-            throw new IllegalArgumentException("仅支持卸载仓库工具");
-        }
-        scriptScheduleRepository.findAll().stream()
-                .filter(item -> installedScriptId.equals(item.getRepositoryToolId()))
-                .map(ScriptSchedule::getId)
-                .toList()
-                .forEach(scriptScheduleRepository::deleteById);
-        scriptRepository.deleteById(installedScriptId);
-        repositoryToolInstallationRepository.deleteByToolId(installedScriptId);
+        toolService.uninstallTool(installedScriptId);
     }
 
     public ScriptDefinition forkTool(String installedScriptId, String newId, String newName) {
-        return scriptApplicationService.createFork(installedScriptId, newId, newName);
+        return toolService.forkTool(installedScriptId, newId, newName);
     }
 
     public RepositoryPublishConfigPreview previewPublishConfig(RepositoryPublishConfigPreviewRequest request) {
-        String scriptId = normalize(request == null ? null : request.scriptId(), "scriptId 不能为空");
-        List<ScriptSchedule> schedules = resolvePublishSchedules(scriptId, request == null ? null : request.scheduleIds());
-        RepositoryPublishConfigResolver.PublishConfigResolution resolution = RepositoryPublishConfigResolver.resolve(
-                request == null ? null : request.source(),
-                schedules.stream().map(ScriptSchedule::getInput).toList(),
-                configValueRepository.findAll()
-        );
-        return new RepositoryPublishConfigPreview(
-                resolution.items().stream()
-                        .map(item -> new RepositoryPublishConfigCandidate(item.key(), item.label(), item.secret()))
-                        .toList(),
-                resolution.missingKeys()
-        );
+        return toolService.previewPublishConfig(request);
     }
 
     public CapabilityPackagePublishPreview previewCapabilityPackage(String repositoryId,
                                                                     CapabilityPackagePublishPreviewRequest request) {
-        RepositoryDefinition repository = getRepository(repositoryId);
-        CapabilityPackageDraft draft = buildCapabilityPackageDraft(repository, request);
-        return buildCapabilityPackagePublishPreview(repository, draft);
+        return capabilityPackageService.previewCapabilityPackage(repositoryId, request);
     }
 
     public RepositoryToolDescriptor publishTool(String repositoryId, RepositoryPublishRequest request) {
-        return toolRepositoryPublisher.publish(repositoryId, request);
+        return toolService.publishTool(repositoryId, request);
     }
 
     public CapabilityPackageDescriptor publishCapabilityPackage(String repositoryId, CapabilityPackagePublishRequest request) {
-        WritableRepositorySession session = openWritableRepositorySession(repositoryId);
-        RepositoryDefinition repository = session.repository();
-        CapabilityPackageDraft draft = buildCapabilityPackageDraft(repository, request);
-        CapabilityPackagePublishPreview preview = buildCapabilityPackagePublishPreview(repository, draft);
-        if (preview.checks().stream().anyMatch(item -> "BLOCKER".equals(item.severity()))) {
-            throw new IllegalArgumentException("能力包存在阻断项，不能发布");
-        }
-        assertCapabilityPackageVersionAvailable(repositoryId, session.index(), draft.packageId(), draft.version());
-        Path packageRoot = session.root().resolve(CAPABILITY_PACKAGES_DIR).resolve(draft.packageId());
-        writeCapabilityPackageFiles(packageRoot, draft, preview);
-        updateCapabilityPackageIndex(session.root(), repository, draft, preview);
-        session.commitPublishedAsset(draft.packageId(), draft.version(), draft.releaseNotes());
-        return getCapabilityPackage(repositoryId, draft.packageId()).descriptor();
+        return capabilityPackageService.publishCapabilityPackage(repositoryId, request);
     }
 
     public CapabilityPackageInstallResult installCapabilityPackage(String repositoryId, String packageId) {
-        return installOrUpdateCapabilityPackage(repositoryId, packageId, false, new LinkedHashSet<>());
+        return capabilityPackageService.installCapabilityPackage(repositoryId, packageId);
     }
 
     public CapabilityPackageInstallResult updateCapabilityPackage(String repositoryId, String packageId) {
-        return installOrUpdateCapabilityPackage(repositoryId, packageId, true, new LinkedHashSet<>());
+        return capabilityPackageService.updateCapabilityPackage(repositoryId, packageId);
     }
 
     public void uninstallCapabilityPackage(String repositoryId, String packageId) {
-        CapabilityPackageInstallation installation = capabilityPackageInstallationRepository
-                .findByInstallationId(capabilityPackageInstallationId(repositoryId, packageId))
-                .orElseThrow(() -> new IllegalArgumentException("能力包尚未安装: " + packageId));
-        uninstallManagedCapabilityPackageAssets(installation);
-        for (String presetId : installation.getPresetIds()) {
-            executionPresetRepository.deleteById(presetId);
-        }
-        capabilityPackageInstallationRepository.deleteByInstallationId(installation.getInstallationId());
-        removeManagedConfigTemplates(repositoryId, packageId);
+        capabilityPackageService.uninstallCapabilityPackage(repositoryId, packageId);
     }
 
     public RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryPluginPublishRequest request) {
@@ -889,95 +727,15 @@ public class RepositoryCatalogService {
         return configValueRepository;
     }
 
-    private RepositoryToolInstallation installOrUpdateTool(String repositoryId,
-                                                           String toolId,
-                                                           boolean installSchedules,
-                                                           boolean updateOnly,
-                                                           boolean installScriptDependencies,
-                                                           boolean installPluginDependencies,
-                                                           boolean forcePluginUpgrade,
-                                                           LinkedHashSet<String> visiting) {
-        String installationKey = repositoryId + ":" + toolId;
-        if (!visiting.add(installationKey)) {
-            throw new IllegalStateException("检测到脚本循环依赖: " + String.join(" -> ", visiting) + " -> " + installationKey);
-        }
-        try {
-            RepositoryToolDetail detail = getRepositoryTool(repositoryId, toolId);
-            String installedScriptId = detail.descriptor().installedScriptId();
-            ScriptDefinition existing = scriptRepository.findById(installedScriptId).orElse(null);
-            if (updateOnly && existing == null) {
-                throw new IllegalArgumentException("工具尚未安装: " + installedScriptId);
-            }
-            resolveScriptDependencies(
-                    detail.descriptor().scriptDependencies(),
-                    installScriptDependencies,
-                    installPluginDependencies,
-                    forcePluginUpgrade,
-                    visiting
-            );
-            resolvePluginDependencies(repositoryId, detail.descriptor().pluginDependencies(), installPluginDependencies, forcePluginUpgrade);
-
-            LocalDateTime now = LocalDateTime.now();
-            ScriptPackaging packaging = resolvePackaging(detail.descriptor().packaging());
-            Map<String, Object> inputSchema = readSchema(repositoryId, detail.descriptor().inputSchemaPath());
-            Map<String, Object> outputSchema = readSchema(repositoryId, detail.descriptor().outputSchemaPath());
-            ScriptDefinition definition = new ScriptDefinition()
-                    .setId(installedScriptId)
-                    .setName(detail.descriptor().displayName())
-                    .setType(ScriptType.valueOf(detail.descriptor().type()))
-                    .setPackaging(packaging)
-                    .setSource(detail.source())
-                    .setPythonRequirements(detail.pythonRequirements())
-                    .setInputSchema(inputSchema)
-                    .setOutputSchema(outputSchema)
-                    .setStatus(ScriptStatus.PUBLISHED)
-                    .setPublishedSnapshot(new PublishedScriptSnapshot()
-                            .setName(detail.descriptor().displayName())
-                            .setType(ScriptType.valueOf(detail.descriptor().type()))
-                            .setPackaging(packaging)
-                            .setSource(detail.source())
-                            .setPythonRequirements(detail.pythonRequirements())
-                            .setInputSchema(inputSchema)
-                            .setOutputSchema(outputSchema)
-                            .setScriptDependencies(detail.descriptor().scriptDependencies()))
-                    .setVersion(existing == null ? 1 : (existing.getVersion() == null ? 1 : existing.getVersion() + 1))
-                    .setScope(ScriptScope.REPOSITORY)
-                    .setRepositoryId(repositoryId)
-                    .setRepositoryToolId(detail.descriptor().toolId())
-                    .setRepositoryVersion(detail.descriptor().version())
-                    .setEditable(false)
-                    .setOwner(detail.descriptor().owner())
-                    .setDescription(detail.descriptor().description())
-                    .setTags(detail.descriptor().tags())
-                    .setScriptDependencies(detail.descriptor().scriptDependencies())
-                    .setPluginDependencies(detail.descriptor().pluginDependencies())
-                    .setCreatedAt(existing == null ? now : existing.getCreatedAt())
-                    .setUpdatedAt(now);
-            scriptRepository.save(definition);
-            syncConfigTemplates(repositoryId, detail.descriptor().toolId(), detail.descriptor().version(), detail.configTemplate());
-            if (installSchedules) {
-                syncScheduleTemplates(definition, detail.scheduleTemplate());
-            }
-
-            RepositoryToolInstallation installation = new RepositoryToolInstallation()
-                    .setToolId(installedScriptId)
-                    .setRepositoryId(repositoryId)
-                    .setName(definition.getName())
-                    .setVersion(detail.descriptor().version())
-                    .setLatestVersion(detail.descriptor().version())
-                    .setOwner(definition.getOwner())
-                    .setDescription(definition.getDescription())
-                    .setInstalledAt(existing == null ? now : Optional.ofNullable(repositoryToolInstallationRepository.findByToolId(installedScriptId)
-                            .map(RepositoryToolInstallation::getInstalledAt)
-                            .orElse(null)).orElse(now))
-                    .setUpdatedAt(now);
-            return repositoryToolInstallationRepository.save(installation);
-        } finally {
-            visiting.remove(installationKey);
-        }
+    void setToolService(RepositoryToolService toolService) {
+        this.toolService = toolService;
     }
 
-    private CapabilityPackageInstallResult installOrUpdateCapabilityPackage(String repositoryId,
+    void setCapabilityPackageService(RepositoryCapabilityPackageService capabilityPackageService) {
+        this.capabilityPackageService = capabilityPackageService;
+    }
+
+    CapabilityPackageInstallResult installOrUpdateCapabilityPackage(String repositoryId,
                                                                             String packageId,
                                                                             boolean updateOnly,
                                                                             LinkedHashSet<String> visiting) {
@@ -1025,12 +783,12 @@ public class RepositoryCatalogService {
                         if (dependency.repositoryId() == null || dependency.repositoryId().isBlank()) {
                             throw new IllegalArgumentException("缺少插件仓库来源，且本地未安装插件: " + dependency.assetId());
                         }
-                        installPlugin(dependency.repositoryId(), dependency.assetId(), false);
+                        pluginService.installPlugin(dependency.repositoryId(), dependency.assetId(), false);
                     } else if (dependency.repositoryId() != null
                             && !dependency.repositoryId().isBlank()
                             && (!Objects.equals(registration.getRepositoryId(), dependency.repositoryId())
                             || !Objects.equals(registration.getRepositoryPluginId(), dependency.assetId()))) {
-                        installPlugin(dependency.repositoryId(), dependency.assetId(), false);
+                        pluginService.installPlugin(dependency.repositoryId(), dependency.assetId(), false);
                     }
                     continue;
                 }
@@ -1434,7 +1192,7 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
-    private CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
+    CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
                                                                CapabilityPackagePublishPreviewRequest request) {
         return buildCapabilityPackageDraft(
                 repository,
@@ -1455,7 +1213,7 @@ public class RepositoryCatalogService {
         );
     }
 
-    private CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
+    CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
                                                                CapabilityPackagePublishRequest request) {
         return buildCapabilityPackageDraft(
                 repository,
@@ -1476,7 +1234,7 @@ public class RepositoryCatalogService {
         );
     }
 
-    private CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
+    CapabilityPackageDraft buildCapabilityPackageDraft(RepositoryDefinition repository,
                                                                String packageIdValue,
                                                                String displayNameValue,
                                                                String versionValue,
@@ -1674,7 +1432,7 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
-    private CapabilityPackagePublishPreview buildCapabilityPackagePublishPreview(RepositoryDefinition repository,
+    CapabilityPackagePublishPreview buildCapabilityPackagePublishPreview(RepositoryDefinition repository,
                                                                                 CapabilityPackageDraft draft) {
         CapabilityPackageDetail currentPackage = null;
         try {
@@ -1747,7 +1505,7 @@ public class RepositoryCatalogService {
         );
     }
 
-    private void writeCapabilityPackageFiles(Path packageRoot,
+    void writeCapabilityPackageFiles(Path packageRoot,
                                              CapabilityPackageDraft draft,
                                              CapabilityPackagePublishPreview preview) {
         try {
@@ -1802,7 +1560,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void updateCapabilityPackageIndex(Path root,
+    void updateCapabilityPackageIndex(Path root,
                                               RepositoryDefinition repository,
                                               CapabilityPackageDraft draft,
                                               CapabilityPackagePublishPreview preview) {
@@ -1863,7 +1621,7 @@ public class RepositoryCatalogService {
         ));
     }
 
-    private void uninstallManagedCapabilityPackageAssets(CapabilityPackageInstallation installation) {
+    void uninstallManagedCapabilityPackageAssets(CapabilityPackageInstallation installation) {
         for (String scriptId : installation.getScriptIds()) {
             scriptScheduleRepository.deleteByScriptId(scriptId);
             scriptRepository.deleteById(scriptId);
@@ -1879,7 +1637,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void removeManagedConfigTemplates(String repositoryId, String packageId) {
+    void removeManagedConfigTemplates(String repositoryId, String packageId) {
         for (ConfigValue configValue : configValueRepository.findAll()) {
             if (configValue.isManaged()
                     && Objects.equals(repositoryId, configValue.getRepositoryId())
@@ -1889,15 +1647,15 @@ public class RepositoryCatalogService {
         }
     }
 
-    private String capabilityPackageInstallationId(String repositoryId, String packageId) {
+    String capabilityPackageInstallationId(String repositoryId, String packageId) {
         return normalize(repositoryId, "repositoryId 不能为空") + ":" + normalize(packageId, "packageId 不能为空");
     }
 
-    private String aiPackageEntryAgentRuntimeId(String repositoryId, String packageId) {
+    String aiPackageEntryAgentRuntimeId(String repositoryId, String packageId) {
         return AI_PACKAGE_ENTRY_PREFIX + normalize(repositoryId, "repositoryId 不能为空") + "." + normalize(packageId, "packageId 不能为空");
     }
 
-    private String aiPackageInternalId(String repositoryId, String packageId, String kind, String localId) {
+    String aiPackageInternalId(String repositoryId, String packageId, String kind, String localId) {
         return AI_PACKAGE_INTERNAL_PREFIX
                 + normalize(repositoryId, "repositoryId 不能为空")
                 + "."
@@ -1908,7 +1666,7 @@ public class RepositoryCatalogService {
                 + normalize(localId, "localId 不能为空");
     }
 
-    private ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryToolDetail detail) {
+    ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryToolDetail detail) {
         String toolPath = findRepositoryToolPath(repository, detail.descriptor().toolId());
         String digest = computeToolDigest(detail);
         String commit = "GIT".equals(repository.getType()) ? gitHead(resolveRepositoryRoot(repository)) : null;
@@ -1944,7 +1702,7 @@ public class RepositoryCatalogService {
         return sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
     }
 
-    private String computeDevelopmentLocalDigest(ScriptDefinition script) {
+    String computeDevelopmentLocalDigest(ScriptDefinition script) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("toolId", script.getRepositoryToolId());
         values.put("displayName", script.getName());
@@ -1963,145 +1721,14 @@ public class RepositoryCatalogService {
         return sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
     }
 
-    private RepositoryPluginInstallResult installOrUpdatePlugin(String repositoryId,
-                                                               String pluginId,
-                                                               boolean updateOnly,
-                                                               boolean force) {
-        RepositoryPluginDetail detail = getRepositoryPlugin(repositoryId, pluginId);
-        RepositoryPluginDescriptor descriptor = detail.descriptor();
-        PluginRegistration existing = findPluginRegistration(pluginId).orElse(null);
-        if (updateOnly && existing == null) {
-            throw new IllegalArgumentException("插件尚未安装: " + pluginId);
-        }
-        List<RepositoryPluginConflict> conflicts = findPluginConflicts(pluginId, descriptor.version());
-        if (!conflicts.isEmpty() && !force) {
-            throw new RepositoryPluginConflictException(pluginId, conflicts);
-        }
-
-        RepositoryDefinition repository = getRepository(repositoryId);
-        PluginArtifactRef artifactRef = validatePluginArtifactRef(detail.plugin().artifact(), true);
-        PluginArtifact artifact = pluginArtifactResolverRegistry.resolve(
-                artifactRef,
-                new PluginArtifactContext(repository, detail, resolveRepositoryRoot(repository))
-        );
-        verifySha256(pluginId, artifact.content(), artifactRef.sha256());
-        verifySize(pluginId, artifact.content(), artifactRef.size());
-        PluginView plugin = existing == null
-                ? pluginRuntimeService.installFromRepository(
-                artifact.fileName(),
-                artifact.content(),
-                repositoryId,
-                pluginId,
-                descriptor.version()
-        )
-                : pluginRuntimeService.upgradeFromRepository(
-                pluginId,
-                artifact.fileName(),
-                artifact.content(),
-                repositoryId,
-                pluginId,
-                descriptor.version()
-        );
-        return new RepositoryPluginInstallResult(plugin, conflicts);
-    }
-
-    private void resolvePluginDependencies(String repositoryId,
-                                           List<PluginDependency> dependencies,
-                                           boolean installPluginDependencies,
-                                           boolean forcePluginUpgrade) {
-        for (PluginDependency dependency : dependencies == null ? List.<PluginDependency>of() : dependencies) {
-            String pluginId = normalize(dependency.getPluginId(), "插件依赖 pluginId 不能为空");
-            PluginRegistration registration = findPluginRegistration(pluginId).orElse(null);
-            if (registration != null && versionSatisfies(registration.getVersion(), dependency.getVersionRange())) {
-                continue;
-            }
-            if (!installPluginDependencies) {
-                throw new IllegalArgumentException("缺少插件依赖或版本不满足: " + pluginId + " " + normalizeOrDefault(dependency.getVersionRange(), ""));
-            }
-
-            RepositoryPluginDescriptor descriptor = findRepositoryPlugin(repositoryId, pluginId)
-                    .orElseThrow(() -> new IllegalArgumentException("仓库中缺少插件依赖: " + pluginId));
-            if (!versionSatisfies(descriptor.version(), dependency.getVersionRange())) {
-                throw new IllegalArgumentException("仓库插件版本不满足工具依赖: " + pluginId + " " + dependency.getVersionRange());
-            }
-            if (registration == null) {
-                installPlugin(repositoryId, pluginId, forcePluginUpgrade);
-            } else {
-                updatePlugin(repositoryId, pluginId, forcePluginUpgrade);
-            }
-        }
-    }
-
-    private void resolveScriptDependencies(List<ScriptDependency> dependencies,
-                                           boolean installScriptDependencies,
-                                           boolean installPluginDependencies,
-                                           boolean forcePluginUpgrade,
-                                           LinkedHashSet<String> visiting) {
-        for (ScriptDependency dependency : dependencies == null ? List.<ScriptDependency>of() : dependencies) {
-            String scriptId = normalize(dependency.getScriptId(), "脚本依赖 scriptId 不能为空");
-            String repositoryId = normalize(dependency.getRepositoryId(), "脚本依赖 repositoryId 不能为空: " + scriptId);
-            String toolId = normalize(dependency.getToolId(), "脚本依赖 toolId 不能为空: " + scriptId);
-            ScriptDefinition installed = scriptRepository.findInstalledByRepositorySource(repositoryId, toolId).orElse(null);
-            if (installed != null && versionSatisfies(installed.getRepositoryVersion(), dependency.getVersionRange())) {
-                continue;
-            }
-            if (!installScriptDependencies) {
-                throw new IllegalArgumentException(
-                        "缺少脚本依赖或版本不满足: " + scriptId + " -> " + repositoryId + "/" + toolId + " "
-                                + normalizeOrDefault(dependency.getVersionRange(), "")
-                );
-            }
-
-            RepositoryToolDescriptor descriptor = getRepositoryTool(repositoryId, toolId).descriptor();
-            if (!versionSatisfies(descriptor.version(), dependency.getVersionRange())) {
-                throw new IllegalArgumentException(
-                        "仓库工具版本不满足脚本依赖: " + scriptId + " -> " + repositoryId + "/" + toolId + " "
-                                + dependency.getVersionRange()
-                );
-            }
-            installOrUpdateTool(
-                    repositoryId,
-                    toolId,
-                    false,
-                    installed != null,
-                    true,
-                    installPluginDependencies,
-                    forcePluginUpgrade,
-                    visiting
-            );
-        }
-    }
-
-    private Optional<RepositoryPluginDescriptor> findRepositoryPlugin(String repositoryId, String pluginId) {
-        return listRepositoryPlugins(repositoryId).stream()
-                .filter(item -> pluginId.equals(item.pluginId()))
-                .findFirst();
-    }
-
-    private Optional<PluginRegistration> findPluginRegistration(String pluginId) {
+    Optional<PluginRegistration> findPluginRegistration(String pluginId) {
         return pluginRuntimeService.list().stream()
                 .filter(item -> pluginId.equals(item.getPluginId()))
                 .findFirst()
                 .map(item -> pluginRuntimeService.getRegistration(pluginId));
     }
 
-    private List<RepositoryPluginConflict> findPluginConflicts(String pluginId, String targetVersion) {
-        List<RepositoryPluginConflict> conflicts = new ArrayList<>();
-        for (ScriptDefinition script : scriptRepository.findAll()) {
-            for (PluginDependency dependency : script.getPluginDependencies()) {
-                if (pluginId.equals(dependency.getPluginId()) && !versionSatisfies(targetVersion, dependency.getVersionRange())) {
-                    conflicts.add(new RepositoryPluginConflict(
-                            script.getId(),
-                            script.getName(),
-                            dependency.getVersionRange()
-                    ));
-                }
-            }
-        }
-        return conflicts;
-    }
-
-    private boolean versionSatisfies(String version, String range) {
+    static boolean versionSatisfies(String version, String range) {
         if (range == null || range.isBlank()) {
             return true;
         }
@@ -2132,7 +1759,7 @@ public class RepositoryCatalogService {
         return true;
     }
 
-    private int compareVersion(String left, String right) {
+    static int compareVersion(String left, String right) {
         String[] leftParts = normalizeVersion(left).split("\\.");
         String[] rightParts = normalizeVersion(right).split("\\.");
         int length = Math.max(leftParts.length, rightParts.length);
@@ -2146,12 +1773,12 @@ public class RepositoryCatalogService {
         return 0;
     }
 
-    private String normalizeVersion(String version) {
+    static String normalizeVersion(String version) {
         String normalized = version == null ? "" : version.trim();
         return normalized.startsWith("v") || normalized.startsWith("V") ? normalized.substring(1) : normalized;
     }
 
-    private int parseVersionPart(String value) {
+    static int parseVersionPart(String value) {
         String digits = value.replaceAll("[^0-9].*$", "");
         if (digits.isBlank()) {
             return 0;
@@ -2159,7 +1786,7 @@ public class RepositoryCatalogService {
         return Integer.parseInt(digits);
     }
 
-    private void verifySha256(String pluginId, byte[] content, String expected) {
+    void verifySha256(String pluginId, byte[] content, String expected) {
         normalize(expected, "插件 artifact.sha256 不能为空");
         String actual = sha256(content);
         if (!actual.equalsIgnoreCase(expected.trim())) {
@@ -2167,7 +1794,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void verifySize(String pluginId, byte[] content, Long expected) {
+    void verifySize(String pluginId, byte[] content, Long expected) {
         if (expected == null) {
             return;
         }
@@ -2179,7 +1806,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private String sha256(byte[] content) {
+    static String sha256(byte[] content) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
         } catch (NoSuchAlgorithmException exception) {
@@ -2226,63 +1853,6 @@ public class RepositoryCatalogService {
         }
     }
 
-    private void syncScheduleTemplates(ScriptDefinition definition, List<ScheduleTemplateItem> templates) {
-        List<ScriptSchedule> all = scriptScheduleRepository.findAll();
-        for (ScheduleTemplateItem template : templates) {
-            ScriptSchedule existing = all.stream()
-                    .filter(item -> definition.getId().equals(item.getScriptId()))
-                    .filter(item -> definition.getRepositoryId().equals(item.getRepositoryId()))
-                    .filter(item -> definition.getId().equals(item.getRepositoryToolId()))
-                    .filter(item -> item.getName().equals(template.name()))
-                    .findFirst()
-                    .orElse(null);
-            ScriptSchedule schedule = new ScriptSchedule()
-                    .setId(existing == null ? UUID.randomUUID().toString() : existing.getId())
-                    .setScriptId(definition.getId())
-                    .setName(template.name())
-                    .setCronExpression(template.cronExpression())
-                    .setInput(template.input() == null ? Map.of() : template.input())
-                    .setEnabled(false)
-                    .setEditable(false)
-                    .setRepositoryId(definition.getRepositoryId())
-                    .setRepositoryToolId(definition.getId())
-                    .setRepositoryVersion(definition.getRepositoryVersion())
-                    .setCreatedAt(existing == null ? LocalDateTime.now() : existing.getCreatedAt())
-                    .setUpdatedAt(LocalDateTime.now());
-            scriptScheduleRepository.save(schedule);
-        }
-    }
-
-    void writeToolFiles(Path toolDir,
-                        String toolId,
-                        ScriptDefinition script,
-                        RepositoryPublishRequest request,
-                        List<ConfigTemplateItem> configTemplates,
-                        List<ScheduleTemplateItem> scheduleTemplates,
-                        List<ScriptDependency> scriptDependencies) {
-        try {
-            Files.createDirectories(toolDir);
-            String sourceFileName = script.getType() == ScriptType.PYTHON ? "source.py" : "source.groovy";
-            Files.writeString(toolDir.resolve(sourceFileName), script.getPublishedSnapshot().getSource(), StandardCharsets.UTF_8);
-            writeJson(toolDir.resolve("tool.json"), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies));
-            writeJson(toolDir.resolve("input.schema.json"), script.getPublishedSnapshot().getInputSchema());
-            writeJson(toolDir.resolve("output.schema.json"), script.getPublishedSnapshot().getOutputSchema());
-            if (script.getPublishedSnapshot().getPythonRequirements() != null
-                    && !script.getPublishedSnapshot().getPythonRequirements().isBlank()) {
-                Files.writeString(toolDir.resolve("requirements.txt"), script.getPublishedSnapshot().getPythonRequirements(), StandardCharsets.UTF_8);
-            }
-
-            if (!configTemplates.isEmpty()) {
-                writeJson(toolDir.resolve("config.template.json"), configTemplates);
-            }
-            if (!scheduleTemplates.isEmpty()) {
-                writeJson(toolDir.resolve("schedules.template.json"), scheduleTemplates);
-            }
-        } catch (IOException exception) {
-            throw new IllegalStateException("写入仓库工具文件失败", exception);
-        }
-    }
-
     void writePluginFiles(Path pluginDir,
                           String pluginId,
                           String displayName,
@@ -2306,155 +1876,6 @@ public class RepositoryCatalogService {
         } catch (IOException exception) {
             throw new IllegalStateException("写入仓库插件文件失败", exception);
         }
-    }
-
-    private ToolFile buildToolFile(ScriptDefinition script,
-                                   RepositoryPublishRequest request,
-                                   String sourceFileName,
-                                   List<ConfigTemplateItem> configTemplates,
-                                   List<ScheduleTemplateItem> scheduleTemplates,
-                                   List<ScriptDependency> scriptDependencies) {
-        return new ToolFile(
-                1,
-                normalize(request.toolId(), "toolId 不能为空"),
-                normalizeOrDefault(request.displayName(), script.getName()),
-                normalize(request.version(), "version 不能为空"),
-                script.getType().name(),
-                script.getPackaging().name(),
-                normalizeNullable(script.getDescription()),
-                normalizeNullable(request.releaseNotes()),
-                normalizeNullable(request.owner()),
-                request.tags() == null ? List.of() : request.tags(),
-                sourceFileName,
-                script.getPublishedSnapshot().getPythonRequirements() == null || script.getPublishedSnapshot().getPythonRequirements().isBlank()
-                        ? null
-                        : "requirements.txt",
-                "input.schema.json",
-                "output.schema.json",
-                configTemplates.isEmpty() ? null : "config.template.json",
-                scheduleTemplates.isEmpty() ? null : "schedules.template.json",
-                null,
-                null,
-                scriptDependencies,
-                resolveToolPluginDependencies(script)
-        );
-    }
-
-    private List<PluginDependency> resolveToolPluginDependencies(ScriptDefinition script) {
-        Map<String, String> installedPluginVersions = new LinkedHashMap<>();
-        for (PluginView plugin : pluginRuntimeService.list()) {
-            installedPluginVersions.put(plugin.getPluginId(), plugin.getVersion());
-        }
-        Map<String, PluginDependency> dependencies = new LinkedHashMap<>();
-        mergePluginDependencies(dependencies, script.getPluginDependencies());
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
-        mergePluginDependencies(
-                dependencies,
-                extractPluginDependenciesFromSource(snapshot == null ? script.getSource() : snapshot.getSource(), installedPluginVersions)
-        );
-        return List.copyOf(dependencies.values());
-    }
-
-    List<ScriptDependency> resolveToolScriptDependencies(String defaultRepositoryId,
-                                                         ScriptDefinition script,
-                                                         RepositoryPublishRequest request) {
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
-        String source = snapshot == null ? script.getSource() : snapshot.getSource();
-        int invocationCount = countScriptInvocations(source);
-        int literalInvocationCount = countLiteralScriptInvocations(source);
-        if (invocationCount != literalInvocationCount) {
-            throw new IllegalArgumentException("仓库发布仅支持字面量 scripts.invoke(...) 依赖，请先移除动态脚本调用");
-        }
-        List<String> detectedScriptIds = extractScriptDependenciesFromSource(source);
-        if (detectedScriptIds.isEmpty()) {
-            return List.of();
-        }
-
-        Map<String, ScriptDependency> declaredByScriptId = new LinkedHashMap<>();
-        for (ScriptDependency item : request.scriptDependencies() == null ? List.<ScriptDependency>of() : request.scriptDependencies()) {
-            String scriptId = normalize(item.getScriptId(), "脚本依赖 scriptId 不能为空");
-            if (declaredByScriptId.containsKey(scriptId)) {
-                throw new IllegalArgumentException("脚本依赖重复声明: " + scriptId);
-            }
-            String repositoryId = normalizeOrDefault(item.getRepositoryId(), defaultRepositoryId);
-            String toolId = normalize(item.getToolId(), "脚本依赖 toolId 不能为空: " + scriptId);
-            RepositoryToolDescriptor descriptor = getRepositoryTool(repositoryId, toolId).descriptor();
-            declaredByScriptId.put(scriptId, new ScriptDependency()
-                    .setScriptId(scriptId)
-                    .setRepositoryId(repositoryId)
-                    .setToolId(toolId)
-                    .setVersionRange(normalizeOrDefault(item.getVersionRange(), ">= " + descriptor.version())));
-        }
-
-        List<String> missing = detectedScriptIds.stream()
-                .filter(scriptId -> !declaredByScriptId.containsKey(scriptId))
-                .toList();
-        if (!missing.isEmpty()) {
-            throw new IllegalArgumentException("脚本依赖缺少仓库映射: " + String.join(", ", missing));
-        }
-
-        List<String> extras = declaredByScriptId.keySet().stream()
-                .filter(scriptId -> !detectedScriptIds.contains(scriptId))
-                .toList();
-        if (!extras.isEmpty()) {
-            throw new IllegalArgumentException("脚本依赖声明未在源码中使用: " + String.join(", ", extras));
-        }
-
-        List<ScriptDependency> dependencies = new ArrayList<>();
-        for (String scriptId : detectedScriptIds) {
-            dependencies.add(declaredByScriptId.get(scriptId));
-        }
-        return List.copyOf(dependencies);
-    }
-
-    static List<PluginDependency> extractPluginDependenciesFromSource(String source, Map<String, String> installedPluginVersions) {
-        if (source == null || source.isBlank()) {
-            return List.of();
-        }
-
-        Map<String, LinkedHashSet<String>> actionsByPlugin = new LinkedHashMap<>();
-        Matcher matcher = PLUGIN_INVOKE_PATTERN.matcher(source);
-        while (matcher.find()) {
-            String pluginId = matcher.group(2).trim();
-            String action = matcher.group(4).trim();
-            if (pluginId.isBlank() || action.isBlank()) {
-                continue;
-            }
-            actionsByPlugin.computeIfAbsent(pluginId, ignored -> new LinkedHashSet<>()).add(action);
-        }
-
-        List<PluginDependency> dependencies = new ArrayList<>();
-        for (Map.Entry<String, LinkedHashSet<String>> entry : actionsByPlugin.entrySet()) {
-            String version = installedPluginVersions == null ? null : installedPluginVersions.get(entry.getKey());
-            dependencies.add(new PluginDependency()
-                    .setPluginId(entry.getKey())
-                    .setVersionRange(version == null || version.isBlank() ? null : ">= " + version)
-                    .setRequiredActions(new ArrayList<>(entry.getValue())));
-        }
-        return dependencies;
-    }
-
-    private void mergePluginDependencies(Map<String, PluginDependency> target, List<PluginDependency> source) {
-        for (PluginDependency dependency : source == null ? List.<PluginDependency>of() : source) {
-            if (dependency.getPluginId() == null || dependency.getPluginId().isBlank()) {
-                continue;
-            }
-            PluginDependency existing = target.computeIfAbsent(dependency.getPluginId(), pluginId -> new PluginDependency()
-                    .setPluginId(pluginId)
-                    .setRequiredActions(List.of()));
-            if ((existing.getVersionRange() == null || existing.getVersionRange().isBlank())
-                    && dependency.getVersionRange() != null && !dependency.getVersionRange().isBlank()) {
-                existing.setVersionRange(dependency.getVersionRange());
-            }
-            LinkedHashSet<String> actions = new LinkedHashSet<>(existing.getRequiredActions());
-            actions.addAll(dependency.getRequiredActions());
-            existing.setRequiredActions(new ArrayList<>(actions));
-        }
-    }
-
-    List<ConfigTemplateItem> buildConfigTemplate(RepositoryPublishConfigResolver.PublishConfigResolution resolution,
-                                                 List<RepositoryPublishConfigItem> configItems) {
-        return RepositoryPublishConfigResolver.buildTemplates(resolution, configItems);
     }
 
     PluginArtifactRef completePluginArtifactRef(String pluginId,
@@ -2525,7 +1946,7 @@ public class RepositoryCatalogService {
         return target;
     }
 
-    private PluginArtifactRef validatePluginArtifactRef(PluginArtifactRef artifact, boolean requireSha256) {
+    PluginArtifactRef validatePluginArtifactRef(PluginArtifactRef artifact, boolean requireSha256) {
         if (artifact == null) {
             throw new IllegalArgumentException("插件 artifact 不能为空");
         }
@@ -2542,60 +1963,6 @@ public class RepositoryCatalogService {
                 normalizeNullable(artifact.fileName()),
                 artifact.size()
         );
-    }
-
-    List<ScheduleTemplateItem> buildScheduleTemplate(List<ScriptSchedule> schedules) {
-        List<ScheduleTemplateItem> templates = new ArrayList<>();
-        for (ScriptSchedule schedule : schedules == null ? List.<ScriptSchedule>of() : schedules) {
-            templates.add(new ScheduleTemplateItem(schedule.getId(), schedule.getScriptId(), schedule.getName(), schedule.getCronExpression(), schedule.getInput(), false));
-        }
-        return templates;
-    }
-
-    List<ScriptSchedule> resolvePublishSchedules(String scriptId, List<String> scheduleIds) {
-        List<ScriptSchedule> schedules = new ArrayList<>();
-        for (String scheduleId : scheduleIds == null ? List.<String>of() : scheduleIds) {
-            String normalizedScheduleId = normalize(scheduleId, "定时任务 ID 不能为空");
-            ScriptSchedule schedule = scriptScheduleRepository.findById(normalizedScheduleId)
-                    .orElseThrow(() -> new IllegalArgumentException("定时任务不存在: " + normalizedScheduleId));
-            if (!Objects.equals(scriptId, schedule.getScriptId())) {
-                throw new IllegalArgumentException("定时任务不属于当前脚本: " + normalizedScheduleId);
-            }
-            schedules.add(schedule);
-        }
-        return schedules;
-    }
-
-    void updateRepositoryIndex(Path root,
-                               RepositoryDefinition repository,
-                               String toolId,
-                               ScriptDefinition script,
-                               RepositoryPublishRequest request) {
-        RepositoryIndexFile current = Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
-                ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
-                : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
-        List<RepositoryIndexEntry> entries = new ArrayList<>(current.tools() == null ? List.of() : current.tools());
-        RepositoryIndexEntry next = new RepositoryIndexEntry(
-                toolId,
-                normalizeOrDefault(request.displayName(), script.getName()),
-                normalize(request.version(), "version 不能为空"),
-                script.getType().name(),
-                normalizeNullable(script.getDescription()),
-                normalizeNullable(request.releaseNotes()),
-                "tools/" + toolId + "/tool.json"
-        );
-        entries.removeIf(item -> toolId.equals(item.id()));
-        entries.add(next);
-        entries.sort(Comparator.comparing(RepositoryIndexEntry::id));
-        writeJson(root.resolve(REPOSITORY_INDEX_FILE), new RepositoryIndexFile(
-                1,
-                repository.getName(),
-                normalizeNullable(repository.getDescription()),
-                entries,
-                new ArrayList<>(safePlugins(current)),
-                new ArrayList<>(safeCapabilityPackages(current)),
-                new ArrayList<>(safeSkills(current))
-        ));
     }
 
     void updateRepositoryPluginIndex(Path root,
@@ -2645,7 +2012,7 @@ public class RepositoryCatalogService {
         runGit(root, List.of("git", "-C", root.toString(), "push", "origin", normalizeOrDefault(repository.getBranch(), "master")));
     }
 
-    private Map<String, Object> readSchema(String repositoryId, String schemaPath) {
+    Map<String, Object> readSchema(String repositoryId, String schemaPath) {
         if (schemaPath == null || schemaPath.isBlank()) {
             return Map.of();
         }
@@ -2947,30 +2314,6 @@ public class RepositoryCatalogService {
         return values;
     }
 
-    private int countScriptInvocations(String source) {
-        if (source == null || source.isBlank()) {
-            return 0;
-        }
-        int count = 0;
-        Matcher matcher = SCRIPT_INVOKE_ANY_PATTERN.matcher(source);
-        while (matcher.find()) {
-            count += 1;
-        }
-        return count;
-    }
-
-    private int countLiteralScriptInvocations(String source) {
-        if (source == null || source.isBlank()) {
-            return 0;
-        }
-        int count = 0;
-        Matcher matcher = SCRIPT_INVOKE_PATTERN.matcher(source);
-        while (matcher.find()) {
-            count += 1;
-        }
-        return count;
-    }
-
     private List<String> extractScriptDependenciesFromSource(String source) {
         if (source == null || source.isBlank()) {
             return List.of();
@@ -2986,7 +2329,7 @@ public class RepositoryCatalogService {
         return List.copyOf(dependencies);
     }
 
-    private ScriptPackaging resolvePackaging(String packaging) {
+    ScriptPackaging resolvePackaging(String packaging) {
         if (packaging == null || packaging.isBlank()) {
             return ScriptPackaging.TOOL;
         }
@@ -3257,7 +2600,7 @@ public class RepositoryCatalogService {
         return target;
     }
 
-    private <T> T readJson(Path path, Class<T> type) {
+    <T> T readJson(Path path, Class<T> type) {
         try (InputStream stream = Files.newInputStream(path)) {
             String raw = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
             assertLatestRepositoryMetadata(raw, type, path.toString());
@@ -3351,7 +2694,7 @@ public class RepositoryCatalogService {
         return jsonCodec.readMap(content);
     }
 
-    private void writeJson(Path path, Object value) {
+    void writeJson(Path path, Object value) {
         try {
             Files.createDirectories(path.getParent());
             Files.writeString(path, jsonCodec.write(value), StandardCharsets.UTF_8);
@@ -3487,19 +2830,19 @@ public class RepositoryCatalogService {
         return Path.of(toolPath).getParent().resolve(nestedPath).toString().replace('\\', '/');
     }
 
-    private List<RepositoryIndexEntry> safeTools(RepositoryIndexFile index) {
+    List<RepositoryIndexEntry> safeTools(RepositoryIndexFile index) {
         return index == null || index.tools() == null ? List.of() : index.tools();
     }
 
-    private List<RepositoryPluginIndexEntry> safePlugins(RepositoryIndexFile index) {
+    List<RepositoryPluginIndexEntry> safePlugins(RepositoryIndexFile index) {
         return index == null || index.plugins() == null ? List.of() : index.plugins();
     }
 
-    private List<CapabilityPackageIndexEntry> safeCapabilityPackages(RepositoryIndexFile index) {
+    List<CapabilityPackageIndexEntry> safeCapabilityPackages(RepositoryIndexFile index) {
         return index == null || index.packages() == null ? List.of() : index.packages();
     }
 
-    private List<RepositorySkillIndexEntry> safeSkills(RepositoryIndexFile index) {
+    List<RepositorySkillIndexEntry> safeSkills(RepositoryIndexFile index) {
         return index == null || index.skills() == null ? List.of() : index.skills();
     }
 
@@ -3523,17 +2866,6 @@ public class RepositoryCatalogService {
         return Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexFile.class)
                 : new RepositoryIndexFile(1, repository.getName(), repository.getDescription(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
-    }
-
-    static void assertToolVersionAvailable(String repositoryId,
-                                           RepositoryIndexFile index,
-                                           String toolId,
-                                           String version) {
-        for (RepositoryIndexEntry entry : index == null || index.tools() == null ? List.<RepositoryIndexEntry>of() : index.tools()) {
-            if (Objects.equals(toolId, entry.id()) && Objects.equals(version, entry.version())) {
-                throw new RepositoryVersionExistsException("TOOL", repositoryId, toolId, version);
-            }
-        }
     }
 
     static void assertPluginVersionAvailable(String repositoryId,
@@ -4006,7 +3338,7 @@ public class RepositoryCatalogService {
                                              String target) {
     }
 
-    private record CapabilityPackageDraft(String packageId,
+    record CapabilityPackageDraft(String packageId,
                                           String displayName,
                                           String version,
                                           String owner,
@@ -4306,6 +3638,6 @@ public class RepositoryCatalogService {
         }
     }
 
-    private record ToolSourceState(String path, String commit, String digest) {
+    record ToolSourceState(String path, String commit, String digest) {
     }
 }

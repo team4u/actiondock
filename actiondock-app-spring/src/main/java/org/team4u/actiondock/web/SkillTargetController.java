@@ -11,62 +11,63 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.domain.model.SkillTarget;
 import org.team4u.actiondock.skill.SkillService;
+import org.team4u.actiondock.skill.SkillTargetService;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/skill-targets")
 public class SkillTargetController {
-    private final SkillService skillService;
+    private final SkillTargetService skillTargetService;
 
-    public SkillTargetController(SkillService skillService) {
-        this.skillService = skillService;
+    public SkillTargetController(SkillTargetService skillTargetService) {
+        this.skillTargetService = skillTargetService;
     }
 
     @GetMapping
     public ApiResponse<List<SkillTarget>> list() {
-        return ApiResponse.success(skillService.listTargets());
+        return ApiResponse.success(skillTargetService.listTargets());
     }
 
     @PostMapping
     public ApiResponse<SkillTarget> create(@RequestBody SkillTarget request) {
-        return ApiResponse.success(skillService.saveTarget(request), "SkillTarget 已创建");
+        return ApiResponse.success(skillTargetService.saveTarget(request), "SkillTarget 已创建");
     }
 
     @PutMapping("/{targetId}")
     public ApiResponse<SkillTarget> update(@PathVariable String targetId, @RequestBody SkillTarget request) {
         request.setId(targetId);
-        return ApiResponse.success(skillService.saveTarget(request), "SkillTarget 已更新");
+        return ApiResponse.success(skillTargetService.saveTarget(request), "SkillTarget 已更新");
     }
 
     @DeleteMapping("/{targetId}")
     public ApiResponse<Void> delete(@PathVariable String targetId) {
-        skillService.deleteTarget(targetId);
+        skillTargetService.deleteTarget(targetId);
         return ApiResponse.success(null, "SkillTarget 已删除");
     }
 
     @PostMapping("/{targetId}/scan")
     public ApiResponse<List<SkillService.SkillScanItem>> scan(@PathVariable String targetId) {
-        return ApiResponse.success(skillService.scanTarget(targetId));
+        return ApiResponse.success(skillTargetService.scanTarget(targetId));
     }
 
     @GetMapping("/{targetId}/scan/{directoryId}")
     public ApiResponse<SkillService.SkillScanDetail> getScanItemDetail(@PathVariable String targetId,
                                                                         @PathVariable String directoryId) {
-        return ApiResponse.success(skillService.getScanItemDetail(targetId, directoryId));
+        return ApiResponse.success(skillTargetService.getScanItemDetail(targetId, directoryId));
     }
 
     @GetMapping("/{targetId}/scan/{directoryId}/preview")
     public ApiResponse<SkillService.SkillFilePreview> previewScanItemFile(@PathVariable String targetId,
                                                                            @PathVariable String directoryId,
                                                                            @RequestParam String path) {
-        return ApiResponse.success(skillService.previewScanItemFile(targetId, directoryId, path));
+        return ApiResponse.success(skillTargetService.previewScanItemFile(targetId, directoryId, path));
     }
 
     @DeleteMapping("/{targetId}/scan/{directoryId}")
     public ApiResponse<Void> deleteScanDirectory(@PathVariable String targetId,
                                                   @PathVariable String directoryId) {
-        skillService.deleteUnmanagedScanDirectory(targetId, directoryId);
+        skillTargetService.deleteUnmanagedScanDirectory(targetId, directoryId);
         return ApiResponse.success(null, "目录已删除");
     }
 
@@ -74,7 +75,7 @@ public class SkillTargetController {
     public ApiResponse<SkillService.SkillSyncResponse> syncInstallations(@PathVariable String targetId,
                                                                          @RequestBody SkillTargetSyncRequest request) {
         return ApiResponse.success(
-                skillService.syncSkillsToTarget(targetId, request == null ? List.of() : request.getSkillIds()),
+                skillTargetService.syncSkillsToTarget(targetId, request == null ? List.of() : request.getSkillIds()),
                 "Skill 同步完成"
         );
     }

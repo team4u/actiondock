@@ -9,6 +9,7 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
+import org.team4u.actiondock.repository.RepositoryToolService;
 import org.team4u.actiondock.schedule.ScriptScheduleDispatcher;
 
 import java.util.LinkedHashMap;
@@ -33,19 +34,19 @@ public class ScriptController {
     private final ExecutionApplicationService executionApplicationService;
     private final ScriptScheduleDispatcher scriptScheduleDispatcher;
     private final ExecutionResponseMapper executionResponseMapper;
-    private final RepositoryCatalogService repositoryCatalogService;
+    private final RepositoryToolService repositoryToolService;
     private final ObjectMapper objectMapper;
 
     public ScriptController(ScriptApplicationService scriptApplicationService,
                             ExecutionApplicationService executionApplicationService,
                             ScriptScheduleDispatcher scriptScheduleDispatcher,
-                            RepositoryCatalogService repositoryCatalogService,
+                            RepositoryToolService repositoryToolService,
                             ObjectMapper objectMapper,
                             ExecutionResponseMapper executionResponseMapper) {
         this.scriptApplicationService = scriptApplicationService;
         this.executionApplicationService = executionApplicationService;
         this.scriptScheduleDispatcher = scriptScheduleDispatcher;
-        this.repositoryCatalogService = repositoryCatalogService;
+        this.repositoryToolService = repositoryToolService;
         this.objectMapper = objectMapper;
         this.executionResponseMapper = executionResponseMapper;
     }
@@ -247,7 +248,7 @@ public class ScriptController {
 
     @GetMapping("/{id}/development-status")
     public ApiResponse<RepositoryCatalogService.DevelopmentStatus> developmentStatus(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.getDevelopmentStatus(id));
+        return ApiResponse.success(repositoryToolService.getDevelopmentStatus(id));
     }
 
     @PostMapping("/{id}/development-pull")
@@ -255,7 +256,7 @@ public class ScriptController {
                                                          @RequestParam(defaultValue = "false") boolean force,
                                                          @RequestParam(defaultValue = "false") boolean includeUiSchema) {
         return ApiResponse.success(
-                toResponse(repositoryCatalogService.pullDevelopmentScript(id, force), includeUiSchema),
+                toResponse(repositoryToolService.pullDevelopmentScript(id, force), includeUiSchema),
                 "开发脚本已拉取远端更新"
         );
     }
