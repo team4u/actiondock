@@ -46,6 +46,10 @@ public final class SkillFileUtils {
     public static final String ERR_VERSION_REQUIRED = "version 不能为空";
     private static final int MAX_SKILL_MD_SIZE = 100_000;
 
+    public static <T> List<T> nullSafeList(List<T> list) {
+        return list == null ? List.of() : list;
+    }
+
     public static Path normalizePath(Path path) {
         return path == null ? null : path.toAbsolutePath().normalize();
     }
@@ -200,7 +204,7 @@ public final class SkillFileUtils {
                 fields.version,
                 fields.description,
                 manifest == null ? null : manifest.owner(),
-                manifest == null || manifest.tags() == null ? List.of() : manifest.tags(),
+                manifest == null ? List.of() : nullSafeList(manifest.tags()),
                 manifest == null ? null : manifest.riskLevel(),
                 manifest == null ? SKILL_MANIFEST_FILE : normalizeOrDefault(manifest.entrypointPath(), SKILL_MANIFEST_FILE),
                 digestDirectory(root),
@@ -872,7 +876,7 @@ public final class SkillFileUtils {
     }
 
     public static List<String> normalizeTargetIds(List<String> targetIds) {
-        List<String> normalized = targetIds == null ? List.of() : targetIds.stream()
+        List<String> normalized = nullSafeList(targetIds).stream()
                 .map(id -> normalize(id, "targetId 不能为空"))
                 .distinct()
                 .toList();

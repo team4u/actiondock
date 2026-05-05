@@ -177,7 +177,7 @@ public final class RepositoryCatalogTypes {
     }
 
     static <T> List<T> nullSafeList(List<T> list) {
-        return list == null ? List.of() : list;
+        return SkillFileUtils.nullSafeList(list);
     }
 
     static <T> List<T> upsertSorted(List<T> entries, T newEntry, Function<T, String> idExtractor) {

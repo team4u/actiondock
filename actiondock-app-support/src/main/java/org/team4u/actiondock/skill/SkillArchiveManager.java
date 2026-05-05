@@ -164,7 +164,7 @@ public final class SkillArchiveManager {
                 SkillFileUtils.normalize(version, SkillFileUtils.ERR_VERSION_REQUIRED),
                 validation.description(),
                 validation.owner(),
-                validation.tags() == null ? List.of() : validation.tags(),
+                SkillFileUtils.nullSafeList(validation.tags()),
                 validation.riskLevel(),
                 SkillFileUtils.normalizeOrDefault(validation.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE),
                 digest

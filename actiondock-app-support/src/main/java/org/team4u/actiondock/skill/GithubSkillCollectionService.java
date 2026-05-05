@@ -265,7 +265,7 @@ public class GithubSkillCollectionService {
     }
 
     private static List<String> normalizeSkillPaths(List<String> skillPaths) {
-        List<String> normalized = skillPaths == null ? List.of() : skillPaths.stream()
+        List<String> normalized = SkillFileUtils.nullSafeList(skillPaths).stream()
                 .map(path -> SkillFileUtils.normalize(path, "Skill 路径不能为空"))
                 .peek(GithubSkillCollectionService::validateRelativePath)
                 .distinct()

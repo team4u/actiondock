@@ -183,7 +183,7 @@ public class SkillTargetService {
     }
 
     private static List<String> normalizeSkillIds(List<String> skillIds) {
-        return skillIds == null ? List.of() : skillIds.stream()
+        return SkillFileUtils.nullSafeList(skillIds).stream()
                 .map(id -> SkillFileUtils.normalize(id, "skillId 不能为空"))
                 .distinct()
                 .toList();

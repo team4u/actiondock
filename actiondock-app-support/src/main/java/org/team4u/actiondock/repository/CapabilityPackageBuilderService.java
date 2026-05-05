@@ -182,7 +182,7 @@ class CapabilityPackageBuilderService {
                 SkillFileUtils.normalizeNullable(owner),
                 description,
                 SkillFileUtils.normalizeNullable(releaseNotes),
-                tags == null ? List.of() : tags.stream().map(SkillFileUtils::normalizeNullable).filter(Objects::nonNull).distinct().toList(),
+                nullSafeList(tags).stream().map(SkillFileUtils::normalizeNullable).filter(Objects::nonNull).distinct().toList(),
                 SkillFileUtils.normalizeNullable(riskLevel),
                 sourceType,
                 entries,
@@ -443,7 +443,7 @@ class CapabilityPackageBuilderService {
     private static void collectChangedAsset(List<String> changedAssets, String label,
                                              CapabilityPackageDetail currentPackage,
                                              List<String> currentIds, List<String> nextIds) {
-        List<String> sortedCurrent = currentIds == null ? List.of() : currentIds.stream().sorted().toList();
+        List<String> sortedCurrent = nullSafeList(currentIds).stream().sorted().toList();
         List<String> sortedNext = nextIds.stream().sorted().toList();
         if (currentPackage == null || !Objects.equals(sortedCurrent, sortedNext)) {
             changedAssets.add(label);

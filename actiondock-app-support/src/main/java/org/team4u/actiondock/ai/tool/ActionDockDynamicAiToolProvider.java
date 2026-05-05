@@ -25,6 +25,7 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.ScriptRepository;
+import org.team4u.actiondock.skill.SkillFileUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -342,7 +343,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
     }
 
     private static List<String> append(List<String> values, String next) {
-        List<String> result = new ArrayList<>(values == null ? List.of() : values);
+        List<String> result = new ArrayList<>(SkillFileUtils.nullSafeList(values));
         result.add(next);
         return List.copyOf(result);
     }

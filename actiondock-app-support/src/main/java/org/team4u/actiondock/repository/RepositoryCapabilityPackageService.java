@@ -210,7 +210,7 @@ public class RepositoryCapabilityPackageService {
                 .setUpdatedAt(ctx.now);
         return new CapabilityPackageInstallResult(
                 repos.capabilityPackageInstallationRepository().save(installation),
-                ctx.release.externalDependencies() == null ? List.of() : ctx.release.externalDependencies()
+                nullSafeList(ctx.release.externalDependencies())
         );
     }
 
@@ -337,7 +337,7 @@ public class RepositoryCapabilityPackageService {
     private List<String> installToolsets(InstallationContext ctx) {
         List<String> installedIds = new ArrayList<>();
         for (AiPackageToolsetFile toolset : nullSafeList(ctx.release == null ? null : ctx.release.toolsets())) {
-            List<String> toolNames = toolset.toolNames() == null ? List.of() : toolset.toolNames().stream()
+            List<String> toolNames = nullSafeList(toolset.toolNames()).stream()
                     .map(toolName -> AiPackageIdRewriter.rewriteToolName(toolName, ctx.agentIdMappings, ctx.scriptIdMappings))
                     .toList();
             AiToolset value = new AiToolset()
@@ -406,14 +406,14 @@ public class RepositoryCapabilityPackageService {
                     .setProvider(agent.provider() == null ? AiProvider.AGENTSCOPE : AiProvider.valueOf(agent.provider()))
                     .setModelProfileId(ctx.modelIdMappings.getOrDefault(agent.modelProfileId(), agent.modelProfileId()))
                     .setSystemPrompt(agent.systemPrompt())
-                    .setToolsetIds(agent.toolsetIds() == null ? List.of() : agent.toolsetIds().stream()
+                    .setToolsetIds(nullSafeList(agent.toolsetIds()).stream()
                             .map(toolsetId -> ctx.toolsetIdMappings.getOrDefault(toolsetId, toolsetId))
                             .toList())
-                    .setDirectToolNames(agent.directToolNames() == null ? List.of() : agent.directToolNames().stream()
+                    .setDirectToolNames(nullSafeList(agent.directToolNames()).stream()
                             .map(toolName -> AiPackageIdRewriter.rewriteToolName(toolName, ctx.agentIdMappings, ctx.scriptIdMappings))
                             .toList())
                     .setDirectToolOptions(AiPackageIdRewriter.rewriteToolOptions(agent.directToolOptions(), ctx.agentIdMappings, ctx.scriptIdMappings))
-                    .setSkillIds(agent.skillIds() == null ? List.of() : agent.skillIds())
+                    .setSkillIds(nullSafeList(agent.skillIds()))
                     .setOptions(agent.options() == null ? Map.of() : agent.options())
                     .setEnabled(agent.enabled())
                     .setCreatedAt(ctx.now)

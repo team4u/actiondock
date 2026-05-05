@@ -170,7 +170,7 @@ class RepositoryAiPackageService {
                     SkillFileUtils.normalizeNullable(request.description()),
                     SkillFileUtils.normalizeNullable(request.releaseNotes()),
                     SkillFileUtils.normalizeNullable(request.owner()),
-                    request.tags() == null ? List.of() : request.tags(),
+                    nullSafeList(request.tags()),
                     artifact,
                     SkillFileUtils.normalizeNullable(request.riskLevel())
             ));
