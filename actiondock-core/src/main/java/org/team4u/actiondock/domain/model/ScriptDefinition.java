@@ -563,6 +563,38 @@ public class ScriptDefinition {
                 .setAiDependencies(aiDependencies));
     }
 
+    public ScriptDefinition fullCopy() {
+        return new ScriptDefinition()
+                .setId(id)
+                .setName(name)
+                .setType(type)
+                .setPackaging(packaging)
+                .setSource(source)
+                .setPythonRequirements(pythonRequirements)
+                .setInputSchema(inputSchema)
+                .setOutputSchema(outputSchema)
+                .setStatus(status)
+                .setVersion(version)
+                .setPublishedSnapshot(publishedSnapshot)
+                .setScope(scope)
+                .setRepositoryId(repositoryId)
+                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryVersion(repositoryVersion)
+                .setSourcePath(getSourcePath())
+                .setSourceCommit(getSourceCommit())
+                .setSourceDigest(getSourceDigest())
+                .setSourceSyncedAt(getSourceSyncedAt())
+                .setDirty(isDirty())
+                .setEditable(editable)
+                .setOwner(owner)
+                .setDescription(description)
+                .setTags(tags)
+                .setScriptDependencies(scriptDependencies)
+                .setAiDependencies(aiDependencies)
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt);
+    }
+
     public void normalizePublicationState() {
         if (hasStoredPublishedSnapshot()) {
             setStatus(ScriptStatus.PUBLISHED);

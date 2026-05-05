@@ -204,35 +204,7 @@ public class ScriptApplicationService {
     }
 
     private static ScriptDefinition copyCurrentDefinition(ScriptDefinition source) {
-        return new ScriptDefinition()
-                .setId(source.getId())
-                .setName(source.getName())
-                .setType(source.getType())
-                .setPackaging(source.getPackaging())
-                .setSource(source.getSource())
-                .setPythonRequirements(source.getPythonRequirements())
-                .setInputSchema(source.getInputSchema())
-                .setOutputSchema(source.getOutputSchema())
-                .setStatus(source.getStatus())
-                .setVersion(source.getVersion())
-                .setPublishedSnapshot(source.getPublishedSnapshot())
-                .setScope(source.getScope())
-                .setRepositoryId(source.getRepositoryId())
-                .setRepositoryToolId(source.getRepositoryToolId())
-                .setRepositoryVersion(source.getRepositoryVersion())
-                .setSourcePath(source.getSourcePath())
-                .setSourceCommit(source.getSourceCommit())
-                .setSourceDigest(source.getSourceDigest())
-                .setSourceSyncedAt(source.getSourceSyncedAt())
-                .setDirty(source.isDirty())
-                .setEditable(source.isEditable())
-                .setOwner(source.getOwner())
-                .setDescription(source.getDescription())
-                .setTags(source.getTags())
-                .setScriptDependencies(source.getScriptDependencies())
-                .setAiDependencies(source.getAiDependencies())
-                .setCreatedAt(source.getCreatedAt())
-                .setUpdatedAt(source.getUpdatedAt());
+        return source.fullCopy();
     }
 
     private void copySchedulesToFork(String sourceScriptId, String forkScriptId) {
