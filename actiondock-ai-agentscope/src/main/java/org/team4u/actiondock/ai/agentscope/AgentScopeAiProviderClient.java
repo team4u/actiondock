@@ -564,8 +564,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
     }
 
     private static String stringOption(Map<String, Object> options, String key) {
-        Object value = options.get(key);
-        return value == null ? null : String.valueOf(value);
+        return stringValue(options.get(key));
     }
 
     static String stringValue(Object value) {
