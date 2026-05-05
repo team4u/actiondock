@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.PUBLISH_MODE_INLINE;
+
 /**
  * 仓库配置模板同步服务，负责将仓库中的配置模板同步为受管配置值。
  *
@@ -52,7 +54,7 @@ class RepositoryConfigTemplateSyncService {
                                                         String repositoryVersion, String publishMode) {
         return new ConfigValue()
                 .setKey(template.key())
-                .setValue(publishMode.equals("INLINE") ? template.defaultValue() : "")
+                .setValue(publishMode.equals(PUBLISH_MODE_INLINE) ? template.defaultValue() : "")
                 .setDescription(SkillFileUtils.normalizeNullable(template.label()))
                 .setSecret(template.secret())
                 .setRepositoryId(repositoryId)
@@ -80,7 +82,7 @@ class RepositoryConfigTemplateSyncService {
                 .setManaged(true)
                 .setUpdatedAt(LocalDateTime.now());
         if (!existing.isOverridden()) {
-            existing.setValue(publishMode.equals("INLINE") ? template.defaultValue() : "");
+            existing.setValue(publishMode.equals(PUBLISH_MODE_INLINE) ? template.defaultValue() : "");
         }
     }
 }

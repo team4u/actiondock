@@ -115,7 +115,7 @@ final class RepositoryPublishConfigResolver {
         List<ConfigTemplateItem> templates = new ArrayList<>();
         for (ResolvedConfigValue item : resolution.items()) {
             String requestedMode = requestedModes.get(item.key());
-            boolean inline = !item.secret() && "INLINE".equalsIgnoreCase(requestedMode);
+            boolean inline = !item.secret() && PUBLISH_MODE_INLINE.equalsIgnoreCase(requestedMode);
             templates.add(new ConfigTemplateItem(
                     item.key(),
                     item.label(),
@@ -171,7 +171,7 @@ final class RepositoryPublishConfigResolver {
             throw new IllegalArgumentException("发布配置项 publishMode 不能为空");
         }
         normalized = normalized.toUpperCase(Locale.ROOT);
-        if (!"INLINE".equals(normalized) && !"PLACEHOLDER".equals(normalized)) {
+        if (!PUBLISH_MODE_INLINE.equals(normalized) && !PUBLISH_MODE_PLACEHOLDER.equals(normalized)) {
             throw new IllegalArgumentException("发布配置项 publishMode 仅支持 INLINE / PLACEHOLDER");
         }
         return normalized;

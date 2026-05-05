@@ -80,6 +80,11 @@ public final class RepositoryCatalogTypes {
     /** 资产类型：技能。 */
     public static final String ASSET_TYPE_SKILL = "SKILL";
 
+    /** 配置发布模式：内联（值直接嵌入脚本源码）。 */
+    public static final String PUBLISH_MODE_INLINE = "INLINE";
+    /** 配置发布模式：占位符（值在运行时注入）。 */
+    public static final String PUBLISH_MODE_PLACEHOLDER = "PLACEHOLDER";
+
     public record ToolInstallationOptions(
             boolean installSchedules,
             boolean installScriptDependencies,
@@ -738,8 +743,8 @@ public final class RepositoryCatalogTypes {
                                      String defaultValue) {
         public String resolvePublishMode() {
             return (secret || defaultValue == null || defaultValue.isBlank())
-                    ? "PLACEHOLDER"
-                    : "INLINE";
+                    ? PUBLISH_MODE_PLACEHOLDER
+                    : PUBLISH_MODE_INLINE;
         }
     }
 

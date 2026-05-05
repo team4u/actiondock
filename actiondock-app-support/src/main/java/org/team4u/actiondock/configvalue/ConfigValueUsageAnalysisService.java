@@ -27,6 +27,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.PUBLISH_MODE_INLINE;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -371,7 +373,7 @@ public class ConfigValueUsageAnalysisService {
                 SkillFileUtils.normalizeNullable(template.label()),
                 template.secret(),
                 publishMode,
-                publishMode.equals("INLINE") ? SkillFileUtils.normalizeNullable(template.defaultValue()) : ""
+                publishMode.equals(PUBLISH_MODE_INLINE) ? SkillFileUtils.normalizeNullable(template.defaultValue()) : ""
         ));
     }
 

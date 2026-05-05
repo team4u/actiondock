@@ -22,6 +22,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/config-values")
 public class ConfigValueController {
+    private static final String PUBLISH_MODE_PLACEHOLDER = "PLACEHOLDER";
+
     private final ConfigValueApplicationService configValueApplicationService;
     private final ConfigValueUsageAnalysisService configValueUsageAnalysisService;
 
@@ -136,7 +138,7 @@ public class ConfigValueController {
 
     private static ConfigValueView toView(ConfigValue value) {
         boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
-        boolean masked = value.isSecret() || "PLACEHOLDER".equalsIgnoreCase(value.getPublishMode());
+        boolean masked = value.isSecret() || PUBLISH_MODE_PLACEHOLDER.equalsIgnoreCase(value.getPublishMode());
         return new ConfigValueView()
                 .setKey(value.getKey())
                 .setValue(masked ? null : value.getValue())
@@ -160,7 +162,7 @@ public class ConfigValueController {
         return new ConfigValueDetailView(
                 value.getKey(),
                 value.isSecret() ? null : value.getValue(),
-                (value.isSecret() || "PLACEHOLDER".equalsIgnoreCase(value.getPublishMode())) && hasValue ? "********" : null,
+                (value.isSecret() || PUBLISH_MODE_PLACEHOLDER.equalsIgnoreCase(value.getPublishMode())) && hasValue ? "********" : null,
                 hasValue,
                 value.getDescription(),
                 value.isSecret(),

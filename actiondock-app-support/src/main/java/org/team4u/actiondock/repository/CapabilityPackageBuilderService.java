@@ -79,7 +79,7 @@ class CapabilityPackageBuilderService {
             for (ConfigTemplateItem item : RepositoryPublishConfigResolver.buildTemplates(
                     resolution,
                     resolution.inferredKeys().stream()
-                            .map(key -> new RepositoryPublishConfigItem(key, "PLACEHOLDER"))
+                            .map(key -> new RepositoryPublishConfigItem(key, PUBLISH_MODE_PLACEHOLDER))
                             .toList()
             )) {
                 templates.putIfAbsent(item.key(), item);
