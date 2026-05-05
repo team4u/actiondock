@@ -403,10 +403,6 @@ public class PythonEnvironmentManager {
         return ProcessSupport.parseLogEvent(line, LOG_PREFIX, jsonCodec);
     }
 
-    private static ExecutionLogLevel resolveLevel(Object value) {
-        return ProcessSupport.resolveLevel(value);
-    }
-
     // ---- 文件系统辅助方法 ----
 
     /**

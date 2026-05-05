@@ -362,7 +362,7 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.CapabilityPackageIndexEntry entry = findEntryById(
                 safeCapabilityPackages(index), packageId, RepositoryCatalogTypes.CapabilityPackageIndexEntry::id, "仓库能力包");
         RepositoryCatalogTypes.CapabilityPackageManifestFile manifest = readCapabilityPackageManifest(repository, entry.path());
-        RepositoryCatalogTypes.CapabilityPackageReleaseFile release = readCapabilityPackageRelease(repository, manifest.latestReleasePath());
+        RepositoryCatalogTypes.CapabilityPackageReleaseFile release = readRepositoryJsonFile(repository, manifest.latestReleasePath(), RepositoryCatalogTypes.CapabilityPackageReleaseFile.class);
         List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
                 parentDirectoryPath(manifest.latestReleasePath()).resolveNullable(release.configTemplatePath()),
@@ -502,19 +502,15 @@ public class RepositoryCatalogService {
     }
 
     RepositoryCatalogTypes.ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryToolDetail detail) {
-        String toolPath = findRepositoryToolPath(repository, detail.descriptor().toolId());
-        String digest = computeToolDigest(detail);
-        String commit = REPO_TYPE_GIT.equals(repository.getType()) ? gitOps.gitHead(resolveRepositoryRoot(repository)) : null;
-        return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(toolPath).value(), commit, digest);
-    }
-
-    private String findRepositoryToolPath(RepositoryDefinition repository, String toolId) {
-        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        return safeTools(index).stream()
+        String toolId = detail.descriptor().toolId();
+        String toolPath = safeTools(readRepositoryIndex(repository)).stream()
                 .filter(item -> toolId.equals(item.id()))
                 .findFirst()
                 .map(RepositoryCatalogTypes.RepositoryIndexEntry::toolPath)
                 .orElseThrow(() -> new IllegalArgumentException("仓库工具不存在: " + toolId));
+        String digest = computeToolDigest(detail);
+        String commit = REPO_TYPE_GIT.equals(repository.getType()) ? gitOps.gitHead(resolveRepositoryRoot(repository)) : null;
+        return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(toolPath).value(), commit, digest);
     }
 
     private String computeToolDigest(RepositoryCatalogTypes.RepositoryToolDetail detail) {
@@ -723,7 +719,7 @@ public class RepositoryCatalogService {
         return new DevelopmentInfo(
                 isLocalChanged(developmentScript, localDigest),
                 isRemoteChanged(developmentScript, state),
-                syncState == null ? null : syncState.name()
+                syncState.name()
         );
     }
 
@@ -841,15 +837,10 @@ public class RepositoryCatalogService {
     }
 
     private int dependentToolCount(String pluginId) {
-        int count = 0;
-        for (ScriptDefinition script : repos.scriptRepository().findAll()) {
-            boolean dependsOnPlugin = script.getPluginDependencies().stream()
-                    .anyMatch(dependency -> pluginId.equals(dependency.getPluginId()));
-            if (dependsOnPlugin) {
-                count++;
-            }
-        }
-        return count;
+        return (int) repos.scriptRepository().findAll().stream()
+                .filter(script -> script.getPluginDependencies().stream()
+                        .anyMatch(dep -> pluginId.equals(dep.getPluginId())))
+                .count();
     }
 
 
@@ -898,13 +889,9 @@ public class RepositoryCatalogService {
         return readRepositoryJsonFile(repository, manifestPath, RepositoryCatalogTypes.CapabilityPackageManifestFile.class);
     }
 
-    private RepositoryCatalogTypes.CapabilityPackageReleaseFile readCapabilityPackageRelease(RepositoryDefinition repository, String releasePath) {
-        return readRepositoryJsonFile(repository, releasePath, RepositoryCatalogTypes.CapabilityPackageReleaseFile.class);
-    }
-
     String readRepositoryFile(RepositoryDefinition repository, Path path) {
         if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            return readHttpText(httpReader.joinHttpPath(repository.getUrl(), path.toString().replace('\\', '/')));
+            return httpReader.readHttpText(httpReader.joinHttpPath(repository.getUrl(), path.toString().replace('\\', '/')));
         }
         try {
             return Files.readString(safeResolveRepositoryPath(resolveRepositoryRoot(repository), path.toString()), StandardCharsets.UTF_8);
@@ -1050,14 +1037,11 @@ public class RepositoryCatalogService {
     }
 
     private <T> List<T> listAllFromEnabledRepositories(Function<String, List<T>> lister, Comparator<T> comparator) {
-        List<T> result = new ArrayList<>();
-        for (RepositoryDefinition repository : listRepositories()) {
-            if (!repository.isEnabled()) {
-                continue;
-            }
-            result.addAll(lister.apply(repository.getId()));
-        }
-        return result.stream().sorted(comparator).toList();
+        return listRepositories().stream()
+                .filter(RepositoryDefinition::isEnabled)
+                .flatMap(repo -> lister.apply(repo.getId()).stream())
+                .sorted(comparator)
+                .toList();
     }
 
     private static <E> E findEntryById(List<E> entries, String id, Function<E, String> idExtractor, String label) {
