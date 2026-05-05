@@ -988,10 +988,6 @@ public class RepositoryCatalogService {
         }
     }
 
-    private String readHttpText(String url) {
-        return httpReader.readHttpText(url);
-    }
-
     void writeJson(Path path, Object value) {
         try {
             Files.createDirectories(path.getParent());
@@ -1133,11 +1129,10 @@ public class RepositoryCatalogService {
         if (entries == null) {
             return;
         }
-        for (T entry : entries) {
-            if (Objects.equals(assetId, idExtractor.apply(entry)) && Objects.equals(version, versionExtractor.apply(entry))) {
-                throw new RepositoryVersionExistsException(assetType, repositoryId, assetId, version);
-            }
-        }
+        entries.stream()
+                .filter(entry -> Objects.equals(assetId, idExtractor.apply(entry)) && Objects.equals(version, versionExtractor.apply(entry)))
+                .findFirst()
+                .ifPresent(entry -> { throw new RepositoryVersionExistsException(assetType, repositoryId, assetId, version); });
     }
 
     RelativeRepositoryPath parentDirectoryPath(String filePath) {
