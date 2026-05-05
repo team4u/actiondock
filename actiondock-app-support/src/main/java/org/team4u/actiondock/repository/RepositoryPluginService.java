@@ -12,7 +12,6 @@ import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -163,18 +162,10 @@ public class RepositoryPluginService {
     }
 
     private List<RepositoryPluginConflict> findPluginConflicts(String pluginId, String targetVersion) {
-        List<RepositoryPluginConflict> conflicts = new ArrayList<>();
-        for (ScriptDefinition dependentScript : scriptRepository.findAll()) {
-            for (PluginDependency dependency : dependentScript.getPluginDependencies()) {
-                if (pluginId.equals(dependency.getPluginId()) && !RepositoryVersionUtils.versionSatisfies(targetVersion, dependency.getVersionRange())) {
-                    conflicts.add(new RepositoryPluginConflict(
-                            dependentScript.getId(),
-                            dependentScript.getName(),
-                            dependency.getVersionRange()
-                    ));
-                }
-            }
-        }
-        return conflicts;
+        return scriptRepository.findAll().stream()
+                .flatMap(script -> script.getPluginDependencies().stream()
+                        .filter(dep -> pluginId.equals(dep.getPluginId()) && !RepositoryVersionUtils.versionSatisfies(targetVersion, dep.getVersionRange()))
+                        .map(dep -> new RepositoryPluginConflict(script.getId(), script.getName(), dep.getVersionRange())))
+                .toList();
     }
 }

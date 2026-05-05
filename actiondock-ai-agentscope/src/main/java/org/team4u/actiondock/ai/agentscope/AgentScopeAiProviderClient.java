@@ -60,6 +60,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -124,11 +125,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         for (String input : request == null || request.input() == null ? List.<String>of() : request.input()) {
             double[] vector = block(model.embed(TextBlock.builder().text(input == null ? "" : input).build()),
                     modelCallTimeout(profile, request == null ? null : request.options()));
-            List<Double> values = new ArrayList<>(vector.length);
-            for (double item : vector) {
-                values.add(item);
-            }
-            embeddings.add(values);
+            embeddings.add(Arrays.stream(vector).boxed().toList());
         }
         Map<String, Object> raw = buildResponseMetadata(profile);
         raw.put("dimensions", model.getDimensions());

@@ -266,12 +266,8 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listRepositoryTools(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        List<RepositoryCatalogTypes.RepositoryToolDescriptor> tools = new ArrayList<>();
-        for (RepositoryCatalogTypes.RepositoryIndexEntry entry : safeTools(index)) {
-            RepositoryCatalogTypes.ToolFile tool = readToolFile(repository, entry.toolPath());
-            tools.add(toDescriptor(repository, tool, entry.toolPath()));
-        }
-        return tools.stream()
+        return safeTools(index).stream()
+                .map(entry -> toDescriptor(repository, readToolFile(repository, entry.toolPath()), entry.toolPath()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::installedScriptId))
                 .toList();
     }
@@ -285,12 +281,8 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.CapabilityPackageDescriptor> listCapabilityPackages(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        List<RepositoryCatalogTypes.CapabilityPackageDescriptor> packages = new ArrayList<>();
-        for (RepositoryCatalogTypes.CapabilityPackageIndexEntry entry : safeCapabilityPackages(index)) {
-            RepositoryCatalogTypes.CapabilityPackageManifestFile manifest = readCapabilityPackageManifest(repository, entry.path());
-            packages.add(toCapabilityPackageDescriptor(repository, manifest, entry.path()));
-        }
-        return packages.stream()
+        return safeCapabilityPackages(index).stream()
+                .map(entry -> toCapabilityPackageDescriptor(repository, readCapabilityPackageManifest(repository, entry.path()), entry.path()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.CapabilityPackageDescriptor::installationId))
                 .toList();
     }
@@ -304,12 +296,8 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.RepositoryPluginDescriptor> listRepositoryPlugins(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        List<RepositoryCatalogTypes.RepositoryPluginDescriptor> plugins = new ArrayList<>();
-        for (RepositoryCatalogTypes.RepositoryPluginIndexEntry entry : safePlugins(index)) {
-            RepositoryCatalogTypes.PluginFile plugin = readPluginFile(repository, entry.pluginPath());
-            plugins.add(toPluginDescriptor(repository, plugin, entry.pluginPath()));
-        }
-        return plugins.stream()
+        return safePlugins(index).stream()
+                .map(entry -> toPluginDescriptor(repository, readPluginFile(repository, entry.pluginPath()), entry.pluginPath()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPluginDescriptor::pluginId))
                 .toList();
     }
