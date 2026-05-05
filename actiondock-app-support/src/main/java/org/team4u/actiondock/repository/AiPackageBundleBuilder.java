@@ -64,15 +64,15 @@ final class AiPackageBundleBuilder {
     }
 
     void addModel(String id, AiPackageModelFile file) {
-        models.putIfAbsent(id, copyWithId(file, id));
+        models.putIfAbsent(id, file.withId(id));
     }
 
     void addToolset(String id, AiPackageToolsetFile file) {
-        toolsets.putIfAbsent(id, copyWithId(file, id));
+        toolsets.putIfAbsent(id, file.withId(id));
     }
 
     void addAgent(String id, AiPackageAgentFile file) {
-        agents.putIfAbsent(id, copyWithId(file, id));
+        agents.putIfAbsent(id, file.withId(id));
         if (Objects.equals(id, entryAgentId)) {
             entryAgentName = file.name();
             entryAgentDescription = file.description();
@@ -80,29 +80,7 @@ final class AiPackageBundleBuilder {
     }
 
     void addScript(String id, AiPackageScriptFile file) {
-        scripts.putIfAbsent(id, copyWithId(file, id));
-    }
-
-    private static AiPackageModelFile copyWithId(AiPackageModelFile f, String id) {
-        return new AiPackageModelFile(id, f.name(), f.provider(), f.modelProvider(), f.modelName(),
-                f.baseUrl(), f.apiKeyConfigKey(), f.defaultOptions(), f.limits(), f.capabilities(), f.enabled());
-    }
-
-    private static AiPackageToolsetFile copyWithId(AiPackageToolsetFile f, String id) {
-        return new AiPackageToolsetFile(id, f.name(), f.description(), f.toolNames(),
-                f.toolOptions(), f.maxPermission(), f.enabled());
-    }
-
-    private static AiPackageAgentFile copyWithId(AiPackageAgentFile f, String id) {
-        return new AiPackageAgentFile(id, f.name(), f.description(), f.provider(), f.modelProfileId(),
-                f.systemPrompt(), f.toolsetIds(), f.directToolNames(), f.directToolOptions(),
-                f.skillIds(), f.options(), f.enabled());
-    }
-
-    private static AiPackageScriptFile copyWithId(AiPackageScriptFile f, String id) {
-        return new AiPackageScriptFile(id, f.name(), f.type(), f.packaging(), f.description(),
-                f.tags(), f.source(), f.pythonRequirements(), f.inputSchema(), f.outputSchema(),
-                f.pluginDependencies(), f.aiDependencies());
+        scripts.putIfAbsent(id, file.withId(id));
     }
 
     void addExternalDependency(RepositoryAiPackageDependency dependency) {

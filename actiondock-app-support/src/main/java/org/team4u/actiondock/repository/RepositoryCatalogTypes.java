@@ -696,6 +696,10 @@ public final class RepositoryCatalogTypes {
                                      Map<String, Object> limits,
                                      List<String> capabilities,
                                      boolean enabled) {
+        public AiPackageModelFile withId(String newId) {
+            return new AiPackageModelFile(newId, name, provider, modelProvider, modelName,
+                    baseUrl, apiKeyConfigKey, defaultOptions, limits, capabilities, enabled);
+        }
     }
 
     public record AiPackageToolsetFile(String id,
@@ -705,6 +709,10 @@ public final class RepositoryCatalogTypes {
                                        Map<String, Map<String, Object>> toolOptions,
                                        String maxPermission,
                                        boolean enabled) {
+        public AiPackageToolsetFile withId(String newId) {
+            return new AiPackageToolsetFile(newId, name, description, toolNames,
+                    toolOptions, maxPermission, enabled);
+        }
     }
 
     public record AiPackageAgentFile(String id,
@@ -719,6 +727,11 @@ public final class RepositoryCatalogTypes {
                                      List<String> skillIds,
                                      Map<String, Object> options,
                                      boolean enabled) {
+        public AiPackageAgentFile withId(String newId) {
+            return new AiPackageAgentFile(newId, name, description, provider, modelProfileId,
+                    systemPrompt, toolsetIds, directToolNames, directToolOptions,
+                    skillIds, options, enabled);
+        }
     }
 
     public record AiPackageScriptFile(String id,
@@ -733,6 +746,11 @@ public final class RepositoryCatalogTypes {
                                       Map<String, Object> outputSchema,
                                       List<PluginDependency> pluginDependencies,
                                       List<AiDependency> aiDependencies) {
+        public AiPackageScriptFile withId(String newId) {
+            return new AiPackageScriptFile(newId, name, type, packaging, description,
+                    tags, source, pythonRequirements, inputSchema, outputSchema,
+                    pluginDependencies, aiDependencies);
+        }
     }
 
     public record ConfigTemplateItem(String key,
