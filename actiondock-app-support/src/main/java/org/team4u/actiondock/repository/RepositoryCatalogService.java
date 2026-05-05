@@ -839,7 +839,7 @@ public class RepositoryCatalogService {
 
     RepositoryCatalogTypes.RepositoryIndexFile readRepositoryIndex(RepositoryDefinition repository) {
         if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            return readHttpJson(httpReader.joinHttpPath(repository.getUrl(), REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class);
+            return httpReader.readHttpJson(httpReader.joinHttpPath(repository.getUrl(), REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class);
         }
         Path root = resolveRepositoryRoot(repository);
         if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
@@ -856,7 +856,7 @@ public class RepositoryCatalogService {
 
     private <T> T readRepositoryJsonFile(RepositoryDefinition repository, String relativePath, Class<T> type) {
         if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            return readHttpJson(httpReader.joinHttpPath(repository.getUrl(), relativePath), type);
+            return httpReader.readHttpJson(httpReader.joinHttpPath(repository.getUrl(), relativePath), type);
         }
         return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), relativePath), type);
     }
@@ -934,9 +934,6 @@ public class RepositoryCatalogService {
         }
     }
 
-    private <T> T readHttpJson(String url, Class<T> type) {
-        return httpReader.readHttpJson(url, type);
-    }
 
     static void assertLatestRepositoryMetadata(String raw, Class<?> type, String source) {
         if (type != RepositoryCatalogTypes.RepositoryIndexFile.class
