@@ -12,4 +12,8 @@ public enum ScriptPackaging {
 
     /** AI 包入口前缀，以该前缀开头的名称表示由能力包注册的入口实体。 */
     public static final String MANAGED_ENTRY_PREFIX = "cap.";
+
+    public static boolean isManagedId(String id) {
+        return id != null && (id.startsWith(MANAGED_INTERNAL_PREFIX) || id.startsWith(MANAGED_ENTRY_PREFIX));
+    }
 }

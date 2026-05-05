@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
+import static org.team4u.actiondock.domain.model.ScriptPackaging.isManagedId;
 
 public class AiToolsetService {
 
@@ -95,7 +96,7 @@ public class AiToolsetService {
     }
 
     private static void assertMutable(String id) {
-        if (id != null && id.startsWith(MANAGED_INTERNAL_PREFIX)) {
+        if (isManagedId(id)) {
             throw new IllegalArgumentException("AI 能力包托管工具集不允许直接修改: " + id);
         }
     }
