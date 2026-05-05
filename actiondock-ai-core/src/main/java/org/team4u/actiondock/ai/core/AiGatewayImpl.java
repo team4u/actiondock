@@ -12,6 +12,7 @@ import org.team4u.actiondock.ai.api.AiEmbeddingResponse;
 import org.team4u.actiondock.ai.api.AiGateway;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiProviderClient;
+import org.team4u.actiondock.ai.api.AiStepStatus;
 import org.team4u.actiondock.ai.api.AiStructuredRequest;
 import org.team4u.actiondock.ai.api.AiStructuredResponse;
 import org.team4u.actiondock.ai.api.AiUsage;
@@ -26,8 +27,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 public class AiGatewayImpl implements AiGateway {
-    private static final String CALL_STATUS_SUCCESS = "SUCCESS";
-    private static final String CALL_STATUS_FAILED = "FAILED";
+    private static final String CALL_STATUS_SUCCESS = AiStepStatus.SUCCESS;
+    private static final String CALL_STATUS_FAILED = AiStepStatus.FAILED;
 
     private final AiModelProfileService modelProfileService;
     private final AiProviderClient providerClient;
