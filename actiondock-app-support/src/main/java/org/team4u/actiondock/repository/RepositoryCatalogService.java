@@ -49,6 +49,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -58,6 +59,15 @@ import java.util.function.Function;
  */
 public class RepositoryCatalogService {
     private static final ObjectMapper METADATA_OBJECT_MAPPER = new ObjectMapper();
+    private static final Set<Class<?>> METADATA_TYPES = Set.of(
+            RepositoryCatalogTypes.RepositoryIndexFile.class,
+            RepositoryCatalogTypes.ToolFile.class,
+            RepositoryCatalogTypes.PluginFile.class,
+            RepositoryCatalogTypes.SkillFile.class,
+            RepositoryCatalogTypes.CapabilityPackageManifestFile.class,
+            RepositoryCatalogTypes.CapabilityPackageReleaseFile.class
+    );
+    private static final String ERR_MISSING_RELEASE_NOTES = "仓库元数据缺少 releaseNotes 字段: ";
 
     /**
      * 仓库接口分组，将所有仓储端口聚合为一个上下文。
@@ -944,12 +954,7 @@ public class RepositoryCatalogService {
 
 
     static void assertLatestRepositoryMetadata(String raw, Class<?> type, String source) {
-        if (type != RepositoryCatalogTypes.RepositoryIndexFile.class
-                && type != RepositoryCatalogTypes.ToolFile.class
-                && type != RepositoryCatalogTypes.PluginFile.class
-                && type != RepositoryCatalogTypes.SkillFile.class
-                && type != RepositoryCatalogTypes.CapabilityPackageManifestFile.class
-                && type != RepositoryCatalogTypes.CapabilityPackageReleaseFile.class) {
+        if (!METADATA_TYPES.contains(type)) {
             return;
         }
         JsonNode root;
@@ -970,14 +975,14 @@ public class RepositoryCatalogService {
                 for (int index = 0; index < entries.size(); index++) {
                     JsonNode entry = entries.get(index);
                     if (entry != null && entry.isObject() && !entry.has("releaseNotes")) {
-                        throw new IllegalArgumentException("仓库元数据缺少 releaseNotes 字段: " + source + " " + section + "[" + index + "].releaseNotes");
+                        throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " " + section + "[" + index + "].releaseNotes");
                     }
                 }
             }
             return;
         }
         if (!root.has("releaseNotes")) {
-            throw new IllegalArgumentException("仓库元数据缺少 releaseNotes 字段: " + source + " releaseNotes");
+            throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " releaseNotes");
         }
     }
 
