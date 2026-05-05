@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -151,10 +150,6 @@ public class RepositoryToolService {
                 .forEach(repos.scriptScheduleRepository()::deleteById);
         repos.scriptRepository().deleteById(installedScriptId);
         repos.repositoryToolInstallationRepository().deleteByToolId(installedScriptId);
-    }
-
-    public ScriptDefinition forkTool(String installedScriptId, String newId, String newName) {
-        return services.scriptApplicationService().createFork(installedScriptId, newId, newName);
     }
 
     public RepositoryPublishConfigPreview previewPublishConfig(RepositoryPublishConfigPreviewRequest request) {

@@ -500,10 +500,7 @@ public final class SkillFileUtils {
         return value == null ? null : String.valueOf(value);
     }
 
-    /**
-     * 根据文件扩展名判断预览类型（MARKDOWN 或 TEXT）。
-     */
-    public static String resolvePreviewType(Path path) {
+    private static String resolvePreviewType(Path path) {
         String extension = extractExtension(path);
         if (".md".equals(extension)) {
             return "MARKDOWN";
@@ -511,10 +508,7 @@ public final class SkillFileUtils {
         return "TEXT";
     }
 
-    /**
-     * 根据文件扩展名判断编辑器语言标识。
-     */
-    public static String resolveLanguage(Path path) {
+    private static String resolveLanguage(Path path) {
         String extension = extractExtension(path);
         return EXTENSION_TO_LANGUAGE.getOrDefault(extension, "plaintext");
     }
@@ -684,13 +678,6 @@ public final class SkillFileUtils {
         } catch (IOException exception) {
             throw new IllegalStateException("创建临时 Skill 目录失败", exception);
         }
-    }
-
-    /**
-     * 读取安装标记文件内容。
-     */
-    public static Map<String, Object> readInstallMarker(Path directory, JsonCodec jsonCodec) {
-        return SkillArchiveManager.readInstallMarker(directory, jsonCodec);
     }
 
     private static final int MAX_TEXT_PREVIEW_CHARS = 200_000;

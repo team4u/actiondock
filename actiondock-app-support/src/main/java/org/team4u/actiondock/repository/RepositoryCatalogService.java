@@ -303,12 +303,6 @@ public class RepositoryCatalogService {
                 Comparator.comparing(RepositoryCatalogTypes.RepositoryPluginDescriptor::pluginId));
     }
 
-    public List<RepositoryCatalogTypes.RepositorySkillDescriptor> listAllRepositorySkills() {
-        return listAllFromEnabledRepositories(
-                this::listRepositorySkills,
-                Comparator.comparing(RepositoryCatalogTypes.RepositorySkillDescriptor::skillId));
-    }
-
     public List<RepositoryCatalogTypes.RepositoryPluginDescriptor> listRepositoryPlugins(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
@@ -319,19 +313,6 @@ public class RepositoryCatalogService {
         }
         return plugins.stream()
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPluginDescriptor::pluginId))
-                .toList();
-    }
-
-    public List<RepositoryCatalogTypes.RepositorySkillDescriptor> listRepositorySkills(String repositoryId) {
-        RepositoryDefinition repository = getRepository(repositoryId);
-        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        List<RepositoryCatalogTypes.RepositorySkillDescriptor> skills = new ArrayList<>();
-        for (RepositoryCatalogTypes.RepositorySkillIndexEntry entry : safeSkills(index)) {
-            RepositoryCatalogTypes.SkillFile skill = readSkillFile(repository, entry.skillPath());
-            skills.add(toSkillDescriptor(repository, skill, entry.skillPath()));
-        }
-        return skills.stream()
-                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositorySkillDescriptor::skillId))
                 .toList();
     }
 
@@ -352,23 +333,6 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.SkillFile skill = readSkillFile(repository, entry.skillPath());
         String content = readRepositoryFile(repository, parentDirectoryPath(entry.skillPath()).resolve(skill.entrypointPath()));
         return new RepositoryCatalogTypes.RepositorySkillDetail(toSkillDescriptor(repository, skill, entry.skillPath()), content);
-    }
-
-    public RepositoryCatalogTypes.RepositoryBinaryArchive exportRepositorySkillArchive(String repositoryId, String skillId) {
-        RepositoryDefinition repository = getRepository(repositoryId);
-        if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            throw new IllegalArgumentException(ERR_HTTP_REPO_UNSUPPORTED_EXPORT);
-        }
-        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        RepositoryCatalogTypes.RepositorySkillIndexEntry entry = findEntryById(
-                safeSkills(index), skillId, RepositoryCatalogTypes.RepositorySkillIndexEntry::id, "仓库 Skill");
-        RepositoryCatalogTypes.SkillFile skill = readSkillFile(repository, entry.skillPath());
-        Path skillRoot = safeResolveRepositoryPath(resolveRepositoryRoot(repository), parentDirectoryPath(entry.skillPath()).value());
-        SkillTypes.SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(skillRoot, skill.skillId(), true, jsonCodec);
-        return new RepositoryCatalogTypes.RepositoryBinaryArchive(
-                validation.skillId() + ".zip",
-                SkillArchiveManager.buildArchive(skillRoot, validation, validation.version(), jsonCodec)
-        );
     }
 
     public RepositoryCatalogTypes.RepositoryToolDetail getRepositoryTool(String repositoryId, String toolId) {
@@ -1018,30 +982,22 @@ public class RepositoryCatalogService {
             return;
         }
         if (type == RepositoryCatalogTypes.RepositoryIndexFile.class) {
-            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("tools"), source, "tools");
-            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("plugins"), source, "plugins");
-            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("packages"), source, "packages");
-            assertRepositoryIndexEntriesIncludeReleaseNotes(root.get("skills"), source, "skills");
-            return;
-        }
-        assertReleaseNotesField(root, source, "releaseNotes");
-    }
-
-    private static void assertRepositoryIndexEntriesIncludeReleaseNotes(JsonNode entries, String source, String fieldName) {
-        if (entries == null || !entries.isArray()) {
-            return;
-        }
-        for (int index = 0; index < entries.size(); index++) {
-            JsonNode entry = entries.get(index);
-            if (entry != null && entry.isObject()) {
-                assertReleaseNotesField(entry, source, fieldName + "[" + index + "].releaseNotes");
+            for (String section : List.of("tools", "plugins", "packages", "skills")) {
+                JsonNode entries = root.get(section);
+                if (entries == null || !entries.isArray()) {
+                    continue;
+                }
+                for (int index = 0; index < entries.size(); index++) {
+                    JsonNode entry = entries.get(index);
+                    if (entry != null && entry.isObject() && !entry.has("releaseNotes")) {
+                        throw new IllegalArgumentException("仓库元数据缺少 releaseNotes 字段: " + source + " " + section + "[" + index + "].releaseNotes");
+                    }
+                }
             }
+            return;
         }
-    }
-
-    private static void assertReleaseNotesField(JsonNode node, String source, String path) {
-        if (!node.has("releaseNotes")) {
-            throw new IllegalArgumentException("仓库元数据缺少 releaseNotes 字段: " + source + " " + path);
+        if (!root.has("releaseNotes")) {
+            throw new IllegalArgumentException("仓库元数据缺少 releaseNotes 字段: " + source + " releaseNotes");
         }
     }
 
