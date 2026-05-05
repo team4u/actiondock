@@ -45,6 +45,11 @@ final class ToolRepositoryPublisher {
     );
     private static final String TOOL_SOURCE_PYTHON_FILE = "source.py";
     private static final String TOOL_SOURCE_GROOVY_FILE = "source.groovy";
+    private static final String TOOL_REQUIREMENTS_FILE = "requirements.txt";
+    private static final String TOOL_INPUT_SCHEMA_FILE = "input.schema.json";
+    private static final String TOOL_OUTPUT_SCHEMA_FILE = "output.schema.json";
+    private static final String TOOL_CONFIG_TEMPLATE_FILE = "config.template.json";
+    private static final String TOOL_SCHEDULE_TEMPLATE_FILE = "schedules.template.json";
 
     private final RepositoryCatalogService catalog;
     private final RepositoryCatalogService.Repositories repos;
@@ -150,7 +155,7 @@ final class ToolRepositoryPublisher {
         Files.writeString(toolDir.resolve(sourceFileName), script.getPublishedSnapshot().getSource(), StandardCharsets.UTF_8);
         if (script.getPublishedSnapshot().getPythonRequirements() != null
                 && !script.getPublishedSnapshot().getPythonRequirements().isBlank()) {
-            Files.writeString(toolDir.resolve("requirements.txt"), script.getPublishedSnapshot().getPythonRequirements(), StandardCharsets.UTF_8);
+            Files.writeString(toolDir.resolve(TOOL_REQUIREMENTS_FILE), script.getPublishedSnapshot().getPythonRequirements(), StandardCharsets.UTF_8);
         }
     }
 
@@ -163,18 +168,18 @@ final class ToolRepositoryPublisher {
                                           List<ScriptDependency> scriptDependencies,
                                           List<PluginDependency> pluginDeps) {
         catalog.writeJson(toolDir.resolve("tool.json"), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies, pluginDeps));
-        catalog.writeJson(toolDir.resolve("input.schema.json"), script.getPublishedSnapshot().getInputSchema());
-        catalog.writeJson(toolDir.resolve("output.schema.json"), script.getPublishedSnapshot().getOutputSchema());
+        catalog.writeJson(toolDir.resolve(TOOL_INPUT_SCHEMA_FILE), script.getPublishedSnapshot().getInputSchema());
+        catalog.writeJson(toolDir.resolve(TOOL_OUTPUT_SCHEMA_FILE), script.getPublishedSnapshot().getOutputSchema());
     }
 
     private void writeToolOptionalFiles(Path toolDir,
                                          List<ConfigTemplateItem> configTemplates,
                                          List<ScheduleTemplateItem> scheduleTemplates) {
         if (!configTemplates.isEmpty()) {
-            catalog.writeJson(toolDir.resolve("config.template.json"), configTemplates);
+            catalog.writeJson(toolDir.resolve(TOOL_CONFIG_TEMPLATE_FILE), configTemplates);
         }
         if (!scheduleTemplates.isEmpty()) {
-            catalog.writeJson(toolDir.resolve("schedules.template.json"), scheduleTemplates);
+            catalog.writeJson(toolDir.resolve(TOOL_SCHEDULE_TEMPLATE_FILE), scheduleTemplates);
         }
     }
 
@@ -199,11 +204,11 @@ final class ToolRepositoryPublisher {
                 sourceFileName,
                 script.getPublishedSnapshot().getPythonRequirements() == null || script.getPublishedSnapshot().getPythonRequirements().isBlank()
                         ? null
-                        : "requirements.txt",
-                "input.schema.json",
-                "output.schema.json",
-                configTemplates.isEmpty() ? null : "config.template.json",
-                scheduleTemplates.isEmpty() ? null : "schedules.template.json",
+                        : TOOL_REQUIREMENTS_FILE,
+                TOOL_INPUT_SCHEMA_FILE,
+                TOOL_OUTPUT_SCHEMA_FILE,
+                configTemplates.isEmpty() ? null : TOOL_CONFIG_TEMPLATE_FILE,
+                scheduleTemplates.isEmpty() ? null : TOOL_SCHEDULE_TEMPLATE_FILE,
                 null,
                 null,
                 scriptDependencies,

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Skill 相关的公共数据类型定义。
@@ -15,6 +16,18 @@ public final class SkillTypes {
 
     private SkillTypes() {
     }
+
+    public static final String TARGET_TYPE_CODEX = "CODEX";
+    public static final String TARGET_TYPE_CLAUDE = "CLAUDE";
+    public static final String TARGET_TYPE_GEMINI = "GEMINI";
+    public static final String TARGET_TYPE_CODEBUDDY = "CODEBUDDY";
+    public static final String TARGET_TYPE_CUSTOM = "CUSTOM";
+    public static final String TARGET_TYPE_ACTIONDOCK_AGENT = "ACTIONDOCK_AGENT";
+
+    public static final Set<String> VALID_TARGET_TYPES = Set.of(
+            TARGET_TYPE_CODEX, TARGET_TYPE_CLAUDE, TARGET_TYPE_GEMINI,
+            TARGET_TYPE_CODEBUDDY, TARGET_TYPE_CUSTOM, TARGET_TYPE_ACTIONDOCK_AGENT
+    );
 
     public record SkillManifestFile(int schemaVersion,
                                     String skillId,

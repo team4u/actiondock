@@ -7,6 +7,8 @@ import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.domain.port.SkillTargetRepository;
 
 import static org.team4u.actiondock.skill.SkillTypes.*;
+import static org.team4u.actiondock.skill.SkillTypes.VALID_TARGET_TYPES;
+import static org.team4u.actiondock.skill.SkillTypes.TARGET_TYPE_CUSTOM;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -56,9 +58,9 @@ public class SkillTargetService {
         SkillTarget target = request == null ? new SkillTarget() : request;
         String id = SkillFileUtils.normalizeOrDefault(target.getId(), UUID.randomUUID().toString());
         String name = SkillFileUtils.normalize(target.getName(), "SkillTarget 名称不能为空");
-        String type = SkillFileUtils.normalizeOrDefault(target.getType(), "CUSTOM").toUpperCase(Locale.ROOT);
-        if (!List.of("CODEX", "CLAUDE", "GEMINI", "CODEBUDDY", "CUSTOM", "ACTIONDOCK_AGENT").contains(type)) {
-            throw new IllegalArgumentException("SkillTarget type 仅支持 CODEX / CLAUDE / GEMINI / CODEBUDDY / CUSTOM / ACTIONDOCK_AGENT");
+        String type = SkillFileUtils.normalizeOrDefault(target.getType(), TARGET_TYPE_CUSTOM).toUpperCase(Locale.ROOT);
+        if (!VALID_TARGET_TYPES.contains(type)) {
+            throw new IllegalArgumentException("SkillTarget type 仅支持 " + String.join(" / ", VALID_TARGET_TYPES));
         }
         Path rootPath = SkillFileUtils.resolveTargetRoot(SkillFileUtils.normalize(target.getRootPath(), "SkillTarget rootPath 不能为空"));
         boolean writable = SkillFileUtils.ensureDirectoryWritable(rootPath);
