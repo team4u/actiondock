@@ -675,9 +675,9 @@ public class RepositoryCatalogService {
      */
     private ScriptDefinition findDevelopmentScript(String repositoryId, String toolId) {
         return repos.scriptRepository().findAll().stream()
-                .filter(script -> script.getScope() == ScriptScope.DEVELOPMENT)
-                .filter(script -> repositoryId.equals(script.getRepositoryId()))
-                .filter(script -> toolId.equals(script.getRepositoryToolId()))
+                .filter(script -> script.getScope() == ScriptScope.DEVELOPMENT
+                        && repositoryId.equals(script.getRepositoryId())
+                        && toolId.equals(script.getRepositoryToolId()))
                 .findFirst()
                 .orElse(null);
     }

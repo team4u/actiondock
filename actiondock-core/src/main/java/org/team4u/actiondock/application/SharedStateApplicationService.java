@@ -5,7 +5,6 @@ import org.team4u.actiondock.domain.port.SharedStateRepository;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -161,14 +160,13 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
             return List.of();
         }
         LocalDateTime now = LocalDateTime.now();
-        Set<String> namespaces = new LinkedHashSet<>();
-        repository.findAll().stream()
+        return repository.findAll().stream()
                 .filter(item -> !item.isExpiredAt(now))
                 .map(SharedStateEntry::getNamespace)
                 .filter(item -> item != null && !item.isBlank())
+                .distinct()
                 .sorted()
-                .forEach(namespaces::add);
-        return List.copyOf(namespaces);
+                .toList();
     }
 
     public long purgeExpired(String namespace) {

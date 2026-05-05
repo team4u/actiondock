@@ -100,12 +100,12 @@ public class SkillService {
         if (deployments.isEmpty()) {
             throw new IllegalArgumentException("Skill 未安装到任何目标: " + skillId);
         }
-        for (SkillInstallation deployment : deployments) {
+        deployments.forEach(deployment -> {
             deleteInstalledPath(deployment);
             skillInstallationRepository.save(deployment.copy()
                     .setEnabled(false)
                     .setUpdatedAt(LocalDateTime.now()));
-        }
+        });
         return getSkill(skillId);
     }
 
