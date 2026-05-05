@@ -13,6 +13,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  */
 @Configuration(proxyBeanMethods = false)
 public class WebCorsConfiguration implements WebMvcConfigurer {
+    private static final long CORS_MAX_AGE_SECONDS = 3600;
+
     private final AppProperties appProperties;
 
     public WebCorsConfiguration(AppProperties appProperties) {
@@ -25,6 +27,6 @@ public class WebCorsConfiguration implements WebMvcConfigurer {
                 .allowedOriginPatterns(appProperties.getCors().getAllowedOrigins().toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
-                .maxAge(3600);
+                .maxAge(CORS_MAX_AGE_SECONDS);
     }
 }

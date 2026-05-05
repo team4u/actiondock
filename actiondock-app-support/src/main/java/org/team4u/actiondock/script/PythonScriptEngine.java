@@ -46,6 +46,7 @@ import java.util.function.Function;
  */
 public class PythonScriptEngine implements ScriptEngine {
     private static final System.Logger log = System.getLogger(PythonScriptEngine.class.getName());
+    private static final String DEFAULT_PYTHON_EXECUTABLE = "python3";
     private static final String INVOKE_PREFIX = "__ACTIONDOCK_INVOKE__";
     private static final String PLUGIN_PREFIX = "__ACTIONDOCK_PLUGIN__";
     private static final String STATE_PREFIX = "__ACTIONDOCK_STATE__";
@@ -272,7 +273,7 @@ public class PythonScriptEngine implements ScriptEngine {
 
     private String resolveExecutable() {
         if (properties.getExecutable() == null || properties.getExecutable().isBlank()) {
-            return "python3";
+            return DEFAULT_PYTHON_EXECUTABLE;
         }
         return properties.getExecutable().trim();
     }
