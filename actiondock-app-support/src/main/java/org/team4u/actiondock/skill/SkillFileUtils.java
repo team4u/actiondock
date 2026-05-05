@@ -44,6 +44,7 @@ public final class SkillFileUtils {
     public static final String SKILL_PACKAGE_FILE = SkillArchiveManager.SKILL_PACKAGE_FILE;
     static final long MAX_ARCHIVE_SIZE = SkillArchiveManager.MAX_ARCHIVE_SIZE;
     public static final String ERR_VERSION_REQUIRED = "version 不能为空";
+    private static final int MAX_SKILL_MD_SIZE = 100_000;
 
     public static Path normalizePath(Path path) {
         return path == null ? null : path.toAbsolutePath().normalize();
@@ -183,7 +184,7 @@ public final class SkillFileUtils {
         if (frontmatter.name() != null && !Objects.equals(slugify(frontmatter.name()), skillId)) {
             warnings.add("frontmatter name 规范化后与 skillId 不一致");
         }
-        if (content.length() > 100_000) {
+        if (content.length() > MAX_SKILL_MD_SIZE) {
             warnings.add("SKILL.md 较大，建议拆分 references");
         }
         return warnings;
