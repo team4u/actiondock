@@ -14,8 +14,6 @@ import org.team4u.actiondock.domain.model.ConfigValue;
 
 import java.util.List;
 
-import static org.team4u.actiondock.repository.RepositoryCatalogTypes.PUBLISH_MODE_PLACEHOLDER;
-
 /**
  * 全局配置值 REST 控制器。
  *
@@ -41,7 +39,7 @@ public class ConfigValueController {
      */
     @GetMapping
     public ApiResponse<List<ConfigValueView>> list() {
-        return ApiResponse.success(configValueApplicationService.list().stream().map(ConfigValueController::toView).toList());
+        return ApiResponse.success(configValueApplicationService.list().stream().map(ConfigValueViewMapper::toView).toList());
     }
 
     /**
@@ -52,7 +50,7 @@ public class ConfigValueController {
      */
     @GetMapping("/{key}")
     public ApiResponse<ConfigValueDetailView> detail(@PathVariable String key) {
-        return ApiResponse.success(toDetailView(configValueUsageAnalysisService.analyze(key)));
+        return ApiResponse.success(ConfigValueViewMapper.toDetailView(configValueUsageAnalysisService.analyze(key)));
     }
 
     /**
@@ -64,7 +62,7 @@ public class ConfigValueController {
     @PostMapping
     public ApiResponse<ConfigValueView> create(@RequestBody ConfigValueRequest request) {
         return ApiResponse.success(
-                toView(configValueApplicationService.create(toDomain(request))),
+                ConfigValueViewMapper.toView(configValueApplicationService.create(ConfigValueViewMapper.toDomain(request))),
                 "配置值已创建"
         );
     }
@@ -79,7 +77,7 @@ public class ConfigValueController {
     @PutMapping("/{key}")
     public ApiResponse<ConfigValueView> update(@PathVariable String key, @RequestBody ConfigValueRequest request) {
         return ApiResponse.success(
-                toView(configValueApplicationService.update(key, toDomain(request), request != null && request.isPreserveValue())),
+                ConfigValueViewMapper.toView(configValueApplicationService.update(key, ConfigValueViewMapper.toDomain(request), request != null && request.isPreserveValue())),
                 "配置值已更新"
         );
     }
@@ -88,7 +86,7 @@ public class ConfigValueController {
     public ApiResponse<ConfigValueDetailView> copyLocalOverride(@PathVariable String key) {
         configValueApplicationService.copyAsLocalOverride(key);
         return ApiResponse.success(
-                toDetailView(configValueUsageAnalysisService.analyze(key)),
+                ConfigValueViewMapper.toDetailView(configValueUsageAnalysisService.analyze(key)),
                 "已复制为本地覆盖值"
         );
     }
@@ -111,7 +109,7 @@ public class ConfigValueController {
                         .setOverridden(false)
         );
         return ApiResponse.success(
-                toDetailView(configValueUsageAnalysisService.analyze(key)),
+                ConfigValueViewMapper.toDetailView(configValueUsageAnalysisService.analyze(key)),
                 "已恢复仓库默认值"
         );
     }
@@ -126,164 +124,5 @@ public class ConfigValueController {
     public ApiResponse<Void> delete(@PathVariable String key) {
         configValueApplicationService.delete(key);
         return ApiResponse.success(null, "配置值已删除");
-    }
-
-    private static ConfigValue toDomain(ConfigValueRequest request) {
-        ConfigValueRequest value = request == null ? new ConfigValueRequest() : request;
-        return new ConfigValue()
-                .setKey(value.getKey())
-                .setValue(value.getValue())
-                .setDescription(value.getDescription())
-                .setSecret(value.isSecret());
-    }
-
-    private static ConfigValueView toView(ConfigValue value) {
-        boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
-        boolean masked = value.isSecret() || PUBLISH_MODE_PLACEHOLDER.equalsIgnoreCase(value.getPublishMode());
-        return new ConfigValueView()
-                .setKey(value.getKey())
-                .setValue(masked ? null : value.getValue())
-                .setValueMasked(masked && hasValue ? "********" : null)
-                .setHasValue(hasValue)
-                .setDescription(value.getDescription())
-                .setSecret(value.isSecret())
-                .setRepositoryId(value.getRepositoryId())
-                .setRepositoryToolId(value.getRepositoryToolId())
-                .setRepositoryVersion(value.getRepositoryVersion())
-                .setPublishMode(value.getPublishMode())
-                .setManaged(value.isManaged())
-                .setOverridden(value.isOverridden())
-                .setCreatedAt(value.getCreatedAt())
-                .setUpdatedAt(value.getUpdatedAt());
-    }
-
-    private static ConfigValueDetailView toDetailView(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        ConfigValue value = insight.configValue();
-        boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
-        return new ConfigValueDetailView(
-                value.getKey(),
-                value.isSecret() ? null : value.getValue(),
-                (value.isSecret() || PUBLISH_MODE_PLACEHOLDER.equalsIgnoreCase(value.getPublishMode())) && hasValue ? "********" : null,
-                hasValue,
-                value.getDescription(),
-                value.isSecret(),
-                value.getRepositoryId(),
-                value.getRepositoryToolId(),
-                value.getRepositoryVersion(),
-                value.getPublishMode(),
-                value.isManaged(),
-                value.isOverridden(),
-                value.getCreatedAt(),
-                value.getUpdatedAt(),
-                toUsage(insight),
-                toImpactScripts(insight.impactedScripts()),
-                insight.origin() == null ? null : toOrigin(insight.origin()),
-                new ConfigValueDetailView.AvailableActions(
-                        insight.availableActions().canCopyAsLocalOverride(),
-                        insight.availableActions().canRestoreRepositoryDefault()
-                )
-        );
-    }
-
-    private static ConfigValueDetailView.Usage toUsage(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        return new ConfigValueDetailView.Usage(
-                toConfigReferences(insight),
-                toScriptReferences(insight),
-                toScheduleReferences(insight),
-                toPluginConfigReferences(insight),
-                toTemplateDeclarations(insight),
-                toModelReferences(insight)
-        );
-    }
-
-    private static List<ConfigValueDetailView.ConfigReference> toConfigReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        return insight.configReferences().stream()
-                .map(item -> new ConfigValueDetailView.ConfigReference(item.key(), item.description()))
-                .toList();
-    }
-
-    private static List<ConfigValueDetailView.ScriptReference> toScriptReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        return insight.scriptReferences().stream()
-                .map(item -> new ConfigValueDetailView.ScriptReference(
-                        item.scriptId(),
-                        item.scriptName(),
-                        item.scope(),
-                        item.repositoryId(),
-                        item.repositoryToolId(),
-                        item.repositoryVersion()
-                ))
-                .toList();
-    }
-
-    private static List<ConfigValueDetailView.ScheduleReference> toScheduleReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        return insight.scheduleReferences().stream()
-                .map(item -> new ConfigValueDetailView.ScheduleReference(
-                        item.scheduleId(),
-                        item.scheduleName(),
-                        item.scriptId(),
-                        item.scriptName()
-                ))
-                .toList();
-    }
-
-    private static List<ConfigValueDetailView.PluginConfigReference> toPluginConfigReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        return insight.pluginConfigReferences().stream()
-                .map(item -> new ConfigValueDetailView.PluginConfigReference(
-                        item.pluginId(),
-                        item.pluginName(),
-                        item.dependentScriptCount()
-                ))
-                .toList();
-    }
-
-    private static List<ConfigValueDetailView.TemplateDeclaration> toTemplateDeclarations(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        return insight.templateDeclarations().stream()
-                .map(item -> new ConfigValueDetailView.TemplateDeclaration(
-                        item.repositoryId(),
-                        item.repositoryName(),
-                        item.toolId(),
-                        item.toolName(),
-                        item.version(),
-                        item.label(),
-                        item.secret(),
-                        item.publishMode(),
-                        item.defaultValue()
-                ))
-                .toList();
-    }
-
-    private static List<ConfigValueDetailView.ModelReference> toModelReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
-        return insight.modelReferences().stream()
-                .map(item -> new ConfigValueDetailView.ModelReference(
-                        item.modelId(),
-                        item.modelName(),
-                        item.modelProvider(),
-                        item.referenceType()
-                ))
-                .toList();
-    }
-
-    private static List<ConfigValueDetailView.ImpactScript> toImpactScripts(List<ConfigValueUsageAnalysisService.ImpactScript> impacts) {
-        return impacts.stream()
-                .map(item -> new ConfigValueDetailView.ImpactScript(
-                        item.scriptId(),
-                        item.scriptName(),
-                        item.scope(),
-                        item.repositoryId(),
-                        item.repositoryToolId(),
-                        item.repositoryVersion(),
-                        item.reasons()
-                ))
-                .toList();
-    }
-
-    private static ConfigValueDetailView.Origin toOrigin(ConfigValueUsageAnalysisService.ConfigValueOrigin origin) {
-        return new ConfigValueDetailView.Origin(
-                origin.repositoryId(),
-                origin.repositoryName(),
-                origin.toolId(),
-                origin.toolName(),
-                origin.version()
-        );
     }
 }
