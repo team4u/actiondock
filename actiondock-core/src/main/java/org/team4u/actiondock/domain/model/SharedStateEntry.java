@@ -112,4 +112,18 @@ public class SharedStateEntry {
     public boolean isExpiredAt(LocalDateTime now) {
         return expiresAt != null && now != null && !expiresAt.isAfter(now);
     }
+
+    public SharedStateEntry copy() {
+        return new SharedStateEntry()
+                .setNamespace(namespace)
+                .setKey(key)
+                .setValue(value)
+                .setSecret(secret)
+                .setVersion(version)
+                .setExpiresAt(expiresAt)
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt)
+                .setLastWriterScriptId(lastWriterScriptId)
+                .setLastWriterExecutionId(lastWriterExecutionId);
+    }
 }

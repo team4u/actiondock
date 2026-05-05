@@ -68,7 +68,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         }
         return configValueRepository.findAll().stream()
                 .sorted((left, right) -> left.getKey().compareTo(right.getKey()))
-                .map(ConfigValueApplicationService::copy)
+                .map(ConfigValue::copy)
                 .toList();
     }
 
@@ -82,7 +82,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
      */
     public ConfigValue get(String key) {
         ensureEnabled();
-        return copy(requireExisting(normalizeKey(key)));
+        return requireExisting(normalizeKey(key)).copy();
     }
 
     /**
@@ -103,7 +103,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         }
         LocalDateTime now = LocalDateTime.now();
         normalized.setCreatedAt(now).setUpdatedAt(now);
-        return copy(configValueRepository.save(normalized));
+        return configValueRepository.save(normalized).copy();
     }
 
     /**
@@ -134,7 +134,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
                 .setPublishMode(existing.getPublishMode())
                 .setManaged(existing.isManaged())
                 .setOverridden(existing.isManaged() || existing.isOverridden());
-        return copy(configValueRepository.save(normalized));
+        return configValueRepository.save(normalized).copy();
     }
 
     /**
@@ -158,11 +158,11 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
             throw new IllegalArgumentException("仅托管配置值支持复制为本地覆盖值");
         }
         if (existing.isOverridden()) {
-            return copy(existing);
+            return existing.copy();
         }
         existing.setOverridden(true)
                 .setUpdatedAt(LocalDateTime.now());
-        return copy(configValueRepository.save(existing));
+        return configValueRepository.save(existing).copy();
     }
 
     public ConfigValue restoreManagedValue(String key, ConfigValue restoredValue) {
@@ -175,7 +175,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         ConfigValue normalized = normalizeForRestore(normalizedKey, restoredValue, existing);
         normalized.setCreatedAt(existing.getCreatedAt())
                 .setUpdatedAt(LocalDateTime.now());
-        return copy(configValueRepository.save(normalized));
+        return configValueRepository.save(normalized).copy();
     }
 
     /**
@@ -302,15 +302,6 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
                 .orElseThrow(() -> new IllegalArgumentException("配置值不存在: " + key));
     }
 
-    private static ConfigValue copy(ConfigValue source) {
-        return buildConfigValue(
-                source.getKey(), source.getValue(), source.getDescription(),
-                new ConfigValueFlags(source.isSecret(), source.isManaged(), source.isOverridden()),
-                source.getRepositoryId(), source.getRepositoryToolId(),
-                source.getRepositoryVersion(), source.getPublishMode(),
-                source.getCreatedAt(), source.getUpdatedAt()
-        );
-    }
 
     private static ConfigValue buildConfigValue(String key, String value,
                                                 String description, ConfigValueFlags flags,

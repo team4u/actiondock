@@ -130,4 +130,20 @@ public class ConfigValue {
         this.updatedAt = updatedAt;
         return this;
     }
+
+    public ConfigValue copy() {
+        return new ConfigValue()
+                .setKey(key)
+                .setValue(value)
+                .setDescription(description)
+                .setSecret(secret)
+                .setRepositoryId(repositoryId)
+                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryVersion(repositoryVersion)
+                .setPublishMode(publishMode)
+                .setManaged(managed)
+                .setOverridden(overridden)
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt);
+    }
 }

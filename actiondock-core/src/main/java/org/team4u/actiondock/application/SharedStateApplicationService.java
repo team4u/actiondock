@@ -43,7 +43,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         String normalizedNamespace = normalizeNamespace(namespace);
         String normalizedKey = normalizeKey(key);
         return activeEntry(repository.findByNamespaceAndKey(normalizedNamespace, normalizedKey), LocalDateTime.now())
-                .map(SharedStateApplicationService::copy)
+                .map(SharedStateEntry::copy)
                 .orElse(null);
     }
 
@@ -67,7 +67,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                 .setKey(normalizedKey)
                 .setVersion(1L)
                 .setCreatedAt(now)
-                : copy(existing)
+                : existing.copy()
                 .setVersion(existing.getVersion() == null ? 1L : existing.getVersion() + 1L);
 
         target.setValue(value)
@@ -80,7 +80,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         if (existing == null) {
             target.setCreatedAt(now);
         }
-        return copy(repository.save(target));
+        return repository.save(target).copy();
     }
 
     public CompareAndSetResult compareAndSet(String namespace,
@@ -103,7 +103,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
             }
             SharedStateEntry created = repository.save(
                     buildEntry(normalizedNamespace, normalizedKey, value, secret, expiresAt, writerScriptId, writerExecutionId, 1L, now, now));
-            return new CompareAndSetResult(true, copy(created), copy(created));
+            return new CompareAndSetResult(true, created.copy(), created.copy());
         }
 
         return updateExistingEntry(normalizedNamespace, normalizedKey, current, expectedVersion,
@@ -121,7 +121,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                                                     String writerExecutionId,
                                                     LocalDateTime now) {
         if (!Objects.equals(current.getVersion(), expectedVersion)) {
-            return new CompareAndSetResult(false, null, copy(current));
+            return new CompareAndSetResult(false, null, current.copy());
         }
 
         SharedStateEntry updated = buildEntry(
@@ -130,11 +130,11 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         boolean success = repository.compareAndSet(updated, expectedVersion);
         if (!success) {
             SharedStateEntry latest = findActiveEntry(namespace, key, LocalDateTime.now());
-            return new CompareAndSetResult(false, null, latest == null ? null : copy(latest));
+            return new CompareAndSetResult(false, null, latest == null ? null : latest.copy());
         }
         SharedStateEntry persisted = repository.findByNamespaceAndKey(namespace, key)
-                .map(SharedStateApplicationService::copy)
-                .orElse(copy(updated));
+                .map(SharedStateEntry::copy)
+                .orElse(updated.copy());
         return new CompareAndSetResult(true, persisted, persisted);
     }
 
@@ -152,7 +152,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         return repository.findByNamespace(normalizedNamespace).stream()
                 .filter(item -> !item.isExpiredAt(now))
                 .sorted(Comparator.comparing(SharedStateEntry::getKey))
-                .map(SharedStateApplicationService::copy)
+                .map(SharedStateEntry::copy)
                 .toList();
     }
 
@@ -247,7 +247,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                                                String writerExecutionId,
                                                long version,
                                                LocalDateTime updatedAt) {
-        return copy(base)
+        return base.copy()
                 .setValue(value)
                 .setSecret(secret)
                 .setExpiresAt(expiresAt)
@@ -257,19 +257,6 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                 .setLastWriterExecutionId(blankToNull(writerExecutionId));
     }
 
-    private static SharedStateEntry copy(SharedStateEntry source) {
-        return new SharedStateEntry()
-                .setNamespace(source.getNamespace())
-                .setKey(source.getKey())
-                .setValue(source.getValue())
-                .setSecret(source.isSecret())
-                .setVersion(source.getVersion())
-                .setExpiresAt(source.getExpiresAt())
-                .setCreatedAt(source.getCreatedAt())
-                .setUpdatedAt(source.getUpdatedAt())
-                .setLastWriterScriptId(source.getLastWriterScriptId())
-                .setLastWriterExecutionId(source.getLastWriterExecutionId());
-    }
 
     public record CompareAndSetResult(boolean updated, SharedStateEntry entry, SharedStateEntry current) {
     }
