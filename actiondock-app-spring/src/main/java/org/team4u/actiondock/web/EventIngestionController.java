@@ -36,7 +36,7 @@ public class EventIngestionController {
         return ApiResponse.success(new EventIngestionView(result.getEventRecord(), result.getDispatches()), "已接收");
     }
 
-    private Map<String, Object> readHeaders(HttpServletRequest request) {
+    private static Map<String, Object> readHeaders(HttpServletRequest request) {
         Map<String, Object> headers = new LinkedHashMap<>();
         Enumeration<String> names = request.getHeaderNames();
         if (names == null) {
@@ -49,7 +49,7 @@ public class EventIngestionController {
         return headers;
     }
 
-    private Map<String, Object> readQuery(HttpServletRequest request) {
+    private static Map<String, Object> readQuery(HttpServletRequest request) {
         Map<String, Object> query = new LinkedHashMap<>();
         request.getParameterMap().forEach((key, value) -> {
             if (value == null || value.length == 0) {

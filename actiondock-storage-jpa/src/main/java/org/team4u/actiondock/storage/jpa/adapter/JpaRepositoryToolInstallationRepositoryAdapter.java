@@ -30,12 +30,12 @@ public class JpaRepositoryToolInstallationRepositoryAdapter implements Repositor
 
     @Override
     public Optional<RepositoryToolInstallation> findByToolId(String toolId) {
-        return repository.findById(toolId).map(this::toDomain);
+        return repository.findById(toolId).map(JpaRepositoryToolInstallationRepositoryAdapter::toDomain);
     }
 
     @Override
     public List<RepositoryToolInstallation> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
+        return repository.findAll().stream().map(JpaRepositoryToolInstallationRepositoryAdapter::toDomain).toList();
     }
 
     @Override
@@ -49,7 +49,7 @@ public class JpaRepositoryToolInstallationRepositoryAdapter implements Repositor
      * @param installation 仓库工具安装领域对象
      * @return JPA 实体
      */
-    private RepositoryToolInstallationEntity toEntity(RepositoryToolInstallation installation) {
+    private static RepositoryToolInstallationEntity toEntity(RepositoryToolInstallation installation) {
         RepositoryToolInstallationEntity entity = new RepositoryToolInstallationEntity();
         entity.setToolId(installation.getToolId());
         entity.setRepositoryId(installation.getRepositoryId());
@@ -69,7 +69,7 @@ public class JpaRepositoryToolInstallationRepositoryAdapter implements Repositor
      * @param entity JPA 实体
      * @return 仓库工具安装领域对象
      */
-    private RepositoryToolInstallation toDomain(RepositoryToolInstallationEntity entity) {
+    private static RepositoryToolInstallation toDomain(RepositoryToolInstallationEntity entity) {
         return new RepositoryToolInstallation()
                 .setToolId(entity.getToolId())
                 .setRepositoryId(entity.getRepositoryId())

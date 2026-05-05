@@ -39,4 +39,11 @@ public class PluginDependency {
         this.requiredActions = requiredActions == null ? new ArrayList<>() : new ArrayList<>(requiredActions);
         return this;
     }
+
+    public PluginDependency copy() {
+        return new PluginDependency()
+                .setPluginId(pluginId)
+                .setVersionRange(versionRange)
+                .setRequiredActions(requiredActions);
+    }
 }

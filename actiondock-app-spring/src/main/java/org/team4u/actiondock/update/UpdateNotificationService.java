@@ -23,6 +23,7 @@ import java.util.Optional;
  * 统一的更新检查服务，用于不同发行组件的 npm 版本提醒。
  */
 public final class UpdateNotificationService {
+    private static final System.Logger log = System.getLogger(UpdateNotificationService.class.getName());
     public static final String DISABLE_ENV = "ACTIONDOCK_NO_UPDATE_NOTIFIER";
     private static final Duration DEFAULT_HTTP_TIMEOUT = Duration.ofSeconds(3);
     private static final URI DEFAULT_NPM_REGISTRY = URI.create("https://registry.npmjs.org/");
@@ -86,7 +87,7 @@ public final class UpdateNotificationService {
         }
     }
 
-    private Optional<UpdateNotification> buildNotification(UpdateNotificationRequest request, String latestVersion) {
+    private static Optional<UpdateNotification> buildNotification(UpdateNotificationRequest request, String latestVersion) {
         if (latestVersion == null || latestVersion.isBlank()) {
             return Optional.empty();
         }
@@ -96,7 +97,8 @@ public final class UpdateNotificationService {
             if (latest.compareTo(current) <= 0) {
                 return Optional.empty();
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException exception) {
+            log.log(System.Logger.Level.DEBUG, "解析语义版本失败，跳过更新通知: {0}", exception.getMessage());
             return Optional.empty();
         }
         return Optional.of(new UpdateNotification(request.displayName(), request.currentVersion(), latestVersion, request.installCommand()));
@@ -108,7 +110,8 @@ public final class UpdateNotificationService {
         }
         try {
             return Optional.ofNullable(objectMapper.readValue(cacheFile.toFile(), UpdateCheckCache.class));
-        } catch (IOException ignored) {
+        } catch (IOException exception) {
+            log.log(System.Logger.Level.DEBUG, "读取更新缓存失败: {0}", exception.getMessage());
             return Optional.empty();
         }
     }
@@ -120,12 +123,12 @@ public final class UpdateNotificationService {
         try {
             Files.createDirectories(cacheFile.getParent());
             objectMapper.writeValue(cacheFile.toFile(), cache);
-        } catch (IOException ignored) {
-            // Ignore cache write failures. Update prompts should never block the main command.
+        } catch (IOException exception) {
+            log.log(System.Logger.Level.DEBUG, "写入更新缓存失败，更新提示不应阻塞主流程: {0}", exception.getMessage());
         }
     }
 
-    private boolean isDisabled(Map<String, String> environment) {
+    private static boolean isDisabled(Map<String, String> environment) {
         if (environment == null) {
             return false;
         }

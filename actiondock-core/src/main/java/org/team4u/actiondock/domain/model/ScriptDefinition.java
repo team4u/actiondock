@@ -1,7 +1,5 @@
 package org.team4u.actiondock.domain.model;
 
-import org.team4u.actiondock.domain.model.SchemaValueCopier;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -263,61 +261,39 @@ public class ScriptDefinition {
 
     public List<PluginDependency> getPluginDependencies() {
         return pluginDependencies.stream()
-                .map(dependency -> new PluginDependency()
-                        .setPluginId(dependency.getPluginId())
-                        .setVersionRange(dependency.getVersionRange())
-                        .setRequiredActions(dependency.getRequiredActions()))
+                .map(PluginDependency::copy)
                 .toList();
     }
 
     public ScriptDefinition setPluginDependencies(List<PluginDependency> pluginDependencies) {
         this.pluginDependencies = pluginDependencies == null ? new ArrayList<>() : pluginDependencies.stream()
-                .map(dependency -> new PluginDependency()
-                        .setPluginId(dependency.getPluginId())
-                        .setVersionRange(dependency.getVersionRange())
-                        .setRequiredActions(dependency.getRequiredActions()))
+                .map(PluginDependency::copy)
                 .toList();
         return this;
     }
 
     public List<ScriptDependency> getScriptDependencies() {
         return scriptDependencies.stream()
-                .map(dependency -> new ScriptDependency()
-                        .setScriptId(dependency.getScriptId())
-                        .setRepositoryId(dependency.getRepositoryId())
-                        .setToolId(dependency.getToolId())
-                        .setVersionRange(dependency.getVersionRange()))
+                .map(ScriptDependency::copy)
                 .toList();
     }
 
     public ScriptDefinition setScriptDependencies(List<ScriptDependency> scriptDependencies) {
         this.scriptDependencies = scriptDependencies == null ? new ArrayList<>() : scriptDependencies.stream()
-                .map(dependency -> new ScriptDependency()
-                        .setScriptId(dependency.getScriptId())
-                        .setRepositoryId(dependency.getRepositoryId())
-                        .setToolId(dependency.getToolId())
-                        .setVersionRange(dependency.getVersionRange()))
+                .map(ScriptDependency::copy)
                 .toList();
         return this;
     }
 
     public List<AiDependency> getAiDependencies() {
         return aiDependencies.stream()
-                .map(dependency -> new AiDependency()
-                        .setCapability(dependency.getCapability())
-                        .setProfile(dependency.getProfile())
-                        .setAgentProfile(dependency.getAgentProfile())
-                        .setRequired(dependency.isRequired()))
+                .map(AiDependency::copy)
                 .toList();
     }
 
     public ScriptDefinition setAiDependencies(List<AiDependency> aiDependencies) {
         this.aiDependencies = aiDependencies == null ? new ArrayList<>() : aiDependencies.stream()
-                .map(dependency -> new AiDependency()
-                        .setCapability(dependency.getCapability())
-                        .setProfile(dependency.getProfile())
-                        .setAgentProfile(dependency.getAgentProfile())
-                        .setRequired(dependency.isRequired()))
+                .map(AiDependency::copy)
                 .toList();
         return this;
     }
@@ -391,24 +367,9 @@ public class ScriptDefinition {
      * @return 已发布状态的脚本定义
      * @throws IllegalStateException 如果脚本尚未发布
      */
-    public ScriptDefinition toPublishedDefinition() {
-        PublishedScriptSnapshot snapshot = resolveEffectiveSnapshot();
-        if (snapshot == null) {
-            throw new IllegalStateException("Script not published: " + id);
-        }
-
-        return new ScriptDefinition()
+    private ScriptDefinition copyMetadataTo(ScriptDefinition target) {
+        return target
                 .setId(id)
-                .setName(snapshot.getName())
-                .setType(snapshot.getType())
-                .setPackaging(snapshot.getPackaging())
-                .setSource(snapshot.getSource())
-                .setPythonRequirements(snapshot.getPythonRequirements())
-                .setInputSchema(snapshot.getInputSchema())
-                .setOutputSchema(snapshot.getOutputSchema())
-                .setStatus(ScriptStatus.PUBLISHED)
-                .setVersion(version)
-                .setPublishedSnapshot(snapshot)
                 .setScope(scope)
                 .setRepositoryId(repositoryId)
                 .setRepositoryToolId(repositoryToolId)
@@ -422,11 +383,30 @@ public class ScriptDefinition {
                 .setOwner(owner)
                 .setDescription(description)
                 .setTags(tags)
-                .setScriptDependencies(snapshot.getScriptDependencies())
                 .setPluginDependencies(pluginDependencies)
-                .setAiDependencies(snapshot.getAiDependencies())
                 .setCreatedAt(createdAt)
                 .setUpdatedAt(updatedAt);
+    }
+
+    public ScriptDefinition toPublishedDefinition() {
+        PublishedScriptSnapshot snapshot = resolveEffectiveSnapshot();
+        if (snapshot == null) {
+            throw new IllegalStateException("脚本尚未发布: " + id);
+        }
+
+        return copyMetadataTo(new ScriptDefinition()
+                .setName(snapshot.getName())
+                .setType(snapshot.getType())
+                .setPackaging(snapshot.getPackaging())
+                .setSource(snapshot.getSource())
+                .setPythonRequirements(snapshot.getPythonRequirements())
+                .setInputSchema(snapshot.getInputSchema())
+                .setOutputSchema(snapshot.getOutputSchema())
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setVersion(version)
+                .setPublishedSnapshot(snapshot)
+                .setScriptDependencies(snapshot.getScriptDependencies())
+                .setAiDependencies(snapshot.getAiDependencies()));
     }
 
     public LocalDateTime getCreatedAt() {
@@ -502,15 +482,7 @@ public class ScriptDefinition {
         if (snapshot == null) {
             throw new IllegalStateException("没有已发布快照可恢复: " + id);
         }
-        this.name = snapshot.getName();
-        this.type = snapshot.getType();
-        this.packaging = snapshot.getPackaging();
-        this.source = snapshot.getSource();
-        this.pythonRequirements = snapshot.getPythonRequirements();
-        this.inputSchema = snapshot.getInputSchema();
-        this.outputSchema = snapshot.getOutputSchema();
-        this.scriptDependencies = snapshot.getScriptDependencies();
-        this.aiDependencies = snapshot.getAiDependencies();
+        snapshot.applyTo(this);
         this.status = ScriptStatus.PUBLISHED;
         sourceMetadata.setDirty(false);
         return this;
@@ -536,54 +508,7 @@ public class ScriptDefinition {
      * @return 当前实例
      */
     public ScriptDefinition mergeFrom(ScriptDefinition existing) {
-        if (createdAt == null) {
-            setCreatedAt(existing.getCreatedAt());
-        }
-        if (version == null) {
-            setVersion(existing.getVersion());
-        }
-        if (owner == null) {
-            setOwner(existing.getOwner());
-        }
-        if (packaging == null) {
-            setPackaging(existing.getPackaging());
-        }
-        if (description == null) {
-            setDescription(existing.getDescription());
-        }
-        if (pythonRequirements == null) {
-            setPythonRequirements(existing.getPythonRequirements());
-        }
-        if (status == null) {
-            setStatus(existing.getStatus());
-        }
-        if (!hasStoredPublishedSnapshot()) {
-            setPublishedSnapshot(existing.getPublishedSnapshot());
-        }
-        if (scope == null) {
-            setScope(existing.getScope());
-        }
-        if (repositoryId == null) {
-            setRepositoryId(existing.getRepositoryId());
-        }
-        if (repositoryToolId == null) {
-            setRepositoryToolId(existing.getRepositoryToolId());
-        }
-        if (repositoryVersion == null) {
-            setRepositoryVersion(existing.getRepositoryVersion());
-        }
-        if (getSourcePath() == null) {
-            setSourcePath(existing.getSourcePath());
-        }
-        if (getSourceCommit() == null) {
-            setSourceCommit(existing.getSourceCommit());
-        }
-        if (getSourceDigest() == null) {
-            setSourceDigest(existing.getSourceDigest());
-        }
-        if (getSourceSyncedAt() == null) {
-            setSourceSyncedAt(existing.getSourceSyncedAt());
-        }
+        mergeNullFieldsFrom(existing);
         if (scope == ScriptScope.DEVELOPMENT) {
             setDirty(existing.isDirty() || !snapshotCurrent().equals(existing.snapshotCurrent()));
         } else {
@@ -593,12 +518,25 @@ public class ScriptDefinition {
         return this;
     }
 
-    /**
-     * 规范化发布状态。
-     * <p>
-     * 如果存在存储的发布快照，确保状态为 PUBLISHED；
-     * 如果状态为 PUBLISHED 但无快照，自动创建快照。
-     */
+    private void mergeNullFieldsFrom(ScriptDefinition existing) {
+        if (createdAt == null) setCreatedAt(existing.getCreatedAt());
+        if (version == null) setVersion(existing.getVersion());
+        if (owner == null) setOwner(existing.getOwner());
+        if (packaging == null) setPackaging(existing.getPackaging());
+        if (description == null) setDescription(existing.getDescription());
+        if (pythonRequirements == null) setPythonRequirements(existing.getPythonRequirements());
+        if (status == null) setStatus(existing.getStatus());
+        if (!hasStoredPublishedSnapshot()) setPublishedSnapshot(existing.getPublishedSnapshot());
+        if (scope == null) setScope(existing.getScope());
+        if (repositoryId == null) setRepositoryId(existing.getRepositoryId());
+        if (repositoryToolId == null) setRepositoryToolId(existing.getRepositoryToolId());
+        if (repositoryVersion == null) setRepositoryVersion(existing.getRepositoryVersion());
+        if (getSourcePath() == null) setSourcePath(existing.getSourcePath());
+        if (getSourceCommit() == null) setSourceCommit(existing.getSourceCommit());
+        if (getSourceDigest() == null) setSourceDigest(existing.getSourceDigest());
+        if (getSourceSyncedAt() == null) setSourceSyncedAt(existing.getSourceSyncedAt());
+    }
+
     /**
      * 创建去除 UI 扩展字段的脚本定义副本。
      * <p>
@@ -620,8 +558,7 @@ public class ScriptDefinition {
                     .setScriptDependencies(sanitizedSnapshot.getScriptDependencies())
                     .setAiDependencies(sanitizedSnapshot.getAiDependencies());
         }
-        return new ScriptDefinition()
-                .setId(id)
+        return copyMetadataTo(new ScriptDefinition()
                 .setName(name)
                 .setType(type)
                 .setSource(source)
@@ -632,24 +569,8 @@ public class ScriptDefinition {
                 .setPublishedSnapshot(sanitizedSnapshot)
                 .setStatus(status)
                 .setVersion(version)
-                .setScope(scope)
-                .setRepositoryId(repositoryId)
-                .setRepositoryToolId(repositoryToolId)
-                .setRepositoryVersion(repositoryVersion)
-                .setSourcePath(getSourcePath())
-                .setSourceCommit(getSourceCommit())
-                .setSourceDigest(getSourceDigest())
-                .setSourceSyncedAt(getSourceSyncedAt())
-                .setDirty(isDirty())
-                .setEditable(editable)
-                .setOwner(owner)
-                .setDescription(description)
-                .setTags(tags)
                 .setScriptDependencies(scriptDependencies)
-                .setPluginDependencies(pluginDependencies)
-                .setAiDependencies(aiDependencies)
-                .setCreatedAt(createdAt)
-                .setUpdatedAt(updatedAt);
+                .setAiDependencies(aiDependencies));
     }
 
     public void normalizePublicationState() {

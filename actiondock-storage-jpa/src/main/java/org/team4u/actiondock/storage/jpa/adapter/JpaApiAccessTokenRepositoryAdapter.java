@@ -7,40 +7,18 @@ import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.storage.jpa.entity.ApiAccessTokenEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataApiAccessTokenRepository;
 
-import java.util.List;
-import java.util.Optional;
-
 /**
  * JPA API 访问令牌仓储适配器。
  *
  * @author jay.wu
  */
 @Component
-public class JpaApiAccessTokenRepositoryAdapter implements ApiAccessTokenRepository {
-    private final SpringDataApiAccessTokenRepository repository;
+public class JpaApiAccessTokenRepositoryAdapter
+        extends AbstractJpaRepositoryAdapter<ApiAccessTokenEntity, ApiAccessToken, SpringDataApiAccessTokenRepository>
+        implements ApiAccessTokenRepository {
 
     public JpaApiAccessTokenRepositoryAdapter(SpringDataApiAccessTokenRepository repository) {
-        this.repository = repository;
-    }
-
-    @Override
-    public ApiAccessToken save(ApiAccessToken token) {
-        return toDomain(repository.save(toEntity(token)));
-    }
-
-    @Override
-    public Optional<ApiAccessToken> findById(String id) {
-        return repository.findById(id).map(this::toDomain);
-    }
-
-    @Override
-    public List<ApiAccessToken> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
-    }
-
-    @Override
-    public void deleteById(String id) {
-        repository.deleteById(id);
+        super(repository);
     }
 
     @Override
@@ -48,7 +26,8 @@ public class JpaApiAccessTokenRepositoryAdapter implements ApiAccessTokenReposit
         return repository.count();
     }
 
-    private ApiAccessTokenEntity toEntity(ApiAccessToken token) {
+    @Override
+    protected ApiAccessTokenEntity toEntity(ApiAccessToken token) {
         ApiAccessTokenEntity entity = new ApiAccessTokenEntity();
         entity.setId(token.getId());
         entity.setName(token.getName());
@@ -61,7 +40,8 @@ public class JpaApiAccessTokenRepositoryAdapter implements ApiAccessTokenReposit
         return entity;
     }
 
-    private ApiAccessToken toDomain(ApiAccessTokenEntity entity) {
+    @Override
+    protected ApiAccessToken toDomain(ApiAccessTokenEntity entity) {
         return new ApiAccessToken()
                 .setId(entity.getId())
                 .setName(entity.getName())

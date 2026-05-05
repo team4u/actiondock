@@ -9,11 +9,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ScriptSchemaSupportTest {
-    private final ScriptSchemaSupport support = new ScriptSchemaSupport();
 
     @Test
     void summarizeReturnsSupportedAndUnsupportedFields() {
-        ScriptSchemaSupport.SchemaSummary summary = support.summarize(Map.of(
+        ScriptSchemaSupport.SchemaSummary summary = ScriptSchemaSupport.summarize(Map.of(
                 "type", "object",
                 "required", List.of("name"),
                 "properties", Map.of(
@@ -49,7 +48,7 @@ class ScriptSchemaSupportTest {
 
     @Test
     void validateInputRejectsMissingRequiredField() {
-        assertThatThrownBy(() -> support.validateInput("script-1", Map.of(), Map.of(
+        assertThatThrownBy(() -> ScriptSchemaSupport.validateInput("script-1", Map.of(), Map.of(
                 "type", "object",
                 "required", List.of("name"),
                 "properties", Map.of(
@@ -67,7 +66,7 @@ class ScriptSchemaSupportTest {
 
     @Test
     void validateInputRejectsTypeMismatchAndEnumMismatch() {
-        assertThatThrownBy(() -> support.validateInput("script-1", Map.of(
+        assertThatThrownBy(() -> ScriptSchemaSupport.validateInput("script-1", Map.of(
                 "age", "18",
                 "mode", "DEBUG"
         ), Map.of(
@@ -89,6 +88,6 @@ class ScriptSchemaSupportTest {
 
     @Test
     void validateInputSkipsValidationWhenSchemaMissing() {
-        support.validateInput("script-1", Map.of("any", "value"), Map.of());
+        ScriptSchemaSupport.validateInput("script-1", Map.of("any", "value"), Map.of());
     }
 }

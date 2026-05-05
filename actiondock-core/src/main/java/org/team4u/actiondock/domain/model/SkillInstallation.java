@@ -136,4 +136,21 @@ public class SkillInstallation {
         this.updatedAt = updatedAt;
         return this;
     }
+
+    public SkillInstallation copy() {
+        return new SkillInstallation()
+                .setInstallationId(installationId)
+                .setSkillId(skillId)
+                .setRepositoryId(repositoryId)
+                .setVersion(version)
+                .setTargetId(targetId)
+                .setTargetPath(targetPath)
+                .setInstalledPath(installedPath)
+                .setDigest(digest)
+                .setDisplayName(displayName)
+                .setDescription(description)
+                .setEnabled(enabled)
+                .setInstalledAt(installedAt)
+                .setUpdatedAt(updatedAt);
+    }
 }

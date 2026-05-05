@@ -11,7 +11,7 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
-import org.team4u.actiondock.repository.RepositoryCatalogService;
+import org.team4u.actiondock.skill.SkillFileUtils;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -23,74 +23,155 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
 /**
  * 配置值引用分析服务，汇总直接引用、模板声明和受影响脚本。
  */
 public class ConfigValueUsageAnalysisService {
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{config\\.([A-Za-z][A-Za-z0-9_.-]*)}");
 
-    private final ConfigValueRepository configValueRepository;
-    private final ScriptRepository scriptRepository;
-    private final ScriptScheduleRepository scriptScheduleRepository;
-    private final PluginRegistryRepository pluginRegistryRepository;
-    private final Function<String, Map<String, Object>> loadPluginConfig;
-    private final Supplier<List<RepositoryDefinition>> listRepositories;
-    private final Function<String, List<RepositoryCatalogService.RepositoryToolDescriptor>> listRepositoryTools;
-    private final Supplier<List<RepositoryCatalogService.RepositoryToolDescriptor>> listAllRepositoryTools;
-    private final BiFunction<String, String, RepositoryCatalogService.RepositoryToolDetail> getRepositoryTool;
-    private final Supplier<List<AiModelProfile>> listModelProfiles;
+    private static final System.Logger log = System.getLogger(ConfigValueUsageAnalysisService.class.getName());
 
-    public ConfigValueUsageAnalysisService(ConfigValueRepository configValueRepository,
-                                           ScriptRepository scriptRepository,
-                                           ScriptScheduleRepository scriptScheduleRepository,
-                                           PluginRegistryRepository pluginRegistryRepository,
-                                           Function<String, Map<String, Object>> loadPluginConfig,
-                                           Supplier<List<RepositoryDefinition>> listRepositories,
-                                           Function<String, List<RepositoryCatalogService.RepositoryToolDescriptor>> listRepositoryTools,
-                                           Supplier<List<RepositoryCatalogService.RepositoryToolDescriptor>> listAllRepositoryTools,
-                                           BiFunction<String, String, RepositoryCatalogService.RepositoryToolDetail> getRepositoryTool,
-                                           Supplier<List<AiModelProfile>> listModelProfiles) {
-        this.configValueRepository = configValueRepository;
-        this.scriptRepository = scriptRepository;
-        this.scriptScheduleRepository = scriptScheduleRepository;
-        this.pluginRegistryRepository = pluginRegistryRepository;
-        this.loadPluginConfig = loadPluginConfig;
-        this.listRepositories = listRepositories;
-        this.listRepositoryTools = listRepositoryTools;
-        this.listAllRepositoryTools = listAllRepositoryTools;
-        this.getRepositoryTool = getRepositoryTool;
-        this.listModelProfiles = listModelProfiles;
+    /**
+     * 仓库端口接口分组，封装所有直接依赖的 repository。
+     */
+    public record Repositories(
+            ConfigValueRepository configValue,
+            ScriptRepository script,
+            ScriptScheduleRepository scriptSchedule,
+            PluginRegistryRepository pluginRegistry
+    ) {
+    }
+
+    /**
+     * 应用服务分组，封装所有业务查询函数。
+     */
+    public record ApplicationServices(
+            Function<String, Map<String, Object>> loadPluginConfig,
+            Supplier<List<RepositoryDefinition>> listRepositories,
+            Function<String, List<RepositoryToolDescriptor>> listRepositoryTools,
+            Supplier<List<RepositoryToolDescriptor>> listAllRepositoryTools,
+            BiFunction<String, String, RepositoryToolDetail> getRepositoryTool,
+            Supplier<List<AiModelProfile>> listModelProfiles
+    ) {
+    }
+
+    private final Repositories repos;
+    private final ApplicationServices services;
+
+    public ConfigValueUsageAnalysisService(Repositories repos,
+                                           ApplicationServices services) {
+        this.repos = repos;
+        this.services = services;
     }
 
     public ConfigValueInsight analyze(String key) {
         ConfigValue target = requireConfig(key);
-        List<ConfigValue> configValues = configValueRepository.findAll();
-        List<ScriptDefinition> scripts = scriptRepository.findAll();
-        List<ScriptSchedule> schedules = scriptScheduleRepository.findAll();
-        List<PluginRegistration> plugins = pluginRegistryRepository.findAll();
-        List<RepositoryCatalogService.RepositoryToolDescriptor> allToolDescriptors = listAllRepositoryTools.get();
+        AnalysisContext ctx = loadAnalysisContext();
+        Set<String> cascadingConfigKeys = collectCascadingConfigKeys(key, ctx.configDependencies);
+        AnalysisReferences refs = collectAnalysisReferences(key, ctx, cascadingConfigKeys);
 
-        Map<String, Set<String>> configDependencies = new LinkedHashMap<>();
-        for (ConfigValue item : configValues) {
-            configDependencies.put(item.getKey(), extractPlaceholderKeys(item.getValue()));
-        }
+        ManagedTemplate managedTemplate = resolveManagedTemplate(target).orElse(null);
+        ConfigValueOrigin origin = resolveOrigin(target, managedTemplate, refs.templateDeclarations);
 
-        Set<String> cascadingConfigKeys = collectCascadingConfigKeys(key, configDependencies);
-        List<ConfigReference> configReferences = configValues.stream()
+        List<ImpactScript> impactedScripts = buildImpactMap(
+                key, cascadingConfigKeys, ctx.scripts, ctx.schedules,
+                refs.pluginCascadeMatches, refs.templateDeclarations,
+                ctx.scriptsById, ctx.allToolDescriptors
+        );
+
+        return new ConfigValueInsight(
+                target,
+                refs.configReferences,
+                refs.scriptReferences,
+                refs.scheduleReferences,
+                refs.pluginReferences,
+                refs.templateDeclarations,
+                refs.modelReferences,
+                impactedScripts,
+                origin,
+                new AvailableActions(target.isManaged() && !target.isOverridden(), target.isManaged() && target.isOverridden())
+        );
+    }
+
+    private AnalysisContext loadAnalysisContext() {
+        List<ConfigValue> configValues = repos.configValue().findAll();
+        List<ScriptDefinition> scripts = repos.script().findAll();
+        List<ScriptSchedule> schedules = repos.scriptSchedule().findAll();
+        List<PluginRegistration> plugins = repos.pluginRegistry().findAll();
+        List<RepositoryToolDescriptor> allToolDescriptors = services.listAllRepositoryTools().get();
+        Map<String, Set<String>> configDependencies = buildConfigDependencies(configValues);
+        Map<String, ScriptDefinition> scriptsById = buildScriptsById(scripts);
+        return new AnalysisContext(configValues, scripts, schedules, plugins,
+                allToolDescriptors, configDependencies, scriptsById);
+    }
+
+    private AnalysisReferences collectAnalysisReferences(String key,
+                                                         AnalysisContext ctx,
+                                                         Set<String> cascadingConfigKeys) {
+        List<ConfigReference> configReferences = collectConfigReferences(key, ctx.configValues, ctx.configDependencies);
+        List<ScriptReference> scriptReferences = collectScriptReferences(key, ctx.scripts);
+        List<ScheduleReference> scheduleReferences = collectScheduleReferences(key, ctx.schedules, ctx.scriptsById);
+        PluginReferenceResult pluginResult = collectPluginReferences(key, cascadingConfigKeys, ctx.plugins, ctx.scripts);
+        List<TemplateDeclaration> templateDeclarations = scanTemplateDeclarations(key);
+        List<ModelReference> modelReferences = collectModelReferences(key, cascadingConfigKeys);
+        return new AnalysisReferences(configReferences, scriptReferences, scheduleReferences,
+                pluginResult.pluginReferences(), templateDeclarations, modelReferences,
+                pluginResult.pluginCascadeMatches());
+    }
+
+    private record AnalysisContext(
+            List<ConfigValue> configValues,
+            List<ScriptDefinition> scripts,
+            List<ScriptSchedule> schedules,
+            List<PluginRegistration> plugins,
+            List<RepositoryToolDescriptor> allToolDescriptors,
+            Map<String, Set<String>> configDependencies,
+            Map<String, ScriptDefinition> scriptsById
+    ) {
+    }
+
+    private record AnalysisReferences(
+            List<ConfigReference> configReferences,
+            List<ScriptReference> scriptReferences,
+            List<ScheduleReference> scheduleReferences,
+            List<PluginConfigReference> pluginReferences,
+            List<TemplateDeclaration> templateDeclarations,
+            List<ModelReference> modelReferences,
+            Map<String, Set<String>> pluginCascadeMatches
+    ) {
+    }
+
+    private static Map<String, Set<String>> buildConfigDependencies(List<ConfigValue> configValues) {
+        return configValues.stream()
+                .collect(Collectors.toMap(
+                        ConfigValue::getKey,
+                        item -> PlaceholderKeyExtractor.extractPlaceholderKeys(item.getValue()),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private static List<ConfigReference> collectConfigReferences(String key,
+                                                                  List<ConfigValue> configValues,
+                                                                  Map<String, Set<String>> configDependencies) {
+        return configValues.stream()
                 .filter(item -> !key.equals(item.getKey()))
                 .filter(item -> configDependencies.getOrDefault(item.getKey(), Set.of()).contains(key))
                 .map(item -> new ConfigReference(item.getKey(), item.getDescription()))
                 .sorted(Comparator.comparing(ConfigReference::key))
                 .toList();
+    }
 
-        List<ScriptReference> scriptReferences = scripts.stream()
+    private static List<ScriptReference> collectScriptReferences(String key, List<ScriptDefinition> scripts) {
+        return scripts.stream()
                 .filter(script -> scriptUsesKey(script.getSource(), key))
                 .map(script -> new ScriptReference(
                         script.getId(),
@@ -102,13 +183,17 @@ public class ConfigValueUsageAnalysisService {
                 ))
                 .sorted(Comparator.comparing(ScriptReference::scriptId))
                 .toList();
+    }
 
-        Map<String, ScriptDefinition> scriptsById = new LinkedHashMap<>();
-        for (ScriptDefinition script : scripts) {
-            scriptsById.put(script.getId(), script);
-        }
+    private static Map<String, ScriptDefinition> buildScriptsById(List<ScriptDefinition> scripts) {
+        return scripts.stream()
+                .collect(Collectors.toMap(ScriptDefinition::getId, Function.identity(), (a, b) -> a, LinkedHashMap::new));
+    }
 
-        List<ScheduleReference> scheduleReferences = schedules.stream()
+    private static List<ScheduleReference> collectScheduleReferences(String key,
+                                                                      List<ScriptSchedule> schedules,
+                                                                      Map<String, ScriptDefinition> scriptsById) {
+        return schedules.stream()
                 .filter(schedule -> containsPlaceholderKey(schedule.getInput(), key))
                 .map(schedule -> {
                     ScriptDefinition script = scriptsById.get(schedule.getScriptId());
@@ -121,71 +206,110 @@ public class ConfigValueUsageAnalysisService {
                 })
                 .sorted(Comparator.comparing(ScheduleReference::scheduleId))
                 .toList();
+    }
 
+    private PluginReferenceResult collectPluginReferences(String key,
+                                                          Set<String> cascadingConfigKeys,
+                                                          List<PluginRegistration> plugins,
+                                                          List<ScriptDefinition> scripts) {
         List<PluginConfigReference> pluginReferences = new ArrayList<>();
         Map<String, Set<String>> pluginCascadeMatches = new LinkedHashMap<>();
         for (PluginRegistration plugin : plugins) {
-            Map<String, Object> rawConfig = loadPluginConfig(plugin.getPluginId());
-            Set<String> directMatches = filterPlaceholderKeys(rawConfig, Set.of(key));
+            Map<String, Object> rawConfig = services.loadPluginConfig().apply(plugin.getPluginId());
+            Set<String> directMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, Set.of(key));
             if (!directMatches.isEmpty()) {
                 pluginReferences.add(new PluginConfigReference(plugin.getPluginId(), plugin.getName(), countDependentScripts(scripts, plugin.getPluginId())));
             }
-            Set<String> cascadeMatches = filterPlaceholderKeys(rawConfig, cascadingConfigKeys);
+            Set<String> cascadeMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, cascadingConfigKeys);
             if (!cascadeMatches.isEmpty()) {
                 pluginCascadeMatches.put(plugin.getPluginId(), cascadeMatches);
             }
         }
-        pluginReferences = pluginReferences.stream()
-                .sorted(Comparator.comparing(PluginConfigReference::pluginId))
-                .toList();
+        return new PluginReferenceResult(
+                pluginReferences.stream()
+                        .sorted(Comparator.comparing(PluginConfigReference::pluginId))
+                        .toList(),
+                pluginCascadeMatches
+        );
+    }
 
-        List<TemplateDeclaration> templateDeclarations = scanTemplateDeclarations(key);
-        ManagedTemplate managedTemplate = resolveManagedTemplate(target).orElse(null);
-        ConfigValueOrigin origin = resolveOrigin(target, managedTemplate, templateDeclarations);
-
+    private List<ModelReference> collectModelReferences(String key, Set<String> cascadingConfigKeys) {
         List<ModelReference> modelReferences = new ArrayList<>();
-        for (AiModelProfile model : listModelProfiles.get()) {
+        for (AiModelProfile model : services.listModelProfiles().get()) {
             if (key.equals(model.getApiKeyConfigKey()) || cascadingConfigKeys.contains(model.getApiKeyConfigKey())) {
-                modelReferences.add(new ModelReference(
-                        model.getId(),
-                        model.getName(),
-                        model.getModelProvider() == null ? null : model.getModelProvider().name(),
-                        "apiKeyConfigKey"
-                ));
+                modelReferences.add(toModelReference(model, "apiKeyConfigKey"));
                 continue;
             }
-            Set<String> optionsMatches = filterPlaceholderKeys(model.getDefaultOptions(), cascadingConfigKeys);
+            Set<String> optionsMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(model.getDefaultOptions(), cascadingConfigKeys);
             if (!optionsMatches.isEmpty()) {
-                modelReferences.add(new ModelReference(
-                        model.getId(),
-                        model.getName(),
-                        model.getModelProvider() == null ? null : model.getModelProvider().name(),
-                        "defaultOptions"
-                ));
+                modelReferences.add(toModelReference(model, "defaultOptions"));
             }
         }
-        modelReferences = modelReferences.stream()
+        return modelReferences.stream()
                 .sorted(Comparator.comparing(ModelReference::modelId))
                 .toList();
+    }
 
+    private static ModelReference toModelReference(AiModelProfile model, String referenceType) {
+        return new ModelReference(
+                model.getId(),
+                model.getName(),
+                model.getModelProvider() == null ? null : model.getModelProvider().name(),
+                referenceType
+        );
+    }
+
+    private static List<ImpactScript> buildImpactMap(String key,
+                                                     Set<String> cascadingConfigKeys,
+                                                     List<ScriptDefinition> scripts,
+                                                     List<ScriptSchedule> schedules,
+                                                     Map<String, Set<String>> pluginCascadeMatches,
+                                                     List<TemplateDeclaration> templateDeclarations,
+                                                     Map<String, ScriptDefinition> scriptsById,
+                                                     List<RepositoryToolDescriptor> allToolDescriptors) {
         Map<String, ImpactScriptAccumulator> impacts = new LinkedHashMap<>();
+        collectScriptSourceImpacts(impacts, scripts, cascadingConfigKeys, key);
+        collectScheduleImpacts(impacts, schedules, scriptsById, cascadingConfigKeys, key);
+        collectPluginCascadeImpacts(impacts, scripts, pluginCascadeMatches, key);
+        collectTemplateDeclarationImpacts(impacts, templateDeclarations, scriptsById, allToolDescriptors);
+        return impacts.values().stream()
+                .map(ImpactScriptAccumulator::toView)
+                .sorted(Comparator.comparing(ImpactScript::scriptId))
+                .toList();
+    }
+
+    private static void collectScriptSourceImpacts(Map<String, ImpactScriptAccumulator> impacts,
+                                                   List<ScriptDefinition> scripts,
+                                                   Set<String> cascadingConfigKeys,
+                                                   String key) {
         for (ScriptDefinition script : scripts) {
             Set<String> matchedKeys = filterScriptKeys(script.getSource(), cascadingConfigKeys);
             addScriptImpact(impacts, script, matchedKeys, key, "脚本源码");
         }
+    }
 
+    private static void collectScheduleImpacts(Map<String, ImpactScriptAccumulator> impacts,
+                                               List<ScriptSchedule> schedules,
+                                               Map<String, ScriptDefinition> scriptsById,
+                                               Set<String> cascadingConfigKeys,
+                                               String key) {
         for (ScriptSchedule schedule : schedules) {
             ScriptDefinition script = scriptsById.get(schedule.getScriptId());
             if (script == null) {
                 continue;
             }
-            Set<String> matchedKeys = filterPlaceholderKeys(schedule.getInput(), cascadingConfigKeys);
+            Set<String> matchedKeys = PlaceholderKeyExtractor.filterPlaceholderKeys(schedule.getInput(), cascadingConfigKeys);
             if (matchedKeys.isEmpty()) {
                 continue;
             }
             addImpact(impacts, script, buildIndirectReason("定时任务 " + schedule.getName(), matchedKeys, key));
         }
+    }
 
+    private static void collectPluginCascadeImpacts(Map<String, ImpactScriptAccumulator> impacts,
+                                                    List<ScriptDefinition> scripts,
+                                                    Map<String, Set<String>> pluginCascadeMatches,
+                                                    String key) {
         for (ScriptDefinition script : scripts) {
             for (PluginDependency dependency : script.getPluginDependencies()) {
                 Set<String> matchedKeys = pluginCascadeMatches.get(dependency.getPluginId());
@@ -195,39 +319,26 @@ public class ConfigValueUsageAnalysisService {
                 addImpact(impacts, script, buildIndirectReason("插件配置 " + dependency.getPluginId(), matchedKeys, key));
             }
         }
+    }
 
-        Map<String, RepositoryCatalogService.RepositoryToolDescriptor> descriptorsBySource = new LinkedHashMap<>();
-        for (RepositoryCatalogService.RepositoryToolDescriptor descriptor : allToolDescriptors) {
+    private static void collectTemplateDeclarationImpacts(Map<String, ImpactScriptAccumulator> impacts,
+                                                          List<TemplateDeclaration> templateDeclarations,
+                                                          Map<String, ScriptDefinition> scriptsById,
+                                                          List<RepositoryToolDescriptor> allToolDescriptors) {
+        Map<String, RepositoryToolDescriptor> descriptorsBySource = new LinkedHashMap<>();
+        for (RepositoryToolDescriptor descriptor : allToolDescriptors) {
             descriptorsBySource.put(descriptor.repositoryId() + ":" + descriptor.toolId(), descriptor);
         }
         for (TemplateDeclaration declaration : templateDeclarations) {
-            RepositoryCatalogService.RepositoryToolDescriptor descriptor = descriptorsBySource.get(
+            RepositoryToolDescriptor descriptor = descriptorsBySource.get(
                     declaration.repositoryId() + ":" + declaration.toolId()
             );
             if (descriptor == null) {
                 continue;
             }
-            addImpactForInstalledScript(impacts, scriptsById.get(descriptor.installedScriptId()), "仓库模板声明");
-            addImpactForInstalledScript(impacts, scriptsById.get(descriptor.developmentScriptId()), "仓库模板声明");
+            addImpact(impacts, scriptsById.get(descriptor.installedScriptId()), "仓库模板声明");
+            addImpact(impacts, scriptsById.get(descriptor.developmentScriptId()), "仓库模板声明");
         }
-
-        List<ImpactScript> impactedScripts = impacts.values().stream()
-                .map(ImpactScriptAccumulator::toView)
-                .sorted(Comparator.comparing(ImpactScript::scriptId))
-                .toList();
-
-        return new ConfigValueInsight(
-                target,
-                configReferences,
-                scriptReferences,
-                scheduleReferences,
-                pluginReferences,
-                templateDeclarations,
-                modelReferences,
-                impactedScripts,
-                origin,
-                new AvailableActions(target.isManaged() && !target.isOverridden(), target.isManaged() && target.isOverridden())
-        );
     }
 
     public ManagedTemplate resolveManagedTemplate(String key) {
@@ -236,36 +347,36 @@ public class ConfigValueUsageAnalysisService {
                 .orElseThrow(() -> new IllegalArgumentException("来源仓库模板不存在，无法恢复默认值"));
     }
 
-    private java.util.Optional<ManagedTemplate> resolveManagedTemplate(ConfigValue value) {
+    private Optional<ManagedTemplate> resolveManagedTemplate(ConfigValue value) {
         if (!value.isManaged() || value.getRepositoryId() == null || value.getRepositoryToolId() == null) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
-        RepositoryCatalogService.RepositoryToolDetail detail = getRepositoryTool.apply(value.getRepositoryId(), value.getRepositoryToolId());
-        RepositoryCatalogService.ConfigTemplateItem template = detail.configTemplate().stream()
+        RepositoryToolDetail detail = services.getRepositoryTool().apply(value.getRepositoryId(), value.getRepositoryToolId());
+        ConfigTemplateItem template = detail.configTemplate().stream()
                 .filter(item -> value.getKey().equals(item.key()))
                 .findFirst()
                 .orElse(null);
         if (template == null) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
-        String publishMode = resolvePublishMode(template);
-        return java.util.Optional.of(new ManagedTemplate(
+        String publishMode = template.resolvePublishMode();
+        return Optional.of(new ManagedTemplate(
                 value.getKey(),
-                normalizeBlank(detail.descriptor().repositoryId()),
+                SkillFileUtils.normalizeNullable(detail.descriptor().repositoryId()),
                 resolveRepositoryName(detail.descriptor().repositoryId()),
-                normalizeBlank(detail.descriptor().toolId()),
-                normalizeBlank(detail.descriptor().displayName()),
-                normalizeBlank(detail.descriptor().version()),
-                normalizeBlank(template.label()),
+                SkillFileUtils.normalizeNullable(detail.descriptor().toolId()),
+                SkillFileUtils.normalizeNullable(detail.descriptor().displayName()),
+                SkillFileUtils.normalizeNullable(detail.descriptor().version()),
+                SkillFileUtils.normalizeNullable(template.label()),
                 template.secret(),
                 publishMode,
-                publishMode.equals("INLINE") ? normalizeBlank(template.defaultValue()) : ""
+                publishMode.equals("INLINE") ? SkillFileUtils.normalizeNullable(template.defaultValue()) : ""
         ));
     }
 
-    private ConfigValueOrigin resolveOrigin(ConfigValue value,
-                                            ManagedTemplate managedTemplate,
-                                            List<TemplateDeclaration> templateDeclarations) {
+    private static ConfigValueOrigin resolveOrigin(ConfigValue value,
+                                                   ManagedTemplate managedTemplate,
+                                                   List<TemplateDeclaration> templateDeclarations) {
         if (value.getRepositoryId() == null && value.getRepositoryToolId() == null && value.getRepositoryVersion() == null) {
             return null;
         }
@@ -294,54 +405,59 @@ public class ConfigValueUsageAnalysisService {
 
     private List<TemplateDeclaration> scanTemplateDeclarations(String key) {
         List<TemplateDeclaration> declarations = new ArrayList<>();
-        for (RepositoryDefinition repository : listRepositories.get()) {
+        for (RepositoryDefinition repository : services.listRepositories().get()) {
             if (repository == null || !repository.isEnabled()) {
                 continue;
             }
-            List<RepositoryCatalogService.RepositoryToolDescriptor> tools;
-            try {
-                tools = listRepositoryTools.apply(repository.getId());
-            } catch (RuntimeException ignored) {
-                continue;
-            }
-            for (RepositoryCatalogService.RepositoryToolDescriptor tool : tools) {
-                RepositoryCatalogService.RepositoryToolDetail detail;
-                try {
-                    detail = getRepositoryTool.apply(repository.getId(), tool.toolId());
-                } catch (RuntimeException ignored) {
-                    continue;
-                }
-                detail.configTemplate().stream()
-                        .filter(item -> key.equals(item.key()))
-                        .findFirst()
-                        .ifPresent(item -> declarations.add(new TemplateDeclaration(
-                                repository.getId(),
-                                repository.getName(),
-                                tool.toolId(),
-                                tool.displayName(),
-                                tool.version(),
-                                normalizeBlank(item.label()),
-                                item.secret(),
-                                resolvePublishMode(item),
-                                normalizeBlank(item.defaultValue())
-                        )));
-            }
+            declarations.addAll(collectDeclarationsFromRepository(repository, key));
         }
         return declarations.stream()
                 .sorted(Comparator.comparing(TemplateDeclaration::repositoryId).thenComparing(TemplateDeclaration::toolId))
                 .toList();
     }
 
-    private Map<String, Object> loadPluginConfig(String pluginId) {
+    private List<TemplateDeclaration> collectDeclarationsFromRepository(RepositoryDefinition repository, String key) {
+        List<TemplateDeclaration> declarations = new ArrayList<>();
+        List<RepositoryToolDescriptor> tools;
         try {
-            Map<String, Object> config = loadPluginConfig.apply(pluginId);
-            return config == null ? Map.of() : config;
+            tools = services.listRepositoryTools().apply(repository.getId());
         } catch (RuntimeException exception) {
-            return Map.of();
+            log.log(System.Logger.Level.DEBUG, "扫描跳过: {0}", exception.getMessage());
+            return declarations;
         }
+        for (RepositoryToolDescriptor tool : tools) {
+            RepositoryToolDetail detail;
+            try {
+                detail = services.getRepositoryTool().apply(repository.getId(), tool.toolId());
+            } catch (RuntimeException exception) {
+                log.log(System.Logger.Level.DEBUG, "扫描跳过: {0}", exception.getMessage());
+                continue;
+            }
+            detail.configTemplate().stream()
+                    .filter(item -> key.equals(item.key()))
+                    .findFirst()
+                    .ifPresent(item -> declarations.add(toTemplateDeclaration(repository, tool, item)));
+        }
+        return declarations;
     }
 
-    private int countDependentScripts(List<ScriptDefinition> scripts, String pluginId) {
+    private static TemplateDeclaration toTemplateDeclaration(RepositoryDefinition repository,
+                                                              RepositoryToolDescriptor tool,
+                                                              ConfigTemplateItem item) {
+        return new TemplateDeclaration(
+                repository.getId(),
+                repository.getName(),
+                tool.toolId(),
+                tool.displayName(),
+                tool.version(),
+                SkillFileUtils.normalizeNullable(item.label()),
+                item.secret(),
+                item.resolvePublishMode(),
+                SkillFileUtils.normalizeNullable(item.defaultValue())
+        );
+    }
+
+    private static int countDependentScripts(List<ScriptDefinition> scripts, String pluginId) {
         int count = 0;
         for (ScriptDefinition script : scripts) {
             if (script.getPluginDependencies().stream().map(PluginDependency::getPluginId).anyMatch(pluginId::equals)) {
@@ -351,11 +467,11 @@ public class ConfigValueUsageAnalysisService {
         return count;
     }
 
-    private void addScriptImpact(Map<String, ImpactScriptAccumulator> impacts,
-                                 ScriptDefinition script,
-                                 Set<String> matchedKeys,
-                                 String targetKey,
-                                 String sourceLabel) {
+    private static void addScriptImpact(Map<String, ImpactScriptAccumulator> impacts,
+                                        ScriptDefinition script,
+                                        Set<String> matchedKeys,
+                                        String targetKey,
+                                        String sourceLabel) {
         if (matchedKeys.isEmpty()) {
             return;
         }
@@ -369,14 +485,7 @@ public class ConfigValueUsageAnalysisService {
         }
     }
 
-    private void addImpactForInstalledScript(Map<String, ImpactScriptAccumulator> impacts, ScriptDefinition script, String reason) {
-        if (script == null) {
-            return;
-        }
-        addImpact(impacts, script, reason);
-    }
-
-    private void addImpact(Map<String, ImpactScriptAccumulator> impacts, ScriptDefinition script, String reason) {
+    private static void addImpact(Map<String, ImpactScriptAccumulator> impacts, ScriptDefinition script, String reason) {
         if (script == null) {
             return;
         }
@@ -384,7 +493,7 @@ public class ConfigValueUsageAnalysisService {
                 .addReason(reason);
     }
 
-    private String buildIndirectReason(String prefix, Set<String> matchedKeys, String targetKey) {
+    private static String buildIndirectReason(String prefix, Set<String> matchedKeys, String targetKey) {
         Set<String> indirectKeys = new LinkedHashSet<>(matchedKeys);
         indirectKeys.remove(targetKey);
         if (indirectKeys.isEmpty()) {
@@ -393,7 +502,7 @@ public class ConfigValueUsageAnalysisService {
         return prefix + "通过配置 " + String.join(", ", indirectKeys) + " 间接受影响";
     }
 
-    private Set<String> collectCascadingConfigKeys(String targetKey, Map<String, Set<String>> configDependencies) {
+    private static Set<String> collectCascadingConfigKeys(String targetKey, Map<String, Set<String>> configDependencies) {
         Set<String> cascading = new LinkedHashSet<>();
         ArrayDeque<String> queue = new ArrayDeque<>();
         cascading.add(targetKey);
@@ -412,7 +521,7 @@ public class ConfigValueUsageAnalysisService {
         return cascading;
     }
 
-    private Set<String> filterScriptKeys(String source, Collection<String> keys) {
+    private static Set<String> filterScriptKeys(String source, Collection<String> keys) {
         Set<String> matches = new LinkedHashSet<>();
         for (String key : keys) {
             if (scriptUsesKey(source, key)) {
@@ -422,7 +531,7 @@ public class ConfigValueUsageAnalysisService {
         return matches;
     }
 
-    private boolean scriptUsesKey(String source, String key) {
+    private static boolean scriptUsesKey(String source, String key) {
         if (source == null || source.isBlank()) {
             return false;
         }
@@ -433,68 +542,20 @@ public class ConfigValueUsageAnalysisService {
                 || source.contains("config.get('" + key + "')");
     }
 
-    private Set<String> filterPlaceholderKeys(Object value, Collection<String> keys) {
-        Set<String> found = new LinkedHashSet<>();
-        collectPlaceholderKeys(value, found);
-        found.retainAll(new LinkedHashSet<>(keys));
-        return found;
-    }
-
-    private boolean containsPlaceholderKey(Object value, String key) {
-        return filterPlaceholderKeys(value, Set.of(key)).contains(key);
-    }
-
-    private void collectPlaceholderKeys(Object value, Set<String> found) {
-        if (value instanceof Map<?, ?> map) {
-            for (Object item : map.values()) {
-                collectPlaceholderKeys(item, found);
-            }
-            return;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            for (Object item : iterable) {
-                collectPlaceholderKeys(item, found);
-            }
-            return;
-        }
-        if (!(value instanceof String text) || text.isBlank()) {
-            return;
-        }
-        found.addAll(extractPlaceholderKeys(text));
-    }
-
-    private Set<String> extractPlaceholderKeys(String value) {
-        if (value == null || value.isBlank()) {
-            return Set.of();
-        }
-        Set<String> keys = new LinkedHashSet<>();
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(value);
-        while (matcher.find()) {
-            keys.add(matcher.group(1));
-        }
-        return keys;
-    }
-
-    private String resolvePublishMode(RepositoryCatalogService.ConfigTemplateItem template) {
-        return (template.secret() || template.defaultValue() == null || template.defaultValue().isBlank())
-                ? "PLACEHOLDER"
-                : "INLINE";
+    private static boolean containsPlaceholderKey(Object value, String key) {
+        return PlaceholderKeyExtractor.filterPlaceholderKeys(value, Set.of(key)).contains(key);
     }
 
     private ConfigValue requireConfig(String key) {
-        return configValueRepository.findByKey(key)
+        return repos.configValue().findByKey(key)
                 .orElseThrow(() -> new IllegalArgumentException("配置值不存在: " + key));
-    }
-
-    private String normalizeBlank(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String resolveRepositoryName(String repositoryId) {
         if (repositoryId == null || repositoryId.isBlank()) {
             return null;
         }
-        return listRepositories.get().stream()
+        return services.listRepositories().get().stream()
                 .filter(repository -> repositoryId.equals(repository.getId()))
                 .map(RepositoryDefinition::getName)
                 .filter(Objects::nonNull)
@@ -502,7 +563,7 @@ public class ConfigValueUsageAnalysisService {
                 .orElse(null);
     }
 
-    private String normalizeScope(String scope) {
+    private static String normalizeScope(String scope) {
         return scope == null ? null : scope.toUpperCase(Locale.ROOT);
     }
 
@@ -568,6 +629,10 @@ public class ConfigValueUsageAnalysisService {
     }
 
     public record AvailableActions(boolean canCopyAsLocalOverride, boolean canRestoreRepositoryDefault) {
+    }
+
+    private record PluginReferenceResult(List<PluginConfigReference> pluginReferences,
+                                         Map<String, Set<String>> pluginCascadeMatches) {
     }
 
     public record ManagedTemplate(String key,

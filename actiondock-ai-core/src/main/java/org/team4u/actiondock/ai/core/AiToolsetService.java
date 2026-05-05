@@ -8,8 +8,9 @@ import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
+
 public class AiToolsetService {
-    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
 
     private final AiToolsetRepository repository;
     private final AiAgentProfileRepository agentProfileRepository;
@@ -93,7 +94,7 @@ public class AiToolsetService {
         }
     }
 
-    private void assertMutable(String id) {
+    private static void assertMutable(String id) {
         if (id != null && id.startsWith(MANAGED_INTERNAL_PREFIX)) {
             throw new IllegalArgumentException("AI 能力包托管工具集不允许直接修改: " + id);
         }

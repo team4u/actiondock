@@ -1,0 +1,86 @@
+package org.team4u.actiondock.repository;
+
+import org.team4u.actiondock.domain.model.ConfigValue;
+import org.team4u.actiondock.domain.port.ConfigValueRepository;
+import org.team4u.actiondock.skill.SkillFileUtils;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * 仓库配置模板同步服务，负责将仓库中的配置模板同步为受管配置值。
+ *
+ * @author jay.wu
+ */
+class RepositoryConfigTemplateSyncService {
+
+    private final ConfigValueRepository configValueRepository;
+
+    RepositoryConfigTemplateSyncService(ConfigValueRepository configValueRepository) {
+        this.configValueRepository = configValueRepository;
+    }
+
+    void syncConfigTemplates(String repositoryId, String toolId, String repositoryVersion,
+                             List<RepositoryCatalogTypes.ConfigTemplateItem> templates) {
+        for (RepositoryCatalogTypes.ConfigTemplateItem template : templates) {
+            ConfigValue existing = configValueRepository.findByKey(template.key()).orElse(null);
+            String publishMode = template.resolvePublishMode();
+            if (existing == null) {
+                configValueRepository.save(createManagedConfigValue(template, repositoryId, toolId, repositoryVersion, publishMode));
+                continue;
+            }
+            if (isSameSource(existing, repositoryId, toolId)) {
+                updateManagedConfigValue(existing, template, repositoryVersion, publishMode);
+                configValueRepository.save(existing);
+            }
+        }
+    }
+
+    void removeManagedConfigTemplates(String repositoryId, String packageId) {
+        for (ConfigValue configValue : configValueRepository.findAll()) {
+            if (configValue.isManaged()
+                    && Objects.equals(repositoryId, configValue.getRepositoryId())
+                    && Objects.equals(packageId, configValue.getRepositoryToolId())) {
+                configValueRepository.deleteByKey(configValue.getKey());
+            }
+        }
+    }
+
+    private static ConfigValue createManagedConfigValue(RepositoryCatalogTypes.ConfigTemplateItem template,
+                                                        String repositoryId, String toolId,
+                                                        String repositoryVersion, String publishMode) {
+        return new ConfigValue()
+                .setKey(template.key())
+                .setValue(publishMode.equals("INLINE") ? template.defaultValue() : "")
+                .setDescription(SkillFileUtils.normalizeNullable(template.label()))
+                .setSecret(template.secret())
+                .setRepositoryId(repositoryId)
+                .setRepositoryToolId(toolId)
+                .setRepositoryVersion(repositoryVersion)
+                .setPublishMode(publishMode)
+                .setManaged(true)
+                .setOverridden(false)
+                .setCreatedAt(LocalDateTime.now())
+                .setUpdatedAt(LocalDateTime.now());
+    }
+
+    private static boolean isSameSource(ConfigValue existing, String repositoryId, String toolId) {
+        return Objects.equals(existing.getRepositoryId(), repositoryId)
+                && Objects.equals(existing.getRepositoryToolId(), toolId);
+    }
+
+    private static void updateManagedConfigValue(ConfigValue existing,
+                                                 RepositoryCatalogTypes.ConfigTemplateItem template,
+                                                 String repositoryVersion, String publishMode) {
+        existing.setDescription(SkillFileUtils.normalizeNullable(template.label()))
+                .setSecret(template.secret())
+                .setRepositoryVersion(repositoryVersion)
+                .setPublishMode(publishMode)
+                .setManaged(true)
+                .setUpdatedAt(LocalDateTime.now());
+        if (!existing.isOverridden()) {
+            existing.setValue(publishMode.equals("INLINE") ? template.defaultValue() : "");
+        }
+    }
+}

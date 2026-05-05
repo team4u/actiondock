@@ -79,6 +79,10 @@ public class AwtDesktopControls implements DesktopControls {
         trayIcon.setImageAutoSize(true);
         tray.add(trayIcon);
 
+        return awaitLatch(exitLatch);
+    }
+
+    private static DesktopControl awaitLatch(CountDownLatch exitLatch) {
         return () -> {
             try {
                 exitLatch.await();
@@ -123,13 +127,7 @@ public class AwtDesktopControls implements DesktopControls {
             frame.setVisible(true);
         });
 
-        return () -> {
-            try {
-                exitLatch.await();
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-            }
-        };
+        return awaitLatch(exitLatch);
     }
 
     private Image createTrayImage() {

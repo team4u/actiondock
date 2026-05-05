@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,8 @@ public class EventIngestionApplicationService {
     private static final int MAX_HEADER_VALUE_BYTES = 8 * 1024;
     private static final int MAX_BODY_BYTES = 1024 * 1024;
     private static final String REDACTED = "[REDACTED]";
+    private static final String SIGNATURE_PAYLOAD_TIMESTAMP_DOT_RAW_BODY = "TIMESTAMP_DOT_RAW_BODY";
+    private static final String HMAC_SHA256_ALGORITHM = "HmacSHA256";
 
     private final EventSourceApplicationService eventSourceApplicationService;
     private final EventTriggerApplicationService eventTriggerApplicationService;
@@ -59,6 +62,11 @@ public class EventIngestionApplicationService {
         verifyContentType(source, safePayload);
         verifyAuth(source, safePayload);
 
+        EventRecord record = normalizeEventRecord(source, safePayload);
+        return dispatchTriggers(source, record, record.getNormalizedEvent());
+    }
+
+    private EventRecord normalizeEventRecord(EventSourceDefinition source, IncomingEventPayload safePayload) {
         Map<String, Object> rawHeaders = safePayload.getHeaders();
         Map<String, Object> rawQuery = safePayload.getQuery();
         Map<String, Object> rawBody = parseBody(safePayload.getRawBody());
@@ -73,8 +81,8 @@ public class EventIngestionApplicationService {
                 .setSourceId(source.getId())
                 .setSourceKey(source.getKey())
                 .setStatus(EventRecordStatus.RECEIVED)
-                .setRawHeaders(sanitizeHeadersForStorage(source, rawHeaders))
-                .setRawQuery(sanitizeQueryForStorage(source, rawQuery))
+                .setRawHeaders(sanitizeForStorage(source, rawHeaders))
+                .setRawQuery(sanitizeForStorage(source, rawQuery))
                 .setRawBody(rawBody)
                 .setCreatedAt(LocalDateTime.now()));
 
@@ -85,8 +93,10 @@ public class EventIngestionApplicationService {
                 .setActor(event.getActor())
                 .setSubject(event.getSubject())
                 .setStatus(EventRecordStatus.NORMALIZED);
-        eventRecordRepository.save(record);
+        return eventRecordRepository.save(record);
+    }
 
+    private EventIngestionResult dispatchTriggers(EventSourceDefinition source, EventRecord record, NormalizedEvent event) {
         List<EventTrigger> triggers = eventTriggerApplicationService.list().stream()
                 .filter(EventTrigger::isEnabled)
                 .filter(trigger -> trigger.getSourceId().equals(source.getId()))
@@ -110,13 +120,13 @@ public class EventIngestionApplicationService {
                 .setDispatches(dispatches);
     }
 
-    private void validatePayloadShape(IncomingEventPayload payload) {
+    private static void validatePayloadShape(IncomingEventPayload payload) {
         Map<String, Object> headers = payload.getHeaders();
         if (headers.size() > MAX_HEADER_COUNT) {
             throw new WebhookRequestHeadersTooLargeException("请求头数量超过限制: " + headers.size() + " > " + MAX_HEADER_COUNT);
         }
         headers.forEach((name, value) -> {
-            String text = stringValue(value);
+            String text = ObjectValues.stringValue(value);
             if (text != null && text.getBytes(StandardCharsets.UTF_8).length > MAX_HEADER_VALUE_BYTES) {
                 throw new WebhookRequestHeadersTooLargeException("请求头过长: " + name);
             }
@@ -127,7 +137,7 @@ public class EventIngestionApplicationService {
         }
     }
 
-    private void verifyContentType(EventSourceDefinition source, IncomingEventPayload payload) {
+    private static void verifyContentType(EventSourceDefinition source, IncomingEventPayload payload) {
         String contentType = payload.getContentType();
         if (contentType == null || contentType.isBlank()) {
             return;
@@ -151,7 +161,7 @@ public class EventIngestionApplicationService {
             case HEADER_TOKEN -> verifyHeaderToken(auth, payload);
             case QUERY_TOKEN -> verifyQueryToken(auth, payload);
             case HMAC_SHA256 -> verifyHmac(auth, payload);
-            case NONE -> true;
+            default -> true;
         };
         if (!passed) {
             eventRecordRepository.save(new EventRecord()
@@ -166,15 +176,18 @@ public class EventIngestionApplicationService {
     }
 
     private boolean verifyHeaderToken(EventSourceAuthConfig auth, IncomingEventPayload payload) {
-        String secret = resolveSecret(auth);
-        String header = valueByName(payload.getHeaders(), auth.getTokenHeader());
-        return constantTimeEquals(secret, header);
+        String provided = valueByName(payload.getHeaders(), auth.getTokenHeader());
+        return verifyToken(provided, auth, "请求头");
     }
 
     private boolean verifyQueryToken(EventSourceAuthConfig auth, IncomingEventPayload payload) {
+        String provided = ObjectValues.stringValue(payload.getQuery().get(auth.getTokenQueryParam()));
+        return verifyToken(provided, auth, "查询参数");
+    }
+
+    private boolean verifyToken(String providedToken, EventSourceAuthConfig auth, String context) {
         String secret = resolveSecret(auth);
-        String query = stringValue(payload.getQuery().get(auth.getTokenQueryParam()));
-        return constantTimeEquals(secret, query);
+        return constantTimeEquals(secret, providedToken);
     }
 
     private boolean verifyHmac(EventSourceAuthConfig auth, IncomingEventPayload payload) {
@@ -195,33 +208,35 @@ public class EventIngestionApplicationService {
         return constantTimeEquals(hmacSha256Bytes(secret, signingPayload), actual);
     }
 
-    private String buildSigningPayload(EventSourceAuthConfig auth, IncomingEventPayload payload) {
+    private static String buildSigningPayload(EventSourceAuthConfig auth, IncomingEventPayload payload) {
         String rawBody = payload.getRawBody() == null ? "" : payload.getRawBody();
-        if ("TIMESTAMP_DOT_RAW_BODY".equalsIgnoreCase(auth.getSignaturePayload())) {
-            String timestamp = valueByName(payload.getHeaders(), auth.getTimestampHeader());
-            if (timestamp == null) {
-                return "";
-            }
-            if (auth.getMaxSkewSeconds() != null && auth.getMaxSkewSeconds() > 0) {
-                try {
-                    long epoch = Long.parseLong(timestamp);
-                    Duration skew = Duration.between(Instant.ofEpochSecond(epoch), Instant.now());
-                    if (Math.abs(skew.toSeconds()) > auth.getMaxSkewSeconds()) {
-                        return "";
-                    }
-                } catch (NumberFormatException exception) {
-                    return "";
-                }
-            }
-            return timestamp + "." + rawBody;
+        if (!SIGNATURE_PAYLOAD_TIMESTAMP_DOT_RAW_BODY.equalsIgnoreCase(auth.getSignaturePayload())) {
+            return rawBody;
         }
-        return rawBody;
+        String timestamp = valueByName(payload.getHeaders(), auth.getTimestampHeader());
+        if (timestamp == null || !isTimestampWithinSkew(timestamp, auth.getMaxSkewSeconds())) {
+            return "";
+        }
+        return timestamp + "." + rawBody;
     }
 
-    private byte[] hmacSha256Bytes(String secret, String payload) {
+    private static boolean isTimestampWithinSkew(String timestamp, Integer maxSkewSeconds) {
+        if (maxSkewSeconds == null || maxSkewSeconds <= 0) {
+            return true;
+        }
         try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            long epoch = Long.parseLong(timestamp);
+            Duration skew = Duration.between(Instant.ofEpochSecond(epoch), Instant.now());
+            return Math.abs(skew.toSeconds()) <= maxSkewSeconds;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
+    }
+
+    private static byte[] hmacSha256Bytes(String secret, String payload) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_SHA256_ALGORITHM);
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_SHA256_ALGORITHM));
             return mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
         } catch (Exception exception) {
             throw new IllegalStateException("HMAC 计算失败", exception);
@@ -235,14 +250,22 @@ public class EventIngestionApplicationService {
         return configValueApplicationService.snapshot().get(auth.getSecretConfigKey());
     }
 
-    private Map<String, Object> sanitizeHeadersForStorage(EventSourceDefinition source, Map<String, Object> headers) {
-        Map<String, Object> sanitized = new LinkedHashMap<>(headers);
+    /**
+     * 对请求参数进行脱敏处理，将鉴权相关的敏感值替换为占位符。
+     *
+     * @param source 事件源定义，包含鉴权配置
+     * @param values 待脱敏的请求参数（headers 或 query）
+     * @return 脱敏后的参数副本
+     */
+    private static Map<String, Object> sanitizeForStorage(EventSourceDefinition source, Map<String, Object> values) {
+        Map<String, Object> sanitized = new LinkedHashMap<>(values);
         EventSourceAuthConfig auth = source.getAuth();
         if (auth == null || auth.getMode() == null) {
             return sanitized;
         }
         switch (auth.getMode()) {
             case HEADER_TOKEN -> redactValue(sanitized, auth.getTokenHeader());
+            case QUERY_TOKEN -> redactValue(sanitized, auth.getTokenQueryParam());
             case HMAC_SHA256 -> redactValue(sanitized, auth.getSignatureHeader());
             default -> {
             }
@@ -250,19 +273,7 @@ public class EventIngestionApplicationService {
         return sanitized;
     }
 
-    private Map<String, Object> sanitizeQueryForStorage(EventSourceDefinition source, Map<String, Object> query) {
-        Map<String, Object> sanitized = new LinkedHashMap<>(query);
-        EventSourceAuthConfig auth = source.getAuth();
-        if (auth == null || auth.getMode() == null) {
-            return sanitized;
-        }
-        if (auth.getMode() == EventSourceAuthMode.QUERY_TOKEN) {
-            redactValue(sanitized, auth.getTokenQueryParam());
-        }
-        return sanitized;
-    }
-
-    private void redactValue(Map<String, Object> values, String key) {
+    private static void redactValue(Map<String, Object> values, String key) {
         if (key == null || key.isBlank() || values.isEmpty()) {
             return;
         }
@@ -289,42 +300,46 @@ public class EventIngestionApplicationService {
         }
     }
 
-    private boolean constantTimeEquals(String expected, String actual) {
+    private static boolean constantTimeEquals(String expected, String actual) {
         if (expected == null || actual == null) {
             return false;
         }
-        return MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
+        return constantTimeEquals(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
     }
 
-    private boolean constantTimeEquals(byte[] expected, String actualHex) {
+    private static boolean constantTimeEquals(byte[] expected, byte[] actual) {
+        return MessageDigest.isEqual(expected, actual);
+    }
+
+    private static boolean constantTimeEquals(byte[] expected, String actualHex) {
         if (expected == null || actualHex == null || actualHex.isBlank()) {
             return false;
         }
         try {
-            byte[] actual = java.util.HexFormat.of().parseHex(actualHex);
-            return MessageDigest.isEqual(expected, actual);
+            byte[] actual = HexFormat.of().parseHex(actualHex);
+            return constantTimeEquals(expected, actual);
         } catch (IllegalArgumentException exception) {
             return false;
         }
     }
 
-    private String valueByName(Map<String, Object> values, String key) {
+    private static String valueByName(Map<String, Object> values, String key) {
         if (values == null || values.isEmpty() || key == null || key.isBlank()) {
             return null;
         }
         Object exact = values.get(key);
         if (exact != null) {
-            return stringValue(exact);
+            return ObjectValues.stringValue(exact);
         }
         for (Map.Entry<String, Object> entry : values.entrySet()) {
             if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
-                return stringValue(entry.getValue());
+                return ObjectValues.stringValue(entry.getValue());
             }
         }
         return null;
     }
 
-    private EventRecordStatus resolveRecordStatus(List<EventDispatchRecord> dispatches) {
+    private static EventRecordStatus resolveRecordStatus(List<EventDispatchRecord> dispatches) {
         if (dispatches.isEmpty()) {
             return EventRecordStatus.IGNORED;
         }
@@ -338,9 +353,5 @@ public class EventIngestionApplicationService {
             return EventRecordStatus.IGNORED;
         }
         return EventRecordStatus.FAILED;
-    }
-
-    private String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
     }
 }

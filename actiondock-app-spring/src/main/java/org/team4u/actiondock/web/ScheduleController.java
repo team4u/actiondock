@@ -70,7 +70,7 @@ public class ScheduleController {
         return support.deleteSchedule(existing.getScriptId(), scheduleId);
     }
 
-    private String resolveScriptId(ScriptScheduleUpsertRequest request) {
+    private static String resolveScriptId(ScriptScheduleUpsertRequest request) {
         if (request.getScriptId() == null || request.getScriptId().isBlank()) {
             throw new IllegalArgumentException("scriptId 不能为空");
         }

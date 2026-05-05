@@ -29,17 +29,17 @@ public class JpaExecutionPresetRepositoryAdapter implements ExecutionPresetRepos
 
     @Override
     public ExecutionPreset save(ExecutionPreset preset) {
-        return toDomain(repository.save(toEntity(preset)));
+        return toDomain(repository.save(toEntity(preset, jsonCodec)), jsonCodec);
     }
 
     @Override
     public Optional<ExecutionPreset> findById(String id) {
-        return repository.findById(id).map(this::toDomain);
+        return repository.findById(id).map(e -> toDomain(e, jsonCodec));
     }
 
     @Override
     public List<ExecutionPreset> findByScriptId(String scriptId) {
-        return repository.findByScriptIdOrderByCreatedAtDesc(scriptId).stream().map(this::toDomain).toList();
+        return repository.findByScriptIdOrderByCreatedAtDesc(scriptId).stream().map(e -> toDomain(e, jsonCodec)).toList();
     }
 
     @Override
@@ -52,7 +52,7 @@ public class JpaExecutionPresetRepositoryAdapter implements ExecutionPresetRepos
         repository.deleteAllByScriptId(scriptId);
     }
 
-    private ExecutionPresetEntity toEntity(ExecutionPreset preset) {
+    private static ExecutionPresetEntity toEntity(ExecutionPreset preset, JsonCodec jsonCodec) {
         ExecutionPresetEntity entity = new ExecutionPresetEntity();
         entity.setId(preset.getId());
         entity.setScriptId(preset.getScriptId());
@@ -68,7 +68,7 @@ public class JpaExecutionPresetRepositoryAdapter implements ExecutionPresetRepos
         return entity;
     }
 
-    private ExecutionPreset toDomain(ExecutionPresetEntity entity) {
+    private static ExecutionPreset toDomain(ExecutionPresetEntity entity, JsonCodec jsonCodec) {
         return new ExecutionPreset()
                 .setId(entity.getId())
                 .setScriptId(entity.getScriptId())

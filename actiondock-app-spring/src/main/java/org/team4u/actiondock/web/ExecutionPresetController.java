@@ -87,7 +87,7 @@ public class ExecutionPresetController {
         return ApiResponse.success(null, "预设已删除");
     }
 
-    private ExecutionPreset toDomain(ExecutionPresetUpsertRequest request, String presetId) {
+    private static ExecutionPreset toDomain(ExecutionPresetUpsertRequest request, String presetId) {
         return new ExecutionPreset()
                 .setId(presetId)
                 .setName(request.getName())

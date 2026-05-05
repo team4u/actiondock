@@ -6,38 +6,17 @@ import org.team4u.actiondock.domain.port.SkillTargetRepository;
 import org.team4u.actiondock.storage.jpa.entity.SkillTargetEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataSkillTargetRepository;
 
-import java.util.List;
-import java.util.Optional;
-
 @Component
-public class JpaSkillTargetRepositoryAdapter implements SkillTargetRepository {
-    private final SpringDataSkillTargetRepository repository;
+public class JpaSkillTargetRepositoryAdapter
+        extends AbstractJpaRepositoryAdapter<SkillTargetEntity, SkillTarget, SpringDataSkillTargetRepository>
+        implements SkillTargetRepository {
 
     public JpaSkillTargetRepositoryAdapter(SpringDataSkillTargetRepository repository) {
-        this.repository = repository;
+        super(repository);
     }
 
     @Override
-    public SkillTarget save(SkillTarget target) {
-        return toDomain(repository.save(toEntity(target)));
-    }
-
-    @Override
-    public Optional<SkillTarget> findById(String id) {
-        return repository.findById(id).map(this::toDomain);
-    }
-
-    @Override
-    public List<SkillTarget> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
-    }
-
-    @Override
-    public void deleteById(String id) {
-        repository.deleteById(id);
-    }
-
-    private SkillTargetEntity toEntity(SkillTarget target) {
+    protected SkillTargetEntity toEntity(SkillTarget target) {
         SkillTargetEntity entity = new SkillTargetEntity();
         entity.setId(target.getId());
         entity.setName(target.getName());
@@ -50,7 +29,8 @@ public class JpaSkillTargetRepositoryAdapter implements SkillTargetRepository {
         return entity;
     }
 
-    private SkillTarget toDomain(SkillTargetEntity entity) {
+    @Override
+    protected SkillTarget toDomain(SkillTargetEntity entity) {
         return new SkillTarget()
                 .setId(entity.getId())
                 .setName(entity.getName())

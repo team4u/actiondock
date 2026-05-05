@@ -144,7 +144,7 @@ final class CompiledGroovyScriptCache {
         }
     }
 
-    private String cacheKey(String source) {
+    private static String cacheKey(String source) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(source.getBytes(StandardCharsets.UTF_8));
@@ -154,7 +154,7 @@ final class CompiledGroovyScriptCache {
         }
     }
 
-    private RuntimeException rethrow(Throwable throwable) {
+    private static RuntimeException rethrow(Throwable throwable) {
         if (throwable instanceof RuntimeException runtimeException) {
             return runtimeException;
         }

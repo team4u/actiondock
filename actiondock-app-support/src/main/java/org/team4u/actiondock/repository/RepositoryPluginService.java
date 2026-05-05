@@ -9,6 +9,8 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginView;
+import org.team4u.actiondock.skill.SkillFileUtils;
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,7 +49,7 @@ public class RepositoryPluginService {
      * @param force        是否强制安装（忽略版本冲突）
      * @return 安装结果，包含插件信息和冲突列表
      */
-    public RepositoryCatalogService.RepositoryPluginInstallResult installPlugin(String repositoryId, String pluginId, boolean force) {
+    public RepositoryPluginInstallResult installPlugin(String repositoryId, String pluginId, boolean force) {
         return installOrUpdatePlugin(repositoryId, pluginId, false, force);
     }
 
@@ -59,7 +61,7 @@ public class RepositoryPluginService {
      * @param force        是否强制更新（忽略版本冲突）
      * @return 更新结果，包含插件信息和冲突列表
      */
-    public RepositoryCatalogService.RepositoryPluginInstallResult updatePlugin(String repositoryId, String pluginId, boolean force) {
+    public RepositoryPluginInstallResult updatePlugin(String repositoryId, String pluginId, boolean force) {
         return installOrUpdatePlugin(repositoryId, pluginId, true, force);
     }
 
@@ -79,35 +81,46 @@ public class RepositoryPluginService {
                                    boolean installPluginDependencies,
                                    boolean forcePluginUpgrade) {
         for (PluginDependency dependency : dependencies == null ? List.<PluginDependency>of() : dependencies) {
-            String pluginId = catalog.normalize(dependency.getPluginId(), "插件依赖 pluginId 不能为空");
-            PluginRegistration registration = findPluginRegistration(pluginId).orElse(null);
-            if (registration != null && RepositoryCatalogService.versionSatisfies(registration.getVersion(), dependency.getVersionRange())) {
+            String pluginId = SkillFileUtils.normalize(dependency.getPluginId(), "插件依赖 pluginId 不能为空");
+            PluginRegistration registration = pluginRuntimeService.findPluginRegistration(pluginId).orElse(null);
+            if (registration != null && RepositoryVersionUtils.versionSatisfies(registration.getVersion(), dependency.getVersionRange())) {
                 continue;
             }
-            if (!installPluginDependencies) {
-                throw new IllegalArgumentException("缺少插件依赖或版本不满足: " + pluginId + " " + catalog.normalizeOrDefault(dependency.getVersionRange(), ""));
-            }
-
-            RepositoryCatalogService.RepositoryPluginDescriptor descriptor = findRepositoryPlugin(repositoryId, pluginId)
-                    .orElseThrow(() -> new IllegalArgumentException("仓库中缺少插件依赖: " + pluginId));
-            if (!RepositoryCatalogService.versionSatisfies(descriptor.version(), dependency.getVersionRange())) {
-                throw new IllegalArgumentException("仓库插件版本不满足工具依赖: " + pluginId + " " + dependency.getVersionRange());
-            }
-            if (registration == null) {
-                installPlugin(repositoryId, pluginId, forcePluginUpgrade);
-            } else {
-                updatePlugin(repositoryId, pluginId, forcePluginUpgrade);
-            }
+            assertDependencySatisfiable(pluginId, dependency, installPluginDependencies);
+            assertRepositoryVersionSatisfies(repositoryId, pluginId, dependency);
+            installOrUpdate(repositoryId, pluginId, registration == null, forcePluginUpgrade);
         }
     }
 
-    private RepositoryCatalogService.RepositoryPluginInstallResult installOrUpdatePlugin(String repositoryId,
+    private void assertDependencySatisfiable(String pluginId, PluginDependency dependency, boolean installPluginDependencies) {
+        if (!installPluginDependencies) {
+            throw new IllegalArgumentException("缺少插件依赖或版本不满足: " + pluginId + " " + SkillFileUtils.normalizeOrDefault(dependency.getVersionRange(), ""));
+        }
+    }
+
+    private void assertRepositoryVersionSatisfies(String repositoryId, String pluginId, PluginDependency dependency) {
+        RepositoryPluginDescriptor descriptor = findRepositoryPlugin(repositoryId, pluginId)
+                .orElseThrow(() -> new IllegalArgumentException("仓库中缺少插件依赖: " + pluginId));
+        if (!RepositoryVersionUtils.versionSatisfies(descriptor.version(), dependency.getVersionRange())) {
+            throw new IllegalArgumentException("仓库插件版本不满足工具依赖: " + pluginId + " " + dependency.getVersionRange());
+        }
+    }
+
+    private void installOrUpdate(String repositoryId, String pluginId, boolean freshInstall, boolean force) {
+        if (freshInstall) {
+            installPlugin(repositoryId, pluginId, force);
+        } else {
+            updatePlugin(repositoryId, pluginId, force);
+        }
+    }
+
+    private RepositoryPluginInstallResult installOrUpdatePlugin(String repositoryId,
                                                                                          String pluginId,
                                                                                          boolean updateOnly,
                                                                                          boolean force) {
-        RepositoryCatalogService.RepositoryPluginDetail detail = catalog.getRepositoryPlugin(repositoryId, pluginId);
-        RepositoryCatalogService.RepositoryPluginDescriptor descriptor = detail.descriptor();
-        PluginRegistration existing = findPluginRegistration(pluginId).orElse(null);
+        RepositoryPluginDetail detail = catalog.getRepositoryPlugin(repositoryId, pluginId);
+        RepositoryPluginDescriptor descriptor = detail.descriptor();
+        PluginRegistration existing = pluginRuntimeService.findPluginRegistration(pluginId).orElse(null);
         if (updateOnly && existing == null) {
             throw new IllegalArgumentException("插件尚未安装: " + pluginId);
         }
@@ -116,54 +129,47 @@ public class RepositoryPluginService {
             throw new RepositoryPluginConflictException(pluginId, conflicts);
         }
 
+        PluginArtifact artifact = resolvePluginArtifact(detail, repositoryId);
+        PluginView plugin = installOrUpgradePlugin(existing, artifact, repositoryId, pluginId, descriptor.version());
+        return new RepositoryPluginInstallResult(plugin, conflicts);
+    }
+
+    private PluginArtifact resolvePluginArtifact(RepositoryPluginDetail detail, String repositoryId) {
         RepositoryDefinition repository = catalog.getRepository(repositoryId);
         PluginArtifactRef artifactRef = catalog.validatePluginArtifactRef(detail.plugin().artifact(), true);
         PluginArtifact artifact = pluginArtifactResolverRegistry.resolve(
                 artifactRef,
                 new PluginArtifactContext(repository, detail, catalog.resolveRepositoryRoot(repository))
         );
-        catalog.verifySha256(pluginId, artifact.content(), artifactRef.sha256());
-        catalog.verifySize(pluginId, artifact.content(), artifactRef.size());
-        PluginView plugin = existing == null
-                ? pluginRuntimeService.installFromRepository(
-                artifact.fileName(),
-                artifact.content(),
-                repositoryId,
-                pluginId,
-                descriptor.version()
-        )
-                : pluginRuntimeService.upgradeFromRepository(
-                pluginId,
-                artifact.fileName(),
-                artifact.content(),
-                repositoryId,
-                pluginId,
-                descriptor.version()
-        );
-        return new RepositoryCatalogService.RepositoryPluginInstallResult(plugin, conflicts);
+        RepositoryVersionUtils.verifySha256(detail.descriptor().pluginId(), artifact.content(), artifactRef.sha256());
+        RepositoryVersionUtils.verifySize(detail.descriptor().pluginId(), artifact.content(), artifactRef.size());
+        return artifact;
     }
 
-    private Optional<RepositoryCatalogService.RepositoryPluginDescriptor> findRepositoryPlugin(String repositoryId, String pluginId) {
+    private PluginView installOrUpgradePlugin(PluginRegistration existing,
+                                              PluginArtifact artifact,
+                                              String repositoryId,
+                                              String pluginId,
+                                              String version) {
+        return existing == null
+                ? pluginRuntimeService.installFromRepository(artifact.fileName(), artifact.content(), repositoryId, pluginId, version)
+                : pluginRuntimeService.upgradeFromRepository(pluginId, artifact.fileName(), artifact.content(), repositoryId, pluginId, version);
+    }
+
+    private Optional<RepositoryPluginDescriptor> findRepositoryPlugin(String repositoryId, String pluginId) {
         return catalog.listRepositoryPlugins(repositoryId).stream()
                 .filter(item -> pluginId.equals(item.pluginId()))
                 .findFirst();
     }
 
-    private Optional<PluginRegistration> findPluginRegistration(String pluginId) {
-        return pluginRuntimeService.list().stream()
-                .filter(item -> pluginId.equals(item.getPluginId()))
-                .findFirst()
-                .map(item -> pluginRuntimeService.getRegistration(pluginId));
-    }
-
     private List<RepositoryPluginConflict> findPluginConflicts(String pluginId, String targetVersion) {
         List<RepositoryPluginConflict> conflicts = new ArrayList<>();
-        for (ScriptDefinition script : scriptRepository.findAll()) {
-            for (PluginDependency dependency : script.getPluginDependencies()) {
-                if (pluginId.equals(dependency.getPluginId()) && !RepositoryCatalogService.versionSatisfies(targetVersion, dependency.getVersionRange())) {
+        for (ScriptDefinition dependentScript : scriptRepository.findAll()) {
+            for (PluginDependency dependency : dependentScript.getPluginDependencies()) {
+                if (pluginId.equals(dependency.getPluginId()) && !RepositoryVersionUtils.versionSatisfies(targetVersion, dependency.getVersionRange())) {
                     conflicts.add(new RepositoryPluginConflict(
-                            script.getId(),
-                            script.getName(),
+                            dependentScript.getId(),
+                            dependentScript.getName(),
                             dependency.getVersionRange()
                     ));
                 }

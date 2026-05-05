@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.skill.GithubSkillCollectionService;
 import org.team4u.actiondock.skill.SkillService;
+import org.team4u.actiondock.skill.SkillTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,7 +57,7 @@ class SkillControllerTest {
     @Test
     void archiveReturnsBinaryDownload() throws Exception {
         when(skillService.exportSkillArchive("skill-1"))
-                .thenReturn(new SkillService.SkillArchive("skill-1.zip", "zip-content".getBytes()));
+                .thenReturn(new SkillTypes.SkillArchive("skill-1.zip", "zip-content".getBytes()));
 
         mockMvc.perform(get("/api/skills/skill-1/archive"))
                 .andExpect(status().isOk())
@@ -67,7 +68,7 @@ class SkillControllerTest {
     @Test
     void installArchiveDelegatesToSkillService() throws Exception {
         when(skillService.installArchive(eq(List.of("target-1", "target-2")), eq("repo-1"), eq("skill.zip"), any()))
-                .thenReturn(new SkillService.SkillListItem(
+                .thenReturn(new SkillTypes.SkillListItem(
                         "skill",
                         "repo-1",
                         "1.0.0",
@@ -77,8 +78,8 @@ class SkillControllerTest {
                         2,
                         0,
                         List.of(
-                                new SkillService.SkillDeploymentView("target-1", "/targets/one", "/targets/one/skill", true, LocalDateTime.now(), LocalDateTime.now()),
-                                new SkillService.SkillDeploymentView("target-2", "/targets/two", "/targets/two/skill", true, LocalDateTime.now(), LocalDateTime.now())
+                                new SkillTypes.SkillDeploymentView("target-1", "/targets/one", "/targets/one/skill", true, LocalDateTime.now(), LocalDateTime.now()),
+                                new SkillTypes.SkillDeploymentView("target-2", "/targets/two", "/targets/two/skill", true, LocalDateTime.now(), LocalDateTime.now())
                         ),
                         LocalDateTime.now(),
                         LocalDateTime.now()
@@ -164,7 +165,7 @@ class SkillControllerTest {
     @Test
     void updateVersionDelegatesToSkillService() throws Exception {
         when(skillService.updateSkillVersion("skill-1", "1.2.0"))
-                .thenReturn(new SkillService.SkillListItem(
+                .thenReturn(new SkillTypes.SkillListItem(
                         "skill-1",
                         "repo-1",
                         "1.2.0",
@@ -173,7 +174,7 @@ class SkillControllerTest {
                         "desc",
                         1,
                         0,
-                        List.of(new SkillService.SkillDeploymentView("target-1", "/targets/one", "/targets/one/skill", true, LocalDateTime.now(), LocalDateTime.now())),
+                        List.of(new SkillTypes.SkillDeploymentView("target-1", "/targets/one", "/targets/one/skill", true, LocalDateTime.now(), LocalDateTime.now())),
                         LocalDateTime.now(),
                         LocalDateTime.now()
                 ));

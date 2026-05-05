@@ -8,7 +8,6 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ExecutionOutputProjectorTest {
-    private final ExecutionOutputProjector projector = new ExecutionOutputProjector();
 
     @Test
     void projectKeepsOnlySchemaDeclaredFields() {
@@ -23,7 +22,7 @@ class ExecutionOutputProjectorTest {
         expected.put("message", "Hello");
         expected.put("count", 3);
 
-        Map<String, Object> projected = projector.project(
+        Map<String, Object> projected = ExecutionOutputProjector.project(
                 rawOutput,
                 Map.of(
                         "type", "object",
@@ -38,7 +37,7 @@ class ExecutionOutputProjectorTest {
     void projectFallsBackToRawOutputWhenSchemaHasNoProperties() {
         Map<String, Object> rawOutput = new LinkedHashMap<>(Map.of("message", "Hello", "secret", "token"));
 
-        Map<String, Object> projected = projector.project(rawOutput, Map.of("type", "object"));
+        Map<String, Object> projected = ExecutionOutputProjector.project(rawOutput, Map.of("type", "object"));
 
         assertThat(projected).containsExactlyEntriesOf(rawOutput);
         assertThat(projected).isNotSameAs(rawOutput);
@@ -46,7 +45,7 @@ class ExecutionOutputProjectorTest {
 
     @Test
     void projectReturnsEmptyWhenSchemaPropertiesDoNotMatchRawOutput() {
-        Map<String, Object> projected = projector.project(
+        Map<String, Object> projected = ExecutionOutputProjector.project(
                 Map.of("secret", "token"),
                 Map.of("properties", Map.of("message", Map.of("type", "string")))
         );

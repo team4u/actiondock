@@ -62,7 +62,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AiRuntimePolicyTest {
-    private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
+    private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = AiAgentRuntimeImpl.DISABLE_OUTER_TIMEOUT_METADATA_KEY;
 
     @Test
     void builtInToolsExposeCurrentScriptWithoutMutatingStorage() {

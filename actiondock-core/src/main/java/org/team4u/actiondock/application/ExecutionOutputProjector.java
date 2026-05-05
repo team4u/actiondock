@@ -11,6 +11,9 @@ import java.util.Map;
  * @author jay.wu
  */
 public class ExecutionOutputProjector {
+    private ExecutionOutputProjector() {
+    }
+
     /**
      * 根据输出模式（outputSchema）投影过滤原始执行结果。
      * <p>
@@ -21,7 +24,7 @@ public class ExecutionOutputProjector {
      * @param outputSchema 输出模式定义，遵循 JSON Schema 格式
      * @return 经过投影过滤后的输出结果
      */
-    public Map<String, Object> project(Map<String, Object> rawOutput, Map<String, Object> outputSchema) {
+    public static Map<String, Object> project(Map<String, Object> rawOutput, Map<String, Object> outputSchema) {
         Map<String, Object> source = rawOutput == null ? new LinkedHashMap<>() : new LinkedHashMap<>(rawOutput);
         Map<String, Object> properties = propertiesOf(outputSchema);
         if (properties.isEmpty()) {
@@ -38,7 +41,7 @@ public class ExecutionOutputProjector {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> propertiesOf(Map<String, Object> outputSchema) {
+    private static Map<String, Object> propertiesOf(Map<String, Object> outputSchema) {
         if (outputSchema == null || outputSchema.isEmpty()) {
             return Map.of();
         }

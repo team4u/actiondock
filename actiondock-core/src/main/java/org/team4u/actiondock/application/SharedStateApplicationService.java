@@ -43,7 +43,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         String normalizedNamespace = normalizeNamespace(namespace);
         String normalizedKey = normalizeKey(key);
         return activeEntry(repository.findByNamespaceAndKey(normalizedNamespace, normalizedKey), LocalDateTime.now())
-                .map(this::copy)
+                .map(SharedStateApplicationService::copy)
                 .orElse(null);
     }
 
@@ -95,48 +95,45 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         String normalizedNamespace = normalizeNamespace(namespace);
         String normalizedKey = normalizeKey(key);
         LocalDateTime now = LocalDateTime.now();
-        SharedStateEntry current = activeEntry(repository.findByNamespaceAndKey(normalizedNamespace, normalizedKey), now)
-                .orElse(null);
+        SharedStateEntry current = findActiveEntry(normalizedNamespace, normalizedKey, now);
 
         if (current == null) {
             if (expectedVersion != null) {
                 return new CompareAndSetResult(false, null, null);
             }
-            SharedStateEntry created = repository.save(new SharedStateEntry()
-                    .setNamespace(normalizedNamespace)
-                    .setKey(normalizedKey)
-                    .setValue(value)
-                    .setSecret(secret)
-                    .setVersion(1L)
-                    .setExpiresAt(expiresAt)
-                    .setCreatedAt(now)
-                    .setUpdatedAt(now)
-                    .setLastWriterScriptId(blankToNull(writerScriptId))
-                    .setLastWriterExecutionId(blankToNull(writerExecutionId)));
+            SharedStateEntry created = repository.save(
+                    buildEntry(normalizedNamespace, normalizedKey, value, secret, expiresAt, writerScriptId, writerExecutionId, 1L, now, now));
             return new CompareAndSetResult(true, copy(created), copy(created));
         }
 
+        return updateExistingEntry(normalizedNamespace, normalizedKey, current, expectedVersion,
+                value, secret, expiresAt, writerScriptId, writerExecutionId, now);
+    }
+
+    private CompareAndSetResult updateExistingEntry(String namespace,
+                                                    String key,
+                                                    SharedStateEntry current,
+                                                    Long expectedVersion,
+                                                    Object value,
+                                                    boolean secret,
+                                                    LocalDateTime expiresAt,
+                                                    String writerScriptId,
+                                                    String writerExecutionId,
+                                                    LocalDateTime now) {
         if (!Objects.equals(current.getVersion(), expectedVersion)) {
             return new CompareAndSetResult(false, null, copy(current));
         }
 
-        SharedStateEntry updated = copy(current)
-                .setValue(value)
-                .setSecret(secret)
-                .setExpiresAt(expiresAt)
-                .setVersion(current.getVersion() == null ? 1L : current.getVersion() + 1L)
-                .setUpdatedAt(now)
-                .setLastWriterScriptId(blankToNull(writerScriptId))
-                .setLastWriterExecutionId(blankToNull(writerExecutionId));
+        SharedStateEntry updated = buildEntry(
+                current, value, secret, expiresAt, writerScriptId, writerExecutionId,
+                current.getVersion() == null ? 1L : current.getVersion() + 1L, now);
         boolean success = repository.compareAndSet(updated, expectedVersion);
         if (!success) {
-            SharedStateEntry latest = activeEntry(repository.findByNamespaceAndKey(normalizedNamespace, normalizedKey), LocalDateTime.now())
-                    .map(this::copy)
-                    .orElse(null);
-            return new CompareAndSetResult(false, null, latest);
+            SharedStateEntry latest = findActiveEntry(namespace, key, LocalDateTime.now());
+            return new CompareAndSetResult(false, null, latest == null ? null : copy(latest));
         }
-        SharedStateEntry persisted = repository.findByNamespaceAndKey(normalizedNamespace, normalizedKey)
-                .map(this::copy)
+        SharedStateEntry persisted = repository.findByNamespaceAndKey(namespace, key)
+                .map(SharedStateApplicationService::copy)
                 .orElse(copy(updated));
         return new CompareAndSetResult(true, persisted, persisted);
     }
@@ -155,7 +152,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         return repository.findByNamespace(normalizedNamespace).stream()
                 .filter(item -> !item.isExpiredAt(now))
                 .sorted(Comparator.comparing(SharedStateEntry::getKey))
-                .map(this::copy)
+                .map(SharedStateApplicationService::copy)
                 .toList();
     }
 
@@ -183,19 +180,19 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         return repository.deleteExpired(normalizeNamespace(namespace), now);
     }
 
-    private Optional<SharedStateEntry> activeEntry(Optional<SharedStateEntry> optionalEntry, LocalDateTime now) {
+    private static Optional<SharedStateEntry> activeEntry(Optional<SharedStateEntry> optionalEntry, LocalDateTime now) {
         return optionalEntry.filter(entry -> !entry.isExpiredAt(now));
     }
 
-    private String normalizeNamespace(String namespace) {
+    private static String normalizeNamespace(String namespace) {
         return normalizeToken(namespace, "namespace");
     }
 
-    private String normalizeKey(String key) {
+    private static String normalizeKey(String key) {
         return normalizeToken(key, "key");
     }
 
-    private String normalizeToken(String value, String fieldName) {
+    private static String normalizeToken(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " 不能为空");
         }
@@ -206,7 +203,7 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         return normalized;
     }
 
-    private String blankToNull(String value) {
+    private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
@@ -215,7 +212,52 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
         return "共享状态服务";
     }
 
-    private SharedStateEntry copy(SharedStateEntry source) {
+    private SharedStateEntry findActiveEntry(String namespace, String key, LocalDateTime now) {
+        return activeEntry(repository.findByNamespaceAndKey(namespace, key), now).orElse(null);
+    }
+
+    private static SharedStateEntry buildEntry(String namespace,
+                                               String key,
+                                               Object value,
+                                               boolean secret,
+                                               LocalDateTime expiresAt,
+                                               String writerScriptId,
+                                               String writerExecutionId,
+                                               long version,
+                                               LocalDateTime createdAt,
+                                               LocalDateTime updatedAt) {
+        return new SharedStateEntry()
+                .setNamespace(namespace)
+                .setKey(key)
+                .setValue(value)
+                .setSecret(secret)
+                .setVersion(version)
+                .setExpiresAt(expiresAt)
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt)
+                .setLastWriterScriptId(blankToNull(writerScriptId))
+                .setLastWriterExecutionId(blankToNull(writerExecutionId));
+    }
+
+    private static SharedStateEntry buildEntry(SharedStateEntry base,
+                                               Object value,
+                                               boolean secret,
+                                               LocalDateTime expiresAt,
+                                               String writerScriptId,
+                                               String writerExecutionId,
+                                               long version,
+                                               LocalDateTime updatedAt) {
+        return copy(base)
+                .setValue(value)
+                .setSecret(secret)
+                .setExpiresAt(expiresAt)
+                .setVersion(version)
+                .setUpdatedAt(updatedAt)
+                .setLastWriterScriptId(blankToNull(writerScriptId))
+                .setLastWriterExecutionId(blankToNull(writerExecutionId));
+    }
+
+    private static SharedStateEntry copy(SharedStateEntry source) {
         return new SharedStateEntry()
                 .setNamespace(source.getNamespace())
                 .setKey(source.getKey())

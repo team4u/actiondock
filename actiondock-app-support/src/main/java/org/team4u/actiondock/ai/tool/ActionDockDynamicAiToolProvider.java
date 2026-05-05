@@ -16,6 +16,7 @@ import org.team4u.actiondock.ai.api.AiToolPermission;
 import org.team4u.actiondock.ai.api.AiToolProvider;
 import org.team4u.actiondock.ai.api.AiToolSourceType;
 import org.team4u.actiondock.application.ExecutionApplicationService;
+import org.team4u.actiondock.application.ObjectValues;
 import org.team4u.actiondock.application.ExecutionOutputProjector;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
@@ -26,6 +27,7 @@ import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,17 +35,17 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
+
 public class ActionDockDynamicAiToolProvider implements AiToolProvider {
-    static final String SCRIPT_TOOL_PREFIX = "script.";
-    static final String AGENT_TOOL_PREFIX = "agent.";
+    public static final String SCRIPT_TOOL_PREFIX = "script.";
+    public static final String AGENT_TOOL_PREFIX = "agent.";
     static final String AGENT_PROFILE_CHAIN_METADATA_KEY = "agentProfileChain";
-    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
 
     private final ScriptRepository scriptRepository;
     private final AiAgentProfileRepository agentProfileRepository;
     private final Supplier<ExecutionApplicationService> executionApplicationServiceSupplier;
     private final Supplier<AiAgentRuntime> aiAgentRuntimeSupplier;
-    private final ExecutionOutputProjector executionOutputProjector = new ExecutionOutputProjector();
 
     public ActionDockDynamicAiToolProvider(ScriptRepository scriptRepository,
                                            AiAgentProfileRepository agentProfileRepository,
@@ -59,13 +61,13 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
     public List<AiTool> listTools() {
         List<AiTool> tools = new ArrayList<>();
         scriptRepository.findAll().stream()
-                .filter(this::isPublishedToolScript)
-                .sorted(java.util.Comparator.comparing(ScriptDefinition::getId))
+                .filter(ActionDockDynamicAiToolProvider::isPublishedToolScript)
+                .sorted(Comparator.comparing(ScriptDefinition::getId))
                 .map(PublishedScriptTool::new)
                 .forEach(tools::add);
         agentProfileRepository.findAll().stream()
-                .filter(this::isVisibleAgentTool)
-                .sorted(java.util.Comparator.comparing(AiAgentProfile::getId))
+                .filter(ActionDockDynamicAiToolProvider::isVisibleAgentTool)
+                .sorted(Comparator.comparing(AiAgentProfile::getId))
                 .map(AgentProfileTool::new)
                 .forEach(tools::add);
         return List.copyOf(tools);
@@ -78,18 +80,18 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
         }
         if (name.startsWith(SCRIPT_TOOL_PREFIX)) {
             return scriptRepository.findById(name.substring(SCRIPT_TOOL_PREFIX.length()))
-                    .filter(this::isPublishedToolScript)
+                    .filter(ActionDockDynamicAiToolProvider::isPublishedToolScript)
                     .map(PublishedScriptTool::new);
         }
         if (name.startsWith(AGENT_TOOL_PREFIX)) {
             return agentProfileRepository.findById(name.substring(AGENT_TOOL_PREFIX.length()))
-                    .filter(this::isVisibleAgentTool)
+                    .filter(ActionDockDynamicAiToolProvider::isVisibleAgentTool)
                     .map(AgentProfileTool::new);
         }
         return Optional.empty();
     }
 
-    private boolean isPublishedToolScript(ScriptDefinition script) {
+    private static boolean isPublishedToolScript(ScriptDefinition script) {
         PublishedScriptSnapshot snapshot = script == null ? null : script.getPublishedSnapshot();
         return script != null
                 && !script.getId().startsWith(MANAGED_INTERNAL_PREFIX)
@@ -97,7 +99,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
                 && snapshot.getPackaging() == ScriptPackaging.TOOL;
     }
 
-    private boolean isVisibleAgentTool(AiAgentProfile profile) {
+    private static boolean isVisibleAgentTool(AiAgentProfile profile) {
         return profile != null
                 && profile.isEnabled()
                 && !profile.getId().startsWith(MANAGED_INTERNAL_PREFIX);
@@ -117,7 +119,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String description() {
-            String text = blankToNull(script.getDescription());
+            String text = ActionDockAiTools.blankToNull(script.getDescription());
             return text == null
                     ? "调用已发布脚本 " + displayName()
                     : "调用已发布脚本 " + displayName() + "。 " + text;
@@ -135,7 +137,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String displayName() {
-            return blankToNull(script.getName()) == null ? script.getId() : script.getName();
+            return ActionDockAiTools.blankToNull(script.getName()) == null ? script.getId() : script.getName();
         }
 
         @Override
@@ -177,19 +179,14 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
                 Map<String, Object> output = new LinkedHashMap<>();
                 output.put("executionId", record.getId());
                 output.put("status", record.getStatus().name());
-                output.put("data", executionOutputProjector.project(record.getOutput(), publishedDefinition.getOutputSchema()));
+                output.put("data", ExecutionOutputProjector.project(record.getOutput(), publishedDefinition.getOutputSchema()));
                 output.put("errorMessage", record.getErrorMessage());
                 if (record.getStatus() == org.team4u.actiondock.domain.model.ExecutionStatus.FAILED) {
                     return new AiToolExecutionResult(false, output, record.getErrorMessage(), System.currentTimeMillis() - started);
                 }
                 return AiToolExecutionResult.success(output, System.currentTimeMillis() - started);
             } catch (RuntimeException exception) {
-                Map<String, Object> output = new LinkedHashMap<>();
-                output.put("executionId", null);
-                output.put("status", "FAILED");
-                output.put("data", Map.of());
-                output.put("errorMessage", exception.getMessage());
-                return new AiToolExecutionResult(false, output, exception.getMessage(), System.currentTimeMillis() - started);
+                return toErrorResult("executionId", started, exception);
             }
         }
     }
@@ -208,7 +205,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String description() {
-            String text = blankToNull(agentProfile.getDescription());
+            String text = ActionDockAiTools.blankToNull(agentProfile.getDescription());
             return text == null
                     ? "调用已启用 Agent " + displayName() + "，输入统一为 message + input。"
                     : "调用已启用 Agent " + displayName() + "。 " + text;
@@ -226,7 +223,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String displayName() {
-            return blankToNull(agentProfile.getName()) == null ? agentProfile.getId() : agentProfile.getName();
+            return ActionDockAiTools.blankToNull(agentProfile.getName()) == null ? agentProfile.getId() : agentProfile.getName();
         }
 
         @Override
@@ -256,66 +253,87 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
         public AiToolExecutionResult invoke(Map<String, Object> input, AiToolExecutionContext context) {
             long started = System.currentTimeMillis();
             try {
-                String message = stringValue(input == null ? null : input.get("message"));
-                if (message == null || message.isBlank()) {
-                    throw new IllegalArgumentException("message 不能为空");
-                }
+                String message = requireMessage(input);
                 List<String> chain = agentProfileChain(context);
-                if (chain.contains(agentProfile.getId())) {
-                    throw new IllegalStateException("检测到 Agent 工具递归调用链: " + String.join(" -> ", append(chain, agentProfile.getId())));
-                }
-                Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
-                metadata.put(AGENT_PROFILE_CHAIN_METADATA_KEY, append(chain, agentProfile.getId()));
+                checkRecursiveChain(chain);
+                Map<String, Object> metadata = buildChainMetadata(context, chain);
 
-                @SuppressWarnings("unchecked")
-                Map<String, Object> structuredInput = input != null && input.get("input") instanceof Map<?, ?> map
-                        ? new LinkedHashMap<>((Map<String, Object>) map)
-                        : Map.of();
                 AiAgentRunResult result = aiAgentRuntimeSupplier.get().run(
-                        new AiAgentRunRequest(
-                                agentProfile.getId(),
-                                List.of(new AiMessage("user", message)),
-                                structuredInput,
-                                Map.of()
-                        ),
-                        new AiAgentRunContext(
-                                AiCallerType.AGENT,
-                                context == null ? null : context.scriptId(),
-                                context == null ? null : context.executionId(),
-                                context == null ? null : context.userId(),
-                                metadata
-                        )
+                        buildRunRequest(message, input),
+                        buildRunContext(context, metadata)
                 );
 
-                Map<String, Object> output = new LinkedHashMap<>();
-                output.put("runId", result.runId());
-                output.put("status", result.status() == null ? AiRunStatus.SUCCESS.name() : result.status().name());
-                output.put("data", result.data() == null ? Map.of() : result.data());
-                output.put("errorMessage", result.errorMessage());
-                if (result.status() != AiRunStatus.SUCCESS) {
-                    String errorMessage = result.errorMessage() == null ? "子 Agent 执行失败: " + output.get("status") : result.errorMessage();
-                    return new AiToolExecutionResult(false, output, errorMessage, System.currentTimeMillis() - started);
-                }
-                return AiToolExecutionResult.success(output, System.currentTimeMillis() - started);
+                return toAgentResult(result, started);
             } catch (RuntimeException exception) {
-                Map<String, Object> output = new LinkedHashMap<>();
-                output.put("runId", null);
-                output.put("status", AiRunStatus.FAILED.name());
-                output.put("data", Map.of());
-                output.put("errorMessage", exception.getMessage());
-                return new AiToolExecutionResult(false, output, exception.getMessage(), System.currentTimeMillis() - started);
+                return toErrorResult("runId", started, exception);
             }
+        }
+
+        private String requireMessage(Map<String, Object> input) {
+            String message = ObjectValues.stringValue(input == null ? null : input.get("message"));
+            if (message == null || message.isBlank()) {
+                throw new IllegalArgumentException("message 不能为空");
+            }
+            return message;
+        }
+
+        private void checkRecursiveChain(List<String> chain) {
+            if (chain.contains(agentProfile.getId())) {
+                throw new IllegalStateException("检测到 Agent 工具递归调用链: " + String.join(" -> ", append(chain, agentProfile.getId())));
+            }
+        }
+
+        private Map<String, Object> buildChainMetadata(AiToolExecutionContext context, List<String> chain) {
+            Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
+            metadata.put(AGENT_PROFILE_CHAIN_METADATA_KEY, append(chain, agentProfile.getId()));
+            return metadata;
+        }
+
+        @SuppressWarnings("unchecked")
+        private AiAgentRunRequest buildRunRequest(String message, Map<String, Object> input) {
+            Map<String, Object> structuredInput = input != null && input.get("input") instanceof Map<?, ?> map
+                    ? new LinkedHashMap<>((Map<String, Object>) map)
+                    : Map.of();
+            return new AiAgentRunRequest(
+                    agentProfile.getId(),
+                    List.of(new AiMessage("user", message)),
+                    structuredInput,
+                    Map.of()
+            );
+        }
+
+        private AiAgentRunContext buildRunContext(AiToolExecutionContext context, Map<String, Object> metadata) {
+            return new AiAgentRunContext(
+                    AiCallerType.AGENT,
+                    context == null ? null : context.scriptId(),
+                    context == null ? null : context.executionId(),
+                    context == null ? null : context.userId(),
+                    metadata
+            );
+        }
+
+        private AiToolExecutionResult toAgentResult(AiAgentRunResult result, long started) {
+            Map<String, Object> output = new LinkedHashMap<>();
+            output.put("runId", result.runId());
+            output.put("status", result.status() == null ? AiRunStatus.SUCCESS.name() : result.status().name());
+            output.put("data", result.data() == null ? Map.of() : result.data());
+            output.put("errorMessage", result.errorMessage());
+            if (result.status() != AiRunStatus.SUCCESS) {
+                String errorMessage = result.errorMessage() == null ? "子 Agent 执行失败: " + output.get("status") : result.errorMessage();
+                return new AiToolExecutionResult(false, output, errorMessage, System.currentTimeMillis() - started);
+            }
+            return AiToolExecutionResult.success(output, System.currentTimeMillis() - started);
         }
     }
 
-    private List<String> agentProfileChain(AiToolExecutionContext context) {
+    private static List<String> agentProfileChain(AiToolExecutionContext context) {
         List<String> chain = new ArrayList<>();
         if (context != null && context.metadata() != null) {
             Object existing = context.metadata().get(AGENT_PROFILE_CHAIN_METADATA_KEY);
             if (existing instanceof List<?> list) {
                 list.stream().map(String::valueOf).forEach(chain::add);
             }
-            String parentAgentProfile = stringValue(context.metadata().get("agentProfile"));
+            String parentAgentProfile = ObjectValues.stringValue(context.metadata().get("agentProfile"));
             if (parentAgentProfile != null && !parentAgentProfile.isBlank() && !chain.contains(parentAgentProfile)) {
                 chain.add(parentAgentProfile);
             }
@@ -323,7 +341,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
         return List.copyOf(chain);
     }
 
-    private List<String> append(List<String> values, String next) {
+    private static List<String> append(List<String> values, String next) {
         List<String> result = new ArrayList<>(values == null ? List.of() : values);
         result.add(next);
         return List.copyOf(result);
@@ -337,11 +355,13 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
         return Map.of("type", "string", "description", description);
     }
 
-    private static String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
+    private static AiToolExecutionResult toErrorResult(String idKey, long started, RuntimeException exception) {
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put(idKey, null);
+        output.put("status", AiRunStatus.FAILED.name());
+        output.put("data", Map.of());
+        output.put("errorMessage", exception.getMessage());
+        return new AiToolExecutionResult(false, output, exception.getMessage(), System.currentTimeMillis() - started);
     }
 
-    private static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
-    }
 }

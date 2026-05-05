@@ -7,10 +7,9 @@ import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginManifestLoader;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
+import org.team4u.actiondock.plugin.api.PluginActionManifest;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +22,7 @@ class PluginViewMapper {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PluginViewMapper.class);
 
-    PluginView toPluginView(PluginRegistration registration, DefaultPluginManager pluginManager) {
+    static PluginView toPluginView(PluginRegistration registration, DefaultPluginManager pluginManager) {
         PluginWrapper wrapper = pluginManager.getPlugin(registration.getPluginId());
         String state = wrapper == null
                 ? (registration.isEnabled() ? "ENABLED" : "DISABLED")
@@ -45,7 +44,7 @@ class PluginViewMapper {
                         .toList());
     }
 
-    PluginReferenceView toInstalledPluginReferenceView(PluginRegistration registration) {
+    static PluginReferenceView toInstalledPluginReferenceView(PluginRegistration registration) {
         return new PluginReferenceView()
                 .setPluginId(registration.getPluginId())
                 .setName(registration.getName())
@@ -58,7 +57,7 @@ class PluginViewMapper {
                         .toList());
     }
 
-    PluginReferenceView toSystemPluginReferenceView(String pluginId, ActionDockPlugin plugin) {
+    static PluginReferenceView toSystemPluginReferenceView(String pluginId, ActionDockPlugin plugin) {
         PluginManifest manifest;
         try {
             manifest = PluginManifestLoader.load(plugin.getClass(), pluginId);
@@ -74,13 +73,7 @@ class PluginViewMapper {
                 .setSourceType(PluginReferenceSourceType.SYSTEM)
                 .setStarted(true)
                 .setActions(manifest.getActions().stream()
-                        .map(action -> new PluginActionView()
-                                .setAction(action.getAction())
-                                .setTitle(action.getTitle())
-                                .setDescription(action.getDescription())
-                                .setInputSchema(action.getInputSchema())
-                                .setOutputSchema(action.getOutputSchema())
-                                .setExampleArgs(action.getExampleArgs()))
+                        .map(PluginViewMapper::toActionView)
                         .toList());
     }
 
@@ -92,6 +85,26 @@ class PluginViewMapper {
                 .setInputSchema(actionMetadata.getInputSchema())
                 .setOutputSchema(actionMetadata.getOutputSchema())
                 .setExampleArgs(actionMetadata.getExampleArgs());
+    }
+
+    static PluginActionView toActionView(PluginActionManifest action) {
+        return new PluginActionView()
+                .setAction(action.getAction())
+                .setTitle(action.getTitle())
+                .setDescription(action.getDescription())
+                .setInputSchema(action.getInputSchema())
+                .setOutputSchema(action.getOutputSchema())
+                .setExampleArgs(action.getExampleArgs());
+    }
+
+    static PluginActionMetadata toActionMetadata(PluginActionManifest action) {
+        return new PluginActionMetadata()
+                .setAction(action.getAction())
+                .setTitle(action.getTitle())
+                .setDescription(action.getDescription())
+                .setInputSchema(action.getInputSchema())
+                .setOutputSchema(action.getOutputSchema())
+                .setExampleArgs(action.getExampleArgs());
     }
 
     static PluginRegistration toRegistration(PluginManifest manifest,
@@ -108,13 +121,7 @@ class PluginViewMapper {
                 .setConfigSchema(manifest.getConfigSchema())
                 .setDefaultConfig(manifest.getDefaultConfig())
                 .setActions(manifest.getActions().stream()
-                        .map(action -> new PluginActionMetadata()
-                                .setAction(action.getAction())
-                                .setTitle(action.getTitle())
-                                .setDescription(action.getDescription())
-                                .setInputSchema(action.getInputSchema())
-                                .setOutputSchema(action.getOutputSchema())
-                                .setExampleArgs(action.getExampleArgs()))
+                        .map(PluginViewMapper::toActionMetadata)
                         .toList())
                 .setEnabled(enabled)
                 .setInstalledAt(existing == null ? now : existing.getInstalledAt())

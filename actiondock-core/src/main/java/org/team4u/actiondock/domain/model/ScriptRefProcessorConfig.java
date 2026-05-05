@@ -1,8 +1,11 @@
 package org.team4u.actiondock.domain.model;
 
 public class ScriptRefProcessorConfig {
+
+    public static final String DEFAULT_VERSION_MODE = "PUBLISHED";
+
     private String scriptId;
-    private String versionMode = "PUBLISHED";
+    private String versionMode = DEFAULT_VERSION_MODE;
 
     public String getScriptId() {
         return scriptId;
@@ -18,7 +21,7 @@ public class ScriptRefProcessorConfig {
     }
 
     public ScriptRefProcessorConfig setVersionMode(String versionMode) {
-        this.versionMode = versionMode == null || versionMode.isBlank() ? "PUBLISHED" : versionMode;
+        this.versionMode = versionMode == null || versionMode.isBlank() ? DEFAULT_VERSION_MODE : versionMode;
         return this;
     }
 }

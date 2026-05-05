@@ -13,7 +13,6 @@ import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ProcessorContext;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
-import org.team4u.actiondock.domain.model.ProcessorMode;
 import org.team4u.actiondock.domain.model.ProcessorResult;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.model.SubmitMode;
@@ -75,7 +74,7 @@ public class DefaultProcessorEngine implements ProcessorEngine {
         }
     }
 
-    private Map<String, Object> executeJsonPath(ProcessorDefinition processor, ProcessorContext context) {
+    private static Map<String, Object> executeJsonPath(ProcessorDefinition processor, ProcessorContext context) {
         if (processor.getJsonPath() == null || processor.getJsonPath().getFields().isEmpty()) {
             throw new IllegalArgumentException("JSON_PATH 缺少 fields 配置");
         }

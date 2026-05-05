@@ -34,7 +34,7 @@ public class SharedStateController {
 
     @GetMapping
     public ApiResponse<List<SharedStateSummaryView>> list(@RequestParam String namespace) {
-        return ApiResponse.success(sharedStateApplicationService.list(namespace).stream().map(this::toSummaryView).toList());
+        return ApiResponse.success(sharedStateApplicationService.list(namespace).stream().map(SharedStateController::toSummaryView).toList());
     }
 
     @GetMapping("/detail")
@@ -64,18 +64,7 @@ public class SharedStateController {
 
     @PutMapping
     public ApiResponse<SharedStateDetailView> update(@RequestBody SharedStateRequest request) {
-        return ApiResponse.success(
-                toDetailView(sharedStateApplicationService.put(
-                        request == null ? null : request.getNamespace(),
-                        request == null ? null : request.getKey(),
-                        request == null ? null : request.getValue(),
-                        request != null && request.isSecret(),
-                        request == null ? null : request.getExpiresAt(),
-                        null,
-                        null
-                )),
-                "共享状态已更新"
-        );
+        return create(request);
     }
 
     @PostMapping("/cas")
@@ -107,8 +96,11 @@ public class SharedStateController {
         return ApiResponse.success(sharedStateApplicationService.purgeExpired(namespace), "过期共享状态已清理");
     }
 
-    private SharedStateSummaryView toSummaryView(SharedStateEntry entry) {
-        return new SharedStateSummaryView()
+    /**
+     * 构建共享状态视图的基础字段。
+     */
+    private static <T extends SharedStateSummaryView> T buildBaseView(T view, SharedStateEntry entry) {
+        return (T) view
                 .setNamespace(entry.getNamespace())
                 .setKey(entry.getKey())
                 .setSecret(entry.isSecret())
@@ -120,18 +112,12 @@ public class SharedStateController {
                 .setLastWriterExecutionId(entry.getLastWriterExecutionId());
     }
 
-    private SharedStateDetailView toDetailView(SharedStateEntry entry) {
-        SharedStateDetailView view = new SharedStateDetailView();
-        view.setValue(entry.getValue())
-                .setNamespace(entry.getNamespace())
-                .setKey(entry.getKey())
-                .setSecret(entry.isSecret())
-                .setVersion(entry.getVersion())
-                .setExpiresAt(entry.getExpiresAt())
-                .setCreatedAt(entry.getCreatedAt())
-                .setUpdatedAt(entry.getUpdatedAt())
-                .setLastWriterScriptId(entry.getLastWriterScriptId())
-                .setLastWriterExecutionId(entry.getLastWriterExecutionId());
-        return view;
+    private static SharedStateSummaryView toSummaryView(SharedStateEntry entry) {
+        return buildBaseView(new SharedStateSummaryView(), entry);
+    }
+
+    private static SharedStateDetailView toDetailView(SharedStateEntry entry) {
+        return buildBaseView(new SharedStateDetailView(), entry)
+                .setValue(entry.getValue());
     }
 }

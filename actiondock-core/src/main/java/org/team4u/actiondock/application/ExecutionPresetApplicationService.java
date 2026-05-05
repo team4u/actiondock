@@ -4,7 +4,6 @@ import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -103,19 +102,19 @@ public class ExecutionPresetApplicationService {
         executionPresetRepository.deleteByScriptId(scriptId);
     }
 
-    private void ensurePresetBelongsToScript(ExecutionPreset preset, String scriptId) {
+    private static void ensurePresetBelongsToScript(ExecutionPreset preset, String scriptId) {
         if (!preset.getScriptId().equals(scriptId)) {
             throw new IllegalArgumentException("Preset does not belong to script: " + preset.getId());
         }
     }
 
-    private void ensureEditable(ExecutionPreset preset) {
+    private static void ensureEditable(ExecutionPreset preset) {
         if (!preset.isEditable()) {
             throw new IllegalArgumentException("托管预设不允许直接修改: " + preset.getId());
         }
     }
 
-    private String normalize(String value, String message) {
+    private static String normalize(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(message);
         }

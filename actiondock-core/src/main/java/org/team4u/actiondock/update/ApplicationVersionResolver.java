@@ -9,6 +9,7 @@ import java.util.Properties;
  * 从 Maven 产物元数据中解析应用版本。
  */
 public final class ApplicationVersionResolver {
+    private static final System.Logger log = System.getLogger(ApplicationVersionResolver.class.getName());
     private ApplicationVersionResolver() {
     }
 
@@ -27,8 +28,8 @@ public final class ApplicationVersionResolver {
                     return version.trim();
                 }
             }
-        } catch (IOException ignored) {
-            // Ignore and continue to package metadata fallback.
+        } catch (IOException exception) {
+            log.log(System.Logger.Level.DEBUG, "读取 pom.properties 失败，回退到 Package 元数据: {0}", exception.getMessage());
         }
 
         Package targetPackage = anchorClass.getPackage();

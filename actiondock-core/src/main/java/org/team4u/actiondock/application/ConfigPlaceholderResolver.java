@@ -1,6 +1,5 @@
 package org.team4u.actiondock.application;
 
-import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 
 import java.util.ArrayList;

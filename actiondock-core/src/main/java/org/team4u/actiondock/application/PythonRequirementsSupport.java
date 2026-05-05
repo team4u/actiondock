@@ -28,61 +28,60 @@ public final class PythonRequirementsSupport {
             return new ParsedPythonRequirements(null, null, List.of());
         }
 
-        List<String> packageLines = new ArrayList<>();
-        String indexUrl = null;
+        ParseState state = new ParseState();
         String[] lines = normalized.split("\n", -1);
         for (int index = 0; index < lines.length; index += 1) {
-            String rawLine = lines[index];
-            String line = rawLine.trim();
-            if (line.isEmpty() || line.startsWith("#")) {
-                continue;
-            }
-
-            if (line.startsWith("--")) {
-                if (line.startsWith("--index-url ")) {
-                    if (indexUrl != null) {
-                        throw new InvalidPythonRequirementsException(
-                                "INVALID_PYTHON_REQUIREMENTS",
-                                scriptId,
-                                index + 1,
-                                rawLine,
-                                "仅支持声明一个 --index-url"
-                        );
-                    }
-                    String value = line.substring("--index-url ".length()).trim();
-                    if (value.isEmpty()) {
-                        throw new InvalidPythonRequirementsException(
-                                "INVALID_PYTHON_REQUIREMENTS",
-                                scriptId,
-                                index + 1,
-                                rawLine,
-                                "--index-url 不能为空"
-                        );
-                    }
-                    indexUrl = value;
-                    continue;
-                }
-                throw unsupported(scriptId, index + 1, rawLine, "暂不支持该 pip 选项");
-            }
-
-            if (line.startsWith("-")) {
-                throw unsupported(scriptId, index + 1, rawLine, "暂不支持该 requirements 语法");
-            }
-            if (line.startsWith("git+") || line.contains("://") || line.startsWith(".")) {
-                throw unsupported(scriptId, index + 1, rawLine, "暂不支持 URL、本地路径或 VCS 依赖");
-            }
-            if (line.contains("@ ")) {
-                throw unsupported(scriptId, index + 1, rawLine, "暂不支持 direct URL 依赖");
-            }
-
-            packageLines.add(line);
+            processLine(scriptId, lines[index], index + 1, state);
         }
 
-        return new ParsedPythonRequirements(
-                normalized,
-                indexUrl,
-                List.copyOf(packageLines)
-        );
+        return new ParsedPythonRequirements(normalized, state.indexUrl, List.copyOf(state.packageLines));
+    }
+
+    private static void processLine(String scriptId, String rawLine, int lineNumber, ParseState state) {
+        String line = rawLine.trim();
+        if (line.isEmpty() || line.startsWith("#")) {
+            return;
+        }
+        if (line.startsWith("--")) {
+            processOption(scriptId, rawLine, lineNumber, line, state);
+            return;
+        }
+        if (line.startsWith("-")) {
+            throw unsupported(scriptId, lineNumber, rawLine, "暂不支持该 requirements 语法");
+        }
+        if (line.startsWith("git+") || line.contains("://") || line.startsWith(".")) {
+            throw unsupported(scriptId, lineNumber, rawLine, "暂不支持 URL、本地路径或 VCS 依赖");
+        }
+        if (line.contains("@ ")) {
+            throw unsupported(scriptId, lineNumber, rawLine, "暂不支持 direct URL 依赖");
+        }
+        state.packageLines.add(line);
+    }
+
+    private static void processOption(String scriptId, String rawLine, int lineNumber, String line, ParseState state) {
+        if (line.startsWith("--index-url ")) {
+            if (state.indexUrl != null) {
+                throw new InvalidPythonRequirementsException(
+                        "INVALID_PYTHON_REQUIREMENTS", scriptId, lineNumber, rawLine,
+                        "仅支持声明一个 --index-url"
+                );
+            }
+            String value = line.substring("--index-url ".length()).trim();
+            if (value.isEmpty()) {
+                throw new InvalidPythonRequirementsException(
+                        "INVALID_PYTHON_REQUIREMENTS", scriptId, lineNumber, rawLine,
+                        "--index-url 不能为空"
+                );
+            }
+            state.indexUrl = value;
+            return;
+        }
+        throw unsupported(scriptId, lineNumber, rawLine, "暂不支持该 pip 选项");
+    }
+
+    private static final class ParseState {
+        String indexUrl;
+        final List<String> packageLines = new ArrayList<>();
     }
 
     public static void validateScriptDefinition(ScriptDefinition definition) {

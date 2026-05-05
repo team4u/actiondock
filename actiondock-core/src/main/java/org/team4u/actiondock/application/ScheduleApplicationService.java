@@ -25,7 +25,6 @@ public class ScheduleApplicationService {
     private final ScriptScheduleRepository scriptScheduleRepository;
     private final ScriptRepository scriptRepository;
     private final ScheduleExpressionValidator scheduleExpressionValidator;
-    private final ScriptSchemaSupport scriptSchemaSupport;
     private final ConfigValueApplicationService configValueApplicationService;
 
     public ScheduleApplicationService(ScriptScheduleRepository scriptScheduleRepository,
@@ -41,7 +40,6 @@ public class ScheduleApplicationService {
         this.scriptScheduleRepository = scriptScheduleRepository;
         this.scriptRepository = scriptRepository;
         this.scheduleExpressionValidator = scheduleExpressionValidator;
-        this.scriptSchemaSupport = new ScriptSchemaSupport();
         this.configValueApplicationService = configValueApplicationService == null
                 ? ConfigValueApplicationService.disabled()
                 : configValueApplicationService;
@@ -85,7 +83,8 @@ public class ScheduleApplicationService {
      * @throws IllegalArgumentException 如果调度不存在
      */
     public ScriptSchedule getById(String scheduleId) {
-        return getByIdInternal(scheduleId);
+        return scriptScheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new IllegalArgumentException("调度不存在: " + scheduleId));
     }
 
     /**
@@ -142,7 +141,7 @@ public class ScheduleApplicationService {
                 .setInput(copy(schedule.getInput()))
                 .setEnabled(schedule.isEnabled())
                 .setUpdatedAt(now);
-        scriptSchemaSupport.validateInput(script.getId(),
+        ScriptSchemaSupport.validateInput(script.getId(),
                 configValueApplicationService.resolveMap(target.getInput()),
                 script.getPublishedSnapshot().getInputSchema());
         return scriptScheduleRepository.save(target);
@@ -238,22 +237,17 @@ public class ScheduleApplicationService {
                 .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + scriptId));
     }
 
-    private ScriptSchedule getByIdInternal(String scheduleId) {
-        return scriptScheduleRepository.findById(scheduleId)
-                .orElseThrow(() -> new IllegalArgumentException("调度不存在: " + scheduleId));
-    }
-
-    private void ensureScheduleBelongsToScript(ScriptSchedule schedule, String scriptId) {
+    private static void ensureScheduleBelongsToScript(ScriptSchedule schedule, String scriptId) {
         if (!schedule.getScriptId().equals(scriptId)) {
             throw new IllegalArgumentException("调度不属于该脚本: " + schedule.getId());
         }
     }
 
-    private Map<String, Object> copy(Map<String, Object> input) {
+    private static Map<String, Object> copy(Map<String, Object> input) {
         return input == null ? new LinkedHashMap<>() : SchemaValueCopier.copyMap(input);
     }
 
-    private void ensureEditable(ScriptSchedule schedule) {
+    private static void ensureEditable(ScriptSchedule schedule) {
         if (!schedule.isEditable()) {
             throw new IllegalArgumentException("团队定时任务为只读");
         }

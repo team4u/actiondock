@@ -9,42 +9,22 @@ import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.storage.jpa.entity.AiToolsetEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiToolsetRepository;
 
-import java.util.List;
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 
 @Component
-public class JpaAiToolsetRepositoryAdapter implements AiToolsetRepository {
-    private final SpringDataAiToolsetRepository repository;
+public class JpaAiToolsetRepositoryAdapter
+        extends AbstractJpaRepositoryAdapter<AiToolsetEntity, AiToolset, SpringDataAiToolsetRepository>
+        implements AiToolsetRepository {
+
     private final JsonCodec jsonCodec;
 
     public JpaAiToolsetRepositoryAdapter(SpringDataAiToolsetRepository repository, JsonCodec jsonCodec) {
-        this.repository = repository;
+        super(repository);
         this.jsonCodec = jsonCodec;
     }
 
     @Override
-    public AiToolset save(AiToolset toolset) {
-        return toDomain(repository.save(toEntity(toolset)));
-    }
-
-    @Override
-    public Optional<AiToolset> findById(String id) {
-        return repository.findById(id).map(this::toDomain);
-    }
-
-    @Override
-    public List<AiToolset> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
-    }
-
-    @Override
-    public void deleteById(String id) {
-        repository.deleteById(id);
-    }
-
-    private AiToolsetEntity toEntity(AiToolset toolset) {
+    protected AiToolsetEntity toEntity(AiToolset toolset) {
         AiToolsetEntity entity = new AiToolsetEntity();
         entity.setId(toolset.getId());
         entity.setName(toolset.getName());
@@ -58,7 +38,8 @@ public class JpaAiToolsetRepositoryAdapter implements AiToolsetRepository {
         return entity;
     }
 
-    private AiToolset toDomain(AiToolsetEntity entity) {
+    @Override
+    protected AiToolset toDomain(AiToolsetEntity entity) {
         return new AiToolset()
                 .setId(entity.getId())
                 .setName(entity.getName())
@@ -71,14 +52,7 @@ public class JpaAiToolsetRepositoryAdapter implements AiToolsetRepository {
                 .setUpdatedAt(entity.getUpdatedAt());
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Map<String, Object>> readToolOptions(String json) {
-        Map<String, Map<String, Object>> options = new LinkedHashMap<>();
-        jsonCodec.readMap(json).forEach((key, value) -> {
-            if (value instanceof Map<?, ?> map) {
-                options.put(key, new LinkedHashMap<>((Map<String, Object>) map));
-            }
-        });
-        return options;
+        return JpaJsonSupport.readToolOptions(jsonCodec, json);
     }
 }

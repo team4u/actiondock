@@ -27,7 +27,7 @@ public class ScriptSchemaSupport {
      * @param schema JSON Schema 格式的输入模式定义
      * @return 包含所有字段信息的模式摘要
      */
-    public SchemaSummary summarize(Map<String, Object> schema) {
+    public static SchemaSummary summarize(Map<String, Object> schema) {
         ParsedSchema parsedSchema = parse(schema);
         List<SchemaField> fields = parsedSchema.fields().stream()
                 .map(field -> new SchemaField(
@@ -55,7 +55,7 @@ public class ScriptSchemaSupport {
      * @param schema   JSON Schema 格式的输入模式定义
      * @throws InvalidExecutionInputException 如果输入参数不符合模式定义
      */
-    public void validateInput(String scriptId, Map<String, Object> input, Map<String, Object> schema) {
+    public static void validateInput(String scriptId, Map<String, Object> input, Map<String, Object> schema) {
         ParsedSchema parsedSchema = parse(schema);
         if (parsedSchema.fields().isEmpty()) {
             return;
@@ -65,57 +65,10 @@ public class ScriptSchemaSupport {
         List<SchemaFieldError> fieldErrors = new ArrayList<>();
         for (ParsedField field : parsedSchema.fields()) {
             if (!payload.containsKey(field.name())) {
-                if (field.required()) {
-                    fieldErrors.add(new SchemaFieldError(
-                            field.name(),
-                            "required",
-                            field.label() + " 必填",
-                            "present",
-                            "missing"
-                    ));
-                }
+                collectRequiredFieldError(field, fieldErrors);
                 continue;
             }
-
-            Object value = payload.get(field.name());
-            if (value == null) {
-                fieldErrors.add(new SchemaFieldError(
-                        field.name(),
-                        "type_mismatch",
-                        field.label() + " 不能为空",
-                        field.kind(),
-                        "null"
-                ));
-                continue;
-            }
-
-            if (!field.supported()) {
-                continue;
-            }
-
-            if (!matchesType(value, field.kind())) {
-                fieldErrors.add(new SchemaFieldError(
-                        field.name(),
-                        "type_mismatch",
-                        field.label() + " 类型应为 " + field.kind() + "，实际为 " + describeActualType(value),
-                        field.kind(),
-                        detectType(value)
-                ));
-                continue;
-            }
-
-            if (!field.enumValues().isEmpty()) {
-                String enumValue = String.valueOf(value);
-                if (!field.enumValues().contains(enumValue)) {
-                    fieldErrors.add(new SchemaFieldError(
-                            field.name(),
-                            "enum_mismatch",
-                            field.label() + " 必须是枚举值之一: " + String.join(", ", field.enumValues()),
-                            "enum(" + String.join(", ", field.enumValues()) + ")",
-                            enumValue
-                    ));
-                }
-            }
+            collectFieldTypeErrors(field, payload.get(field.name()), fieldErrors);
         }
 
         if (!fieldErrors.isEmpty()) {
@@ -123,7 +76,60 @@ public class ScriptSchemaSupport {
         }
     }
 
-    private ParsedSchema parse(Map<String, Object> schema) {
+    private static void collectRequiredFieldError(ParsedField field, List<SchemaFieldError> errors) {
+        if (field.required()) {
+            errors.add(new SchemaFieldError(
+                    field.name(),
+                    "required",
+                    field.label() + " 必填",
+                    "present",
+                    "missing"
+            ));
+        }
+    }
+
+    private static void collectFieldTypeErrors(ParsedField field, Object value, List<SchemaFieldError> errors) {
+        if (value == null) {
+            errors.add(new SchemaFieldError(
+                    field.name(),
+                    "type_mismatch",
+                    field.label() + " 不能为空",
+                    field.kind(),
+                    "null"
+            ));
+            return;
+        }
+
+        if (!field.supported()) {
+            return;
+        }
+
+        if (!matchesType(value, field.kind())) {
+            errors.add(new SchemaFieldError(
+                    field.name(),
+                    "type_mismatch",
+                    field.label() + " 类型应为 " + field.kind() + "，实际为 " + describeActualType(value),
+                    field.kind(),
+                    detectType(value)
+            ));
+            return;
+        }
+
+        if (!field.enumValues().isEmpty()) {
+            String enumValue = String.valueOf(value);
+            if (!field.enumValues().contains(enumValue)) {
+                errors.add(new SchemaFieldError(
+                        field.name(),
+                        "enum_mismatch",
+                        field.label() + " 必须是枚举值之一: " + String.join(", ", field.enumValues()),
+                        "enum(" + String.join(", ", field.enumValues()) + ")",
+                        enumValue
+                ));
+            }
+        }
+    }
+
+    private static ParsedSchema parse(Map<String, Object> schema) {
         if (schema == null || schema.isEmpty()) {
             return new ParsedSchema(List.of());
         }
@@ -139,7 +145,7 @@ public class ScriptSchemaSupport {
         return new ParsedSchema(fields);
     }
 
-    private ParsedField parseField(String name, Object rawMeta, boolean required) {
+    private static ParsedField parseField(String name, Object rawMeta, boolean required) {
         Map<String, Object> meta = toObjectMap(rawMeta);
         String label = stringValue(meta.get("title"));
         if (label == null || label.isBlank()) {
@@ -163,7 +169,7 @@ public class ScriptSchemaSupport {
         return new ParsedField(name, label, kind, required, description, List.of(), defaultValue, examples, supported);
     }
 
-    private boolean matchesType(Object value, String kind) {
+    private static boolean matchesType(Object value, String kind) {
         return switch (kind) {
             case "string", "enum" -> value instanceof String;
             case "boolean" -> value instanceof Boolean;
@@ -173,7 +179,7 @@ public class ScriptSchemaSupport {
         };
     }
 
-    private boolean isInteger(Object value) {
+    private static boolean isInteger(Object value) {
         if (!(value instanceof Number number)) {
             return false;
         }
@@ -190,7 +196,7 @@ public class ScriptSchemaSupport {
         return false;
     }
 
-    private String detectType(Object value) {
+    private static String detectType(Object value) {
         if (value == null) {
             return "null";
         }
@@ -212,7 +218,7 @@ public class ScriptSchemaSupport {
         return value.getClass().getSimpleName();
     }
 
-    private String describeActualType(Object value) {
+    private static String describeActualType(Object value) {
         String logicalType = detectType(value);
         if (value == null) {
             return logicalType;
@@ -223,12 +229,12 @@ public class ScriptSchemaSupport {
         return logicalType + " (" + value.getClass().getName() + ")";
     }
 
-    private boolean isSupportedType(String type) {
+    private static boolean isSupportedType(String type) {
         return "string".equals(type) || "number".equals(type) || "integer".equals(type) || "boolean".equals(type);
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> toObjectMap(Object value) {
+    private static Map<String, Object> toObjectMap(Object value) {
         if (!(value instanceof Map<?, ?> source)) {
             return Map.of();
         }
@@ -237,7 +243,7 @@ public class ScriptSchemaSupport {
         return result;
     }
 
-    private Set<String> toStringSet(Object value) {
+    private static Set<String> toStringSet(Object value) {
         if (!(value instanceof List<?> items)) {
             return Set.of();
         }
@@ -249,7 +255,7 @@ public class ScriptSchemaSupport {
         return values;
     }
 
-    private List<String> toStringList(Object value) {
+    private static List<String> toStringList(Object value) {
         if (!(value instanceof List<?> items)) {
             return List.of();
         }
@@ -263,14 +269,14 @@ public class ScriptSchemaSupport {
         return List.copyOf(values);
     }
 
-    private List<Object> toObjectList(Object value) {
+    private static List<Object> toObjectList(Object value) {
         if (!(value instanceof List<?> items)) {
             return List.of();
         }
         return List.copyOf(items);
     }
 
-    private String stringValue(Object value) {
+    private static String stringValue(Object value) {
         return value instanceof String text ? text : null;
     }
 

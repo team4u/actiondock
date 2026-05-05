@@ -67,4 +67,12 @@ public class ScriptDependency {
     public int hashCode() {
         return Objects.hash(scriptId, repositoryId, toolId, versionRange);
     }
+
+    public ScriptDependency copy() {
+        return new ScriptDependency()
+                .setScriptId(scriptId)
+                .setRepositoryId(repositoryId)
+                .setToolId(toolId)
+                .setVersionRange(versionRange);
+    }
 }

@@ -1,5 +1,9 @@
 package org.team4u.actiondock.repository;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.REPO_TYPE_HTTP;
+
+import org.team4u.actiondock.skill.SkillFileUtils;
+
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -17,7 +21,7 @@ public class LocalPluginArtifactResolver implements PluginArtifactResolver {
 
     @Override
     public PluginArtifact resolve(PluginArtifactRef artifact, PluginArtifactContext context) {
-        if ("HTTP".equals(context.repository().getType())) {
+        if (REPO_TYPE_HTTP.equals(context.repository().getType())) {
             throw new IllegalArgumentException("HTTP 仓库不支持 local:// 插件制品");
         }
         URI uri = URI.create(artifact.uri());
@@ -27,7 +31,7 @@ public class LocalPluginArtifactResolver implements PluginArtifactResolver {
         }
         validateRelativePath(relativePath);
 
-        Path repositoryRoot = context.repositoryRoot().toAbsolutePath().normalize();
+        Path repositoryRoot = SkillFileUtils.normalizePath(context.repositoryRoot());
         Path artifactPath = repositoryRoot.resolve(relativePath).normalize();
         if (!artifactPath.startsWith(repositoryRoot)) {
             throw new IllegalArgumentException("local artifact 越界访问被拒绝");
@@ -45,23 +49,14 @@ public class LocalPluginArtifactResolver implements PluginArtifactResolver {
         }
     }
 
-    private void validateRelativePath(String path) {
-        if (path == null || path.isBlank()) {
-            throw new IllegalArgumentException("local artifact 路径不能为空");
-        }
-        if (path.contains("..")) {
-            throw new IllegalArgumentException("local artifact 不允许包含 ..");
-        }
+    private static void validateRelativePath(String path) {
+        RepositoryVersionUtils.validateRelativePath(path, "local artifact");
         if (WINDOWS_ABSOLUTE_PATH.matcher(path).matches()) {
-            throw new IllegalArgumentException("local artifact 不允许使用绝对路径");
-        }
-        Path parsed = Path.of(path);
-        if (parsed.isAbsolute()) {
             throw new IllegalArgumentException("local artifact 不允许使用绝对路径");
         }
     }
 
-    private String resolveFileName(PluginArtifactRef artifact, Path path) {
+    private static String resolveFileName(PluginArtifactRef artifact, Path path) {
         if (artifact.fileName() != null && !artifact.fileName().isBlank()) {
             return artifact.fileName();
         }

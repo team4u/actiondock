@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
+
 /**
  * 脚本应用服务，提供脚本定义的 CRUD 操作和发布管理。
  * <p>
@@ -23,6 +25,7 @@ import java.util.UUID;
  * @author jay.wu
  */
 public class ScriptApplicationService {
+
     private final ScriptRepository scriptRepository;
     private final ScriptEngine scriptEngine;
     private final ScriptScheduleRepository scriptScheduleRepository;
@@ -105,8 +108,6 @@ public class ScriptApplicationService {
      *
      * @return 脚本定义列表
      */
-    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
-
     public List<ScriptDefinition> list() {
         return scriptRepository.findAll();
     }
@@ -154,9 +155,7 @@ public class ScriptApplicationService {
      */
     public ScriptDefinition publish(String id) {
         ScriptDefinition definition = get(id);
-        definition.setPublishedSnapshot(definition.snapshotCurrent());
-        definition.setStatus(ScriptStatus.PUBLISHED);
-        definition.setVersion((definition.getVersion() == null ? 0 : definition.getVersion()) + 1);
+        definition.publish();
         definition.setUpdatedAt(LocalDateTime.now());
         return scriptRepository.save(definition);
     }
@@ -204,7 +203,7 @@ public class ScriptApplicationService {
         return saved;
     }
 
-    private ScriptDefinition copyCurrentDefinition(ScriptDefinition source) {
+    private static ScriptDefinition copyCurrentDefinition(ScriptDefinition source) {
         return new ScriptDefinition()
                 .setId(source.getId())
                 .setName(source.getName())
@@ -257,7 +256,7 @@ public class ScriptApplicationService {
         }
     }
 
-    private void ensureEditable(ScriptDefinition definition) {
+    private static void ensureEditable(ScriptDefinition definition) {
         if (!definition.isEditable()) {
             throw new IllegalArgumentException("仓库工具为只读，请先 Fork");
         }

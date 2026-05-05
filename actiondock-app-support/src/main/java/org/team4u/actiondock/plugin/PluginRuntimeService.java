@@ -4,9 +4,11 @@ import org.pf4j.DefaultPluginManager;
 import org.pf4j.PluginState;
 import org.pf4j.PluginWrapper;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
+import org.team4u.actiondock.application.MapValueConverter;
 import org.team4u.actiondock.application.ErrorDetailSupport;
 import org.team4u.actiondock.application.ExecutionOutputProjector;
 import org.team4u.actiondock.config.AppProperties;
+import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.domain.model.PluginActionMetadata;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -31,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,10 +60,8 @@ public class PluginRuntimeService {
     private final DefaultPluginManager pluginManager;
     private final Map<String, ActionDockPlugin> systemPlugins;
     private final Map<String, PluginManifest> manifestCache;
-    private final ExecutionOutputProjector executionOutputProjector;
     private final ConfigValueApplicationService configValueApplicationService;
     private final PluginConfigManager configManager;
-    private final PluginViewMapper viewMapper;
     private final boolean enabled;
 
     private PluginRuntimeService() {
@@ -70,10 +71,8 @@ public class PluginRuntimeService {
         this.pluginManager = null;
         this.systemPlugins = Map.of();
         this.manifestCache = Map.of();
-        this.executionOutputProjector = null;
         this.configValueApplicationService = ConfigValueApplicationService.disabled();
         this.configManager = null;
-        this.viewMapper = null;
         this.enabled = false;
     }
 
@@ -106,20 +105,18 @@ public class PluginRuntimeService {
                                 List<ActionDockPlugin> systemPlugins) {
         this.pluginRegistryRepository = pluginRegistryRepository;
         this.scriptRepository = scriptRepository;
-        this.pluginsRoot = Path.of(properties == null || properties.getDir() == null || properties.getDir().isBlank()
+        this.pluginsRoot = SkillFileUtils.normalizePath(Path.of(properties == null || properties.getDir() == null || properties.getDir().isBlank()
                 ? AppProperties.defaultPluginsDir()
-                : properties.getDir()).toAbsolutePath().normalize();
+                : properties.getDir()));
         Path configRoot = this.pluginsRoot.resolve(".actiondock-config");
         this.pluginManager = new DefaultPluginManager(this.pluginsRoot);
         this.systemPlugins = systemPlugins == null ? Map.of() : systemPlugins.stream()
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(ActionDockPlugin::id, plugin -> plugin));
         this.manifestCache = new HashMap<>();
-        this.executionOutputProjector = new ExecutionOutputProjector();
         this.configValueApplicationService = configValueApplicationService == null
                 ? ConfigValueApplicationService.disabled()
                 : configValueApplicationService;
         this.configManager = new PluginConfigManager(jsonCodec, configRoot, configValueApplicationService);
-        this.viewMapper = new PluginViewMapper();
         this.enabled = true;
         initialize();
     }
@@ -132,68 +129,44 @@ public class PluginRuntimeService {
         if (!enabled) {
             return List.of();
         }
-        lock.readLock().lock();
-        try {
-            return pluginRegistryRepository.findAll().stream()
-                    .sorted(Comparator.comparing(PluginRegistration::getPluginId))
-                    .map(reg -> viewMapper.toPluginView(reg, pluginManager))
-                    .toList();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return withReadLock(() -> pluginRegistryRepository.findAll().stream()
+                .sorted(Comparator.comparing(PluginRegistration::getPluginId))
+                .map(reg -> PluginViewMapper.toPluginView(reg, pluginManager))
+                .toList());
     }
 
     public List<PluginReferenceView> listPluginReferences() {
         if (!enabled) {
             return List.of();
         }
-        lock.readLock().lock();
-        try {
+        return withReadLock(() -> {
             List<PluginReferenceView> references = new ArrayList<>();
             pluginRegistryRepository.findAll().stream()
                     .filter(registration -> isLoadedAndStarted(registration.getPluginId()))
                     .sorted(Comparator.comparing(PluginRegistration::getPluginId))
-                    .map(viewMapper::toInstalledPluginReferenceView)
+                    .map(PluginViewMapper::toInstalledPluginReferenceView)
                     .forEach(references::add);
             systemPlugins.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> viewMapper.toSystemPluginReferenceView(entry.getKey(), entry.getValue()))
+                    .map(entry -> PluginViewMapper.toSystemPluginReferenceView(entry.getKey(), entry.getValue()))
                     .filter(Objects::nonNull)
                     .forEach(references::add);
             return references.stream()
                     .sorted(Comparator.comparing(PluginReferenceView::getPluginId))
                     .toList();
-        } finally {
-            lock.readLock().unlock();
-        }
+        });
     }
 
     public PluginView get(String pluginId) {
-        lock.readLock().lock();
-        try {
-            return viewMapper.toPluginView(requireRegistration(pluginId), pluginManager);
-        } finally {
-            lock.readLock().unlock();
-        }
+        return withReadLock(() -> PluginViewMapper.toPluginView(requireRegistration(pluginId), pluginManager));
     }
 
     public PluginConfigView getConfig(String pluginId) {
-        lock.readLock().lock();
-        try {
-            PluginRegistration registration = requireRegistration(pluginId);
-            return new PluginConfigView()
-                    .setPluginId(pluginId)
-                    .setConfigSchema(registration.getConfigSchema())
-                    .setDefaultConfig(registration.getDefaultConfig())
-                    .setConfig(configManager.loadRawEffectiveConfig(registration.getDefaultConfig(), pluginId));
-        } finally {
-            lock.readLock().unlock();
-        }
+        return withReadLock(() -> buildConfigView(pluginId, requireRegistration(pluginId)));
     }
 
     public PluginConfigView saveConfig(String pluginId, Map<String, Object> config) {
-        lock.writeLock().lock();
-        try {
+        return withWriteLock(() -> {
             PluginRegistration registration = requireRegistration(pluginId);
             Map<String, Object> normalized = PluginConfigManager.normalizeConfig(config);
             Map<String, Object> effectiveConfig = configManager.resolveRuntimeConfig(registration.getDefaultConfig(), normalized);
@@ -202,14 +175,16 @@ public class PluginRuntimeService {
                 plugin.validateConfig(effectiveConfig);
             }
             configManager.writeConfig(pluginId, normalized);
-            return new PluginConfigView()
-                    .setPluginId(pluginId)
-                    .setConfigSchema(registration.getConfigSchema())
-                    .setDefaultConfig(registration.getDefaultConfig())
-                    .setConfig(configManager.loadRawEffectiveConfig(registration.getDefaultConfig(), pluginId));
-        } finally {
-            lock.writeLock().unlock();
-        }
+            return buildConfigView(pluginId, registration);
+        });
+    }
+
+    private PluginConfigView buildConfigView(String pluginId, PluginRegistration registration) {
+        return new PluginConfigView()
+                .setPluginId(pluginId)
+                .setConfigSchema(registration.getConfigSchema())
+                .setDefaultConfig(registration.getDefaultConfig())
+                .setConfig(configManager.loadRawEffectiveConfig(registration.getDefaultConfig(), pluginId));
     }
 
     public PluginView install(String originalFilename, byte[] content) {
@@ -224,48 +199,82 @@ public class PluginRuntimeService {
         return install(originalFilename, content, repositoryId, repositoryPluginId, repositoryVersion);
     }
 
+    /**
+     * 持久化插件文件并加载到运行时。
+     * <p>
+     * 包含通用的空内容校验、文件写入、插件加载、缓存和版本校验逻辑，
+     * 供 install 和 upgrade 流程复用。
+     *
+     * @param content           插件文件内容
+     * @param destination       目标写入路径
+     * @param repositoryVersion 预期的仓库版本号，用于版本一致性校验
+     * @return 加载后的插件 ID
+     */
+    private String persistPluginArtifact(byte[] content, Path destination, String repositoryVersion) {
+        if (content == null || content.length == 0) {
+            throw new IllegalArgumentException("插件文件不能为空");
+        }
+        try {
+            Files.createDirectories(pluginsRoot);
+            Files.write(destination, content);
+        } catch (IOException exception) {
+            throw new IllegalStateException("写入插件文件失败: " + destination.getFileName(), exception);
+        }
+        String pluginId = loadPlugin(destination);
+        PluginManifest manifest = cacheManifest(pluginId);
+        assertRepositoryVersion(repositoryVersion, manifest);
+        return pluginId;
+    }
+
     private PluginView install(String originalFilename,
                                byte[] content,
                                String repositoryId,
                                String repositoryPluginId,
                                String repositoryVersion) {
-        lock.writeLock().lock();
-        try {
+        return withWriteLock(() -> {
             ensureEnabled();
-            if (content == null || content.length == 0) {
-                throw new IllegalArgumentException("插件文件不能为空");
-            }
             String fileName = sanitizeFilename(originalFilename);
             Path destination = uniquePluginPath(fileName);
             String pluginId = null;
             try {
-                Files.createDirectories(pluginsRoot);
-                Files.write(destination, content);
-                pluginId = loadPlugin(destination);
-                PluginManifest manifest = cacheManifest(pluginId);
-                assertRepositoryVersion(repositoryVersion, manifest);
-                if (pluginRegistryRepository.findByPluginId(pluginId).isPresent()) {
-                    throw new IllegalArgumentException("插件已存在: " + pluginId);
-                }
-                PluginRegistration saved = pluginRegistryRepository.save(
-                        PluginViewMapper.toRegistration(manifest, destination.getFileName().toString(), true, null)
-                                .setRepositoryId(repositoryId)
-                                .setRepositoryPluginId(repositoryPluginId)
-                                .setRepositoryVersion(repositoryVersion)
-                );
-                return viewMapper.toPluginView(saved, pluginManager);
+                pluginId = persistPluginArtifact(content, destination, repositoryVersion);
+                ensurePluginNotExists(pluginId);
+                PluginRegistration saved = saveRegistration(pluginId, destination.getFileName().toString(), true, null, repositoryId, repositoryPluginId, repositoryVersion);
+                return PluginViewMapper.toPluginView(saved, pluginManager);
             } catch (Exception exception) {
-                if (pluginId != null) {
-                    unloadIfLoaded(pluginId);
-                }
-                try {
-                    Files.deleteIfExists(destination);
-                } catch (IOException ignored) {
-                }
-                throw new PluginRuntimeException("安装插件失败: " + exception.getMessage(), exception);
+                cleanupFailedInstall(pluginId, destination);
+                throw exception instanceof PluginRuntimeException re ? re
+                        : new PluginRuntimeException("安装插件失败: " + exception.getMessage(), exception);
             }
-        } finally {
-            lock.writeLock().unlock();
+        });
+    }
+
+    private void ensurePluginNotExists(String pluginId) {
+        if (pluginRegistryRepository.findByPluginId(pluginId).isPresent()) {
+            throw new IllegalArgumentException("插件已存在: " + pluginId);
+        }
+    }
+
+    private PluginRegistration saveRegistration(String pluginId, String fileName,
+                                                boolean enabled, PluginRegistration previous,
+                                                String repositoryId, String repositoryPluginId, String repositoryVersion) {
+        PluginManifest manifest = manifestCache.get(pluginId);
+        return pluginRegistryRepository.save(
+                PluginViewMapper.toRegistration(manifest, fileName, enabled, previous)
+                        .setRepositoryId(repositoryId)
+                        .setRepositoryPluginId(repositoryPluginId)
+                        .setRepositoryVersion(repositoryVersion)
+        );
+    }
+
+    private void cleanupFailedInstall(String pluginId, Path destination) {
+        if (pluginId != null) {
+            unloadIfLoaded(pluginId);
+        }
+        try {
+            Files.deleteIfExists(destination);
+        } catch (IOException e) {
+            LOGGER.warn("清理安装失败的插件文件失败: {}", destination, e);
         }
     }
 
@@ -288,107 +297,101 @@ public class PluginRuntimeService {
                                String repositoryId,
                                String repositoryPluginId,
                                String repositoryVersion) {
-        lock.writeLock().lock();
-        try {
+        return withWriteLock(() -> {
             ensureEnabled();
-            if (content == null || content.length == 0) {
-                throw new IllegalArgumentException("插件文件不能为空");
-            }
             PluginRegistration current = requireRegistration(pluginId);
             PluginRegistration backup = PluginViewMapper.cloneRegistration(current);
             Path oldPluginPath = resolvePluginPath(current);
             boolean wasEnabled = current.isEnabled();
-            String fileName = sanitizeFilename(originalFilename);
-            Path destination = uniquePluginPath(fileName);
-            String loadedPluginId = null;
-            PluginRegistration saved = null;
-            try {
-                unloadIfLoaded(pluginId);
-                Files.createDirectories(pluginsRoot);
-                Files.write(destination, content);
-                loadedPluginId = loadPlugin(destination);
-                if (!pluginId.equals(loadedPluginId)) {
-                    throw new IllegalArgumentException("插件 ID 与升级目标不一致: " + loadedPluginId);
-                }
-                PluginManifest manifest = cacheManifest(pluginId);
-                assertRepositoryVersion(repositoryVersion, manifest);
-                saved = pluginRegistryRepository.save(
-                        PluginViewMapper.toRegistration(manifest, destination.getFileName().toString(), wasEnabled, backup)
-                                .setRepositoryId(repositoryId)
-                                .setRepositoryPluginId(repositoryPluginId)
-                                .setRepositoryVersion(repositoryVersion)
-                );
-                if (!wasEnabled) {
-                    unloadIfLoaded(pluginId);
-                }
-                if (!oldPluginPath.equals(destination)) {
-                    Files.deleteIfExists(oldPluginPath);
-                }
-                return viewMapper.toPluginView(saved, pluginManager);
-            } catch (Exception exception) {
-                if (loadedPluginId != null) {
-                    unloadIfLoaded(loadedPluginId);
-                }
-                try {
-                    Files.deleteIfExists(destination);
-                } catch (IOException ignored) {
-                }
-                if (saved != null) {
-                    pluginRegistryRepository.save(backup);
-                }
-                if (wasEnabled) {
-                    try {
-                        loadRegisteredPlugin(backup);
-                    } catch (Exception rollbackException) {
-                        LOGGER.error("插件回滚失败，系统可能处于不一致状态: {}", pluginId, rollbackException);
-                    }
-                }
-                throw new PluginRuntimeException("升级插件失败: " + exception.getMessage(), exception);
+            return performUpgrade(pluginId, originalFilename, content, repositoryId, repositoryPluginId,
+                    repositoryVersion, backup, oldPluginPath, wasEnabled);
+        });
+    }
+
+    private PluginView performUpgrade(String pluginId,
+                                      String originalFilename,
+                                      byte[] content,
+                                      String repositoryId,
+                                      String repositoryPluginId,
+                                      String repositoryVersion,
+                                      PluginRegistration backup,
+                                      Path oldPluginPath,
+                                      boolean wasEnabled) {
+        Path destination = uniquePluginPath(sanitizeFilename(originalFilename));
+        String loadedPluginId = null;
+        PluginRegistration saved = null;
+        try {
+            unloadIfLoaded(pluginId);
+            loadedPluginId = persistPluginArtifact(content, destination, repositoryVersion);
+            if (!pluginId.equals(loadedPluginId)) {
+                throw new IllegalArgumentException("插件 ID 与升级目标不一致: " + loadedPluginId);
             }
-        } finally {
-            lock.writeLock().unlock();
+            saved = saveRegistration(pluginId, destination.getFileName().toString(), wasEnabled, backup, repositoryId, repositoryPluginId, repositoryVersion);
+            if (!wasEnabled) {
+                unloadIfLoaded(pluginId);
+            }
+            if (!oldPluginPath.equals(destination)) {
+                Files.deleteIfExists(oldPluginPath);
+            }
+            return PluginViewMapper.toPluginView(saved, pluginManager);
+        } catch (Exception exception) {
+            throw rollbackUpgrade(pluginId, loadedPluginId, destination, saved, backup, wasEnabled, exception);
         }
+    }
+
+    private PluginRuntimeException rollbackUpgrade(String pluginId,
+                                  String loadedPluginId,
+                                  Path destination,
+                                  PluginRegistration saved,
+                                  PluginRegistration backup,
+                                  boolean wasEnabled,
+                                  Exception cause) {
+        cleanupFailedInstall(loadedPluginId, destination);
+        if (saved != null) {
+            pluginRegistryRepository.save(backup);
+        }
+        if (wasEnabled) {
+            try {
+                loadRegisteredPlugin(backup);
+            } catch (Exception rollbackException) {
+                LOGGER.error("插件回滚失败，系统可能处于不一致状态: {}", pluginId, rollbackException);
+            }
+        }
+        return new PluginRuntimeException("升级插件失败: " + cause.getMessage(), cause);
+    }
+
+    public Optional<PluginRegistration> findPluginRegistration(String pluginId) {
+        return withReadLock(() -> pluginRegistryRepository.findByPluginId(pluginId)
+                .map(PluginViewMapper::cloneRegistration));
     }
 
     public PluginRegistration getRegistration(String pluginId) {
-        lock.readLock().lock();
-        try {
-            return PluginViewMapper.cloneRegistration(requireRegistration(pluginId));
-        } finally {
-            lock.readLock().unlock();
-        }
+        return withReadLock(() -> PluginViewMapper.cloneRegistration(requireRegistration(pluginId)));
     }
 
     public byte[] readPluginFile(String pluginId) {
-        lock.readLock().lock();
-        try {
-            PluginRegistration registration = requireRegistration(pluginId);
-            return Files.readAllBytes(resolvePluginPath(registration));
-        } catch (IOException exception) {
-            throw new PluginRuntimeException("读取插件文件失败: " + pluginId, exception);
-        } finally {
-            lock.readLock().unlock();
-        }
+        return withReadLock(() -> {
+            try {
+                PluginRegistration registration = requireRegistration(pluginId);
+                return Files.readAllBytes(resolvePluginPath(registration));
+            } catch (IOException exception) {
+                throw new PluginRuntimeException("读取插件文件失败: " + pluginId, exception);
+            }
+        });
     }
 
     public PluginView start(String pluginId) {
-        lock.writeLock().lock();
-        try {
+        return withWriteLock(() -> {
             ensureEnabled();
             PluginRegistration registration = requireRegistration(pluginId);
-            PluginManifest manifest = loadRegisteredPlugin(registration);
-            PluginRegistration saved = pluginRegistryRepository.save(
-                    PluginViewMapper.toRegistration(manifest, registration.getFileName(), true, registration)
-            );
-            return viewMapper.toPluginView(saved, pluginManager);
-        } finally {
-            lock.writeLock().unlock();
-        }
+            loadRegisteredPlugin(registration);
+            PluginRegistration saved = saveRegistration(pluginId, registration.getFileName(), true, registration, null, null, null);
+            return PluginViewMapper.toPluginView(saved, pluginManager);
+        });
     }
 
     public PluginView stop(String pluginId) {
-        lock.writeLock().lock();
-        try {
+        return withWriteLock(() -> {
             ensureEnabled();
             PluginRegistration registration = requireRegistration(pluginId);
             unloadIfLoaded(pluginId);
@@ -397,18 +400,15 @@ public class PluginRuntimeService {
                             .setEnabled(false)
                             .setUpdatedAt(LocalDateTime.now())
             );
-            return viewMapper.toPluginView(saved, pluginManager);
-        } finally {
-            lock.writeLock().unlock();
-        }
+            return PluginViewMapper.toPluginView(saved, pluginManager);
+        });
     }
 
     public void uninstall(String pluginId, boolean force) {
-        lock.writeLock().lock();
-        try {
+        withWriteLock(() -> {
             ensureEnabled();
             if (!force) {
-                List<String> dependentScripts = findDependentScripts(pluginId);
+                List<String> dependentScripts = findDependentScriptIds(pluginId);
                 if (!dependentScripts.isEmpty()) {
                     throw new IllegalArgumentException("插件仍被工具依赖，不能卸载: " + String.join(", ", dependentScripts));
                 }
@@ -419,25 +419,28 @@ public class PluginRuntimeService {
             pluginRegistryRepository.deleteByPluginId(pluginId);
             manifestCache.remove(pluginId);
             configManager.deleteConfig(pluginId);
-        } finally {
-            lock.writeLock().unlock();
-        }
+        });
     }
 
-    private List<String> findDependentScripts(String pluginId) {
+    /**
+     * 查找依赖指定插件的所有脚本 ID。
+     *
+     * @param pluginId 插件 ID
+     * @return 依赖该插件的脚本 ID 列表
+     */
+    public List<String> findDependentScriptIds(String pluginId) {
         if (scriptRepository == null) {
             return List.of();
         }
         return scriptRepository.findAll().stream()
                 .filter(script -> script.getPluginDependencies().stream()
                         .anyMatch(dependency -> pluginId.equals(dependency.getPluginId())))
-                .map(script -> script.getId())
+                .map(ScriptDefinition::getId)
                 .toList();
     }
 
     public void assertActionAvailable(String pluginId, String action) {
-        lock.readLock().lock();
-        try {
+        withReadLock(() -> {
             if (systemPlugins.containsKey(pluginId)) {
                 return;
             }
@@ -451,9 +454,7 @@ public class PluginRuntimeService {
             if (!exists) {
                 throw new IllegalArgumentException("插件动作不存在: " + pluginId + "/" + action);
             }
-        } finally {
-            lock.readLock().unlock();
-        }
+        });
     }
 
     public Object invoke(String pluginId,
@@ -462,13 +463,10 @@ public class PluginRuntimeService {
                          ScriptExecutionContext executionContext,
                          Map<String, Object> input,
                          Map<String, Object> args) {
-        lock.readLock().lock();
-        try {
-            assertActionAvailableInternal(pluginId, action);
+        return withReadLock(() -> {
+            assertActionAvailable(pluginId, action);
             return doInvoke(pluginId, action, definition, executionContext, input, args);
-        } finally {
-            lock.readLock().unlock();
-        }
+        });
     }
 
     public PluginInvokeView invokeForDebug(String pluginId,
@@ -476,13 +474,12 @@ public class PluginRuntimeService {
                                            Map<String, Object> args,
                                            Map<String, Object> scriptInput,
                                            boolean includeDebug) {
-        lock.readLock().lock();
-        try {
+        return withReadLock(() -> {
             PluginRegistration registration = requireRegistration(pluginId);
             PluginActionMetadata actionMetadata = requireActionMetadata(registration, action);
             Map<String, Object> normalizedArgs = configValueApplicationService.resolveMap(args);
             Map<String, Object> normalizedScriptInput = configValueApplicationService.resolveMap(scriptInput);
-            Map<String, Object> pluginResult = normalizeResult(
+            Map<String, Object> pluginResult = MapValueConverter.toResultMap(
                     doInvoke(pluginId, action, null,
                             new ScriptExecutionContext()
                                     .setSubmitMode(SubmitMode.SYNC)
@@ -492,31 +489,13 @@ public class PluginRuntimeService {
             return new PluginInvokeView()
                     .setPluginId(pluginId)
                     .setAction(action)
-                    .setResult(executionOutputProjector.project(pluginResult, actionMetadata.getOutputSchema()))
+                    .setResult(ExecutionOutputProjector.project(pluginResult, actionMetadata.getOutputSchema()))
                     .setDebug(includeDebug
                             ? new PluginInvokeDebugView()
                             .setArgs(normalizedArgs)
                             .setScriptInput(normalizedScriptInput)
                             : null);
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
-    private void assertActionAvailableInternal(String pluginId, String action) {
-        if (systemPlugins.containsKey(pluginId)) {
-            return;
-        }
-        PluginRegistration registration = requireRegistration(pluginId);
-        if (!registration.isEnabled() || !isLoadedAndStarted(pluginId)) {
-            throw new IllegalArgumentException("插件未启动: " + pluginId);
-        }
-        boolean exists = registration.getActions().stream()
-                .map(PluginActionMetadata::getAction)
-                .anyMatch(action::equals);
-        if (!exists) {
-            throw new IllegalArgumentException("插件动作不存在: " + pluginId + "/" + action);
-        }
+        });
     }
 
     private Object doInvoke(String pluginId,
@@ -527,34 +506,27 @@ public class PluginRuntimeService {
                             Map<String, Object> args) {
         try {
             ActionDockPlugin systemPlugin = systemPlugins.get(pluginId);
+            ActionDockPlugin plugin;
+            Map<String, Object> pluginConfig;
+
             if (systemPlugin != null) {
-                return systemPlugin.invoke(
-                        action,
-                        new ScriptPluginContext()
-                                .setScriptId(definition == null ? null : definition.getId())
-                                .setScriptName(definition == null ? null : definition.getName())
-                                .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
-                                .setSubmitMode(resolveSubmitMode(executionContext))
-                                .setScriptInput(input)
-                                .setPluginConfig(Map.of()),
-                        args == null ? Map.of() : new LinkedHashMap<>(args)
-                );
+                plugin = systemPlugin;
+                pluginConfig = Map.of();
+            } else {
+                PluginRegistration registration = requireRegistration(pluginId);
+                plugin = requireLoadedExtension(pluginId);
+                pluginConfig = configManager.loadRuntimeConfig(registration.getDefaultConfig(), pluginId);
             }
-            PluginRegistration registration = requireRegistration(pluginId);
-            ActionDockPlugin plugin = requireLoadedExtension(pluginId);
-            return plugin.invoke(
-                    action,
-                    new ScriptPluginContext()
-                            .setScriptId(definition == null ? null : definition.getId())
-                            .setScriptName(definition == null ? null : definition.getName())
-                            .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
-                            .setSubmitMode(resolveSubmitMode(executionContext))
-                            .setScriptInput(input)
-                            .setPluginConfig(configManager.loadRuntimeConfig(registration.getDefaultConfig(), pluginId)),
-                    args == null ? Map.of() : new LinkedHashMap<>(args)
-            );
-        } catch (PluginRuntimeException exception) {
-            throw enrichPluginInvocationException(pluginId, action, exception);
+
+            ScriptPluginContext context = new ScriptPluginContext()
+                    .setScriptId(definition == null ? null : definition.getId())
+                    .setScriptName(definition == null ? null : definition.getName())
+                    .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
+                    .setSubmitMode(resolveSubmitMode(executionContext))
+                    .setScriptInput(input)
+                    .setPluginConfig(pluginConfig);
+
+            return plugin.invoke(action, context, args == null ? Map.of() : new LinkedHashMap<>(args));
         } catch (Exception exception) {
             throw enrichPluginInvocationException(pluginId, action, exception);
         }
@@ -568,22 +540,20 @@ public class PluginRuntimeService {
         }
         pluginRegistryRepository.findEnabled().forEach(registration -> {
             try {
-                PluginManifest manifest = loadRegisteredPlugin(registration);
-                pluginRegistryRepository.save(
-                        PluginViewMapper.toRegistration(manifest, registration.getFileName(), true, registration)
-                );
+                loadRegisteredPlugin(registration);
+                saveRegistration(registration.getPluginId(), registration.getFileName(), true, registration, null, null, null);
             } catch (Exception e) {
                 LOGGER.warn("Failed to load plugin on startup: {}", registration.getPluginId(), e);
             }
         });
     }
 
-    private String resolveSubmitMode(ScriptExecutionContext executionContext) {
+    private static String resolveSubmitMode(ScriptExecutionContext executionContext) {
         SubmitMode submitMode = executionContext == null ? null : executionContext.getSubmitMode();
         return submitMode == null ? null : submitMode.name();
     }
 
-    private PluginRuntimeException enrichPluginInvocationException(String pluginId, String action, Exception exception) {
+    private static PluginRuntimeException enrichPluginInvocationException(String pluginId, String action, Exception exception) {
         String prefix = "插件调用失败 " + pluginId + "/" + action + ": ";
         String message = ErrorDetailSupport.summarize(exception);
         if (message.startsWith(prefix) && exception instanceof PluginRuntimeException pluginRuntimeException) {
@@ -640,10 +610,7 @@ public class PluginRuntimeService {
                 throw new IllegalArgumentException("插件 ID 与数据库记录不一致: " + loadedPluginId);
             }
         }
-        PluginState state = pluginManager.startPlugin(registration.getPluginId());
-        if (!state.isStarted()) {
-            throw new IllegalStateException("插件启动失败: " + registration.getPluginId());
-        }
+        startPlugin(registration.getPluginId());
         return cacheManifest(registration.getPluginId());
     }
 
@@ -652,11 +619,15 @@ public class PluginRuntimeService {
         if (pluginId == null || pluginId.isBlank()) {
             throw new IllegalStateException("插件加载失败，未返回 pluginId");
         }
+        startPlugin(pluginId);
+        return pluginId;
+    }
+
+    private void startPlugin(String pluginId) {
         PluginState state = pluginManager.startPlugin(pluginId);
         if (!state.isStarted()) {
             throw new IllegalStateException("插件启动失败: " + pluginId);
         }
-        return pluginId;
     }
 
     private PluginManifest cacheManifest(String pluginId) {
@@ -682,7 +653,7 @@ public class PluginRuntimeService {
         return manifest;
     }
 
-    private void assertRepositoryVersion(String expectedVersion, PluginManifest manifest) {
+    private static void assertRepositoryVersion(String expectedVersion, PluginManifest manifest) {
         if (expectedVersion != null && !expectedVersion.isBlank() && !expectedVersion.equals(manifest.getVersion())) {
             throw new IllegalArgumentException("插件版本与仓库描述不一致: " + manifest.getVersion());
         }
@@ -714,20 +685,6 @@ public class PluginRuntimeService {
         return pluginsRoot.resolve(registration.getFileName()).normalize();
     }
 
-    private Map<String, Object> normalizeResult(Object result) {
-        if (result == null) {
-            return new LinkedHashMap<>();
-        }
-        if (result instanceof Map<?, ?> source) {
-            Map<String, Object> normalized = new LinkedHashMap<>();
-            source.forEach((key, value) -> normalized.put(String.valueOf(key), value));
-            return normalized;
-        }
-        Map<String, Object> normalized = new LinkedHashMap<>();
-        normalized.put("result", result);
-        return normalized;
-    }
-
     private Path uniquePluginPath(String fileName) {
         Path target = pluginsRoot.resolve(fileName);
         if (!Files.exists(target)) {
@@ -744,7 +701,7 @@ public class PluginRuntimeService {
         return target;
     }
 
-    private String sanitizeFilename(String originalFilename) {
+    private static String sanitizeFilename(String originalFilename) {
         String value = originalFilename == null || originalFilename.isBlank() ? "plugin.jar" : originalFilename;
         String fileName = Path.of(value).getFileName().toString();
         if (!fileName.endsWith(".jar")) {
@@ -756,6 +713,42 @@ public class PluginRuntimeService {
     private void ensureEnabled() {
         if (!enabled) {
             throw new IllegalStateException("插件运行时未启用");
+        }
+    }
+
+    private <T> T withReadLock(java.util.function.Supplier<T> action) {
+        lock.readLock().lock();
+        try {
+            return action.get();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    private void withReadLock(Runnable action) {
+        lock.readLock().lock();
+        try {
+            action.run();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    private void withWriteLock(Runnable action) {
+        lock.writeLock().lock();
+        try {
+            action.run();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private <T> T withWriteLock(java.util.function.Supplier<T> action) {
+        lock.writeLock().lock();
+        try {
+            return action.get();
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 }

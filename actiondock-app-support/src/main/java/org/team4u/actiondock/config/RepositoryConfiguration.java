@@ -1,0 +1,170 @@
+package org.team4u.actiondock.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.team4u.actiondock.application.ConfigValueApplicationService;
+import org.team4u.actiondock.application.ScriptApplicationService;
+import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
+import org.team4u.actiondock.domain.port.*;
+import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
+import org.team4u.actiondock.ai.api.AiModelProfileRepository;
+import org.team4u.actiondock.ai.api.AiToolsetRepository;
+import org.team4u.actiondock.repository.*;
+
+import java.util.List;
+
+/**
+ * 仓库相关配置，注册仓库目录、插件、工具、能力包等 Bean。
+ *
+ * @author jay.wu
+ */
+@Configuration(proxyBeanMethods = false)
+public class RepositoryConfiguration {
+
+    @Bean
+    public PluginArtifactResolver localPluginArtifactResolver() {
+        return new LocalPluginArtifactResolver();
+    }
+
+    @Bean
+    public PluginArtifactResolver httpPluginArtifactResolver() {
+        return new HttpPluginArtifactResolver();
+    }
+
+    @Bean
+    public PluginArtifactResolverRegistry pluginArtifactResolverRegistry(List<PluginArtifactResolver> resolvers) {
+        return new PluginArtifactResolverRegistry(resolvers);
+    }
+
+    @Bean
+    public RepositoryCatalogService repositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
+                                                             RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+                                                             CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
+                                                             ScriptRepository scriptRepository,
+                                                             ScriptScheduleRepository scriptScheduleRepository,
+                                                             ExecutionPresetRepository executionPresetRepository,
+                                                             ConfigValueRepository configValueRepository,
+                                                             AiModelProfileRepository aiModelProfileRepository,
+                                                             AiAgentProfileRepository aiAgentProfileRepository,
+                                                             AiToolsetRepository aiToolsetRepository,
+                                                             ScriptApplicationService scriptApplicationService,
+                                                             ConfigValueApplicationService configValueApplicationService,
+                                                             PluginRuntimeService pluginRuntimeService,
+                                                             JsonCodec jsonCodec,
+                                                             AppProperties properties,
+                                                             PluginArtifactResolverRegistry pluginArtifactResolverRegistry) {
+        return new RepositoryCatalogService(
+                new RepositoryCatalogService.Repositories(
+                        repositoryDefinitionRepository,
+                        repositoryToolInstallationRepository,
+                        capabilityPackageInstallationRepository,
+                        scriptRepository,
+                        scriptScheduleRepository,
+                        executionPresetRepository,
+                        configValueRepository,
+                        aiModelProfileRepository,
+                        aiAgentProfileRepository,
+                        aiToolsetRepository
+                ),
+                new RepositoryCatalogService.ApplicationServices(
+                        scriptApplicationService,
+                        configValueApplicationService,
+                        pluginRuntimeService
+                ),
+                jsonCodec,
+                properties,
+                pluginArtifactResolverRegistry
+        );
+    }
+
+    @Bean
+    public RepositoryPluginService repositoryPluginService(RepositoryCatalogService repositoryCatalogService,
+                                                            PluginRuntimeService pluginRuntimeService,
+                                                            ScriptRepository scriptRepository,
+                                                            PluginArtifactResolverRegistry pluginArtifactResolverRegistry) {
+        return new RepositoryPluginService(repositoryCatalogService, pluginRuntimeService, scriptRepository, pluginArtifactResolverRegistry);
+    }
+
+    @Bean
+    public RepositoryToolService repositoryToolService(RepositoryCatalogService repositoryCatalogService,
+                                                        RepositoryPluginService repositoryPluginService) {
+        return new RepositoryToolService(
+                repositoryCatalogService,
+                repositoryPluginService,
+                repositoryCatalogService.getRepos(),
+                repositoryCatalogService.getServices(),
+                repositoryCatalogService.getConfigTemplateSyncService()
+        );
+    }
+
+    @Bean
+    public RepositoryCapabilityPackageService repositoryCapabilityPackageService(
+            RepositoryCatalogService repositoryCatalogService,
+            CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
+            ExecutionPresetRepository executionPresetRepository,
+            AiModelProfileRepository aiModelProfileRepository,
+            AiAgentProfileRepository aiAgentProfileRepository,
+            AiToolsetRepository aiToolsetRepository,
+            ScriptRepository scriptRepository,
+            ScriptScheduleRepository scriptScheduleRepository,
+            ConfigValueRepository configValueRepository,
+            RepositoryDefinitionRepository repositoryDefinitionRepository,
+            RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+            ScriptApplicationService scriptApplicationService,
+            ConfigValueApplicationService configValueApplicationService,
+            PluginRuntimeService pluginRuntimeService,
+            RepositoryPluginService repositoryPluginService,
+            RepositoryToolService repositoryToolService) {
+        return new RepositoryCapabilityPackageService(
+                repositoryCatalogService,
+                new RepositoryCatalogService.Repositories(
+                        repositoryDefinitionRepository,
+                        repositoryToolInstallationRepository,
+                        capabilityPackageInstallationRepository,
+                        scriptRepository,
+                        scriptScheduleRepository,
+                        executionPresetRepository,
+                        configValueRepository,
+                        aiModelProfileRepository,
+                        aiAgentProfileRepository,
+                        aiToolsetRepository
+                ),
+                new RepositoryCatalogService.ApplicationServices(
+                        scriptApplicationService,
+                        configValueApplicationService,
+                        pluginRuntimeService
+                ),
+                repositoryPluginService,
+                repositoryToolService,
+                repositoryCatalogService.getConfigTemplateSyncService(),
+                repositoryCatalogService.getAiPackageService()
+        );
+    }
+
+    @Bean
+    public ConfigValueUsageAnalysisService configValueUsageAnalysisService(ConfigValueRepository configValueRepository,
+                                                                          ScriptRepository scriptRepository,
+                                                                          ScriptScheduleRepository scriptScheduleRepository,
+                                                                          PluginRegistryRepository pluginRegistryRepository,
+                                                                          PluginRuntimeService pluginRuntimeService,
+                                                                          RepositoryCatalogService repositoryCatalogService,
+                                                                          AiModelProfileRepository aiModelProfileRepository) {
+        return new ConfigValueUsageAnalysisService(
+                new ConfigValueUsageAnalysisService.Repositories(
+                        configValueRepository,
+                        scriptRepository,
+                        scriptScheduleRepository,
+                        pluginRegistryRepository
+                ),
+                new ConfigValueUsageAnalysisService.ApplicationServices(
+                        pluginId -> pluginRuntimeService.getConfig(pluginId).getConfig(),
+                        repositoryCatalogService::listRepositories,
+                        repositoryCatalogService::listRepositoryTools,
+                        repositoryCatalogService::listAllRepositoryTools,
+                        repositoryCatalogService::getRepositoryTool,
+                        aiModelProfileRepository::findAll
+                )
+        );
+    }
+}

@@ -50,7 +50,7 @@ public class HttpPluginArtifactResolver implements PluginArtifactResolver {
         }
     }
 
-    private String resolveFileName(PluginArtifactRef artifact, URI uri) {
+    private static String resolveFileName(PluginArtifactRef artifact, URI uri) {
         if (artifact.fileName() != null && !artifact.fileName().isBlank()) {
             return artifact.fileName();
         }

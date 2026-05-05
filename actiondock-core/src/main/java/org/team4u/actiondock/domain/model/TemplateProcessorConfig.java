@@ -4,7 +4,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class TemplateProcessorConfig {
-    private String engine = "MUSTACHE";
+
+    public static final String DEFAULT_ENGINE = "MUSTACHE";
+
+    private String engine = DEFAULT_ENGINE;
     private Map<String, Object> template = new LinkedHashMap<>();
 
     public String getEngine() {
@@ -12,7 +15,7 @@ public class TemplateProcessorConfig {
     }
 
     public TemplateProcessorConfig setEngine(String engine) {
-        this.engine = engine == null || engine.isBlank() ? "MUSTACHE" : engine;
+        this.engine = engine == null || engine.isBlank() ? DEFAULT_ENGINE : engine;
         return this;
     }
 

@@ -7,8 +7,9 @@ import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
+
 public class AiModelProfileService {
-    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
 
     private final AiModelProfileRepository repository;
     private final AiAgentProfileRepository agentProfileRepository;
@@ -64,7 +65,7 @@ public class AiModelProfileService {
         repository.deleteById(id);
     }
 
-    private void validate(AiModelProfile profile) {
+    private static void validate(AiModelProfile profile) {
         if (profile == null) {
             throw new IllegalArgumentException("AI 模型 Profile 不能为空");
         }
@@ -82,7 +83,7 @@ public class AiModelProfileService {
         }
     }
 
-    private void assertMutable(String id) {
+    private static void assertMutable(String id) {
         if (id != null && id.startsWith(MANAGED_INTERNAL_PREFIX)) {
             throw new IllegalArgumentException("AI 能力包托管模型不允许直接修改: " + id);
         }

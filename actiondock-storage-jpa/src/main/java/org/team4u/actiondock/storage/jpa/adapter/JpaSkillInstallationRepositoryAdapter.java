@@ -25,27 +25,27 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
 
     @Override
     public Optional<SkillInstallation> findByInstallationId(String installationId) {
-        return repository.findById(installationId).map(this::toDomain);
+        return repository.findById(installationId).map(JpaSkillInstallationRepositoryAdapter::toDomain);
     }
 
     @Override
     public Optional<SkillInstallation> findBySkillIdAndTargetId(String skillId, String targetId) {
-        return repository.findBySkillIdAndTargetId(skillId, targetId).map(this::toDomain);
+        return repository.findBySkillIdAndTargetId(skillId, targetId).map(JpaSkillInstallationRepositoryAdapter::toDomain);
     }
 
     @Override
     public List<SkillInstallation> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
+        return repository.findAll().stream().map(JpaSkillInstallationRepositoryAdapter::toDomain).toList();
     }
 
     @Override
     public List<SkillInstallation> findBySkillId(String skillId) {
-        return repository.findBySkillIdOrderByInstallationIdAsc(skillId).stream().map(this::toDomain).toList();
+        return repository.findBySkillIdOrderByInstallationIdAsc(skillId).stream().map(JpaSkillInstallationRepositoryAdapter::toDomain).toList();
     }
 
     @Override
     public List<SkillInstallation> findByTargetId(String targetId) {
-        return repository.findByTargetIdOrderByInstallationIdAsc(targetId).stream().map(this::toDomain).toList();
+        return repository.findByTargetIdOrderByInstallationIdAsc(targetId).stream().map(JpaSkillInstallationRepositoryAdapter::toDomain).toList();
     }
 
     @Override
@@ -59,7 +59,7 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
         repository.deleteBySkillIdAndTargetId(skillId, targetId);
     }
 
-    private SkillInstallationEntity toEntity(SkillInstallation installation) {
+    private static SkillInstallationEntity toEntity(SkillInstallation installation) {
         SkillInstallationEntity entity = new SkillInstallationEntity();
         entity.setInstallationId(installation.getInstallationId());
         entity.setSkillId(installation.getSkillId());
@@ -77,7 +77,7 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
         return entity;
     }
 
-    private SkillInstallation toDomain(SkillInstallationEntity entity) {
+    private static SkillInstallation toDomain(SkillInstallationEntity entity) {
         return new SkillInstallation()
                 .setInstallationId(entity.getInstallationId())
                 .setSkillId(entity.getSkillId())

@@ -73,7 +73,7 @@ class ScheduleControllerSupport {
         return ApiResponse.success(null, "已删除");
     }
 
-    ScriptSchedule toDomain(ScriptScheduleUpsertRequest request, String scheduleId) {
+    static ScriptSchedule toDomain(ScriptScheduleUpsertRequest request, String scheduleId) {
         return new ScriptSchedule()
                 .setId(scheduleId)
                 .setName(request.getName())

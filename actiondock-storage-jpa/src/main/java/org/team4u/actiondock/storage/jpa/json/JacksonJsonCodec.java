@@ -52,14 +52,7 @@ public class JacksonJsonCodec implements JsonCodec {
      */
     @Override
     public <T> T read(String json, Class<T> type) {
-        if (json == null || json.isBlank()) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(json, type);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot deserialize value", e);
-        }
+        return readJson(json, () -> objectMapper.readValue(json, type));
     }
 
     /**
@@ -71,14 +64,7 @@ public class JacksonJsonCodec implements JsonCodec {
      */
     @Override
     public Object readUntyped(String json) {
-        if (json == null || json.isBlank()) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(json, Object.class);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot deserialize value", e);
-        }
+        return readJson(json, () -> objectMapper.readValue(json, Object.class));
     }
 
     /**
@@ -91,15 +77,11 @@ public class JacksonJsonCodec implements JsonCodec {
      */
     @Override
     public <T> List<T> readList(String json, Class<T> elementType) {
-        if (json == null || json.isBlank()) {
+        if (isBlank(json)) {
             return Collections.emptyList();
         }
-        try {
-            JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, elementType);
-            return objectMapper.readValue(json, type);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot deserialize list", e);
-        }
+        JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, elementType);
+        return parseJson(() -> objectMapper.readValue(json, type), "Cannot deserialize list");
     }
 
     /**
@@ -112,13 +94,58 @@ public class JacksonJsonCodec implements JsonCodec {
     @SuppressWarnings("unchecked")
     @Override
     public Map<String, Object> readMap(String json) {
-        if (json == null || json.isBlank()) {
+        if (isBlank(json)) {
             return Collections.emptyMap();
         }
+        return parseJson(() -> objectMapper.readValue(json, Map.class), "Cannot deserialize map");
+    }
+
+    /**
+     * 判断 JSON 字符串是否为 null 或空白。
+     */
+    private boolean isBlank(String json) {
+        return json == null || json.isBlank();
+    }
+
+    /**
+     * 执行 JSON 反序列化，将 Jackson 异常统一转换为 IllegalStateException。
+     *
+     * @param parser 延迟执行的反序列化操作
+     * @return 反序列化结果
+     * @throws IllegalStateException 反序列化失败时抛出
+     */
+    private <T> T parseJson(JsonParser<T> parser) {
+        return parseJson(parser, "Cannot deserialize value");
+    }
+
+    private <T> T parseJson(JsonParser<T> parser, String errorMessage) {
         try {
-            return objectMapper.readValue(json, Map.class);
+            return parser.parse();
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot deserialize map", e);
+            throw new IllegalStateException(errorMessage, e);
         }
+    }
+
+    /**
+     * 对 null/空白 JSON 做防护后执行反序列化，空白时返回 null。
+     *
+     * @param json   JSON 字符串
+     * @param parser 延迟执行的反序列化操作
+     * @return 反序列化结果，空白时返回 null
+     * @throws IllegalStateException 反序列化失败时抛出
+     */
+    private <T> T readJson(String json, JsonParser<T> parser) {
+        if (isBlank(json)) {
+            return null;
+        }
+        return parseJson(parser);
+    }
+
+    /**
+     * JSON 反序列化操作的函数式接口。
+     */
+    @FunctionalInterface
+    private interface JsonParser<T> {
+        T parse() throws JsonProcessingException;
     }
 }

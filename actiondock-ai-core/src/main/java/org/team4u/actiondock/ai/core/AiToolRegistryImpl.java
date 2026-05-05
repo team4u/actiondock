@@ -67,7 +67,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         return resolution.tools().stream().map(ResolvedAgentTool::tool).toList();
     }
 
-    private AiTool configureTool(AiTool tool, Map<String, Object> options) {
+    private static AiTool configureTool(AiTool tool, Map<String, Object> options) {
         if (tool instanceof ConfigurableAiTool configurable) {
             return configurable.configure(options == null ? Map.of() : options);
         }
@@ -101,6 +101,8 @@ public class AiToolRegistryImpl implements AiToolRegistry {
                     : AiToolPermission.from(context.metadata().get("maxToolPermission"), AiToolPermission.DANGEROUS_ACTION);
             ensureAllowed(tool, maxPermission, "AI 工具调用权限上限");
             return tool.invoke(input == null ? Map.of() : input, context);
+        } catch (IllegalArgumentException exception) {
+            throw exception;
         } catch (Exception exception) {
             return AiToolExecutionResult.failed(exception.getMessage(), System.currentTimeMillis() - started);
         }
@@ -143,7 +145,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         }
     }
 
-    private void ensureAllowed(AiTool tool, AiToolPermission maxPermission, String label) {
+    private static void ensureAllowed(AiTool tool, AiToolPermission maxPermission, String label) {
         AiToolPermission effectiveMax = maxPermission == null ? AiToolPermission.READ_ONLY : maxPermission;
         AiToolPermission requested = tool == null ? null : tool.permission();
         if (!effectiveMax.allows(requested)) {
@@ -204,7 +206,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         }
     }
 
-    private IllegalArgumentException conflictException(List<AgentToolConflict> conflicts) {
+    private static IllegalArgumentException conflictException(List<AgentToolConflict> conflicts) {
         String detail = conflicts.stream()
                 .map(conflict -> conflict.toolName() + " 来源 [" + sourceLabels(conflict.sources()) + "] 配置不一致")
                 .reduce((left, right) -> left + "; " + right)
@@ -212,11 +214,11 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         return new IllegalArgumentException("Agent 工具配置冲突: " + detail);
     }
 
-    private String sourceLabels(List<AgentToolSource> sources) {
-        return sources.stream().map(this::sourceLabel).reduce((left, right) -> left + ", " + right).orElse("");
+    private static String sourceLabels(List<AgentToolSource> sources) {
+        return sources.stream().map(AiToolRegistryImpl::sourceLabel).reduce((left, right) -> left + ", " + right).orElse("");
     }
 
-    private String sourceLabel(AgentToolSource source) {
+    private static String sourceLabel(AgentToolSource source) {
         if (source == null) {
             return "unknown";
         }
@@ -226,7 +228,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         return "direct";
     }
 
-    private Map<String, Object> normalizeOptions(Map<String, Object> options) {
+    private static Map<String, Object> normalizeOptions(Map<String, Object> options) {
         Map<String, Object> normalized = new LinkedHashMap<>();
         if (options != null) {
             options.forEach((key, value) -> normalized.put(key, normalizeValue(value)));
@@ -235,14 +237,14 @@ public class AiToolRegistryImpl implements AiToolRegistry {
     }
 
     @SuppressWarnings("unchecked")
-    private Object normalizeValue(Object value) {
+    private static Object normalizeValue(Object value) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> normalized = new LinkedHashMap<>();
             map.forEach((key, item) -> normalized.put(String.valueOf(key), normalizeValue(item)));
             return normalized;
         }
         if (value instanceof List<?> list) {
-            return list.stream().map(this::normalizeValue).toList();
+            return list.stream().map(AiToolRegistryImpl::normalizeValue).toList();
         }
         return value;
     }

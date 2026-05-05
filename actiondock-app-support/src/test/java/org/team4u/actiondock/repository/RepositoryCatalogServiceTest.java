@@ -8,6 +8,8 @@ import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.port.JsonCodec;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
+
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,9 +41,9 @@ class RepositoryCatalogServiceTest {
         assertThat(Files.isDirectory(root.resolve("plugins"))).isTrue();
         assertThat(Files.isRegularFile(root.resolve("actiondock.repository.json"))).isTrue();
 
-        RepositoryCatalogService.RepositoryIndexFile index = objectMapper.readValue(
+        RepositoryIndexFile index = objectMapper.readValue(
                 Files.readString(root.resolve("actiondock.repository.json")),
-                RepositoryCatalogService.RepositoryIndexFile.class
+                RepositoryIndexFile.class
         );
         assertThat(index.name()).isEqualTo("Demo Repository");
         assertThat(index.description()).isEqualTo("Demo description");
@@ -58,9 +60,9 @@ class RepositoryCatalogServiceTest {
 
         RepositoryCatalogService.ensureRepositoryWorkspace(root, repository, jsonCodec);
 
-        RepositoryCatalogService.RepositoryIndexFile index = objectMapper.readValue(
+        RepositoryIndexFile index = objectMapper.readValue(
                 Files.readString(root.resolve("actiondock.repository.json")),
-                RepositoryCatalogService.RepositoryIndexFile.class
+                RepositoryIndexFile.class
         );
         assertThat(index.name()).isEqualTo("repo-2");
         assertThat(index.description()).isEqualTo("Only description");
@@ -75,7 +77,7 @@ class RepositoryCatalogServiceTest {
                 return plugins.invoke("plugin-b", "run")
                 """;
 
-        var dependencies = RepositoryToolService.extractPluginDependenciesFromSource(
+        var dependencies = ToolRepositoryPublisher.extractPluginDependenciesFromSource(
                 source,
                 Map.of("plugin-a", "1.2.3", "plugin-b", "0.4.0")
         );
@@ -98,7 +100,7 @@ class RepositoryCatalogServiceTest {
                 return plugins.invoke("plugin-b", "run")
                 """;
 
-        var dependencies = RepositoryToolService.extractPluginDependenciesFromSource(
+        var dependencies = ToolRepositoryPublisher.extractPluginDependenciesFromSource(
                 source,
                 Map.of("plugin-a", "1.2.3", "plugin-b", "0.4.0")
         );
@@ -129,12 +131,12 @@ class RepositoryCatalogServiceTest {
                 }
                 """;
 
-        RepositoryCatalogService.ToolFile tool = objectMapper.readValue(toolJson, RepositoryCatalogService.ToolFile.class);
+        ToolFile tool = objectMapper.readValue(toolJson, ToolFile.class);
 
         assertThat(tool.description()).isEqualTo("Asset docs");
         assertThat(tool.releaseNotes()).isEqualTo("## Changed");
 
-        RepositoryCatalogService.PluginFile plugin = new RepositoryCatalogService.PluginFile(
+        PluginFile plugin = new PluginFile(
                 1,
                 "demo-plugin",
                 "Demo Plugin",
@@ -157,7 +159,7 @@ class RepositoryCatalogServiceTest {
 
     @Test
     void toolMetadataRoundTripsScriptDependencies() throws Exception {
-        RepositoryCatalogService.ToolFile tool = new RepositoryCatalogService.ToolFile(
+        ToolFile tool = new ToolFile(
                 1,
                 "demo-tool",
                 "Demo Tool",
@@ -185,7 +187,7 @@ class RepositoryCatalogServiceTest {
         );
 
         String json = objectMapper.writeValueAsString(tool);
-        RepositoryCatalogService.ToolFile restored = objectMapper.readValue(json, RepositoryCatalogService.ToolFile.class);
+        ToolFile restored = objectMapper.readValue(json, ToolFile.class);
 
         assertThat(restored.scriptDependencies()).singleElement()
                 .satisfies(item -> {
@@ -248,21 +250,21 @@ class RepositoryCatalogServiceTest {
 
         assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
                 indexJson,
-                RepositoryCatalogService.RepositoryIndexFile.class,
+                RepositoryIndexFile.class,
                 "actiondock.repository.json"
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("tools[0].releaseNotes");
         assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
                 toolJson,
-                RepositoryCatalogService.ToolFile.class,
+                ToolFile.class,
                 "tool.json"
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("tool.json releaseNotes");
         assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
                 pluginJson,
-                RepositoryCatalogService.PluginFile.class,
+                PluginFile.class,
                 "plugin.json"
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -335,23 +337,23 @@ class RepositoryCatalogServiceTest {
 
         assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
                 indexJson,
-                RepositoryCatalogService.RepositoryIndexFile.class,
+                RepositoryIndexFile.class,
                 "actiondock.repository.json"
         )).doesNotThrowAnyException();
         assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
                 toolJson,
-                RepositoryCatalogService.ToolFile.class,
+                ToolFile.class,
                 "tool.json"
         )).doesNotThrowAnyException();
         assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
                 pluginJson,
-                RepositoryCatalogService.PluginFile.class,
+                PluginFile.class,
                 "plugin.json"
         )).doesNotThrowAnyException();
 
-        RepositoryCatalogService.RepositoryIndexEntry entry = objectMapper.readValue(
+        RepositoryIndexEntry entry = objectMapper.readValue(
                 indexEntryJson,
-                RepositoryCatalogService.RepositoryIndexEntry.class
+                RepositoryIndexEntry.class
         );
         assertThat(entry.description()).isEqualTo("Asset docs");
         assertThat(entry.releaseNotes()).isNull();
@@ -359,11 +361,11 @@ class RepositoryCatalogServiceTest {
 
     @Test
     void rejectsPublishingSameToolVersionInRepository() {
-        RepositoryCatalogService.RepositoryIndexFile index = new RepositoryCatalogService.RepositoryIndexFile(
+        RepositoryIndexFile index = new RepositoryIndexFile(
                 1,
                 "Demo Repository",
                 null,
-                List.of(new RepositoryCatalogService.RepositoryIndexEntry(
+                List.of(new RepositoryIndexEntry(
                         "demo-tool",
                         "Demo Tool",
                         "1.0.0",
@@ -376,7 +378,7 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatThrownBy(() -> RepositoryToolService.assertToolVersionAvailable(
+        assertThatThrownBy(() -> ToolRepositoryPublisher.assertToolVersionAvailable(
                 "repo-1",
                 index,
                 "demo-tool",
@@ -390,11 +392,11 @@ class RepositoryCatalogServiceTest {
 
     @Test
     void allowsPublishingDifferentToolVersionOrDifferentTool() {
-        RepositoryCatalogService.RepositoryIndexFile index = new RepositoryCatalogService.RepositoryIndexFile(
+        RepositoryIndexFile index = new RepositoryIndexFile(
                 1,
                 "Demo Repository",
                 null,
-                List.of(new RepositoryCatalogService.RepositoryIndexEntry(
+                List.of(new RepositoryIndexEntry(
                         "demo-tool",
                         "Demo Tool",
                         "1.0.0",
@@ -407,20 +409,20 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatCode(() -> RepositoryToolService.assertToolVersionAvailable("repo-1", index, "demo-tool", "1.0.1"))
+        assertThatCode(() -> ToolRepositoryPublisher.assertToolVersionAvailable("repo-1", index, "demo-tool", "1.0.1"))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> RepositoryToolService.assertToolVersionAvailable("repo-1", index, "other-tool", "1.0.0"))
+        assertThatCode(() -> ToolRepositoryPublisher.assertToolVersionAvailable("repo-1", index, "other-tool", "1.0.0"))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void rejectsPublishingSamePluginVersionInRepository() {
-        RepositoryCatalogService.RepositoryIndexFile index = new RepositoryCatalogService.RepositoryIndexFile(
+        RepositoryIndexFile index = new RepositoryIndexFile(
                 1,
                 "Demo Repository",
                 null,
                 List.of(),
-                List.of(new RepositoryCatalogService.RepositoryPluginIndexEntry(
+                List.of(new RepositoryPluginIndexEntry(
                         "demo-plugin",
                         "Demo Plugin",
                         "1.0.0",
@@ -445,12 +447,12 @@ class RepositoryCatalogServiceTest {
 
     @Test
     void allowsPublishingDifferentPluginVersionOrDifferentPlugin() {
-        RepositoryCatalogService.RepositoryIndexFile index = new RepositoryCatalogService.RepositoryIndexFile(
+        RepositoryIndexFile index = new RepositoryIndexFile(
                 1,
                 "Demo Repository",
                 null,
                 List.of(),
-                List.of(new RepositoryCatalogService.RepositoryPluginIndexEntry(
+                List.of(new RepositoryPluginIndexEntry(
                         "demo-plugin",
                         "Demo Plugin",
                         "1.0.0",

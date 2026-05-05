@@ -19,11 +19,9 @@ import java.util.Map;
 @RequestMapping("/api/schema")
 public class SchemaController {
     private final ScriptApplicationService scriptApplicationService;
-    private final ScriptSchemaSupport scriptSchemaSupport;
 
     public SchemaController(ScriptApplicationService scriptApplicationService) {
         this.scriptApplicationService = scriptApplicationService;
-        this.scriptSchemaSupport = new ScriptSchemaSupport();
     }
 
     /**
@@ -40,15 +38,15 @@ public class SchemaController {
     }
 
     private SchemaResponse toResponse(ScriptDefinition definition) {
-        ScriptSchemaSupport.SchemaSummary inputSummary = scriptSchemaSupport.summarize(definition.getInputSchema());
-        ScriptSchemaSupport.SchemaSummary outputSummary = scriptSchemaSupport.summarize(definition.getOutputSchema());
+        ScriptSchemaSupport.SchemaSummary inputSummary = ScriptSchemaSupport.summarize(definition.getInputSchema());
+        ScriptSchemaSupport.SchemaSummary outputSummary = ScriptSchemaSupport.summarize(definition.getOutputSchema());
         return new SchemaResponse(
                 hasSchema(definition.getInputSchema()) ? inputSummary.fields().stream().map(SchemaFieldView::from).toList() : null,
                 hasSchema(definition.getOutputSchema()) ? outputSummary.fields().stream().map(SchemaFieldView::from).toList() : null
         );
     }
 
-    private boolean hasSchema(Map<String, Object> schema) {
+    private static boolean hasSchema(Map<String, Object> schema) {
         return schema != null && !schema.isEmpty();
     }
 }

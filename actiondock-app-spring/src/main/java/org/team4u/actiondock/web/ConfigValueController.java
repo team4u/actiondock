@@ -38,7 +38,7 @@ public class ConfigValueController {
      */
     @GetMapping
     public ApiResponse<List<ConfigValueView>> list() {
-        return ApiResponse.success(configValueApplicationService.list().stream().map(this::toView).toList());
+        return ApiResponse.success(configValueApplicationService.list().stream().map(ConfigValueController::toView).toList());
     }
 
     /**
@@ -125,7 +125,7 @@ public class ConfigValueController {
         return ApiResponse.success(null, "配置值已删除");
     }
 
-    private ConfigValue toDomain(ConfigValueRequest request) {
+    private static ConfigValue toDomain(ConfigValueRequest request) {
         ConfigValueRequest value = request == null ? new ConfigValueRequest() : request;
         return new ConfigValue()
                 .setKey(value.getKey())
@@ -134,7 +134,7 @@ public class ConfigValueController {
                 .setSecret(value.isSecret());
     }
 
-    private ConfigValueView toView(ConfigValue value) {
+    private static ConfigValueView toView(ConfigValue value) {
         boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
         boolean masked = value.isSecret() || "PLACEHOLDER".equalsIgnoreCase(value.getPublishMode());
         return new ConfigValueView()
@@ -154,7 +154,7 @@ public class ConfigValueController {
                 .setUpdatedAt(value.getUpdatedAt());
     }
 
-    private ConfigValueDetailView toDetailView(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+    private static ConfigValueDetailView toDetailView(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
         ConfigValue value = insight.configValue();
         boolean hasValue = value.getValue() != null && !value.getValue().isEmpty();
         return new ConfigValueDetailView(
@@ -172,79 +172,115 @@ public class ConfigValueController {
                 value.isOverridden(),
                 value.getCreatedAt(),
                 value.getUpdatedAt(),
-                new ConfigValueDetailView.Usage(
-                        insight.configReferences().stream()
-                                .map(item -> new ConfigValueDetailView.ConfigReference(item.key(), item.description()))
-                                .toList(),
-                        insight.scriptReferences().stream()
-                                .map(item -> new ConfigValueDetailView.ScriptReference(
-                                        item.scriptId(),
-                                        item.scriptName(),
-                                        item.scope(),
-                                        item.repositoryId(),
-                                        item.repositoryToolId(),
-                                        item.repositoryVersion()
-                                ))
-                                .toList(),
-                        insight.scheduleReferences().stream()
-                                .map(item -> new ConfigValueDetailView.ScheduleReference(
-                                        item.scheduleId(),
-                                        item.scheduleName(),
-                                        item.scriptId(),
-                                        item.scriptName()
-                                ))
-                                .toList(),
-                        insight.pluginConfigReferences().stream()
-                                .map(item -> new ConfigValueDetailView.PluginConfigReference(
-                                        item.pluginId(),
-                                        item.pluginName(),
-                                        item.dependentScriptCount()
-                                ))
-                                .toList(),
-                        insight.templateDeclarations().stream()
-                                .map(item -> new ConfigValueDetailView.TemplateDeclaration(
-                                        item.repositoryId(),
-                                        item.repositoryName(),
-                                        item.toolId(),
-                                        item.toolName(),
-                                        item.version(),
-                                        item.label(),
-                                        item.secret(),
-                                        item.publishMode(),
-                                        item.defaultValue()
-                                ))
-                                .toList(),
-                        insight.modelReferences().stream()
-                                .map(item -> new ConfigValueDetailView.ModelReference(
-                                        item.modelId(),
-                                        item.modelName(),
-                                        item.modelProvider(),
-                                        item.referenceType()
-                                ))
-                                .toList()
-                ),
-                insight.impactedScripts().stream()
-                        .map(item -> new ConfigValueDetailView.ImpactScript(
-                                item.scriptId(),
-                                item.scriptName(),
-                                item.scope(),
-                                item.repositoryId(),
-                                item.repositoryToolId(),
-                                item.repositoryVersion(),
-                                item.reasons()
-                        ))
-                        .toList(),
-                insight.origin() == null ? null : new ConfigValueDetailView.Origin(
-                        insight.origin().repositoryId(),
-                        insight.origin().repositoryName(),
-                        insight.origin().toolId(),
-                        insight.origin().toolName(),
-                        insight.origin().version()
-                ),
+                toUsage(insight),
+                toImpactScripts(insight.impactedScripts()),
+                insight.origin() == null ? null : toOrigin(insight.origin()),
                 new ConfigValueDetailView.AvailableActions(
                         insight.availableActions().canCopyAsLocalOverride(),
                         insight.availableActions().canRestoreRepositoryDefault()
                 )
+        );
+    }
+
+    private static ConfigValueDetailView.Usage toUsage(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        return new ConfigValueDetailView.Usage(
+                toConfigReferences(insight),
+                toScriptReferences(insight),
+                toScheduleReferences(insight),
+                toPluginConfigReferences(insight),
+                toTemplateDeclarations(insight),
+                toModelReferences(insight)
+        );
+    }
+
+    private static List<ConfigValueDetailView.ConfigReference> toConfigReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        return insight.configReferences().stream()
+                .map(item -> new ConfigValueDetailView.ConfigReference(item.key(), item.description()))
+                .toList();
+    }
+
+    private static List<ConfigValueDetailView.ScriptReference> toScriptReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        return insight.scriptReferences().stream()
+                .map(item -> new ConfigValueDetailView.ScriptReference(
+                        item.scriptId(),
+                        item.scriptName(),
+                        item.scope(),
+                        item.repositoryId(),
+                        item.repositoryToolId(),
+                        item.repositoryVersion()
+                ))
+                .toList();
+    }
+
+    private static List<ConfigValueDetailView.ScheduleReference> toScheduleReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        return insight.scheduleReferences().stream()
+                .map(item -> new ConfigValueDetailView.ScheduleReference(
+                        item.scheduleId(),
+                        item.scheduleName(),
+                        item.scriptId(),
+                        item.scriptName()
+                ))
+                .toList();
+    }
+
+    private static List<ConfigValueDetailView.PluginConfigReference> toPluginConfigReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        return insight.pluginConfigReferences().stream()
+                .map(item -> new ConfigValueDetailView.PluginConfigReference(
+                        item.pluginId(),
+                        item.pluginName(),
+                        item.dependentScriptCount()
+                ))
+                .toList();
+    }
+
+    private static List<ConfigValueDetailView.TemplateDeclaration> toTemplateDeclarations(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        return insight.templateDeclarations().stream()
+                .map(item -> new ConfigValueDetailView.TemplateDeclaration(
+                        item.repositoryId(),
+                        item.repositoryName(),
+                        item.toolId(),
+                        item.toolName(),
+                        item.version(),
+                        item.label(),
+                        item.secret(),
+                        item.publishMode(),
+                        item.defaultValue()
+                ))
+                .toList();
+    }
+
+    private static List<ConfigValueDetailView.ModelReference> toModelReferences(ConfigValueUsageAnalysisService.ConfigValueInsight insight) {
+        return insight.modelReferences().stream()
+                .map(item -> new ConfigValueDetailView.ModelReference(
+                        item.modelId(),
+                        item.modelName(),
+                        item.modelProvider(),
+                        item.referenceType()
+                ))
+                .toList();
+    }
+
+    private static List<ConfigValueDetailView.ImpactScript> toImpactScripts(List<ConfigValueUsageAnalysisService.ImpactScript> impacts) {
+        return impacts.stream()
+                .map(item -> new ConfigValueDetailView.ImpactScript(
+                        item.scriptId(),
+                        item.scriptName(),
+                        item.scope(),
+                        item.repositoryId(),
+                        item.repositoryToolId(),
+                        item.repositoryVersion(),
+                        item.reasons()
+                ))
+                .toList();
+    }
+
+    private static ConfigValueDetailView.Origin toOrigin(ConfigValueUsageAnalysisService.ConfigValueOrigin origin) {
+        return new ConfigValueDetailView.Origin(
+                origin.repositoryId(),
+                origin.repositoryName(),
+                origin.toolId(),
+                origin.toolName(),
+                origin.version()
         );
     }
 }

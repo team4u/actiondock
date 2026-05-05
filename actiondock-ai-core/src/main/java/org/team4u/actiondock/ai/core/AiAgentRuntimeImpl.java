@@ -29,7 +29,7 @@ import java.util.UUID;
 import java.util.concurrent.Executor;
 
 public class AiAgentRuntimeImpl implements AiAgentRuntime {
-    static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
+    public static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
 
     private final AiAgentProfileService agentProfileService;
     private final AiModelProfileRepository modelProfileRepository;
@@ -83,8 +83,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
 
     @Override
     public AiAgentRunResult resume(String runId, AiAgentResumeCommand command) {
-        AiAgentRunRecord run = runRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
+        AiAgentRunRecord run = requireRun(runId);
         if (run.getStatus() != AiRunStatus.WAITING_APPROVAL && run.getStatus() != AiRunStatus.INTERRUPTED) {
             throw new IllegalStateException("AI Agent Run 当前状态不可恢复: " + run.getStatus());
         }
@@ -97,8 +96,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
 
     @Override
     public void cancel(String runId) {
-        AiAgentRunRecord run = runRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
+        AiAgentRunRecord run = requireRun(runId);
         if (isTerminalStatus(run.getStatus())) {
             return;
         }
@@ -109,8 +107,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
 
     @Override
     public AiAgentRunSnapshot getRun(String runId) {
-        AiAgentRunRecord run = runRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
+        AiAgentRunRecord run = requireRun(runId);
         List<AiAgentStep> steps = stepRepository.findByRunId(runId);
         return new AiAgentRunSnapshot(
                 run.getId(),
@@ -137,8 +134,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
     }
 
     public void deleteRun(String runId) {
-        AiAgentRunRecord run = runRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
+        AiAgentRunRecord run = requireRun(runId);
         if (!isTerminalStatus(run.getStatus())) {
             throw new IllegalStateException("运行进行中，无法删除: " + run.getStatus());
         }
@@ -226,13 +222,48 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
         steps.forEach(stepRepository::save);
         List<AiAgentStep> persistedSteps = stepRepository.findByRunId(runId);
         AiUsage usage = result == null || result.usage() == null ? AiUsage.empty() : result.usage();
+        AiRunStatus status = result == null || result.status() == null ? AiRunStatus.SUCCESS : result.status();
+        Map<String, Object> output = result == null || result.data() == null ? Map.of() : result.data();
+        String errorMessage = result == null ? null : result.errorMessage();
+        return persistFinalizedRun(prepared, persistedSteps, usage, status, output, errorMessage);
+    }
+
+    private AiAgentRunResult finalizeFailure(PreparedRun prepared, RuntimeException exception) {
+        String runId = prepared.runId();
+        List<AiAgentStep> persistedSteps = stepRepository.findByRunId(runId);
+        String errorMessage = exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage();
+        Map<String, Object> output = new LinkedHashMap<>();
+        AiAgentRunRecord current = runRepository.findById(runId).orElse(prepared.run());
+        output.putAll(current.getOutputSummary());
+        output.put("errorMessage", errorMessage);
+        return persistFinalizedRun(prepared, persistedSteps, AiUsage.empty(), AiRunStatus.FAILED, output, errorMessage);
+    }
+
+    /**
+     * 持久化最终状态的 Agent 运行记录。
+     * <p>
+     * 统一处理 CANCELLED 跳过、步骤计数统计、记录保存和结果返回，
+     * 消除 finalizeSuccess / finalizeFailure 之间的重复逻辑。
+     *
+     * @param prepared        预处理的运行上下文
+     * @param persistedSteps  已持久化的步骤列表
+     * @param usage           模型用量统计
+     * @param status          最终状态
+     * @param output          输出摘要
+     * @param errorMessage    错误信息（成功时为 null）
+     * @return 运行结果
+     */
+    private AiAgentRunResult persistFinalizedRun(PreparedRun prepared,
+                                                 List<AiAgentStep> persistedSteps,
+                                                 AiUsage usage,
+                                                 AiRunStatus status,
+                                                 Map<String, Object> output,
+                                                 String errorMessage) {
+        String runId = prepared.runId();
         AiAgentRunRecord current = runRepository.findById(runId).orElse(prepared.run());
         if (current.getStatus() == AiRunStatus.CANCELLED) {
             return new AiAgentRunResult(runId, AiRunStatus.CANCELLED, current.getOutputSummary(), persistedSteps, usage, current.getErrorMessage());
         }
-
-        AiRunStatus status = result == null || result.status() == null ? AiRunStatus.SUCCESS : result.status();
-        Map<String, Object> output = result == null || result.data() == null ? Map.of() : result.data();
         runRepository.save(current
                 .setStatus(status)
                 .setOutputSummary(output)
@@ -240,40 +271,18 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
                 .setTotalToolCalls(countSteps(persistedSteps, AiStepType.TOOL_CALL))
                 .setTotalTokens(usage.totalTokens())
                 .setFinishedAt(LocalDateTime.now())
-                .setErrorMessage(result == null ? null : result.errorMessage()));
-        return new AiAgentRunResult(runId, status, output, persistedSteps, usage, result == null ? null : result.errorMessage());
+                .setErrorMessage(errorMessage));
+        return new AiAgentRunResult(runId, status, output, persistedSteps, usage, errorMessage);
     }
 
-    private AiAgentRunResult finalizeFailure(PreparedRun prepared, RuntimeException exception) {
-        String runId = prepared.runId();
-        AiAgentRunRecord current = runRepository.findById(runId).orElse(prepared.run());
-        List<AiAgentStep> persistedSteps = stepRepository.findByRunId(runId);
-        if (current.getStatus() == AiRunStatus.CANCELLED) {
-            return new AiAgentRunResult(runId, AiRunStatus.CANCELLED, current.getOutputSummary(), persistedSteps, AiUsage.empty(), current.getErrorMessage());
-        }
-
-        String message = exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage();
-        Map<String, Object> output = new LinkedHashMap<>(current.getOutputSummary());
-        output.put("errorMessage", message);
-        runRepository.save(current
-                .setStatus(AiRunStatus.FAILED)
-                .setOutputSummary(output)
-                .setTotalModelCalls(countSteps(persistedSteps, AiStepType.MODEL_REASONING))
-                .setTotalToolCalls(countSteps(persistedSteps, AiStepType.TOOL_CALL))
-                .setTotalTokens(0)
-                .setFinishedAt(LocalDateTime.now())
-                .setErrorMessage(message));
-        return new AiAgentRunResult(runId, AiRunStatus.FAILED, output, persistedSteps, AiUsage.empty(), message);
-    }
-
-    private List<AiAgentStep> normalizeSteps(String runId, List<AiAgentStep> steps) {
+    private static List<AiAgentStep> normalizeSteps(String runId, List<AiAgentStep> steps) {
         if (steps == null || steps.isEmpty()) {
             return List.of();
         }
         return steps.stream().map(step -> withRunId(step, runId)).toList();
     }
 
-    private AiAgentStep withRunId(AiAgentStep step, String runId) {
+    private static AiAgentStep withRunId(AiAgentStep step, String runId) {
         return new AiAgentStep(
                 step.id(),
                 step.runId() == null ? runId : step.runId(),
@@ -291,15 +300,20 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
         );
     }
 
-    private int countSteps(List<AiAgentStep> steps, AiStepType stepType) {
+    private static int countSteps(List<AiAgentStep> steps, AiStepType stepType) {
         return (int) steps.stream().filter(step -> step.stepType() == stepType).count();
     }
 
-    private boolean isTerminalStatus(AiRunStatus status) {
+    private static boolean isTerminalStatus(AiRunStatus status) {
         return status == AiRunStatus.SUCCESS
                 || status == AiRunStatus.FAILED
                 || status == AiRunStatus.CANCELLED
                 || status == AiRunStatus.INTERRUPTED;
+    }
+
+    private AiAgentRunRecord requireRun(String runId) {
+        return runRepository.findById(runId)
+                .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
     }
 
     private AiAgentRunContext withEffectivePolicy(AiAgentProfile agentProfile,

@@ -17,7 +17,6 @@ import java.util.Map;
  */
 @Component
 public class ExecutionResponseMapper {
-    private final ExecutionOutputProjector executionOutputProjector = new ExecutionOutputProjector();
 
     /**
      * 将执行记录转换为 API 响应对象。
@@ -50,7 +49,7 @@ public class ExecutionResponseMapper {
                 record.getEventTriggerId(),
                 record.getEventRecordId(),
                 record.getEventDispatchId(),
-                executionOutputProjector.project(rawOutput, scriptDefinition.getOutputSchema()),
+                ExecutionOutputProjector.project(rawOutput, scriptDefinition.getOutputSchema()),
                 copyLogs(record.getLogs()),
                 record.getErrorMessage(),
                 record.getErrorDetail(),
@@ -61,11 +60,11 @@ public class ExecutionResponseMapper {
         );
     }
 
-    private Map<String, Object> copy(Map<String, Object> value) {
+    private static Map<String, Object> copy(Map<String, Object> value) {
         return value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
     }
 
-    private List<ExecutionLogEntry> copyLogs(List<ExecutionLogEntry> value) {
+    private static List<ExecutionLogEntry> copyLogs(List<ExecutionLogEntry> value) {
         return value == null ? List.of() : List.copyOf(value);
     }
 }

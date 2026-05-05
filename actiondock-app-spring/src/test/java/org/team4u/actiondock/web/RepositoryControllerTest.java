@@ -10,6 +10,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
+import org.team4u.actiondock.repository.RepositoryCatalogTypes;
+import org.team4u.actiondock.repository.RepositorySkillService;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -45,10 +47,13 @@ class RepositoryControllerTest {
     @MockBean
     private RepositoryCatalogService repositoryCatalogService;
 
+    @MockBean
+    private RepositorySkillService repositorySkillService;
+
     @Test
     void skillArchiveReturnsBinaryDownload() throws Exception {
-        when(repositoryCatalogService.exportRepositorySkillArchive("repo-1", "skill-1"))
-                .thenReturn(new RepositoryCatalogService.RepositoryBinaryArchive("skill-1.zip", "zip-content".getBytes()));
+        when(repositorySkillService.exportRepositorySkillArchive("repo-1", "skill-1"))
+                .thenReturn(new RepositoryCatalogTypes.RepositoryBinaryArchive("skill-1.zip", "zip-content".getBytes()));
 
         mockMvc.perform(get("/api/repositories/repo-1/skills/skill-1/archive"))
                 .andExpect(status().isOk())
@@ -59,7 +64,7 @@ class RepositoryControllerTest {
     @Test
     void publishSkillArchiveDelegatesToRepositoryService() throws Exception {
         when(repositoryCatalogService.publishSkillArchive(eq("repo-1"), eq("notes"), eq("skill.zip"), any()))
-                .thenReturn(new RepositoryCatalogService.RepositorySkillDescriptor(
+                .thenReturn(new RepositoryCatalogTypes.RepositorySkillDescriptor(
                         "repo-1",
                         "skill-1",
                         "Skill 1",

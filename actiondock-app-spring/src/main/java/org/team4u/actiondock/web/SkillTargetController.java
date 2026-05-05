@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.domain.model.SkillTarget;
-import org.team4u.actiondock.skill.SkillService;
 import org.team4u.actiondock.skill.SkillTargetService;
+import org.team4u.actiondock.skill.SkillTypes;
 
 import java.util.List;
 
@@ -47,18 +47,18 @@ public class SkillTargetController {
     }
 
     @PostMapping("/{targetId}/scan")
-    public ApiResponse<List<SkillService.SkillScanItem>> scan(@PathVariable String targetId) {
+    public ApiResponse<List<SkillTypes.SkillScanItem>> scan(@PathVariable String targetId) {
         return ApiResponse.success(skillTargetService.scanTarget(targetId));
     }
 
     @GetMapping("/{targetId}/scan/{directoryId}")
-    public ApiResponse<SkillService.SkillScanDetail> getScanItemDetail(@PathVariable String targetId,
+    public ApiResponse<SkillTypes.SkillScanDetail> getScanItemDetail(@PathVariable String targetId,
                                                                         @PathVariable String directoryId) {
         return ApiResponse.success(skillTargetService.getScanItemDetail(targetId, directoryId));
     }
 
     @GetMapping("/{targetId}/scan/{directoryId}/preview")
-    public ApiResponse<SkillService.SkillFilePreview> previewScanItemFile(@PathVariable String targetId,
+    public ApiResponse<SkillTypes.SkillFilePreview> previewScanItemFile(@PathVariable String targetId,
                                                                            @PathVariable String directoryId,
                                                                            @RequestParam String path) {
         return ApiResponse.success(skillTargetService.previewScanItemFile(targetId, directoryId, path));
@@ -72,7 +72,7 @@ public class SkillTargetController {
     }
 
     @PostMapping("/{targetId}/sync-installations")
-    public ApiResponse<SkillService.SkillSyncResponse> syncInstallations(@PathVariable String targetId,
+    public ApiResponse<SkillTypes.SkillSyncResponse> syncInstallations(@PathVariable String targetId,
                                                                          @RequestBody SkillTargetSyncRequest request) {
         return ApiResponse.success(
                 skillTargetService.syncSkillsToTarget(targetId, request == null ? List.of() : request.getSkillIds()),

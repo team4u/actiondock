@@ -23,6 +23,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 public class AiGatewayImpl implements AiGateway {
     private final AiModelProfileService modelProfileService;
@@ -40,50 +41,84 @@ public class AiGatewayImpl implements AiGateway {
     @Override
     public AiChatResponse chat(AiChatRequest request, AiCallContext context) {
         AiModelProfile profile = requireProfile(request == null ? null : request.modelProfile(), AiCapability.CHAT);
-        long started = System.currentTimeMillis();
-        try {
-            AiChatResponse response = providerClient.chat(profile, request, context);
-            audit(context, AiCallAction.CHAT, profile, "SUCCESS", response.usage(), System.currentTimeMillis() - started, null, null,
-                    summarizeMessages(request == null ? null : request.messages()), Map.of("dataLength", response.data() == null ? 0 : response.data().length()));
-            return response;
-        } catch (RuntimeException exception) {
-            audit(context, AiCallAction.CHAT, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,
-                    exception.getClass().getName(), exception.getMessage(), summarizeMessages(request == null ? null : request.messages()), Map.of());
-            throw exception;
-        }
+        Map<String, Object> reqSummary = summarizeMessages(request == null ? null : request.messages());
+        return executeWithAudit(
+                context, AiCallAction.CHAT, profile,
+                reqSummary,
+                () -> providerClient.chat(profile, request, context),
+                response -> Map.of("dataLength", response.data() == null ? 0 : response.data().length()),
+                reqSummary
+        );
     }
 
     @Override
     public AiStructuredResponse structured(AiStructuredRequest request, AiCallContext context) {
         AiModelProfile profile = requireProfile(request == null ? null : request.modelProfile(), AiCapability.STRUCTURED_OUTPUT);
-        long started = System.currentTimeMillis();
-        try {
-            AiStructuredResponse response = providerClient.structured(profile, request, context);
-            audit(context, AiCallAction.STRUCTURED, profile, "SUCCESS", response.usage(), System.currentTimeMillis() - started, null, null,
-                    summarizeMessages(request == null ? null : request.messages()), Map.of("fieldCount", response.data() == null ? 0 : response.data().size()));
-            return response;
-        } catch (RuntimeException exception) {
-            audit(context, AiCallAction.STRUCTURED, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,
-                    exception.getClass().getName(), exception.getMessage(), summarizeMessages(request == null ? null : request.messages()), Map.of());
-            throw exception;
-        }
+        Map<String, Object> reqSummary = summarizeMessages(request == null ? null : request.messages());
+        return executeWithAudit(
+                context, AiCallAction.STRUCTURED, profile,
+                reqSummary,
+                () -> providerClient.structured(profile, request, context),
+                response -> Map.of("fieldCount", response.data() == null ? 0 : response.data().size()),
+                reqSummary
+        );
     }
 
     @Override
     public AiEmbeddingResponse embed(AiEmbeddingRequest request, AiCallContext context) {
         AiModelProfile profile = requireProfile(request == null ? null : request.modelProfile(), AiCapability.EMBEDDING);
+        return executeWithAudit(
+                context, AiCallAction.EMBED, profile,
+                Map.of("inputCount", request == null || request.input() == null ? 0 : request.input().size()),
+                () -> providerClient.embed(profile, request, context),
+                response -> Map.of("embeddingCount", response.data() == null ? 0 : response.data().size()),
+                Map.of()
+        );
+    }
+
+    /**
+     * 通用的执行 + 审计模板方法，封装 try-catch 和审计逻辑。
+     *
+     * @param context              调用上下文
+     * @param action               调用动作类型
+     * @param profile              模型配置
+     * @param requestSummary       成功时的请求摘要
+     * @param invocation           实际调用提供者的逻辑
+     * @param responseSummary      响应摘要构建函数
+     * @param failedRequestSummary 失败时的请求摘要
+     * @param <R>                  响应类型
+     * @return 提供者返回的响应
+     */
+    private <R> R executeWithAudit(AiCallContext context,
+                                   AiCallAction action,
+                                   AiModelProfile profile,
+                                   Map<String, Object> requestSummary,
+                                   Supplier<R> invocation,
+                                   java.util.function.Function<R, Map<String, Object>> responseSummary,
+                                   Map<String, Object> failedRequestSummary) {
         long started = System.currentTimeMillis();
         try {
-            AiEmbeddingResponse response = providerClient.embed(profile, request, context);
-            audit(context, AiCallAction.EMBED, profile, "SUCCESS", response.usage(), System.currentTimeMillis() - started, null, null,
-                    Map.of("inputCount", request == null || request.input() == null ? 0 : request.input().size()),
-                    Map.of("embeddingCount", response.data() == null ? 0 : response.data().size()));
+            R response = invocation.get();
+            AiUsage usage = extractUsage(response);
+            audit(context, action, profile, "SUCCESS", usage, System.currentTimeMillis() - started,
+                    null, null, requestSummary, responseSummary.apply(response));
             return response;
         } catch (RuntimeException exception) {
-            audit(context, AiCallAction.EMBED, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,
-                    exception.getClass().getName(), exception.getMessage(), Map.of(), Map.of());
+            audit(context, action, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,
+                    exception.getClass().getName(), exception.getMessage(),
+                    failedRequestSummary, Map.of());
             throw exception;
         }
+    }
+
+    /**
+     * 从响应对象中提取用量统计。
+     */
+    private static AiUsage extractUsage(Object response) {
+        if (response instanceof AiChatResponse r) return r.usage();
+        if (response instanceof AiStructuredResponse r) return r.usage();
+        if (response instanceof AiEmbeddingResponse r) return r.usage();
+        return AiUsage.empty();
     }
 
     private AiModelProfile requireProfile(String id, AiCapability capability) {
@@ -110,22 +145,16 @@ public class AiGatewayImpl implements AiGateway {
                        String errorMessage,
                        Map<String, Object> requestSummary,
                        Map<String, Object> responseSummary) {
-        callLogRepository.save(new AiCallLog()
-                .setId(UUID.randomUUID().toString())
-                .setExecutionId(context == null ? null : context.executionId())
-                .setScriptId(context == null ? null : context.scriptId())
-                .setPluginId(context == null ? null : context.pluginId())
-                .setAgentRunId(context == null ? null : context.agentRunId())
-                .setAgentStepId(context == null ? null : context.agentStepId())
-                .setCallerType(context == null ? null : context.callerType())
+        AiCallLog log = new AiCallLog()
+                .setId(UUID.randomUUID().toString());
+        applyContext(log, context);
+        applyUsage(log, usage);
+        callLogRepository.save(log
                 .setAction(action)
                 .setModelProfile(profile.getId())
                 .setProvider(profile.getProvider())
                 .setModel(profile.getModelName())
                 .setStatus(status)
-                .setInputTokens(usage == null ? null : usage.inputTokens())
-                .setOutputTokens(usage == null ? null : usage.outputTokens())
-                .setTotalTokens(usage == null ? null : usage.totalTokens())
                 .setLatencyMs(latencyMs)
                 .setErrorType(errorType)
                 .setErrorMessage(errorMessage)
@@ -135,19 +164,42 @@ public class AiGatewayImpl implements AiGateway {
                 .setCreatedAt(LocalDateTime.now()));
     }
 
-    private Map<String, Object> summarizeMessages(List<?> messages) {
+    /**
+     * 将调用上下文中的字段安全地应用到审计日志。
+     * 当 context 为 null 时，所有字段设为 null。
+     */
+    private static void applyContext(AiCallLog log, AiCallContext context) {
+        log.setExecutionId(context == null ? null : context.executionId())
+                .setScriptId(context == null ? null : context.scriptId())
+                .setPluginId(context == null ? null : context.pluginId())
+                .setAgentRunId(context == null ? null : context.agentRunId())
+                .setAgentStepId(context == null ? null : context.agentStepId())
+                .setCallerType(context == null ? null : context.callerType());
+    }
+
+    /**
+     * 将用量统计安全地应用到审计日志。
+     * 当 usage 为 null 时，所有令牌字段设为 null。
+     */
+    private static void applyUsage(AiCallLog log, AiUsage usage) {
+        log.setInputTokens(usage == null ? null : usage.inputTokens())
+                .setOutputTokens(usage == null ? null : usage.outputTokens())
+                .setTotalTokens(usage == null ? null : usage.totalTokens());
+    }
+
+    private static Map<String, Object> summarizeMessages(List<?> messages) {
         return Map.of(
                 "messageCount", messages == null ? 0 : messages.size(),
                 "characters", messages == null ? 0 : messages.toString().length()
         );
     }
 
-    private String hash(String value) {
+    private static String hash(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception exception) {
-            return null;
+            throw new IllegalStateException("SHA-256 哈希计算失败", exception);
         }
     }
 }

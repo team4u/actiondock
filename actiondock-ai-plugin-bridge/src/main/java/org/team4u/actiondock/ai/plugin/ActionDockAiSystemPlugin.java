@@ -44,11 +44,11 @@ public class ActionDockAiSystemPlugin implements ActionDockPlugin {
         };
     }
 
-    private AiChatRequest toChatRequest(Map<String, Object> values) {
+    private static AiChatRequest toChatRequest(Map<String, Object> values) {
         return new AiChatRequest(stringValue(values.get("modelProfile")), messages(values.get("messages")), mapValue(values.get("options")));
     }
 
-    private AiStructuredRequest toStructuredRequest(Map<String, Object> values) {
+    private static AiStructuredRequest toStructuredRequest(Map<String, Object> values) {
         return new AiStructuredRequest(
                 stringValue(values.get("modelProfile")),
                 messages(values.get("messages")),
@@ -57,7 +57,7 @@ public class ActionDockAiSystemPlugin implements ActionDockPlugin {
         );
     }
 
-    private AiEmbeddingRequest toEmbeddingRequest(Map<String, Object> values) {
+    private static AiEmbeddingRequest toEmbeddingRequest(Map<String, Object> values) {
         Object input = values.get("input");
         List<String> items = input instanceof List<?> list
                 ? list.stream().map(String::valueOf).toList()
@@ -65,7 +65,7 @@ public class ActionDockAiSystemPlugin implements ActionDockPlugin {
         return new AiEmbeddingRequest(stringValue(values.get("modelProfile")), items, mapValue(values.get("options")));
     }
 
-    private AiAgentRunRequest toAgentRunRequest(Map<String, Object> values) {
+    private static AiAgentRunRequest toAgentRunRequest(Map<String, Object> values) {
         return new AiAgentRunRequest(
                 stringValue(values.get("agentProfile")),
                 messages(values.get("messages")),
@@ -74,7 +74,7 @@ public class ActionDockAiSystemPlugin implements ActionDockPlugin {
         );
     }
 
-    private AiCallContext toCallContext(ScriptPluginContext context) {
+    private static AiCallContext toCallContext(ScriptPluginContext context) {
         return new AiCallContext(
                 AiCallerType.SCRIPT,
                 context == null ? null : context.getScriptId(),
@@ -87,7 +87,7 @@ public class ActionDockAiSystemPlugin implements ActionDockPlugin {
         );
     }
 
-    private AiAgentRunContext toAgentRunContext(ScriptPluginContext context) {
+    private static AiAgentRunContext toAgentRunContext(ScriptPluginContext context) {
         return new AiAgentRunContext(
                 AiCallerType.SCRIPT,
                 context == null ? null : context.getScriptId(),
@@ -98,12 +98,12 @@ public class ActionDockAiSystemPlugin implements ActionDockPlugin {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> mapValue(Object value) {
+    private static Map<String, Object> mapValue(Object value) {
         return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
     }
 
     @SuppressWarnings("unchecked")
-    private List<AiMessage> messages(Object value) {
+    private static List<AiMessage> messages(Object value) {
         if (!(value instanceof List<?> list)) {
             return List.of();
         }
@@ -116,7 +116,7 @@ public class ActionDockAiSystemPlugin implements ActionDockPlugin {
                 .toList();
     }
 
-    private String stringValue(Object value) {
+    private static String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
     }
 }

@@ -13,6 +13,8 @@ import org.team4u.actiondock.domain.port.ManagedSkillRepository;
 import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.domain.port.SkillTargetRepository;
 
+import static org.team4u.actiondock.skill.SkillTypes.*;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -51,7 +53,7 @@ class SkillServiceTest {
         SkillTarget targetA = saveTarget(service, "Claude", "CLAUDE", "target-a");
         SkillTarget targetB = saveTarget(service, "Codex", "CODEX", "target-b");
 
-        SkillService.SkillListItem skill = service.installFromZip(
+        SkillTypes.SkillListItem skill = service.installFromZip(
                 List.of(targetA.getId(), targetB.getId()),
                 "sample-skill.zip",
                 sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "hello")
@@ -79,7 +81,7 @@ class SkillServiceTest {
         Path updateDir = tempDir.resolve("update");
         writeSkillDirectory(updateDir, "sample-skill", "2.0.0", "New Skill", "New", "new");
 
-        SkillService.SkillListItem updated = service.updateSkill("sample-skill", updateDir.toString());
+        SkillTypes.SkillListItem updated = service.updateSkill("sample-skill", updateDir.toString());
 
         assertThat(updated.version()).isEqualTo("2.0.0");
         assertThat(updated.displayName()).isEqualTo("New Skill");
@@ -100,7 +102,7 @@ class SkillServiceTest {
         Path updateDir = tempDir.resolve("standard-update");
         writeStandardSkillDirectory(updateDir, "New Skill", "New", "new");
 
-        SkillService.SkillListItem updated = service.updateSkill("sample-skill", updateDir.toString());
+        SkillTypes.SkillListItem updated = service.updateSkill("sample-skill", updateDir.toString());
 
         assertThat(updated.version()).isEqualTo("1.5.0");
         assertThat(updated.displayName()).isEqualTo("New Skill");
@@ -124,7 +126,7 @@ class SkillServiceTest {
                 sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "hello")
         );
 
-        SkillService.SkillListItem updated = service.updateSkillVersion("sample-skill", "1.1.0");
+        SkillTypes.SkillListItem updated = service.updateSkillVersion("sample-skill", "1.1.0");
 
         assertThat(updated.version()).isEqualTo("1.1.0");
         assertThat(updated.targets()).allSatisfy(deployment ->
@@ -143,7 +145,7 @@ class SkillServiceTest {
         SkillService service = createService();
         SkillTarget target = saveTarget(service, "Claude", "CLAUDE", "target-a");
 
-        SkillService.SkillListItem skill = service.installFromZip(
+        SkillTypes.SkillListItem skill = service.installFromZip(
                 List.of(target.getId()),
                 "standard-skill.zip",
                 standardArchive("standard-skill", "Standard Skill", "Standard", "body")
@@ -167,12 +169,12 @@ class SkillServiceTest {
                 sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "hello")
         );
 
-        SkillService.SkillListItem disabled = service.disableSkill("sample-skill");
+        SkillTypes.SkillListItem disabled = service.disableSkill("sample-skill");
         assertThat(disabled.enabledTargetCount()).isZero();
         assertThat(disabled.disabledTargetCount()).isEqualTo(2);
         assertThat(disabled.targets()).allSatisfy(target -> assertThat(Path.of(target.installedPath())).doesNotExist());
 
-        SkillService.SkillListItem restored = service.restoreSkill("sample-skill");
+        SkillTypes.SkillListItem restored = service.restoreSkill("sample-skill");
         assertThat(restored.enabledTargetCount()).isEqualTo(2);
         assertThat(restored.targets()).allSatisfy(target -> assertThat(Path.of(target.installedPath()).resolve("SKILL.md")).exists());
     }
@@ -188,7 +190,7 @@ class SkillServiceTest {
                 sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "hello")
         );
 
-        SkillService.SkillSyncResponse response = createTargetService(service).syncSkillsToTarget(target.getId(), List.of("sample-skill"));
+        SkillTypes.SkillSyncResponse response = createTargetService(service).syncSkillsToTarget(target.getId(), List.of("sample-skill"));
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo("SUCCESS");
@@ -217,7 +219,7 @@ class SkillServiceTest {
                 conflict
                 """.trim());
 
-        SkillService.SkillSyncResponse response = createTargetService(service).syncSkillsToTarget(target.getId(), List.of("sample-skill"));
+        SkillTypes.SkillSyncResponse response = createTargetService(service).syncSkillsToTarget(target.getId(), List.of("sample-skill"));
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo("SKIPPED");
@@ -256,8 +258,8 @@ class SkillServiceTest {
                 sampleArchive("sample-skill", "1.0.0", "Sample Skill", "Sample", "guide")
         );
 
-        SkillService.SkillFilePreview preview = service.previewSkillFile("sample-skill", "references/guide.txt");
-        SkillService.SkillArchive exported = service.exportSkillArchive("sample-skill");
+        SkillTypes.SkillFilePreview preview = service.previewSkillFile("sample-skill", "references/guide.txt");
+        SkillTypes.SkillArchive exported = service.exportSkillArchive("sample-skill");
 
         assertThat(preview.previewType()).isEqualTo("TEXT");
         assertThat(preview.textContent()).isEqualTo("guide");
@@ -279,7 +281,7 @@ class SkillServiceTest {
         );
         Files.write(tempDir.resolve("managed-skills").resolve("sample-skill").resolve("image.png"), new byte[] {1, 2, 3});
 
-        SkillService.RuntimeSkill runtimeSkill = service.requireRuntimeSkill("sample-skill");
+        RuntimeSkill runtimeSkill = service.requireRuntimeSkill("sample-skill");
 
         assertThat(runtimeSkill.skillId()).isEqualTo("sample-skill");
         assertThat(runtimeSkill.displayName()).isEqualTo("Sample Skill");

@@ -86,4 +86,16 @@ public class ManagedSkill {
         this.updatedAt = updatedAt;
         return this;
     }
+
+    public ManagedSkill copyWith(String version, String digest, LocalDateTime updatedAt) {
+        return new ManagedSkill()
+                .setSkillId(skillId)
+                .setRepositoryId(repositoryId)
+                .setVersion(version)
+                .setDigest(digest)
+                .setDisplayName(displayName)
+                .setDescription(description)
+                .setInstalledAt(installedAt)
+                .setUpdatedAt(updatedAt);
+    }
 }

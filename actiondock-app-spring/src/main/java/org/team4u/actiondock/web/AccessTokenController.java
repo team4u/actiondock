@@ -29,7 +29,7 @@ public class AccessTokenController {
 
     @GetMapping
     public ApiResponse<List<AccessTokenView>> list() {
-        return ApiResponse.success(apiAccessTokenApplicationService.list().stream().map(this::toView).toList());
+        return ApiResponse.success(apiAccessTokenApplicationService.list().stream().map(AccessTokenController::toView).toList());
     }
 
     @PostMapping
@@ -65,7 +65,7 @@ public class AccessTokenController {
         return ApiResponse.success(null, "访问令牌已删除");
     }
 
-    private AccessTokenView toView(ApiAccessToken token) {
+    private static AccessTokenView toView(ApiAccessToken token) {
         return new AccessTokenView()
                 .setId(token.getId())
                 .setName(token.getName())

@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
  * @author jay.wu
  */
 public class RepositoryDefinition {
+
+    public static final String DEFAULT_USAGE = "DISTRIBUTION";
+
     private String id;
     private String name;
     private String type;
@@ -15,7 +18,7 @@ public class RepositoryDefinition {
     private String branch;
     private boolean enabled = true;
     private String trustLevel;
-    private String usage = "DISTRIBUTION";
+    private String usage = DEFAULT_USAGE;
     private String description;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;
@@ -89,7 +92,7 @@ public class RepositoryDefinition {
     }
 
     public RepositoryDefinition setUsage(String usage) {
-        this.usage = usage == null || usage.isBlank() ? "DISTRIBUTION" : usage;
+        this.usage = usage == null || usage.isBlank() ? DEFAULT_USAGE : usage;
         return this;
     }
 

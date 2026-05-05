@@ -110,7 +110,7 @@ public class JpaSharedStateRepositoryAdapter implements SharedStateRepository {
                 .setLastWriterExecutionId(entity.getLastWriterExecutionId());
     }
 
-    private String compositeId(String namespace, String key) {
+    private static String compositeId(String namespace, String key) {
         return namespace + ID_SEPARATOR + key;
     }
 }

@@ -1,7 +1,5 @@
 package org.team4u.actiondock.domain.model;
 
-import org.team4u.actiondock.domain.model.SchemaValueCopier;
-
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -126,42 +124,26 @@ public class PublishedScriptSnapshot {
 
     public List<ScriptDependency> getScriptDependencies() {
         return scriptDependencies.stream()
-                .map(dependency -> new ScriptDependency()
-                        .setScriptId(dependency.getScriptId())
-                        .setRepositoryId(dependency.getRepositoryId())
-                        .setToolId(dependency.getToolId())
-                        .setVersionRange(dependency.getVersionRange()))
+                .map(ScriptDependency::copy)
                 .toList();
     }
 
     public PublishedScriptSnapshot setScriptDependencies(List<ScriptDependency> scriptDependencies) {
         this.scriptDependencies = scriptDependencies == null ? new ArrayList<>() : scriptDependencies.stream()
-                .map(dependency -> new ScriptDependency()
-                        .setScriptId(dependency.getScriptId())
-                        .setRepositoryId(dependency.getRepositoryId())
-                        .setToolId(dependency.getToolId())
-                        .setVersionRange(dependency.getVersionRange()))
+                .map(ScriptDependency::copy)
                 .toList();
         return this;
     }
 
     public List<AiDependency> getAiDependencies() {
         return aiDependencies.stream()
-                .map(dependency -> new AiDependency()
-                        .setCapability(dependency.getCapability())
-                        .setProfile(dependency.getProfile())
-                        .setAgentProfile(dependency.getAgentProfile())
-                        .setRequired(dependency.isRequired()))
+                .map(AiDependency::copy)
                 .toList();
     }
 
     public PublishedScriptSnapshot setAiDependencies(List<AiDependency> aiDependencies) {
         this.aiDependencies = aiDependencies == null ? new ArrayList<>() : aiDependencies.stream()
-                .map(dependency -> new AiDependency()
-                        .setCapability(dependency.getCapability())
-                        .setProfile(dependency.getProfile())
-                        .setAgentProfile(dependency.getAgentProfile())
-                        .setRequired(dependency.isRequired()))
+                .map(AiDependency::copy)
                 .toList();
         return this;
     }
@@ -173,6 +155,18 @@ public class PublishedScriptSnapshot {
      */
     public PublishedScriptSnapshot copy() {
         return new PublishedScriptSnapshot(this);
+    }
+
+    void applyTo(ScriptDefinition target) {
+        target.setName(name);
+        target.setType(type);
+        target.setPackaging(packaging);
+        target.setSource(source);
+        target.setPythonRequirements(pythonRequirements);
+        target.setInputSchema(inputSchema);
+        target.setOutputSchema(outputSchema);
+        target.setScriptDependencies(scriptDependencies);
+        target.setAiDependencies(aiDependencies);
     }
 
     @Override

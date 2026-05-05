@@ -17,12 +17,16 @@ import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
+import org.team4u.actiondock.repository.RepositoryCatalogTypes;
+import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
 import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
+import org.team4u.actiondock.repository.RepositorySkillService;
 import org.team4u.actiondock.repository.RepositoryToolService;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * 工具仓库 REST 控制器。
@@ -36,15 +40,18 @@ public class RepositoryController {
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryToolService repositoryToolService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
+    private final RepositorySkillService repositorySkillService;
 
     public RepositoryController(RepositoryCatalogService repositoryCatalogService,
                                 RepositoryPluginService repositoryPluginService,
                                 RepositoryToolService repositoryToolService,
-                                RepositoryCapabilityPackageService repositoryCapabilityPackageService) {
+                                RepositoryCapabilityPackageService repositoryCapabilityPackageService,
+                                RepositorySkillService repositorySkillService) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryToolService = repositoryToolService;
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
+        this.repositorySkillService = repositorySkillService;
     }
 
     /**
@@ -110,7 +117,7 @@ public class RepositoryController {
      * @return API 响应，包含工具描述符列表
      */
     @GetMapping("/tools")
-    public ApiResponse<List<RepositoryCatalogService.RepositoryToolDescriptor>> listAllTools() {
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listAllTools() {
         return ApiResponse.success(repositoryCatalogService.listAllRepositoryTools());
     }
 
@@ -121,62 +128,62 @@ public class RepositoryController {
      * @return API 响应，包含工具描述符列表
      */
     @GetMapping("/{id}/tools")
-    public ApiResponse<List<RepositoryCatalogService.RepositoryToolDescriptor>> listRepositoryTools(@PathVariable String id) {
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listRepositoryTools(@PathVariable String id) {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
     }
 
     @GetMapping("/packages")
-    public ApiResponse<List<RepositoryCatalogService.CapabilityPackageDescriptor>> listAllPackages() {
+    public ApiResponse<List<RepositoryCatalogTypes.CapabilityPackageDescriptor>> listAllPackages() {
         return ApiResponse.success(repositoryCatalogService.listAllCapabilityPackages());
     }
 
     @GetMapping("/{id}/packages")
-    public ApiResponse<List<RepositoryCatalogService.CapabilityPackageDescriptor>> listRepositoryPackages(@PathVariable String id) {
+    public ApiResponse<List<RepositoryCatalogTypes.CapabilityPackageDescriptor>> listRepositoryPackages(@PathVariable String id) {
         return ApiResponse.success(repositoryCatalogService.listCapabilityPackages(id));
     }
 
     @GetMapping("/{id}/packages/{packageId}")
-    public ApiResponse<RepositoryCatalogService.CapabilityPackageDetail> capabilityPackageDetail(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.CapabilityPackageDetail> capabilityPackageDetail(@PathVariable String id,
                                                                                                  @PathVariable String packageId) {
         return ApiResponse.success(repositoryCatalogService.getCapabilityPackage(id, packageId));
     }
 
     @GetMapping("/plugins")
-    public ApiResponse<List<RepositoryCatalogService.RepositoryPluginDescriptor>> listAllPlugins() {
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPluginDescriptor>> listAllPlugins() {
         return ApiResponse.success(repositoryCatalogService.listAllRepositoryPlugins());
     }
 
     @GetMapping("/skills")
-    public ApiResponse<List<RepositoryCatalogService.RepositorySkillDescriptor>> listAllSkills() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositorySkills());
+    public ApiResponse<List<RepositoryCatalogTypes.RepositorySkillDescriptor>> listAllSkills() {
+        return ApiResponse.success(repositorySkillService.listAllRepositorySkills());
     }
 
     @GetMapping("/{id}/plugins")
-    public ApiResponse<List<RepositoryCatalogService.RepositoryPluginDescriptor>> listRepositoryPlugins(@PathVariable String id) {
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPluginDescriptor>> listRepositoryPlugins(@PathVariable String id) {
         return ApiResponse.success(repositoryCatalogService.listRepositoryPlugins(id));
     }
 
     @GetMapping("/{id}/skills")
-    public ApiResponse<List<RepositoryCatalogService.RepositorySkillDescriptor>> listRepositorySkills(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositorySkills(id));
+    public ApiResponse<List<RepositoryCatalogTypes.RepositorySkillDescriptor>> listRepositorySkills(@PathVariable String id) {
+        return ApiResponse.success(repositorySkillService.listRepositorySkills(id));
     }
 
     @GetMapping("/{id}/plugins/{pluginId}")
-    public ApiResponse<RepositoryCatalogService.RepositoryPluginDetail> pluginDetail(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositoryPluginDetail> pluginDetail(@PathVariable String id,
                                                                                      @PathVariable String pluginId) {
         return ApiResponse.success(repositoryCatalogService.getRepositoryPlugin(id, pluginId));
     }
 
     @GetMapping("/{id}/skills/{skillId}")
-    public ApiResponse<RepositoryCatalogService.RepositorySkillDetail> skillDetail(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositorySkillDetail> skillDetail(@PathVariable String id,
                                                                                    @PathVariable String skillId) {
-        return ApiResponse.success(repositoryCatalogService.getRepositorySkill(id, skillId));
+        return ApiResponse.success(repositorySkillService.getRepositorySkill(id, skillId));
     }
 
     @GetMapping("/{id}/skills/{skillId}/archive")
     public ResponseEntity<byte[]> skillArchive(@PathVariable String id,
                                                @PathVariable String skillId) {
-        RepositoryCatalogService.RepositoryBinaryArchive archive = repositoryCatalogService.exportRepositorySkillArchive(id, skillId);
+        RepositoryCatalogTypes.RepositoryBinaryArchive archive = repositorySkillService.exportRepositorySkillArchive(id, skillId);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + archive.fileName() + "\"")
@@ -184,19 +191,17 @@ public class RepositoryController {
     }
 
     @PostMapping("/{id}/plugins/{pluginId}/install")
-    public ApiResponse<RepositoryCatalogService.RepositoryPluginInstallResult> installPlugin(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositoryPluginInstallResult> installPlugin(@PathVariable String id,
                                                                                             @PathVariable String pluginId,
                                                                                             @RequestBody(required = false) RepositoryPluginInstallRequest request) {
-        boolean force = request != null && request.isForce();
-        return ApiResponse.success(repositoryPluginService.installPlugin(id, pluginId, force), "插件安装完成");
+        return resolveForceAndApply(request, force -> repositoryPluginService.installPlugin(id, pluginId, force), "插件安装完成");
     }
 
     @PostMapping("/{id}/plugins/{pluginId}/update")
-    public ApiResponse<RepositoryCatalogService.RepositoryPluginInstallResult> updatePlugin(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositoryPluginInstallResult> updatePlugin(@PathVariable String id,
                                                                                            @PathVariable String pluginId,
                                                                                            @RequestBody(required = false) RepositoryPluginInstallRequest request) {
-        boolean force = request != null && request.isForce();
-        return ApiResponse.success(repositoryPluginService.updatePlugin(id, pluginId, force), "插件更新完成");
+        return resolveForceAndApply(request, force -> repositoryPluginService.updatePlugin(id, pluginId, force), "插件更新完成");
     }
 
     /**
@@ -207,7 +212,7 @@ public class RepositoryController {
      * @return API 响应，包含工具详情
      */
     @GetMapping("/{id}/tools/{toolId}")
-    public ApiResponse<RepositoryCatalogService.RepositoryToolDetail> detail(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositoryToolDetail> detail(@PathVariable String id,
                                                                              @PathVariable String toolId) {
         return ApiResponse.success(repositoryCatalogService.getRepositoryTool(id, toolId));
     }
@@ -224,18 +229,8 @@ public class RepositoryController {
     public ApiResponse<RepositoryToolInstallation> install(@PathVariable String id,
                                                      @PathVariable String toolId,
                                                      @RequestBody(required = false) RepositoryInstallRequest request) {
-        boolean installSchedules = request != null && request.isInstallSchedules();
-        boolean installScriptDependencies = request != null && request.isInstallScriptDependencies();
-        boolean installPluginDependencies = request != null && request.isInstallPluginDependencies();
-        boolean forcePluginUpgrade = request != null && request.isForcePluginUpgrade();
-        return ApiResponse.success(repositoryToolService.installTool(
-                id,
-                toolId,
-                installSchedules,
-                installScriptDependencies,
-                installPluginDependencies,
-                forcePluginUpgrade
-        ), "安装完成");
+        return resolveOptionsAndApply(request,
+                options -> repositoryToolService.installTool(id, toolId, options), "安装完成");
     }
 
     /**
@@ -250,24 +245,14 @@ public class RepositoryController {
     public ApiResponse<RepositoryToolInstallation> update(@PathVariable String id,
                                                     @PathVariable String toolId,
                                                     @RequestBody(required = false) RepositoryInstallRequest request) {
-        boolean installSchedules = request != null && request.isInstallSchedules();
-        boolean installScriptDependencies = request != null && request.isInstallScriptDependencies();
-        boolean installPluginDependencies = request != null && request.isInstallPluginDependencies();
-        boolean forcePluginUpgrade = request != null && request.isForcePluginUpgrade();
-        return ApiResponse.success(repositoryToolService.updateTool(
-                id,
-                toolId,
-                installSchedules,
-                installScriptDependencies,
-                installPluginDependencies,
-                forcePluginUpgrade
-        ), "更新完成");
+        return resolveOptionsAndApply(request,
+                options -> repositoryToolService.updateTool(id, toolId, options), "更新完成");
     }
 
     @PostMapping("/{id}/tools/{toolId}/develop")
     public ApiResponse<ScriptDefinition> develop(@PathVariable String id,
                                                  @PathVariable String toolId,
-                                                 @RequestBody(required = false) RepositoryCatalogService.DevelopmentSyncRequest request) {
+                                                 @RequestBody(required = false) RepositoryCatalogTypes.DevelopmentSyncRequest request) {
         return ApiResponse.success(repositoryToolService.syncToolForDevelopment(id, toolId, request), "已同步为开发脚本");
     }
 
@@ -279,39 +264,39 @@ public class RepositoryController {
      * @return API 响应，包含发布后的工具描述符
      */
     @PostMapping("/{id}/publish")
-    public ApiResponse<RepositoryCatalogService.RepositoryToolDescriptor> publish(@PathVariable String id,
-                                                                                  @RequestBody RepositoryCatalogService.RepositoryPublishRequest request) {
+    public ApiResponse<RepositoryCatalogTypes.RepositoryToolDescriptor> publish(@PathVariable String id,
+                                                                                  @RequestBody RepositoryCatalogTypes.RepositoryPublishRequest request) {
         return ApiResponse.success(repositoryToolService.publishTool(id, request), "发布完成");
     }
 
     @PostMapping("/{id}/packages/preview")
-    public ApiResponse<RepositoryCatalogService.CapabilityPackagePublishPreview> previewCapabilityPackage(
+    public ApiResponse<RepositoryCatalogTypes.CapabilityPackagePublishPreview> previewCapabilityPackage(
             @PathVariable String id,
-            @RequestBody RepositoryCatalogService.CapabilityPackagePublishPreviewRequest request) {
+            @RequestBody RepositoryCatalogTypes.CapabilityPackagePublishRequest request) {
         return ApiResponse.success(repositoryCapabilityPackageService.previewCapabilityPackage(id, request));
     }
 
     @PostMapping("/{id}/packages/publish")
-    public ApiResponse<RepositoryCatalogService.CapabilityPackageDescriptor> publishCapabilityPackage(
+    public ApiResponse<RepositoryCatalogTypes.CapabilityPackageDescriptor> publishCapabilityPackage(
             @PathVariable String id,
-            @RequestBody RepositoryCatalogService.CapabilityPackagePublishRequest request) {
+            @RequestBody RepositoryCatalogTypes.CapabilityPackagePublishRequest request) {
         return ApiResponse.success(repositoryCapabilityPackageService.publishCapabilityPackage(id, request), "能力包发布完成");
     }
 
     @PostMapping("/publish-config-preview")
-    public ApiResponse<RepositoryCatalogService.RepositoryPublishConfigPreview> previewPublishConfig(
-            @RequestBody RepositoryCatalogService.RepositoryPublishConfigPreviewRequest request) {
+    public ApiResponse<RepositoryCatalogTypes.RepositoryPublishConfigPreview> previewPublishConfig(
+            @RequestBody RepositoryCatalogTypes.RepositoryPublishConfigPreviewRequest request) {
         return ApiResponse.success(repositoryToolService.previewPublishConfig(request));
     }
 
     @PostMapping("/{id}/publish-plugin")
-    public ApiResponse<RepositoryCatalogService.RepositoryPluginDescriptor> publishPlugin(@PathVariable String id,
-                                                                                         @RequestBody RepositoryCatalogService.RepositoryPluginPublishRequest request) {
+    public ApiResponse<RepositoryCatalogTypes.RepositoryPluginDescriptor> publishPlugin(@PathVariable String id,
+                                                                                         @RequestBody RepositoryCatalogTypes.RepositoryPluginPublishRequest request) {
         return ApiResponse.success(repositoryCatalogService.publishPlugin(id, request), "插件发布完成");
     }
 
     @PostMapping(value = "/{id}/publish-skill-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<RepositoryCatalogService.RepositorySkillDescriptor> publishSkillArchive(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositorySkillDescriptor> publishSkillArchive(@PathVariable String id,
                                                                                                 @RequestParam(value = "releaseNotes", required = false) String releaseNotes,
                                                                                                 @RequestParam("archive") MultipartFile archive) throws IOException {
         return ApiResponse.success(
@@ -321,13 +306,13 @@ public class RepositoryController {
     }
 
     @PostMapping("/{id}/packages/{packageId}/install")
-    public ApiResponse<RepositoryCatalogService.CapabilityPackageInstallResult> installCapabilityPackage(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.CapabilityPackageInstallResult> installCapabilityPackage(@PathVariable String id,
                                                                                                           @PathVariable String packageId) {
         return ApiResponse.success(repositoryCapabilityPackageService.installCapabilityPackage(id, packageId), "能力包安装完成");
     }
 
     @PostMapping("/{id}/packages/{packageId}/update")
-    public ApiResponse<RepositoryCatalogService.CapabilityPackageInstallResult> updateCapabilityPackage(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.CapabilityPackageInstallResult> updateCapabilityPackage(@PathVariable String id,
                                                                                                          @PathVariable String packageId) {
         return ApiResponse.success(repositoryCapabilityPackageService.updateCapabilityPackage(id, packageId), "能力包更新完成");
     }
@@ -337,5 +322,21 @@ public class RepositoryController {
                                                         @PathVariable String packageId) {
         repositoryCapabilityPackageService.uninstallCapabilityPackage(id, packageId);
         return ApiResponse.success(null, "能力包已卸载");
+    }
+
+    private <T> ApiResponse<T> resolveForceAndApply(RepositoryPluginInstallRequest request,
+                                                    Function<Boolean, T> action,
+                                                    String successMessage) {
+        boolean force = request != null && request.isForce();
+        return ApiResponse.success(action.apply(force), successMessage);
+    }
+
+    private <T> ApiResponse<T> resolveOptionsAndApply(RepositoryInstallRequest request,
+                                                      Function<ToolInstallationOptions, T> action,
+                                                      String successMessage) {
+        ToolInstallationOptions options = request != null
+                ? new ToolInstallationOptions(request.isInstallSchedules(), request.isInstallScriptDependencies(), request.isInstallPluginDependencies(), request.isForcePluginUpgrade())
+                : ToolInstallationOptions.DEFAULT;
+        return ApiResponse.success(action.apply(options), successMessage);
     }
 }

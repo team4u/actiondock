@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.skill.SkillService;
+import org.team4u.actiondock.skill.SkillTypes;
 
 import java.util.List;
 
@@ -45,10 +46,10 @@ class SkillTargetControllerTest {
     @Test
     void syncInstallationsDelegatesToSkillService() throws Exception {
         when(skillService.syncSkillsToTarget(eq("target-1"), eq(List.of("skill-a", "skill-b"))))
-                .thenReturn(new SkillService.SkillSyncResponse(
+                .thenReturn(new SkillTypes.SkillSyncResponse(
                         "target-1",
                         List.of(
-                                new SkillService.SkillSyncResult("skill-a", "target-1", "SUCCESS", "Skill 已同步", null)
+                                new SkillTypes.SkillSyncResult("skill-a", "target-1", "SUCCESS", "Skill 已同步", null)
                         )
                 ));
 

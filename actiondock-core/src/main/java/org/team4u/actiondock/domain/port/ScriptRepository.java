@@ -1,8 +1,10 @@
 package org.team4u.actiondock.domain.port;
 
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptScope;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -39,9 +41,9 @@ public interface ScriptRepository {
      */
     default Optional<ScriptDefinition> findInstalledByRepositorySource(String repositoryId, String repositoryToolId) {
         return findAll().stream()
-                .filter(item -> item.getScope() == org.team4u.actiondock.domain.model.ScriptScope.REPOSITORY)
-                .filter(item -> java.util.Objects.equals(repositoryId, item.getRepositoryId()))
-                .filter(item -> java.util.Objects.equals(repositoryToolId, item.getRepositoryToolId()))
+                .filter(item -> item.getScope() == ScriptScope.REPOSITORY)
+                .filter(item -> Objects.equals(repositoryId, item.getRepositoryId()))
+                .filter(item -> Objects.equals(repositoryToolId, item.getRepositoryToolId()))
                 .findFirst();
     }
 

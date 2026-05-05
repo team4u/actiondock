@@ -3,6 +3,8 @@ package org.team4u.actiondock.repository;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.ConfigValue;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
+
 import java.util.List;
 import java.util.Map;
 
@@ -58,7 +60,7 @@ class RepositoryPublishConfigResolverTest {
 
         assertThatThrownBy(() -> RepositoryPublishConfigResolver.buildTemplates(
                 resolution,
-                List.of(new RepositoryCatalogService.RepositoryPublishConfigItem("missing.key", "PLACEHOLDER"))
+                List.of(new RepositoryPublishConfigItem("missing.key", "PLACEHOLDER"))
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("发布依赖的配置值不存在: missing.key");
@@ -77,15 +79,15 @@ class RepositoryPublishConfigResolverTest {
                 .hasMessageContaining("发布配置项缺失: api.base");
         assertThatThrownBy(() -> RepositoryPublishConfigResolver.buildTemplates(
                 resolution,
-                List.of(new RepositoryCatalogService.RepositoryPublishConfigItem("other.key", "PLACEHOLDER"))
+                List.of(new RepositoryPublishConfigItem("other.key", "PLACEHOLDER"))
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("发布配置项缺失: api.base");
         assertThatThrownBy(() -> RepositoryPublishConfigResolver.buildTemplates(
                 resolution,
                 List.of(
-                        new RepositoryCatalogService.RepositoryPublishConfigItem("api.base", "PLACEHOLDER"),
-                        new RepositoryCatalogService.RepositoryPublishConfigItem("other.key", "PLACEHOLDER")
+                        new RepositoryPublishConfigItem("api.base", "PLACEHOLDER"),
+                        new RepositoryPublishConfigItem("other.key", "PLACEHOLDER")
                 )
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -93,8 +95,8 @@ class RepositoryPublishConfigResolverTest {
         assertThatThrownBy(() -> RepositoryPublishConfigResolver.buildTemplates(
                 resolution,
                 List.of(
-                        new RepositoryCatalogService.RepositoryPublishConfigItem("api.base", "PLACEHOLDER"),
-                        new RepositoryCatalogService.RepositoryPublishConfigItem("api.base", "INLINE")
+                        new RepositoryPublishConfigItem("api.base", "PLACEHOLDER"),
+                        new RepositoryPublishConfigItem("api.base", "INLINE")
                 )
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -115,11 +117,11 @@ class RepositoryPublishConfigResolverTest {
                 )
         );
 
-        List<RepositoryCatalogService.ConfigTemplateItem> templates = RepositoryPublishConfigResolver.buildTemplates(
+        List<ConfigTemplateItem> templates = RepositoryPublishConfigResolver.buildTemplates(
                 resolution,
                 List.of(
-                        new RepositoryCatalogService.RepositoryPublishConfigItem("api.base", "INLINE"),
-                        new RepositoryCatalogService.RepositoryPublishConfigItem("api.token", "INLINE")
+                        new RepositoryPublishConfigItem("api.base", "INLINE"),
+                        new RepositoryPublishConfigItem("api.token", "INLINE")
                 )
         );
 

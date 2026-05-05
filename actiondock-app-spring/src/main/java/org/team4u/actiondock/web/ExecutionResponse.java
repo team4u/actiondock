@@ -7,6 +7,7 @@ import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.SubmitMode;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,7 +29,7 @@ public record ExecutionResponse(
         String eventRecordId,
         String eventDispatchId,
         Map<String, Object> output,
-        java.util.List<ExecutionLogEntry> logs,
+        List<ExecutionLogEntry> logs,
         String errorMessage,
         ErrorDetail errorDetail,
         LocalDateTime createdAt,

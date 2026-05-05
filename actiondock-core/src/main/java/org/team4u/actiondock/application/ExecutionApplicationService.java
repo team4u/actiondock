@@ -2,8 +2,6 @@ package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionSubmissionMetadata;
-import org.team4u.actiondock.domain.model.ExecutionLogEntry;
-import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
@@ -14,7 +12,6 @@ import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,7 +30,6 @@ public class ExecutionApplicationService {
     private final ExecutionRepository executionRepository;
     private final ScriptEngine scriptEngine;
     private final Executor executor;
-    private final ScriptSchemaSupport scriptSchemaSupport;
     private final ConfigValueApplicationService configValueApplicationService;
 
     public ExecutionApplicationService(ScriptRepository scriptRepository,
@@ -52,7 +48,6 @@ public class ExecutionApplicationService {
         this.executionRepository = executionRepository;
         this.scriptEngine = scriptEngine;
         this.executor = executor;
-        this.scriptSchemaSupport = new ScriptSchemaSupport();
         this.configValueApplicationService = configValueApplicationService == null
                 ? ConfigValueApplicationService.disabled()
                 : configValueApplicationService;
@@ -138,35 +133,11 @@ public class ExecutionApplicationService {
     private ExecutionRecord execute(ScriptDefinition scriptDefinition,
                                     Map<String, Object> input,
                                     SubmitMode submitMode,
-                                    ExecutionTriggerSource triggerSource,
-                                    String scheduleId) {
-        return execute(scriptDefinition, input, submitMode, new ExecutionSubmissionMetadata()
-                .setTriggerSource(triggerSource)
-                .setScheduleId(scheduleId));
-    }
-
-    private ExecutionRecord execute(ScriptDefinition scriptDefinition,
-                                    Map<String, Object> input,
-                                    SubmitMode submitMode,
-                                    ExecutionTriggerSource triggerSource,
-                                    String scheduleId,
-                                    String agentRunId,
-                                    String agentStepId) {
-        return execute(scriptDefinition, input, submitMode, new ExecutionSubmissionMetadata()
-                .setTriggerSource(triggerSource)
-                .setScheduleId(scheduleId)
-                .setAgentRunId(agentRunId)
-                .setAgentStepId(agentStepId));
-    }
-
-    private ExecutionRecord execute(ScriptDefinition scriptDefinition,
-                                    Map<String, Object> input,
-                                    SubmitMode submitMode,
                                     ExecutionSubmissionMetadata metadata) {
         Map<String, Object> payload = ExecutionInputNormalizer.normalizeMap(
                 configValueApplicationService.resolveMap(input)
         );
-        scriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
+        ScriptSchemaSupport.validateInput(scriptDefinition.getId(), payload, scriptDefinition.getInputSchema());
         ExecutionSubmissionMetadata executionMetadata = metadata == null ? ExecutionSubmissionMetadata.manual() : metadata;
 
         ExecutionRecord record = new ExecutionRecord()
@@ -217,31 +188,37 @@ public class ExecutionApplicationService {
             Object result = scriptEngine.execute(
                     definition,
                     record.getInput(),
-                    new ScriptExecutionContext()
-                            .setExecutionId(record.getId())
-                            .setSubmitMode(record.getSubmitMode())
-                            .setConfig(configValueApplicationService.snapshot())
-                            .setScriptStack(List.of(definition.getId()))
-                            .setLogger(logCollector::append)
+                    buildExecutionContext(definition, record, logCollector)
             );
             return logCollector.completeSuccess(MapValueConverter.toResultMap(result));
         } catch (Exception ex) {
             return logCollector.completeFailure(ex);
         } catch (Throwable t) {
-            // 兜底：确保不会因 Error（如 OOM）导致记录永久卡在 RUNNING
-            try {
-                record.setStatus(ExecutionStatus.FAILED);
-                record.setErrorMessage("Fatal error: " + t.getClass().getName());
-                record.setFinishedAt(LocalDateTime.now());
-                executionRepository.save(record);
-            } catch (Exception ignored) {
-                // 持久化也失败时已无能为力
-            }
+            markFailedOnFatalError(record, t);
             throw t;
         }
     }
 
-    @SuppressWarnings("unchecked")
+    private ScriptExecutionContext buildExecutionContext(ScriptDefinition definition, ExecutionRecord record,
+                                                        ExecutionLogCollector logCollector) {
+        return new ScriptExecutionContext()
+                .setExecutionId(record.getId())
+                .setSubmitMode(record.getSubmitMode())
+                .setConfig(configValueApplicationService.snapshot())
+                .setScriptStack(List.of(definition.getId()))
+                .setLogger(logCollector::append);
+    }
+
+    private void markFailedOnFatalError(ExecutionRecord record, Throwable t) {
+        try {
+            record.setStatus(ExecutionStatus.FAILED);
+            record.setErrorMessage("致命错误: " + t.getClass().getName());
+            record.setFinishedAt(LocalDateTime.now());
+            executionRepository.save(record);
+        } catch (Exception ignored) {
+        }
+    }
+
     /**
      * 根据 ID 查询执行记录。
      *
@@ -262,9 +239,7 @@ public class ExecutionApplicationService {
      * @throws IllegalArgumentException 如果 scriptId 为空
      */
     public List<ExecutionRecord> list(String scriptId) {
-        if (scriptId == null || scriptId.isBlank()) {
-            throw new IllegalArgumentException("scriptId 不能为空");
-        }
+        requireNonBlank(scriptId, "scriptId");
         return executionRepository.findByScriptId(scriptId);
     }
 
@@ -276,9 +251,7 @@ public class ExecutionApplicationService {
      * @throws IllegalArgumentException 如果 scheduleId 为空
      */
     public List<ExecutionRecord> listByScheduleId(String scheduleId) {
-        if (scheduleId == null || scheduleId.isBlank()) {
-            throw new IllegalArgumentException("scheduleId 不能为空");
-        }
+        requireNonBlank(scheduleId, "scheduleId");
         return executionRepository.findByScheduleId(scheduleId);
     }
 
@@ -306,18 +279,22 @@ public class ExecutionApplicationService {
      * @throws IllegalArgumentException 如果 scriptId 为空或存在仍在执行中的记录
      */
     public void clear(String scriptId) {
-        if (scriptId == null || scriptId.isBlank()) {
-            throw new IllegalArgumentException("scriptId 不能为空");
-        }
+        requireNonBlank(scriptId, "scriptId");
 
         List<ExecutionRecord> records = executionRepository.findByScriptId(scriptId);
-        records.forEach(this::ensureExecutionDeletable);
+        records.forEach(ExecutionApplicationService::ensureExecutionDeletable);
         executionRepository.deleteByScriptId(scriptId);
     }
 
-    private void ensureExecutionDeletable(ExecutionRecord record) {
+    private static void ensureExecutionDeletable(ExecutionRecord record) {
         if (record.getStatus() == ExecutionStatus.PENDING || record.getStatus() == ExecutionStatus.RUNNING) {
             throw new IllegalArgumentException("执行进行中，无法删除");
+        }
+    }
+
+    private static void requireNonBlank(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " 不能为空");
         }
     }
 }

@@ -96,6 +96,6 @@ public class JpaEventTriggerRepositoryAdapter implements EventTriggerRepository 
     }
 
     private <T> T read(String json, Class<T> type) {
-        return json == null || json.isBlank() ? null : jsonCodec.read(json, type);
+        return JpaJsonSupport.read(jsonCodec, json, type);
     }
 }

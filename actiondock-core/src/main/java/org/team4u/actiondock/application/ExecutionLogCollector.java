@@ -17,6 +17,8 @@ import java.util.Map;
  */
 class ExecutionLogCollector {
 
+    private static final System.Logger log = System.getLogger(ExecutionLogCollector.class.getName());
+
     private final ExecutionRecord record;
     private final ExecutionRepository executionRepository;
     private final Object monitor = new Object();
@@ -34,7 +36,8 @@ class ExecutionLogCollector {
                     .setCreatedAt(LocalDateTime.now()));
             try {
                 executionRepository.save(record);
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                log.log(System.Logger.Level.WARNING, "保存执行日志失败: " + record.getId(), ex);
             }
         }
     }
@@ -77,6 +80,7 @@ class ExecutionLogCollector {
         try {
             return executionRepository.save(record);
         } catch (Exception ex) {
+            log.log(System.Logger.Level.WARNING, "保存执行记录失败: " + record.getId(), ex);
             return record;
         }
     }

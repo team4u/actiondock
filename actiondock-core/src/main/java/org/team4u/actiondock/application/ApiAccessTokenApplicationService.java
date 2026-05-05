@@ -18,6 +18,9 @@ import java.util.UUID;
  * @author jay.wu
  */
 public class ApiAccessTokenApplicationService {
+    private static final String TOKEN_PREFIX = "adk_";
+    private static final int TOKEN_PREVIEW_TAIL_SIZE = 8;
+
     private final ApiAccessTokenRepository repository;
 
     public ApiAccessTokenApplicationService(ApiAccessTokenRepository repository) {
@@ -27,7 +30,7 @@ public class ApiAccessTokenApplicationService {
     public List<ApiAccessToken> list() {
         return repository.findAll().stream()
                 .sorted((left, right) -> left.getCreatedAt().compareTo(right.getCreatedAt()))
-                .map(this::copy)
+                .map(ApiAccessTokenApplicationService::copy)
                 .toList();
     }
 
@@ -36,7 +39,7 @@ public class ApiAccessTokenApplicationService {
         String normalizedName = normalizeName(name);
         String id = UUID.randomUUID().toString().replace("-", "");
         String secret = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
-        String tokenValue = "adk_" + id + "_" + secret;
+        String tokenValue = TOKEN_PREFIX + id + "_" + secret;
         ApiAccessToken token = new ApiAccessToken()
                 .setId(id)
                 .setName(normalizedName)
@@ -103,30 +106,30 @@ public class ApiAccessTokenApplicationService {
                 .orElseThrow(() -> new IllegalArgumentException("访问令牌不存在: " + id));
     }
 
-    private String normalizeId(String id) {
+    private static String normalizeId(String id) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("访问令牌 ID 不能为空");
         }
         return id.trim();
     }
 
-    private String normalizeName(String name) {
+    private static String normalizeName(String name) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("访问令牌名称不能为空");
         }
         return name.trim();
     }
 
-    private String buildPreview(String tokenValue) {
-        int tailSize = Math.min(8, tokenValue.length());
+    private static String buildPreview(String tokenValue) {
+        int tailSize = Math.min(TOKEN_PREVIEW_TAIL_SIZE, tokenValue.length());
         return "****" + tokenValue.substring(tokenValue.length() - tailSize);
     }
 
-    private String hash(String rawToken) {
+    private static String hash(String rawToken) {
         return HexFormat.of().formatHex(hashBytes(rawToken));
     }
 
-    private byte[] hashBytes(String rawToken) {
+    private static byte[] hashBytes(String rawToken) {
         try {
             return MessageDigest.getInstance("SHA-256")
                     .digest(rawToken.getBytes(StandardCharsets.UTF_8));
@@ -135,7 +138,7 @@ public class ApiAccessTokenApplicationService {
         }
     }
 
-    private boolean constantTimeEquals(byte[] actual, String expectedHex) {
+    private static boolean constantTimeEquals(byte[] actual, String expectedHex) {
         if (actual == null || expectedHex == null || expectedHex.isBlank()) {
             return false;
         }
@@ -146,18 +149,19 @@ public class ApiAccessTokenApplicationService {
         }
     }
 
-    private ParsedToken parse(String rawToken) {
-        if (rawToken == null || rawToken.isBlank() || !rawToken.startsWith("adk_")) {
+    private static ParsedToken parse(String rawToken) {
+        if (rawToken == null || rawToken.isBlank() || !rawToken.startsWith(TOKEN_PREFIX)) {
             return null;
         }
-        int secondSeparator = rawToken.indexOf('_', 4);
-        if (secondSeparator <= 4 || secondSeparator >= rawToken.length() - 1) {
+        int prefixLength = TOKEN_PREFIX.length();
+        int secondSeparator = rawToken.indexOf('_', prefixLength);
+        if (secondSeparator <= prefixLength || secondSeparator >= rawToken.length() - 1) {
             return null;
         }
-        return new ParsedToken(rawToken.substring(4, secondSeparator));
+        return new ParsedToken(rawToken.substring(prefixLength, secondSeparator));
     }
 
-    private ApiAccessToken copy(ApiAccessToken source) {
+    private static ApiAccessToken copy(ApiAccessToken source) {
         return new ApiAccessToken()
                 .setId(source.getId())
                 .setName(source.getName())

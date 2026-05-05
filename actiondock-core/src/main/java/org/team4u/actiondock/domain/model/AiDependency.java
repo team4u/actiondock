@@ -35,4 +35,12 @@ public class AiDependency {
     public int hashCode() {
         return Objects.hash(capability, profile, agentProfile, required);
     }
+
+    public AiDependency copy() {
+        return new AiDependency()
+                .setCapability(capability)
+                .setProfile(profile)
+                .setAgentProfile(agentProfile)
+                .setRequired(required);
+    }
 }

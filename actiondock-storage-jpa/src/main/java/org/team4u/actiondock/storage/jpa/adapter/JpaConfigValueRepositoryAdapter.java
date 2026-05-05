@@ -30,12 +30,12 @@ public class JpaConfigValueRepositoryAdapter implements ConfigValueRepository {
 
     @Override
     public Optional<ConfigValue> findByKey(String key) {
-        return repository.findById(key).map(this::toDomain);
+        return repository.findById(key).map(JpaConfigValueRepositoryAdapter::toDomain);
     }
 
     @Override
     public List<ConfigValue> findAll() {
-        return repository.findAllByOrderByKeyAsc().stream().map(this::toDomain).toList();
+        return repository.findAllByOrderByKeyAsc().stream().map(JpaConfigValueRepositoryAdapter::toDomain).toList();
     }
 
     @Override
@@ -49,7 +49,7 @@ public class JpaConfigValueRepositoryAdapter implements ConfigValueRepository {
      * @param configValue 配置值领域对象
      * @return JPA 实体
      */
-    private ConfigValueEntity toEntity(ConfigValue configValue) {
+    private static ConfigValueEntity toEntity(ConfigValue configValue) {
         ConfigValueEntity entity = new ConfigValueEntity();
         entity.setKey(configValue.getKey());
         entity.setValue(configValue.getValue());
@@ -72,7 +72,7 @@ public class JpaConfigValueRepositoryAdapter implements ConfigValueRepository {
      * @param entity JPA 实体
      * @return 配置值领域对象
      */
-    private ConfigValue toDomain(ConfigValueEntity entity) {
+    private static ConfigValue toDomain(ConfigValueEntity entity) {
         return new ConfigValue()
                 .setKey(entity.getKey())
                 .setValue(entity.getValue())

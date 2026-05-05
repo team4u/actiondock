@@ -30,7 +30,7 @@ public class EventRecordApplicationService {
                 .orElseThrow(() -> new IllegalArgumentException("事件记录不存在: " + id));
     }
 
-    public java.util.List<EventDispatchRecord> listDispatches(String eventId) {
+    public List<EventDispatchRecord> listDispatches(String eventId) {
         get(eventId);
         return eventDispatchRepository.findByEventId(eventId);
     }

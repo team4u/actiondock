@@ -6,7 +6,6 @@ import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,19 +19,16 @@ public class ScriptInvocationService extends OptionalServiceSupport {
 
     private final ScriptRepository scriptRepository;
     private final Supplier<ScriptEngine> scriptEngineSupplier;
-    private final ScriptSchemaSupport scriptSchemaSupport;
 
     private ScriptInvocationService() {
         this.scriptRepository = null;
         this.scriptEngineSupplier = null;
-        this.scriptSchemaSupport = new ScriptSchemaSupport();
     }
 
     public ScriptInvocationService(ScriptRepository scriptRepository, Supplier<ScriptEngine> scriptEngineSupplier) {
         super(true);
         this.scriptRepository = Objects.requireNonNull(scriptRepository);
         this.scriptEngineSupplier = Objects.requireNonNull(scriptEngineSupplier);
-        this.scriptSchemaSupport = new ScriptSchemaSupport();
     }
 
     /**
@@ -77,7 +73,7 @@ public class ScriptInvocationService extends OptionalServiceSupport {
 
             ScriptDefinition publishedDefinition = definition.toPublishedDefinition();
             Map<String, Object> payload = normalizeInput(input);
-            scriptSchemaSupport.validateInput(publishedDefinition.getId(), payload, publishedDefinition.getInputSchema());
+            ScriptSchemaSupport.validateInput(publishedDefinition.getId(), payload, publishedDefinition.getInputSchema());
 
             ScriptExecutionContext nestedContext = childContext(
                     callerDefinition,
@@ -110,11 +106,11 @@ public class ScriptInvocationService extends OptionalServiceSupport {
         return scriptEngine;
     }
 
-    private Map<String, Object> normalizeInput(Map<String, Object> input) {
+    private static Map<String, Object> normalizeInput(Map<String, Object> input) {
         return ExecutionInputNormalizer.normalizeMap(input);
     }
 
-    private String normalizeScriptId(String scriptId) {
+    private static String normalizeScriptId(String scriptId) {
         if (scriptId == null || scriptId.isBlank()) {
             throw new IllegalArgumentException("scriptId 不能为空");
         }
@@ -138,7 +134,7 @@ public class ScriptInvocationService extends OptionalServiceSupport {
                 .orElse(scriptId);
     }
 
-    private String buildMissingScriptMessage(String requestedScriptId, ScriptDefinition callerDefinition) {
+    private static String buildMissingScriptMessage(String requestedScriptId, ScriptDefinition callerDefinition) {
         if (callerDefinition == null) {
             return "脚本不存在: " + requestedScriptId;
         }
@@ -151,11 +147,11 @@ public class ScriptInvocationService extends OptionalServiceSupport {
                 .orElse("脚本不存在: " + requestedScriptId);
     }
 
-    private String defaultInstalledScriptId(String repositoryId, String toolId) {
+    private static String defaultInstalledScriptId(String repositoryId, String toolId) {
         return repositoryId + "." + toolId;
     }
 
-    private ScriptExecutionContext childContext(ScriptDefinition callerDefinition,
+    private static ScriptExecutionContext childContext(ScriptDefinition callerDefinition,
                                                 ScriptExecutionContext parentContext,
                                                 String calleeScriptId) {
         List<String> nextStack = nextStack(callerDefinition, parentContext, calleeScriptId);
@@ -168,7 +164,7 @@ public class ScriptInvocationService extends OptionalServiceSupport {
                 .setLogPrefix("[script:" + calleeScriptId + "] ");
     }
 
-    private List<String> nextStack(ScriptDefinition callerDefinition,
+    private static List<String> nextStack(ScriptDefinition callerDefinition,
                                    ScriptExecutionContext parentContext,
                                    String calleeScriptId) {
         List<String> stack = new ArrayList<>(parentContext == null ? List.of() : parentContext.getScriptStack());
@@ -190,7 +186,7 @@ public class ScriptInvocationService extends OptionalServiceSupport {
         return "脚本互调";
     }
 
-    private String prefixedInvocationMessage(String calleeScriptId, RuntimeException exception) {
+    private static String prefixedInvocationMessage(String calleeScriptId, RuntimeException exception) {
         String prefix = "调用脚本 " + calleeScriptId + " 失败: ";
         String message = ErrorDetailSupport.summarize(exception);
         if (message.startsWith(prefix)) {

@@ -3,6 +3,9 @@ package org.team4u.actiondock.domain.model;
 import java.time.LocalDateTime;
 
 public class EventTrigger {
+
+    public static final String DEFAULT_RESPONSE_VIEW = "RESULT";
+
     private String id;
     private String name;
     private String description;
@@ -13,7 +16,7 @@ public class EventTrigger {
     private ProcessorDefinition idempotencyProcessor;
     private ProcessorDefinition inputProcessor;
     private SubmitMode submitMode = SubmitMode.ASYNC;
-    private String responseView = "RESULT";
+    private String responseView = DEFAULT_RESPONSE_VIEW;
     private String lastEventId;
     private LocalDateTime lastTriggeredAt;
     private String lastExecutionId;
@@ -116,7 +119,7 @@ public class EventTrigger {
     }
 
     public EventTrigger setResponseView(String responseView) {
-        this.responseView = responseView == null || responseView.isBlank() ? "RESULT" : responseView;
+        this.responseView = responseView == null || responseView.isBlank() ? DEFAULT_RESPONSE_VIEW : responseView;
         return this;
     }
 

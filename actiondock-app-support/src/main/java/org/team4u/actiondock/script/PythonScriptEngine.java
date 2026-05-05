@@ -1,12 +1,12 @@
 package org.team4u.actiondock.script;
 
 import org.team4u.actiondock.application.ErrorDetailSupport;
+import org.team4u.actiondock.application.MapValueConverter;
 import org.team4u.actiondock.application.PythonRequirementsSupport;
 import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ErrorDetail;
-import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -18,50 +18,36 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Python 脚本引擎，通过子进程方式执行 Python 脚本。
  * <p>
  * 将用户脚本包装为标准化的 Python 入口函数，通过 stdin/stdout 传递 JSON 数据，
  * 并支持通过 stderr 的特殊前缀协议收集脚本日志与脚本互调请求。
+ * <p>
+ * 环境管理（虚拟环境创建、依赖安装等）委托给 {@link PythonEnvironmentManager}。
  *
  * @author jay.wu
  */
 public class PythonScriptEngine implements ScriptEngine {
-    private static final String LOG_PREFIX = "__ACTIONDOCK_LOG__";
+    private static final System.Logger log = System.getLogger(PythonScriptEngine.class.getName());
     private static final String INVOKE_PREFIX = "__ACTIONDOCK_INVOKE__";
     private static final String PLUGIN_PREFIX = "__ACTIONDOCK_PLUGIN__";
     private static final String STATE_PREFIX = "__ACTIONDOCK_STATE__";
-    private static final String VENV_VALIDATION_RUNNER = """
-            import json
-            import sys
-            import venv
-
-            print(json.dumps({
-                "version": "{}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro),
-                "executable": sys.executable
-            }, ensure_ascii=False))
-            """;
     private static final String VALIDATION_RUNNER = """
             import py_compile
             import sys
@@ -75,6 +61,7 @@ public class PythonScriptEngine implements ScriptEngine {
     private final ScriptInvocationService scriptInvocationService;
     private final SharedStateApplicationService sharedStateApplicationService;
     private final Executor asyncExecutor;
+    private final PythonEnvironmentManager environmentManager;
 
     public PythonScriptEngine(JsonCodec jsonCodec, AppProperties.Python properties) {
         this(
@@ -131,6 +118,7 @@ public class PythonScriptEngine implements ScriptEngine {
                 ? SharedStateApplicationService.disabled()
                 : sharedStateApplicationService;
         this.asyncExecutor = asyncExecutor == null ? ForkJoinPool.commonPool() : asyncExecutor;
+        this.environmentManager = new PythonEnvironmentManager(jsonCodec, properties, asyncExecutor);
     }
 
     /**
@@ -149,20 +137,15 @@ public class PythonScriptEngine implements ScriptEngine {
         try {
             PythonRequirementsSupport.parse(definition.getId(), definition.getPythonRequirements());
             scriptPath = writeScriptFile(definition.getSource(), false);
-            ProcessResult result = runCommand(
-                    List.of(resolveExecutable(), "-c", VALIDATION_RUNNER, scriptPath.toAbsolutePath().toString()),
+            ProcessSupport.ProcessResult result = runCommand(
+                    buildValidationCommand(scriptPath),
                     null,
                     "{}",
                     null,
                     null,
                     properties.getTimeoutSeconds()
             );
-            if (result.timedOut()) {
-                throw new IllegalStateException("Python 脚本校验超时");
-            }
-            if (result.exitCode() != 0) {
-                throw new IllegalArgumentException(extractErrorMessage(result));
-            }
+            checkValidationResult(result);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to validate Python script", e);
         } catch (InterruptedException e) {
@@ -170,6 +153,19 @@ public class PythonScriptEngine implements ScriptEngine {
             throw new IllegalStateException("Python validation interrupted", e);
         } finally {
             deleteIfExists(scriptPath);
+        }
+    }
+
+    private List<String> buildValidationCommand(Path scriptPath) {
+        return List.of(resolveExecutable(), "-c", VALIDATION_RUNNER, scriptPath.toAbsolutePath().toString());
+    }
+
+    private static void checkValidationResult(ProcessSupport.ProcessResult result) {
+        if (result.timedOut()) {
+            throw new IllegalStateException("Python 脚本校验超时");
+        }
+        if (result.exitCode() != 0) {
+            throw new IllegalArgumentException(extractErrorMessage(result));
         }
     }
 
@@ -190,33 +186,16 @@ public class PythonScriptEngine implements ScriptEngine {
     public Object execute(ScriptDefinition definition, Map<String, Object> input, ScriptExecutionContext executionContext) {
         Path scriptPath = null;
         try {
-            PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements =
-                    PythonRequirementsSupport.parse(definition.getId(), definition.getPythonRequirements());
-            PythonExecutable executable = resolveRuntimeExecutable(parsedRequirements, definition, executionContext);
             scriptPath = writeScriptFile(definition.getSource(), true);
-            ProcessResult result = runCommand(
-                    List.of(executable.path(), scriptPath.toAbsolutePath().toString()),
-                    jsonCodec.write(input == null ? Map.of() : input) + "\n",
-                    jsonCodec.write(executionContext == null ? Map.of() : executionContext.getConfig()),
-                    event -> {
-                        if (executionContext != null) {
-                            executionContext.log(event.level(), event.message());
-                        }
-                    },
-                    new PythonBridge(definition, input == null ? Map.of() : input, executionContext)
+            ExecuteContext ctx = buildExecuteContext(definition, input, executionContext, scriptPath);
+            ProcessSupport.ProcessResult result = runCommand(
+                    ctx.command,
+                    ctx.stdin,
+                    ctx.configJson,
+                    ctx.logConsumer,
+                    ctx.bridge
             );
-            if (result.timedOut()) {
-                throw new IllegalStateException("Python 脚本执行超时");
-            }
-            if (result.exitCode() != 0) {
-                throw new PythonExecutionException(
-                        extractErrorMessage(result),
-                        buildErrorDetail("PYTHON_EXECUTION_FAILED", result, Map.of(
-                                "command", List.of(executable.path(), scriptPath.toAbsolutePath().toString())
-                        ))
-                );
-            }
-            return jsonCodec.readUntyped(result.stdout());
+            return processExecuteResult(result, ctx.command);
         } catch (PythonExecutionException exception) {
             throw exception;
         } catch (IOException e) {
@@ -229,19 +208,56 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
-    private ProcessResult runCommand(List<String> command,
+    private ExecuteContext buildExecuteContext(ScriptDefinition definition, Map<String, Object> input,
+                                                ScriptExecutionContext executionContext, Path scriptPath)
+            throws IOException, InterruptedException {
+        PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements =
+                PythonRequirementsSupport.parse(definition.getId(), definition.getPythonRequirements());
+        PythonEnvironmentManager.PythonExecutable executable = environmentManager.resolveRuntimeExecutable(
+                parsedRequirements, definition, executionContext, resolveExecutable());
+        return new ExecuteContext(
+                List.of(executable.path(), scriptPath.toAbsolutePath().toString()),
+                jsonCodec.write(input == null ? Map.of() : input) + "\n",
+                jsonCodec.write(executionContext == null ? Map.of() : executionContext.getConfig()),
+                event -> {
+                    if (executionContext != null) {
+                        executionContext.log(event.level(), event.message());
+                    }
+                },
+                new PythonBridge(definition, input == null ? Map.of() : input, executionContext)
+        );
+    }
+
+    private Object processExecuteResult(ProcessSupport.ProcessResult result, List<String> command) {
+        if (result.timedOut()) {
+            throw new IllegalStateException("Python 脚本执行超时");
+        }
+        if (result.exitCode() != 0) {
+            throw new PythonExecutionException(
+                    extractErrorMessage(result),
+                    buildErrorDetail("PYTHON_EXECUTION_FAILED", result, Map.of("command", command))
+            );
+        }
+        return jsonCodec.readUntyped(result.stdout());
+    }
+
+    private record ExecuteContext(List<String> command, String stdin, String configJson,
+                                   Consumer<ProcessSupport.LogEvent> logConsumer, PythonBridge bridge) {
+    }
+
+    private ProcessSupport.ProcessResult runCommand(List<String> command,
                                      String stdin,
                                      String configJson,
-                                     Consumer<LogEvent> logConsumer,
+                                     Consumer<ProcessSupport.LogEvent> logConsumer,
                                      PythonBridge invocationBridge)
             throws IOException, InterruptedException {
         return runCommand(command, stdin, configJson, logConsumer, invocationBridge, properties.getTimeoutSeconds());
     }
 
-    private ProcessResult runCommand(List<String> command,
+    private ProcessSupport.ProcessResult runCommand(List<String> command,
                                      String stdin,
                                      String configJson,
-                                     Consumer<LogEvent> logConsumer,
+                                     Consumer<ProcessSupport.LogEvent> logConsumer,
                                      PythonBridge invocationBridge,
                                      int timeoutSeconds)
             throws IOException, InterruptedException {
@@ -249,7 +265,7 @@ public class PythonScriptEngine implements ScriptEngine {
         processBuilder.command(command);
         processBuilder.environment().put("ACTIONDOCK_CONFIG_JSON", configJson == null ? "{}" : configJson);
         Process process = processBuilder.start();
-        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()), asyncExecutor);
+        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> ProcessSupport.readStream(process.getInputStream()), asyncExecutor);
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
                 readErrorStream(
                         process.getErrorStream(),
@@ -258,28 +274,7 @@ public class PythonScriptEngine implements ScriptEngine {
                         invocationBridge
                 ), asyncExecutor);
 
-        try (OutputStream stdinStream = process.getOutputStream()) {
-            if (stdin != null) {
-                stdinStream.write(stdin.getBytes(StandardCharsets.UTF_8));
-                stdinStream.flush();
-            }
-
-            if (timeoutSeconds <= 0) {
-                timeoutSeconds = properties.getTimeoutSeconds();
-            }
-            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                process.waitFor();
-            }
-
-            return new ProcessResult(
-                    finished ? process.exitValue() : -1,
-                    stdoutFuture.join(),
-                    stderrFuture.join(),
-                    !finished
-            );
-        }
+        return ProcessSupport.runProcessToCompletion(process, stdin, stdoutFuture, stderrFuture, timeoutSeconds, properties.getTimeoutSeconds());
     }
 
     private String resolveExecutable() {
@@ -289,188 +284,14 @@ public class PythonScriptEngine implements ScriptEngine {
         return properties.getExecutable().trim();
     }
 
-    private PythonExecutable resolveRuntimeExecutable(PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
-                                                      ScriptDefinition definition,
-                                                      ScriptExecutionContext executionContext)
-            throws IOException, InterruptedException {
-        String executable = resolveExecutable();
-        PythonRuntimeInfo runtimeInfo = inspectRuntime(executable, definition.getId());
-        if (parsedRequirements == null || parsedRequirements.isEmpty()) {
-            return new PythonExecutable(executable, runtimeInfo.version());
-        }
-        Path envDir = prepareEnvironment(executable, runtimeInfo, parsedRequirements, definition, executionContext);
-        return new PythonExecutable(resolveEnvironmentPython(envDir), runtimeInfo.version());
-    }
-
-    private PythonRuntimeInfo inspectRuntime(String executable, String scriptId) throws IOException, InterruptedException {
-        ProcessResult result = runCommand(
-                List.of(executable, "-c", VENV_VALIDATION_RUNNER),
-                null,
-                "{}",
-                null,
-                null,
-                properties.getInstallTimeoutSeconds()
-        );
-        if (result.timedOut()) {
-            throw new PythonExecutionException(
-                    "检测 Python 运行环境超时",
-                    buildSimpleErrorDetail("PYTHON_RUNTIME_MISSING", Map.of(
-                            "scriptId", scriptId,
-                            "executable", executable,
-                            "reason", "检测 Python 运行环境超时"
-                    ))
-            );
-        }
-        if (result.exitCode() != 0) {
-            throw new PythonExecutionException(
-                    "Python 运行环境不可用",
-                    buildErrorDetail("PYTHON_RUNTIME_MISSING", result, Map.of(
-                            "scriptId", scriptId,
-                            "executable", executable
-                    ))
-            );
-        }
-        Map<String, Object> payload = jsonCodec.readMap(result.stdout());
-        Object version = payload.get("version");
-        return new PythonRuntimeInfo(version == null ? "" : String.valueOf(version));
-    }
-
-    private Path prepareEnvironment(String executable,
-                                    PythonRuntimeInfo runtimeInfo,
-                                    PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
-                                    ScriptDefinition definition,
-                                    ScriptExecutionContext executionContext)
-            throws IOException, InterruptedException {
-        Path cacheRoot = resolveEnvCacheDir();
-        Files.createDirectories(cacheRoot);
-        String cacheKey = sha256(parsedRequirements.cacheKeyMaterial(executable, runtimeInfo.version()));
-        Path envDir = cacheRoot.resolve(cacheKey);
-        Path readyFile = envDir.resolve("READY");
-        if (Files.isRegularFile(readyFile)) {
-            return envDir;
-        }
-
-        Files.createDirectories(envDir);
-        Path lockFile = envDir.resolve(".lock");
-        try (FileChannel channel = FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-             FileLock ignored = channel.lock()) {
-            if (Files.isRegularFile(readyFile)) {
-                return envDir;
-            }
-            clearDirectoryContents(envDir, Set.of(".lock"));
-            installEnvironment(executable, envDir, parsedRequirements, definition, executionContext);
-            Files.writeString(readyFile, "ready\n", StandardCharsets.UTF_8);
-        }
-        return envDir;
-    }
-
-    private void installEnvironment(String executable,
-                                    Path envDir,
-                                    PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
-                                    ScriptDefinition definition,
-                                    ScriptExecutionContext executionContext)
-            throws IOException, InterruptedException {
-        if (executionContext != null) {
-            executionContext.log(ExecutionLogLevel.INFO, "[python-install] Preparing virtual environment");
-        }
-
-        ProcessResult venvResult = runLoggedCommand(
-                List.of(executable, "-m", "venv", envDir.toAbsolutePath().toString()),
-                executionContext,
-                properties.getInstallTimeoutSeconds()
-        );
-        if (venvResult.timedOut() || venvResult.exitCode() != 0) {
-            throw new PythonExecutionException(
-                    "Python 虚拟环境创建失败",
-                    buildErrorDetail("PYTHON_ENV_PREPARE_FAILED", venvResult, Map.of(
-                            "scriptId", definition.getId(),
-                            "envDir", envDir.toString()
-                    ))
-            );
-        }
-
-        Path requirementsPath = envDir.resolve("requirements.txt");
-        Files.writeString(requirementsPath, parsedRequirements.normalizedText(), StandardCharsets.UTF_8);
-        List<String> installCommand = new ArrayList<>(List.of(
-                resolveEnvironmentPython(envDir),
-                "-m",
-                "pip",
-                "install",
-                "--disable-pip-version-check",
-                "--no-input",
-                "-r",
-                requirementsPath.toAbsolutePath().toString()
-        ));
-        ProcessResult pipResult = runLoggedCommand(
-                installCommand,
-                executionContext,
-                properties.getInstallTimeoutSeconds()
-        );
-        if (pipResult.timedOut() || pipResult.exitCode() != 0) {
-            throw new PythonExecutionException(
-                    "Python 依赖安装失败",
-                    buildErrorDetail("PYTHON_DEP_INSTALL_FAILED", pipResult, Map.of(
-                            "scriptId", definition.getId(),
-                            "envDir", envDir.toString(),
-                            "requirements", parsedRequirements.normalizedText(),
-                            "command", installCommand
-                    ))
-            );
-        }
-    }
-
-    private ProcessResult runLoggedCommand(List<String> command,
-                                           ScriptExecutionContext executionContext,
-                                           int timeoutSeconds)
-            throws IOException, InterruptedException {
-        Process process = new ProcessBuilder(command).start();
-        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() ->
-                readLoggedStream(process.getInputStream(), line -> logInstallLine(executionContext, ExecutionLogLevel.INFO, line)));
-        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
-                readLoggedStream(process.getErrorStream(), line -> logInstallLine(executionContext, ExecutionLogLevel.WARN, line)));
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            process.waitFor();
-        }
-        return new ProcessResult(
-                finished ? process.exitValue() : -1,
-                stdoutFuture.join(),
-                stderrFuture.join(),
-                !finished
-        );
-    }
-
-    private void logInstallLine(ScriptExecutionContext executionContext, ExecutionLogLevel level, String line) {
-        if (executionContext != null && line != null && !line.isBlank()) {
-            executionContext.log(level, "[python-install] " + line);
-        }
-    }
-
-    private Path resolveEnvCacheDir() {
-        String configured = properties.getEnvCacheDir();
-        if (configured == null || configured.isBlank()) {
-            return Path.of(AppProperties.defaultHomeDir(), "python-envs");
-        }
-        return Path.of(configured.trim());
-    }
-
-    private String resolveEnvironmentPython(Path envDir) {
-        Path unix = envDir.resolve("bin").resolve("python");
-        if (Files.exists(unix)) {
-            return unix.toString();
-        }
-        return envDir.resolve("Scripts").resolve("python.exe").toString();
-    }
-
-    private Path writeScriptFile(String source, boolean executable) throws IOException {
+    private static Path writeScriptFile(String source, boolean executable) throws IOException {
         Path scriptPath = Files.createTempFile("actiondock-python-", ".py");
         String content = executable ? buildExecutableScript(source) : buildWrappedSource(source);
         Files.writeString(scriptPath, content, StandardCharsets.UTF_8);
         return scriptPath;
     }
 
-    private String buildExecutableScript(String source) {
+    private static String buildExecutableScript(String source) {
         return buildWrappedSource(source) + """
 
                 if __name__ == "__main__":
@@ -496,7 +317,7 @@ public class PythonScriptEngine implements ScriptEngine {
         }
     }
 
-    private String buildWrappedSource(String source) {
+    private static String buildWrappedSource(String source) {
         String normalizedSource = source == null ? "" : source.replace("\r\n", "\n");
         if (normalizedSource.isBlank()) {
             normalizedSource = "return {}";
@@ -505,7 +326,7 @@ public class PythonScriptEngine implements ScriptEngine {
         return PYTHON_WRAPPER_TEMPLATE.replace("{{ user_script }}", indentedSource);
     }
 
-    private List<String> indent(String source) {
+    private static List<String> indent(String source) {
         String[] lines = source.split("\n", -1);
         List<String> indented = new ArrayList<>();
         for (String line : lines) {
@@ -514,42 +335,15 @@ public class PythonScriptEngine implements ScriptEngine {
         return indented;
     }
 
-    private String readStream(InputStream stream) {
-        try (InputStream inputStream = stream) {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read Python process output", e);
-        }
-    }
-
-    private String readLoggedStream(InputStream stream, Consumer<String> lineConsumer) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (output.length() > 0) {
-                    output.append('\n');
-                }
-                output.append(line);
-                if (lineConsumer != null) {
-                    lineConsumer.accept(line);
-                }
-            }
-            return output.toString();
-        } catch (IOException exception) {
-            throw new IllegalStateException("Failed to read Python process output", exception);
-        }
-    }
-
     private String readErrorStream(InputStream stream,
-                                   Consumer<LogEvent> logConsumer,
+                                   Consumer<ProcessSupport.LogEvent> logConsumer,
                                    OutputStream stdinStream,
                                    PythonBridge bridge) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             StringBuilder output = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
-                LogEvent event = parseLogEvent(line);
+                ProcessSupport.LogEvent event = parseLogEvent(line);
                 if (event != null) {
                     logConsumer.accept(event);
                     continue;
@@ -580,121 +374,83 @@ public class PythonScriptEngine implements ScriptEngine {
     private void handleInvocation(String payload,
                                   OutputStream stdinStream,
                                   PythonBridge bridge) {
-        if (bridge == null) {
-            throw new IllegalStateException("Python 脚本互调桥接未初始化");
-        }
-        PythonInvocationRequest request = parseInvocationRequest(payload);
-        String response = bridge.respondInvocation(request);
-        try {
-            stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
-            stdinStream.flush();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to write Python invocation response", e);
-        }
+        handleBridgeMessage(payload, stdinStream, bridge,
+                "Python 脚本互调桥接未初始化",
+                this::parseInvocationRequest, PythonBridge::respondInvocation);
     }
 
     private void handleState(String payload,
                              OutputStream stdinStream,
                              PythonBridge bridge) {
-        if (bridge == null) {
-            throw new IllegalStateException("Python 状态桥接未初始化");
-        }
-        PythonStateRequest request = parseStateRequest(payload);
-        String response = bridge.respondState(request);
-        try {
-            stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
-            stdinStream.flush();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to write Python state response", e);
-        }
+        handleBridgeMessage(payload, stdinStream, bridge,
+                "Python 状态桥接未初始化",
+                this::parseStateRequest, PythonBridge::respondState);
     }
 
     private void handlePlugin(String payload,
                               OutputStream stdinStream,
                               PythonBridge bridge) {
+        handleBridgeMessage(payload, stdinStream, bridge,
+                "Python 插件桥接未初始化",
+                this::parsePluginRequest, PythonBridge::respondPlugin);
+    }
+
+    private <R> void handleBridgeMessage(String payload,
+                                          OutputStream stdinStream,
+                                          PythonBridge bridge,
+                                          String errorMessage,
+                                          Function<String, R> parser,
+                                          BiFunction<PythonBridge, R, String> responder) {
         if (bridge == null) {
-            throw new IllegalStateException("Python 插件桥接未初始化");
+            throw new IllegalStateException(errorMessage);
         }
-        PythonPluginRequest request = parsePluginRequest(payload);
-        String response = bridge.respondPlugin(request);
+        R request = parser.apply(payload);
+        String response = responder.apply(bridge, request);
         try {
             stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
             stdinStream.flush();
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to write Python plugin response", e);
+            throw new IllegalStateException("Failed to write Python bridge response", e);
         }
     }
 
     private PythonInvocationRequest parseInvocationRequest(String payload) {
         Map<String, Object> value = jsonCodec.readMap(payload);
-        Object scriptId = value.get("scriptId");
-        Object args = value.get("args");
-        return new PythonInvocationRequest(
-                scriptId == null ? null : String.valueOf(scriptId),
-                args instanceof Map<?, ?> map ? normalizeMap(map) : Map.of()
-        );
+        return new PythonInvocationRequest(stringField(value, "scriptId"), mapField(value, "args"));
     }
 
     private PythonStateRequest parseStateRequest(String payload) {
         Map<String, Object> value = jsonCodec.readMap(payload);
-        Object expectedVersion = value.get("expectedVersion");
-        Object options = value.get("options");
         return new PythonStateRequest(
-                stringValue(value.get("operation")),
-                stringValue(value.get("namespace")),
-                stringValue(value.get("key")),
-                expectedVersion instanceof Number number ? number.longValue() : null,
+                stringField(value, "operation"),
+                stringField(value, "namespace"),
+                stringField(value, "key"),
+                value.get("expectedVersion") instanceof Number number ? number.longValue() : null,
                 value.get("value"),
-                options instanceof Map<?, ?> map ? normalizeMap(map) : Map.of()
+                mapField(value, "options")
         );
     }
 
     private PythonPluginRequest parsePluginRequest(String payload) {
         Map<String, Object> value = jsonCodec.readMap(payload);
-        Object args = value.get("args");
-        return new PythonPluginRequest(
-                stringValue(value.get("pluginId")),
-                stringValue(value.get("action")),
-                args instanceof Map<?, ?> map ? normalizeMap(map) : Map.of()
-        );
+        return new PythonPluginRequest(stringField(value, "pluginId"), stringField(value, "action"), mapField(value, "args"));
     }
 
-    private Map<String, Object> normalizeMap(Map<?, ?> value) {
-        Map<String, Object> normalized = new LinkedHashMap<>();
-        value.forEach((key, item) -> normalized.put(String.valueOf(key), item));
-        return normalized;
+    private static String stringField(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        return v == null ? null : String.valueOf(v);
     }
 
-    private String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
+    private static Map<String, Object> mapField(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        return v instanceof Map<?, ?> m ? MapValueConverter.toResultMap(m) : Map.of();
     }
 
-    private LogEvent parseLogEvent(String line) {
-        if (line == null || !line.startsWith(LOG_PREFIX)) {
-            return null;
-        }
-        try {
-            Map<String, Object> value = jsonCodec.readMap(line.substring(LOG_PREFIX.length()));
-            Object level = value.get("level");
-            Object message = value.get("message");
-            return new LogEvent(resolveLevel(level), message == null ? "" : String.valueOf(message));
-        } catch (Exception ignored) {
-            return null;
-        }
+    private ProcessSupport.LogEvent parseLogEvent(String line) {
+        return ProcessSupport.parseLogEvent(line, PythonEnvironmentManager.LOG_PREFIX, jsonCodec);
     }
 
-    private ExecutionLogLevel resolveLevel(Object value) {
-        if (value == null) {
-            return ExecutionLogLevel.INFO;
-        }
-        try {
-            return ExecutionLogLevel.valueOf(String.valueOf(value).trim().toUpperCase());
-        } catch (IllegalArgumentException ignored) {
-            return ExecutionLogLevel.INFO;
-        }
-    }
-
-    private String extractErrorMessage(ProcessResult result) {
+    private static String extractErrorMessage(ProcessSupport.ProcessResult result) {
         String stderr = result.stderr() == null ? "" : result.stderr().trim();
         if (!stderr.isEmpty()) {
             return summarizePythonError(stderr);
@@ -706,7 +462,7 @@ public class PythonScriptEngine implements ScriptEngine {
         return "Python 脚本执行失败";
     }
 
-    private String summarizePythonError(String stderr) {
+    private static String summarizePythonError(String stderr) {
         String[] lines = stderr.split("\\R");
         for (int index = lines.length - 1; index >= 0; index -= 1) {
             String line = lines[index].trim();
@@ -722,84 +478,19 @@ public class PythonScriptEngine implements ScriptEngine {
         return stderr;
     }
 
-    private void deleteIfExists(Path path) {
+    private static void deleteIfExists(Path path) {
         if (path == null) {
             return;
         }
         try {
             Files.deleteIfExists(path);
-        } catch (IOException ignored) {
+        } catch (IOException exception) {
+            log.log(System.Logger.Level.DEBUG, "删除临时脚本文件失败: {0}", exception.getMessage());
         }
     }
 
-    private ErrorDetail buildErrorDetail(String code, ProcessResult result, Map<String, Object> details) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("code", code);
-        values.put("stdout", result.stdout());
-        values.put("stderr", result.stderr());
-        values.put("exitCode", result.exitCode());
-        values.put("timedOut", result.timedOut());
-        values.putAll(details);
-        return new ErrorDetail()
-                .setType(PythonExecutionException.class.getName())
-                .setStackTrace((result.stderr() == null || result.stderr().isBlank()) ? result.stdout() : result.stderr())
-                .setDetails(values);
-    }
-
-    private ErrorDetail buildSimpleErrorDetail(String code, Map<String, Object> details) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("code", code);
-        values.putAll(details);
-        return new ErrorDetail()
-                .setType(PythonExecutionException.class.getName())
-                .setStackTrace("")
-                .setDetails(values);
-    }
-
-    private String sha256(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 not available", exception);
-        }
-    }
-
-    private void clearDirectoryContents(Path directory, Set<String> preserveNames) throws IOException {
-        if (Files.notExists(directory)) {
-            return;
-        }
-        try (var children = Files.list(directory)) {
-            for (Path child : children.toList()) {
-                if (preserveNames.contains(child.getFileName().toString())) {
-                    continue;
-                }
-                deleteRecursively(child);
-            }
-        }
-    }
-
-    private void deleteRecursively(Path path) throws IOException {
-        if (Files.isDirectory(path) && !Files.isSymbolicLink(path)) {
-            try (var children = Files.list(path)) {
-                for (Path child : children.toList()) {
-                    deleteRecursively(child);
-                }
-            }
-        }
-        Files.deleteIfExists(path);
-    }
-
-    record ProcessResult(int exitCode, String stdout, String stderr, boolean timedOut) {
-    }
-
-    record LogEvent(ExecutionLogLevel level, String message) {
-    }
-
-    record PythonExecutable(String path, String version) {
-    }
-
-    record PythonRuntimeInfo(String version) {
+    private static ErrorDetail buildErrorDetail(String code, ProcessSupport.ProcessResult result, Map<String, Object> details) {
+        return ProcessSupport.buildErrorDetail(code, result, details);
     }
 
     record PythonInvocationRequest(String scriptId, Map<String, Object> args) {
@@ -831,70 +522,56 @@ public class PythonScriptEngine implements ScriptEngine {
             this.stateBridge = new ScriptStateBridge(sharedStateApplicationService, definition, executionContext);
         }
 
-        private String respondInvocation(PythonInvocationRequest request) {
-            try {
-                Object result = scriptInvocationService.invokePublished(
-                        request.scriptId(),
-                        definition,
-                        executionContext,
-                        request.args()
-                );
-                return jsonCodec.write(Map.of(
-                        "ok", true,
-                        "result", result
-                ));
-            } catch (Exception exception) {
-                return jsonCodec.write(Map.of(
-                        "ok", false,
-                        "error", ErrorDetailSupport.summarize(exception)
-                ));
+        /**
+         * 构建统一的 JSON 响应。
+         * <p>
+         * 使用 {@link LinkedHashMap} 以支持 value 为 null 的场景（如 delete 操作）。
+         *
+         * @param ok    操作是否成功
+         * @param data  成功时为结果数据，失败时忽略
+         * @param error 失败时的错误摘要，成功时忽略
+         * @return JSON 格式的响应字符串
+         */
+        private String writeResponse(boolean ok, Object data, String error) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("ok", ok);
+            if (ok) {
+                response.put("result", data);
+            } else {
+                response.put("error", error);
             }
+            return jsonCodec.write(response);
+        }
+
+        private String respondInvocation(PythonInvocationRequest request) {
+            return respond(() -> scriptInvocationService.invokePublished(
+                    request.scriptId(), definition, executionContext, request.args()));
         }
 
         private String respondPlugin(PythonPluginRequest request) {
-            try {
-                Object result = pluginRuntimeService.invoke(
-                        request.pluginId(),
-                        request.action(),
-                        definition,
-                        executionContext,
-                        input,
-                        request.args()
-                );
-                return jsonCodec.write(Map.of(
-                        "ok", true,
-                        "result", result
-                ));
-            } catch (Exception exception) {
-                return jsonCodec.write(Map.of(
-                        "ok", false,
-                        "error", ErrorDetailSupport.summarize(exception)
-                ));
-            }
+            return respond(() -> pluginRuntimeService.invoke(
+                    request.pluginId(), request.action(), definition, executionContext, input, request.args()));
         }
 
         private String respondState(PythonStateRequest request) {
+            return respond(() -> switch (request.operation()) {
+                case "get" -> stateBridge.get(request.namespace(), request.key());
+                case "put" -> stateBridge.put(request.namespace(), request.key(), request.value(), request.options());
+                case "cas" -> stateBridge.cas(request.namespace(), request.key(), request.expectedVersion(), request.value(), request.options());
+                case "delete" -> {
+                    stateBridge.delete(request.namespace(), request.key());
+                    yield null;
+                }
+                case "list" -> stateBridge.list(request.namespace());
+                default -> throw new IllegalArgumentException("不支持的 state 操作: " + request.operation());
+            });
+        }
+
+        private String respond(java.util.function.Supplier<Object> action) {
             try {
-                Object result = switch (request.operation()) {
-                    case "get" -> stateBridge.get(request.namespace(), request.key());
-                    case "put" -> stateBridge.put(request.namespace(), request.key(), request.value(), request.options());
-                    case "cas" -> stateBridge.cas(request.namespace(), request.key(), request.expectedVersion(), request.value(), request.options());
-                    case "delete" -> {
-                        stateBridge.delete(request.namespace(), request.key());
-                        yield null;
-                    }
-                    case "list" -> stateBridge.list(request.namespace());
-                    default -> throw new IllegalArgumentException("不支持的 state 操作: " + request.operation());
-                };
-                Map<String, Object> values = new LinkedHashMap<>();
-                values.put("ok", true);
-                values.put("result", result);
-                return jsonCodec.write(values);
+                return writeResponse(true, action.get(), null);
             } catch (Exception exception) {
-                return jsonCodec.write(Map.of(
-                        "ok", false,
-                        "error", ErrorDetailSupport.summarize(exception)
-                ));
+                return writeResponse(false, null, ErrorDetailSupport.summarize(exception));
             }
         }
     }

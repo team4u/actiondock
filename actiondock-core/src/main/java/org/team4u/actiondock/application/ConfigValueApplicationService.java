@@ -4,8 +4,6 @@ import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +20,10 @@ import java.util.regex.Pattern;
 public class ConfigValueApplicationService extends OptionalServiceSupport {
     private static final Pattern KEY_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_.-]*");
     private static final ConfigValueApplicationService DISABLED = new ConfigValueApplicationService();
+
+    private record ConfigValueFlags(boolean secret, boolean managed, boolean overridden) {
+        static final ConfigValueFlags DEFAULT = new ConfigValueFlags(false, false, false);
+    }
 
     private final ConfigValueRepository configValueRepository;
     private final ConfigPlaceholderResolver placeholderResolver;
@@ -66,7 +68,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         }
         return configValueRepository.findAll().stream()
                 .sorted((left, right) -> left.getKey().compareTo(right.getKey()))
-                .map(this::copy)
+                .map(ConfigValueApplicationService::copy)
                 .toList();
     }
 
@@ -213,7 +215,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         return placeholderResolver.resolveText(value, snapshot());
     }
 
-    private ConfigValue normalizeForCreate(ConfigValue configValue) {
+    private static ConfigValue normalizeForCreate(ConfigValue configValue) {
         if (configValue == null) {
             throw new IllegalArgumentException("配置值不能为空");
         }
@@ -225,7 +227,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         );
     }
 
-    private ConfigValue normalizeForUpdate(String key,
+    private static ConfigValue normalizeForUpdate(String key,
                                            ConfigValue configValue,
                                            boolean preserveValue,
                                            ConfigValue existing) {
@@ -243,7 +245,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         );
     }
 
-    private ConfigValue normalizeForRestore(String key, ConfigValue restoredValue, ConfigValue existing) {
+    private static ConfigValue normalizeForRestore(String key, ConfigValue restoredValue, ConfigValue existing) {
         if (restoredValue == null) {
             throw new IllegalArgumentException("恢复默认值缺少来源模板");
         }
@@ -258,28 +260,26 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         ).setManaged(true).setOverridden(false);
     }
 
-    private ConfigValue normalizeAndBuild(String key,
+    private static ConfigValue normalizeAndBuild(String key,
                                           String value,
                                           ConfigValue source,
                                           ConfigValue fallback) {
-        return new ConfigValue()
-                .setKey(key)
-                .setValue(value)
-                .setDescription(normalizeDescription(source.getDescription()))
-                .setSecret(source.isSecret())
-                .setRepositoryId(fallback == null ? source.getRepositoryId() :
-                        (source.getRepositoryId() == null ? fallback.getRepositoryId() : source.getRepositoryId()))
-                .setRepositoryToolId(fallback == null ? source.getRepositoryToolId() :
-                        (source.getRepositoryToolId() == null ? fallback.getRepositoryToolId() : source.getRepositoryToolId()))
-                .setRepositoryVersion(fallback == null ? source.getRepositoryVersion() :
-                        (source.getRepositoryVersion() == null ? fallback.getRepositoryVersion() : source.getRepositoryVersion()))
-                .setPublishMode(fallback == null ? source.getPublishMode() :
-                        (source.getPublishMode() == null ? fallback.getPublishMode() : source.getPublishMode()))
-                .setManaged(source.isManaged())
-                .setOverridden(source.isOverridden());
+        return buildConfigValue(
+                key, value, normalizeDescription(source.getDescription()),
+                new ConfigValueFlags(source.isSecret(), source.isManaged(), source.isOverridden()),
+                fallback == null ? source.getRepositoryId() :
+                        (source.getRepositoryId() == null ? fallback.getRepositoryId() : source.getRepositoryId()),
+                fallback == null ? source.getRepositoryToolId() :
+                        (source.getRepositoryToolId() == null ? fallback.getRepositoryToolId() : source.getRepositoryToolId()),
+                fallback == null ? source.getRepositoryVersion() :
+                        (source.getRepositoryVersion() == null ? fallback.getRepositoryVersion() : source.getRepositoryVersion()),
+                fallback == null ? source.getPublishMode() :
+                        (source.getPublishMode() == null ? fallback.getPublishMode() : source.getPublishMode()),
+                null, null
+        );
     }
 
-    private String normalizeKey(String key) {
+    private static String normalizeKey(String key) {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("配置值 key 不能为空");
         }
@@ -290,7 +290,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         return normalized;
     }
 
-    private String normalizeDescription(String description) {
+    private static String normalizeDescription(String description) {
         if (description == null || description.isBlank()) {
             return null;
         }
@@ -302,20 +302,34 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
                 .orElseThrow(() -> new IllegalArgumentException("配置值不存在: " + key));
     }
 
-    private ConfigValue copy(ConfigValue source) {
+    private static ConfigValue copy(ConfigValue source) {
+        return buildConfigValue(
+                source.getKey(), source.getValue(), source.getDescription(),
+                new ConfigValueFlags(source.isSecret(), source.isManaged(), source.isOverridden()),
+                source.getRepositoryId(), source.getRepositoryToolId(),
+                source.getRepositoryVersion(), source.getPublishMode(),
+                source.getCreatedAt(), source.getUpdatedAt()
+        );
+    }
+
+    private static ConfigValue buildConfigValue(String key, String value,
+                                                String description, ConfigValueFlags flags,
+                                                String repositoryId, String repositoryToolId,
+                                                String repositoryVersion, String publishMode,
+                                                LocalDateTime createdAt, LocalDateTime updatedAt) {
         return new ConfigValue()
-                .setKey(source.getKey())
-                .setValue(source.getValue())
-                .setDescription(source.getDescription())
-                .setSecret(source.isSecret())
-                .setRepositoryId(source.getRepositoryId())
-                .setRepositoryToolId(source.getRepositoryToolId())
-                .setRepositoryVersion(source.getRepositoryVersion())
-                .setPublishMode(source.getPublishMode())
-                .setManaged(source.isManaged())
-                .setOverridden(source.isOverridden())
-                .setCreatedAt(source.getCreatedAt())
-                .setUpdatedAt(source.getUpdatedAt());
+                .setKey(key)
+                .setValue(value)
+                .setDescription(description)
+                .setSecret(flags.secret())
+                .setRepositoryId(repositoryId)
+                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryVersion(repositoryVersion)
+                .setPublishMode(publishMode)
+                .setManaged(flags.managed())
+                .setOverridden(flags.overridden())
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt);
     }
 
     @Override

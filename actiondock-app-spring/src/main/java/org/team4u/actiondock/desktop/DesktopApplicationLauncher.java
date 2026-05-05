@@ -105,7 +105,7 @@ public class DesktopApplicationLauncher {
         }
     }
 
-    private int resolveActualPort(ConfigurableApplicationContext context, int configuredPort) {
+    private static int resolveActualPort(ConfigurableApplicationContext context, int configuredPort) {
         if (context instanceof WebServerApplicationContext webContext) {
             return webContext.getWebServer().getPort();
         }

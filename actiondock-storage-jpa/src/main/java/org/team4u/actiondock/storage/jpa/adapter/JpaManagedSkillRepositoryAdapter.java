@@ -24,12 +24,12 @@ public class JpaManagedSkillRepositoryAdapter implements ManagedSkillRepository 
 
     @Override
     public Optional<ManagedSkill> findBySkillId(String skillId) {
-        return repository.findById(skillId).map(this::toDomain);
+        return repository.findById(skillId).map(JpaManagedSkillRepositoryAdapter::toDomain);
     }
 
     @Override
     public List<ManagedSkill> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
+        return repository.findAll().stream().map(JpaManagedSkillRepositoryAdapter::toDomain).toList();
     }
 
     @Override
@@ -37,7 +37,7 @@ public class JpaManagedSkillRepositoryAdapter implements ManagedSkillRepository 
         repository.deleteById(skillId);
     }
 
-    private ManagedSkillEntity toEntity(ManagedSkill skill) {
+    private static ManagedSkillEntity toEntity(ManagedSkill skill) {
         ManagedSkillEntity entity = new ManagedSkillEntity();
         entity.setSkillId(skill.getSkillId());
         entity.setRepositoryId(skill.getRepositoryId());
@@ -50,7 +50,7 @@ public class JpaManagedSkillRepositoryAdapter implements ManagedSkillRepository 
         return entity;
     }
 
-    private ManagedSkill toDomain(ManagedSkillEntity entity) {
+    private static ManagedSkill toDomain(ManagedSkillEntity entity) {
         return new ManagedSkill()
                 .setSkillId(entity.getSkillId())
                 .setRepositoryId(entity.getRepositoryId())

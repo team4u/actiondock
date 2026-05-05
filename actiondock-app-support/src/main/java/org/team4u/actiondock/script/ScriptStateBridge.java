@@ -83,15 +83,15 @@ public class ScriptStateBridge {
     }
 
     public List<Map<String, Object>> list(String namespace) {
-        return sharedStateApplicationService.list(namespace).stream().map(this::summaryMap).toList();
+        return sharedStateApplicationService.list(namespace).stream().map(ScriptStateBridge::summaryMap).toList();
     }
 
-    private boolean secret(Map<String, Object> options) {
+    private static boolean secret(Map<String, Object> options) {
         Object value = options == null ? null : options.get("secret");
         return value instanceof Boolean item && item;
     }
 
-    private LocalDateTime expiresAt(Map<String, Object> options) {
+    private static LocalDateTime expiresAt(Map<String, Object> options) {
         Object ttlValue = options == null ? null : options.get("ttlSeconds");
         if (ttlValue == null) {
             return null;
@@ -120,7 +120,7 @@ public class ScriptStateBridge {
         return executionContext == null ? null : executionContext.getExecutionId();
     }
 
-    private Map<String, Object> summaryMap(SharedStateEntry entry) {
+    private static Map<String, Object> summaryMap(SharedStateEntry entry) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("namespace", entry.getNamespace());
         values.put("key", entry.getKey());
@@ -134,13 +134,13 @@ public class ScriptStateBridge {
         return values;
     }
 
-    private Map<String, Object> detailMap(SharedStateEntry entry) {
+    private static Map<String, Object> detailMap(SharedStateEntry entry) {
         Map<String, Object> values = summaryMap(entry);
         values.put("value", entry.getValue());
         return values;
     }
 
-    private String time(LocalDateTime value) {
+    private static String time(LocalDateTime value) {
         return value == null ? null : value.toString();
     }
 }

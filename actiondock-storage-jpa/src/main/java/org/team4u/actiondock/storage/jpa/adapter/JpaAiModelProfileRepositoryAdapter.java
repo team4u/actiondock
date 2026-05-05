@@ -12,41 +12,22 @@ import org.team4u.actiondock.storage.jpa.entity.AiModelProfileEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataAiModelProfileRepository;
 
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 @Component
-public class JpaAiModelProfileRepositoryAdapter implements AiModelProfileRepository {
-    private final SpringDataAiModelProfileRepository repository;
+public class JpaAiModelProfileRepositoryAdapter
+        extends AbstractJpaRepositoryAdapter<AiModelProfileEntity, AiModelProfile, SpringDataAiModelProfileRepository>
+        implements AiModelProfileRepository {
+
     private final JsonCodec jsonCodec;
 
     public JpaAiModelProfileRepositoryAdapter(SpringDataAiModelProfileRepository repository, JsonCodec jsonCodec) {
-        this.repository = repository;
+        super(repository);
         this.jsonCodec = jsonCodec;
     }
 
     @Override
-    public AiModelProfile save(AiModelProfile profile) {
-        return toDomain(repository.save(toEntity(profile)));
-    }
-
-    @Override
-    public Optional<AiModelProfile> findById(String id) {
-        return repository.findById(id).map(this::toDomain);
-    }
-
-    @Override
-    public List<AiModelProfile> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
-    }
-
-    @Override
-    public void deleteById(String id) {
-        repository.deleteById(id);
-    }
-
-    private AiModelProfileEntity toEntity(AiModelProfile profile) {
+    protected AiModelProfileEntity toEntity(AiModelProfile profile) {
         AiModelProfileEntity entity = new AiModelProfileEntity();
         entity.setId(profile.getId());
         entity.setName(profile.getName());
@@ -64,7 +45,8 @@ public class JpaAiModelProfileRepositoryAdapter implements AiModelProfileReposit
         return entity;
     }
 
-    private AiModelProfile toDomain(AiModelProfileEntity entity) {
+    @Override
+    protected AiModelProfile toDomain(AiModelProfileEntity entity) {
         Set<AiCapability> capabilities = new LinkedHashSet<>();
         jsonCodec.readList(entity.getCapabilitiesJson(), String.class).forEach(value -> capabilities.add(AiCapability.valueOf(value)));
         return new AiModelProfile()

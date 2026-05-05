@@ -1,13 +1,13 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.EventDispatchRecord;
+import org.team4u.actiondock.domain.model.EventDispatchStatus;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionSubmissionMetadata;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
-import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorResult;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.SubmitMode;
@@ -19,10 +19,12 @@ import org.team4u.actiondock.domain.port.ProcessorEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import static org.team4u.actiondock.application.ObjectValues.stringValue;
 
 public class EventTriggerApplicationService {
     private final EventTriggerRepository eventTriggerRepository;
@@ -31,7 +33,6 @@ public class EventTriggerApplicationService {
     private final ScriptRepository scriptRepository;
     private final ProcessorEngine processorEngine;
     private final ExecutionApplicationService executionApplicationService;
-    private final ScriptSchemaSupport scriptSchemaSupport = new ScriptSchemaSupport();
 
     public EventTriggerApplicationService(EventTriggerRepository eventTriggerRepository,
                                           EventSourceRepository eventSourceRepository,
@@ -66,16 +67,7 @@ public class EventTriggerApplicationService {
             throw new IllegalArgumentException("事件触发器不能为空");
         }
         LocalDateTime now = LocalDateTime.now();
-        EventTrigger existing = trigger.getId() == null || trigger.getId().isBlank()
-                ? null
-                : eventTriggerRepository.findById(trigger.getId()).orElse(null);
-        EventTrigger target = existing == null
-                ? new EventTrigger()
-                    .setId(trigger.getId() == null || trigger.getId().isBlank()
-                            ? UUID.randomUUID().toString()
-                            : trigger.getId())
-                    .setCreatedAt(now)
-                : existing;
+        EventTrigger target = resolveOrCreateTarget(trigger, now);
 
         String name = ApplicationServiceSupport.normalize(trigger.getName(), "触发器名称不能为空");
         EventSourceDefinition source = eventSourceRepository.findById(
@@ -84,17 +76,40 @@ public class EventTriggerApplicationService {
         ScriptDefinition script = scriptRepository.findById(
                         ApplicationServiceSupport.normalize(trigger.getTargetScriptId(), "targetScriptId 不能为空"))
                 .orElseThrow(() -> new IllegalArgumentException("目标脚本不存在: " + trigger.getTargetScriptId()));
-        if (script.getPublishedSnapshot() == null) {
-            throw new IllegalArgumentException("目标脚本未发布: " + script.getId());
-        }
+        requirePublished(script);
 
-        validateProcessor(trigger.getFilterProcessor(), sampleContext(source, target), "filterProcessor");
-        validateProcessor(trigger.getIdempotencyProcessor(), sampleContext(source, target), "idempotencyProcessor");
+        ProcessorContext sampleCtx = sampleContext(source, target);
+        validateProcessors(trigger, sampleCtx);
+
+        applyTriggerFields(target, trigger, name, source, script, now);
+        return eventTriggerRepository.save(target);
+    }
+
+    private EventTrigger resolveOrCreateTarget(EventTrigger trigger, LocalDateTime now) {
+        EventTrigger existing = trigger.getId() == null || trigger.getId().isBlank()
+                ? null
+                : eventTriggerRepository.findById(trigger.getId()).orElse(null);
+        return existing == null
+                ? new EventTrigger()
+                    .setId(trigger.getId() == null || trigger.getId().isBlank()
+                            ? UUID.randomUUID().toString()
+                            : trigger.getId())
+                    .setCreatedAt(now)
+                : existing;
+    }
+
+    private void validateProcessors(EventTrigger trigger, ProcessorContext sampleCtx) {
+        ApplicationServiceSupport.validateProcessor(processorEngine, trigger.getFilterProcessor(), sampleCtx, "filterProcessor");
+        ApplicationServiceSupport.validateProcessor(processorEngine, trigger.getIdempotencyProcessor(), sampleCtx, "idempotencyProcessor");
         if (trigger.getInputProcessor() == null) {
             throw new IllegalArgumentException("inputProcessor 不能为空");
         }
-        validateProcessor(trigger.getInputProcessor(), sampleContext(source, target), "inputProcessor");
+        ApplicationServiceSupport.validateProcessor(processorEngine, trigger.getInputProcessor(), sampleCtx, "inputProcessor");
+    }
 
+    private static void applyTriggerFields(EventTrigger target, EventTrigger trigger,
+                                            String name, EventSourceDefinition source,
+                                            ScriptDefinition script, LocalDateTime now) {
         target.setName(name)
                 .setDescription(trigger.getDescription())
                 .setEnabled(trigger.isEnabled())
@@ -106,18 +121,19 @@ public class EventTriggerApplicationService {
                 .setSubmitMode(trigger.getSubmitMode() == null ? SubmitMode.ASYNC : trigger.getSubmitMode())
                 .setResponseView(trigger.getResponseView())
                 .setUpdatedAt(now);
-        return eventTriggerRepository.save(target);
     }
 
     public EventTrigger enable(String id) {
-        EventTrigger trigger = get(id);
-        trigger.setEnabled(true).setUpdatedAt(LocalDateTime.now());
-        return eventTriggerRepository.save(trigger);
+        return setEnabled(id, true);
     }
 
     public EventTrigger disable(String id) {
+        return setEnabled(id, false);
+    }
+
+    private EventTrigger setEnabled(String id, boolean enabled) {
         EventTrigger trigger = get(id);
-        trigger.setEnabled(false).setUpdatedAt(LocalDateTime.now());
+        trigger.setEnabled(enabled).setUpdatedAt(LocalDateTime.now());
         return eventTriggerRepository.save(trigger);
     }
 
@@ -132,54 +148,86 @@ public class EventTriggerApplicationService {
                 .orElseThrow(() -> new IllegalArgumentException("事件源不存在: " + trigger.getSourceId()));
         ScriptDefinition script = scriptRepository.findById(trigger.getTargetScriptId())
                 .orElseThrow(() -> new IllegalArgumentException("目标脚本不存在: " + trigger.getTargetScriptId()));
-        if (script.getPublishedSnapshot() == null) {
-            throw new IllegalArgumentException("目标脚本未发布: " + script.getId());
-        }
+        requirePublished(script);
+
         ProcessorContext context = buildContext(source, trigger, event);
-        TriggerTestResult result = new TriggerTestResult();
-        result.setEvent(event);
+        TestProcessorResult result = processTestPipeline(trigger, script, context, event);
+        if (result.earlyReturn != null) {
+            return result.earlyReturn;
+        }
+
+        ExecutionRecord execution = execute ? submitTestExecution(source, trigger, script, result.mappedInput) : null;
+        return new TriggerTestResult(event, result.filterResult, result.filterMatched,
+                result.idempotencyResult, result.idempotencyKey, result.inputResult,
+                result.mappedInput, true, List.of(), execution);
+    }
+
+    private TestProcessorResult processTestPipeline(EventTrigger trigger, ScriptDefinition script,
+                                                     ProcessorContext context, NormalizedEvent event) {
+        ProcessorResult filterResult = null;
+        boolean filterMatched = true;
         if (trigger.getFilterProcessor() != null) {
-            ProcessorResult filter = processorEngine.process(trigger.getFilterProcessor(), context);
-            result.setFilterResult(filter);
-            result.setFilterMatched(asMatched(filter));
-            if (!result.isFilterMatched()) {
-                return result;
+            filterResult = processorEngine.process(trigger.getFilterProcessor(), context);
+            filterMatched = asMatched(filterResult);
+            if (!filterMatched) {
+                return TestProcessorResult.early(event, filterResult, false, null, null, null, Map.of());
             }
-        } else {
-            result.setFilterMatched(true);
         }
+
+        ProcessorResult idempotencyResult = null;
+        String idempotencyKey = null;
         if (trigger.getIdempotencyProcessor() != null) {
-            ProcessorResult idempotency = processorEngine.process(trigger.getIdempotencyProcessor(), context);
-            result.setIdempotencyResult(idempotency);
-            result.setIdempotencyKey(extractIdempotencyKey(idempotency));
+            idempotencyResult = processorEngine.process(trigger.getIdempotencyProcessor(), context);
+            idempotencyKey = extractIdempotencyKey(idempotencyResult);
         }
-        ProcessorResult input = processorEngine.process(trigger.getInputProcessor(), context);
-        result.setInputResult(input);
-        if (!input.isSuccess()) {
-            return result;
+
+        ProcessorResult inputResult = processorEngine.process(trigger.getInputProcessor(), context);
+        if (!inputResult.isSuccess()) {
+            return TestProcessorResult.early(event, filterResult, filterMatched, idempotencyResult, idempotencyKey, inputResult, Map.of());
         }
-        result.setMappedInput(input.getOutput());
+
+        Map<String, Object> mappedInput = inputResult.getOutput();
         try {
-            scriptSchemaSupport.validateInput(script.getId(), input.getOutput(), script.getPublishedSnapshot().getInputSchema());
-            result.setSchemaValid(true);
+            ScriptSchemaSupport.validateInput(script.getId(), mappedInput, script.getPublishedSnapshot().getInputSchema());
         } catch (InvalidExecutionInputException exception) {
-            result.setSchemaValid(false)
-                    .setFieldErrors(exception.getFieldErrors());
-            return result;
+            TriggerTestResult early = new TriggerTestResult(event, filterResult, filterMatched,
+                    idempotencyResult, idempotencyKey, inputResult, mappedInput, false, exception.getFieldErrors(), null);
+            return new TestProcessorResult(early, filterResult, filterMatched, idempotencyResult, idempotencyKey, inputResult, mappedInput);
         }
-        if (execute) {
-            ExecutionRecord execution = executionApplicationService.executePublished(
-                    script.getId(),
-                    input.getOutput(),
-                    trigger.getSubmitMode(),
-                    new ExecutionSubmissionMetadata()
-                            .setTriggerSource(ExecutionTriggerSource.EVENT)
-                            .setEventSourceId(source.getId())
-                            .setEventTriggerId(trigger.getId())
-            );
-            result.setExecution(execution);
+
+        return new TestProcessorResult(null, filterResult, filterMatched, idempotencyResult, idempotencyKey, inputResult, mappedInput);
+    }
+
+    private ExecutionRecord submitTestExecution(EventSourceDefinition source, EventTrigger trigger,
+                                                 ScriptDefinition script, Map<String, Object> mappedInput) {
+        return executionApplicationService.executePublished(
+                script.getId(),
+                mappedInput,
+                trigger.getSubmitMode(),
+                new ExecutionSubmissionMetadata()
+                        .setTriggerSource(ExecutionTriggerSource.EVENT)
+                        .setEventSourceId(source.getId())
+                        .setEventTriggerId(trigger.getId())
+        );
+    }
+
+    private record TestProcessorResult(
+            TriggerTestResult earlyReturn,
+            ProcessorResult filterResult,
+            boolean filterMatched,
+            ProcessorResult idempotencyResult,
+            String idempotencyKey,
+            ProcessorResult inputResult,
+            Map<String, Object> mappedInput
+    ) {
+        static TestProcessorResult early(NormalizedEvent event, ProcessorResult filterResult,
+                                          boolean filterMatched, ProcessorResult idempotencyResult,
+                                          String idempotencyKey, ProcessorResult inputResult,
+                                          Map<String, Object> mappedInput) {
+            TriggerTestResult early = new TriggerTestResult(event, filterResult, filterMatched,
+                    idempotencyResult, idempotencyKey, inputResult, mappedInput, false, List.of(), null);
+            return new TestProcessorResult(early, filterResult, filterMatched, idempotencyResult, idempotencyKey, inputResult, mappedInput);
         }
-        return result;
     }
 
     public EventDispatchRecord dispatch(EventSourceDefinition source,
@@ -195,55 +243,68 @@ public class EventTriggerApplicationService {
                 .setTargetScriptId(trigger.getTargetScriptId())
                 .setCreatedAt(LocalDateTime.now())
                 .setUpdatedAt(LocalDateTime.now());
-        if (trigger.getFilterProcessor() != null) {
-            ProcessorResult filter = processorEngine.process(trigger.getFilterProcessor(), context);
-            if (!filter.isSuccess()) {
-                return eventDispatchRepository.save(dispatch
-                        .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.MAPPING_FAILED)
-                        .setErrorMessage(filter.getErrorMessage()));
-            }
-            boolean matched = asMatched(filter);
-            dispatch.setFilterMatched(matched);
-            if (!matched) {
-                return eventDispatchRepository.save(dispatch
-                        .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.FILTERED_OUT));
-            }
-        } else {
-            dispatch.setFilterMatched(true);
+
+        EventDispatchRecord filterResult = applyFilter(trigger, context, dispatch);
+        if (filterResult != null) {
+            return filterResult;
         }
 
-        if (trigger.getIdempotencyProcessor() != null) {
-            ProcessorResult idempotency = processorEngine.process(trigger.getIdempotencyProcessor(), context);
-            if (!idempotency.isSuccess()) {
-                return eventDispatchRepository.save(dispatch
-                        .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.MAPPING_FAILED)
-                        .setErrorMessage(idempotency.getErrorMessage()));
-            }
-            String key = extractIdempotencyKey(idempotency);
-            dispatch.setIdempotencyKey(key);
-            if (key != null && eventDispatchRepository.findByTriggerIdAndIdempotencyKey(trigger.getId(), key).isPresent()) {
-                return eventDispatchRepository.save(dispatch
-                        .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.DUPLICATE));
-            }
+        EventDispatchRecord idempotencyResult = checkIdempotency(trigger, context, dispatch);
+        if (idempotencyResult != null) {
+            return idempotencyResult;
         }
 
         ProcessorResult input = processorEngine.process(trigger.getInputProcessor(), context);
         if (!input.isSuccess()) {
-            return eventDispatchRepository.save(dispatch
-                    .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.MAPPING_FAILED)
-                    .setErrorMessage(input.getErrorMessage()));
+            return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, input.getErrorMessage());
         }
         dispatch.setMappedInput(input.getOutput());
+        return executeTargetScript(source, trigger, eventRecordId, dispatch, input.getOutput());
+    }
+
+    private EventDispatchRecord applyFilter(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
+        if (trigger.getFilterProcessor() == null) {
+            dispatch.setFilterMatched(true);
+            return null;
+        }
+        ProcessorResult filter = processorEngine.process(trigger.getFilterProcessor(), context);
+        if (!filter.isSuccess()) {
+            return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, filter.getErrorMessage());
+        }
+        boolean matched = asMatched(filter);
+        dispatch.setFilterMatched(matched);
+        return matched ? null : failDispatch(dispatch, EventDispatchStatus.FILTERED_OUT, null);
+    }
+
+    private EventDispatchRecord checkIdempotency(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
+        if (trigger.getIdempotencyProcessor() == null) {
+            return null;
+        }
+        ProcessorResult idempotency = processorEngine.process(trigger.getIdempotencyProcessor(), context);
+        if (!idempotency.isSuccess()) {
+            return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, idempotency.getErrorMessage());
+        }
+        String key = extractIdempotencyKey(idempotency);
+        dispatch.setIdempotencyKey(key);
+        if (key != null && eventDispatchRepository.findByTriggerIdAndIdempotencyKey(trigger.getId(), key).isPresent()) {
+            return failDispatch(dispatch, EventDispatchStatus.DUPLICATE, null);
+        }
+        return null;
+    }
+
+    private EventDispatchRecord executeTargetScript(EventSourceDefinition source,
+                                                     EventTrigger trigger,
+                                                     String eventRecordId,
+                                                     EventDispatchRecord dispatch,
+                                                     Map<String, Object> mappedInput) {
         try {
             ScriptDefinition script = scriptRepository.findById(trigger.getTargetScriptId())
                     .orElseThrow(() -> new IllegalArgumentException("目标脚本不存在: " + trigger.getTargetScriptId()));
-            if (script.getPublishedSnapshot() == null) {
-                throw new IllegalArgumentException("目标脚本未发布: " + script.getId());
-            }
-            scriptSchemaSupport.validateInput(script.getId(), input.getOutput(), script.getPublishedSnapshot().getInputSchema());
+            requirePublished(script);
+            ScriptSchemaSupport.validateInput(script.getId(), mappedInput, script.getPublishedSnapshot().getInputSchema());
             ExecutionRecord execution = executionApplicationService.executePublished(
                     script.getId(),
-                    input.getOutput(),
+                    mappedInput,
                     trigger.getSubmitMode(),
                     new ExecutionSubmissionMetadata()
                             .setTriggerSource(ExecutionTriggerSource.EVENT)
@@ -255,36 +316,27 @@ public class EventTriggerApplicationService {
             dispatch.setExecutionId(execution.getId())
                     .setExecutionStatus(execution.getStatus())
                     .setStatus(execution.getStatus() == org.team4u.actiondock.domain.model.ExecutionStatus.FAILED
-                            ? org.team4u.actiondock.domain.model.EventDispatchStatus.EXECUTION_FAILED
-                            : org.team4u.actiondock.domain.model.EventDispatchStatus.EXECUTION_CREATED)
+                            ? EventDispatchStatus.EXECUTION_FAILED
+                            : EventDispatchStatus.EXECUTION_CREATED)
                     .setUpdatedAt(LocalDateTime.now());
             updateTriggerAfterDispatch(trigger, eventRecordId, execution);
             eventTriggerRepository.save(trigger);
             return eventDispatchRepository.save(dispatch);
         } catch (InvalidExecutionInputException exception) {
-            return eventDispatchRepository.save(dispatch
-                    .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.VALIDATION_FAILED)
-                    .setErrorMessage(exception.getMessage())
-                    .setUpdatedAt(LocalDateTime.now()));
+            return failDispatch(dispatch, EventDispatchStatus.VALIDATION_FAILED, exception.getMessage());
         } catch (RuntimeException exception) {
-            return eventDispatchRepository.save(dispatch
-                    .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.EXECUTION_FAILED)
-                    .setErrorMessage(ErrorDetailSupport.summarize(exception))
-                    .setUpdatedAt(LocalDateTime.now()));
+            return failDispatch(dispatch, EventDispatchStatus.EXECUTION_FAILED, ErrorDetailSupport.summarize(exception));
         }
     }
 
-    private void validateProcessor(ProcessorDefinition processor, ProcessorContext context, String fieldName) {
-        if (processor == null) {
-            return;
-        }
-        ProcessorResult result = processorEngine.process(processor, context);
-        if (!result.isSuccess()) {
-            throw new IllegalArgumentException(fieldName + " 不可执行: " + result.getErrorMessage());
-        }
+    private EventDispatchRecord failDispatch(EventDispatchRecord dispatch,
+                                              EventDispatchStatus status,
+                                              String errorMessage) {
+        dispatch.setStatus(status).setErrorMessage(errorMessage).setUpdatedAt(LocalDateTime.now());
+        return eventDispatchRepository.save(dispatch);
     }
 
-    private ProcessorContext sampleContext(EventSourceDefinition source, EventTrigger trigger) {
+    private static ProcessorContext sampleContext(EventSourceDefinition source, EventTrigger trigger) {
         Map<String, Object> sample = source.getSampleContext();
         NormalizedEvent event = new NormalizedEvent()
                 .setSourceId(source.getId())
@@ -309,17 +361,17 @@ public class EventTriggerApplicationService {
         return buildContext(source, trigger, event);
     }
 
-    private ProcessorContext buildContext(EventSourceDefinition source, EventTrigger trigger, NormalizedEvent event) {
+    private static ProcessorContext buildContext(EventSourceDefinition source, EventTrigger trigger, NormalizedEvent event) {
         return new ProcessorContext()
                 .setHeaders(event.getHeaders())
                 .setQuery(event.getQuery())
                 .setBody(event.getBody())
-                .setEvent(eventMap(event))
-                .setSource(sourceMap(source))
+                .setEvent(ApplicationServiceSupport.toEventMap(event))
+                .setSource(ApplicationServiceSupport.toSourceMap(source))
                 .setTrigger(triggerMap(trigger));
     }
 
-    private boolean asMatched(ProcessorResult result) {
+    private static boolean asMatched(ProcessorResult result) {
         if (result == null || !result.isSuccess()) {
             return false;
         }
@@ -333,13 +385,13 @@ public class EventTriggerApplicationService {
         if (value instanceof CharSequence text) {
             return !text.isEmpty() && !"false".equalsIgnoreCase(text.toString());
         }
-        if (value instanceof java.util.Collection<?> collection) {
+        if (value instanceof Collection<?> collection) {
             return !collection.isEmpty();
         }
         return value != null;
     }
 
-    private String extractIdempotencyKey(ProcessorResult result) {
+    private static String extractIdempotencyKey(ProcessorResult result) {
         if (result == null || !result.isSuccess()) {
             return null;
         }
@@ -351,7 +403,7 @@ public class EventTriggerApplicationService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private void updateTriggerAfterDispatch(EventTrigger trigger, String eventRecordId, ExecutionRecord execution) {
+    private static void updateTriggerAfterDispatch(EventTrigger trigger, String eventRecordId, ExecutionRecord execution) {
         trigger.setLastEventId(eventRecordId)
                 .setLastTriggeredAt(LocalDateTime.now())
                 .setLastExecutionId(execution.getId())
@@ -359,36 +411,14 @@ public class EventTriggerApplicationService {
                 .setUpdatedAt(LocalDateTime.now());
     }
 
-    private String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
+
+    private static void requirePublished(ScriptDefinition script) {
+        if (script.getPublishedSnapshot() == null) {
+            throw new IllegalArgumentException("目标脚本未发布: " + script.getId());
+        }
     }
 
-    private Map<String, Object> eventMap(NormalizedEvent event) {
-        Map<String, Object> value = new LinkedHashMap<>();
-        value.put("id", event.getId());
-        value.put("sourceId", event.getSourceId());
-        value.put("sourceKey", event.getSourceKey());
-        value.put("eventType", event.getEventType());
-        value.put("eventId", event.getEventId());
-        value.put("actor", event.getActor());
-        value.put("subject", event.getSubject());
-        value.put("timestamp", event.getTimestamp());
-        value.put("headers", event.getHeaders());
-        value.put("query", event.getQuery());
-        value.put("body", event.getBody());
-        value.put("receivedAt", event.getReceivedAt() == null ? null : event.getReceivedAt().toString());
-        return value;
-    }
-
-    private Map<String, Object> sourceMap(EventSourceDefinition source) {
-        Map<String, Object> value = new LinkedHashMap<>();
-        value.put("id", source.getId());
-        value.put("key", source.getKey());
-        value.put("name", source.getName());
-        return value;
-    }
-
-    private Map<String, Object> triggerMap(EventTrigger trigger) {
+    private static Map<String, Object> triggerMap(EventTrigger trigger) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("id", trigger.getId());
         value.put("name", trigger.getName());
@@ -396,106 +426,21 @@ public class EventTriggerApplicationService {
         return value;
     }
 
-    public static class TriggerTestResult {
-        private NormalizedEvent event;
-        private boolean filterMatched;
-        private ProcessorResult filterResult;
-        private ProcessorResult idempotencyResult;
-        private String idempotencyKey;
-        private ProcessorResult inputResult;
-        private Map<String, Object> mappedInput = Map.of();
-        private boolean schemaValid;
-        private List<SchemaFieldError> fieldErrors = List.of();
-        private ExecutionRecord execution;
-
-        public NormalizedEvent getEvent() {
-            return event;
-        }
-
-        public TriggerTestResult setEvent(NormalizedEvent event) {
-            this.event = event;
-            return this;
-        }
-
-        public boolean isFilterMatched() {
-            return filterMatched;
-        }
-
-        public TriggerTestResult setFilterMatched(boolean filterMatched) {
-            this.filterMatched = filterMatched;
-            return this;
-        }
-
-        public ProcessorResult getFilterResult() {
-            return filterResult;
-        }
-
-        public TriggerTestResult setFilterResult(ProcessorResult filterResult) {
-            this.filterResult = filterResult;
-            return this;
-        }
-
-        public ProcessorResult getIdempotencyResult() {
-            return idempotencyResult;
-        }
-
-        public TriggerTestResult setIdempotencyResult(ProcessorResult idempotencyResult) {
-            this.idempotencyResult = idempotencyResult;
-            return this;
-        }
-
-        public String getIdempotencyKey() {
-            return idempotencyKey;
-        }
-
-        public TriggerTestResult setIdempotencyKey(String idempotencyKey) {
-            this.idempotencyKey = idempotencyKey;
-            return this;
-        }
-
-        public ProcessorResult getInputResult() {
-            return inputResult;
-        }
-
-        public TriggerTestResult setInputResult(ProcessorResult inputResult) {
-            this.inputResult = inputResult;
-            return this;
-        }
-
-        public Map<String, Object> getMappedInput() {
-            return mappedInput;
-        }
-
-        public TriggerTestResult setMappedInput(Map<String, Object> mappedInput) {
-            this.mappedInput = mappedInput == null ? Map.of() : mappedInput;
-            return this;
-        }
-
-        public boolean isSchemaValid() {
-            return schemaValid;
-        }
-
-        public TriggerTestResult setSchemaValid(boolean schemaValid) {
-            this.schemaValid = schemaValid;
-            return this;
-        }
-
-        public List<SchemaFieldError> getFieldErrors() {
-            return fieldErrors;
-        }
-
-        public TriggerTestResult setFieldErrors(List<SchemaFieldError> fieldErrors) {
-            this.fieldErrors = fieldErrors == null ? List.of() : List.copyOf(fieldErrors);
-            return this;
-        }
-
-        public ExecutionRecord getExecution() {
-            return execution;
-        }
-
-        public TriggerTestResult setExecution(ExecutionRecord execution) {
-            this.execution = execution;
-            return this;
+    public record TriggerTestResult(
+            NormalizedEvent event,
+            ProcessorResult filterResult,
+            boolean filterMatched,
+            ProcessorResult idempotencyResult,
+            String idempotencyKey,
+            ProcessorResult inputResult,
+            Map<String, Object> mappedInput,
+            boolean schemaValid,
+            List<SchemaFieldError> fieldErrors,
+            ExecutionRecord execution
+    ) {
+        public TriggerTestResult {
+            mappedInput = mappedInput == null ? Map.of() : mappedInput;
+            fieldErrors = fieldErrors == null ? List.of() : List.copyOf(fieldErrors);
         }
     }
 }

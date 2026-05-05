@@ -15,10 +15,14 @@ import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public final class ActionDockAiTools {
     private ActionDockAiTools() {
@@ -27,39 +31,53 @@ public final class ActionDockAiTools {
     public static List<AiTool> create(ScriptRepository scriptRepository,
                                       ExecutionRepository executionRepository,
                                       PluginRegistryRepository pluginRegistryRepository) {
+        List<AiTool> all = new ArrayList<>();
+        all.addAll(readTools(scriptRepository, executionRepository, pluginRegistryRepository));
+        all.addAll(proposalTools());
+        return all;
+    }
+
+    private static List<AiTool> readTools(ScriptRepository scriptRepo,
+                                           ExecutionRepository executionRepo,
+                                           PluginRegistryRepository pluginRepo) {
         return List.of(
                 tool("get_current_script", "读取当前脚本定义摘要和源码", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of()),
                         objectSchema(Map.of("script", Map.of("type", "object"))),
-                        (input, context) -> script(scriptRepository, requireContextScriptId(context), true)),
+                        (input, context) -> script(scriptRepo, requireContextScriptId(context), true)),
                 tool("get_script", "按脚本 ID 读取脚本定义", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("scriptId", stringSchema(), "includeSource", booleanSchema())),
                         objectSchema(Map.of("script", Map.of("type", "object"))),
-                        (input, context) -> script(scriptRepository, string(input.get("scriptId")), booleanValue(input.get("includeSource"), true))),
+                        (input, context) -> script(scriptRepo, string(input.get("scriptId")), booleanValue(input.get("includeSource"), true))),
                 tool("list_scripts", "列出脚本摘要，可按关键词过滤", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("keyword", stringSchema())),
                         objectSchema(Map.of("scripts", Map.of("type", "array"))),
-                        (input, context) -> listScripts(scriptRepository, string(input.get("keyword")))),
+                        (input, context) -> listScripts(scriptRepo, string(input.get("keyword")))),
                 tool("get_script_schema", "读取脚本输入输出 Schema", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("scriptId", stringSchema())),
                         objectSchema(Map.of("inputSchema", Map.of("type", "object"), "outputSchema", Map.of("type", "object"))),
-                        (input, context) -> scriptSchema(scriptRepository, string(input.get("scriptId")))),
+                        (input, context) -> scriptSchema(scriptRepo, string(input.get("scriptId")))),
                 tool("get_execution", "读取执行记录摘要、输入、输出和错误信息", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("executionId", stringSchema())),
                         objectSchema(Map.of("execution", Map.of("type", "object"))),
-                        (input, context) -> execution(executionRepository, string(input.get("executionId")), true)),
+                        (input, context) -> execution(executionRepo, string(input.get("executionId")), true)),
                 tool("get_execution_logs", "读取执行日志", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("executionId", stringSchema())),
                         objectSchema(Map.of("logs", Map.of("type", "array"))),
-                        (input, context) -> executionLogs(executionRepository, string(input.get("executionId")))),
+                        (input, context) -> executionLogs(executionRepo, string(input.get("executionId")))),
                 tool("list_plugin_actions", "列出插件及其动作 Schema", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("pluginId", stringSchema())),
                         objectSchema(Map.of("plugins", Map.of("type", "array"))),
-                        (input, context) -> listPluginActions(pluginRegistryRepository, string(input.get("pluginId")))),
+                        (input, context) -> listPluginActions(pluginRepo, string(input.get("pluginId")))),
                 tool("get_published_snapshot", "读取脚本已发布快照", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("scriptId", stringSchema())),
                         objectSchema(Map.of("publishedSnapshot", Map.of("type", "object"))),
-                        (input, context) -> publishedSnapshot(scriptRepository, string(input.get("scriptId")))),
+                        (input, context) -> publishedSnapshot(scriptRepo, string(input.get("scriptId"))))
+        );
+    }
+
+    private static List<AiTool> proposalTools() {
+        return List.of(
                 tool("propose_script_draft", "生成新脚本草稿提案，不直接保存", AiToolPermission.PROPOSE_CHANGE,
                         objectSchema(Map.of("id", stringSchema(), "name", stringSchema(), "type", stringSchema(), "source", stringSchema(), "inputSchema", Map.of("type", "object"), "outputSchema", Map.of("type", "object"), "rationale", stringSchema())),
                         objectSchema(Map.of("scriptDraft", Map.of("type", "object"), "proposal", Map.of("type", "object"))),
@@ -153,12 +171,12 @@ public final class ActionDockAiTools {
     private static Map<String, Object> publishedSnapshot(ScriptRepository repository, String scriptId) {
         ScriptDefinition script = requireScript(repository, scriptId);
         PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
+        Map<String, Object> values = new LinkedHashMap<>();
         values.put("scriptId", script.getId());
         if (snapshot == null) {
             values.put("publishedSnapshot", Map.of());
         } else {
-            Map<String, Object> snapshotValues = new java.util.LinkedHashMap<>();
+            Map<String, Object> snapshotValues = new LinkedHashMap<>();
             snapshotValues.put("name", value(snapshot.getName()));
             snapshotValues.put("type", snapshot.getType() == null ? null : snapshot.getType().name());
             snapshotValues.put("source", value(snapshot.getSource()));
@@ -171,7 +189,7 @@ public final class ActionDockAiTools {
     }
 
     private static Map<String, Object> proposal(String type, String resultKey, Map<String, Object> input) {
-        Map<String, Object> payload = input == null ? Map.of() : new java.util.LinkedHashMap<>(input);
+        Map<String, Object> payload = input == null ? Map.of() : new LinkedHashMap<>(input);
         Map<String, Object> proposal = Map.of(
                 "type", type,
                 "payload", payload,
@@ -180,26 +198,26 @@ public final class ActionDockAiTools {
                 "createdAt", LocalDateTime.now().toString(),
                 "applied", false
         );
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
+        Map<String, Object> values = new LinkedHashMap<>();
         values.put(resultKey, payload);
         values.put("proposal", proposal);
         return values;
     }
 
-    private static ScriptDefinition requireScript(ScriptRepository repository, String scriptId) {
-        if (scriptId == null || scriptId.isBlank()) {
-            throw new IllegalArgumentException("scriptId 不能为空");
+    private static <T> T requireEntity(String id, String entityName, Function<String, Optional<T>> finder) {
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException(entityName + " 不能为空");
         }
-        return repository.findById(scriptId)
-                .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + scriptId));
+        return finder.apply(id)
+                .orElseThrow(() -> new IllegalArgumentException(entityName + "不存在: " + id));
+    }
+
+    private static ScriptDefinition requireScript(ScriptRepository repository, String scriptId) {
+        return requireEntity(scriptId, "scriptId", repository::findById);
     }
 
     private static ExecutionRecord requireExecution(ExecutionRepository repository, String executionId) {
-        if (executionId == null || executionId.isBlank()) {
-            throw new IllegalArgumentException("executionId 不能为空");
-        }
-        return repository.findById(executionId)
-                .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + executionId));
+        return requireEntity(executionId, "executionId", repository::findById);
     }
 
     private static String requireContextScriptId(AiToolExecutionContext context) {
@@ -209,23 +227,32 @@ public final class ActionDockAiTools {
         return context.scriptId();
     }
 
+    private static Map<String, Object> mapOf(Object... keyValuePairs) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < keyValuePairs.length; i += 2) {
+            map.put((String) keyValuePairs[i], keyValuePairs[i + 1]);
+        }
+        return map;
+    }
+
     private static Map<String, Object> scriptMap(ScriptDefinition script, boolean includeSource) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        values.put("id", script.getId());
-        values.put("name", script.getName());
-        values.put("type", script.getType() == null ? null : script.getType().name());
-        values.put("status", script.getStatus() == null ? null : script.getStatus().name());
-        values.put("version", script.getVersion());
-        values.put("scope", script.getScope() == null ? null : script.getScope().name());
-        values.put("description", script.getDescription());
-        values.put("tags", script.getTags());
-        values.put("pluginDependencies", script.getPluginDependencies());
-        values.put("aiDependencies", script.getAiDependencies());
-        values.put("inputSchema", script.getInputSchema());
-        values.put("outputSchema", script.getOutputSchema());
-        values.put("repositoryId", script.getRepositoryId());
-        values.put("repositoryToolId", script.getRepositoryToolId());
-        values.put("updatedAt", time(script.getUpdatedAt()));
+        Map<String, Object> values = mapOf(
+                "id", script.getId(),
+                "name", script.getName(),
+                "type", script.getType() == null ? null : script.getType().name(),
+                "status", script.getStatus() == null ? null : script.getStatus().name(),
+                "version", script.getVersion(),
+                "scope", script.getScope() == null ? null : script.getScope().name(),
+                "description", script.getDescription(),
+                "tags", script.getTags(),
+                "pluginDependencies", script.getPluginDependencies(),
+                "aiDependencies", script.getAiDependencies(),
+                "inputSchema", script.getInputSchema(),
+                "outputSchema", script.getOutputSchema(),
+                "repositoryId", script.getRepositoryId(),
+                "repositoryToolId", script.getRepositoryToolId(),
+                "updatedAt", time(script.getUpdatedAt())
+        );
         if (includeSource) {
             values.put("source", script.getSource());
         }
@@ -233,16 +260,17 @@ public final class ActionDockAiTools {
     }
 
     private static Map<String, Object> executionMap(ExecutionRecord record, boolean includePayloads, boolean includeError) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        values.put("id", record.getId());
-        values.put("scriptId", record.getScriptId());
-        values.put("status", record.getStatus() == null ? null : record.getStatus().name());
-        values.put("submitMode", record.getSubmitMode() == null ? null : record.getSubmitMode().name());
-        values.put("triggerSource", record.getTriggerSource() == null ? null : record.getTriggerSource().name());
-        values.put("scheduleId", record.getScheduleId());
-        values.put("createdAt", time(record.getCreatedAt()));
-        values.put("startedAt", time(record.getStartedAt()));
-        values.put("finishedAt", time(record.getFinishedAt()));
+        Map<String, Object> values = mapOf(
+                "id", record.getId(),
+                "scriptId", record.getScriptId(),
+                "status", record.getStatus() == null ? null : record.getStatus().name(),
+                "submitMode", record.getSubmitMode() == null ? null : record.getSubmitMode().name(),
+                "triggerSource", record.getTriggerSource() == null ? null : record.getTriggerSource().name(),
+                "scheduleId", record.getScheduleId(),
+                "createdAt", time(record.getCreatedAt()),
+                "startedAt", time(record.getStartedAt()),
+                "finishedAt", time(record.getFinishedAt())
+        );
         if (includePayloads) {
             values.put("input", record.getInput());
             values.put("output", record.getOutput());
@@ -256,31 +284,31 @@ public final class ActionDockAiTools {
     }
 
     private static Map<String, Object> logMap(ExecutionLogEntry log) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        values.put("level", log.getLevel() == null ? null : log.getLevel().name());
-        values.put("message", value(log.getMessage()));
-        values.put("createdAt", time(log.getCreatedAt()));
-        return values;
+        return mapOf(
+                "level", log.getLevel() == null ? null : log.getLevel().name(),
+                "message", value(log.getMessage()),
+                "createdAt", time(log.getCreatedAt())
+        );
     }
 
     private static Map<String, Object> pluginMap(PluginRegistration registration) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        values.put("pluginId", value(registration.getPluginId()));
-        values.put("name", value(registration.getName()));
-        values.put("version", value(registration.getVersion()));
-        values.put("enabled", registration.isEnabled());
-        values.put("actions", registration.getActions().stream().map(ActionDockAiTools::actionMap).toList());
-        return values;
+        return mapOf(
+                "pluginId", value(registration.getPluginId()),
+                "name", value(registration.getName()),
+                "version", value(registration.getVersion()),
+                "enabled", registration.isEnabled(),
+                "actions", registration.getActions().stream().map(ActionDockAiTools::actionMap).toList()
+        );
     }
 
     private static Map<String, Object> actionMap(PluginActionMetadata action) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        values.put("action", value(action.getAction()));
-        values.put("title", value(action.getTitle()));
-        values.put("description", value(action.getDescription()));
-        values.put("inputSchema", action.getInputSchema());
-        values.put("outputSchema", action.getOutputSchema());
-        return values;
+        return mapOf(
+                "action", value(action.getAction()),
+                "title", value(action.getTitle()),
+                "description", value(action.getDescription()),
+                "inputSchema", action.getInputSchema(),
+                "outputSchema", action.getOutputSchema()
+        );
     }
 
     private static Map<String, Object> objectSchema(Map<String, Object> properties) {
@@ -309,6 +337,10 @@ public final class ActionDockAiTools {
 
     private static String value(String value) {
         return value == null ? "" : value;
+    }
+
+    static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static String time(LocalDateTime value) {

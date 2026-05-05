@@ -10,9 +10,10 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_ENTRY_PREFIX;
+import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
+
 public class AiAgentProfileService {
-    private static final String MANAGED_INTERNAL_PREFIX = "pkg.";
-    private static final String MANAGED_ENTRY_PREFIX = "cap.";
 
     private final AiAgentProfileRepository repository;
     private final AiModelProfileRepository modelProfileRepository;

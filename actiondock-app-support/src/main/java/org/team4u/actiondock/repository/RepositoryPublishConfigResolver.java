@@ -1,6 +1,8 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.configvalue.PlaceholderKeyExtractor;
 import org.team4u.actiondock.domain.model.ConfigValue;
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -9,6 +11,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import org.team4u.actiondock.skill.SkillFileUtils;
+
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -16,7 +20,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class RepositoryPublishConfigResolver {
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{config\\.([A-Za-z][A-Za-z0-9_.-]*)}");
     private static final Pattern CONFIG_INDEX_ACCESS_PATTERN = Pattern.compile(
             "config\\s*\\[\\s*([\"'`])([^\"'`]+)\\1\\s*]"
     );
@@ -30,6 +33,15 @@ final class RepositoryPublishConfigResolver {
     static PublishConfigResolution resolve(String source,
                                           List<Map<String, Object>> scheduleInputs,
                                           List<ConfigValue> configValues) {
+        Map<String, ConfigValue> configsByKey = buildConfigsByKey(configValues);
+        LinkedHashSet<String> detectedKeys = collectDetectedKeys(source, scheduleInputs);
+        LinkedHashSet<String> resolvedKeys = new LinkedHashSet<>(detectedKeys);
+        LinkedHashSet<String> missingKeys = new LinkedHashSet<>();
+        resolveTransitiveKeys(configsByKey, resolvedKeys, missingKeys, detectedKeys);
+        return buildResolution(configsByKey, resolvedKeys, missingKeys);
+    }
+
+    private static Map<String, ConfigValue> buildConfigsByKey(List<ConfigValue> configValues) {
         Map<String, ConfigValue> configsByKey = new LinkedHashMap<>();
         for (ConfigValue value : configValues == null ? List.<ConfigValue>of() : configValues) {
             if (value == null || value.getKey() == null || value.getKey().isBlank()) {
@@ -37,15 +49,23 @@ final class RepositoryPublishConfigResolver {
             }
             configsByKey.put(value.getKey(), value);
         }
+        return configsByKey;
+    }
 
+    private static LinkedHashSet<String> collectDetectedKeys(String source,
+                                                             List<Map<String, Object>> scheduleInputs) {
         LinkedHashSet<String> detectedKeys = new LinkedHashSet<>(extractSourceConfigKeys(source));
         for (Map<String, Object> scheduleInput : scheduleInputs == null ? List.<Map<String, Object>>of() : scheduleInputs) {
-            detectedKeys.addAll(extractPlaceholderKeys(scheduleInput));
+            PlaceholderKeyExtractor.collectPlaceholderKeys(scheduleInput, detectedKeys);
         }
+        return detectedKeys;
+    }
 
-        LinkedHashSet<String> resolvedKeys = new LinkedHashSet<>(detectedKeys);
-        LinkedHashSet<String> missingKeys = new LinkedHashSet<>();
-        ArrayDeque<String> queue = new ArrayDeque<>(detectedKeys);
+    private static void resolveTransitiveKeys(Map<String, ConfigValue> configsByKey,
+                                              LinkedHashSet<String> resolvedKeys,
+                                              LinkedHashSet<String> missingKeys,
+                                              LinkedHashSet<String> seeds) {
+        ArrayDeque<String> queue = new ArrayDeque<>(seeds);
         while (!queue.isEmpty()) {
             String key = queue.removeFirst();
             ConfigValue configValue = configsByKey.get(key);
@@ -53,19 +73,23 @@ final class RepositoryPublishConfigResolver {
                 missingKeys.add(key);
                 continue;
             }
-            for (String nestedKey : extractPlaceholderKeys(configValue.getValue())) {
+            for (String nestedKey : PlaceholderKeyExtractor.extractPlaceholderKeys(configValue.getValue())) {
                 if (resolvedKeys.add(nestedKey)) {
                     queue.addLast(nestedKey);
                 }
             }
         }
+    }
 
+    private static PublishConfigResolution buildResolution(Map<String, ConfigValue> configsByKey,
+                                                           LinkedHashSet<String> resolvedKeys,
+                                                           LinkedHashSet<String> missingKeys) {
         List<ResolvedConfigValue> items = resolvedKeys.stream()
                 .filter(configsByKey::containsKey)
                 .map(configsByKey::get)
                 .map(value -> new ResolvedConfigValue(
                         value.getKey(),
-                        normalizeBlank(value.getDescription()),
+                        SkillFileUtils.normalizeNullable(value.getDescription()),
                         value.isSecret(),
                         value.getValue() == null ? "" : value.getValue()
                 ))
@@ -80,19 +104,19 @@ final class RepositoryPublishConfigResolver {
         return new PublishConfigResolution(items, sortedMissingKeys, inferredKeys);
     }
 
-    static List<RepositoryCatalogService.ConfigTemplateItem> buildTemplates(PublishConfigResolution resolution,
-                                                                            List<RepositoryCatalogService.RepositoryPublishConfigItem> requestedItems) {
+    static List<ConfigTemplateItem> buildTemplates(PublishConfigResolution resolution,
+                                                                            List<RepositoryPublishConfigItem> requestedItems) {
         if (!resolution.missingKeys().isEmpty()) {
             throw new IllegalArgumentException("发布依赖的配置值不存在: " + String.join(", ", resolution.missingKeys()));
         }
         Map<String, String> requestedModes = normalizeRequestedModes(requestedItems);
         validateRequestedKeys(resolution.inferredKeys(), requestedModes.keySet());
 
-        List<RepositoryCatalogService.ConfigTemplateItem> templates = new ArrayList<>();
+        List<ConfigTemplateItem> templates = new ArrayList<>();
         for (ResolvedConfigValue item : resolution.items()) {
             String requestedMode = requestedModes.get(item.key());
             boolean inline = !item.secret() && "INLINE".equalsIgnoreCase(requestedMode);
-            templates.add(new RepositoryCatalogService.ConfigTemplateItem(
+            templates.add(new ConfigTemplateItem(
                     item.key(),
                     item.label(),
                     "string",
@@ -109,7 +133,7 @@ final class RepositoryPublishConfigResolver {
             return List.of();
         }
         LinkedHashSet<String> keys = new LinkedHashSet<>();
-        keys.addAll(extractPlaceholderKeys(source));
+        keys.addAll(PlaceholderKeyExtractor.extractPlaceholderKeys(source));
         collectMatches(CONFIG_INDEX_ACCESS_PATTERN.matcher(source), keys);
         collectMatches(CONFIG_GET_ACCESS_PATTERN.matcher(source), keys);
         return List.copyOf(keys);
@@ -117,45 +141,17 @@ final class RepositoryPublishConfigResolver {
 
     private static void collectMatches(Matcher matcher, Set<String> target) {
         while (matcher.find()) {
-            String key = normalizeBlank(matcher.group(2));
+            String key = SkillFileUtils.normalizeNullable(matcher.group(2));
             if (key != null) {
                 target.add(key);
             }
         }
     }
 
-    private static Set<String> extractPlaceholderKeys(Object value) {
-        LinkedHashSet<String> found = new LinkedHashSet<>();
-        collectPlaceholderKeys(value, found);
-        return found;
-    }
-
-    private static void collectPlaceholderKeys(Object value, Set<String> found) {
-        if (value instanceof Map<?, ?> map) {
-            for (Object item : map.values()) {
-                collectPlaceholderKeys(item, found);
-            }
-            return;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            for (Object item : iterable) {
-                collectPlaceholderKeys(item, found);
-            }
-            return;
-        }
-        if (!(value instanceof String text) || text.isBlank()) {
-            return;
-        }
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(text);
-        while (matcher.find()) {
-            found.add(matcher.group(1));
-        }
-    }
-
-    private static Map<String, String> normalizeRequestedModes(List<RepositoryCatalogService.RepositoryPublishConfigItem> requestedItems) {
+    private static Map<String, String> normalizeRequestedModes(List<RepositoryPublishConfigItem> requestedItems) {
         Map<String, String> requestedModes = new LinkedHashMap<>();
-        for (RepositoryCatalogService.RepositoryPublishConfigItem item : requestedItems == null
-                ? List.<RepositoryCatalogService.RepositoryPublishConfigItem>of()
+        for (RepositoryPublishConfigItem item : requestedItems == null
+                ? List.<RepositoryPublishConfigItem>of()
                 : requestedItems) {
             if (item == null || item.key() == null || item.key().isBlank()) {
                 throw new IllegalArgumentException("发布配置项 key 不能为空");
@@ -170,7 +166,7 @@ final class RepositoryPublishConfigResolver {
     }
 
     private static String normalizeMode(String mode) {
-        String normalized = normalizeBlank(mode);
+        String normalized = SkillFileUtils.normalizeNullable(mode);
         if (normalized == null) {
             throw new IllegalArgumentException("发布配置项 publishMode 不能为空");
         }
@@ -194,10 +190,6 @@ final class RepositoryPublishConfigResolver {
         if (!extra.isEmpty()) {
             throw new IllegalArgumentException("发布配置项包含未检测的 key: " + String.join(", ", extra.stream().sorted().toList()));
         }
-    }
-
-    private static String normalizeBlank(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 
     record PublishConfigResolution(List<ResolvedConfigValue> items,

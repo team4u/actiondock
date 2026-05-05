@@ -48,7 +48,7 @@ public class ScriptScheduleViewMapper {
         );
     }
 
-    private LocalDateTime nextRunAt(ScriptSchedule schedule) {
+    private static LocalDateTime nextRunAt(ScriptSchedule schedule) {
         if (!schedule.isEnabled()) {
             return null;
         }
@@ -64,7 +64,7 @@ public class ScriptScheduleViewMapper {
                 .orElse(null);
     }
 
-    private Map<String, Object> copy(Map<String, Object> value) {
+    private static Map<String, Object> copy(Map<String, Object> value) {
         return value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
     }
 }
