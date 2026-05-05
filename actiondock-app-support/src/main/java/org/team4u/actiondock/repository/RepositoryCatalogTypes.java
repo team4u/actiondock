@@ -56,6 +56,10 @@ public final class RepositoryCatalogTypes {
 
     public static final String ERR_HTTP_REPO_UNSUPPORTED_EXPORT = "HTTP 仓库暂不支持导出 Skill 归档";
     public static final String ERR_HTTP_REPO_UNSUPPORTED_PUBLISH = "HTTP 仓库暂不支持发布";
+    /** 本地插件制品 URI scheme。 */
+    public static final String LOCAL_ARTIFACT_SCHEME = "local";
+    /** Windows 绝对路径正则。 */
+    public static final String WINDOWS_ABSOLUTE_PATH_REGEX = "^[A-Za-z]:[\\\\/].*";
 
     /** 仓库用途：开发仓库。 */
     public static final String REPO_USAGE_DEVELOPMENT = "DEVELOPMENT";

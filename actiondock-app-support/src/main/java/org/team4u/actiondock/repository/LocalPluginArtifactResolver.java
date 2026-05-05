@@ -1,6 +1,8 @@
 package org.team4u.actiondock.repository;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.LOCAL_ARTIFACT_SCHEME;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.REPO_TYPE_HTTP;
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.WINDOWS_ABSOLUTE_PATH_REGEX;
 
 import org.team4u.actiondock.skill.SkillFileUtils;
 
@@ -12,11 +14,11 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public class LocalPluginArtifactResolver implements PluginArtifactResolver {
-    private static final Pattern WINDOWS_ABSOLUTE_PATH = Pattern.compile("^[A-Za-z]:[\\\\/].*");
+    private static final Pattern WINDOWS_ABSOLUTE_PATH = Pattern.compile(WINDOWS_ABSOLUTE_PATH_REGEX);
 
     @Override
     public Set<String> supportedSchemes() {
-        return Set.of("local");
+        return Set.of(LOCAL_ARTIFACT_SCHEME);
     }
 
     @Override

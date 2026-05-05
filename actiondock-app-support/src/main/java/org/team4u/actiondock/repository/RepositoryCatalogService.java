@@ -589,7 +589,7 @@ public class RepositoryCatalogService {
                                                    RepositoryDefinition repository,
                                                    Path repositoryRoot) {
         URI uri = URI.create(artifact.uri());
-        if (!"local".equalsIgnoreCase(uri.getScheme()) || REPO_TYPE_HTTP.equals(repository.getType())) {
+        if (!LOCAL_ARTIFACT_SCHEME.equalsIgnoreCase(uri.getScheme()) || REPO_TYPE_HTTP.equals(repository.getType())) {
             return;
         }
         Path target = resolveLocalArtifactPath(repositoryRoot, uri);
@@ -609,7 +609,7 @@ public class RepositoryCatalogService {
         if (relativePath != null && relativePath.startsWith("//")) {
             relativePath = relativePath.substring(2);
         }
-        if (relativePath != null && relativePath.matches("^[A-Za-z]:[\\\\/].*")) {
+        if (relativePath != null && relativePath.matches(WINDOWS_ABSOLUTE_PATH_REGEX)) {
             throw new IllegalArgumentException("local artifact 不允许使用绝对路径");
         }
         return safeResolvePath(repositoryRoot, relativePath, "local artifact ");
