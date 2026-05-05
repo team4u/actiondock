@@ -371,24 +371,16 @@ public class RepositoryCapabilityPackageService {
                     .setPythonRequirements(script.pythonRequirements())
                     .setInputSchema(script.inputSchema() == null ? Map.of() : script.inputSchema())
                     .setOutputSchema(script.outputSchema() == null ? Map.of() : script.outputSchema())
+                    .setAiDependencies(AiPackageIdRewriter.rewriteAiDependencies(script.aiDependencies(), ctx.modelIdMappings, ctx.agentIdMappings))
                     .setStatus(ScriptStatus.PUBLISHED)
-                    .setPublishedSnapshot(new PublishedScriptSnapshot()
-                            .setName(script.name())
-                            .setType(script.type() == null ? ScriptType.GROOVY : ScriptType.valueOf(script.type()))
-                            .setPackaging(script.packaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(script.packaging()))
-                            .setSource(AiPackageIdRewriter.rewriteScriptSource(script.source(), ctx.scriptIdMappings, ctx.modelIdMappings, ctx.agentIdMappings))
-                            .setPythonRequirements(script.pythonRequirements())
-                            .setInputSchema(script.inputSchema() == null ? Map.of() : script.inputSchema())
-                            .setOutputSchema(script.outputSchema() == null ? Map.of() : script.outputSchema())
-                            .setAiDependencies(AiPackageIdRewriter.rewriteAiDependencies(script.aiDependencies(), ctx.modelIdMappings, ctx.agentIdMappings)))
                     .setVersion(1)
                     .setEditable(false)
                     .setDescription(script.description())
                     .setTags(script.tags())
                     .setPluginDependencies(script.pluginDependencies())
-                    .setAiDependencies(AiPackageIdRewriter.rewriteAiDependencies(script.aiDependencies(), ctx.modelIdMappings, ctx.agentIdMappings))
                     .setCreatedAt(ctx.now)
                     .setUpdatedAt(ctx.now);
+            definition.setPublishedSnapshot(definition.snapshotCurrent());
             repos.scriptRepository().save(definition);
             installedIds.add(runtimeScriptId);
         }

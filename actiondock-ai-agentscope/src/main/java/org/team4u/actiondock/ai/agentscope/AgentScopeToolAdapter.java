@@ -34,6 +34,7 @@ class AgentScopeToolAdapter implements AgentTool {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final System.Logger log = System.getLogger(AgentScopeToolAdapter.class.getName());
+    private static final String TOOL_EXECUTION_FAILED = "工具执行失败";
 
     private final AiTool tool;
     private final AiAgentRunRequest request;
@@ -152,7 +153,7 @@ class AgentScopeToolAdapter implements AgentTool {
         String text = result.success() ? toJson(output) : result.errorMessage();
         ToolResultBlock block = result.success()
                 ? ToolResultBlock.of(TextBlock.builder().text(text == null ? "" : text).build())
-                : ToolResultBlock.error(text == null ? "Tool execution failed" : text);
+                : ToolResultBlock.error(text == null ? TOOL_EXECUTION_FAILED : text);
         if (param != null && param.getToolUseBlock() != null) {
             block = block.withIdAndName(param.getToolUseBlock().getId(), tool.name());
         }
