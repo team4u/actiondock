@@ -28,6 +28,8 @@ public final class RepositoryCatalogTypes {
     public static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
     /** Tool 子目录名称。 */
     public static final String TOOLS_DIR = "tools";
+    /** Tool 描述文件名。 */
+    public static final String TOOL_DESCRIPTOR_FILE = "tool.json";
     /** Plugin 子目录名称。 */
     public static final String PLUGINS_DIR = "plugins";
     /** Plugin 索引文件名。 */

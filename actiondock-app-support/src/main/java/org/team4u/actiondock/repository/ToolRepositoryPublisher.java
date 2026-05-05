@@ -163,7 +163,7 @@ final class ToolRepositoryPublisher {
                                           List<ScheduleTemplateItem> scheduleTemplates,
                                           List<ScriptDependency> scriptDependencies,
                                           List<PluginDependency> pluginDeps) {
-        catalog.writeJson(toolDir.resolve("tool.json"), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies, pluginDeps));
+        catalog.writeJson(toolDir.resolve(TOOL_DESCRIPTOR_FILE), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies, pluginDeps));
         catalog.writeJson(toolDir.resolve(TOOL_INPUT_SCHEMA_FILE), script.getPublishedSnapshot().getInputSchema());
         catalog.writeJson(toolDir.resolve(TOOL_OUTPUT_SCHEMA_FILE), script.getPublishedSnapshot().getOutputSchema());
     }
@@ -359,7 +359,7 @@ final class ToolRepositoryPublisher {
                 script.getType().name(),
                 SkillFileUtils.normalizeNullable(script.getDescription()),
                 SkillFileUtils.normalizeNullable(request.releaseNotes()),
-                "tools/" + toolId + "/tool.json"
+                TOOLS_DIR + "/" + toolId + "/" + TOOL_DESCRIPTOR_FILE
         );
         List<RepositoryIndexEntry> entries =
                 RepositoryCatalogTypes.upsertSorted(catalog.safeTools(current), next, RepositoryIndexEntry::id);

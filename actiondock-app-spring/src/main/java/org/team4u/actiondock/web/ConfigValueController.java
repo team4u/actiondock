@@ -14,6 +14,8 @@ import org.team4u.actiondock.domain.model.ConfigValue;
 
 import java.util.List;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.PUBLISH_MODE_PLACEHOLDER;
+
 /**
  * 全局配置值 REST 控制器。
  *
@@ -22,7 +24,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/config-values")
 public class ConfigValueController {
-    private static final String PUBLISH_MODE_PLACEHOLDER = "PLACEHOLDER";
 
     private final ConfigValueApplicationService configValueApplicationService;
     private final ConfigValueUsageAnalysisService configValueUsageAnalysisService;
