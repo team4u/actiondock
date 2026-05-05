@@ -137,7 +137,7 @@ final class ToolRepositoryPublisher {
                                 List<ScriptDependency> scriptDependencies) {
         try {
             Files.createDirectories(toolDir);
-            String sourceFileName = resolveSourceFileName(script.getType());
+            String sourceFileName = script.getType() == ScriptType.PYTHON ? TOOL_SOURCE_PYTHON_FILE : TOOL_SOURCE_GROOVY_FILE;
             List<PluginDependency> pluginDeps = resolveToolPluginDependencies(script);
             writeToolSourceFiles(toolDir, script, sourceFileName);
             writeToolDescriptorFile(toolDir, script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies, pluginDeps);
@@ -145,10 +145,6 @@ final class ToolRepositoryPublisher {
         } catch (IOException exception) {
             throw new IllegalStateException("写入仓库工具文件失败", exception);
         }
-    }
-
-    private static String resolveSourceFileName(ScriptType type) {
-        return type == ScriptType.PYTHON ? TOOL_SOURCE_PYTHON_FILE : TOOL_SOURCE_GROOVY_FILE;
     }
 
     private static void writeToolSourceFiles(Path toolDir, ScriptDefinition script, String sourceFileName) throws IOException {
@@ -253,7 +249,7 @@ final class ToolRepositoryPublisher {
     }
 
     private static void assertLiteralScriptInvocations(String source) {
-        int invocationCount = countScriptInvocations(source);
+        int invocationCount = source == null || source.isBlank() ? 0 : (int) SCRIPT_INVOKE_ANY_PATTERN.matcher(source).results().count();
         int literalInvocationCount = AiPackageIdRewriter.countLiteralScriptInvocations(source);
         if (invocationCount != literalInvocationCount) {
             throw new IllegalArgumentException("仓库发布仅支持字面量 scripts.invoke(...) 依赖，请先移除动态脚本调用");
@@ -374,22 +370,9 @@ final class ToolRepositoryPublisher {
                                            RepositoryIndexFile index,
                                            String toolId,
                                            String version) {
-        for (RepositoryIndexEntry entry : nullSafeList(index == null ? null : index.tools())) {
-            if (Objects.equals(toolId, entry.id()) && Objects.equals(version, entry.version())) {
-                throw new RepositoryVersionExistsException(ASSET_TYPE_TOOL, repositoryId, toolId, version);
-            }
-        }
-    }
-
-    private static int countScriptInvocations(String source) {
-        if (source == null || source.isBlank()) {
-            return 0;
-        }
-        int count = 0;
-        Matcher matcher = SCRIPT_INVOKE_ANY_PATTERN.matcher(source);
-        while (matcher.find()) {
-            count += 1;
-        }
-        return count;
+        nullSafeList(index == null ? null : index.tools()).stream()
+                .filter(entry -> Objects.equals(toolId, entry.id()) && Objects.equals(version, entry.version()))
+                .findFirst()
+                .ifPresent(entry -> { throw new RepositoryVersionExistsException(ASSET_TYPE_TOOL, repositoryId, toolId, version); });
     }
 }

@@ -22,10 +22,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
@@ -138,14 +140,19 @@ public class PythonScriptEngine implements ScriptEngine {
             PythonRequirementsSupport.parse(definition.getId(), definition.getPythonRequirements());
             scriptPath = writeScriptFile(definition.getSource(), false);
             ProcessSupport.ProcessResult result = runCommand(
-                    buildValidationCommand(scriptPath),
+                    List.of(resolveExecutable(), "-c", VALIDATION_RUNNER, scriptPath.toAbsolutePath().toString()),
                     null,
                     "{}",
                     null,
                     null,
                     properties.getTimeoutSeconds()
             );
-            checkValidationResult(result);
+            if (result.timedOut()) {
+                throw new IllegalStateException("Python 脚本校验超时");
+            }
+            if (result.exitCode() != 0) {
+                throw new IllegalArgumentException(extractErrorMessage(result));
+            }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to validate Python script", e);
         } catch (InterruptedException e) {
@@ -153,19 +160,6 @@ public class PythonScriptEngine implements ScriptEngine {
             throw new IllegalStateException("Python validation interrupted", e);
         } finally {
             deleteIfExists(scriptPath);
-        }
-    }
-
-    private List<String> buildValidationCommand(Path scriptPath) {
-        return List.of(resolveExecutable(), "-c", VALIDATION_RUNNER, scriptPath.toAbsolutePath().toString());
-    }
-
-    private static void checkValidationResult(ProcessSupport.ProcessResult result) {
-        if (result.timedOut()) {
-            throw new IllegalStateException("Python 脚本校验超时");
-        }
-        if (result.exitCode() != 0) {
-            throw new IllegalArgumentException(extractErrorMessage(result));
         }
     }
 
@@ -235,7 +229,7 @@ public class PythonScriptEngine implements ScriptEngine {
         if (result.exitCode() != 0) {
             throw new PythonExecutionException(
                     extractErrorMessage(result),
-                    buildErrorDetail("PYTHON_EXECUTION_FAILED", result, Map.of("command", command))
+                    ProcessSupport.buildErrorDetail("PYTHON_EXECUTION_FAILED", result, Map.of("command", command))
             );
         }
         return jsonCodec.readUntyped(result.stdout());
@@ -322,17 +316,10 @@ public class PythonScriptEngine implements ScriptEngine {
         if (normalizedSource.isBlank()) {
             normalizedSource = "return {}";
         }
-        String indentedSource = String.join("\n", indent(normalizedSource));
+        String indentedSource = Arrays.stream(normalizedSource.split("\n", -1))
+                .map(line -> line.isEmpty() ? "    " : "    " + line)
+                .collect(Collectors.joining("\n"));
         return PYTHON_WRAPPER_TEMPLATE.replace("{{ user_script }}", indentedSource);
-    }
-
-    private static List<String> indent(String source) {
-        String[] lines = source.split("\n", -1);
-        List<String> indented = new ArrayList<>();
-        for (String line : lines) {
-            indented.add(line.isEmpty() ? "    " : "    " + line);
-        }
-        return indented;
     }
 
     private String readErrorStream(InputStream stream,
@@ -487,10 +474,6 @@ public class PythonScriptEngine implements ScriptEngine {
         } catch (IOException exception) {
             log.log(System.Logger.Level.DEBUG, "删除临时脚本文件失败: {0}", exception.getMessage());
         }
-    }
-
-    private static ErrorDetail buildErrorDetail(String code, ProcessSupport.ProcessResult result, Map<String, Object> details) {
-        return ProcessSupport.buildErrorDetail(code, result, details);
     }
 
     record PythonInvocationRequest(String scriptId, Map<String, Object> args) {

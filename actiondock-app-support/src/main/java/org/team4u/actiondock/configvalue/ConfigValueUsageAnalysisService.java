@@ -176,7 +176,7 @@ public class ConfigValueUsageAnalysisService {
                 .map(script -> new ScriptReference(
                         script.getId(),
                         script.getName(),
-                        normalizeScope(script.getScope() == null ? null : script.getScope().name()),
+                        script.getScope() == null ? null : script.getScope().name().toUpperCase(Locale.ROOT),
                         script.getRepositoryId(),
                         script.getRepositoryToolId(),
                         script.getRepositoryVersion()
@@ -218,7 +218,8 @@ public class ConfigValueUsageAnalysisService {
             Map<String, Object> rawConfig = services.loadPluginConfig().apply(plugin.getPluginId());
             Set<String> directMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, Set.of(key));
             if (!directMatches.isEmpty()) {
-                pluginReferences.add(new PluginConfigReference(plugin.getPluginId(), plugin.getName(), countDependentScripts(scripts, plugin.getPluginId())));
+                pluginReferences.add(new PluginConfigReference(plugin.getPluginId(), plugin.getName(),
+                        (int) scripts.stream().filter(s -> s.getPluginDependencies().stream().map(PluginDependency::getPluginId).anyMatch(plugin.getPluginId()::equals)).count()));
             }
             Set<String> cascadeMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, cascadingConfigKeys);
             if (!cascadeMatches.isEmpty()) {
@@ -457,16 +458,6 @@ public class ConfigValueUsageAnalysisService {
         );
     }
 
-    private static int countDependentScripts(List<ScriptDefinition> scripts, String pluginId) {
-        int count = 0;
-        for (ScriptDefinition script : scripts) {
-            if (script.getPluginDependencies().stream().map(PluginDependency::getPluginId).anyMatch(pluginId::equals)) {
-                count += 1;
-            }
-        }
-        return count;
-    }
-
     private static void addScriptImpact(Map<String, ImpactScriptAccumulator> impacts,
                                         ScriptDefinition script,
                                         Set<String> matchedKeys,
@@ -561,10 +552,6 @@ public class ConfigValueUsageAnalysisService {
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
-    }
-
-    private static String normalizeScope(String scope) {
-        return scope == null ? null : scope.toUpperCase(Locale.ROOT);
     }
 
     public record ConfigValueInsight(
