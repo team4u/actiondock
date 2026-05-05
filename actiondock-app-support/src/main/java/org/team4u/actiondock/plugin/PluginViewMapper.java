@@ -129,22 +129,4 @@ class PluginViewMapper {
                 .setInstalledAt(existing == null ? now : existing.getInstalledAt())
                 .setUpdatedAt(now);
     }
-
-    static PluginRegistration cloneRegistration(PluginRegistration registration) {
-        return new PluginRegistration()
-                .setPluginId(registration.getPluginId())
-                .setName(registration.getName())
-                .setDescription(registration.getDescription())
-                .setVersion(registration.getVersion())
-                .setFileName(registration.getFileName())
-                .setRepositoryId(registration.getRepositoryId())
-                .setRepositoryPluginId(registration.getRepositoryPluginId())
-                .setRepositoryVersion(registration.getRepositoryVersion())
-                .setConfigSchema(registration.getConfigSchema())
-                .setDefaultConfig(registration.getDefaultConfig())
-                .setActions(registration.getActions())
-                .setEnabled(registration.isEnabled())
-                .setInstalledAt(registration.getInstalledAt())
-                .setUpdatedAt(registration.getUpdatedAt());
-    }
 }

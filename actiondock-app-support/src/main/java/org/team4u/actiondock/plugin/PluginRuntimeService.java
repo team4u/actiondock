@@ -300,7 +300,7 @@ public class PluginRuntimeService {
         return withWriteLock(() -> {
             ensureEnabled();
             PluginRegistration current = requireRegistration(pluginId);
-            PluginRegistration backup = PluginViewMapper.cloneRegistration(current);
+            PluginRegistration backup = current.copy();
             Path oldPluginPath = resolvePluginPath(current);
             boolean wasEnabled = current.isEnabled();
             return performUpgrade(pluginId, originalFilename, content, repositoryId, repositoryPluginId,
@@ -362,11 +362,11 @@ public class PluginRuntimeService {
 
     public Optional<PluginRegistration> findPluginRegistration(String pluginId) {
         return withReadLock(() -> pluginRegistryRepository.findByPluginId(pluginId)
-                .map(PluginViewMapper::cloneRegistration));
+                .map(PluginRegistration::copy));
     }
 
     public PluginRegistration getRegistration(String pluginId) {
-        return withReadLock(() -> PluginViewMapper.cloneRegistration(requireRegistration(pluginId)));
+        return withReadLock(() -> requireRegistration(pluginId).copy());
     }
 
     public byte[] readPluginFile(String pluginId) {
@@ -396,7 +396,7 @@ public class PluginRuntimeService {
             PluginRegistration registration = requireRegistration(pluginId);
             unloadIfLoaded(pluginId);
             PluginRegistration saved = pluginRegistryRepository.save(
-                    PluginViewMapper.cloneRegistration(registration)
+                    registration.copy()
                             .setEnabled(false)
                             .setUpdatedAt(LocalDateTime.now())
             );

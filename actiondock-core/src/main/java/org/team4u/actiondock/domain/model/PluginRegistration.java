@@ -175,4 +175,22 @@ public class PluginRegistration {
         this.updatedAt = updatedAt;
         return this;
     }
+
+    public PluginRegistration copy() {
+        return new PluginRegistration()
+                .setPluginId(pluginId)
+                .setName(name)
+                .setDescription(description)
+                .setVersion(version)
+                .setFileName(fileName)
+                .setRepositoryId(repositoryId)
+                .setRepositoryPluginId(repositoryPluginId)
+                .setRepositoryVersion(repositoryVersion)
+                .setConfigSchema(configSchema)
+                .setDefaultConfig(defaultConfig)
+                .setActions(actions)
+                .setEnabled(enabled)
+                .setInstalledAt(installedAt)
+                .setUpdatedAt(updatedAt);
+    }
 }
