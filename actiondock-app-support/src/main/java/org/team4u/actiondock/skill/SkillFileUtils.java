@@ -348,15 +348,6 @@ public final class SkillFileUtils {
         }
     }
 
-    private static List<Path> collectDigestFiles(Path directory) throws IOException {
-        try (var stream = Files.walk(directory)) {
-            return stream.filter(path -> Files.isRegularFile(path)
-                            && !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
-                    .sorted()
-                    .toList();
-        }
-    }
-
     /**
      * 解析 SKILL.md 的 YAML frontmatter，提取 name 和 description。
      */
