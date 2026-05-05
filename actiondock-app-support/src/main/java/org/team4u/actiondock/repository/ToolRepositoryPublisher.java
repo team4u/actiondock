@@ -91,7 +91,7 @@ final class ToolRepositoryPublisher {
         List<ScheduleTemplateItem> scheduleTemplates = buildScheduleTemplate(selectedSchedules);
 
         assertToolVersionAvailable(repositoryId, session.index(), toolId, version);
-        Path toolDir = session.root().resolve("tools").resolve(toolId);
+        Path toolDir = session.root().resolve(TOOLS_DIR).resolve(toolId);
         writeToolFiles(toolDir, toolId, script, request, configTemplates, scheduleTemplates, scriptDependencies);
         updateRepositoryIndex(session.root(), repository, toolId, script, request);
         session.commitPublishedAsset(toolId, version, request.releaseNotes());

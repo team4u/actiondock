@@ -24,7 +24,7 @@ final class PluginRepositoryPublisher {
         PluginArtifactRef artifact = service.completePluginArtifactRef(pluginId, request.artifact(), session.repository(), session.root());
 
         RepositoryCatalogService.assertPluginVersionAvailable(repositoryId, session.index(), pluginId, version);
-        Path pluginDir = session.root().resolve("plugins").resolve(pluginId);
+        Path pluginDir = session.root().resolve(PLUGINS_DIR).resolve(pluginId);
         aiPackageService.writePluginFiles(pluginDir, pluginId, displayName, artifact, request, version);
         service.updateRepositoryPluginIndex(session.root(), session.repository(), pluginId, displayName, request, version);
         session.commitPublishedAsset(pluginId, version, request.releaseNotes());

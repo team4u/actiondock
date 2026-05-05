@@ -962,7 +962,7 @@ public class RepositoryCatalogService {
             return;
         }
         if (type == RepositoryCatalogTypes.RepositoryIndexFile.class) {
-            for (String section : List.of("tools", "plugins", "packages", "skills")) {
+            for (String section : REPO_INDEX_SECTIONS) {
                 JsonNode entries = root.get(section);
                 if (entries == null || !entries.isArray()) {
                     continue;
@@ -993,10 +993,9 @@ public class RepositoryCatalogService {
     static void ensureRepositoryWorkspace(Path root, RepositoryDefinition repository, JsonCodec jsonCodec) {
         try {
             Files.createDirectories(root);
-            Files.createDirectories(root.resolve("tools"));
-            Files.createDirectories(root.resolve("plugins"));
-            Files.createDirectories(root.resolve(CAPABILITY_PACKAGES_DIR));
-            Files.createDirectories(root.resolve(SKILLS_DIR));
+            for (String dir : REPO_INDEX_SECTIONS) {
+                Files.createDirectories(root.resolve(dir));
+            }
         } catch (IOException exception) {
             throw new IllegalStateException("初始化仓库目录失败: " + root, exception);
         }

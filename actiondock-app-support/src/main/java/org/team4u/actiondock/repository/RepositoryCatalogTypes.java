@@ -26,6 +26,10 @@ public final class RepositoryCatalogTypes {
 
     /** 仓库索引文件名。 */
     public static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
+    /** Tool 子目录名称。 */
+    public static final String TOOLS_DIR = "tools";
+    /** Plugin 子目录名称。 */
+    public static final String PLUGINS_DIR = "plugins";
     /** Skill 子目录名称。 */
     public static final String SKILLS_DIR = "skills";
     /** Skill 清单文件名。 */
@@ -36,6 +40,8 @@ public final class RepositoryCatalogTypes {
     public static final String AI_PACKAGE_INTERNAL_PREFIX = ScriptPackaging.MANAGED_INTERNAL_PREFIX;
     /** 能力包子目录名称。 */
     public static final String CAPABILITY_PACKAGES_DIR = "packages";
+    /** 仓库索引中的所有分节名称。 */
+    public static final List<String> REPO_INDEX_SECTIONS = List.of(TOOLS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
     /** 默认的仓库索引/文件 schema 版本号。 */
     public static final int DEFAULT_VERSION = 1;
 
