@@ -58,6 +58,12 @@ public final class SkillTypes {
                                         String digest,
                                         List<String> warnings,
                                         boolean manifestPresent) {
+
+        public SkillValidationResult withVersionAndDigest(String version, String digest) {
+            return new SkillValidationResult(
+                    skillId, displayName, version, description, owner,
+                    tags, riskLevel, entrypointPath, digest, warnings, manifestPresent);
+        }
     }
 
     public record SkillPackageResult(SkillValidationResult validation,

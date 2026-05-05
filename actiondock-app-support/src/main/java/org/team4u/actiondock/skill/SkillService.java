@@ -235,7 +235,7 @@ public class SkillService {
         LocalDateTime now = LocalDateTime.now();
         ManagedSkill saved = saveManagedSkillVersion(r.skill(), normalizedVersion, digest, now);
         SkillValidationResult persistedValidation = SkillFileUtils.validateSkillDirectory(r.managedPath(), skillId, false, jsonCodec);
-        SkillValidationResult versionedValidation = copyValidationWithVersionAndDigest(persistedValidation, normalizedVersion, digest);
+        SkillValidationResult versionedValidation = persistedValidation.withVersionAndDigest(normalizedVersion, digest);
         updateDeploymentVersions(skillId, normalizedVersion, digest, saved, versionedValidation, now);
         return getSkill(skillId);
     }
@@ -307,8 +307,7 @@ public class SkillService {
         skillInstallationRepository.findBySkillId(skillId).stream()
                 .map(SkillInstallation::getTargetId)
                 .forEach(allTargetIds::add);
-        SkillValidationResult managedValidation = copyValidationWithVersionAndDigest(
-                validation,
+        SkillValidationResult managedValidation = validation.withVersionAndDigest(
                 savedSkill.getVersion(),
                 savedSkill.getDigest()
         );
@@ -325,7 +324,7 @@ public class SkillService {
                                                ManagedSkill existingSkill) {
         Path normalizedSourceDirectory = SkillFileUtils.locateSkillRoot(sourceDirectory);
         String managedVersion = resolveManagedVersion(validation, existingSkill);
-        SkillValidationResult managedValidation = copyValidationWithVersionAndDigest(validation, managedVersion, validation.digest());
+        SkillValidationResult managedValidation = validation.withVersionAndDigest(managedVersion, validation.digest());
         Path managedDir = resolveManagedPath(validation.skillId());
         copySkillToManagedStorage(normalizedSourceDirectory, managedDir, managedValidation, managedVersion);
         LocalDateTime now = LocalDateTime.now();
@@ -451,22 +450,6 @@ public class SkillService {
             return SkillFileUtils.normalizeNullable(existingSkill.getVersion());
         }
         return SkillFileUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
-    }
-
-    private static SkillValidationResult copyValidationWithVersionAndDigest(SkillValidationResult validation, String version, String digest) {
-        return new SkillValidationResult(
-                validation.skillId(),
-                validation.displayName(),
-                SkillFileUtils.normalize(version, SkillFileUtils.ERR_VERSION_REQUIRED),
-                validation.description(),
-                validation.owner(),
-                validation.tags(),
-                validation.riskLevel(),
-                validation.entrypointPath(),
-                digest,
-                validation.warnings(),
-                validation.manifestPresent()
-        );
     }
 
     private static void deleteInstalledPath(SkillInstallation deployment) {
