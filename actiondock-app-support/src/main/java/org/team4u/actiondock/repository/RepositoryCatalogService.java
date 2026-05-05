@@ -31,9 +31,7 @@ import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.skill.SkillFileUtils;
-import org.team4u.actiondock.skill.SkillArchiveManager;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
-import org.team4u.actiondock.skill.SkillTypes;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -183,7 +181,7 @@ public class RepositoryCatalogService {
         RepositoryDefinition saved = repos.repositoryDefinitionRepository().save(
                 buildRepositoryDefinition(id, target, type, trustLevel, usage, existing, now)
         );
-        if ("LOCAL_DIR".equals(type)) {
+        if (REPO_TYPE_LOCAL_DIR.equals(type)) {
             ensureLocalDirRepository(saved);
             saved.setLastSyncedAt(now).setUpdatedAt(now);
             return repos.repositoryDefinitionRepository().save(saved);
@@ -250,7 +248,7 @@ public class RepositoryCatalogService {
         if (REPO_TYPE_GIT.equals(repository.getType())) {
             gitOps.syncGitRepository(repository, resolveRepositoryRoot(repository));
             ensureRepositoryWorkspace(resolveRepositoryRoot(repository), repository, jsonCodec);
-        } else if ("LOCAL_DIR".equals(repository.getType())) {
+        } else if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
             ensureLocalDirRepository(repository);
         } else {
             readRepositoryIndex(repository);
@@ -865,7 +863,7 @@ public class RepositoryCatalogService {
             return readHttpJson(httpReader.joinHttpPath(repository.getUrl(), REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class);
         }
         Path root = resolveRepositoryRoot(repository);
-        if ("LOCAL_DIR".equals(repository.getType())) {
+        if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
             ensureLocalDirRepository(repository);
         }
         if (REPO_TYPE_GIT.equals(repository.getType()) && Files.notExists(root)) {
@@ -924,7 +922,7 @@ public class RepositoryCatalogService {
     }
 
     Path resolveRepositoryRoot(RepositoryDefinition repository) {
-        if ("LOCAL_DIR".equals(repository.getType())) {
+        if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
             return Path.of(repository.getUrl());
         }
         return repositoriesRoot.resolve(repository.getId());
