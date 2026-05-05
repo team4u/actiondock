@@ -29,6 +29,11 @@ public final class SkillTypes {
             TARGET_TYPE_CODEBUDDY, TARGET_TYPE_CUSTOM, TARGET_TYPE_ACTIONDOCK_AGENT
     );
 
+    public static final String STATUS_SUCCESS = "SUCCESS";
+    public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_SKIPPED = "SKIPPED";
+    public static final String STATUS_RUNNING = "RUNNING";
+
     public record SkillManifestFile(int schemaVersion,
                                     String skillId,
                                     String displayName,

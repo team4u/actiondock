@@ -74,6 +74,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
     // 与 AiAgentRuntimeImpl.DISABLE_OUTER_TIMEOUT_METADATA_KEY 保持一致
     private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String STEP_STATUS_SUCCESS = "SUCCESS";
 
     private final AiSecretResolver secretResolver;
     private final AiAgentSkillRegistry skillRegistry;
@@ -172,7 +173,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 null,
                 Map.of(),
                 Map.of("text", text),
-                "SUCCESS",
+                STEP_STATUS_SUCCESS,
                 System.currentTimeMillis() - started,
                 null,
                 LocalDateTime.now()

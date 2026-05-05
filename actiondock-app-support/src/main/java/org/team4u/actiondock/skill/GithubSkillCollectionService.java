@@ -3,6 +3,7 @@ package org.team4u.actiondock.skill;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 
+import static org.team4u.actiondock.skill.SkillTypes.*;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -104,15 +105,15 @@ public class GithubSkillCollectionService {
                                                          Path repoRoot,
                                                          String repositoryId) {
         if (!availablePaths.contains(skillPath)) {
-            return new GithubSkillInstallResult(skillPath, null, "FAILED", "GitHub 集合中未找到该 Skill", null);
+            return new GithubSkillInstallResult(skillPath, null, STATUS_FAILED, "GitHub 集合中未找到该 Skill", null);
         }
         Path skillDirectory = resolveRepoRelativePath(repoRoot, skillPath);
         try {
             SkillTypes.SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(skillDirectory, skillDirectory.getFileName().toString(), false, jsonCodec);
             SkillTypes.SkillListItem skill = skillService.installFromDirectory(targetIds, skillDirectory.toString(), repositoryId);
-            return new GithubSkillInstallResult(skillPath, validation.skillId(), "SUCCESS", "Skill 已安装", skill);
+            return new GithubSkillInstallResult(skillPath, validation.skillId(), STATUS_SUCCESS, "Skill 已安装", skill);
         } catch (RuntimeException exception) {
-            return new GithubSkillInstallResult(skillPath, null, "FAILED", summarize(exception), null);
+            return new GithubSkillInstallResult(skillPath, null, STATUS_FAILED, summarize(exception), null);
         }
     }
 

@@ -26,6 +26,9 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 public class AiGatewayImpl implements AiGateway {
+    private static final String CALL_STATUS_SUCCESS = "SUCCESS";
+    private static final String CALL_STATUS_FAILED = "FAILED";
+
     private final AiModelProfileService modelProfileService;
     private final AiProviderClient providerClient;
     private final AiCallLogRepository callLogRepository;
@@ -100,11 +103,11 @@ public class AiGatewayImpl implements AiGateway {
         try {
             R response = invocation.get();
             AiUsage usage = extractUsage(response);
-            audit(context, action, profile, "SUCCESS", usage, System.currentTimeMillis() - started,
+            audit(context, action, profile, CALL_STATUS_SUCCESS, usage, System.currentTimeMillis() - started,
                     null, null, requestSummary, responseSummary.apply(response));
             return response;
         } catch (RuntimeException exception) {
-            audit(context, action, profile, "FAILED", AiUsage.empty(), System.currentTimeMillis() - started,
+            audit(context, action, profile, CALL_STATUS_FAILED, AiUsage.empty(), System.currentTimeMillis() - started,
                     exception.getClass().getName(), exception.getMessage(),
                     failedRequestSummary, Map.of());
             throw exception;

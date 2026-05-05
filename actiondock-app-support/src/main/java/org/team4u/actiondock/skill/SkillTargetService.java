@@ -7,8 +7,6 @@ import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.domain.port.SkillTargetRepository;
 
 import static org.team4u.actiondock.skill.SkillTypes.*;
-import static org.team4u.actiondock.skill.SkillTypes.VALID_TARGET_TYPES;
-import static org.team4u.actiondock.skill.SkillTypes.TARGET_TYPE_CUSTOM;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -191,24 +189,24 @@ public class SkillTargetService {
 
     private SkillTypes.SkillSyncResult syncSingleSkill(String skillId, String targetId) {
         if (skillInstallationRepository.findBySkillIdAndTargetId(skillId, targetId).isPresent()) {
-            return new SkillTypes.SkillSyncResult(skillId, targetId, "SKIPPED", "Skill 已安装在当前目标，无需同步", null);
+            return new SkillTypes.SkillSyncResult(skillId, targetId, STATUS_SKIPPED, "Skill 已安装在当前目标，无需同步", null);
         }
         ManagedSkill skill = skillService.requireManagedSkill(skillId);
         Path managedPath = skillService.resolveManagedPath(skillId);
         if (Files.notExists(managedPath.resolve(SkillFileUtils.SKILL_MANIFEST_FILE))) {
-            return new SkillTypes.SkillSyncResult(skillId, targetId, "FAILED", "Skill 受管副本不存在", null);
+            return new SkillTypes.SkillSyncResult(skillId, targetId, STATUS_FAILED, "Skill 受管副本不存在", null);
         }
         Path targetRoot = SkillFileUtils.resolveTargetRoot(requireTarget(targetId).getRootPath());
         Path targetDirectory = SkillFileUtils.normalizePath(targetRoot.resolve(skillId));
         if (Files.exists(targetDirectory) && Files.notExists(targetDirectory.resolve(SkillFileUtils.INSTALL_MARKER_FILE))) {
-            return new SkillTypes.SkillSyncResult(skillId, targetId, "SKIPPED", "目标中已存在同名未受管目录，已跳过", null);
+            return new SkillTypes.SkillSyncResult(skillId, targetId, STATUS_SKIPPED, "目标中已存在同名未受管目录，已跳过", null);
         }
         try {
             SkillTypes.SkillValidationResult validation = skillService.validateDirectory(managedPath, skillId, false);
             SkillInstallation created = skillService.deployManagedSkillToTarget(skill, targetId, validation, null);
-            return new SkillTypes.SkillSyncResult(skillId, targetId, "SUCCESS", "Skill 已同步", SkillService.toDeploymentView(created));
+            return new SkillTypes.SkillSyncResult(skillId, targetId, STATUS_SUCCESS, "Skill 已同步", SkillService.toDeploymentView(created));
         } catch (RuntimeException exception) {
-            return new SkillTypes.SkillSyncResult(skillId, targetId, "FAILED", exception.getMessage(), null);
+            return new SkillTypes.SkillSyncResult(skillId, targetId, STATUS_FAILED, exception.getMessage(), null);
         }
     }
 

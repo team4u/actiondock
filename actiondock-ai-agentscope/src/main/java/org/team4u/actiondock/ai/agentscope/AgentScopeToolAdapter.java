@@ -33,6 +33,9 @@ class AgentScopeToolAdapter implements AgentTool {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final System.Logger log = System.getLogger(AgentScopeToolAdapter.class.getName());
+    private static final String STEP_STATUS_RUNNING = "RUNNING";
+    private static final String STEP_STATUS_SUCCESS = "SUCCESS";
+    private static final String STEP_STATUS_FAILED = "FAILED";
 
     private final AiTool tool;
     private final AiAgentRunRequest request;
@@ -102,7 +105,7 @@ class AgentScopeToolAdapter implements AgentTool {
 
         AiAgentStep startStep = buildToolStep(
                 stepId, AgentScopeAiProviderClient.runId(context), stepIndex.incrementAndGet(), tool,
-                input, Map.of(), "RUNNING", null, null
+                input, Map.of(), STEP_STATUS_RUNNING, null, null
         );
         steps.add(startStep);
         observer.onStep(startStep);
@@ -120,7 +123,7 @@ class AgentScopeToolAdapter implements AgentTool {
         Map<String, Object> output = result.output() == null ? Map.of() : result.output();
         AiAgentStep resultStep = buildToolStep(
                 UUID.randomUUID().toString(), AgentScopeAiProviderClient.runId(context), stepIndex.incrementAndGet(), tool,
-                Map.of(), output, result.success() ? "SUCCESS" : "FAILED",
+                Map.of(), output, result.success() ? STEP_STATUS_SUCCESS : STEP_STATUS_FAILED,
                 result.latencyMs(), result.errorMessage()
         );
         steps.add(resultStep);
@@ -136,7 +139,7 @@ class AgentScopeToolAdapter implements AgentTool {
                                               String status,
                                               Long latencyMs,
                                               String errorMessage) {
-        AiStepType stepType = "RUNNING".equals(status) ? AiStepType.TOOL_CALL : AiStepType.TOOL_RESULT;
+        AiStepType stepType = STEP_STATUS_RUNNING.equals(status) ? AiStepType.TOOL_CALL : AiStepType.TOOL_RESULT;
         return new AiAgentStep(
                 stepId, runId, stepIndex, stepType, null,
                 tool.name(), tool.permission(), input, output,

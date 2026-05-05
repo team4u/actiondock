@@ -21,11 +21,13 @@ import org.slf4j.LoggerFactory;
 class PluginViewMapper {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PluginViewMapper.class);
+    private static final String PLUGIN_STATE_ENABLED = "ENABLED";
+    private static final String PLUGIN_STATE_DISABLED = "DISABLED";
 
     static PluginView toPluginView(PluginRegistration registration, DefaultPluginManager pluginManager) {
         PluginWrapper wrapper = pluginManager.getPlugin(registration.getPluginId());
         String state = wrapper == null
-                ? (registration.isEnabled() ? "ENABLED" : "DISABLED")
+                ? (registration.isEnabled() ? PLUGIN_STATE_ENABLED : PLUGIN_STATE_DISABLED)
                 : wrapper.getPluginState().name();
         return new PluginView()
                 .setPluginId(registration.getPluginId())
