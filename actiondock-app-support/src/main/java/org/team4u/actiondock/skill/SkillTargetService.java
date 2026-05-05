@@ -204,7 +204,7 @@ public class SkillTargetService {
         try {
             SkillTypes.SkillValidationResult validation = skillService.validateDirectory(managedPath, skillId, false);
             SkillInstallation created = skillService.deployManagedSkillToTarget(skill, targetId, validation, null);
-            return new SkillTypes.SkillSyncResult(skillId, targetId, "SUCCESS", "Skill 已同步", toDeploymentView(created));
+            return new SkillTypes.SkillSyncResult(skillId, targetId, "SUCCESS", "Skill 已同步", SkillService.toDeploymentView(created));
         } catch (RuntimeException exception) {
             return new SkillTypes.SkillSyncResult(skillId, targetId, "FAILED", exception.getMessage(), null);
         }
@@ -236,10 +236,6 @@ public class SkillTargetService {
             throw new IllegalArgumentException("不是有效的 Skill 目录: " + directoryId);
         }
         return dir;
-    }
-
-    private static SkillTypes.SkillDeploymentView toDeploymentView(SkillInstallation deployment) {
-        return SkillService.toDeploymentView(deployment);
     }
 
     /**

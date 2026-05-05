@@ -857,7 +857,7 @@ public class RepositoryCatalogService {
         );
     }
 
-    private RepositoryCatalogTypes.RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.SkillFile skill, String skillPath) {
+    static RepositoryCatalogTypes.RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.SkillFile skill, String skillPath) {
         return new RepositoryCatalogTypes.RepositorySkillDescriptor(
                 repository.getId(),
                 SkillFileUtils.normalize(skill.skillId(), "skillId 不能为空"),

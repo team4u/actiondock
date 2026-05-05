@@ -68,7 +68,7 @@ public class RepositorySkillService {
         List<RepositorySkillDescriptor> skills = new ArrayList<>();
         for (RepositorySkillIndexEntry entry : catalog.safeSkills(index)) {
             SkillFile skill = catalog.readSkillFile(repository, entry.skillPath());
-            skills.add(toSkillDescriptor(repository, skill, entry.skillPath()));
+            skills.add(RepositoryCatalogService.toSkillDescriptor(repository, skill, entry.skillPath()));
         }
         return skills.stream()
                 .sorted(Comparator.comparing(RepositorySkillDescriptor::skillId))
@@ -93,7 +93,7 @@ public class RepositorySkillService {
         Path skillDir = Path.of(entry.skillPath()).getParent();
         String entrypoint = SkillFileUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE);
         String content = catalog.readRepositoryFile(repository, skillDir.resolve(Path.of(entrypoint)));
-        return new RepositorySkillDetail(toSkillDescriptor(repository, skill, entry.skillPath()), content);
+        return new RepositorySkillDetail(RepositoryCatalogService.toSkillDescriptor(repository, skill, entry.skillPath()), content);
     }
 
     /**
@@ -210,26 +210,6 @@ public class RepositorySkillService {
      * @param skillPath  Skill 清单文件路径
      * @return Skill 描述符
      */
-    private static RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository,
-                                                                                  SkillFile skill,
-                                                                                  String skillPath) {
-        return new RepositorySkillDescriptor(
-                repository.getId(),
-                SkillFileUtils.normalize(skill.skillId(), "skillId 不能为空"),
-                SkillFileUtils.normalizeOrDefault(skill.displayName(), skill.skillId()),
-                SkillFileUtils.normalize(skill.version(), SkillFileUtils.ERR_VERSION_REQUIRED),
-                SkillFileUtils.normalizeNullable(skill.description()),
-                null,
-                SkillFileUtils.normalizeNullable(skill.owner()),
-                skill.tags() == null ? List.of() : skill.tags(),
-                skillPath,
-                RepositoryCatalogService.resolveRelative(skillPath, SkillFileUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE)),
-                SkillFileUtils.normalizeNullable(skill.digest()),
-                SkillFileUtils.normalizeNullable(skill.riskLevel()),
-                REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel()),
-                repository.getUsage()
-        );
-    }
 
     /**
      * 更新仓库索引中的 Skill 条目。
@@ -246,11 +226,9 @@ public class RepositorySkillService {
                                             String version,
                                             String releaseNotes) {
         RepositoryIndexFile current = catalog.readRepositoryIndexFile(root, repository);
-        List<RepositorySkillIndexEntry> entries = new ArrayList<>(catalog.safeSkills(current));
         RepositorySkillIndexEntry next = RepositorySkillIndexEntry.fromSkillValidation(validation, version, releaseNotes);
-        entries.removeIf(item -> validation.skillId().equals(item.id()));
-        entries.add(next);
-        entries.sort(Comparator.comparing(RepositorySkillIndexEntry::id));
+        List<RepositorySkillIndexEntry> entries =
+                RepositoryCatalogTypes.upsertSorted(catalog.safeSkills(current), next, RepositorySkillIndexEntry::id);
         catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.withSkills(current, repository, entries));
     }
 }
