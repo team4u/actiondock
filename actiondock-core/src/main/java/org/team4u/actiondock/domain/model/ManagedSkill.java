@@ -87,6 +87,21 @@ public class ManagedSkill {
         return this;
     }
 
+    public static ManagedSkill create(String skillId, String repositoryId,
+                                      String version, String digest,
+                                      String displayName, String description,
+                                      ManagedSkill existing, LocalDateTime now) {
+        return new ManagedSkill()
+                .setSkillId(skillId)
+                .setRepositoryId(repositoryId)
+                .setVersion(version)
+                .setDigest(digest)
+                .setDisplayName(displayName)
+                .setDescription(description)
+                .setInstalledAt(existing == null ? now : existing.getInstalledAt() != null ? existing.getInstalledAt() : now)
+                .setUpdatedAt(now);
+    }
+
     public ManagedSkill copyWith(String version, String digest, LocalDateTime updatedAt) {
         return new ManagedSkill()
                 .setSkillId(skillId)

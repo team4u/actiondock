@@ -1,6 +1,8 @@
 package org.team4u.actiondock.domain.model;
 
+import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * 本地受管 Skill 安装记录。
@@ -135,6 +137,28 @@ public class SkillInstallation {
     public SkillInstallation setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
         return this;
+    }
+
+    public static SkillInstallation fromManagedSkillAndTarget(ManagedSkill skill,
+                                                               SkillTarget target,
+                                                               Path installedPath,
+                                                               SkillInstallation existing,
+                                                               String installationId,
+                                                               LocalDateTime now) {
+        return new SkillInstallation()
+                .setInstallationId(installationId)
+                .setSkillId(skill.getSkillId())
+                .setRepositoryId(skill.getRepositoryId())
+                .setVersion(skill.getVersion())
+                .setTargetId(target.getId())
+                .setTargetPath(target.getRootPath())
+                .setInstalledPath(installedPath.toString())
+                .setDigest(skill.getDigest())
+                .setDisplayName(skill.getDisplayName())
+                .setDescription(skill.getDescription())
+                .setEnabled(true)
+                .setInstalledAt(existing == null ? now : Optional.ofNullable(existing.getInstalledAt()).orElse(now))
+                .setUpdatedAt(now);
     }
 
     public SkillInstallation copy() {

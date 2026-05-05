@@ -342,15 +342,9 @@ public class SkillService {
     private ManagedSkill saveManagedSkillEntity(SkillValidationResult validation, String repositoryId,
                                                 String version, String digest,
                                                 ManagedSkill existingSkill, LocalDateTime now) {
-        return managedSkillRepository.save(new ManagedSkill()
-                .setSkillId(validation.skillId())
-                .setRepositoryId(repositoryId)
-                .setVersion(version)
-                .setDigest(digest)
-                .setDisplayName(validation.displayName())
-                .setDescription(validation.description())
-                .setInstalledAt(existingSkill == null ? now : Optional.ofNullable(existingSkill.getInstalledAt()).orElse(now))
-                .setUpdatedAt(now));
+        return managedSkillRepository.save(ManagedSkill.create(
+                validation.skillId(), repositoryId, version, digest,
+                validation.displayName(), validation.description(), existingSkill, now));
     }
 
     SkillInstallation deployManagedSkillToTarget(ManagedSkill skill,
@@ -378,35 +372,13 @@ public class SkillService {
             }
             SkillFileUtils.swapTempToTarget(finalTargetDir, tempFinalDir);
             LocalDateTime now = LocalDateTime.now();
-            SkillInstallation record = buildInstallationRecord(
+            SkillInstallation record = SkillInstallation.fromManagedSkillAndTarget(
                     skill, target, finalTargetDir, existingDeployment, installationId, now);
             return skillInstallationRepository.save(record);
         } catch (IOException exception) {
             SkillFileUtils.deleteQuietly(tempFinalDir);
             throw new IllegalStateException("安装 Skill 失败", exception);
         }
-    }
-
-    private static SkillInstallation buildInstallationRecord(ManagedSkill skill,
-                                                             SkillTarget target,
-                                                             Path finalTargetDir,
-                                                             SkillInstallation existingDeployment,
-                                                             String installationId,
-                                                             LocalDateTime now) {
-        return new SkillInstallation()
-                .setInstallationId(installationId)
-                .setSkillId(skill.getSkillId())
-                .setRepositoryId(skill.getRepositoryId())
-                .setVersion(skill.getVersion())
-                .setTargetId(target.getId())
-                .setTargetPath(target.getRootPath())
-                .setInstalledPath(finalTargetDir.toString())
-                .setDigest(skill.getDigest())
-                .setDisplayName(skill.getDisplayName())
-                .setDescription(skill.getDescription())
-                .setEnabled(true)
-                .setInstalledAt(existingDeployment == null ? now : Optional.ofNullable(existingDeployment.getInstalledAt()).orElse(now))
-                .setUpdatedAt(now);
     }
 
     private SkillListItem toSkillListItem(ManagedSkill skill) {
