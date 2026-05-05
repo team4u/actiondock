@@ -30,6 +30,8 @@ public final class RepositoryCatalogTypes {
     public static final String TOOLS_DIR = "tools";
     /** Plugin 子目录名称。 */
     public static final String PLUGINS_DIR = "plugins";
+    /** Plugin 索引文件名。 */
+    public static final String PLUGIN_INDEX_FILE = "plugin.json";
     /** Skill 子目录名称。 */
     public static final String SKILLS_DIR = "skills";
     /** Skill 清单文件名。 */

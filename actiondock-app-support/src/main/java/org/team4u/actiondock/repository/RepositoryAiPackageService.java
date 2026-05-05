@@ -162,7 +162,7 @@ class RepositoryAiPackageService {
                           String version) {
         try {
             Files.createDirectories(pluginDir);
-            catalog.writeJson(pluginDir.resolve("plugin.json"), new PluginFile(
+            catalog.writeJson(pluginDir.resolve(PLUGIN_INDEX_FILE), new PluginFile(
                     1,
                     pluginId,
                     displayName,

@@ -647,7 +647,7 @@ public class RepositoryCatalogService {
                 version,
                 SkillFileUtils.normalizeNullable(request.description()),
                 SkillFileUtils.normalizeNullable(request.releaseNotes()),
-                "plugins/" + pluginId + "/plugin.json"
+                PLUGINS_DIR + "/" + pluginId + "/" + PLUGIN_INDEX_FILE
         );
         List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> entries =
                 RepositoryCatalogTypes.upsertSorted(safePlugins(current), next, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id);
