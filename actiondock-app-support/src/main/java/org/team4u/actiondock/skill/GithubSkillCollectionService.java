@@ -1,6 +1,7 @@
 package org.team4u.actiondock.skill;
 
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 
 import java.io.IOException;
 import java.net.URI;
@@ -21,7 +22,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public class GithubSkillCollectionService {
-    private static final String DEFAULT_REF = "main";
+    private static final String DEFAULT_REF = RepositoryCatalogTypes.DEFAULT_GIT_BRANCH;
     private static final long MAX_REPOSITORY_ARCHIVE_SIZE = 100L * 1024L * 1024L;
     private static final Pattern OWNER_REPO_PATTERN = Pattern.compile("[A-Za-z0-9_.-]+");
 
