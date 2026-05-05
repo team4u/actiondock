@@ -730,8 +730,8 @@ public class RepositoryCatalogService {
                 installed,
                 installed ? installation.getVersion() : null,
                 installed && !Objects.equals(installation.getVersion(), tool.version()),
-                REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel()),
-                SkillFileUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION),
+                isTrusted(repository),
+                resolveUsage(repository),
                 null, false, false, null
         );
     }
@@ -759,8 +759,8 @@ public class RepositoryCatalogService {
                 installation != null,
                 installation == null ? null : installation.getVersion(),
                 installation != null && !Objects.equals(installation.getVersion(), manifest.latestVersion()),
-                REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel()),
-                SkillFileUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION)
+                isTrusted(repository),
+                resolveUsage(repository)
         );
     }
 
@@ -800,7 +800,7 @@ public class RepositoryCatalogService {
                 registration != null,
                 registration == null ? null : registration.getVersion(),
                 registration != null && !Objects.equals(registration.getVersion(), plugin.version()),
-                REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel()),
+                isTrusted(repository),
                 dependentToolCount(plugin.pluginId())
         );
     }
@@ -819,7 +819,7 @@ public class RepositoryCatalogService {
                 resolveRelative(skillPath, SkillFileUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE)),
                 SkillFileUtils.normalizeNullable(skill.digest()),
                 SkillFileUtils.normalizeNullable(skill.riskLevel()),
-                REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel()),
+                isTrusted(repository),
                 repository.getUsage()
         );
     }
@@ -909,6 +909,14 @@ public class RepositoryCatalogService {
      * 拒绝绝对路径、空路径、包含 {@code ..} 的路径，
      * 并通过 normalize/toRealPath 确认解析后仍在仓库根目录下。
      */
+    private static boolean isTrusted(RepositoryDefinition repository) {
+        return REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel());
+    }
+
+    private static String resolveUsage(RepositoryDefinition repository) {
+        return SkillFileUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION);
+    }
+
     Path safeResolveRepositoryPath(Path root, String relativePath) {
         return safeResolvePath(root, relativePath, "仓库文件路径");
     }
