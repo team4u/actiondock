@@ -63,10 +63,20 @@ public final class RepositoryCatalogTypes {
     public static final String CHECK_SEVERITY_BLOCKER = "BLOCKER";
     /** 能力包检查严重级别：警告。 */
     public static final String CHECK_SEVERITY_WARNING = "WARNING";
+    /** 能力包检查严重级别：信息。 */
+    public static final String CHECK_SEVERITY_INFO = "INFO";
     /** 能力包入口类型：Agent。 */
     public static final String ENTRY_TYPE_AGENT = "AGENT";
     /** 能力包入口类型：脚本。 */
     public static final String ENTRY_TYPE_SCRIPT = "SCRIPT";
+    /** 资产类型：工具。 */
+    public static final String ASSET_TYPE_TOOL = "TOOL";
+    /** 资产类型：插件。 */
+    public static final String ASSET_TYPE_PLUGIN = "PLUGIN";
+    /** 资产类型：能力包。 */
+    public static final String ASSET_TYPE_CAPABILITY_PACKAGE = "CAPABILITY_PACKAGE";
+    /** 资产类型：技能。 */
+    public static final String ASSET_TYPE_SKILL = "SKILL";
 
     public record ToolInstallationOptions(
             boolean installSchedules,

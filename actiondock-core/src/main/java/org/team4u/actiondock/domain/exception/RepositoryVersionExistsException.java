@@ -6,6 +6,10 @@ package org.team4u.actiondock.domain.exception;
  * @author jay.wu
  */
 public class RepositoryVersionExistsException extends IllegalArgumentException {
+    public static final String KIND_PLUGIN = "PLUGIN";
+    public static final String KIND_CAPABILITY_PACKAGE = "CAPABILITY_PACKAGE";
+    public static final String KIND_AI_PACKAGE = "AI_PACKAGE";
+
     private final String assetKind;
     private final String repositoryId;
     private final String assetId;
@@ -20,13 +24,13 @@ public class RepositoryVersionExistsException extends IllegalArgumentException {
     }
 
     private static String assetLabel(String assetKind) {
-        if ("PLUGIN".equals(assetKind)) {
+        if (KIND_PLUGIN.equals(assetKind)) {
             return "插件";
         }
-        if ("CAPABILITY_PACKAGE".equals(assetKind)) {
+        if (KIND_CAPABILITY_PACKAGE.equals(assetKind)) {
             return "能力包";
         }
-        if ("AI_PACKAGE".equals(assetKind)) {
+        if (KIND_AI_PACKAGE.equals(assetKind)) {
             return "AI 能力包";
         }
         return "工具";

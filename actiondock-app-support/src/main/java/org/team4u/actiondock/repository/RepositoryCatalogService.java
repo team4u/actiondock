@@ -1106,21 +1106,21 @@ public class RepositoryCatalogService {
                                              RepositoryCatalogTypes.RepositoryIndexFile index,
                                              String pluginId,
                                              String version) {
-        assertVersionAvailable("PLUGIN", repositoryId, index == null ? null : index.plugins(), pluginId, version, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id, RepositoryCatalogTypes.RepositoryPluginIndexEntry::version);
+        assertVersionAvailable(ASSET_TYPE_PLUGIN, repositoryId, index == null ? null : index.plugins(), pluginId, version, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id, RepositoryCatalogTypes.RepositoryPluginIndexEntry::version);
     }
 
     static void assertCapabilityPackageVersionAvailable(String repositoryId,
                                                         RepositoryCatalogTypes.RepositoryIndexFile index,
                                                         String packageId,
                                                         String version) {
-        assertVersionAvailable("CAPABILITY_PACKAGE", repositoryId, index == null ? null : index.packages(), packageId, version, RepositoryCatalogTypes.CapabilityPackageIndexEntry::id, RepositoryCatalogTypes.CapabilityPackageIndexEntry::version);
+        assertVersionAvailable(ASSET_TYPE_CAPABILITY_PACKAGE, repositoryId, index == null ? null : index.packages(), packageId, version, RepositoryCatalogTypes.CapabilityPackageIndexEntry::id, RepositoryCatalogTypes.CapabilityPackageIndexEntry::version);
     }
 
     static void assertSkillVersionAvailable(String repositoryId,
                                             RepositoryCatalogTypes.RepositoryIndexFile index,
                                             String skillId,
                                             String version) {
-        assertVersionAvailable("SKILL", repositoryId, index == null ? null : index.skills(), skillId, version, RepositoryCatalogTypes.RepositorySkillIndexEntry::id, RepositoryCatalogTypes.RepositorySkillIndexEntry::version);
+        assertVersionAvailable(ASSET_TYPE_SKILL, repositoryId, index == null ? null : index.skills(), skillId, version, RepositoryCatalogTypes.RepositorySkillIndexEntry::id, RepositoryCatalogTypes.RepositorySkillIndexEntry::version);
     }
 
     static List<ScriptSchedule> resolvePublishSchedules(String scriptId,

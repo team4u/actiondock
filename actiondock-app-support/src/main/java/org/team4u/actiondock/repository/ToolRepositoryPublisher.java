@@ -376,7 +376,7 @@ final class ToolRepositoryPublisher {
                                            String version) {
         for (RepositoryIndexEntry entry : nullSafeList(index == null ? null : index.tools())) {
             if (Objects.equals(toolId, entry.id()) && Objects.equals(version, entry.version())) {
-                throw new RepositoryVersionExistsException("TOOL", repositoryId, toolId, version);
+                throw new RepositoryVersionExistsException(ASSET_TYPE_TOOL, repositoryId, toolId, version);
             }
         }
     }
