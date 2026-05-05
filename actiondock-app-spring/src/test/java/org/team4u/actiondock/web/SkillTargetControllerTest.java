@@ -8,7 +8,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
-import org.team4u.actiondock.skill.SkillService;
+import org.team4u.actiondock.skill.SkillTargetService;
 import org.team4u.actiondock.skill.SkillTypes;
 
 import java.util.List;
@@ -41,11 +41,11 @@ class SkillTargetControllerTest {
     private MockMvc mockMvc;
 
     @MockBean
-    private SkillService skillService;
+    private SkillTargetService skillTargetService;
 
     @Test
-    void syncInstallationsDelegatesToSkillService() throws Exception {
-        when(skillService.syncSkillsToTarget(eq("target-1"), eq(List.of("skill-a", "skill-b"))))
+    void syncInstallationsDelegatesToSkillTargetService() throws Exception {
+        when(skillTargetService.syncSkillsToTarget(eq("target-1"), eq(List.of("skill-a", "skill-b"))))
                 .thenReturn(new SkillTypes.SkillSyncResponse(
                         "target-1",
                         List.of(
@@ -63,6 +63,6 @@ class SkillTargetControllerTest {
                 .andExpect(jsonPath("$.data.results[0].skillId").value("skill-a"))
                 .andExpect(jsonPath("$.data.results[0].status").value("SUCCESS"));
 
-        verify(skillService).syncSkillsToTarget(eq("target-1"), eq(List.of("skill-a", "skill-b")));
+        verify(skillTargetService).syncSkillsToTarget(eq("target-1"), eq(List.of("skill-a", "skill-b")));
     }
 }

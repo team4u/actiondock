@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
@@ -42,6 +43,15 @@ import java.util.concurrent.Executors;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AppProperties.class)
+@Import({
+        AiConfiguration.class,
+        RepositoryConfiguration.class,
+        ScriptConfiguration.class,
+        EventConfiguration.class,
+        PluginConfiguration.class,
+        SkillConfiguration.class,
+        ScheduleConfiguration.class
+})
 public class RuntimeConfiguration {
 
     @Bean(destroyMethod = "shutdown")

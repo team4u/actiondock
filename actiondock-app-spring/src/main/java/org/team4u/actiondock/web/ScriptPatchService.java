@@ -3,6 +3,7 @@ package org.team4u.actiondock.web;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Component;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 
@@ -15,6 +16,7 @@ import java.util.Set;
  *
  * @author jay.wu
  */
+@Component
 class ScriptPatchService {
 
     private static final List<String> ALLOWED_PATCH_FIELDS = List.of("source", "pythonRequirements", "inputSchema", "outputSchema");

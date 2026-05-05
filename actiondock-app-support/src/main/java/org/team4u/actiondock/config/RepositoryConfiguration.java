@@ -167,4 +167,15 @@ public class RepositoryConfiguration {
                 )
         );
     }
+
+    @Bean
+    public RepositorySkillService repositorySkillService(RepositoryCatalogService repositoryCatalogService,
+                                                          JsonCodec jsonCodec,
+                                                          AppProperties properties) {
+        return new RepositorySkillService(
+                repositoryCatalogService,
+                jsonCodec,
+                repositoryCatalogService.getRepositoriesRoot()
+        );
+    }
 }

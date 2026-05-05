@@ -144,6 +144,10 @@ public class RepositoryCatalogService {
         return repos;
     }
 
+    public Path getRepositoriesRoot() {
+        return repositoriesRoot;
+    }
+
     public ApplicationServices getServices() {
         return services;
     }
