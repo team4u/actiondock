@@ -206,7 +206,7 @@ class AiPackageDependencyCollector {
     }
 
     private void collectPluginDependencies(AiPackageBundleBuilder builder, List<PluginDependency> dependencies) {
-        for (PluginDependency dependency : dependencies == null ? List.<PluginDependency>of() : dependencies) {
+        for (PluginDependency dependency : nullSafeList(dependencies)) {
             collectPluginDependency(builder, dependency);
         }
     }

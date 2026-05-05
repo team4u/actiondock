@@ -43,7 +43,7 @@ final class RepositoryPublishConfigResolver {
 
     private static Map<String, ConfigValue> buildConfigsByKey(List<ConfigValue> configValues) {
         Map<String, ConfigValue> configsByKey = new LinkedHashMap<>();
-        for (ConfigValue value : configValues == null ? List.<ConfigValue>of() : configValues) {
+        for (ConfigValue value : nullSafeList(configValues)) {
             if (value == null || value.getKey() == null || value.getKey().isBlank()) {
                 continue;
             }
@@ -55,7 +55,7 @@ final class RepositoryPublishConfigResolver {
     private static LinkedHashSet<String> collectDetectedKeys(String source,
                                                              List<Map<String, Object>> scheduleInputs) {
         LinkedHashSet<String> detectedKeys = new LinkedHashSet<>(extractSourceConfigKeys(source));
-        for (Map<String, Object> scheduleInput : scheduleInputs == null ? List.<Map<String, Object>>of() : scheduleInputs) {
+        for (Map<String, Object> scheduleInput : nullSafeList(scheduleInputs)) {
             PlaceholderKeyExtractor.collectPlaceholderKeys(scheduleInput, detectedKeys);
         }
         return detectedKeys;

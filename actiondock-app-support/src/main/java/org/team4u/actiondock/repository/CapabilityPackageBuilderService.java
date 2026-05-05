@@ -199,16 +199,16 @@ class CapabilityPackageBuilderService {
                                      List<String> agentIds,
                                      List<String> modelIds,
                                      List<String> toolsetIds) {
-        for (String scriptId : scriptIds == null ? List.<String>of() : scriptIds) {
+        for (String scriptId : nullSafeList(scriptIds)) {
             aiPackageDependencyCollector.collectScriptDependency(repository, builder, SkillFileUtils.normalize(scriptId, "scriptId 不能为空"));
         }
-        for (String agentId : agentIds == null ? List.<String>of() : agentIds) {
+        for (String agentId : nullSafeList(agentIds)) {
             aiPackageDependencyCollector.collectAgentDependency(repository, builder, SkillFileUtils.normalize(agentId, "agentId 不能为空"), false);
         }
-        for (String modelId : modelIds == null ? List.<String>of() : modelIds) {
+        for (String modelId : nullSafeList(modelIds)) {
             aiPackageDependencyCollector.collectModelDependency(builder, SkillFileUtils.normalize(modelId, "modelId 不能为空"));
         }
-        for (String toolsetId : toolsetIds == null ? List.<String>of() : toolsetIds) {
+        for (String toolsetId : nullSafeList(toolsetIds)) {
             aiPackageDependencyCollector.collectToolsetDependency(repository, builder, SkillFileUtils.normalize(toolsetId, "toolsetId 不能为空"));
         }
     }
@@ -219,7 +219,7 @@ class CapabilityPackageBuilderService {
                                                                            List<String> agentIds) {
         LinkedHashMap<String, CapabilityPackageEntryFile> entries = new LinkedHashMap<>();
         addCapabilityPackageEntry(entries, primaryEntry);
-        for (String scriptId : scriptIds == null ? List.<String>of() : scriptIds) {
+        for (String scriptId : nullSafeList(scriptIds)) {
             ScriptDefinition script = scriptRepository.findById(scriptId).orElse(null);
             if (script != null) {
                 entries.putIfAbsent(ENTRY_TYPE_SCRIPT + ":" + scriptId, new CapabilityPackageEntryFile(
@@ -230,7 +230,7 @@ class CapabilityPackageBuilderService {
                 ));
             }
         }
-        for (String agentId : agentIds == null ? List.<String>of() : agentIds) {
+        for (String agentId : nullSafeList(agentIds)) {
             AiAgentProfile agent = aiAgentProfileRepository.findById(agentId).orElse(null);
             if (agent != null) {
                 entries.putIfAbsent(ENTRY_TYPE_AGENT + ":" + agentId, new CapabilityPackageEntryFile(

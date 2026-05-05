@@ -111,7 +111,7 @@ public final class RepositoryCatalogTypes {
     public static String resolveRuntimeEntry(List<CapabilityPackageEntryFile> entries,
                                              Map<String, String> agentIdMappings,
                                              Map<String, String> scriptIdMappings) {
-        for (CapabilityPackageEntryFile entry : entries == null ? List.<CapabilityPackageEntryFile>of() : entries) {
+        for (CapabilityPackageEntryFile entry : nullSafeList(entries)) {
             if (ENTRY_TYPE_AGENT.equalsIgnoreCase(entry.type())) {
                 return agentIdMappings.getOrDefault(entry.id(), entry.id());
             }

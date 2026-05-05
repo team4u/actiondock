@@ -5,6 +5,8 @@ import org.team4u.actiondock.ai.tool.ActionDockDynamicAiToolProvider;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.skill.SkillFileUtils;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.nullSafeList;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -80,7 +82,7 @@ public final class AiPackageIdRewriter {
                                                      Map<String, String> modelIdMappings,
                                                      Map<String, String> agentIdMappings) {
         List<AiDependency> rewritten = new ArrayList<>();
-        for (AiDependency dependency : dependencies == null ? List.<AiDependency>of() : dependencies) {
+        for (AiDependency dependency : nullSafeList(dependencies)) {
             rewritten.add(new AiDependency()
                     .setCapability(dependency.getCapability())
                     .setProfile(modelIdMappings.getOrDefault(dependency.getProfile(), dependency.getProfile()))
@@ -92,7 +94,7 @@ public final class AiPackageIdRewriter {
 
     static LinkedHashSet<AiCapability> readCapabilities(List<String> capabilities) {
         LinkedHashSet<AiCapability> values = new LinkedHashSet<>();
-        for (String capability : capabilities == null ? List.<String>of() : capabilities) {
+        for (String capability : nullSafeList(capabilities)) {
             if (capability == null || capability.isBlank()) {
                 continue;
             }

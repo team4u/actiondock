@@ -6,12 +6,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.nullSafeList;
+
 public class PluginArtifactResolverRegistry {
     private final Map<String, PluginArtifactResolver> resolversByScheme;
 
     public PluginArtifactResolverRegistry(List<PluginArtifactResolver> resolvers) {
         this.resolversByScheme = new HashMap<>();
-        for (PluginArtifactResolver resolver : resolvers == null ? List.<PluginArtifactResolver>of() : resolvers) {
+        for (PluginArtifactResolver resolver : nullSafeList(resolvers)) {
             for (String scheme : resolver.supportedSchemes()) {
                 if (scheme != null && !scheme.isBlank()) {
                     resolversByScheme.put(scheme.toLowerCase(Locale.ROOT), resolver);

@@ -79,7 +79,7 @@ public class RepositoryPluginService {
                                    List<PluginDependency> dependencies,
                                    boolean installPluginDependencies,
                                    boolean forcePluginUpgrade) {
-        for (PluginDependency dependency : dependencies == null ? List.<PluginDependency>of() : dependencies) {
+        for (PluginDependency dependency : nullSafeList(dependencies)) {
             String pluginId = SkillFileUtils.normalize(dependency.getPluginId(), "插件依赖 pluginId 不能为空");
             PluginRegistration registration = pluginRuntimeService.findPluginRegistration(pluginId).orElse(null);
             if (registration != null && RepositoryVersionUtils.versionSatisfies(registration.getVersion(), dependency.getVersionRange())) {
