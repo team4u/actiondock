@@ -9,6 +9,7 @@ import org.team4u.actiondock.ai.api.AiAgentRuntime;
 import org.team4u.actiondock.ai.api.AiCallerType;
 import org.team4u.actiondock.ai.api.AiMessage;
 import org.team4u.actiondock.ai.api.AiRunStatus;
+import org.team4u.actiondock.ai.api.AiSchemaUtils;
 import org.team4u.actiondock.ai.api.AiTool;
 import org.team4u.actiondock.ai.api.AiToolExecutionContext;
 import org.team4u.actiondock.ai.api.AiToolExecutionResult;
@@ -349,11 +350,11 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
     }
 
     private static Map<String, Object> objectSchema(Map<String, Object> properties) {
-        return Map.of("type", "object", "properties", properties == null ? Map.of() : properties);
+        return AiSchemaUtils.objectSchema(properties);
     }
 
     private static Map<String, Object> stringSchema(String description) {
-        return Map.of("type", "string", "description", description);
+        return AiSchemaUtils.stringSchema(description);
     }
 
     private static AiToolExecutionResult toErrorResult(String idKey, long started, RuntimeException exception) {

@@ -4,6 +4,7 @@ import org.team4u.actiondock.ai.api.AiTool;
 import org.team4u.actiondock.ai.api.AiToolExecutionContext;
 import org.team4u.actiondock.ai.api.AiToolExecutionResult;
 import org.team4u.actiondock.ai.api.AiToolPermission;
+import org.team4u.actiondock.ai.api.AiSchemaUtils;
 import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.PluginActionMetadata;
@@ -312,15 +313,15 @@ public final class ActionDockAiTools {
     }
 
     private static Map<String, Object> objectSchema(Map<String, Object> properties) {
-        return Map.of("type", "object", "properties", properties == null ? Map.of() : properties);
+        return AiSchemaUtils.objectSchema(properties);
     }
 
     private static Map<String, Object> stringSchema() {
-        return Map.of("type", "string");
+        return AiSchemaUtils.stringSchema();
     }
 
     private static Map<String, Object> booleanSchema() {
-        return Map.of("type", "boolean");
+        return AiSchemaUtils.booleanSchema();
     }
 
     private static boolean contains(String value, String keyword) {

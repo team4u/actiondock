@@ -11,6 +11,7 @@ import io.agentscope.core.tool.file.ReadFileTool;
 import io.agentscope.core.tool.file.WriteFileTool;
 import io.agentscope.core.tool.multimodal.DashScopeMultiModalTool;
 import io.agentscope.core.tool.multimodal.OpenAIMultiModalTool;
+import org.team4u.actiondock.ai.api.AiSchemaUtils;
 import org.team4u.actiondock.ai.api.AiSecretResolver;
 import org.team4u.actiondock.ai.api.AiTool;
 import org.team4u.actiondock.ai.api.AiToolExecutionContext;
@@ -215,11 +216,11 @@ public final class AgentScopeBuiltinAiTools {
     }
 
     private static Map<String, Object> objectSchema(Map<String, Object> properties) {
-        return Map.of("type", "object", "properties", properties == null ? Map.of() : properties);
+        return AiSchemaUtils.objectSchema(properties);
     }
 
     private static Map<String, Object> stringSchema(String description) {
-        return Map.of("type", "string", "description", description);
+        return AiSchemaUtils.stringSchema(description);
     }
 
     private static Map<String, Object> copy(Map<String, Object> options) {
