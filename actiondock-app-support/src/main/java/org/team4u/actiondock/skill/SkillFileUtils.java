@@ -58,10 +58,6 @@ public final class SkillFileUtils {
         return normalizePath(Path.of(path));
     }
 
-    public static byte[] requireValidArchive(byte[] content) {
-        return SkillArchiveManager.requireValidArchive(content);
-    }
-
     /** 文件扩展名到 MIME 内容类型的映射表。 */
     private static final Map<String, String> EXTENSION_TO_CONTENT_TYPE = Map.ofEntries(
             Map.entry(".md", "text/markdown"),
