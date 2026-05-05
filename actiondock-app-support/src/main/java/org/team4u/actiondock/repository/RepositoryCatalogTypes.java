@@ -45,6 +45,8 @@ public final class RepositoryCatalogTypes {
     public static final String REPO_TYPE_HTTP = "HTTP";
     /** 仓库类型：本地目录仓库。 */
     public static final String REPO_TYPE_LOCAL_DIR = "LOCAL_DIR";
+    /** Git 仓库默认分支。 */
+    public static final String DEFAULT_GIT_BRANCH = "main";
 
     public static final String ERR_HTTP_REPO_UNSUPPORTED_EXPORT = "HTTP 仓库暂不支持导出 Skill 归档";
     public static final String ERR_HTTP_REPO_UNSUPPORTED_PUBLISH = "HTTP 仓库暂不支持发布";

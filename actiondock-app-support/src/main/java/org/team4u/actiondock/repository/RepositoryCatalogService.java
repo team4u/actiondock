@@ -228,7 +228,7 @@ public class RepositoryCatalogService {
                 .setName(SkillFileUtils.normalize(target.getName(), "仓库名称不能为空"))
                 .setType(type)
                 .setUrl(SkillFileUtils.normalize(target.getUrl(), "仓库地址不能为空"))
-                .setBranch(REPO_TYPE_GIT.equals(type) ? SkillFileUtils.normalizeOrDefault(target.getBranch(), "main") : null)
+                .setBranch(REPO_TYPE_GIT.equals(type) ? SkillFileUtils.normalizeOrDefault(target.getBranch(), DEFAULT_GIT_BRANCH) : null)
                 .setEnabled(target.isEnabled())
                 .setTrustLevel(trustLevel)
                 .setUsage(usage)
