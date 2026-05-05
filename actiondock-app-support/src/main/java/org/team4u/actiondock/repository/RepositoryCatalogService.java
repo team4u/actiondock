@@ -521,42 +521,44 @@ public class RepositoryCatalogService {
 
     private String computeToolDigest(RepositoryCatalogTypes.RepositoryToolDetail detail) {
         RepositoryCatalogTypes.RepositoryToolDescriptor d = detail.descriptor();
-        return computeToolDigest(d.toolId(), d.displayName(), d.version(), d.type(), d.packaging(),
-                d.description(), d.owner(), d.tags(), d.scriptDependencies(), d.pluginDependencies(),
-                detail.source(), detail.pythonRequirements(),
-                readSchema(d.repositoryId(), d.inputSchemaPath()), readSchema(d.repositoryId(), d.outputSchemaPath()));
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("toolId", d.toolId());
+        values.put("displayName", d.displayName());
+        values.put("version", d.version());
+        values.put("type", d.type());
+        values.put("packaging", d.packaging());
+        values.put("description", d.description());
+        values.put("owner", d.owner());
+        values.put("tags", d.tags());
+        values.put("scriptDependencies", d.scriptDependencies());
+        values.put("pluginDependencies", d.pluginDependencies());
+        values.put("source", detail.source());
+        values.put("pythonRequirements", detail.pythonRequirements());
+        values.put("inputSchema", readSchema(d.repositoryId(), d.inputSchemaPath()));
+        values.put("outputSchema", readSchema(d.repositoryId(), d.outputSchemaPath()));
+        return computeDigest(values);
     }
 
     String computeDevelopmentLocalDigest(ScriptDefinition script) {
-        return computeToolDigest(script.getRepositoryToolId(), script.getName(), script.getRepositoryVersion(),
-                script.getType() == null ? null : script.getType().name(),
-                script.getPackaging() == null ? null : script.getPackaging().name(),
-                script.getDescription(), script.getOwner(), script.getTags(),
-                script.getScriptDependencies(), script.getPluginDependencies(),
-                script.getSource(), script.getPythonRequirements(),
-                script.getInputSchema(), script.getOutputSchema());
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("toolId", script.getRepositoryToolId());
+        values.put("displayName", script.getName());
+        values.put("version", script.getRepositoryVersion());
+        values.put("type", script.getType() == null ? null : script.getType().name());
+        values.put("packaging", script.getPackaging() == null ? null : script.getPackaging().name());
+        values.put("description", script.getDescription());
+        values.put("owner", script.getOwner());
+        values.put("tags", script.getTags());
+        values.put("scriptDependencies", script.getScriptDependencies());
+        values.put("pluginDependencies", script.getPluginDependencies());
+        values.put("source", script.getSource());
+        values.put("pythonRequirements", script.getPythonRequirements());
+        values.put("inputSchema", script.getInputSchema());
+        values.put("outputSchema", script.getOutputSchema());
+        return computeDigest(values);
     }
 
-    private String computeToolDigest(String toolId, String displayName, String version,
-                                     String type, String packaging, String description, String owner,
-                                     Object tags, Object scriptDependencies, Object pluginDependencies,
-                                     Object source, Object pythonRequirements,
-                                     Object inputSchema, Object outputSchema) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("toolId", toolId);
-        values.put("displayName", displayName);
-        values.put("version", version);
-        values.put("type", type);
-        values.put("packaging", packaging);
-        values.put("description", description);
-        values.put("owner", owner);
-        values.put("tags", tags);
-        values.put("scriptDependencies", scriptDependencies);
-        values.put("pluginDependencies", pluginDependencies);
-        values.put("source", source);
-        values.put("pythonRequirements", pythonRequirements);
-        values.put("inputSchema", inputSchema);
-        values.put("outputSchema", outputSchema);
+    private String computeDigest(Map<String, Object> values) {
         return RepositoryVersionUtils.sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
     }
 

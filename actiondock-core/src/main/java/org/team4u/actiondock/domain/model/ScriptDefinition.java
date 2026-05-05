@@ -489,16 +489,6 @@ public class ScriptDefinition {
     }
 
     /**
-     * 归档脚本。
-     *
-     * @return 当前实例
-     */
-    public ScriptDefinition archive() {
-        this.status = ScriptStatus.ARCHIVED;
-        return this;
-    }
-
-    /**
      * 从已有的脚本定义合并缺失字段。
      * <p>
      * 当传入的定义中某个字段为 null 时，使用已有定义的对应字段填充。
