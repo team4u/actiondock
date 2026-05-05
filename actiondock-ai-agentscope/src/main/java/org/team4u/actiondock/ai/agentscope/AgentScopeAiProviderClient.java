@@ -123,7 +123,8 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
     public AiEmbeddingResponse embed(AiModelProfile profile, AiEmbeddingRequest request, AiCallContext context) {
         EmbeddingModel model = buildEmbeddingModel(profile, request == null ? null : request.options());
         List<List<Double>> embeddings = new ArrayList<>();
-        for (String input : request == null || request.input() == null ? List.<String>of() : request.input()) {
+        List<String> inputs = request == null || request.input() == null ? List.of() : request.input();
+        for (String input : inputs) {
             double[] vector = block(model.embed(TextBlock.builder().text(input == null ? "" : input).build()),
                     modelCallTimeout(profile, request == null ? null : request.options()));
             embeddings.add(Arrays.stream(vector).boxed().toList());

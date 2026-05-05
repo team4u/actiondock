@@ -301,8 +301,7 @@ public final class SkillFileUtils {
         }
         try (var stream = Files.list(root)) {
             List<Path> candidates = stream
-                    .filter(Files::isDirectory)
-                    .filter(path -> Files.exists(path.resolve(SKILL_MANIFEST_FILE)))
+                    .filter(path -> Files.isDirectory(path) && Files.exists(path.resolve(SKILL_MANIFEST_FILE)))
                     .toList();
             if (candidates.size() == 1) {
                 return candidates.get(0);
@@ -335,8 +334,8 @@ public final class SkillFileUtils {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             List<Path> files;
             try (var stream = Files.walk(directory)) {
-                files = stream.filter(Files::isRegularFile)
-                        .filter(path -> !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
+                files = stream.filter(path -> Files.isRegularFile(path)
+                                && !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
                         .sorted()
                         .toList();
             }
@@ -355,8 +354,8 @@ public final class SkillFileUtils {
 
     private static List<Path> collectDigestFiles(Path directory) throws IOException {
         try (var stream = Files.walk(directory)) {
-            return stream.filter(Files::isRegularFile)
-                    .filter(path -> !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
+            return stream.filter(path -> Files.isRegularFile(path)
+                            && !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
                     .sorted()
                     .toList();
         }

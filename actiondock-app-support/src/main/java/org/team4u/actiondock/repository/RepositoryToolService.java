@@ -328,10 +328,10 @@ public class RepositoryToolService {
         List<ScriptSchedule> all = repos.scriptScheduleRepository().findAll();
         for (ScheduleTemplateItem template : templates) {
             ScriptSchedule existing = all.stream()
-                    .filter(item -> definition.getId().equals(item.getScriptId()))
-                    .filter(item -> definition.getRepositoryId().equals(item.getRepositoryId()))
-                    .filter(item -> definition.getId().equals(item.getRepositoryToolId()))
-                    .filter(item -> item.getName().equals(template.name()))
+                    .filter(item -> definition.getId().equals(item.getScriptId())
+                            && definition.getRepositoryId().equals(item.getRepositoryId())
+                            && definition.getId().equals(item.getRepositoryToolId())
+                            && item.getName().equals(template.name()))
                     .findFirst()
                     .orElse(null);
             ScriptSchedule schedule = new ScriptSchedule()

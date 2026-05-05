@@ -393,8 +393,8 @@ public class ConfigValueUsageAnalysisService {
             );
         }
         TemplateDeclaration fallback = templateDeclarations.stream()
-                .filter(item -> Objects.equals(item.repositoryId(), value.getRepositoryId()))
-                .filter(item -> Objects.equals(item.toolId(), value.getRepositoryToolId()))
+                .filter(item -> Objects.equals(item.repositoryId(), value.getRepositoryId())
+                        && Objects.equals(item.toolId(), value.getRepositoryToolId()))
                 .findFirst()
                 .orElse(null);
         return new ConfigValueOrigin(
