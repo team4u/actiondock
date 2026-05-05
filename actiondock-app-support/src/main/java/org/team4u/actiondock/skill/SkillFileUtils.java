@@ -328,7 +328,14 @@ public final class SkillFileUtils {
     static String digestDirectory(Path directory) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            for (Path file : collectDigestFiles(directory)) {
+            List<Path> files;
+            try (var stream = Files.walk(directory)) {
+                files = stream.filter(Files::isRegularFile)
+                        .filter(path -> !INSTALL_MARKER_FILE.equals(path.getFileName().toString()))
+                        .sorted()
+                        .toList();
+            }
+            for (Path file : files) {
                 assertNotSymbolicLink(file);
                 digest.update(relativePath(directory, file).getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) 0);
@@ -498,19 +505,6 @@ public final class SkillFileUtils {
         }
         Object value = marker.get(key);
         return value == null ? null : String.valueOf(value);
-    }
-
-    private static String resolvePreviewType(Path path) {
-        String extension = extractExtension(path);
-        if (".md".equals(extension)) {
-            return "MARKDOWN";
-        }
-        return "TEXT";
-    }
-
-    private static String resolveLanguage(Path path) {
-        String extension = extractExtension(path);
-        return EXTENSION_TO_LANGUAGE.getOrDefault(extension, "plaintext");
     }
 
     /**
@@ -697,7 +691,7 @@ public final class SkillFileUtils {
             return previewImage(target, relative, contentType, size);
         }
         if (!isTextFile(target, contentType)) {
-            return previewUnsupported(relative, target, contentType, size);
+            return new SkillTypes.SkillFilePreview(relative, target.getFileName().toString(), false, contentType, size, "UNSUPPORTED", null, null, null, false);
         }
         return previewText(target, relative, contentType, size);
     }
@@ -732,22 +726,19 @@ public final class SkillFileUtils {
     private static SkillTypes.SkillFilePreview previewText(Path target, String relative, String contentType, long size) {
         String text = readString(target);
         boolean truncated = text.length() > MAX_TEXT_PREVIEW_CHARS;
+        String extension = extractExtension(target);
         return new SkillTypes.SkillFilePreview(
                 relative,
                 target.getFileName().toString(),
                 false,
                 contentType,
                 size,
-                resolvePreviewType(target),
-                resolveLanguage(target),
+                ".md".equals(extension) ? "MARKDOWN" : "TEXT",
+                EXTENSION_TO_LANGUAGE.getOrDefault(extension, "plaintext"),
                 truncated ? text.substring(0, MAX_TEXT_PREVIEW_CHARS) : text,
                 null,
                 truncated
         );
-    }
-
-    private static SkillTypes.SkillFilePreview previewUnsupported(String relative, Path target, String contentType, long size) {
-        return new SkillTypes.SkillFilePreview(relative, target.getFileName().toString(), false, contentType, size, "UNSUPPORTED", null, null, null, false);
     }
 
     /**
