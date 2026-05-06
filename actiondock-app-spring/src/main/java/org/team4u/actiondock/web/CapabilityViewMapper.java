@@ -52,8 +52,8 @@ public class CapabilityViewMapper {
             return null;
         }
         return new CapabilityView.CapabilityBindingView(
-                "published",
-                "published",
+                null,
+                snapshot.getSource(),
                 enumName(snapshot.getType()),
                 copySchema(snapshot.getInputSchema()),
                 copySchema(snapshot.getOutputSchema()),

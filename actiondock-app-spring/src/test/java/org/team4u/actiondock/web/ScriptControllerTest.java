@@ -90,6 +90,7 @@ class ScriptControllerTest {
                 .thenReturn(new ScriptDefinition()
                         .setId("script-1")
                         .setName("Live")
+                        .setSource("return [message: 'live']")
                         .setStatus(ScriptStatus.PUBLISHED));
 
         mockMvc.perform(get("/api/scripts/script-1/published"))
@@ -97,7 +98,29 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.status").value(0))
                 .andExpect(jsonPath("$.data.id").value("script-1"))
                 .andExpect(jsonPath("$.data.name").value("Live"))
-                .andExpect(jsonPath("$.data.status").value("PUBLISHED"));
+                .andExpect(jsonPath("$.data.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.data.source").value("return [message: 'live']"));
+    }
+
+    @Test
+    void capabilityDetailKeepsPublishedSnapshotSource() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Live")
+                .setSource("return [message: 'draft']")
+                .setPublishedSnapshot(new org.team4u.actiondock.domain.model.PublishedScriptSnapshot()
+                        .setName("Live")
+                        .setSource("return [message: 'live']")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")))
+                .setStatus(ScriptStatus.PUBLISHED));
+
+        mockMvc.perform(get("/api/capabilities/script-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.source").value("return [message: 'draft']"))
+                .andExpect(jsonPath("$.data.publishedBinding.source").value("return [message: 'live']"))
+                .andExpect(jsonPath("$.data.draftBinding.source").value("return [message: 'draft']"))
+                .andExpect(jsonPath("$.data.publishedBinding.version").doesNotExist());
     }
 
     @Test
