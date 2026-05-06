@@ -50,6 +50,7 @@ import { TrustLevelTag } from "../components/domain/TrustLevelTag";
 import { getScriptTypeLabel } from "../components/domain/typeLabels";
 import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
+import { RepositorySkillInstallDrawer } from "../components/RepositorySkillInstallDrawer";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { ApiError } from "../shared/api/httpClient";
@@ -68,7 +69,6 @@ import type {
   ScriptDependency
 } from "../types";
 import { getErrorMessage } from "../utils";
-import { writeSkillInstallSession } from "../skillInstallSession";
 
 const { Text } = Typography;
 
@@ -304,6 +304,7 @@ export function RepositoryDiscoveryPage() {
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [installFilter, setInstallFilter] = useState<string>("ALL");
   const [trustFilter, setTrustFilter] = useState<string>("ALL");
+  const [skillInstallDescriptor, setSkillInstallDescriptor] = useState<RepositorySkillDescriptor | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [modal, modalContextHolder] = Modal.useModal();
 
@@ -510,13 +511,7 @@ export function RepositoryDiscoveryPage() {
   };
 
   const openSkillInstall = (descriptor: RepositorySkillDescriptor) => {
-    writeSkillInstallSession({
-      source: "REPOSITORY_REF",
-      repositoryId: descriptor.repositoryId,
-      skillId: descriptor.skillId,
-      action: descriptor.installed ? "update" : "install"
-    });
-    navigate("/discover/skills/install");
+    setSkillInstallDescriptor(descriptor);
   };
 
   const handleRepositoryPluginAction = async (record: RepositoryPluginDescriptor, action: "install" | "update", force = false) => {
@@ -1586,6 +1581,15 @@ export function RepositoryDiscoveryPage() {
           </Space>
         )}
       </Drawer>
+      <RepositorySkillInstallDrawer
+        open={skillInstallDescriptor !== null}
+        descriptor={skillInstallDescriptor}
+        onClose={() => setSkillInstallDescriptor(null)}
+        onSuccess={() => {
+          setSkillInstallDescriptor(null);
+          void loadData();
+        }}
+      />
     </>
   );
 }

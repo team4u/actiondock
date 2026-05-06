@@ -10,7 +10,7 @@ const { Paragraph, Text } = Typography;
 
 interface RepositorySkillInstallDrawerProps {
   open: boolean;
-  descriptor: RepositorySkillDescriptor | null;
+  descriptor: Pick<RepositorySkillDescriptor, 'repositoryId' | 'skillId' | 'displayName' | 'installed' | 'updateAvailable' | 'version' | 'trusted' | 'riskLevel'> & { description?: string | null; owner?: string | null } | null;
   onClose: () => void;
   onSuccess: () => void;
 }
