@@ -55,16 +55,35 @@ class ScheduleControllerSupport {
         return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已更新");
     }
 
+    ApiResponse<ScriptScheduleView> enableSchedule(String scheduleId) {
+        ScriptSchedule schedule = scheduleApplicationService.enableByScheduleId(scheduleId);
+        scriptScheduleDispatcher.refreshScript(schedule.getScriptId());
+        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已启用");
+    }
+
     ApiResponse<ScriptScheduleView> enableSchedule(String scriptId, String scheduleId) {
         ScriptSchedule schedule = scheduleApplicationService.enable(scriptId, scheduleId);
         scriptScheduleDispatcher.refreshScript(scriptId);
         return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已启用");
     }
 
+    ApiResponse<ScriptScheduleView> disableSchedule(String scheduleId) {
+        ScriptSchedule schedule = scheduleApplicationService.disableByScheduleId(scheduleId);
+        scriptScheduleDispatcher.refreshScript(schedule.getScriptId());
+        return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已停用");
+    }
+
     ApiResponse<ScriptScheduleView> disableSchedule(String scriptId, String scheduleId) {
         ScriptSchedule schedule = scheduleApplicationService.disable(scriptId, scheduleId);
         scriptScheduleDispatcher.refreshScript(scriptId);
         return ApiResponse.success(scriptScheduleViewMapper.toView(schedule), "已停用");
+    }
+
+    ApiResponse<Void> deleteSchedule(String scheduleId) {
+        ScriptSchedule schedule = scheduleApplicationService.getById(scheduleId);
+        scheduleApplicationService.deleteByScheduleId(scheduleId);
+        scriptScheduleDispatcher.refreshScript(schedule.getScriptId());
+        return ApiResponse.success(null, "已删除");
     }
 
     ApiResponse<Void> deleteSchedule(String scriptId, String scheduleId) {

@@ -31,18 +31,19 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getApiKey } from "../auth";
 import { useColorMode } from "../contexts/ColorModeContext";
 import {
-  ApiError,
   getPlugin,
   getPluginConfig,
   invokePluginAction,
-  listRepositories,
-  publishRepositoryPlugin,
   startPlugin,
   stopPlugin,
   uninstallPlugin,
   updatePluginConfig,
   upgradePlugin
-} from "../api";
+} from "../features/plugins/api";
+import {
+  listRepositories,
+  publishRepositoryPlugin
+} from "../features/resources/api";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { Col } from "../components/SafeCol";
 import { CodeEditor } from "../components/CodeEditor";
@@ -70,6 +71,7 @@ import {
 import { useDefaultOwner } from "../hooks/useDefaultOwner";
 import { getPublishableRepositories } from "../repositoryPublish";
 import { resolveSchemaFields } from "../schema";
+import { ApiError } from "../shared/api/httpClient";
 import type { ErrorDetail, PluginAction, PluginConfigView, PluginInvokeResponse, PluginView, RepositoryDefinition } from "../types";
 import { isErrorDetail } from "../types";
 import { buildPluginSkillExample } from "../skillExamples";

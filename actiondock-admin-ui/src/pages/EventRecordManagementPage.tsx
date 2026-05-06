@@ -6,7 +6,7 @@ import {
   getEventRecord,
   listEventRecordDispatches,
   listEventRecords
-} from "../api";
+} from "../features/triggers/api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import type { EventDispatchRecord, EventRecord } from "../types";

@@ -1,5 +1,7 @@
 package org.team4u.actiondock.processor;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import com.github.mustachejava.DefaultMustacheFactory;
 import com.github.mustachejava.Mustache;
 import com.github.mustachejava.MustacheFactory;
@@ -81,7 +83,7 @@ public class DefaultProcessorEngine implements ProcessorEngine {
         Object document = context == null ? Map.of() : context.toMap();
         Map<String, Object> output = new LinkedHashMap<>();
         processor.getJsonPath().getFields().forEach((field, expression) -> {
-            if (field == null || field.isBlank()) {
+            if (NormalizeUtils.isBlank(field)) {
                 return;
             }
             Object value = JsonPath.using(JSON_PATH_CONFIGURATION).parse(document).read(expression);
@@ -101,7 +103,7 @@ public class DefaultProcessorEngine implements ProcessorEngine {
     private Map<String, Object> executeScriptRef(ProcessorDefinition processor,
                                                  ProcessorContext context,
                                                  List<ExecutionLogEntry> logs) {
-        if (processor.getScriptRef() == null || processor.getScriptRef().getScriptId() == null || processor.getScriptRef().getScriptId().isBlank()) {
+        if (processor.getScriptRef() == null || NormalizeUtils.isBlank(processor.getScriptRef().getScriptId())) {
             throw new IllegalArgumentException("SCRIPT_REF 缺少 scriptId");
         }
         Map<String, Object> input = new LinkedHashMap<>();

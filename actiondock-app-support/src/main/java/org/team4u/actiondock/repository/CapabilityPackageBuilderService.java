@@ -11,6 +11,7 @@ import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -58,7 +59,7 @@ class CapabilityPackageBuilderService {
     List<ConfigTemplateItem> buildAiPackageConfigTemplate(AiPackageBundle bundle) {
         Map<String, ConfigTemplateItem> templates = new LinkedHashMap<>();
         for (AiPackageModelFile model : bundle.models().values()) {
-            if (model.apiKeyConfigKey() == null || model.apiKeyConfigKey().isBlank()) {
+            if (NormalizeUtils.isBlank(model.apiKeyConfigKey())) {
                 continue;
             }
             templates.putIfAbsent(model.apiKeyConfigKey(), new ConfigTemplateItem(
@@ -127,24 +128,22 @@ class CapabilityPackageBuilderService {
                                                                List<String> agentIds,
                                                                List<String> modelIds,
                                                                List<String> toolsetIds) {
-        String packageId = SkillFileUtils.normalize(packageIdValue, "packageId 不能为空");
-        String version = SkillFileUtils.normalize(versionValue, SkillFileUtils.ERR_VERSION_REQUIRED);
+        String packageId = NormalizeUtils.normalize(packageIdValue, "packageId 不能为空");
+        String version = NormalizeUtils.normalize(versionValue, SkillFileUtils.ERR_VERSION_REQUIRED);
         CapabilityPackageSource sourceType = source == null ? CapabilityPackageSource.MANUAL : source;
         CapabilityPackageEntrySelection entry = primaryEntry;
         if (entry == null) {
             throw new IllegalArgumentException("primaryEntry 不能为空");
         }
-        String entryType = SkillFileUtils.normalize(entry.type(), "entry.type 不能为空").toUpperCase(Locale.ROOT);
-        String entryTargetId = SkillFileUtils.normalize(entry.targetId(), "entry.targetId 不能为空");
+        String entryType = NormalizeUtils.normalize(entry.type(), "entry.type 不能为空").toUpperCase(Locale.ROOT);
+        String entryTargetId = NormalizeUtils.normalize(entry.targetId(), "entry.targetId 不能为空");
         String builderEntryAgentId = ENTRY_TYPE_AGENT.equals(entryType) ? entryTargetId : packageId + ".entry";
         AiPackageBundleBuilder builder = new AiPackageBundleBuilder(repository, packageId, builderEntryAgentId);
 
-        if (ENTRY_TYPE_AGENT.equals(entryType)) {
-            aiPackageDependencyCollector.collectAgentDependency(repository, builder, entryTargetId, true);
-        } else if (ENTRY_TYPE_SCRIPT.equals(entryType)) {
-            aiPackageDependencyCollector.collectScriptDependency(repository, builder, entryTargetId);
-        } else {
-            throw new IllegalArgumentException(ERR_UNSUPPORTED_ENTRY_TYPE);
+        switch (entryType) {
+            case ENTRY_TYPE_AGENT -> aiPackageDependencyCollector.collectAgentDependency(repository, builder, entryTargetId, true);
+            case ENTRY_TYPE_SCRIPT -> aiPackageDependencyCollector.collectScriptDependency(repository, builder, entryTargetId);
+            default -> throw new IllegalArgumentException(ERR_UNSUPPORTED_ENTRY_TYPE);
         }
 
         collectDependencies(repository, builder, scriptIds, agentIds, modelIds, toolsetIds);
@@ -173,17 +172,17 @@ class CapabilityPackageBuilderService {
         List<ScheduleTemplateItem> scheduleTemplate = buildCapabilityPackageScheduleTemplate(bundle);
         List<CapabilityPackagePresetTemplate> presetTemplate = buildCapabilityPackagePresetTemplate(bundle);
         List<CapabilityPackageEntryFile> entries = buildCapabilityPackageEntries(entry, bundle, scriptIds, agentIds);
-        String displayName = SkillFileUtils.normalizeOrDefault(displayNameValue, resolveCapabilityPackageDisplayName(entry, bundle));
-        String description = SkillFileUtils.normalizeNullable(descriptionValue == null ? resolveCapabilityPackageDescription(entry, bundle) : descriptionValue);
+        String displayName = NormalizeUtils.normalizeOrDefault(displayNameValue, resolveCapabilityPackageDisplayName(entry, bundle));
+        String description = NormalizeUtils.normalizeNullable(descriptionValue == null ? resolveCapabilityPackageDescription(entry, bundle) : descriptionValue);
         return new CapabilityPackageDraft(
                 packageId,
                 displayName,
                 version,
-                SkillFileUtils.normalizeNullable(owner),
+                NormalizeUtils.normalizeNullable(owner),
                 description,
-                SkillFileUtils.normalizeNullable(releaseNotes),
-                nullSafeList(tags).stream().map(SkillFileUtils::normalizeNullable).filter(Objects::nonNull).distinct().toList(),
-                SkillFileUtils.normalizeNullable(riskLevel),
+                NormalizeUtils.normalizeNullable(releaseNotes),
+                NormalizeUtils.nullSafeList(tags).stream().map(NormalizeUtils::normalizeNullable).filter(Objects::nonNull).distinct().toList(),
+                NormalizeUtils.normalizeNullable(riskLevel),
                 sourceType,
                 entries,
                 bundle,
@@ -199,17 +198,17 @@ class CapabilityPackageBuilderService {
                                      List<String> agentIds,
                                      List<String> modelIds,
                                      List<String> toolsetIds) {
-        for (String scriptId : nullSafeList(scriptIds)) {
-            aiPackageDependencyCollector.collectScriptDependency(repository, builder, SkillFileUtils.normalize(scriptId, "scriptId 不能为空"));
+        for (String scriptId : NormalizeUtils.nullSafeList(scriptIds)) {
+            aiPackageDependencyCollector.collectScriptDependency(repository, builder, NormalizeUtils.normalize(scriptId, "scriptId 不能为空"));
         }
-        for (String agentId : nullSafeList(agentIds)) {
-            aiPackageDependencyCollector.collectAgentDependency(repository, builder, SkillFileUtils.normalize(agentId, "agentId 不能为空"), false);
+        for (String agentId : NormalizeUtils.nullSafeList(agentIds)) {
+            aiPackageDependencyCollector.collectAgentDependency(repository, builder, NormalizeUtils.normalize(agentId, "agentId 不能为空"), false);
         }
-        for (String modelId : nullSafeList(modelIds)) {
-            aiPackageDependencyCollector.collectModelDependency(builder, SkillFileUtils.normalize(modelId, "modelId 不能为空"));
+        for (String modelId : NormalizeUtils.nullSafeList(modelIds)) {
+            aiPackageDependencyCollector.collectModelDependency(builder, NormalizeUtils.normalize(modelId, "modelId 不能为空"));
         }
-        for (String toolsetId : nullSafeList(toolsetIds)) {
-            aiPackageDependencyCollector.collectToolsetDependency(repository, builder, SkillFileUtils.normalize(toolsetId, "toolsetId 不能为空"));
+        for (String toolsetId : NormalizeUtils.nullSafeList(toolsetIds)) {
+            aiPackageDependencyCollector.collectToolsetDependency(repository, builder, NormalizeUtils.normalize(toolsetId, "toolsetId 不能为空"));
         }
     }
 
@@ -219,7 +218,7 @@ class CapabilityPackageBuilderService {
                                                                            List<String> agentIds) {
         LinkedHashMap<String, CapabilityPackageEntryFile> entries = new LinkedHashMap<>();
         addCapabilityPackageEntry(entries, primaryEntry);
-        for (String scriptId : nullSafeList(scriptIds)) {
+        for (String scriptId : NormalizeUtils.nullSafeList(scriptIds)) {
             ScriptDefinition script = scriptRepository.findById(scriptId).orElse(null);
             if (script != null) {
                 entries.putIfAbsent(ENTRY_TYPE_SCRIPT + ":" + scriptId, new CapabilityPackageEntryFile(
@@ -230,7 +229,7 @@ class CapabilityPackageBuilderService {
                 ));
             }
         }
-        for (String agentId : nullSafeList(agentIds)) {
+        for (String agentId : NormalizeUtils.nullSafeList(agentIds)) {
             AiAgentProfile agent = aiAgentProfileRepository.findById(agentId).orElse(null);
             if (agent != null) {
                 entries.putIfAbsent(ENTRY_TYPE_AGENT + ":" + agentId, new CapabilityPackageEntryFile(
@@ -258,30 +257,30 @@ class CapabilityPackageBuilderService {
         if (selection == null) {
             return;
         }
-        String type = SkillFileUtils.normalize(selection.type(), "entry.type 不能为空").toUpperCase(Locale.ROOT);
-        String targetId = SkillFileUtils.normalize(selection.targetId(), "entry.targetId 不能为空");
-        String displayName = SkillFileUtils.normalizeNullable(selection.displayName());
-        if (ENTRY_TYPE_AGENT.equals(type)) {
-            AiAgentProfile agent = aiAgentProfileRepository.findById(targetId)
-                    .orElseThrow(() -> new IllegalArgumentException("AI Agent Profile 不存在: " + targetId));
-            entries.put(type + ":" + targetId, new CapabilityPackageEntryFile(type, targetId, SkillFileUtils.normalizeOrDefault(displayName, agent.getName()), "agent:" + targetId));
-            return;
+        String type = NormalizeUtils.normalize(selection.type(), "entry.type 不能为空").toUpperCase(Locale.ROOT);
+        String targetId = NormalizeUtils.normalize(selection.targetId(), "entry.targetId 不能为空");
+        String displayName = NormalizeUtils.normalizeNullable(selection.displayName());
+        switch (type) {
+            case ENTRY_TYPE_AGENT -> {
+                AiAgentProfile agent = aiAgentProfileRepository.findById(targetId)
+                        .orElseThrow(() -> new IllegalArgumentException("AI Agent Profile 不存在: " + targetId));
+                entries.put(type + ":" + targetId, new CapabilityPackageEntryFile(type, targetId, NormalizeUtils.normalizeOrDefault(displayName, agent.getName()), "agent:" + targetId));
+            }
+            case ENTRY_TYPE_SCRIPT -> {
+                ScriptDefinition script = scriptRepository.findById(targetId)
+                        .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + targetId));
+                entries.put(type + ":" + targetId, new CapabilityPackageEntryFile(type, targetId, NormalizeUtils.normalizeOrDefault(displayName, script.getName()), "script:" + targetId));
+            }
+            default -> throw new IllegalArgumentException(ERR_UNSUPPORTED_ENTRY_TYPE);
         }
-        if (ENTRY_TYPE_SCRIPT.equals(type)) {
-            ScriptDefinition script = scriptRepository.findById(targetId)
-                    .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + targetId));
-            entries.put(type + ":" + targetId, new CapabilityPackageEntryFile(type, targetId, SkillFileUtils.normalizeOrDefault(displayName, script.getName()), "script:" + targetId));
-            return;
-        }
-        throw new IllegalArgumentException(ERR_UNSUPPORTED_ENTRY_TYPE);
     }
 
     private String resolveCapabilityPackageDisplayName(CapabilityPackageEntrySelection entry, AiPackageBundle bundle) {
-        if (entry != null && entry.displayName() != null && !entry.displayName().isBlank()) {
+        if (entry != null && NormalizeUtils.isNotBlank(entry.displayName())) {
             return entry.displayName().trim();
         }
         if (entry != null && ENTRY_TYPE_AGENT.equalsIgnoreCase(entry.type())) {
-            return SkillFileUtils.normalizeOrDefault(bundle.entryAgentName(), entry.targetId());
+            return NormalizeUtils.normalizeOrDefault(bundle.entryAgentName(), entry.targetId());
         }
         if (entry != null && ENTRY_TYPE_SCRIPT.equalsIgnoreCase(entry.type())) {
             ScriptDefinition script = scriptRepository.findById(entry.targetId()).orElse(null);
@@ -289,18 +288,18 @@ class CapabilityPackageBuilderService {
                 return script.getName();
             }
         }
-        return SkillFileUtils.normalizeOrDefault(bundle.entryAgentName(), "Capability Package");
+        return NormalizeUtils.normalizeOrDefault(bundle.entryAgentName(), "Capability Package");
     }
 
     private String resolveCapabilityPackageDescription(CapabilityPackageEntrySelection entry, AiPackageBundle bundle) {
         if (entry != null && ENTRY_TYPE_AGENT.equalsIgnoreCase(entry.type())) {
-            return SkillFileUtils.normalizeNullable(bundle.entryAgentDescription());
+            return NormalizeUtils.normalizeNullable(bundle.entryAgentDescription());
         }
         if (entry != null && ENTRY_TYPE_SCRIPT.equalsIgnoreCase(entry.type())) {
             ScriptDefinition script = scriptRepository.findById(entry.targetId()).orElse(null);
-            return script == null ? null : SkillFileUtils.normalizeNullable(script.getDescription());
+            return script == null ? null : NormalizeUtils.normalizeNullable(script.getDescription());
         }
-        return SkillFileUtils.normalizeNullable(bundle.entryAgentDescription());
+        return NormalizeUtils.normalizeNullable(bundle.entryAgentDescription());
     }
 
     private List<ScheduleTemplateItem> buildCapabilityPackageScheduleTemplate(AiPackageBundle bundle) {
@@ -368,85 +367,6 @@ class CapabilityPackageBuilderService {
     CapabilityPackagePublishPreview buildCapabilityPackagePublishPreview(RepositoryDefinition repository,
                                                                                 CapabilityPackageDraft draft,
                                                                                 CapabilityPackageDetail currentPackage) {
-        List<CapabilityPackageCheck> checks = buildPublishChecks(draft);
-        CapabilityPackageDiffSummary diff = computeEntryChanges(draft, currentPackage);
-
-        return new CapabilityPackagePublishPreview(
-                draft.packageId(),
-                draft.version(),
-                draft.entries(),
-                draft.bundle().models().keySet().stream().sorted().toList(),
-                draft.bundle().toolsets().keySet().stream().sorted().toList(),
-                draft.bundle().agents().keySet().stream().sorted().toList(),
-                draft.bundle().scripts().keySet().stream().sorted().toList(),
-                draft.configTemplate(),
-                draft.scheduleTemplate(),
-                draft.presetTemplate(),
-                draft.bundle().externalDependencies().values().stream().toList(),
-                checks,
-                diff
-        );
-    }
-
-    private List<CapabilityPackageCheck> buildPublishChecks(CapabilityPackageDraft draft) {
-        List<CapabilityPackageCheck> checks = new ArrayList<>();
-        if (draft.entries().isEmpty()) {
-            checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_BLOCKER, "ENTRY_MISSING", "缺少主入口"));
-        }
-        if (draft.releaseNotes() == null || draft.releaseNotes().isBlank()) {
-            checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_WARNING, "RELEASE_NOTES_EMPTY", "未填写 release notes"));
-        }
-        for (RepositoryAiPackageDependency dependency : draft.bundle().externalDependencies().values()) {
-            if ((dependency.version() == null || dependency.version().isBlank())
-                    && !DependencyAssetType.AI_PACKAGE.name().equalsIgnoreCase(dependency.assetType())) {
-                checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_BLOCKER, "DEPENDENCY_VERSION_MISSING", "存在未声明版本的外部依赖: " + dependency.assetId()));
-            } else if (DependencyAssetType.PLUGIN.name().equalsIgnoreCase(dependency.assetType())
-                    && (dependency.repositoryId() == null || dependency.repositoryId().isBlank())) {
-                checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_WARNING, "PLUGIN_EXTERNAL_ONLY", "插件依赖缺少仓库来源，安装时需要本地已存在: " + dependency.assetId()));
-            }
-        }
-        checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_INFO, "ASSET_SUMMARY",
-                "包含 " + draft.bundle().scripts().size() + " 个脚本 / " + draft.bundle().agents().size() + " 个 Agent / "
-                        + draft.bundle().toolsets().size() + " 个工具集 / " + draft.bundle().models().size() + " 个模型"));
-        return checks;
-    }
-
-    private static CapabilityPackageDiffSummary computeEntryChanges(CapabilityPackageDraft draft,
-                                                                     CapabilityPackageDetail currentPackage) {
-        List<String> currentEntryKeys = currentPackage == null
-                ? List.of()
-                : currentPackage.releaseFile().entries().stream().map(item -> item.type() + ":" + item.id()).toList();
-        List<String> nextEntryKeys = draft.entries().stream().map(item -> item.type() + ":" + item.id()).toList();
-        List<String> addedEntries = nextEntryKeys.stream().filter(item -> !currentEntryKeys.contains(item)).toList();
-        List<String> removedEntries = currentEntryKeys.stream().filter(item -> !nextEntryKeys.contains(item)).toList();
-        List<String> changedAssets = new ArrayList<>();
-        collectChangedAsset(changedAssets, "scripts", currentPackage,
-                currentPackage == null ? null : currentPackage.releaseFile().scripts().stream().map(AiPackageScriptFile::id).toList(),
-                draft.bundle().scripts().keySet().stream().toList());
-        collectChangedAsset(changedAssets, "agents", currentPackage,
-                currentPackage == null ? null : currentPackage.releaseFile().agents().stream().map(AiPackageAgentFile::id).toList(),
-                draft.bundle().agents().keySet().stream().toList());
-        collectChangedAsset(changedAssets, "toolsets", currentPackage,
-                currentPackage == null ? null : currentPackage.releaseFile().toolsets().stream().map(AiPackageToolsetFile::id).toList(),
-                draft.bundle().toolsets().keySet().stream().toList());
-        collectChangedAsset(changedAssets, "models", currentPackage,
-                currentPackage == null ? null : currentPackage.releaseFile().models().stream().map(AiPackageModelFile::id).toList(),
-                draft.bundle().models().keySet().stream().toList());
-        return new CapabilityPackageDiffSummary(
-                currentPackage == null ? "INITIAL" : "COMPARE",
-                addedEntries,
-                removedEntries,
-                changedAssets
-        );
-    }
-
-    private static void collectChangedAsset(List<String> changedAssets, String label,
-                                             CapabilityPackageDetail currentPackage,
-                                             List<String> currentIds, List<String> nextIds) {
-        List<String> sortedCurrent = nullSafeList(currentIds).stream().sorted().toList();
-        List<String> sortedNext = nextIds.stream().sorted().toList();
-        if (currentPackage == null || !Objects.equals(sortedCurrent, sortedNext)) {
-            changedAssets.add(label);
-        }
+        return CapabilityPackagePublishPreviewBuilder.buildPreview(draft, currentPackage);
     }
 }

@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * Groovy 脚本中的脚本互调桥接对象。
  */
-public class GroovyScripts {
+class GroovyScripts {
     private final ScriptInvocationService scriptInvocationService;
     private final ScriptDefinition definition;
     private final ScriptExecutionContext executionContext;
@@ -22,7 +22,7 @@ public class GroovyScripts {
      * @param definition              当前执行的脚本定义
      * @param executionContext        脚本执行上下文
      */
-    public GroovyScripts(ScriptInvocationService scriptInvocationService,
+    GroovyScripts(ScriptInvocationService scriptInvocationService,
                          ScriptDefinition definition,
                          ScriptExecutionContext executionContext) {
         this.scriptInvocationService = scriptInvocationService;

@@ -35,7 +35,7 @@ class RepositoryCatalogServiceTest {
                 .setName("Demo Repository")
                 .setDescription("Demo description");
 
-        RepositoryCatalogService.ensureRepositoryWorkspace(root, repository, jsonCodec);
+        RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
 
         assertThat(Files.isDirectory(root.resolve("tools"))).isTrue();
         assertThat(Files.isDirectory(root.resolve("plugins"))).isTrue();
@@ -58,7 +58,7 @@ class RepositoryCatalogServiceTest {
                 .setId("repo-2")
                 .setDescription("Only description");
 
-        RepositoryCatalogService.ensureRepositoryWorkspace(root, repository, jsonCodec);
+        RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
 
         RepositoryIndexFile index = objectMapper.readValue(
                 Files.readString(root.resolve("actiondock.repository.json")),
@@ -248,21 +248,21 @@ class RepositoryCatalogServiceTest {
                 }
                 """;
 
-        assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+        assertThatThrownBy(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 indexJson,
                 RepositoryIndexFile.class,
                 "actiondock.repository.json"
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("tools[0].releaseNotes");
-        assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+        assertThatThrownBy(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 toolJson,
                 ToolFile.class,
                 "tool.json"
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("tool.json releaseNotes");
-        assertThatThrownBy(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+        assertThatThrownBy(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 pluginJson,
                 PluginFile.class,
                 "plugin.json"
@@ -335,17 +335,17 @@ class RepositoryCatalogServiceTest {
                 }
                 """;
 
-        assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+        assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 indexJson,
                 RepositoryIndexFile.class,
                 "actiondock.repository.json"
         )).doesNotThrowAnyException();
-        assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+        assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 toolJson,
                 ToolFile.class,
                 "tool.json"
         )).doesNotThrowAnyException();
-        assertThatCode(() -> RepositoryCatalogService.assertLatestRepositoryMetadata(
+        assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 pluginJson,
                 PluginFile.class,
                 "plugin.json"
@@ -433,7 +433,7 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatThrownBy(() -> RepositoryCatalogService.assertPluginVersionAvailable(
+        assertThatThrownBy(() -> RepositoryCatalogTypes.assertPluginVersionAvailable(
                 "repo-1",
                 index,
                 "demo-plugin",
@@ -463,9 +463,9 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatCode(() -> RepositoryCatalogService.assertPluginVersionAvailable("repo-1", index, "demo-plugin", "1.0.1"))
+        assertThatCode(() -> RepositoryCatalogTypes.assertPluginVersionAvailable("repo-1", index, "demo-plugin", "1.0.1"))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> RepositoryCatalogService.assertPluginVersionAvailable("repo-1", index, "other-plugin", "1.0.0"))
+        assertThatCode(() -> RepositoryCatalogTypes.assertPluginVersionAvailable("repo-1", index, "other-plugin", "1.0.0"))
                 .doesNotThrowAnyException();
     }
 

@@ -59,7 +59,6 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AiRuntimePolicyTest {
     private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = AiAgentRuntimeImpl.DISABLE_OUTER_TIMEOUT_METADATA_KEY;
@@ -411,64 +410,6 @@ class AiRuntimePolicyTest {
                     AiRunStatus.SUCCESS,
                     Map.of("text", "done"),
                     List.of(new AiAgentStep("step-1", null, 1, AiStepType.MODEL_REASONING, modelProfile.getId(), null, null, Map.of(), Map.of("text", "done"), "SUCCESS", 1L, null, LocalDateTime.now())),
-                    AiUsage.empty(),
-                    null
-            );
-        }
-    }
-
-    private static final class StructuredProviderClient extends CapturingProviderClient {
-        private final Map<String, Object> output;
-
-        private StructuredProviderClient(Map<String, Object> output) {
-            this.output = output;
-        }
-
-        @Override
-        public AiAgentRunResult runAgent(AiAgentProfile agentProfile,
-                                         AiModelProfile modelProfile,
-                                         AiAgentRunRequest request,
-                                         AiAgentRunContext context,
-                                         AiToolRegistry toolRegistry) {
-            super.context = context;
-            super.request = request;
-            return new AiAgentRunResult(
-                    null,
-                    AiRunStatus.SUCCESS,
-                    output,
-                    List.of(new AiAgentStep("step-1", null, 1, AiStepType.MODEL_REASONING, modelProfile.getId(), null, null, Map.of(), output, "SUCCESS", 1L, null, LocalDateTime.now())),
-                    AiUsage.empty(),
-                    null
-            );
-        }
-    }
-
-    private static final class StepOutputProviderClient extends CapturingProviderClient {
-        private final String toolName;
-        private final Map<String, Object> toolOutput;
-
-        private StepOutputProviderClient(Map<String, Object> toolOutput) {
-            this("propose_script_draft", toolOutput);
-        }
-
-        private StepOutputProviderClient(String toolName, Map<String, Object> toolOutput) {
-            this.toolName = toolName;
-            this.toolOutput = toolOutput;
-        }
-
-        @Override
-        public AiAgentRunResult runAgent(AiAgentProfile agentProfile,
-                                         AiModelProfile modelProfile,
-                                         AiAgentRunRequest request,
-                                         AiAgentRunContext context,
-                                         AiToolRegistry toolRegistry) {
-            super.context = context;
-            super.request = request;
-            return new AiAgentRunResult(
-                    null,
-                    AiRunStatus.SUCCESS,
-                    Map.of("text", "used tool"),
-                    List.of(new AiAgentStep("step-1", null, 1, AiStepType.TOOL_CALL, modelProfile.getId(), toolName, AiToolPermission.PROPOSE_CHANGE, Map.of(), toolOutput, "SUCCESS", 1L, null, LocalDateTime.now())),
                     AiUsage.empty(),
                     null
             );

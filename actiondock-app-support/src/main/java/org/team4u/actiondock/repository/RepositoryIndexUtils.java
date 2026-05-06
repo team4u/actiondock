@@ -1,0 +1,75 @@
+package org.team4u.actiondock.repository;
+
+import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.shared.NormalizeUtils;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.function.Function;
+
+/**
+ * 仓库索引文件操作工具类。
+ *
+ * <p>提供索引文件的列表替换（with*）和条目更新（upsertSorted）等静态方法，
+ * 从 {@link RepositoryCatalogTypes} 中提取以便独立维护。</p>
+ *
+ * @author jay.wu
+ */
+final class RepositoryIndexUtils {
+
+    static final int DEFAULT_VERSION = 1;
+
+    private RepositoryIndexUtils() {
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile withTools(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                 RepositoryDefinition repository,
+                                                 List<RepositoryCatalogTypes.RepositoryIndexEntry> tools) {
+        return withReplaced(current, repository, tools, null, null, null);
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile withPlugins(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                   RepositoryDefinition repository,
+                                                   List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins) {
+        return withReplaced(current, repository, null, plugins, null, null);
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile withPackages(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                    RepositoryDefinition repository,
+                                                    List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages) {
+        return withReplaced(current, repository, null, null, packages, null);
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile withSkills(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                  RepositoryDefinition repository,
+                                                  List<RepositoryCatalogTypes.RepositorySkillIndexEntry> skills) {
+        return withReplaced(current, repository, null, null, null, skills);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Record> RepositoryCatalogTypes.RepositoryIndexFile withReplaced(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                                        RepositoryDefinition repository,
+                                                                        List<RepositoryCatalogTypes.RepositoryIndexEntry> tools,
+                                                                        List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins,
+                                                                        List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages,
+                                                                        List<RepositoryCatalogTypes.RepositorySkillIndexEntry> skills) {
+        return new RepositoryCatalogTypes.RepositoryIndexFile(
+                DEFAULT_VERSION,
+                repository.getName(),
+                NormalizeUtils.normalizeNullable(repository.getDescription()),
+                tools != null ? tools : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.tools())),
+                plugins != null ? plugins : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.plugins())),
+                packages != null ? packages : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.packages())),
+                skills != null ? skills : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.skills()))
+        );
+    }
+
+    static <T> List<T> upsertSorted(List<T> entries, T newEntry, Function<T, String> idExtractor) {
+        List<T> updated = new ArrayList<>(entries);
+        updated.removeIf(item -> idExtractor.apply(item).equals(idExtractor.apply(newEntry)));
+        updated.add(newEntry);
+        updated.sort(Comparator.comparing(idExtractor));
+        return updated;
+    }
+}

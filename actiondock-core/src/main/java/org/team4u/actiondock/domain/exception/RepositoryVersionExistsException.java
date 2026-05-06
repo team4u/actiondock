@@ -24,16 +24,12 @@ public class RepositoryVersionExistsException extends IllegalArgumentException {
     }
 
     private static String assetLabel(String assetKind) {
-        if (KIND_PLUGIN.equals(assetKind)) {
-            return "插件";
-        }
-        if (KIND_CAPABILITY_PACKAGE.equals(assetKind)) {
-            return "能力包";
-        }
-        if (KIND_AI_PACKAGE.equals(assetKind)) {
-            return "AI 能力包";
-        }
-        return "工具";
+        return switch (assetKind) {
+            case KIND_PLUGIN -> "插件";
+            case KIND_CAPABILITY_PACKAGE -> "能力包";
+            case KIND_AI_PACKAGE -> "AI 能力包";
+            default -> "工具";
+        };
     }
 
     public String getAssetKind() {

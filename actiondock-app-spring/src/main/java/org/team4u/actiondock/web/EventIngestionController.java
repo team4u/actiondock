@@ -52,12 +52,14 @@ public class EventIngestionController {
     private static Map<String, Object> readQuery(HttpServletRequest request) {
         Map<String, Object> query = new LinkedHashMap<>();
         request.getParameterMap().forEach((key, value) -> {
-            if (value == null || value.length == 0) {
+            if (value == null) {
                 query.put(key, null);
-            } else if (value.length == 1) {
-                query.put(key, value[0]);
             } else {
-                query.put(key, java.util.List.of(value));
+                switch (value.length) {
+                    case 0 -> query.put(key, null);
+                    case 1 -> query.put(key, value[0]);
+                    default -> query.put(key, java.util.List.of(value));
+                }
             }
         });
         return query;

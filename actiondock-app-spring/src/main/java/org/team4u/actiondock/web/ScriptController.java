@@ -244,6 +244,6 @@ public class ScriptController {
     }
 
     private ScriptDefinition toResponse(ScriptDefinition definition, boolean includeUiSchema) {
-        return includeUiSchema ? definition : definition.withoutUiSchema();
+        return includeUiSchema ? definition : ScriptViewMapper.withoutUiSchema(definition);
     }
 }

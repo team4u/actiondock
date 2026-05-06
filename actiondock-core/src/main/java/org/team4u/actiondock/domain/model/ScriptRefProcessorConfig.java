@@ -2,7 +2,7 @@ package org.team4u.actiondock.domain.model;
 
 public class ScriptRefProcessorConfig {
 
-    public static final String DEFAULT_VERSION_MODE = "PUBLISHED";
+    private static final String DEFAULT_VERSION_MODE = "PUBLISHED";
 
     private String scriptId;
     private String versionMode = DEFAULT_VERSION_MODE;

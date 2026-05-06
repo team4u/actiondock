@@ -1,5 +1,7 @@
 package org.team4u.actiondock.ai.tool;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.team4u.actiondock.ai.api.AiTool;
 import org.team4u.actiondock.ai.api.AiToolExecutionContext;
 import org.team4u.actiondock.ai.api.AiToolExecutionResult;
@@ -163,7 +165,7 @@ public final class ActionDockAiTools {
     }
 
     private static Map<String, Object> listPluginActions(PluginRegistryRepository repository, String pluginId) {
-        List<PluginRegistration> registrations = pluginId == null || pluginId.isBlank()
+        List<PluginRegistration> registrations = NormalizeUtils.isBlank(pluginId)
                 ? repository.findAll()
                 : repository.findByPluginId(pluginId).map(List::of).orElse(List.of());
         return Map.of("plugins", registrations.stream().map(ActionDockAiTools::pluginMap).toList());
@@ -206,7 +208,7 @@ public final class ActionDockAiTools {
     }
 
     private static <T> T requireEntity(String id, String entityName, Function<String, Optional<T>> finder) {
-        if (id == null || id.isBlank()) {
+        if (NormalizeUtils.isBlank(id)) {
             throw new IllegalArgumentException(entityName + " 不能为空");
         }
         return finder.apply(id)
@@ -222,7 +224,7 @@ public final class ActionDockAiTools {
     }
 
     private static String requireContextScriptId(AiToolExecutionContext context) {
-        if (context == null || context.scriptId() == null || context.scriptId().isBlank()) {
+        if (context == null || NormalizeUtils.isBlank(context.scriptId())) {
             throw new IllegalArgumentException("当前上下文没有关联脚本");
         }
         return context.scriptId();
@@ -338,10 +340,6 @@ public final class ActionDockAiTools {
 
     private static String value(String value) {
         return value == null ? "" : value;
-    }
-
-    static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static String time(LocalDateTime value) {

@@ -8,7 +8,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { listAiAgents, listAiModels, listAiRuns, listAiTools, listAiToolsets } from "../../api";
+import { listAiAgents, listAiModels, listAiRuns, listAiTools, listAiToolsets } from "../../features/ai/api";
 import { getAgentToolSummary } from "../../aiAgentTools";
 import { Col } from "../../components/SafeCol";
 import { PageHeader } from "../../components/PageHeader";

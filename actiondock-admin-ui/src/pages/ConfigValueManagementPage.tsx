@@ -32,7 +32,6 @@ import type { TableRowSelection } from "antd/es/table/interface";
 import type { ChangeEvent, Key } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ApiError,
   copyConfigValueAsLocalOverride,
   createConfigValue,
   deleteConfigValue,
@@ -40,11 +39,12 @@ import {
   listConfigValues,
   restoreConfigValueRepositoryDefault,
   updateConfigValue
-} from "../api";
+} from "../features/settings/api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useCopyMessage } from "../hooks/useCopyMessage";
 import { buildImpactPreview, buildImpactSummary, shouldMaskConfigValue } from "../configValueInsights";
+import { ApiError } from "../shared/api/httpClient";
 import {
   analyzeConfigValueImport,
   buildConfigValueExportBundle,

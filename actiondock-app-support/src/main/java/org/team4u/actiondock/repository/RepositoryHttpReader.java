@@ -1,7 +1,7 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.port.JsonCodec;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -22,7 +22,7 @@ class RepositoryHttpReader {
 
     <T> T readHttpJson(String url, Class<T> type) {
         String text = readHttpText(url);
-        RepositoryCatalogService.assertLatestRepositoryMetadata(text, type, url);
+        RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(text, type, url);
         return jsonCodec.read(text, type);
     }
 
@@ -45,7 +45,7 @@ class RepositoryHttpReader {
     }
 
     static String joinHttpPath(String baseUrl, String relativePath) {
-        String normalizedBase = SkillFileUtils.normalize(baseUrl, "仓库地址不能为空");
+        String normalizedBase = NormalizeUtils.normalize(baseUrl, "仓库地址不能为空");
         while (normalizedBase.endsWith("/")) {
             normalizedBase = normalizedBase.substring(0, normalizedBase.length() - 1);
         }

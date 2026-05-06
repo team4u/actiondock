@@ -4,6 +4,7 @@ import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillArchiveManager;
 import org.team4u.actiondock.skill.SkillTypes;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -51,10 +52,10 @@ final class SkillRepositoryPublisher {
             SkillTypes.SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(
                     skillRoot, fileName, false, catalog.jsonCodec());
 
-            String normalizedVersion = SkillFileUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
-            String skillId = SkillFileUtils.normalize(validation.skillId(), "skillId 不能为空");
+            String normalizedVersion = NormalizeUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
+            String skillId = NormalizeUtils.normalize(validation.skillId(), "skillId 不能为空");
 
-            RepositoryCatalogService.assertSkillVersionAvailable(
+            RepositoryCatalogTypes.assertSkillVersionAvailable(
                     session.repository().getId(), session.index(), skillId, normalizedVersion);
             copySkillToRepository(session, skillRoot, validation, normalizedVersion);
             updateRepositorySkillIndex(session, validation, normalizedVersion, releaseNotes);
@@ -92,7 +93,7 @@ final class SkillRepositoryPublisher {
 
         RepositorySkillIndexEntry next = RepositorySkillIndexEntry.fromSkillValidation(validation, version, releaseNotes);
         List<RepositorySkillIndexEntry> entries =
-                RepositoryCatalogTypes.upsertSorted(catalog.safeSkills(current), next, RepositorySkillIndexEntry::id);
-        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.withSkills(current, repository, entries));
+                RepositoryIndexUtils.upsertSorted(current.safeSkills(), next, RepositorySkillIndexEntry::id);
+        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withSkills(current, repository, entries));
     }
 }

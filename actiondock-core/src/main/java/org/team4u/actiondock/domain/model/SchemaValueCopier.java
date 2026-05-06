@@ -56,45 +56,4 @@ public final class SchemaValueCopier {
         }
         return value;
     }
-
-    /**
-     * 清洗 Schema Map，递归移除 UI 扩展字段（ui、x-ui）。
-     *
-     * @param schema 原始 Schema
-     * @return 清洗后的 Schema Map
-     */
-    public static Map<String, Object> sanitizeSchema(Map<String, Object> schema) {
-        if (schema == null || schema.isEmpty()) {
-            return new LinkedHashMap<>();
-        }
-        Object sanitized = sanitizeValue(schema);
-        if (sanitized instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, value) -> result.put(String.valueOf(key), value));
-            return result;
-        }
-        return new LinkedHashMap<>();
-    }
-
-    private static Object sanitizeValue(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, item) -> {
-                String fieldName = String.valueOf(key);
-                if ("ui".equals(fieldName) || "x-ui".equals(fieldName)) {
-                    return;
-                }
-                result.put(fieldName, sanitizeValue(item));
-            });
-            return result;
-        }
-        if (value instanceof List<?> list) {
-            List<Object> result = new ArrayList<>(list.size());
-            for (Object item : list) {
-                result.add(sanitizeValue(item));
-            }
-            return List.copyOf(result);
-        }
-        return value;
-    }
 }

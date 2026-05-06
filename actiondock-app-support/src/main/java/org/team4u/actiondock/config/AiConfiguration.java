@@ -1,5 +1,7 @@
 package org.team4u.actiondock.config;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -35,7 +37,7 @@ public class AiConfiguration {
 
     @Bean
     public AiSecretResolver aiSecretResolver(ConfigValueApplicationService configValueApplicationService) {
-        return key -> key == null || key.isBlank() ? null : configValueApplicationService.snapshot().get(key);
+        return key -> NormalizeUtils.isBlank(key) ? null : configValueApplicationService.snapshot().get(key);
     }
 
     @Bean

@@ -14,7 +14,7 @@ public final class PythonRequirementsSupport {
     private PythonRequirementsSupport() {
     }
 
-    public static String normalizeForStorage(String requirements) {
+    private static String normalizeForStorage(String requirements) {
         if (requirements == null) {
             return null;
         }
@@ -84,7 +84,7 @@ public final class PythonRequirementsSupport {
         final List<String> packageLines = new ArrayList<>();
     }
 
-    public static void validateScriptDefinition(ScriptDefinition definition) {
+    static void validateScriptDefinition(ScriptDefinition definition) {
         if (definition == null) {
             return;
         }

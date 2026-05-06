@@ -28,7 +28,7 @@ import {
   listSkillTargets,
   scanGithubSkillCollection,
   validateSkillArchive
-} from "../api";
+} from "../features/skills/api";
 import { PageHeader } from "../components/PageHeader";
 import type { GithubSkillInstallResponse, GithubSkillScanItem, GithubSkillScanResponse, SkillTarget } from "../types";
 import { getErrorMessage } from "../utils";

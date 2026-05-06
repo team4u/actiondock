@@ -1,5 +1,7 @@
 package org.team4u.actiondock.schedule;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -144,7 +146,7 @@ public class ScriptScheduleDispatcher {
     }
 
     private boolean hasActiveExecution(String executionId) {
-        if (executionId == null || executionId.isBlank()) {
+        if (NormalizeUtils.isBlank(executionId)) {
             return false;
         }
         return executionRepository.findById(executionId)

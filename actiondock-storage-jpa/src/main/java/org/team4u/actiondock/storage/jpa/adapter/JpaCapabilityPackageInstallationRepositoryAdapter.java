@@ -8,7 +8,6 @@ import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.storage.jpa.entity.CapabilityPackageInstallationEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataCapabilityPackageInstallationRepository;
 
-import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -35,11 +34,6 @@ public class JpaCapabilityPackageInstallationRepositoryAdapter implements Capabi
     @Override
     public Optional<CapabilityPackageInstallation> findByEntryAgentId(String entryAgentId) {
         return repository.findByEntryAgentId(entryAgentId).map(this::toDomain);
-    }
-
-    @Override
-    public List<CapabilityPackageInstallation> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
     }
 
     @Override

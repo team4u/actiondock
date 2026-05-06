@@ -1,5 +1,7 @@
 package org.team4u.actiondock.plugin;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.pf4j.PluginWrapper;
 import org.pf4j.DefaultPluginManager;
 import org.team4u.actiondock.domain.model.PluginActionMetadata;
@@ -69,7 +71,7 @@ class PluginViewMapper {
         }
         return new PluginReferenceView()
                 .setPluginId(pluginId)
-                .setName(manifest.getName() == null || manifest.getName().isBlank() ? pluginId : manifest.getName())
+                .setName(NormalizeUtils.isBlank(manifest.getName()) ? pluginId : manifest.getName())
                 .setDescription(manifest.getDescription())
                 .setVersion(manifest.getVersion())
                 .setSourceType(PluginReferenceSourceType.SYSTEM)
@@ -79,7 +81,7 @@ class PluginViewMapper {
                         .toList());
     }
 
-    static PluginActionView toActionView(PluginActionMetadata actionMetadata) {
+    private static PluginActionView toActionView(PluginActionMetadata actionMetadata) {
         return new PluginActionView()
                 .setAction(actionMetadata.getAction())
                 .setTitle(actionMetadata.getTitle())
@@ -89,7 +91,7 @@ class PluginViewMapper {
                 .setExampleArgs(actionMetadata.getExampleArgs());
     }
 
-    static PluginActionView toActionView(PluginActionManifest action) {
+    private static PluginActionView toActionView(PluginActionManifest action) {
         return new PluginActionView()
                 .setAction(action.getAction())
                 .setTitle(action.getTitle())
@@ -99,7 +101,7 @@ class PluginViewMapper {
                 .setExampleArgs(action.getExampleArgs());
     }
 
-    static PluginActionMetadata toActionMetadata(PluginActionManifest action) {
+    private static PluginActionMetadata toActionMetadata(PluginActionManifest action) {
         return new PluginActionMetadata()
                 .setAction(action.getAction())
                 .setTitle(action.getTitle())
@@ -116,7 +118,7 @@ class PluginViewMapper {
         LocalDateTime now = LocalDateTime.now();
         return new PluginRegistration()
                 .setPluginId(manifest.getPluginId())
-                .setName(manifest.getName() == null || manifest.getName().isBlank() ? manifest.getPluginId() : manifest.getName())
+                .setName(NormalizeUtils.isBlank(manifest.getName()) ? manifest.getPluginId() : manifest.getName())
                 .setDescription(manifest.getDescription())
                 .setVersion(manifest.getVersion())
                 .setFileName(fileName)

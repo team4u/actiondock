@@ -363,6 +363,23 @@ export function buildScriptDetailCurlCommand({
   return joinCommandLines(lines);
 }
 
+export function buildCapabilityDetailCurlCommand({
+  apiKey,
+  capabilityId,
+  origin
+}: {
+  apiKey?: string;
+  capabilityId: string;
+  origin: string;
+}): string {
+  const lines = ["curl -X GET"];
+  if (apiKey) {
+    lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
+  }
+  lines.push(`  ${shellQuote(`${origin}/api/capabilities/${capabilityId}`)}`);
+  return joinCommandLines(lines);
+}
+
 export function buildScriptDetailPowerShellCommand({
   apiKey,
   origin,
@@ -376,6 +393,22 @@ export function buildScriptDetailPowerShellCommand({
     apiKey,
     method: "Get",
     url: `${origin}/api/scripts/${scriptId}/published`
+  });
+}
+
+export function buildCapabilityDetailPowerShellCommand({
+  apiKey,
+  capabilityId,
+  origin
+}: {
+  apiKey?: string;
+  capabilityId: string;
+  origin: string;
+}): string {
+  return buildPowerShellJsonRequestSection({
+    apiKey,
+    method: "Get",
+    url: `${origin}/api/capabilities/${capabilityId}`
   });
 }
 
@@ -394,6 +427,24 @@ export function buildScriptDetailCliCommand({
 }): string {
   return buildCliCommand("actiondock script get", [
     quoteCliValue(scriptId, environment),
+    ...(draft ? ["--draft"] : []),
+    ...buildCliCommonFlags({ apiKey, environment })
+  ], environment);
+}
+
+export function buildCapabilityDetailCliCommand({
+  apiKey,
+  capabilityId,
+  draft = false,
+  environment
+}: {
+  apiKey?: string;
+  capabilityId: string;
+  draft?: boolean;
+  environment: CliEnvironment;
+}): string {
+  return buildCliCommand("actiondock capability get", [
+    quoteCliValue(capabilityId, environment),
     ...(draft ? ["--draft"] : []),
     ...buildCliCommonFlags({ apiKey, environment })
   ], environment);
@@ -484,6 +535,41 @@ export function buildExecuteCurlCommand({
   return joinCommandLines(lines);
 }
 
+export function buildCapabilityExecuteCurlCommand({
+  apiKey,
+  capabilityId,
+  draft = false,
+  input,
+  mode,
+  origin
+}: {
+  apiKey?: string;
+  capabilityId: string;
+  draft?: boolean;
+  input: Record<string, unknown>;
+  mode: SubmitMode;
+  origin: string;
+}): string {
+  const lines = [
+    "curl -X POST",
+    `  -H ${shellQuote("Content-Type: application/json")}`
+  ];
+  if (apiKey) {
+    lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
+  }
+  lines.push(
+    `  -d ${shellQuote(
+      JSON.stringify({
+        input,
+        draft,
+        ...(mode === "SYNC" ? {} : { mode })
+      })
+    )}`
+  );
+  lines.push(`  ${shellQuote(`${origin}/api/capabilities/${capabilityId}/execute`)}`);
+  return joinCommandLines(lines);
+}
+
 export function buildExecutePowerShellCommand({
   apiKey,
   input,
@@ -508,6 +594,33 @@ export function buildExecutePowerShellCommand({
   });
 }
 
+export function buildCapabilityExecutePowerShellCommand({
+  apiKey,
+  capabilityId,
+  draft = false,
+  input,
+  mode,
+  origin
+}: {
+  apiKey?: string;
+  capabilityId: string;
+  draft?: boolean;
+  input: Record<string, unknown>;
+  mode: SubmitMode;
+  origin: string;
+}): string {
+  return buildPowerShellJsonRequestSection({
+    apiKey,
+    body: {
+      input,
+      draft,
+      ...(mode === "SYNC" ? {} : { mode })
+    },
+    method: "Post",
+    url: `${origin}/api/capabilities/${capabilityId}/execute`
+  });
+}
+
 export function buildExecuteCliCommand({
   apiKey,
   draft = false,
@@ -527,6 +640,34 @@ export function buildExecuteCliCommand({
 }): string {
   return buildCliCommand("actiondock script run", [
     quoteCliValue(scriptId, environment),
+    ...(draft ? ["--draft"] : []),
+    ...buildCliCommonFlags({ apiKey, environment }),
+    ...(mode === "SYNC" ? [] : [buildCliFlag("mode", mode.toLowerCase(), environment)]),
+    ...buildCliObjectInputFlags({
+      input,
+      jsonFlagName: "input-json",
+      environment
+    })
+  ], environment);
+}
+
+export function buildCapabilityExecuteCliCommand({
+  apiKey,
+  capabilityId,
+  draft = false,
+  environment,
+  input,
+  mode
+}: {
+  apiKey?: string;
+  capabilityId: string;
+  draft?: boolean;
+  environment: CliEnvironment;
+  input: Record<string, unknown>;
+  mode: SubmitMode;
+}): string {
+  return buildCliCommand("actiondock capability run", [
+    quoteCliValue(capabilityId, environment),
     ...(draft ? ["--draft"] : []),
     ...buildCliCommonFlags({ apiKey, environment }),
     ...(mode === "SYNC" ? [] : [buildCliFlag("mode", mode.toLowerCase(), environment)]),

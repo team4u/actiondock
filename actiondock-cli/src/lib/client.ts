@@ -7,6 +7,7 @@ import { URL } from "node:url";
 import { ActionDockCliError, isRecord } from "./error.js";
 import type {
   ApiEnvelope,
+  CapabilityView,
   EventDispatchRecord,
   EventIngestionView,
   EventRecord,
@@ -54,6 +55,47 @@ interface RequestOptions {
 
 export class ActionDockClient {
   constructor(private readonly options: ClientOptions) {}
+
+  async listCapabilities(): Promise<CapabilityView[]> {
+    return this.requestJson<CapabilityView[]>("/api/capabilities");
+  }
+
+  async getCapability(capabilityId: string): Promise<CapabilityView> {
+    return this.requestJson<CapabilityView>(`/api/capabilities/${capabilityId}`);
+  }
+
+  async patchCapability(capabilityId: string, patch: Record<string, unknown>): Promise<CapabilityView> {
+    return this.requestJson<CapabilityView>(`/api/capabilities/${capabilityId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        draftBinding: patch
+      })
+    });
+  }
+
+  async publishCapability(capabilityId: string): Promise<CapabilityView> {
+    return this.requestJson<CapabilityView>(`/api/capabilities/${capabilityId}/publish`, {
+      method: "POST"
+    });
+  }
+
+  async discardCapabilityDraft(capabilityId: string): Promise<CapabilityView> {
+    return this.requestJson<CapabilityView>(`/api/capabilities/${capabilityId}/discard-draft`, {
+      method: "POST"
+    });
+  }
+
+  async executeCapability(options: ExecuteOptions, draft: boolean): Promise<ExecutionResponse> {
+    return this.requestJson<ExecutionResponse>(`/api/capabilities/${options.scriptId}/execute`, {
+      method: "POST",
+      body: JSON.stringify({
+        input: options.input,
+        draft,
+        mode: options.mode,
+        responseView: options.responseView
+      })
+    });
+  }
 
   async listScripts(): Promise<ScriptDefinition[]> {
     return this.requestJson<ScriptDefinition[]>("/api/scripts");

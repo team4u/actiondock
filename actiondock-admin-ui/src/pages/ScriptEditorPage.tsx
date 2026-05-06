@@ -1,1 +1,1 @@
-export { ScriptEditorPage } from "./scriptEditor/ScriptEditorPage";
+export { ScriptEditorPage } from "../features/capabilities/pages/ScriptEditorPage";

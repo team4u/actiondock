@@ -15,12 +15,12 @@ import java.util.Map;
  *
  * @author jay.wu
  */
-public class ScriptStateBridge {
+class ScriptStateBridge {
     private final SharedStateApplicationService sharedStateApplicationService;
     private final ScriptDefinition definition;
     private final ScriptExecutionContext executionContext;
 
-    public ScriptStateBridge(SharedStateApplicationService sharedStateApplicationService,
+    ScriptStateBridge(SharedStateApplicationService sharedStateApplicationService,
                              ScriptDefinition definition,
                              ScriptExecutionContext executionContext) {
         this.sharedStateApplicationService = sharedStateApplicationService == null

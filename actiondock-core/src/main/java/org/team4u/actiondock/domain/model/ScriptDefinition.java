@@ -321,7 +321,7 @@ public class ScriptDefinition {
      *
      * @return 如果存在存储的发布快照返回 true
      */
-    public boolean hasStoredPublishedSnapshot() {
+    private boolean hasStoredPublishedSnapshot() {
         return publishedSnapshot != null;
     }
 
@@ -477,7 +477,7 @@ public class ScriptDefinition {
      * @return 当前实例
      * @throws IllegalStateException 如果没有已发布快照
      */
-    public ScriptDefinition revertToPublished() {
+    ScriptDefinition revertToPublished() {
         PublishedScriptSnapshot snapshot = getStoredSnapshot();
         if (snapshot == null) {
             throw new IllegalStateException("没有已发布快照可恢复: " + id);
@@ -525,42 +525,6 @@ public class ScriptDefinition {
         if (getSourceCommit() == null) setSourceCommit(existing.getSourceCommit());
         if (getSourceDigest() == null) setSourceDigest(existing.getSourceDigest());
         if (getSourceSyncedAt() == null) setSourceSyncedAt(existing.getSourceSyncedAt());
-    }
-
-    /**
-     * 创建去除 UI 扩展字段的脚本定义副本。
-     * <p>
-     * 递归移除输入输出 Schema 中的 ui、x-ui 字段。
-     *
-     * @return 去除 UI 字段的脚本定义副本
-     */
-    public ScriptDefinition withoutUiSchema() {
-        PublishedScriptSnapshot sanitizedSnapshot = getPublishedSnapshot();
-        if (sanitizedSnapshot != null) {
-            sanitizedSnapshot = new PublishedScriptSnapshot()
-                    .setName(sanitizedSnapshot.getName())
-                    .setType(sanitizedSnapshot.getType())
-                    .setPackaging(sanitizedSnapshot.getPackaging())
-                    .setSource(sanitizedSnapshot.getSource())
-                    .setPythonRequirements(sanitizedSnapshot.getPythonRequirements())
-                    .setInputSchema(SchemaValueCopier.sanitizeSchema(sanitizedSnapshot.getInputSchema()))
-                    .setOutputSchema(SchemaValueCopier.sanitizeSchema(sanitizedSnapshot.getOutputSchema()))
-                    .setScriptDependencies(sanitizedSnapshot.getScriptDependencies())
-                    .setAiDependencies(sanitizedSnapshot.getAiDependencies());
-        }
-        return copyMetadataTo(new ScriptDefinition()
-                .setName(name)
-                .setType(type)
-                .setSource(source)
-                .setPythonRequirements(pythonRequirements)
-                .setPackaging(packaging)
-                .setInputSchema(SchemaValueCopier.sanitizeSchema(inputSchema))
-                .setOutputSchema(SchemaValueCopier.sanitizeSchema(outputSchema))
-                .setPublishedSnapshot(sanitizedSnapshot)
-                .setStatus(status)
-                .setVersion(version)
-                .setScriptDependencies(scriptDependencies)
-                .setAiDependencies(aiDependencies));
     }
 
     public ScriptDefinition fullCopy() {

@@ -1,15 +1,11 @@
 package org.team4u.actiondock.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
-import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
@@ -25,13 +21,13 @@ import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
-import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.repository.RepositoryIndexUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,15 +37,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -58,16 +51,6 @@ import java.util.function.Function;
  * @author jay.wu
  */
 public class RepositoryCatalogService {
-    private static final ObjectMapper METADATA_OBJECT_MAPPER = new ObjectMapper();
-    private static final Set<Class<?>> METADATA_TYPES = Set.of(
-            RepositoryCatalogTypes.RepositoryIndexFile.class,
-            RepositoryCatalogTypes.ToolFile.class,
-            RepositoryCatalogTypes.PluginFile.class,
-            RepositoryCatalogTypes.SkillFile.class,
-            RepositoryCatalogTypes.CapabilityPackageManifestFile.class,
-            RepositoryCatalogTypes.CapabilityPackageReleaseFile.class
-    );
-    private static final String ERR_MISSING_RELEASE_NOTES = "仓库元数据缺少 releaseNotes 字段: ";
 
     /**
      * 仓库接口分组，将所有仓储端口聚合为一个上下文。
@@ -102,6 +85,7 @@ public class RepositoryCatalogService {
     private final PluginArtifactResolverRegistry pluginArtifactResolverRegistry;
     private final Path repositoriesRoot;
     private final RepositoryGitOperations gitOps;
+    private final RepositoryDefinitionService definitionService;
     private final PluginRepositoryPublisher pluginRepositoryPublisher;
     private final SkillRepositoryPublisher skillPublisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
@@ -136,10 +120,11 @@ public class RepositoryCatalogService {
         this.pluginArtifactResolverRegistry = pluginArtifactResolverRegistry == null
                 ? new PluginArtifactResolverRegistry(List.of(new LocalPluginArtifactResolver(), new HttpPluginArtifactResolver()))
                 : pluginArtifactResolverRegistry;
-        this.repositoriesRoot = SkillFileUtils.normalizePath(Path.of(properties == null || properties.getHomeDir() == null || properties.getHomeDir().isBlank()
+        this.repositoriesRoot = NormalizeUtils.normalizePath(Path.of(properties == null || NormalizeUtils.isBlank(properties.getHomeDir())
                 ? AppProperties.defaultHomeDir()
                 : properties.getHomeDir()).resolve("repositories"));
         this.gitOps = new RepositoryGitOperations(repositoriesRoot);
+        this.definitionService = new RepositoryDefinitionService(repos.repositoryDefinitionRepository(), jsonCodec, repositoriesRoot);
         this.aiPackageService = new RepositoryAiPackageService(this, repos, this.services);
         this.pluginRepositoryPublisher = new PluginRepositoryPublisher(this, aiPackageService);
         this.skillPublisher = new SkillRepositoryPublisher(this);
@@ -169,99 +154,30 @@ public class RepositoryCatalogService {
     }
 
     public List<RepositoryDefinition> listRepositories() {
-        return repos.repositoryDefinitionRepository().findAll().stream()
-                .sorted(Comparator.comparing(RepositoryDefinition::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
+        return definitionService.listRepositories();
     }
 
     public RepositoryDefinition getRepository(String repositoryId) {
-        return repos.repositoryDefinitionRepository().findById(repositoryId)
-                .orElseThrow(() -> new IllegalArgumentException("仓库不存在: " + repositoryId));
+        return definitionService.getRepository(repositoryId);
     }
 
     public RepositoryDefinition saveRepository(RepositoryDefinition definition) {
-        RepositoryDefinition target = definition == null ? new RepositoryDefinition() : definition;
-        String id = SkillFileUtils.normalize(target.getId(), "仓库 ID 不能为空");
-        String type = validateRepositoryType(target);
-        String trustLevel = validateTrustLevel(target);
-        String usage = validateRepositoryUsage(target, type);
-
-        LocalDateTime now = LocalDateTime.now();
-        RepositoryDefinition existing = repos.repositoryDefinitionRepository().findById(id).orElse(null);
-        RepositoryDefinition saved = repos.repositoryDefinitionRepository().save(
-                buildRepositoryDefinition(id, target, type, trustLevel, usage, existing, now)
-        );
-        if (REPO_TYPE_LOCAL_DIR.equals(type)) {
-            ensureLocalDirRepository(saved);
-            saved.setLastSyncedAt(now).setUpdatedAt(now);
-            return repos.repositoryDefinitionRepository().save(saved);
-        }
-        return saved;
-    }
-
-    private String validateRepositoryType(RepositoryDefinition target) {
-        String type = SkillFileUtils.normalizeOrDefault(target.getType(), REPO_TYPE_GIT).toUpperCase(Locale.ROOT);
-        if (!List.of(REPO_TYPE_GIT, REPO_TYPE_HTTP, REPO_TYPE_LOCAL_DIR).contains(type)) {
-            throw new IllegalArgumentException("仓库类型仅支持 GIT / HTTP / LOCAL_DIR");
-        }
-        return type;
-    }
-
-    private String validateTrustLevel(RepositoryDefinition target) {
-        String trustLevel = SkillFileUtils.normalizeOrDefault(target.getTrustLevel(), REPO_TRUST_UNTRUSTED).toUpperCase(Locale.ROOT);
-        if (!List.of(REPO_TRUST_TRUSTED, REPO_TRUST_UNTRUSTED).contains(trustLevel)) {
-            throw new IllegalArgumentException("trustLevel 仅支持 TRUSTED / UNTRUSTED");
-        }
-        return trustLevel;
-    }
-
-    private String validateRepositoryUsage(RepositoryDefinition target, String type) {
-        String usage = SkillFileUtils.normalizeOrDefault(target.getUsage(), REPO_USAGE_DISTRIBUTION).toUpperCase(Locale.ROOT);
-        if (!List.of(REPO_USAGE_DISTRIBUTION, REPO_USAGE_DEVELOPMENT).contains(usage)) {
-            throw new IllegalArgumentException("usage 仅支持 DISTRIBUTION / DEVELOPMENT");
-        }
-        if (REPO_TYPE_HTTP.equals(type) && REPO_USAGE_DEVELOPMENT.equals(usage)) {
-            throw new IllegalArgumentException("HTTP 仓库不支持作为开发仓库");
-        }
-        return usage;
-    }
-
-    private RepositoryDefinition buildRepositoryDefinition(String id,
-                                                                   RepositoryDefinition target,
-                                                                   String type,
-                                                                   String trustLevel,
-                                                                   String usage,
-                                                                   RepositoryDefinition existing,
-                                                                   LocalDateTime now) {
-        return new RepositoryDefinition()
-                .setId(id)
-                .setName(SkillFileUtils.normalize(target.getName(), "仓库名称不能为空"))
-                .setType(type)
-                .setUrl(SkillFileUtils.normalize(target.getUrl(), "仓库地址不能为空"))
-                .setBranch(REPO_TYPE_GIT.equals(type) ? SkillFileUtils.normalizeOrDefault(target.getBranch(), DEFAULT_GIT_BRANCH) : null)
-                .setEnabled(target.isEnabled())
-                .setTrustLevel(trustLevel)
-                .setUsage(usage)
-                .setDescription(SkillFileUtils.normalizeNullable(target.getDescription()))
-                .setLastSyncedAt(existing == null ? null : existing.getLastSyncedAt())
-                .setCreatedAt(existing == null ? now : existing.getCreatedAt())
-                .setUpdatedAt(now);
+        return definitionService.saveRepository(definition);
     }
 
     public void deleteRepository(String repositoryId) {
-        getRepository(repositoryId);
-        repos.repositoryDefinitionRepository().deleteById(repositoryId);
+        definitionService.deleteRepository(repositoryId);
     }
 
     public RepositoryDefinition syncRepository(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
-        if (REPO_TYPE_GIT.equals(repository.getType())) {
-            gitOps.syncGitRepository(repository, resolveRepositoryRoot(repository));
-            ensureRepositoryWorkspace(resolveRepositoryRoot(repository), repository, jsonCodec);
-        } else if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
-            ensureLocalDirRepository(repository);
-        } else {
-            readRepositoryIndex(repository);
+        switch (repository.getType()) {
+            case REPO_TYPE_GIT -> {
+                gitOps.syncGitRepository(repository, resolveRepositoryRoot(repository));
+                RepositoryWorkspaceHelper.ensureRepositoryWorkspace(resolveRepositoryRoot(repository), repository, jsonCodec);
+            }
+            case REPO_TYPE_LOCAL_DIR -> ensureLocalDirRepository(repository);
+            default -> readRepositoryIndex(repository);
         }
         repository.setLastSyncedAt(LocalDateTime.now()).setUpdatedAt(LocalDateTime.now());
         return repos.repositoryDefinitionRepository().save(repository);
@@ -276,7 +192,7 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listRepositoryTools(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        return safeTools(index).stream()
+        return index.safeTools().stream()
                 .map(entry -> toDescriptor(repository, readToolFile(repository, entry.toolPath()), entry.toolPath()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::installedScriptId))
                 .toList();
@@ -291,7 +207,7 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.CapabilityPackageDescriptor> listCapabilityPackages(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        return safeCapabilityPackages(index).stream()
+        return index.safeCapabilityPackages().stream()
                 .map(entry -> toCapabilityPackageDescriptor(repository, readCapabilityPackageManifest(repository, entry.path()), entry.path()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.CapabilityPackageDescriptor::installationId))
                 .toList();
@@ -306,7 +222,7 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.RepositoryPluginDescriptor> listRepositoryPlugins(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        return safePlugins(index).stream()
+        return index.safePlugins().stream()
                 .map(entry -> toPluginDescriptor(repository, readPluginFile(repository, entry.pluginPath()), entry.pluginPath()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPluginDescriptor::pluginId))
                 .toList();
@@ -316,7 +232,7 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.RepositoryPluginIndexEntry entry = findEntryById(
-                safePlugins(index), pluginId, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id, "仓库插件");
+                index.safePlugins(), pluginId, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id, "仓库插件");
         RepositoryCatalogTypes.PluginFile plugin = readPluginFile(repository, entry.pluginPath());
         return new RepositoryCatalogTypes.RepositoryPluginDetail(toPluginDescriptor(repository, plugin, entry.pluginPath()), plugin);
     }
@@ -325,17 +241,17 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.RepositorySkillIndexEntry entry = findEntryById(
-                safeSkills(index), skillId, RepositoryCatalogTypes.RepositorySkillIndexEntry::id, "仓库 Skill");
+                index.safeSkills(), skillId, RepositoryCatalogTypes.RepositorySkillIndexEntry::id, "仓库 Skill");
         RepositoryCatalogTypes.SkillFile skill = readSkillFile(repository, entry.skillPath());
         String content = readRepositoryFile(repository, parentDirectoryPath(entry.skillPath()).resolve(skill.entrypointPath()));
-        return new RepositoryCatalogTypes.RepositorySkillDetail(toSkillDescriptor(repository, skill, entry.skillPath()), content);
+        return new RepositoryCatalogTypes.RepositorySkillDetail(RepositorySkillService.toSkillDescriptor(repository, skill, entry.skillPath()), content);
     }
 
     public RepositoryCatalogTypes.RepositoryToolDetail getRepositoryTool(String repositoryId, String toolId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.RepositoryIndexEntry entry = findEntryById(
-                safeTools(index), toolId, RepositoryCatalogTypes.RepositoryIndexEntry::id, "仓库工具");
+                index.safeTools(), toolId, RepositoryCatalogTypes.RepositoryIndexEntry::id, "仓库工具");
         RepositoryCatalogTypes.ToolFile tool = readToolFile(repository, entry.toolPath());
         List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
@@ -348,7 +264,7 @@ public class RepositoryCatalogService {
                 RepositoryCatalogTypes.ScheduleTemplateItem.class
         );
         String source = readRepositoryFile(repository, parentDirectoryPath(entry.toolPath()).resolve(tool.sourcePath()));
-        String pythonRequirements = tool.pythonRequirementsPath() == null || tool.pythonRequirementsPath().isBlank()
+        String pythonRequirements = NormalizeUtils.isBlank(tool.pythonRequirementsPath())
                 ? null
                 : readRepositoryFile(repository, parentDirectoryPath(entry.toolPath()).resolve(tool.pythonRequirementsPath()));
         return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
@@ -358,7 +274,7 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.CapabilityPackageIndexEntry entry = findEntryById(
-                safeCapabilityPackages(index), packageId, RepositoryCatalogTypes.CapabilityPackageIndexEntry::id, "仓库能力包");
+                index.safeCapabilityPackages(), packageId, RepositoryCatalogTypes.CapabilityPackageIndexEntry::id, "仓库能力包");
         RepositoryCatalogTypes.CapabilityPackageManifestFile manifest = readCapabilityPackageManifest(repository, entry.path());
         RepositoryCatalogTypes.CapabilityPackageReleaseFile release = readRepositoryJsonFile(repository, manifest.latestReleasePath(), RepositoryCatalogTypes.CapabilityPackageReleaseFile.class);
         List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
@@ -383,47 +299,6 @@ public class RepositoryCatalogService {
                 presetTemplate,
                 release
         );
-    }
-
-    boolean isRemoteChanged(ScriptDefinition script, RepositoryCatalogTypes.ToolSourceState state) {
-        return !Objects.equals(script.getSourceCommit(), state.commit())
-                || !Objects.equals(script.getSourceDigest(), state.digest());
-    }
-
-    boolean isLocalChanged(ScriptDefinition script, String localDigest) {
-        return !Objects.equals(script.getSourceDigest(), localDigest);
-    }
-
-    RepositoryCatalogTypes.DevelopmentSyncState resolveDevelopmentSyncState(ScriptDefinition script, String localDigest, RepositoryCatalogTypes.ToolSourceState remoteState) {
-        boolean localChanged = isLocalChanged(script, localDigest);
-        boolean remoteChanged = isRemoteChanged(script, remoteState);
-        if (localChanged && remoteChanged) {
-            return RepositoryCatalogTypes.DevelopmentSyncState.DIVERGED;
-        }
-        if (localChanged) {
-            return RepositoryCatalogTypes.DevelopmentSyncState.LOCAL_CHANGES;
-        }
-        if (remoteChanged) {
-            return RepositoryCatalogTypes.DevelopmentSyncState.REMOTE_CHANGES;
-        }
-        return RepositoryCatalogTypes.DevelopmentSyncState.SYNCED;
-    }
-
-    void ensureDevelopmentRepository(RepositoryDefinition repository) {
-        if (!REPO_USAGE_DEVELOPMENT.equalsIgnoreCase(repository.getUsage())) {
-            throw new IllegalArgumentException("仓库不是开发仓库: " + repository.getId());
-        }
-        if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            throw new IllegalArgumentException("HTTP 仓库不支持开发同步");
-        }
-    }
-
-    void ensureDevelopmentScript(ScriptDefinition script) {
-        if (script.getScope() != ScriptScope.DEVELOPMENT) {
-            throw new IllegalArgumentException("脚本不是开发仓库脚本: " + script.getId());
-        }
-        SkillFileUtils.normalize(script.getRepositoryId(), "开发脚本缺少来源仓库");
-        SkillFileUtils.normalize(script.getRepositoryToolId(), "开发脚本缺少来源工具");
     }
 
     public RepositoryCatalogTypes.RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryCatalogTypes.RepositoryPluginPublishRequest request) {
@@ -484,24 +359,9 @@ public class RepositoryCatalogService {
         }
     }
 
-    static String capabilityPackageInstallationId(String repositoryId, String packageId) {
-        return SkillFileUtils.normalize(repositoryId, "repositoryId 不能为空") + ":" + SkillFileUtils.normalize(packageId, "packageId 不能为空");
-    }
-
-    static String aiPackageInternalId(String repositoryId, String packageId, String kind, String localId) {
-        return AI_PACKAGE_INTERNAL_PREFIX
-                + SkillFileUtils.normalize(repositoryId, "repositoryId 不能为空")
-                + "."
-                + SkillFileUtils.normalize(packageId, "packageId 不能为空")
-                + "."
-                + SkillFileUtils.normalize(kind, "kind 不能为空")
-                + "."
-                + SkillFileUtils.normalize(localId, "localId 不能为空");
-    }
-
     RepositoryCatalogTypes.ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryToolDetail detail) {
         String toolId = detail.descriptor().toolId();
-        String toolPath = safeTools(readRepositoryIndex(repository)).stream()
+        String toolPath = readRepositoryIndex(repository).safeTools().stream()
                 .filter(item -> toolId.equals(item.id()))
                 .findFirst()
                 .map(RepositoryCatalogTypes.RepositoryIndexEntry::toolPath)
@@ -513,52 +373,54 @@ public class RepositoryCatalogService {
 
     private String computeToolDigest(RepositoryCatalogTypes.RepositoryToolDetail detail) {
         RepositoryCatalogTypes.RepositoryToolDescriptor d = detail.descriptor();
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("toolId", d.toolId());
-        values.put("displayName", d.displayName());
-        values.put("version", d.version());
-        values.put("type", d.type());
-        values.put("packaging", d.packaging());
-        values.put("description", d.description());
-        values.put("owner", d.owner());
-        values.put("tags", d.tags());
-        values.put("scriptDependencies", d.scriptDependencies());
-        values.put("pluginDependencies", d.pluginDependencies());
-        values.put("source", detail.source());
-        values.put("pythonRequirements", detail.pythonRequirements());
-        values.put("inputSchema", readSchema(d.repositoryId(), d.inputSchemaPath()));
-        values.put("outputSchema", readSchema(d.repositoryId(), d.outputSchemaPath()));
-        return computeDigest(values);
+        return computeDigest(
+                d.toolId(), d.displayName(), d.version(), d.type(), d.packaging(),
+                d.description(), d.owner(), d.tags(),
+                d.scriptDependencies(), d.pluginDependencies(),
+                detail.source(), detail.pythonRequirements(),
+                readSchema(d.repositoryId(), d.inputSchemaPath()),
+                readSchema(d.repositoryId(), d.outputSchemaPath())
+        );
     }
 
     String computeDevelopmentLocalDigest(ScriptDefinition script) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("toolId", script.getRepositoryToolId());
-        values.put("displayName", script.getName());
-        values.put("version", script.getRepositoryVersion());
-        values.put("type", script.getType() == null ? null : script.getType().name());
-        values.put("packaging", script.getPackaging() == null ? null : script.getPackaging().name());
-        values.put("description", script.getDescription());
-        values.put("owner", script.getOwner());
-        values.put("tags", script.getTags());
-        values.put("scriptDependencies", script.getScriptDependencies());
-        values.put("pluginDependencies", script.getPluginDependencies());
-        values.put("source", script.getSource());
-        values.put("pythonRequirements", script.getPythonRequirements());
-        values.put("inputSchema", script.getInputSchema());
-        values.put("outputSchema", script.getOutputSchema());
-        return computeDigest(values);
+        return computeDigest(
+                script.getRepositoryToolId(), script.getName(), script.getRepositoryVersion(),
+                script.getType() == null ? null : script.getType().name(),
+                script.getPackaging() == null ? null : script.getPackaging().name(),
+                script.getDescription(), script.getOwner(), script.getTags(),
+                script.getScriptDependencies(), script.getPluginDependencies(),
+                script.getSource(), script.getPythonRequirements(),
+                script.getInputSchema(), script.getOutputSchema()
+        );
     }
 
-    private String computeDigest(Map<String, Object> values) {
+    private String computeDigest(String toolId, String displayName, String version,
+                                  String type, String packaging, String description,
+                                  String owner, List<String> tags,
+                                  List<?> scriptDependencies, List<?> pluginDependencies,
+                                  String source, String pythonRequirements,
+                                  Object inputSchema, Object outputSchema) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("toolId", toolId);
+        values.put("displayName", displayName);
+        values.put("version", version);
+        values.put("type", type);
+        values.put("packaging", packaging);
+        values.put("description", description);
+        values.put("owner", owner);
+        values.put("tags", tags);
+        values.put("scriptDependencies", scriptDependencies);
+        values.put("pluginDependencies", pluginDependencies);
+        values.put("source", source);
+        values.put("pythonRequirements", pythonRequirements);
+        values.put("inputSchema", inputSchema);
+        values.put("outputSchema", outputSchema);
         return RepositoryVersionUtils.sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
     }
 
     Optional<PluginRegistration> findPluginRegistration(String pluginId) {
-        return services.pluginRuntimeService().list().stream()
-                .filter(item -> pluginId.equals(item.getPluginId()))
-                .findFirst()
-                .map(item -> services.pluginRuntimeService().getRegistration(pluginId));
+        return services.pluginRuntimeService().findPluginRegistration(pluginId);
     }
 
 
@@ -619,17 +481,17 @@ public class RepositoryCatalogService {
         if (artifact == null) {
             throw new IllegalArgumentException("插件 artifact 不能为空");
         }
-        String uri = SkillFileUtils.normalize(artifact.uri(), "插件 artifact.uri 不能为空");
+        String uri = NormalizeUtils.normalize(artifact.uri(), "插件 artifact.uri 不能为空");
         String sha256 = requireSha256
-                ? SkillFileUtils.normalize(artifact.sha256(), "插件 artifact.sha256 不能为空")
-                : SkillFileUtils.normalizeNullable(artifact.sha256());
+                ? NormalizeUtils.normalize(artifact.sha256(), "插件 artifact.sha256 不能为空")
+                : NormalizeUtils.normalizeNullable(artifact.sha256());
         if (artifact.size() != null && artifact.size() < 0) {
             throw new IllegalArgumentException("插件 artifact.size 不能为负数");
         }
         return new PluginArtifactRef(
                 uri,
                 sha256,
-                SkillFileUtils.normalizeNullable(artifact.fileName()),
+                NormalizeUtils.normalizeNullable(artifact.fileName()),
                 artifact.size()
         );
     }
@@ -645,13 +507,13 @@ public class RepositoryCatalogService {
                 pluginId,
                 displayName,
                 version,
-                SkillFileUtils.normalizeNullable(request.description()),
-                SkillFileUtils.normalizeNullable(request.releaseNotes()),
+                NormalizeUtils.normalizeNullable(request.description()),
+                NormalizeUtils.normalizeNullable(request.releaseNotes()),
                 PLUGINS_DIR + "/" + pluginId + "/" + PLUGIN_INDEX_FILE
         );
         List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> entries =
-                RepositoryCatalogTypes.upsertSorted(safePlugins(current), next, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id);
-        writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.withPlugins(current, repository, entries));
+                RepositoryIndexUtils.upsertSorted(current.safePlugins(), next, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id);
+        writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withPlugins(current, repository, entries));
     }
 
     void commitAndPush(RepositoryDefinition repository, String toolId, String version, String releaseNotes) {
@@ -659,7 +521,7 @@ public class RepositoryCatalogService {
     }
 
     Map<String, Object> readSchema(String repositoryId, String schemaPath) {
-        if (schemaPath == null || schemaPath.isBlank()) {
+        if (NormalizeUtils.isBlank(schemaPath)) {
             return Map.of();
         }
         return jsonCodec.readMap(readRepositoryFile(getRepository(repositoryId), Path.of(schemaPath)));
@@ -713,10 +575,10 @@ public class RepositoryCatalogService {
                 List.of()
         ));
         String localDigest = computeDevelopmentLocalDigest(developmentScript);
-        RepositoryCatalogTypes.DevelopmentSyncState syncState = resolveDevelopmentSyncState(developmentScript, localDigest, state);
+        RepositoryCatalogTypes.DevelopmentSyncState syncState = DevelopmentSyncService.resolveDevelopmentSyncState(developmentScript, localDigest, state);
         return new DevelopmentInfo(
-                isLocalChanged(developmentScript, localDigest),
-                isRemoteChanged(developmentScript, state),
+                DevelopmentSyncService.isLocalChanged(developmentScript, localDigest),
+                DevelopmentSyncService.isRemoteChanged(developmentScript, state),
                 syncState.name()
         );
     }
@@ -728,15 +590,15 @@ public class RepositoryCatalogService {
         return new RepositoryCatalogTypes.RepositoryToolDescriptor(
                 repository.getId(), tool.id(), installedScriptId,
                 tool.name(), tool.version(), tool.description(), tool.releaseNotes(), tool.owner(),
-                nullSafeList(tool.tags()),
-                tool.type(), resolvePackaging(tool.packaging()).name(), tool.sourcePath(),
+                NormalizeUtils.nullSafeList(tool.tags()),
+                tool.type(), ScriptPackaging.fromNullableName(tool.packaging()).name(), tool.sourcePath(),
                 resolveRelative(toolPath, tool.pythonRequirementsPath()),
                 resolveRelative(toolPath, tool.inputSchemaPath()),
                 resolveRelative(toolPath, tool.outputSchemaPath()),
                 resolveRelative(toolPath, tool.configTemplatePath()),
                 resolveRelative(toolPath, tool.scheduleTemplatePath()),
                 tool.digest(), tool.riskLevel(),
-                nullSafeList(tool.scriptDependencies()), nullSafeList(tool.pluginDependencies()),
+                NormalizeUtils.nullSafeList(tool.scriptDependencies()), NormalizeUtils.nullSafeList(tool.pluginDependencies()),
                 installed,
                 installed ? installation.getVersion() : null,
                 installed && !Objects.equals(installation.getVersion(), tool.version()),
@@ -749,7 +611,7 @@ public class RepositoryCatalogService {
     private RepositoryCatalogTypes.CapabilityPackageDescriptor toCapabilityPackageDescriptor(RepositoryDefinition repository,
                                                                       RepositoryCatalogTypes.CapabilityPackageManifestFile manifest,
                                                                       String manifestPath) {
-        String packageId = SkillFileUtils.normalize(manifest.packageId(), "能力包 ID 不能为空");
+        String packageId = NormalizeUtils.normalize(manifest.packageId(), "能力包 ID 不能为空");
         String installationId = capabilityPackageInstallationId(repository.getId(), packageId);
         CapabilityPackageInstallation installation = repos.capabilityPackageInstallationRepository().findByInstallationId(installationId).orElse(null);
         return new RepositoryCatalogTypes.CapabilityPackageDescriptor(
@@ -761,9 +623,9 @@ public class RepositoryCatalogService {
                 manifest.description(),
                 manifest.releaseNotes(),
                 manifest.owner(),
-                nullSafeList(manifest.tags()),
+                NormalizeUtils.nullSafeList(manifest.tags()),
                 manifest.riskLevel(),
-                nullSafeList(manifest.entries()),
+                NormalizeUtils.nullSafeList(manifest.entries()),
                 manifestPath,
                 manifest.latestReleasePath(),
                 installation != null,
@@ -772,13 +634,6 @@ public class RepositoryCatalogService {
                 isTrusted(repository),
                 resolveUsage(repository)
         );
-    }
-
-    ScriptPackaging resolvePackaging(String packaging) {
-        if (packaging == null || packaging.isBlank()) {
-            return ScriptPackaging.TOOL;
-        }
-        return ScriptPackaging.valueOf(packaging.trim().toUpperCase(Locale.ROOT));
     }
 
     void assertPackagingConstraints(ScriptDefinition script) {
@@ -804,7 +659,7 @@ public class RepositoryCatalogService {
                 plugin.description(),
                 plugin.releaseNotes(),
                 plugin.owner(),
-                nullSafeList(plugin.tags()),
+                NormalizeUtils.nullSafeList(plugin.tags()),
                 plugin.artifact(),
                 plugin.riskLevel(),
                 registration != null,
@@ -812,25 +667,6 @@ public class RepositoryCatalogService {
                 registration != null && !Objects.equals(registration.getVersion(), plugin.version()),
                 isTrusted(repository),
                 dependentToolCount(plugin.pluginId())
-        );
-    }
-
-    static RepositoryCatalogTypes.RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.SkillFile skill, String skillPath) {
-        return new RepositoryCatalogTypes.RepositorySkillDescriptor(
-                repository.getId(),
-                SkillFileUtils.normalize(skill.skillId(), "skillId 不能为空"),
-                SkillFileUtils.normalizeOrDefault(skill.displayName(), skill.skillId()),
-                SkillFileUtils.normalize(skill.version(), SkillFileUtils.ERR_VERSION_REQUIRED),
-                SkillFileUtils.normalizeNullable(skill.description()),
-                null,
-                SkillFileUtils.normalizeNullable(skill.owner()),
-                nullSafeList(skill.tags()),
-                skillPath,
-                resolveRelative(skillPath, SkillFileUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE)),
-                SkillFileUtils.normalizeNullable(skill.digest()),
-                SkillFileUtils.normalizeNullable(skill.riskLevel()),
-                isTrusted(repository),
-                repository.getUsage()
         );
     }
 
@@ -843,8 +679,7 @@ public class RepositoryCatalogService {
 
 
     void ensureLocalDirRepository(RepositoryDefinition repository) {
-        Path root = resolveRepositoryRoot(repository);
-        ensureRepositoryWorkspace(root, repository, jsonCodec);
+        definitionService.ensureLocalDirRepository(repository);
     }
 
     RepositoryCatalogTypes.RepositoryIndexFile readRepositoryIndex(RepositoryDefinition repository) {
@@ -859,7 +694,7 @@ public class RepositoryCatalogService {
             gitOps.syncGitRepository(repository, root);
         }
         if (REPO_TYPE_GIT.equals(repository.getType())) {
-            ensureRepositoryWorkspace(root, repository, jsonCodec);
+            RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
         }
         return readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class);
     }
@@ -899,7 +734,7 @@ public class RepositoryCatalogService {
     }
 
     private <T> List<T> readOptionalFile(RepositoryDefinition repository, RelativeRepositoryPath path, Class<T> elementType) {
-        if (path == null || path.value() == null || path.value().isBlank()) {
+        if (path == null || NormalizeUtils.isBlank(path.value())) {
             return List.of();
         }
         String raw = readRepositoryFile(repository, Path.of(path.value()));
@@ -907,10 +742,7 @@ public class RepositoryCatalogService {
     }
 
     Path resolveRepositoryRoot(RepositoryDefinition repository) {
-        if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
-            return Path.of(repository.getUrl());
-        }
-        return repositoriesRoot.resolve(repository.getId());
+        return definitionService.resolveRepositoryRoot(repository);
     }
 
     /**
@@ -919,12 +751,8 @@ public class RepositoryCatalogService {
      * 拒绝绝对路径、空路径、包含 {@code ..} 的路径，
      * 并通过 normalize/toRealPath 确认解析后仍在仓库根目录下。
      */
-    private static boolean isTrusted(RepositoryDefinition repository) {
-        return REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel());
-    }
-
     private static String resolveUsage(RepositoryDefinition repository) {
-        return SkillFileUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION);
+        return NormalizeUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION);
     }
 
     Path safeResolveRepositoryPath(Path root, String relativePath) {
@@ -934,7 +762,7 @@ public class RepositoryCatalogService {
     private static Path safeResolvePath(Path root, String relativePath, String context) {
         RepositoryVersionUtils.validateRelativePath(relativePath, context);
         Path parsed = Path.of(relativePath);
-        Path normalizedRoot = SkillFileUtils.normalizePath(root);
+        Path normalizedRoot = NormalizeUtils.normalizePath(root);
         Path target = normalizedRoot.resolve(parsed).normalize();
         if (!target.startsWith(normalizedRoot)) {
             throw new IllegalArgumentException(context + "越界访问被拒绝: " + relativePath);
@@ -945,46 +773,13 @@ public class RepositoryCatalogService {
     <T> T readJson(Path path, Class<T> type) {
         try (InputStream stream = Files.newInputStream(path)) {
             String raw = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-            assertLatestRepositoryMetadata(raw, type, path.toString());
+            RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(raw, type, path.toString());
             return jsonCodec.read(raw, type);
         } catch (IOException exception) {
             throw new IllegalStateException("读取仓库文件失败: " + path, exception);
         }
     }
 
-
-    static void assertLatestRepositoryMetadata(String raw, Class<?> type, String source) {
-        if (!METADATA_TYPES.contains(type)) {
-            return;
-        }
-        JsonNode root;
-        try {
-            root = METADATA_OBJECT_MAPPER.readTree(raw);
-        } catch (JsonProcessingException exception) {
-            return;
-        }
-        if (root == null || !root.isObject()) {
-            return;
-        }
-        if (type == RepositoryCatalogTypes.RepositoryIndexFile.class) {
-            for (String section : REPO_INDEX_SECTIONS) {
-                JsonNode entries = root.get(section);
-                if (entries == null || !entries.isArray()) {
-                    continue;
-                }
-                for (int index = 0; index < entries.size(); index++) {
-                    JsonNode entry = entries.get(index);
-                    if (entry != null && entry.isObject() && !entry.has("releaseNotes")) {
-                        throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " " + section + "[" + index + "].releaseNotes");
-                    }
-                }
-            }
-            return;
-        }
-        if (!root.has("releaseNotes")) {
-            throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " releaseNotes");
-        }
-    }
 
     void writeJson(Path path, Object value) {
         try {
@@ -993,40 +788,6 @@ public class RepositoryCatalogService {
         } catch (IOException exception) {
             throw new IllegalStateException("写入 JSON 文件失败: " + path, exception);
         }
-    }
-
-    static void ensureRepositoryWorkspace(Path root, RepositoryDefinition repository, JsonCodec jsonCodec) {
-        try {
-            Files.createDirectories(root);
-            for (String dir : REPO_INDEX_SECTIONS) {
-                Files.createDirectories(root.resolve(dir));
-            }
-        } catch (IOException exception) {
-            throw new IllegalStateException("初始化仓库目录失败: " + root, exception);
-        }
-        Path indexPath = root.resolve(REPOSITORY_INDEX_FILE);
-        if (Files.exists(indexPath)) {
-            return;
-        }
-        try {
-            Files.writeString(indexPath, jsonCodec.write(emptyRepositoryIndex(repository)), StandardCharsets.UTF_8);
-        } catch (IOException exception) {
-            throw new IllegalStateException("初始化仓库索引失败: " + indexPath, exception);
-        }
-    }
-
-    static RepositoryCatalogTypes.RepositoryIndexFile emptyRepositoryIndex(RepositoryDefinition repository) {
-        String repositoryName = SkillFileUtils.normalizeNullable(repository == null ? null : repository.getName());
-        String repositoryId = SkillFileUtils.normalizeNullable(repository == null ? null : repository.getId());
-        return new RepositoryCatalogTypes.RepositoryIndexFile(
-                1,
-                repositoryName != null ? repositoryName : repositoryId,
-                SkillFileUtils.normalizeNullable(repository == null ? null : repository.getDescription()),
-                new ArrayList<>(),
-                new ArrayList<>(),
-                new ArrayList<>(),
-                new ArrayList<>()
-        );
     }
 
     private <T> List<T> listAllFromEnabledRepositories(Function<String, List<T>> lister, Comparator<T> comparator) {
@@ -1045,119 +806,13 @@ public class RepositoryCatalogService {
     }
 
 
-    static String resolveRelative(String toolPath, String nestedPath) {
-        if (nestedPath == null || nestedPath.isBlank()) {
-            return null;
-        }
-        return Path.of(toolPath).getParent().resolve(nestedPath).toString().replace('\\', '/');
-    }
-
-
-    List<RepositoryCatalogTypes.RepositoryIndexEntry> safeTools(RepositoryCatalogTypes.RepositoryIndexFile index) {
-        return safeList(index, RepositoryCatalogTypes.RepositoryIndexFile::tools);
-    }
-
-    List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> safePlugins(RepositoryCatalogTypes.RepositoryIndexFile index) {
-        return safeList(index, RepositoryCatalogTypes.RepositoryIndexFile::plugins);
-    }
-
-    List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> safeCapabilityPackages(RepositoryCatalogTypes.RepositoryIndexFile index) {
-        return safeList(index, RepositoryCatalogTypes.RepositoryIndexFile::packages);
-    }
-
-    List<RepositoryCatalogTypes.RepositorySkillIndexEntry> safeSkills(RepositoryCatalogTypes.RepositoryIndexFile index) {
-        return safeList(index, RepositoryCatalogTypes.RepositoryIndexFile::skills);
-    }
-
-    private static <S, T> List<T> safeList(S source, java.util.function.Function<S, List<T>> extractor) {
-        return source == null ? List.of() : nullSafeList(extractor.apply(source));
-    }
-
     RepositoryCatalogTypes.RepositoryIndexFile readRepositoryIndexFile(Path root, RepositoryDefinition repository) {
         return Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
                 ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class)
-                : emptyRepositoryIndex(repository);
-    }
-
-    static void assertPluginVersionAvailable(String repositoryId,
-                                             RepositoryCatalogTypes.RepositoryIndexFile index,
-                                             String pluginId,
-                                             String version) {
-        assertVersionAvailable(ASSET_TYPE_PLUGIN, repositoryId, index == null ? null : index.plugins(), pluginId, version, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id, RepositoryCatalogTypes.RepositoryPluginIndexEntry::version);
-    }
-
-    static void assertCapabilityPackageVersionAvailable(String repositoryId,
-                                                        RepositoryCatalogTypes.RepositoryIndexFile index,
-                                                        String packageId,
-                                                        String version) {
-        assertVersionAvailable(ASSET_TYPE_CAPABILITY_PACKAGE, repositoryId, index == null ? null : index.packages(), packageId, version, RepositoryCatalogTypes.CapabilityPackageIndexEntry::id, RepositoryCatalogTypes.CapabilityPackageIndexEntry::version);
-    }
-
-    static void assertSkillVersionAvailable(String repositoryId,
-                                            RepositoryCatalogTypes.RepositoryIndexFile index,
-                                            String skillId,
-                                            String version) {
-        assertVersionAvailable(ASSET_TYPE_SKILL, repositoryId, index == null ? null : index.skills(), skillId, version, RepositoryCatalogTypes.RepositorySkillIndexEntry::id, RepositoryCatalogTypes.RepositorySkillIndexEntry::version);
-    }
-
-    static List<ScriptSchedule> resolvePublishSchedules(String scriptId,
-                                                         List<String> scheduleIds,
-                                                         ScriptScheduleRepository scheduleRepository) {
-        List<ScriptSchedule> schedules = new ArrayList<>();
-        for (String scheduleId : nullSafeList(scheduleIds)) {
-            String normalizedScheduleId = SkillFileUtils.normalize(scheduleId, "定时任务 ID 不能为空");
-            ScriptSchedule schedule = scheduleRepository.findById(normalizedScheduleId)
-                    .orElseThrow(() -> new IllegalArgumentException("定时任务不存在: " + normalizedScheduleId));
-            if (!Objects.equals(scriptId, schedule.getScriptId())) {
-                throw new IllegalArgumentException("定时任务不属于当前脚本: " + normalizedScheduleId);
-            }
-            schedules.add(schedule);
-        }
-        return schedules;
-    }
-
-    private static <T> void assertVersionAvailable(String assetType,
-                                                   String repositoryId,
-                                                   List<T> entries,
-                                                   String assetId,
-                                                   String version,
-                                                   java.util.function.Function<T, String> idExtractor,
-                                                   java.util.function.Function<T, String> versionExtractor) {
-        if (entries == null) {
-            return;
-        }
-        entries.stream()
-                .filter(entry -> Objects.equals(assetId, idExtractor.apply(entry)) && Objects.equals(version, versionExtractor.apply(entry)))
-                .findFirst()
-                .ifPresent(entry -> { throw new RepositoryVersionExistsException(assetType, repositoryId, assetId, version); });
+                : RepositoryWorkspaceHelper.emptyRepositoryIndex(repository);
     }
 
     RelativeRepositoryPath parentDirectoryPath(String filePath) {
         return new RelativeRepositoryPath(Path.of(filePath).getParent().toString().replace('\\', '/'));
-    }
-
-    private record RelativeRepositoryPath(String value) {
-        private Path resolve(String child) {
-            return resolveInternal(child);
-        }
-
-        private RelativeRepositoryPath resolveNullable(String child) {
-            if (child == null || child.isBlank()) {
-                return null;
-            }
-            Path resolved = resolveInternal(child);
-            return new RelativeRepositoryPath(resolved.toString().replace('\\', '/'));
-        }
-
-        private Path resolveInternal(String child) {
-            if (child != null && child.contains("..")) {
-                throw new IllegalArgumentException("仓库文件路径不允许包含 ..: " + child);
-            }
-            Path resolved = Path.of(value).resolve(child).normalize();
-            if (!resolved.startsWith(Path.of(value).normalize())) {
-                throw new IllegalArgumentException("仓库文件越界访问被拒绝: " + child);
-            }
-            return resolved;
-        }
     }
 }

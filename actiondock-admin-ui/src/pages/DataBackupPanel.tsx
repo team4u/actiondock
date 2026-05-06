@@ -19,55 +19,67 @@ import {
 } from "@ant-design/icons";
 import JSZip from "jszip";
 import {
+  listAiAgents,
+  listAiModels,
+  listAiToolsets,
+  saveAiAgent,
+  saveAiModel,
+  createAiToolset,
+  updateAiToolset
+} from "../features/ai/api";
+import {
+  downloadPluginJar,
+  getPluginConfig,
+  installPlugin,
+  listPlugins,
+  uninstallPlugin,
+  updatePluginConfig
+} from "../features/plugins/api";
+import {
+  createRepository,
+  listRepositories,
+  updateRepository
+} from "../features/resources/api";
+import {
+  createPreset,
+  createScript,
+  listPresets,
+  listScripts,
+  updatePreset,
+  updateScript
+} from "../features/scripts/api";
+import {
+  createConfigValue,
+  createSharedState,
+  getSharedState,
+  listConfigValues,
+  listSharedState,
+  listSharedStateNamespaces,
+  updateConfigValue,
+  updateSharedState
+} from "../features/settings/api";
+import {
+  createSkillTarget,
+  deleteSkill,
+  disableSkill,
+  downloadInstalledSkillArchive,
+  installSkillArchive,
+  listSkills,
+  listSkillTargets,
+  restoreSkill,
+  updateSkillTarget
+} from "../features/skills/api";
+import {
   createEventSource,
   createEventTrigger,
-  listScripts,
   listSchedules,
   listEventSources,
   listEventTriggers,
-  listConfigValues,
-  listSharedStateNamespaces,
-  listSharedState,
-  getSharedState,
-  listRepositories,
-  listPlugins,
-  getPluginConfig,
-  listPresets,
-  downloadPluginJar,
-  createScript,
-  updateScript,
   createSchedule,
   updateSchedule,
-  createConfigValue,
-  updateConfigValue,
   updateEventSource,
   updateEventTrigger,
-  createSharedState,
-  updateSharedState,
-  createRepository,
-  updateRepository,
-  installPlugin,
-  uninstallPlugin,
-  updatePluginConfig,
-  createPreset,
-  updatePreset,
-  listAiModels,
-  saveAiModel,
-  listAiAgents,
-  saveAiAgent,
-  listAiToolsets,
-  createAiToolset,
-  updateAiToolset,
-  listSkills,
-  downloadInstalledSkillArchive,
-  listSkillTargets,
-  createSkillTarget,
-  updateSkillTarget,
-  deleteSkill,
-  installSkillArchive,
-  disableSkill,
-  restoreSkill
-} from "../api";
+} from "../features/triggers/api";
 import type {
   ScriptDefinition,
   ScriptSchedule,

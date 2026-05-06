@@ -509,11 +509,6 @@ class SkillServiceTest {
         }
 
         @Override
-        public Optional<SkillInstallation> findByInstallationId(String installationId) {
-            return Optional.ofNullable(storage.get(installationId));
-        }
-
-        @Override
         public Optional<SkillInstallation> findBySkillIdAndTargetId(String skillId, String targetId) {
             return storage.values().stream()
                     .filter(item -> skillId.equals(item.getSkillId()) && targetId.equals(item.getTargetId()))
@@ -537,11 +532,6 @@ class SkillServiceTest {
             return storage.values().stream()
                     .filter(item -> targetId.equals(item.getTargetId()))
                     .toList();
-        }
-
-        @Override
-        public void deleteByInstallationId(String installationId) {
-            storage.remove(installationId);
         }
 
         @Override

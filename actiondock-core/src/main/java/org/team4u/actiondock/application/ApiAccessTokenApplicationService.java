@@ -3,6 +3,7 @@ package org.team4u.actiondock.application;
 import org.team4u.actiondock.domain.model.ApiAccessToken;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 
+import java.util.Comparator;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -29,7 +30,7 @@ public class ApiAccessTokenApplicationService {
 
     public List<ApiAccessToken> list() {
         return repository.findAll().stream()
-                .sorted((left, right) -> left.getCreatedAt().compareTo(right.getCreatedAt()))
+                .sorted(Comparator.comparing(ApiAccessToken::getCreatedAt))
                 .map(ApiAccessTokenApplicationService::copy)
                 .toList();
     }
@@ -107,17 +108,11 @@ public class ApiAccessTokenApplicationService {
     }
 
     private static String normalizeId(String id) {
-        if (id == null || id.isBlank()) {
-            throw new IllegalArgumentException("访问令牌 ID 不能为空");
-        }
-        return id.trim();
+        return ApplicationServiceSupport.normalize(id, "访问令牌 ID 不能为空");
     }
 
     private static String normalizeName(String name) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("访问令牌名称不能为空");
-        }
-        return name.trim();
+        return ApplicationServiceSupport.normalize(name, "访问令牌名称不能为空");
     }
 
     private static String buildPreview(String tokenValue) {

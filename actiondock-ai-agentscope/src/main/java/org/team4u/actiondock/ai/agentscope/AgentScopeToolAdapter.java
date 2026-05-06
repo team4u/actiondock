@@ -110,7 +110,7 @@ class AgentScopeToolAdapter implements AgentTool {
         observer.onStep(startStep);
 
         AiToolExecutionResult result = toolRegistry.invoke(tool.name(), input, new AiToolExecutionContext(
-                context == null || context.metadata() == null ? null : AgentScopeAiProviderClient.stringValue(context.metadata().get("agentRunId")),
+                context == null || context.metadata() == null ? null : AgentScopeOptions.stringValue(context.metadata().get("agentRunId")),
                 stepId,
                 context == null ? null : context.callerType(),
                 context == null ? null : context.scriptId(),

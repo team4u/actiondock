@@ -1,5 +1,7 @@
 package org.team4u.actiondock.configvalue;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -19,7 +21,7 @@ public final class PlaceholderKeyExtractor {
     }
 
     public static Set<String> extractPlaceholderKeys(String value) {
-        if (value == null || value.isBlank()) {
+        if (NormalizeUtils.isBlank(value)) {
             return Set.of();
         }
         Set<String> keys = new LinkedHashSet<>();

@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 public class EventTrigger {
 
-    public static final String DEFAULT_RESPONSE_VIEW = "RESULT";
+    private static final String DEFAULT_RESPONSE_VIEW = "RESULT";
 
     private String id;
     private String name;

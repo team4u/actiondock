@@ -4,6 +4,7 @@ import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +68,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
             return List.of();
         }
         return configValueRepository.findAll().stream()
-                .sorted((left, right) -> left.getKey().compareTo(right.getKey()))
+                .sorted(Comparator.comparing(ConfigValue::getKey))
                 .map(ConfigValue::copy)
                 .toList();
     }
@@ -280,14 +281,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
     }
 
     private static String normalizeKey(String key) {
-        if (key == null || key.isBlank()) {
-            throw new IllegalArgumentException("配置值 key 不能为空");
-        }
-        String normalized = key.trim();
-        if (!KEY_PATTERN.matcher(normalized).matches()) {
-            throw new IllegalArgumentException("配置值 key 格式不合法: " + normalized);
-        }
-        return normalized;
+        return ApplicationServiceSupport.normalizePattern(key, "配置值 key", KEY_PATTERN);
     }
 
     private static String normalizeDescription(String description) {

@@ -1,5 +1,7 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProvider;
@@ -9,7 +11,6 @@ import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
 import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.model.PluginRegistration;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
@@ -81,7 +82,7 @@ public class RepositoryCapabilityPackageService {
         if (preview.checks().stream().anyMatch(item -> CHECK_SEVERITY_BLOCKER.equals(item.severity()))) {
             throw new IllegalArgumentException("能力包存在阻断项，不能发布");
         }
-        RepositoryCatalogService.assertCapabilityPackageVersionAvailable(repositoryId, session.index(), draft.packageId(), draft.version());
+        RepositoryCatalogTypes.assertCapabilityPackageVersionAvailable(repositoryId, session.index(), draft.packageId(), draft.version());
         java.nio.file.Path packageRoot = session.root().resolve(CAPABILITY_PACKAGES_DIR).resolve(draft.packageId());
         aiPackageService.writeCapabilityPackageFiles(packageRoot, draft);
         aiPackageService.updateCapabilityPackageIndex(session.root(), repository, draft);
@@ -122,7 +123,7 @@ public class RepositoryCapabilityPackageService {
      * @param visiting     正在访问的安装 ID 集合，用于检测循环依赖
      * @return 安装结果，包含安装记录和解析后的外部依赖
      */
-    CapabilityPackageInstallResult installOrUpdateCapabilityPackage(String repositoryId,
+    private CapabilityPackageInstallResult installOrUpdateCapabilityPackage(String repositoryId,
                                                                                                       String packageId,
                                                                                                       boolean updateOnly,
                                                                                                       LinkedHashSet<String> visiting) {
@@ -210,13 +211,13 @@ public class RepositoryCapabilityPackageService {
                 .setUpdatedAt(ctx.now);
         return new CapabilityPackageInstallResult(
                 repos.capabilityPackageInstallationRepository().save(installation),
-                nullSafeList(ctx.release.externalDependencies())
+                NormalizeUtils.nullSafeList(ctx.release.externalDependencies())
         );
     }
 
     private void resolveExternalDependencies(List<RepositoryAiPackageDependency> dependencies,
                                              LinkedHashSet<String> visiting) {
-        for (RepositoryAiPackageDependency dependency : nullSafeList(dependencies)) {
+        for (RepositoryAiPackageDependency dependency : NormalizeUtils.nullSafeList(dependencies)) {
             DependencyAssetType type = DependencyAssetType.fromString(dependency.assetType());
             switch (type) {
                 case AI_PACKAGE -> resolveAiPackageDependency(dependency, visiting);
@@ -245,7 +246,7 @@ public class RepositoryCapabilityPackageService {
     private void resolvePluginDependency(RepositoryAiPackageDependency dependency) {
         PluginRegistration registration = findExistingPluginRegistration(dependency.assetId());
         if (registration == null) {
-            if (dependency.repositoryId() == null || dependency.repositoryId().isBlank()) {
+            if (NormalizeUtils.isBlank(dependency.repositoryId())) {
                 throw new IllegalArgumentException("缺少插件仓库来源，且本地未安装插件: " + dependency.assetId());
             }
             pluginService.installPlugin(dependency.repositoryId(), dependency.assetId(), false);
@@ -260,7 +261,7 @@ public class RepositoryCapabilityPackageService {
     private PluginRegistration findExistingPluginRegistration(String pluginId) {
         try {
             return services.pluginRuntimeService().getRegistration(pluginId);
-        } catch (RuntimeException exception) {
+        } catch (IllegalArgumentException exception) {
             log.log(System.Logger.Level.WARNING, "插件注册信息查询失败: {0}", exception.getMessage());
             return null;
         }
@@ -295,16 +296,16 @@ public class RepositoryCapabilityPackageService {
         Map<String, String> toolsetIdMappings = new LinkedHashMap<>();
         Map<String, String> agentIdMappings = new LinkedHashMap<>();
         Map<String, String> scriptIdMappings = new LinkedHashMap<>();
-        for (AiPackageModelFile model : nullSafeList(release == null ? null : release.models())) {
+        for (AiPackageModelFile model : NormalizeUtils.nullSafeList(release == null ? null : release.models())) {
             modelIdMappings.put(model.id(), aiPackageInternalId(repositoryId, packageId, "model", model.id()));
         }
-        for (AiPackageToolsetFile toolset : nullSafeList(release == null ? null : release.toolsets())) {
+        for (AiPackageToolsetFile toolset : NormalizeUtils.nullSafeList(release == null ? null : release.toolsets())) {
             toolsetIdMappings.put(toolset.id(), aiPackageInternalId(repositoryId, packageId, "toolset", toolset.id()));
         }
-        for (AiPackageAgentFile agent : nullSafeList(release == null ? null : release.agents())) {
+        for (AiPackageAgentFile agent : NormalizeUtils.nullSafeList(release == null ? null : release.agents())) {
             agentIdMappings.put(agent.id(), aiPackageInternalId(repositoryId, packageId, "agent", agent.id()));
         }
-        for (AiPackageScriptFile script : nullSafeList(release == null ? null : release.scripts())) {
+        for (AiPackageScriptFile script : NormalizeUtils.nullSafeList(release == null ? null : release.scripts())) {
             scriptIdMappings.put(script.id(), aiPackageInternalId(repositoryId, packageId, "script", script.id()));
         }
         return new InstallationContext(repositoryId, packageId, LocalDateTime.now(),
@@ -313,7 +314,7 @@ public class RepositoryCapabilityPackageService {
 
     private List<String> installModels(InstallationContext ctx) {
         List<String> installedIds = new ArrayList<>();
-        for (AiPackageModelFile model : nullSafeList(ctx.release == null ? null : ctx.release.models())) {
+        for (AiPackageModelFile model : NormalizeUtils.nullSafeList(ctx.release == null ? null : ctx.release.models())) {
             AiModelProfile profile = new AiModelProfile()
                     .setId(ctx.modelIdMappings.get(model.id()))
                     .setName(model.name())
@@ -336,8 +337,8 @@ public class RepositoryCapabilityPackageService {
 
     private List<String> installToolsets(InstallationContext ctx) {
         List<String> installedIds = new ArrayList<>();
-        for (AiPackageToolsetFile toolset : nullSafeList(ctx.release == null ? null : ctx.release.toolsets())) {
-            List<String> toolNames = nullSafeList(toolset.toolNames()).stream()
+        for (AiPackageToolsetFile toolset : NormalizeUtils.nullSafeList(ctx.release == null ? null : ctx.release.toolsets())) {
+            List<String> toolNames = NormalizeUtils.nullSafeList(toolset.toolNames()).stream()
                     .map(toolName -> AiPackageIdRewriter.rewriteToolName(toolName, ctx.agentIdMappings, ctx.scriptIdMappings))
                     .toList();
             AiToolset value = new AiToolset()
@@ -360,7 +361,7 @@ public class RepositoryCapabilityPackageService {
 
     private List<String> installScripts(InstallationContext ctx) {
         List<String> installedIds = new ArrayList<>();
-        for (AiPackageScriptFile script : nullSafeList(ctx.release == null ? null : ctx.release.scripts())) {
+        for (AiPackageScriptFile script : NormalizeUtils.nullSafeList(ctx.release == null ? null : ctx.release.scripts())) {
             String runtimeScriptId = ctx.scriptIdMappings.get(script.id());
             ScriptDefinition definition = new ScriptDefinition()
                     .setId(runtimeScriptId)
@@ -389,7 +390,7 @@ public class RepositoryCapabilityPackageService {
 
     private List<String> installAgents(InstallationContext ctx) {
         List<String> installedIds = new ArrayList<>();
-        for (AiPackageAgentFile agent : nullSafeList(ctx.release == null ? null : ctx.release.agents())) {
+        for (AiPackageAgentFile agent : NormalizeUtils.nullSafeList(ctx.release == null ? null : ctx.release.agents())) {
             String runtimeAgentId = ctx.agentIdMappings.get(agent.id());
             AiAgentProfile profile = new AiAgentProfile()
                     .setId(runtimeAgentId)
@@ -398,14 +399,14 @@ public class RepositoryCapabilityPackageService {
                     .setProvider(agent.provider() == null ? AiProvider.AGENTSCOPE : AiProvider.valueOf(agent.provider()))
                     .setModelProfileId(ctx.modelIdMappings.getOrDefault(agent.modelProfileId(), agent.modelProfileId()))
                     .setSystemPrompt(agent.systemPrompt())
-                    .setToolsetIds(nullSafeList(agent.toolsetIds()).stream()
+                    .setToolsetIds(NormalizeUtils.nullSafeList(agent.toolsetIds()).stream()
                             .map(toolsetId -> ctx.toolsetIdMappings.getOrDefault(toolsetId, toolsetId))
                             .toList())
-                    .setDirectToolNames(nullSafeList(agent.directToolNames()).stream()
+                    .setDirectToolNames(NormalizeUtils.nullSafeList(agent.directToolNames()).stream()
                             .map(toolName -> AiPackageIdRewriter.rewriteToolName(toolName, ctx.agentIdMappings, ctx.scriptIdMappings))
                             .toList())
                     .setDirectToolOptions(AiPackageIdRewriter.rewriteToolOptions(agent.directToolOptions(), ctx.agentIdMappings, ctx.scriptIdMappings))
-                    .setSkillIds(nullSafeList(agent.skillIds()))
+                    .setSkillIds(NormalizeUtils.nullSafeList(agent.skillIds()))
                     .setOptions(agent.options() == null ? Map.of() : agent.options())
                     .setEnabled(agent.enabled())
                     .setCreatedAt(ctx.now)
@@ -470,10 +471,10 @@ public class RepositoryCapabilityPackageService {
 
 
     private static String aiPackageInternalId(String repositoryId, String packageId, String kind, String localId) {
-        return RepositoryCatalogService.aiPackageInternalId(repositoryId, packageId, kind, localId);
+        return RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, kind, localId);
     }
 
     private static String capabilityPackageInstallationId(String repositoryId, String packageId) {
-        return RepositoryCatalogService.capabilityPackageInstallationId(repositoryId, packageId);
+        return RepositoryCatalogTypes.capabilityPackageInstallationId(repositoryId, packageId);
     }
 }

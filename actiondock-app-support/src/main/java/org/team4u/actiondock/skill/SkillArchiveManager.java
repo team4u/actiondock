@@ -1,6 +1,7 @@
 package org.team4u.actiondock.skill;
 
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -51,7 +52,7 @@ public final class SkillArchiveManager {
                                       String manifestVersion,
                                       JsonCodec jsonCodec) {
         Path root = SkillFileUtils.normalizeSkillRoot(directory);
-        String version = SkillFileUtils.normalize(manifestVersion, SkillFileUtils.ERR_VERSION_REQUIRED);
+        String version = NormalizeUtils.normalize(manifestVersion, SkillFileUtils.ERR_VERSION_REQUIRED);
         String digest = computePublishDigest(root, validation, version, jsonCodec);
         byte[] manifestBytes = buildManifestBytes(validation, version, digest, jsonCodec);
         String rootPrefix = validation.skillId() + "/";
@@ -94,7 +95,7 @@ public final class SkillArchiveManager {
                                      SkillTypes.SkillValidationResult validation,
                                      String manifestVersion,
                                      JsonCodec jsonCodec) {
-        String version = SkillFileUtils.normalize(manifestVersion, SkillFileUtils.ERR_VERSION_REQUIRED);
+        String version = NormalizeUtils.normalize(manifestVersion, SkillFileUtils.ERR_VERSION_REQUIRED);
         String digest = computePublishDigest(directory, validation, version, jsonCodec);
         try {
             Files.write(directory.resolve(SKILL_PACKAGE_FILE), buildManifestBytes(validation, version, digest, jsonCodec));
@@ -143,17 +144,17 @@ public final class SkillArchiveManager {
     }
 
     static String normalizeArchiveFallbackId(String fileName) {
-        String normalized = SkillFileUtils.normalizeNullable(fileName);
+        String normalized = NormalizeUtils.normalizeNullable(fileName);
         if (normalized == null) {
             return null;
         }
         if (normalized.toLowerCase(java.util.Locale.ROOT).endsWith(".zip")) {
             normalized = normalized.substring(0, normalized.length() - 4);
         }
-        return SkillFileUtils.normalizeNullable(normalized);
+        return NormalizeUtils.normalizeNullable(normalized);
     }
 
-    static byte[] buildManifestBytes(SkillTypes.SkillValidationResult validation,
+    private static byte[] buildManifestBytes(SkillTypes.SkillValidationResult validation,
                                      String version,
                                      String digest,
                                      JsonCodec jsonCodec) {
@@ -161,12 +162,12 @@ public final class SkillArchiveManager {
                 1,
                 validation.skillId(),
                 validation.displayName(),
-                SkillFileUtils.normalize(version, SkillFileUtils.ERR_VERSION_REQUIRED),
+                NormalizeUtils.normalize(version, SkillFileUtils.ERR_VERSION_REQUIRED),
                 validation.description(),
                 validation.owner(),
-                SkillFileUtils.nullSafeList(validation.tags()),
+                NormalizeUtils.nullSafeList(validation.tags()),
                 validation.riskLevel(),
-                SkillFileUtils.normalizeOrDefault(validation.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE),
+                NormalizeUtils.normalizeOrDefault(validation.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE),
                 digest
         )).getBytes(StandardCharsets.UTF_8);
     }
@@ -226,7 +227,7 @@ public final class SkillArchiveManager {
         long totalBytes = 0L;
         byte[] buffer = new byte[8192];
         while ((entry = zipInputStream.getNextEntry()) != null) {
-            if (entry.getName() == null || entry.getName().isBlank()) {
+            if (NormalizeUtils.isBlank(entry.getName())) {
                 continue;
             }
             String entryName = entry.getName().replace('\\', '/');

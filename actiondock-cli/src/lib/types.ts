@@ -4,6 +4,34 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
+export interface CapabilityBindingView {
+  version?: string | null;
+  source?: string | null;
+  runtime?: string | null;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  packaging?: string | null;
+  dependencies?: unknown[];
+}
+
+export interface CapabilityView {
+  id: string;
+  kind?: string;
+  name?: string;
+  runtime?: string;
+  source?: string;
+  status?: string;
+  version?: number;
+  scope?: string;
+  description?: string;
+  owner?: string;
+  tags?: string[];
+  draftBinding?: CapabilityBindingView | null;
+  publishedBinding?: CapabilityBindingView | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface ScriptDefinition {
   id: string;
   name?: string;

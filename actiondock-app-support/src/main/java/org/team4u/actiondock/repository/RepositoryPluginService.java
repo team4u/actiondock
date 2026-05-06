@@ -5,12 +5,11 @@ import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
-import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginView;
-import org.team4u.actiondock.skill.SkillFileUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -79,8 +78,8 @@ public class RepositoryPluginService {
                                    List<PluginDependency> dependencies,
                                    boolean installPluginDependencies,
                                    boolean forcePluginUpgrade) {
-        for (PluginDependency dependency : nullSafeList(dependencies)) {
-            String pluginId = SkillFileUtils.normalize(dependency.getPluginId(), "插件依赖 pluginId 不能为空");
+        for (PluginDependency dependency : NormalizeUtils.nullSafeList(dependencies)) {
+            String pluginId = NormalizeUtils.normalize(dependency.getPluginId(), "插件依赖 pluginId 不能为空");
             PluginRegistration registration = pluginRuntimeService.findPluginRegistration(pluginId).orElse(null);
             if (registration != null && RepositoryVersionUtils.versionSatisfies(registration.getVersion(), dependency.getVersionRange())) {
                 continue;
@@ -93,7 +92,7 @@ public class RepositoryPluginService {
 
     private void assertDependencySatisfiable(String pluginId, PluginDependency dependency, boolean installPluginDependencies) {
         if (!installPluginDependencies) {
-            throw new IllegalArgumentException("缺少插件依赖或版本不满足: " + pluginId + " " + SkillFileUtils.normalizeOrDefault(dependency.getVersionRange(), ""));
+            throw new IllegalArgumentException("缺少插件依赖或版本不满足: " + pluginId + " " + NormalizeUtils.normalizeOrDefault(dependency.getVersionRange(), ""));
         }
     }
 

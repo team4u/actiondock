@@ -3,7 +3,7 @@ import { DeleteOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined } from
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteAiModel, listAiAgents, listAiModels } from "../../api";
+import { deleteAiModel, listAiAgents, listAiModels } from "../../features/ai/api";
 import { AiCapabilityTag } from "../../components/ai/AiTags";
 import { ConfirmDangerAction } from "../../components/ConfirmDangerAction";
 import { PageHeader } from "../../components/PageHeader";

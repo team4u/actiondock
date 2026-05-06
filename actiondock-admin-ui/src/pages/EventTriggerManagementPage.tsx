@@ -31,10 +31,10 @@ import {
   enableEventTrigger,
   listEventSources,
   listEventTriggers,
-  listScripts,
   testEventTrigger,
   updateEventTrigger
-} from "../api";
+} from "../features/triggers/api";
+import { listScripts } from "../features/scripts/api";
 import { ProcessorEditor } from "../components/ProcessorEditor";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { PageHeader } from "../components/PageHeader";

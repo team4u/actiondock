@@ -229,8 +229,10 @@ public class ScriptSchemaSupport {
         return logicalType + " (" + value.getClass().getName() + ")";
     }
 
+    private static final Set<String> SUPPORTED_SCHEMA_TYPES = Set.of("string", "number", "integer", "boolean");
+
     private static boolean isSupportedType(String type) {
-        return "string".equals(type) || "number".equals(type) || "integer".equals(type) || "boolean".equals(type);
+        return SUPPORTED_SCHEMA_TYPES.contains(type);
     }
 
     @SuppressWarnings("unchecked")

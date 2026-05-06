@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  */
 public class RepositoryDefinition {
 
-    public static final String DEFAULT_USAGE = "DISTRIBUTION";
+    private static final String DEFAULT_USAGE = "DISTRIBUTION";
 
     private String id;
     private String name;

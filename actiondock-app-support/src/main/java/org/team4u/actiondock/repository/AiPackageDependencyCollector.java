@@ -20,7 +20,7 @@ import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -64,7 +64,7 @@ class AiPackageDependencyCollector {
                                 AiPackageBundleBuilder builder,
                                 String agentId,
                                 boolean entryPoint) {
-        if (agentId == null || agentId.isBlank()) return;
+        if (NormalizeUtils.isBlank(agentId)) return;
         if (builder.hasAgent(agentId) || builder.isExternalAgent(agentId)) return;
 
         CapabilityPackageInstallation packageInstallation = capabilityPackageInstallationRepository
@@ -95,7 +95,7 @@ class AiPackageDependencyCollector {
     }
 
     void collectModelDependency(AiPackageBundleBuilder builder, String modelProfileId) {
-        if (modelProfileId == null || modelProfileId.isBlank() || builder.hasModel(modelProfileId)) return;
+        if (NormalizeUtils.isBlank(modelProfileId) || builder.hasModel(modelProfileId)) return;
 
         AiModelProfile profile = collectDependency(modelProfileId, "模型",
                 () -> aiModelProfileRepository.findById(modelProfileId)
@@ -107,7 +107,7 @@ class AiPackageDependencyCollector {
     void collectToolsetDependency(RepositoryDefinition repository,
                                   AiPackageBundleBuilder builder,
                                   String toolsetId) {
-        if (toolsetId == null || toolsetId.isBlank() || builder.hasToolset(toolsetId)) return;
+        if (NormalizeUtils.isBlank(toolsetId) || builder.hasToolset(toolsetId)) return;
 
         AiToolset toolset = collectDependency(toolsetId, "工具集",
                 () -> aiToolsetRepository.findById(toolsetId)
@@ -122,7 +122,7 @@ class AiPackageDependencyCollector {
     void collectToolNameDependency(RepositoryDefinition repository,
                                    AiPackageBundleBuilder builder,
                                    String toolName) {
-        if (toolName == null || toolName.isBlank()) {
+        if (NormalizeUtils.isBlank(toolName)) {
             return;
         }
         if (toolName.startsWith(ActionDockDynamicAiToolProvider.SCRIPT_TOOL_PREFIX)) {
@@ -137,7 +137,7 @@ class AiPackageDependencyCollector {
     void collectScriptDependency(RepositoryDefinition repository,
                                  AiPackageBundleBuilder builder,
                                  String scriptId) {
-        if (scriptId == null || scriptId.isBlank() || builder.hasScript(scriptId) || builder.isExternalScript(scriptId)) {
+        if (NormalizeUtils.isBlank(scriptId) || builder.hasScript(scriptId) || builder.isExternalScript(scriptId)) {
             return;
         }
 
@@ -177,9 +177,9 @@ class AiPackageDependencyCollector {
         if (script.getScope() != ScriptScope.REPOSITORY && script.getScope() != ScriptScope.DEVELOPMENT) {
             return false;
         }
-        String sourceRepositoryId = SkillFileUtils.normalizeNullable(script.getRepositoryId());
-        String sourceToolId = SkillFileUtils.normalizeNullable(script.getRepositoryToolId());
-        String sourceVersion = SkillFileUtils.normalizeNullable(script.getRepositoryVersion());
+        String sourceRepositoryId = NormalizeUtils.normalizeNullable(script.getRepositoryId());
+        String sourceToolId = NormalizeUtils.normalizeNullable(script.getRepositoryToolId());
+        String sourceVersion = NormalizeUtils.normalizeNullable(script.getRepositoryVersion());
         if (sourceRepositoryId != null && sourceToolId != null && sourceVersion != null) {
             builder.addExternalDependency(new RepositoryAiPackageDependency(
                     DependencyAssetType.TOOL.name(),
@@ -206,7 +206,7 @@ class AiPackageDependencyCollector {
     }
 
     private void collectPluginDependencies(AiPackageBundleBuilder builder, List<PluginDependency> dependencies) {
-        for (PluginDependency dependency : nullSafeList(dependencies)) {
+        for (PluginDependency dependency : NormalizeUtils.nullSafeList(dependencies)) {
             collectPluginDependency(builder, dependency);
         }
     }
@@ -215,17 +215,17 @@ class AiPackageDependencyCollector {
                                        AiPackageBundleBuilder builder,
                                        List<AiDependency> dependencies) {
         for (AiDependency dependency : dependencies) {
-            if (dependency.getProfile() != null && !dependency.getProfile().isBlank()) {
+            if (NormalizeUtils.isNotBlank(dependency.getProfile())) {
                 collectModelDependency(builder, dependency.getProfile());
             }
-            if (dependency.getAgentProfile() != null && !dependency.getAgentProfile().isBlank()) {
+            if (NormalizeUtils.isNotBlank(dependency.getAgentProfile())) {
                 collectAgentDependency(repository, builder, dependency.getAgentProfile(), false);
             }
         }
     }
 
     void collectPluginDependency(AiPackageBundleBuilder builder, PluginDependency dependency) {
-        if (dependency == null || dependency.getPluginId() == null || dependency.getPluginId().isBlank()) {
+        if (dependency == null || NormalizeUtils.isBlank(dependency.getPluginId())) {
             return;
         }
         PluginRegistration registration = resolvePluginRegistration(dependency.getPluginId());
@@ -235,17 +235,17 @@ class AiPackageDependencyCollector {
     private PluginRegistration resolvePluginRegistration(String pluginId) {
         try {
             return pluginRuntimeService.getRegistration(pluginId);
-        } catch (RuntimeException exception) {
+        } catch (IllegalArgumentException exception) {
             log.log(System.Logger.Level.WARNING, "插件注册信息查询失败: {0}", exception.getMessage());
             return null;
         }
     }
 
     private static RepositoryAiPackageDependency buildPluginDependency(PluginRegistration registration, PluginDependency dependency) {
-        String repositoryId = registration == null ? null : SkillFileUtils.normalizeNullable(registration.getRepositoryId());
+        String repositoryId = registration == null ? null : NormalizeUtils.normalizeNullable(registration.getRepositoryId());
         String assetId = registration == null
                 ? dependency.getPluginId()
-                : SkillFileUtils.normalizeOrDefault(registration.getRepositoryPluginId(), dependency.getPluginId());
+                : NormalizeUtils.normalizeOrDefault(registration.getRepositoryPluginId(), dependency.getPluginId());
         String version = resolvePluginVersion(registration, dependency);
         return new RepositoryAiPackageDependency(
                 DependencyAssetType.PLUGIN.name(),
@@ -256,12 +256,12 @@ class AiPackageDependencyCollector {
     }
 
     private static String resolvePluginVersion(PluginRegistration registration, PluginDependency dependency) {
-        String version = SkillFileUtils.normalizeNullable(registration == null ? null : registration.getRepositoryVersion());
+        String version = NormalizeUtils.normalizeNullable(registration == null ? null : registration.getRepositoryVersion());
         if (version == null) {
-            version = SkillFileUtils.normalizeNullable(dependency.getVersionRange());
+            version = NormalizeUtils.normalizeNullable(dependency.getVersionRange());
         }
         if (version == null && registration != null) {
-            version = SkillFileUtils.normalizeNullable(registration.getVersion());
+            version = NormalizeUtils.normalizeNullable(registration.getVersion());
         }
         return version;
     }
@@ -333,7 +333,7 @@ class AiPackageDependencyCollector {
         if (dependency == null) {
             return false;
         }
-        return (dependency.getAgentProfile() != null && !dependency.getAgentProfile().isBlank())
+        return (NormalizeUtils.isNotBlank(dependency.getAgentProfile()))
                 || "AGENT_RUN".equalsIgnoreCase(dependency.getCapability());
     }
 }

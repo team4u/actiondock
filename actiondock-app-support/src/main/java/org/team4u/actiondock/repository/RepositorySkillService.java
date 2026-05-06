@@ -6,6 +6,7 @@ import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillArchiveManager;
 import org.team4u.actiondock.skill.SkillTypes;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -61,9 +62,9 @@ public class RepositorySkillService {
         RepositoryDefinition repository = catalog.getRepository(repositoryId);
         RepositoryIndexFile index = catalog.readRepositoryIndex(repository);
         List<RepositorySkillDescriptor> skills = new ArrayList<>();
-        for (RepositorySkillIndexEntry entry : catalog.safeSkills(index)) {
+        for (RepositorySkillIndexEntry entry : index.safeSkills()) {
             SkillFile skill = catalog.readSkillFile(repository, entry.skillPath());
-            skills.add(RepositoryCatalogService.toSkillDescriptor(repository, skill, entry.skillPath()));
+            skills.add(toSkillDescriptor(repository, skill, entry.skillPath()));
         }
         return skills.stream()
                 .sorted(Comparator.comparing(RepositorySkillDescriptor::skillId))
@@ -80,15 +81,15 @@ public class RepositorySkillService {
     public RepositorySkillDetail getRepositorySkill(String repositoryId, String skillId) {
         RepositoryDefinition repository = catalog.getRepository(repositoryId);
         RepositoryIndexFile index = catalog.readRepositoryIndex(repository);
-        RepositorySkillIndexEntry entry = catalog.safeSkills(index).stream()
+        RepositorySkillIndexEntry entry = index.safeSkills().stream()
                 .filter(item -> skillId.equals(item.id()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("仓库 Skill 不存在: " + skillId));
         SkillFile skill = catalog.readSkillFile(repository, entry.skillPath());
         Path skillDir = Path.of(entry.skillPath()).getParent();
-        String entrypoint = SkillFileUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE);
+        String entrypoint = NormalizeUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE);
         String content = catalog.readRepositoryFile(repository, skillDir.resolve(Path.of(entrypoint)));
-        return new RepositorySkillDetail(RepositoryCatalogService.toSkillDescriptor(repository, skill, entry.skillPath()), content);
+        return new RepositorySkillDetail(toSkillDescriptor(repository, skill, entry.skillPath()), content);
     }
 
     /**
@@ -104,7 +105,7 @@ public class RepositorySkillService {
             throw new IllegalArgumentException(ERR_HTTP_REPO_UNSUPPORTED_EXPORT);
         }
         RepositoryIndexFile index = catalog.readRepositoryIndex(repository);
-        RepositorySkillIndexEntry entry = catalog.safeSkills(index).stream()
+        RepositorySkillIndexEntry entry = index.safeSkills().stream()
                 .filter(item -> skillId.equals(item.id()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("仓库 Skill 不存在: " + skillId));
@@ -159,8 +160,8 @@ public class RepositorySkillService {
                                                                                      Path skillRoot,
                                                                                      SkillTypes.SkillValidationResult validation,
                                                                                      String releaseNotes) {
-        String normalizedVersion = SkillFileUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
-        String skillId = SkillFileUtils.normalize(validation.skillId(), "skillId 不能为空");
+        String normalizedVersion = NormalizeUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
+        String skillId = NormalizeUtils.normalize(validation.skillId(), "skillId 不能为空");
         Path root = resolveSkillRepositoryRoot(repository, skillId, normalizedVersion);
         writeSkillFilesToRepository(root, repository, skillRoot, validation, normalizedVersion, releaseNotes, skillId);
         commitSkillPublishIfNeeded(repository, skillId, normalizedVersion, releaseNotes);
@@ -169,8 +170,8 @@ public class RepositorySkillService {
 
     private Path resolveSkillRepositoryRoot(RepositoryDefinition repository, String skillId, String normalizedVersion) {
         Path root = catalog.resolveRepositoryRoot(repository);
-        RepositoryCatalogService.ensureRepositoryWorkspace(root, repository, jsonCodec);
-        RepositoryCatalogService.assertSkillVersionAvailable(repository.getId(), catalog.readRepositoryIndexFile(root, repository), skillId, normalizedVersion);
+        RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
+        RepositoryCatalogTypes.assertSkillVersionAvailable(repository.getId(), catalog.readRepositoryIndexFile(root, repository), skillId, normalizedVersion);
         return root;
     }
 
@@ -223,7 +224,26 @@ public class RepositorySkillService {
         RepositoryIndexFile current = catalog.readRepositoryIndexFile(root, repository);
         RepositorySkillIndexEntry next = RepositorySkillIndexEntry.fromSkillValidation(validation, version, releaseNotes);
         List<RepositorySkillIndexEntry> entries =
-                RepositoryCatalogTypes.upsertSorted(catalog.safeSkills(current), next, RepositorySkillIndexEntry::id);
-        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.withSkills(current, repository, entries));
+                RepositoryIndexUtils.upsertSorted(current.safeSkills(), next, RepositorySkillIndexEntry::id);
+        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withSkills(current, repository, entries));
+    }
+
+    static RepositoryCatalogTypes.RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.SkillFile skill, String skillPath) {
+        return new RepositoryCatalogTypes.RepositorySkillDescriptor(
+                repository.getId(),
+                NormalizeUtils.normalize(skill.skillId(), "skillId 不能为空"),
+                NormalizeUtils.normalizeOrDefault(skill.displayName(), skill.skillId()),
+                NormalizeUtils.normalize(skill.version(), SkillFileUtils.ERR_VERSION_REQUIRED),
+                NormalizeUtils.normalizeNullable(skill.description()),
+                null,
+                NormalizeUtils.normalizeNullable(skill.owner()),
+                NormalizeUtils.nullSafeList(skill.tags()),
+                skillPath,
+                RepositoryCatalogTypes.resolveRelative(skillPath, NormalizeUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE)),
+                NormalizeUtils.normalizeNullable(skill.digest()),
+                NormalizeUtils.normalizeNullable(skill.riskLevel()),
+                RepositoryCatalogTypes.isTrusted(repository),
+                repository.getUsage()
+        );
     }
 }

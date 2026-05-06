@@ -1,7 +1,7 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -75,6 +75,7 @@ class RepositoryAiPackageService {
         try {
             currentPackage = catalog.getCapabilityPackage(repository.getId(), draft.packageId());
         } catch (IllegalArgumentException ignored) {
+            // 能力包尚未发布，首次发布预览
         }
         return builderService.buildCapabilityPackagePublishPreview(repository, draft, currentPackage);
     }
@@ -150,8 +151,8 @@ class RepositoryAiPackageService {
                 CAPABILITY_PACKAGES_DIR + "/" + draft.packageId() + "/" + CAPABILITY_PACKAGE_MANIFEST_FILE
         );
         List<CapabilityPackageIndexEntry> entries =
-                RepositoryCatalogTypes.upsertSorted(catalog.safeCapabilityPackages(current), next, CapabilityPackageIndexEntry::id);
-        catalog.writeJson(root.resolve(RepositoryCatalogTypes.REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.withPackages(current, repository, entries));
+                RepositoryIndexUtils.upsertSorted(current.safeCapabilityPackages(), next, CapabilityPackageIndexEntry::id);
+        catalog.writeJson(root.resolve(RepositoryCatalogTypes.REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withPackages(current, repository, entries));
     }
 
     void writePluginFiles(Path pluginDir,
@@ -167,12 +168,12 @@ class RepositoryAiPackageService {
                     pluginId,
                     displayName,
                     version,
-                    SkillFileUtils.normalizeNullable(request.description()),
-                    SkillFileUtils.normalizeNullable(request.releaseNotes()),
-                    SkillFileUtils.normalizeNullable(request.owner()),
-                    nullSafeList(request.tags()),
+                    NormalizeUtils.normalizeNullable(request.description()),
+                    NormalizeUtils.normalizeNullable(request.releaseNotes()),
+                    NormalizeUtils.normalizeNullable(request.owner()),
+                    NormalizeUtils.nullSafeList(request.tags()),
                     artifact,
-                    SkillFileUtils.normalizeNullable(request.riskLevel())
+                    NormalizeUtils.normalizeNullable(request.riskLevel())
             ));
         } catch (IOException exception) {
             throw new IllegalStateException("写入仓库插件文件失败", exception);

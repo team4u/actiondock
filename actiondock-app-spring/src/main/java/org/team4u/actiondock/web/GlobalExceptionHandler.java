@@ -70,38 +70,22 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<ErrorDetail>> handleIllegalArgument(IllegalArgumentException exception) {
-        return ResponseEntity.badRequest().body(ApiResponse.error(
-                ErrorDetailSupport.summarize(exception),
-                400,
-                ErrorDetailSupport.describe(exception)
-        ));
+        return errorDetailResponse(exception, 400);
     }
 
     @ExceptionHandler(EventAuthenticationException.class)
     public ResponseEntity<ApiResponse<ErrorDetail>> handleEventAuthentication(EventAuthenticationException exception) {
-        return ResponseEntity.status(401).body(ApiResponse.error(
-                ErrorDetailSupport.summarize(exception),
-                401,
-                ErrorDetailSupport.describe(exception)
-        ));
+        return errorDetailResponse(exception, 401);
     }
 
     @ExceptionHandler(WebhookRequestPayloadTooLargeException.class)
     public ResponseEntity<ApiResponse<ErrorDetail>> handleWebhookRequestPayloadTooLarge(WebhookRequestPayloadTooLargeException exception) {
-        return ResponseEntity.status(413).body(ApiResponse.error(
-                ErrorDetailSupport.summarize(exception),
-                413,
-                ErrorDetailSupport.describe(exception)
-        ));
+        return errorDetailResponse(exception, 413);
     }
 
     @ExceptionHandler(WebhookRequestHeadersTooLargeException.class)
     public ResponseEntity<ApiResponse<ErrorDetail>> handleWebhookRequestHeadersTooLarge(WebhookRequestHeadersTooLargeException exception) {
-        return ResponseEntity.status(431).body(ApiResponse.error(
-                ErrorDetailSupport.summarize(exception),
-                431,
-                ErrorDetailSupport.describe(exception)
-        ));
+        return errorDetailResponse(exception, 431);
     }
 
     @ExceptionHandler(RepositoryPluginConflictException.class)
@@ -154,9 +138,13 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<ErrorDetail>> handleException(Exception exception) {
-        return ResponseEntity.internalServerError().body(ApiResponse.error(
+        return errorDetailResponse(exception, 500);
+    }
+
+    private static ResponseEntity<ApiResponse<ErrorDetail>> errorDetailResponse(Exception exception, int status) {
+        return ResponseEntity.status(status).body(ApiResponse.error(
                 ErrorDetailSupport.summarize(exception),
-                500,
+                status,
                 ErrorDetailSupport.describe(exception)
         ));
     }

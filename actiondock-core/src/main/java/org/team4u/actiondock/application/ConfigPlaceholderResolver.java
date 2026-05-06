@@ -4,6 +4,7 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -115,7 +116,7 @@ class ConfigPlaceholderResolver {
     private Map<String, String> loadRawValues() {
         Map<String, String> rawValues = new LinkedHashMap<>();
         configValueRepository.findAll().stream()
-                .sorted((left, right) -> left.getKey().compareTo(right.getKey()))
+                .sorted(Comparator.comparing(item -> item.getKey()))
                 .forEach(item -> rawValues.put(item.getKey(), item.getValue() == null ? "" : item.getValue()));
         return rawValues;
     }

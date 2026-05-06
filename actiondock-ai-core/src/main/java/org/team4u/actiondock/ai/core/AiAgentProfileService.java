@@ -10,9 +10,10 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+import org.team4u.actiondock.domain.model.ScriptPackaging;
+
 import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_ENTRY_PREFIX;
 import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
-import static org.team4u.actiondock.domain.model.ScriptPackaging.isManagedId;
 
 public class AiAgentProfileService {
 
@@ -123,9 +124,7 @@ public class AiAgentProfileService {
         }
     }
 
-    private void assertMutable(String id) {
-        if (isManagedId(id)) {
-            throw new IllegalArgumentException("AI 能力包托管 Agent 不允许直接修改: " + id);
-        }
+    private static void assertMutable(String id) {
+        ScriptPackaging.assertMutable(id, "Agent");
     }
 }

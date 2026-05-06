@@ -119,10 +119,12 @@ public class AiGatewayImpl implements AiGateway {
      * 从响应对象中提取用量统计。
      */
     private static AiUsage extractUsage(Object response) {
-        if (response instanceof AiChatResponse r) return r.usage();
-        if (response instanceof AiStructuredResponse r) return r.usage();
-        if (response instanceof AiEmbeddingResponse r) return r.usage();
-        return AiUsage.empty();
+        return switch (response) {
+            case AiChatResponse r -> r.usage();
+            case AiStructuredResponse r -> r.usage();
+            case AiEmbeddingResponse r -> r.usage();
+            default -> AiUsage.empty();
+        };
     }
 
     private AiModelProfile requireProfile(String id, AiCapability capability) {

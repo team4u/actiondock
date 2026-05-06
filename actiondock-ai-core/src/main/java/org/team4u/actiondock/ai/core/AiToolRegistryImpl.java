@@ -12,7 +12,6 @@ import org.team4u.actiondock.ai.api.ConfigurableAiTool;
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -108,7 +107,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         }
     }
 
-    AgentToolResolution resolveAgentTools(AiAgentProfile agentProfile) {
+    private AgentToolResolution resolveAgentTools(AiAgentProfile agentProfile) {
         if (agentProfile == null) {
             return new AgentToolResolution(List.of(), List.of(), 0);
         }
@@ -120,29 +119,20 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         List<ResolvedAgentTool> resolvedTools = new ArrayList<>();
         int mergedToolCount = 0;
         for (ToolAccumulator accumulator : accumulators.values()) {
-            if (accumulator.conflicting()) {
-                conflicts.add(new AgentToolConflict(accumulator.toolName(), List.copyOf(accumulator.sources()), "配置不一致"));
+            if (accumulator.conflicting) {
+                conflicts.add(new AgentToolConflict(accumulator.toolName, List.copyOf(accumulator.sources), "配置不一致"));
                 continue;
             }
-            if (accumulator.sources().size() > 1) {
+            if (accumulator.sources.size() > 1) {
                 mergedToolCount++;
             }
             resolvedTools.add(new ResolvedAgentTool(
-                    accumulator.tool(),
-                    accumulator.options(),
-                    List.copyOf(accumulator.sources())
+                    accumulator.tool,
+                    accumulator.options,
+                    List.copyOf(accumulator.sources)
             ));
         }
         return new AgentToolResolution(List.copyOf(resolvedTools), List.copyOf(conflicts), mergedToolCount);
-    }
-
-    public void assertToolsAllowed(Collection<AiTool> tools, AiToolPermission maxPermission) {
-        if (tools == null || tools.isEmpty()) {
-            return;
-        }
-        for (AiTool tool : tools) {
-            ensureAllowed(tool, maxPermission, "AI Agent 策略权限上限");
-        }
     }
 
     private static void ensureAllowed(AiTool tool, AiToolPermission maxPermission, String label) {
@@ -201,7 +191,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
             return;
         }
         accumulator.add(tool, options, source);
-        if (accumulator.conflicting()) {
+        if (accumulator.conflicting) {
             conflicts.removeIf(conflict -> conflict.toolName().equals(tool.name()));
         }
     }
@@ -249,28 +239,28 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         return value;
     }
 
-    public record AgentToolResolution(
+    private record AgentToolResolution(
             List<ResolvedAgentTool> tools,
             List<AgentToolConflict> conflicts,
             int mergedToolCount
     ) {
     }
 
-    public record ResolvedAgentTool(
+    private record ResolvedAgentTool(
             AiTool tool,
             Map<String, Object> options,
             List<AgentToolSource> sources
     ) {
     }
 
-    public record AgentToolConflict(
+    private record AgentToolConflict(
             String toolName,
             List<AgentToolSource> sources,
             String reason
     ) {
     }
 
-    public record AgentToolSource(
+    private record AgentToolSource(
             String sourceType,
             String sourceId,
             String toolName
@@ -302,26 +292,6 @@ public class AiToolRegistryImpl implements AiToolRegistry {
             }
             this.tool = nextTool;
             this.options = nextOptions;
-        }
-
-        private String toolName() {
-            return toolName;
-        }
-
-        private AiTool tool() {
-            return tool;
-        }
-
-        private Map<String, Object> options() {
-            return options;
-        }
-
-        private List<AgentToolSource> sources() {
-            return sources;
-        }
-
-        private boolean conflicting() {
-            return conflicting;
         }
     }
 }

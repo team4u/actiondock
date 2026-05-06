@@ -1,5 +1,7 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -15,10 +17,10 @@ public final class RepositoryVersionUtils {
     }
 
     static boolean versionSatisfies(String version, String range) {
-        if (range == null || range.isBlank()) {
+        if (NormalizeUtils.isBlank(range)) {
             return true;
         }
-        if (version == null || version.isBlank()) {
+        if (NormalizeUtils.isBlank(version)) {
             return false;
         }
         for (String token : range.trim().split("\\s+")) {
@@ -73,7 +75,7 @@ public final class RepositoryVersionUtils {
     }
 
     static void verifySha256(String pluginId, byte[] content, String expected) {
-        if (expected == null || expected.isBlank()) {
+        if (NormalizeUtils.isBlank(expected)) {
             throw new IllegalArgumentException("插件 artifact.sha256 不能为空");
         }
         String actual = sha256(content);
@@ -107,7 +109,7 @@ public final class RepositoryVersionUtils {
     }
 
     public static void validateRelativePath(String relativePath, String context) {
-        if (relativePath == null || relativePath.isBlank()) {
+        if (NormalizeUtils.isBlank(relativePath)) {
             throw new IllegalArgumentException(context + "不能为空");
         }
         if (relativePath.contains("..")) {

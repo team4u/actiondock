@@ -14,20 +14,20 @@ import type { ChangeEvent, Key } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ApiError,
   createSchedule,
   deleteSchedule,
   disableSchedule,
   enableSchedule,
-  getExecution,
   listSchedules,
   updateSchedule
-} from "../api";
+} from "../features/triggers/api";
+import { getExecution } from "../features/executions/api";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { ExecutionResultCard } from "../components/ExecutionResultCard";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
+import { ApiError } from "../shared/api/httpClient";
 import {
   analyzeScheduleImport,
   buildScheduleExportBundle,

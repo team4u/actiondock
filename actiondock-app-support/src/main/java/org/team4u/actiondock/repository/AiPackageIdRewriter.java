@@ -3,9 +3,8 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.ai.api.AiCapability;
 import org.team4u.actiondock.ai.tool.ActionDockDynamicAiToolProvider;
 import org.team4u.actiondock.domain.model.AiDependency;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
-import static org.team4u.actiondock.repository.RepositoryCatalogTypes.nullSafeList;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,7 +23,7 @@ import java.util.regex.Pattern;
  *
  * @author jay.wu
  */
-public final class AiPackageIdRewriter {
+final class AiPackageIdRewriter {
 
     private static final Pattern SCRIPT_INVOKE_PATTERN = Pattern.compile(
             "scripts\\s*\\.\\s*invoke\\s*\\(\\s*([\"'`])([^\"'`]+)\\1");
@@ -39,7 +38,7 @@ public final class AiPackageIdRewriter {
     static String rewriteToolName(String toolName,
                                   Map<String, String> agentIdMappings,
                                   Map<String, String> scriptIdMappings) {
-        if (toolName == null || toolName.isBlank()) {
+        if (NormalizeUtils.isBlank(toolName)) {
             return toolName;
         }
         if (toolName.startsWith(ActionDockDynamicAiToolProvider.SCRIPT_TOOL_PREFIX)) {
@@ -70,7 +69,7 @@ public final class AiPackageIdRewriter {
                                       Map<String, String> scriptIdMappings,
                                       Map<String, String> modelIdMappings,
                                       Map<String, String> agentIdMappings) {
-        if (source == null || source.isBlank()) {
+        if (NormalizeUtils.isBlank(source)) {
             return source;
         }
         String rewritten = replaceScriptInvokeIds(source, scriptIdMappings);
@@ -82,7 +81,7 @@ public final class AiPackageIdRewriter {
                                                      Map<String, String> modelIdMappings,
                                                      Map<String, String> agentIdMappings) {
         List<AiDependency> rewritten = new ArrayList<>();
-        for (AiDependency dependency : nullSafeList(dependencies)) {
+        for (AiDependency dependency : NormalizeUtils.nullSafeList(dependencies)) {
             rewritten.add(new AiDependency()
                     .setCapability(dependency.getCapability())
                     .setProfile(modelIdMappings.getOrDefault(dependency.getProfile(), dependency.getProfile()))
@@ -94,8 +93,8 @@ public final class AiPackageIdRewriter {
 
     static LinkedHashSet<AiCapability> readCapabilities(List<String> capabilities) {
         LinkedHashSet<AiCapability> values = new LinkedHashSet<>();
-        for (String capability : nullSafeList(capabilities)) {
-            if (capability == null || capability.isBlank()) {
+        for (String capability : NormalizeUtils.nullSafeList(capabilities)) {
+            if (NormalizeUtils.isBlank(capability)) {
                 continue;
             }
             values.add(AiCapability.valueOf(capability.trim().toUpperCase(Locale.ROOT)));
@@ -104,13 +103,13 @@ public final class AiPackageIdRewriter {
     }
 
     static List<String> extractScriptDependenciesFromSource(String source) {
-        if (source == null || source.isBlank()) {
+        if (NormalizeUtils.isBlank(source)) {
             return List.of();
         }
         LinkedHashSet<String> dependencies = new LinkedHashSet<>();
         Matcher matcher = SCRIPT_INVOKE_PATTERN.matcher(source);
         while (matcher.find()) {
-            String scriptId = SkillFileUtils.normalizeNullable(matcher.group(2));
+            String scriptId = NormalizeUtils.normalizeNullable(matcher.group(2));
             if (scriptId != null) {
                 dependencies.add(scriptId);
             }
@@ -119,7 +118,7 @@ public final class AiPackageIdRewriter {
     }
 
     static int countLiteralScriptInvocations(String source) {
-        if (source == null || source.isBlank()) {
+        if (NormalizeUtils.isBlank(source)) {
             return 0;
         }
         int count = 0;

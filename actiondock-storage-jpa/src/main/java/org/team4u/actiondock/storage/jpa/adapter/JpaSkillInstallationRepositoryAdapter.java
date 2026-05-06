@@ -24,11 +24,6 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
     }
 
     @Override
-    public Optional<SkillInstallation> findByInstallationId(String installationId) {
-        return repository.findById(installationId).map(JpaSkillInstallationRepositoryAdapter::toDomain);
-    }
-
-    @Override
     public Optional<SkillInstallation> findBySkillIdAndTargetId(String skillId, String targetId) {
         return repository.findBySkillIdAndTargetId(skillId, targetId).map(JpaSkillInstallationRepositoryAdapter::toDomain);
     }
@@ -46,11 +41,6 @@ public class JpaSkillInstallationRepositoryAdapter implements SkillInstallationR
     @Override
     public List<SkillInstallation> findByTargetId(String targetId) {
         return repository.findByTargetIdOrderByInstallationIdAsc(targetId).stream().map(JpaSkillInstallationRepositoryAdapter::toDomain).toList();
-    }
-
-    @Override
-    public void deleteByInstallationId(String installationId) {
-        repository.deleteById(installationId);
     }
 
     @Override

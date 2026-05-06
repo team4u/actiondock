@@ -29,7 +29,7 @@ import {
   previewSkillFile,
   removeSkillFromTarget,
   scanSkillTarget
-} from "../api";
+} from "../features/skills/api";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { PageHeader } from "../components/PageHeader";
 import { SkillFileBrowser } from "../components/SkillFileBrowser";

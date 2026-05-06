@@ -7,8 +7,9 @@ import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.team4u.actiondock.domain.model.ScriptPackaging;
+
 import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
-import static org.team4u.actiondock.domain.model.ScriptPackaging.isManagedId;
 
 public class AiModelProfileService {
 
@@ -85,8 +86,6 @@ public class AiModelProfileService {
     }
 
     private static void assertMutable(String id) {
-        if (isManagedId(id)) {
-            throw new IllegalArgumentException("AI 能力包托管模型不允许直接修改: " + id);
-        }
+        ScriptPackaging.assertMutable(id, "模型");
     }
 }

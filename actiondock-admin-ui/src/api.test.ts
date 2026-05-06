@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const getApiKeyMock = vi.fn();
 const emitAuthRequiredMock = vi.fn();
 
-vi.mock("./auth", () => ({
+vi.mock("./shared/auth/tokenStore", () => ({
   getApiKey: getApiKeyMock,
   emitAuthRequired: emitAuthRequiredMock
 }));
@@ -198,6 +198,66 @@ describe("api request auth handling", () => {
     fetchMock.mock.calls.forEach((call) => {
       const init = call[1] as RequestInit | undefined;
       expect(init?.method).toBe("DELETE");
+    });
+  });
+
+  it("routes repository resource operations through the lifecycle endpoint", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        status: 0,
+        msg: "ok",
+        data: {
+          resourceType: "REPOSITORY_TOOL",
+          operation: "publish",
+          repositoryId: "main",
+          resourceId: null,
+          status: "COMPLETED",
+          result: { repositoryId: "main", toolId: "hello", displayName: "Hello", version: "1.0.0" }
+        }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { publishRepositoryTool } = await import("./api");
+    const result = await publishRepositoryTool("main", {
+      scriptId: "script-1",
+      toolId: "hello",
+      displayName: "Hello",
+      version: "1.0.0",
+      owner: "team",
+      releaseNotes: "Initial",
+      tags: ["demo"],
+      scheduleIds: [],
+      configItems: [],
+      scriptDependencies: [],
+      force: false
+    });
+
+    expect(result).toEqual({ repositoryId: "main", toolId: "hello", displayName: "Hello", version: "1.0.0" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/resource-lifecycle/operations");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      resourceType: "REPOSITORY_TOOL",
+      operation: "publish",
+      repositoryId: "main",
+      payload: {
+        scriptId: "script-1",
+        toolId: "hello",
+        displayName: "Hello",
+        version: "1.0.0",
+        owner: "team",
+        releaseNotes: "Initial",
+        tags: ["demo"],
+        scheduleIds: [],
+        configItems: [],
+        scriptDependencies: [],
+        force: false
+      }
     });
   });
 });

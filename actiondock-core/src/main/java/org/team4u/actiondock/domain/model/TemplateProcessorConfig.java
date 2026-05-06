@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class TemplateProcessorConfig {
 
-    public static final String DEFAULT_ENGINE = "MUSTACHE";
+    private static final String DEFAULT_ENGINE = "MUSTACHE";
 
     private String engine = DEFAULT_ENGINE;
     private Map<String, Object> template = new LinkedHashMap<>();

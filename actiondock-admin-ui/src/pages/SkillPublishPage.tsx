@@ -21,14 +21,16 @@ import JSZip from "jszip";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  downloadInstalledSkillArchive,
+  downloadInstalledSkillArchive
+} from "../features/skills/api";
+import {
   downloadRepositorySkillArchive,
   getRepositorySkill,
   listRepositories,
   listSkillsByRepository,
   publishRepositorySkillArchive,
   syncRepository
-} from "../api";
+} from "../features/resources/api";
 import { CodeEditor } from "../components/CodeEditor";
 import { PageHeader } from "../components/PageHeader";
 import { useColorMode } from "../contexts/ColorModeContext";

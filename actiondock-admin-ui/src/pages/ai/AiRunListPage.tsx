@@ -2,7 +2,7 @@ import { Button, Modal, Space, Table, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteAiRun, listAiRuns } from "../../api";
+import { deleteAiRun, listAiRuns } from "../../features/ai/api";
 import { AiRunStatusTag } from "../../components/ai/AiTags";
 import { PageHeader } from "../../components/PageHeader";
 import { TableLinkCell } from "../../components/TableLinkCell";

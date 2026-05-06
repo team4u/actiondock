@@ -58,7 +58,7 @@ class PluginConfigManager {
         }
     }
 
-    static Map<String, Object> mergeConfig(Map<String, Object> defaultConfig, Map<String, Object> overrides) {
+    private static Map<String, Object> mergeConfig(Map<String, Object> defaultConfig, Map<String, Object> overrides) {
         Map<String, Object> merged = normalizeConfig(defaultConfig);
         merged.putAll(normalizeConfig(overrides));
         return merged;

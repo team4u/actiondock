@@ -4,15 +4,12 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent, type Key } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  ApiError,
   createAiAgent,
   createAiModel,
   getAiAgent,
   getAiRun,
   getAiModel,
-  listConfigValues,
   listAiModels,
-  listSkills,
   listAiTools,
   listAiToolsets,
   startAiAgentRun,
@@ -20,12 +17,15 @@ import {
   testAiModel,
   updateAiAgent,
   updateAiModel
-} from "../../api";
+} from "../../features/ai/api";
+import { listConfigValues } from "../../features/settings/api";
+import { listSkills } from "../../features/skills/api";
 import { buildToolOptionsPayload, cloneToolConfigMap, resolveAgentToolSelection, type ResolvedAgentToolView, type ToolConfigMap } from "../../aiAgentTools";
 import { AiRunStatusTag } from "../../components/ai/AiTags";
 import { AiStepTracePanel } from "../../components/ai/AiStepTracePanel";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
+import { ApiError } from "../../shared/api/httpClient";
 import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
 import { buildSystemSettingsSearch } from "../../settingsRouting";
 import type {

@@ -3,8 +3,8 @@ package org.team4u.actiondock.repository;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.LOCAL_ARTIFACT_SCHEME;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.REPO_TYPE_HTTP;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.WINDOWS_ABSOLUTE_PATH_REGEX;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
-import org.team4u.actiondock.skill.SkillFileUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -33,7 +33,7 @@ public class LocalPluginArtifactResolver implements PluginArtifactResolver {
         }
         validateRelativePath(relativePath);
 
-        Path repositoryRoot = SkillFileUtils.normalizePath(context.repositoryRoot());
+        Path repositoryRoot = NormalizeUtils.normalizePath(context.repositoryRoot());
         Path artifactPath = repositoryRoot.resolve(relativePath).normalize();
         if (!artifactPath.startsWith(repositoryRoot)) {
             throw new IllegalArgumentException("local artifact 越界访问被拒绝");
@@ -59,7 +59,7 @@ public class LocalPluginArtifactResolver implements PluginArtifactResolver {
     }
 
     private static String resolveFileName(PluginArtifactRef artifact, Path path) {
-        if (artifact.fileName() != null && !artifact.fileName().isBlank()) {
+        if (NormalizeUtils.isNotBlank(artifact.fileName())) {
             return artifact.fileName();
         }
         return path.getFileName().toString();

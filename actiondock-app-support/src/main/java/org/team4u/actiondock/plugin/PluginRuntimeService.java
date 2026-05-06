@@ -8,7 +8,6 @@ import org.team4u.actiondock.application.MapValueConverter;
 import org.team4u.actiondock.application.ErrorDetailSupport;
 import org.team4u.actiondock.application.ExecutionOutputProjector;
 import org.team4u.actiondock.config.AppProperties;
-import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.domain.model.PluginActionMetadata;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -21,6 +20,7 @@ import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -57,6 +57,7 @@ public class PluginRuntimeService {
     private final PluginRegistryRepository pluginRegistryRepository;
     private final ScriptRepository scriptRepository;
     private final Path pluginsRoot;
+    private final PluginFileManager fileManager;
     private final DefaultPluginManager pluginManager;
     private final Map<String, ActionDockPlugin> systemPlugins;
     private final Map<String, PluginManifest> manifestCache;
@@ -68,6 +69,7 @@ public class PluginRuntimeService {
         this.pluginRegistryRepository = null;
         this.scriptRepository = null;
         this.pluginsRoot = null;
+        this.fileManager = null;
         this.pluginManager = null;
         this.systemPlugins = Map.of();
         this.manifestCache = Map.of();
@@ -105,9 +107,10 @@ public class PluginRuntimeService {
                                 List<ActionDockPlugin> systemPlugins) {
         this.pluginRegistryRepository = pluginRegistryRepository;
         this.scriptRepository = scriptRepository;
-        this.pluginsRoot = SkillFileUtils.normalizePath(Path.of(properties == null || properties.getDir() == null || properties.getDir().isBlank()
+        this.pluginsRoot = NormalizeUtils.normalizePath(Path.of(properties == null || NormalizeUtils.isBlank(properties.getDir())
                 ? AppProperties.defaultPluginsDir()
                 : properties.getDir()));
+        this.fileManager = new PluginFileManager(this.pluginsRoot);
         Path configRoot = this.pluginsRoot.resolve(".actiondock-config");
         this.pluginManager = new DefaultPluginManager(this.pluginsRoot);
         this.systemPlugins = systemPlugins == null ? Map.of() : systemPlugins.stream()
@@ -129,7 +132,7 @@ public class PluginRuntimeService {
         if (!enabled) {
             return List.of();
         }
-        return withReadLock(() -> pluginRegistryRepository.findAll().stream()
+        return withReadLock(lock, () -> pluginRegistryRepository.findAll().stream()
                 .sorted(Comparator.comparing(PluginRegistration::getPluginId))
                 .map(reg -> PluginViewMapper.toPluginView(reg, pluginManager))
                 .toList());
@@ -139,7 +142,7 @@ public class PluginRuntimeService {
         if (!enabled) {
             return List.of();
         }
-        return withReadLock(() -> {
+        return withReadLock(lock, () -> {
             List<PluginReferenceView> references = new ArrayList<>();
             pluginRegistryRepository.findAll().stream()
                     .filter(registration -> isLoadedAndStarted(registration.getPluginId()))
@@ -158,15 +161,15 @@ public class PluginRuntimeService {
     }
 
     public PluginView get(String pluginId) {
-        return withReadLock(() -> PluginViewMapper.toPluginView(requireRegistration(pluginId), pluginManager));
+        return withReadLock(lock, () -> PluginViewMapper.toPluginView(requireRegistration(pluginId), pluginManager));
     }
 
     public PluginConfigView getConfig(String pluginId) {
-        return withReadLock(() -> buildConfigView(pluginId, requireRegistration(pluginId)));
+        return withReadLock(lock, () -> buildConfigView(pluginId, requireRegistration(pluginId)));
     }
 
     public PluginConfigView saveConfig(String pluginId, Map<String, Object> config) {
-        return withWriteLock(() -> {
+        return withWriteLock(lock, () -> {
             PluginRegistration registration = requireRegistration(pluginId);
             Map<String, Object> normalized = PluginConfigManager.normalizeConfig(config);
             Map<String, Object> effectiveConfig = configManager.resolveRuntimeConfig(registration.getDefaultConfig(), normalized);
@@ -222,7 +225,9 @@ public class PluginRuntimeService {
         }
         String pluginId = loadPlugin(destination);
         PluginManifest manifest = cacheManifest(pluginId);
-        assertRepositoryVersion(repositoryVersion, manifest);
+        if (NormalizeUtils.isNotBlank(repositoryVersion) && !repositoryVersion.equals(manifest.getVersion())) {
+            throw new IllegalArgumentException("插件版本与仓库描述不一致: " + manifest.getVersion());
+        }
         return pluginId;
     }
 
@@ -231,14 +236,16 @@ public class PluginRuntimeService {
                                String repositoryId,
                                String repositoryPluginId,
                                String repositoryVersion) {
-        return withWriteLock(() -> {
+        return withWriteLock(lock, () -> {
             ensureEnabled();
-            String fileName = sanitizeFilename(originalFilename);
-            Path destination = uniquePluginPath(fileName);
+            String fileName = fileManager.sanitizeFilename(originalFilename);
+            Path destination = fileManager.uniquePluginPath(fileName);
             String pluginId = null;
             try {
                 pluginId = persistPluginArtifact(content, destination, repositoryVersion);
-                ensurePluginNotExists(pluginId);
+                if (pluginRegistryRepository.findByPluginId(pluginId).isPresent()) {
+                    throw new IllegalArgumentException("插件已存在: " + pluginId);
+                }
                 PluginRegistration saved = saveRegistration(pluginId, destination.getFileName().toString(), true, null, repositoryId, repositoryPluginId, repositoryVersion);
                 return PluginViewMapper.toPluginView(saved, pluginManager);
             } catch (Exception exception) {
@@ -247,12 +254,6 @@ public class PluginRuntimeService {
                         : new PluginRuntimeException("安装插件失败: " + exception.getMessage(), exception);
             }
         });
-    }
-
-    private void ensurePluginNotExists(String pluginId) {
-        if (pluginRegistryRepository.findByPluginId(pluginId).isPresent()) {
-            throw new IllegalArgumentException("插件已存在: " + pluginId);
-        }
     }
 
     private PluginRegistration saveRegistration(String pluginId, String fileName,
@@ -297,11 +298,11 @@ public class PluginRuntimeService {
                                String repositoryId,
                                String repositoryPluginId,
                                String repositoryVersion) {
-        return withWriteLock(() -> {
+        return withWriteLock(lock, () -> {
             ensureEnabled();
             PluginRegistration current = requireRegistration(pluginId);
             PluginRegistration backup = current.copy();
-            Path oldPluginPath = resolvePluginPath(current);
+            Path oldPluginPath = fileManager.resolvePluginPath(current);
             boolean wasEnabled = current.isEnabled();
             return performUpgrade(pluginId, originalFilename, content, repositoryId, repositoryPluginId,
                     repositoryVersion, backup, oldPluginPath, wasEnabled);
@@ -317,7 +318,7 @@ public class PluginRuntimeService {
                                       PluginRegistration backup,
                                       Path oldPluginPath,
                                       boolean wasEnabled) {
-        Path destination = uniquePluginPath(sanitizeFilename(originalFilename));
+        Path destination = fileManager.uniquePluginPath(fileManager.sanitizeFilename(originalFilename));
         String loadedPluginId = null;
         PluginRegistration saved = null;
         try {
@@ -361,19 +362,19 @@ public class PluginRuntimeService {
     }
 
     public Optional<PluginRegistration> findPluginRegistration(String pluginId) {
-        return withReadLock(() -> pluginRegistryRepository.findByPluginId(pluginId)
+        return withReadLock(lock, () -> pluginRegistryRepository.findByPluginId(pluginId)
                 .map(PluginRegistration::copy));
     }
 
     public PluginRegistration getRegistration(String pluginId) {
-        return withReadLock(() -> requireRegistration(pluginId).copy());
+        return withReadLock(lock, () -> requireRegistration(pluginId).copy());
     }
 
     public byte[] readPluginFile(String pluginId) {
-        return withReadLock(() -> {
+        return withReadLock(lock, () -> {
             try {
                 PluginRegistration registration = requireRegistration(pluginId);
-                return Files.readAllBytes(resolvePluginPath(registration));
+                return Files.readAllBytes(fileManager.resolvePluginPath(registration));
             } catch (IOException exception) {
                 throw new PluginRuntimeException("读取插件文件失败: " + pluginId, exception);
             }
@@ -381,7 +382,7 @@ public class PluginRuntimeService {
     }
 
     public PluginView start(String pluginId) {
-        return withWriteLock(() -> {
+        return withWriteLock(lock, () -> {
             ensureEnabled();
             PluginRegistration registration = requireRegistration(pluginId);
             loadRegisteredPlugin(registration);
@@ -391,7 +392,7 @@ public class PluginRuntimeService {
     }
 
     public PluginView stop(String pluginId) {
-        return withWriteLock(() -> {
+        return withWriteLock(lock, () -> {
             ensureEnabled();
             PluginRegistration registration = requireRegistration(pluginId);
             unloadIfLoaded(pluginId);
@@ -405,42 +406,29 @@ public class PluginRuntimeService {
     }
 
     public void uninstall(String pluginId, boolean force) {
-        withWriteLock(() -> {
+        withWriteLock(lock, () -> {
             ensureEnabled();
-            if (!force) {
-                List<String> dependentScripts = findDependentScriptIds(pluginId);
+            if (!force && scriptRepository != null) {
+                List<String> dependentScripts = scriptRepository.findAll().stream()
+                        .filter(script -> script.getPluginDependencies().stream()
+                                .anyMatch(dependency -> pluginId.equals(dependency.getPluginId())))
+                        .map(ScriptDefinition::getId)
+                        .toList();
                 if (!dependentScripts.isEmpty()) {
                     throw new IllegalArgumentException("插件仍被工具依赖，不能卸载: " + String.join(", ", dependentScripts));
                 }
             }
             PluginRegistration registration = requireRegistration(pluginId);
             unloadIfLoaded(pluginId);
-            deletePluginFile(registration);
+            fileManager.deletePluginFile(registration);
             pluginRegistryRepository.deleteByPluginId(pluginId);
             manifestCache.remove(pluginId);
             configManager.deleteConfig(pluginId);
         });
     }
 
-    /**
-     * 查找依赖指定插件的所有脚本 ID。
-     *
-     * @param pluginId 插件 ID
-     * @return 依赖该插件的脚本 ID 列表
-     */
-    public List<String> findDependentScriptIds(String pluginId) {
-        if (scriptRepository == null) {
-            return List.of();
-        }
-        return scriptRepository.findAll().stream()
-                .filter(script -> script.getPluginDependencies().stream()
-                        .anyMatch(dependency -> pluginId.equals(dependency.getPluginId())))
-                .map(ScriptDefinition::getId)
-                .toList();
-    }
-
-    public void assertActionAvailable(String pluginId, String action) {
-        withReadLock(() -> {
+    private void assertActionAvailable(String pluginId, String action) {
+        withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
                 return;
             }
@@ -463,7 +451,7 @@ public class PluginRuntimeService {
                          ScriptExecutionContext executionContext,
                          Map<String, Object> input,
                          Map<String, Object> args) {
-        return withReadLock(() -> {
+        return withReadLock(lock, () -> {
             assertActionAvailable(pluginId, action);
             return doInvoke(pluginId, action, definition, executionContext, input, args);
         });
@@ -474,7 +462,7 @@ public class PluginRuntimeService {
                                            Map<String, Object> args,
                                            Map<String, Object> scriptInput,
                                            boolean includeDebug) {
-        return withReadLock(() -> {
+        return withReadLock(lock, () -> {
             PluginRegistration registration = requireRegistration(pluginId);
             PluginActionMetadata actionMetadata = requireActionMetadata(registration, action);
             Map<String, Object> normalizedArgs = configValueApplicationService.resolveMap(args);
@@ -599,7 +587,7 @@ public class PluginRuntimeService {
     }
 
     private PluginManifest loadRegisteredPlugin(PluginRegistration registration) {
-        Path pluginPath = resolvePluginPath(registration);
+        Path pluginPath = fileManager.resolvePluginPath(registration);
         if (!Files.exists(pluginPath)) {
             throw new IllegalArgumentException("插件文件不存在: " + pluginPath);
         }
@@ -616,7 +604,7 @@ public class PluginRuntimeService {
 
     private String loadPlugin(Path pluginPath) {
         String pluginId = pluginManager.loadPlugin(pluginPath);
-        if (pluginId == null || pluginId.isBlank()) {
+        if (NormalizeUtils.isBlank(pluginId)) {
             throw new IllegalStateException("插件加载失败，未返回 pluginId");
         }
         startPlugin(pluginId);
@@ -633,7 +621,7 @@ public class PluginRuntimeService {
     private PluginManifest cacheManifest(String pluginId) {
         ActionDockPlugin extension = requireLoadedExtension(pluginId);
         String declaredPluginId = extension.id();
-        if (declaredPluginId == null || declaredPluginId.isBlank()) {
+        if (NormalizeUtils.isBlank(declaredPluginId)) {
             throw new IllegalArgumentException("插件 ID 不能为空: " + pluginId);
         }
         if (!pluginId.equals(declaredPluginId)) {
@@ -643,7 +631,7 @@ public class PluginRuntimeService {
         if (manifest == null) {
             throw new IllegalArgumentException("插件描述不能为空: " + pluginId);
         }
-        if (manifest.getPluginId() == null || manifest.getPluginId().isBlank()) {
+        if (NormalizeUtils.isBlank(manifest.getPluginId())) {
             manifest.setPluginId(pluginId);
         }
         if (!pluginId.equals(manifest.getPluginId())) {
@@ -651,12 +639,6 @@ public class PluginRuntimeService {
         }
         manifestCache.put(pluginId, manifest);
         return manifest;
-    }
-
-    private static void assertRepositoryVersion(String expectedVersion, PluginManifest manifest) {
-        if (expectedVersion != null && !expectedVersion.isBlank() && !expectedVersion.equals(manifest.getVersion())) {
-            throw new IllegalArgumentException("插件版本与仓库描述不一致: " + manifest.getVersion());
-        }
     }
 
     private void unloadIfLoaded(String pluginId) {
@@ -673,50 +655,13 @@ public class PluginRuntimeService {
         }
     }
 
-    private void deletePluginFile(PluginRegistration registration) {
-        try {
-            Files.deleteIfExists(resolvePluginPath(registration));
-        } catch (IOException e) {
-            throw new PluginRuntimeException("删除插件文件失败: " + registration.getPluginId(), e);
-        }
-    }
-
-    private Path resolvePluginPath(PluginRegistration registration) {
-        return pluginsRoot.resolve(registration.getFileName()).normalize();
-    }
-
-    private Path uniquePluginPath(String fileName) {
-        Path target = pluginsRoot.resolve(fileName);
-        if (!Files.exists(target)) {
-            return target;
-        }
-        int dot = fileName.lastIndexOf('.');
-        String base = dot >= 0 ? fileName.substring(0, dot) : fileName;
-        String extension = dot >= 0 ? fileName.substring(dot) : "";
-        int index = 1;
-        while (Files.exists(target)) {
-            target = pluginsRoot.resolve(base + "-" + index + extension);
-            index++;
-        }
-        return target;
-    }
-
-    private static String sanitizeFilename(String originalFilename) {
-        String value = originalFilename == null || originalFilename.isBlank() ? "plugin.jar" : originalFilename;
-        String fileName = Path.of(value).getFileName().toString();
-        if (!fileName.endsWith(".jar")) {
-            throw new IllegalArgumentException("仅支持上传 .jar 插件包");
-        }
-        return fileName;
-    }
-
     private void ensureEnabled() {
         if (!enabled) {
             throw new IllegalStateException("插件运行时未启用");
         }
     }
 
-    private <T> T withReadLock(java.util.function.Supplier<T> action) {
+    private static <T> T withReadLock(ReentrantReadWriteLock lock, java.util.function.Supplier<T> action) {
         lock.readLock().lock();
         try {
             return action.get();
@@ -725,7 +670,7 @@ public class PluginRuntimeService {
         }
     }
 
-    private void withReadLock(Runnable action) {
+    private static void withReadLock(ReentrantReadWriteLock lock, Runnable action) {
         lock.readLock().lock();
         try {
             action.run();
@@ -734,7 +679,7 @@ public class PluginRuntimeService {
         }
     }
 
-    private void withWriteLock(Runnable action) {
+    private static void withWriteLock(ReentrantReadWriteLock lock, Runnable action) {
         lock.writeLock().lock();
         try {
             action.run();
@@ -743,7 +688,7 @@ public class PluginRuntimeService {
         }
     }
 
-    private <T> T withWriteLock(java.util.function.Supplier<T> action) {
+    private static <T> T withWriteLock(ReentrantReadWriteLock lock, java.util.function.Supplier<T> action) {
         lock.writeLock().lock();
         try {
             return action.get();

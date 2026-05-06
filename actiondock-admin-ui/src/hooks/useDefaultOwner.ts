@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getConfigValue } from "../api";
+import { getConfigValue } from "../features/settings/api";
 
 const DEFAULT_OWNER_KEY = "system.default-owner";
 

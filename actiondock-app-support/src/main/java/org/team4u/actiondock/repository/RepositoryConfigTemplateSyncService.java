@@ -2,7 +2,7 @@ package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,7 +55,7 @@ class RepositoryConfigTemplateSyncService {
         return new ConfigValue()
                 .setKey(template.key())
                 .setValue(publishMode.equals(PUBLISH_MODE_INLINE) ? template.defaultValue() : "")
-                .setDescription(SkillFileUtils.normalizeNullable(template.label()))
+                .setDescription(NormalizeUtils.normalizeNullable(template.label()))
                 .setSecret(template.secret())
                 .setRepositoryId(repositoryId)
                 .setRepositoryToolId(toolId)
@@ -75,7 +75,7 @@ class RepositoryConfigTemplateSyncService {
     private static void updateManagedConfigValue(ConfigValue existing,
                                                  RepositoryCatalogTypes.ConfigTemplateItem template,
                                                  String repositoryVersion, String publishMode) {
-        existing.setDescription(SkillFileUtils.normalizeNullable(template.label()))
+        existing.setDescription(NormalizeUtils.normalizeNullable(template.label()))
                 .setSecret(template.secret())
                 .setRepositoryVersion(repositoryVersion)
                 .setPublishMode(publishMode)

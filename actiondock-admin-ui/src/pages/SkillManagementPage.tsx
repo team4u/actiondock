@@ -38,7 +38,7 @@ import {
   restoreSkill,
   syncSkillInstallationsToTarget,
   updateSkillTarget
-} from "../api";
+} from "../features/skills/api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import {

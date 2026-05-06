@@ -70,6 +70,34 @@ export interface ScriptDefinition {
   updatedAt?: string;
 }
 
+export interface CapabilityBinding {
+  version?: string | null;
+  source?: string | null;
+  runtime?: ScriptType | string | null;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  packaging?: ScriptPackaging | string | null;
+  dependencies?: unknown[];
+}
+
+export interface CapabilityView {
+  id: string;
+  kind?: string;
+  name?: string;
+  runtime?: ScriptType | string;
+  source?: string;
+  status?: ScriptStatus | string;
+  version?: number;
+  scope?: ScriptScope | string;
+  description?: string;
+  owner?: string;
+  tags?: string[];
+  draftBinding?: CapabilityBinding | null;
+  publishedBinding?: CapabilityBinding | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PluginDependency {
   pluginId: string;
   versionRange?: string;
@@ -1072,6 +1100,27 @@ export interface RepositoryInstallRequest {
   installScriptDependencies?: boolean;
   installPluginDependencies?: boolean;
   forcePluginUpgrade?: boolean;
+}
+
+export type ResourceLifecycleResourceType = "REPOSITORY_TOOL" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
+export type ResourceLifecycleOperation = "install" | "update" | "develop" | "publish" | "preview" | "uninstall";
+
+export interface ResourceLifecycleRequest<TPayload = Record<string, unknown>> {
+  resourceType: ResourceLifecycleResourceType;
+  operation: ResourceLifecycleOperation;
+  repositoryId?: string;
+  resourceId?: string;
+  installedResourceId?: string;
+  payload?: TPayload;
+}
+
+export interface ResourceLifecycleOperationView<TResult = unknown> {
+  resourceType: ResourceLifecycleResourceType;
+  operation: ResourceLifecycleOperation;
+  repositoryId?: string;
+  resourceId?: string;
+  status: "COMPLETED" | string;
+  result: TResult;
 }
 
 export interface RepositoryPluginDescriptor {

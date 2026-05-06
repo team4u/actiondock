@@ -8,9 +8,7 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -138,7 +136,7 @@ public class ScheduleApplicationService {
         target.setScriptId(script.getId())
                 .setName(name)
                 .setCronExpression(cronExpression)
-                .setInput(copy(schedule.getInput()))
+                .setInput(SchemaValueCopier.copyMap(schedule.getInput()))
                 .setEnabled(schedule.isEnabled())
                 .setUpdatedAt(now);
         ScriptSchemaSupport.validateInput(script.getId(),
@@ -167,6 +165,17 @@ public class ScheduleApplicationService {
     }
 
     /**
+     * 根据 ID 启用调度配置，自动解析关联脚本。
+     *
+     * @param scheduleId 调度 ID
+     * @return 启用后的调度配置
+     */
+    public ScriptSchedule enableByScheduleId(String scheduleId) {
+        ScriptSchedule schedule = getById(scheduleId);
+        return enable(schedule.getScriptId(), scheduleId);
+    }
+
+    /**
      * 禁用调度配置。
      * <p>
      * 禁用后调度将不再被定时触发，但配置仍保留。
@@ -184,6 +193,17 @@ public class ScheduleApplicationService {
     }
 
     /**
+     * 根据 ID 禁用调度配置，自动解析关联脚本。
+     *
+     * @param scheduleId 调度 ID
+     * @return 禁用后的调度配置
+     */
+    public ScriptSchedule disableByScheduleId(String scheduleId) {
+        ScriptSchedule schedule = getById(scheduleId);
+        return disable(schedule.getScriptId(), scheduleId);
+    }
+
+    /**
      * 删除指定脚本下的调度配置。
      *
      * @param scriptId   脚本 ID
@@ -194,6 +214,16 @@ public class ScheduleApplicationService {
         ScriptSchedule schedule = get(scriptId, scheduleId);
         ensureEditable(schedule);
         scriptScheduleRepository.deleteById(schedule.getId());
+    }
+
+    /**
+     * 根据 ID 删除调度配置，自动解析关联脚本。
+     *
+     * @param scheduleId 调度 ID
+     */
+    public void deleteByScheduleId(String scheduleId) {
+        ScriptSchedule schedule = getById(scheduleId);
+        delete(schedule.getScriptId(), scheduleId);
     }
 
     /**
@@ -215,15 +245,6 @@ public class ScheduleApplicationService {
         return scriptScheduleRepository.save(schedule);
     }
 
-    /**
-     * 清除指定脚本下的所有调度配置。
-     *
-     * @param scriptId 脚本 ID
-     */
-    public void clearByScriptId(String scriptId) {
-        scriptScheduleRepository.deleteByScriptId(scriptId);
-    }
-
     private ScriptDefinition ensurePublishedScript(String scriptId) {
         ScriptDefinition script = ensureScriptExists(scriptId);
         if (script.getPublishedSnapshot() == null) {
@@ -241,10 +262,6 @@ public class ScheduleApplicationService {
         if (!schedule.getScriptId().equals(scriptId)) {
             throw new IllegalArgumentException("调度不属于该脚本: " + schedule.getId());
         }
-    }
-
-    private static Map<String, Object> copy(Map<String, Object> input) {
-        return input == null ? new LinkedHashMap<>() : SchemaValueCopier.copyMap(input);
     }
 
     private static void ensureEditable(ScriptSchedule schedule) {

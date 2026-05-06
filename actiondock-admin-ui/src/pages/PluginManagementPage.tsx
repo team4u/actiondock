@@ -11,27 +11,29 @@ import { Button, Card, Descriptions, Drawer, Modal, Space, Spin, Table, Tag, Typ
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useRef, useState } from "react";
 import {
-  ApiError,
   getPlugin,
-  installRepositoryPlugin,
   installPlugin,
-  listPluginsByRepository,
   listPlugins,
-  listRepositories,
-  listRepositoryPlugins,
   startPlugin,
   stopPlugin,
-  syncRepository,
-  updateRepositoryPlugin,
   upgradePlugin,
   uninstallPlugin
-} from "../api";
+} from "../features/plugins/api";
+import {
+  installRepositoryPlugin,
+  listPluginsByRepository,
+  listRepositories,
+  listRepositoryPlugins,
+  syncRepository,
+  updateRepositoryPlugin
+} from "../features/resources/api";
 import { getApiKey } from "../auth";
 import { PageHeader } from "../components/PageHeader";
 import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PluginActionsOverview } from "../components/PluginActionsOverview";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
+import { ApiError } from "../shared/api/httpClient";
 import type { PluginAction, PluginView, RepositoryPluginConflict, RepositoryPluginDescriptor } from "../types";
 import { getErrorMessage } from "../utils";
 

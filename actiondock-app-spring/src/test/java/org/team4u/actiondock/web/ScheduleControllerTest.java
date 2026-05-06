@@ -109,7 +109,8 @@ class ScheduleControllerTest {
 
     @Test
     void updateRejectsCrossScriptMove() throws Exception {
-        when(scheduleApplicationService.getById("schedule-1")).thenReturn(schedule("schedule-1"));
+        when(scheduleApplicationService.save(eq("other-script"), any()))
+                .thenThrow(new IllegalArgumentException("调度不属于该脚本: schedule-1"));
 
         mockMvc.perform(put("/api/schedules/schedule-1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -117,7 +118,7 @@ class ScheduleControllerTest {
                                 {"scriptId":"other-script","name":"Nightly","cronExpression":"0 0 2 * * *","input":{},"enabled":true}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.msg").value("不支持修改所属脚本"));
+                .andExpect(jsonPath("$.msg").value("调度不属于该脚本: schedule-1"));
     }
 
     @Test
@@ -128,7 +129,7 @@ class ScheduleControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.msg").value("已删除"));
 
-        verify(scheduleApplicationService).delete("script-1", "schedule-1");
+        verify(scheduleApplicationService).deleteByScheduleId("schedule-1");
         verify(scriptScheduleDispatcher).refreshScript("script-1");
     }
 

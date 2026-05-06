@@ -274,68 +274,6 @@ public class ExecutionRecord {
     }
 
     /**
-     * 将执行状态转换为 RUNNING，设置开始时间。
-     *
-     * @return 当前实例
-     * @throws IllegalStateException 如果当前状态不是 PENDING
-     */
-    public ExecutionRecord start() {
-        if (status != ExecutionStatus.PENDING) {
-            throw new IllegalStateException("只能在 PENDING 状态下启动执行，当前状态: " + status);
-        }
-        this.status = ExecutionStatus.RUNNING;
-        this.startedAt = LocalDateTime.now();
-        return this;
-    }
-
-    /**
-     * 将执行状态转换为 SUCCESS，设置输出和完成时间。
-     *
-     * @param output 执行结果
-     * @return 当前实例
-     * @throws IllegalStateException 如果当前状态不是 RUNNING
-     */
-    public ExecutionRecord complete(Map<String, Object> output) {
-        if (status != ExecutionStatus.RUNNING) {
-            throw new IllegalStateException("只能在 RUNNING 状态下完成执行，当前状态: " + status);
-        }
-        this.status = ExecutionStatus.SUCCESS;
-        this.output = output == null ? new LinkedHashMap<>() : new LinkedHashMap<>(output);
-        this.finishedAt = LocalDateTime.now();
-        return this;
-    }
-
-    /**
-     * 将执行状态转换为 FAILED，设置错误信息和完成时间。
-     *
-     * @param errorMessage 错误摘要信息
-     * @return 当前实例
-     * @throws IllegalStateException 如果当前状态不是 RUNNING
-     */
-    public ExecutionRecord fail(String errorMessage) {
-        return fail(errorMessage, null);
-    }
-
-    /**
-     * 将执行状态转换为 FAILED，设置错误详情和完成时间。
-     *
-     * @param errorMessage 错误摘要信息
-     * @param errorDetail  错误详情
-     * @return 当前实例
-     * @throws IllegalStateException 如果当前状态不是 RUNNING
-     */
-    public ExecutionRecord fail(String errorMessage, ErrorDetail errorDetail) {
-        if (status != ExecutionStatus.RUNNING) {
-            throw new IllegalStateException("只能在 RUNNING 状态下标记失败，当前状态: " + status);
-        }
-        this.status = ExecutionStatus.FAILED;
-        this.errorMessage = errorMessage;
-        this.errorDetail = errorDetail;
-        this.finishedAt = LocalDateTime.now();
-        return this;
-    }
-
-    /**
      * 判断执行是否仍在活跃状态（PENDING 或 RUNNING）。
      *
      * @return 如果执行尚未结束则返回 true

@@ -3,6 +3,7 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.configvalue.PlaceholderKeyExtractor;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -11,7 +12,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import org.team4u.actiondock.skill.SkillFileUtils;
 
 import java.util.Locale;
 import java.util.Map;
@@ -43,8 +43,8 @@ final class RepositoryPublishConfigResolver {
 
     private static Map<String, ConfigValue> buildConfigsByKey(List<ConfigValue> configValues) {
         Map<String, ConfigValue> configsByKey = new LinkedHashMap<>();
-        for (ConfigValue value : nullSafeList(configValues)) {
-            if (value == null || value.getKey() == null || value.getKey().isBlank()) {
+        for (ConfigValue value : NormalizeUtils.nullSafeList(configValues)) {
+            if (value == null || NormalizeUtils.isBlank(value.getKey())) {
                 continue;
             }
             configsByKey.put(value.getKey(), value);
@@ -55,7 +55,7 @@ final class RepositoryPublishConfigResolver {
     private static LinkedHashSet<String> collectDetectedKeys(String source,
                                                              List<Map<String, Object>> scheduleInputs) {
         LinkedHashSet<String> detectedKeys = new LinkedHashSet<>(extractSourceConfigKeys(source));
-        for (Map<String, Object> scheduleInput : nullSafeList(scheduleInputs)) {
+        for (Map<String, Object> scheduleInput : NormalizeUtils.nullSafeList(scheduleInputs)) {
             PlaceholderKeyExtractor.collectPlaceholderKeys(scheduleInput, detectedKeys);
         }
         return detectedKeys;
@@ -89,7 +89,7 @@ final class RepositoryPublishConfigResolver {
                 .map(configsByKey::get)
                 .map(value -> new ResolvedConfigValue(
                         value.getKey(),
-                        SkillFileUtils.normalizeNullable(value.getDescription()),
+                        NormalizeUtils.normalizeNullable(value.getDescription()),
                         value.isSecret(),
                         value.getValue() == null ? "" : value.getValue()
                 ))
@@ -129,7 +129,7 @@ final class RepositoryPublishConfigResolver {
     }
 
     static List<String> extractSourceConfigKeys(String source) {
-        if (source == null || source.isBlank()) {
+        if (NormalizeUtils.isBlank(source)) {
             return List.of();
         }
         LinkedHashSet<String> keys = new LinkedHashSet<>();
@@ -141,7 +141,7 @@ final class RepositoryPublishConfigResolver {
 
     private static void collectMatches(Matcher matcher, Set<String> target) {
         while (matcher.find()) {
-            String key = SkillFileUtils.normalizeNullable(matcher.group(2));
+            String key = NormalizeUtils.normalizeNullable(matcher.group(2));
             if (key != null) {
                 target.add(key);
             }
@@ -153,7 +153,7 @@ final class RepositoryPublishConfigResolver {
         for (RepositoryPublishConfigItem item : requestedItems == null
                 ? List.<RepositoryPublishConfigItem>of()
                 : requestedItems) {
-            if (item == null || item.key() == null || item.key().isBlank()) {
+            if (item == null || NormalizeUtils.isBlank(item.key())) {
                 throw new IllegalArgumentException("发布配置项 key 不能为空");
             }
             String key = item.key().trim();
@@ -166,7 +166,7 @@ final class RepositoryPublishConfigResolver {
     }
 
     private static String normalizeMode(String mode) {
-        String normalized = SkillFileUtils.normalizeNullable(mode);
+        String normalized = NormalizeUtils.normalizeNullable(mode);
         if (normalized == null) {
             throw new IllegalArgumentException("发布配置项 publishMode 不能为空");
         }

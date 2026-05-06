@@ -28,15 +28,13 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  ApiError,
   createSchedule,
   deleteSchedule,
-  executePublishedScript,
   getSchedule,
-  listExecutionsByScheduleId,
-  listScripts,
   updateSchedule
-} from "../api";
+} from "../features/triggers/api";
+import { executePublishedScript, listExecutionsByScheduleId } from "../features/executions/api";
+import { listScripts } from "../features/scripts/api";
 import { buildExecutionInputFromValues, type ObjectInputMode } from "../commands";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { Col } from "../components/SafeCol";
@@ -46,6 +44,7 @@ import { InfoHint } from "../components/InfoHint";
 import { SchemaObjectEditor } from "../components/SchemaObjectEditor";
 import { resolveSchemaFields } from "../schema";
 import { buildSchemaFieldInitialState, isValidationErrorData } from "../schemaExecution";
+import { ApiError } from "../shared/api/httpClient";
 import {
   buildSchemaObjectEditorJsonText,
   parseSchemaObjectEditorJsonText

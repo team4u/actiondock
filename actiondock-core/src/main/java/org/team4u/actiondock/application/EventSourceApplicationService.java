@@ -205,7 +205,7 @@ public class EventSourceApplicationService {
         }
     }
 
-    static ProcessorContext buildContext(IncomingEventPayload payload,
+    private static ProcessorContext buildContext(IncomingEventPayload payload,
                                   EventSourceDefinition source,
                                   Map<String, Object> trigger,
                                   NormalizedEvent event) {

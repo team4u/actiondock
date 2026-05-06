@@ -19,8 +19,6 @@ import org.team4u.actiondock.domain.port.ProcessorEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -168,7 +166,7 @@ public class EventTriggerApplicationService {
         boolean filterMatched = true;
         if (trigger.getFilterProcessor() != null) {
             filterResult = processorEngine.process(trigger.getFilterProcessor(), context);
-            filterMatched = asMatched(filterResult);
+            filterMatched = EventProcessorUtils.asMatched(filterResult);
             if (!filterMatched) {
                 return TestProcessorResult.early(event, filterResult, false, null, null, null, Map.of());
             }
@@ -178,7 +176,7 @@ public class EventTriggerApplicationService {
         String idempotencyKey = null;
         if (trigger.getIdempotencyProcessor() != null) {
             idempotencyResult = processorEngine.process(trigger.getIdempotencyProcessor(), context);
-            idempotencyKey = extractIdempotencyKey(idempotencyResult);
+            idempotencyKey = EventProcessorUtils.extractIdempotencyKey(idempotencyResult);
         }
 
         ProcessorResult inputResult = processorEngine.process(trigger.getInputProcessor(), context);
@@ -198,16 +196,23 @@ public class EventTriggerApplicationService {
         return new TestProcessorResult(null, filterResult, filterMatched, idempotencyResult, idempotencyKey, inputResult, mappedInput);
     }
 
+    private static ExecutionSubmissionMetadata eventMetadata(EventSourceDefinition source, EventTrigger trigger,
+                                                              String eventRecordId, String eventDispatchId) {
+        return new ExecutionSubmissionMetadata()
+                .setTriggerSource(ExecutionTriggerSource.EVENT)
+                .setEventSourceId(source.getId())
+                .setEventTriggerId(trigger.getId())
+                .setEventRecordId(eventRecordId)
+                .setEventDispatchId(eventDispatchId);
+    }
+
     private ExecutionRecord submitTestExecution(EventSourceDefinition source, EventTrigger trigger,
                                                  ScriptDefinition script, Map<String, Object> mappedInput) {
         return executionApplicationService.executePublished(
                 script.getId(),
                 mappedInput,
                 trigger.getSubmitMode(),
-                new ExecutionSubmissionMetadata()
-                        .setTriggerSource(ExecutionTriggerSource.EVENT)
-                        .setEventSourceId(source.getId())
-                        .setEventTriggerId(trigger.getId())
+                eventMetadata(source, trigger, null, null)
         );
     }
 
@@ -271,7 +276,7 @@ public class EventTriggerApplicationService {
         if (!filter.isSuccess()) {
             return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, filter.getErrorMessage());
         }
-        boolean matched = asMatched(filter);
+        boolean matched = EventProcessorUtils.asMatched(filter);
         dispatch.setFilterMatched(matched);
         return matched ? null : failDispatch(dispatch, EventDispatchStatus.FILTERED_OUT, null);
     }
@@ -284,7 +289,7 @@ public class EventTriggerApplicationService {
         if (!idempotency.isSuccess()) {
             return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, idempotency.getErrorMessage());
         }
-        String key = extractIdempotencyKey(idempotency);
+        String key = EventProcessorUtils.extractIdempotencyKey(idempotency);
         dispatch.setIdempotencyKey(key);
         if (key != null && eventDispatchRepository.findByTriggerIdAndIdempotencyKey(trigger.getId(), key).isPresent()) {
             return failDispatch(dispatch, EventDispatchStatus.DUPLICATE, null);
@@ -306,12 +311,7 @@ public class EventTriggerApplicationService {
                     script.getId(),
                     mappedInput,
                     trigger.getSubmitMode(),
-                    new ExecutionSubmissionMetadata()
-                            .setTriggerSource(ExecutionTriggerSource.EVENT)
-                            .setEventSourceId(source.getId())
-                            .setEventTriggerId(trigger.getId())
-                            .setEventRecordId(eventRecordId)
-                            .setEventDispatchId(dispatch.getId())
+                    eventMetadata(source, trigger, eventRecordId, dispatch.getId())
             );
             dispatch.setExecutionId(execution.getId())
                     .setExecutionStatus(execution.getStatus())
@@ -368,39 +368,7 @@ public class EventTriggerApplicationService {
                 .setBody(event.getBody())
                 .setEvent(ApplicationServiceSupport.toEventMap(event))
                 .setSource(ApplicationServiceSupport.toSourceMap(source))
-                .setTrigger(triggerMap(trigger));
-    }
-
-    private static boolean asMatched(ProcessorResult result) {
-        if (result == null || !result.isSuccess()) {
-            return false;
-        }
-        Object value = result.getOutput().get("matched");
-        if (value instanceof Boolean bool) {
-            return bool;
-        }
-        if (value instanceof Number number) {
-            return number.intValue() != 0;
-        }
-        if (value instanceof CharSequence text) {
-            return !text.isEmpty() && !"false".equalsIgnoreCase(text.toString());
-        }
-        if (value instanceof Collection<?> collection) {
-            return !collection.isEmpty();
-        }
-        return value != null;
-    }
-
-    private static String extractIdempotencyKey(ProcessorResult result) {
-        if (result == null || !result.isSuccess()) {
-            return null;
-        }
-        Object value = result.getOutput().get("key");
-        if (value == null) {
-            return null;
-        }
-        String normalized = String.valueOf(value).trim();
-        return normalized.isEmpty() ? null : normalized;
+                .setTrigger(EventProcessorUtils.triggerMap(trigger));
     }
 
     private static void updateTriggerAfterDispatch(EventTrigger trigger, String eventRecordId, ExecutionRecord execution) {
@@ -416,14 +384,6 @@ public class EventTriggerApplicationService {
         if (script.getPublishedSnapshot() == null) {
             throw new IllegalArgumentException("目标脚本未发布: " + script.getId());
         }
-    }
-
-    private static Map<String, Object> triggerMap(EventTrigger trigger) {
-        Map<String, Object> value = new LinkedHashMap<>();
-        value.put("id", trigger.getId());
-        value.put("name", trigger.getName());
-        value.put("targetScriptId", trigger.getTargetScriptId());
-        return value;
     }
 
     public record TriggerTestResult(

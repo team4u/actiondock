@@ -22,19 +22,19 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import {
-  ApiError,
   createRepository,
   deleteRepository,
   listRepositories,
   syncRepository,
   updateRepository
-} from "../api";
+} from "../features/resources/api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { TrustLevelTag } from "../components/domain/TrustLevelTag";
 import { UsageTag } from "../components/domain/UsageTag";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
 import { getRepositoryTypeLabel } from "../components/domain/typeLabels";
+import { ApiError } from "../shared/api/httpClient";
 import type { RepositoryDefinition } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 

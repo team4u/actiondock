@@ -111,10 +111,7 @@ public class ScriptInvocationService extends OptionalServiceSupport {
     }
 
     private static String normalizeScriptId(String scriptId) {
-        if (scriptId == null || scriptId.isBlank()) {
-            throw new IllegalArgumentException("scriptId 不能为空");
-        }
-        return scriptId.trim();
+        return ApplicationServiceSupport.normalize(scriptId, "scriptId 不能为空");
     }
 
     private String resolveInvokedScriptId(String scriptId, ScriptDefinition callerDefinition) {

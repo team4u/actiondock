@@ -1,12 +1,12 @@
 package org.team4u.actiondock.script;
 
-import org.team4u.actiondock.application.ErrorDetailSupport;
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.team4u.actiondock.application.MapValueConverter;
 import org.team4u.actiondock.application.PythonRequirementsSupport;
 import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
-import org.team4u.actiondock.domain.model.ErrorDetail;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -151,7 +150,7 @@ public class PythonScriptEngine implements ScriptEngine {
                 throw new IllegalStateException("Python 脚本校验超时");
             }
             if (result.exitCode() != 0) {
-                throw new IllegalArgumentException(extractErrorMessage(result));
+                throw new IllegalArgumentException(PythonErrorParser.extractErrorMessage(result));
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to validate Python script", e);
@@ -218,7 +217,7 @@ public class PythonScriptEngine implements ScriptEngine {
                         executionContext.log(event.level(), event.message());
                     }
                 },
-                new PythonBridge(definition, input == null ? Map.of() : input, executionContext)
+                new PythonBridge(jsonCodec, scriptInvocationService, pluginRuntimeService, sharedStateApplicationService, definition, input == null ? Map.of() : input, executionContext)
         );
     }
 
@@ -228,7 +227,7 @@ public class PythonScriptEngine implements ScriptEngine {
         }
         if (result.exitCode() != 0) {
             throw new PythonExecutionException(
-                    extractErrorMessage(result),
+                    PythonErrorParser.extractErrorMessage(result),
                     ProcessSupport.buildErrorDetail("PYTHON_EXECUTION_FAILED", result, Map.of("command", command))
             );
         }
@@ -272,7 +271,7 @@ public class PythonScriptEngine implements ScriptEngine {
     }
 
     private String resolveExecutable() {
-        if (properties.getExecutable() == null || properties.getExecutable().isBlank()) {
+        if (NormalizeUtils.isBlank(properties.getExecutable())) {
             return DEFAULT_PYTHON_EXECUTABLE;
         }
         return properties.getExecutable().trim();
@@ -437,34 +436,6 @@ public class PythonScriptEngine implements ScriptEngine {
         return ProcessSupport.parseLogEvent(line, PythonEnvironmentManager.LOG_PREFIX, jsonCodec);
     }
 
-    private static String extractErrorMessage(ProcessSupport.ProcessResult result) {
-        String stderr = result.stderr() == null ? "" : result.stderr().trim();
-        if (!stderr.isEmpty()) {
-            return summarizePythonError(stderr);
-        }
-        String stdout = result.stdout() == null ? "" : result.stdout().trim();
-        if (!stdout.isEmpty()) {
-            return stdout;
-        }
-        return "Python 脚本执行失败";
-    }
-
-    private static String summarizePythonError(String stderr) {
-        String[] lines = stderr.split("\\R");
-        for (int index = lines.length - 1; index >= 0; index -= 1) {
-            String line = lines[index].trim();
-            if (line.isEmpty()) {
-                continue;
-            }
-            int separator = line.indexOf(": ");
-            if (separator > 0 && separator < line.length() - 2) {
-                return line.substring(separator + 2).trim();
-            }
-            return line;
-        }
-        return stderr;
-    }
-
     private static void deleteIfExists(Path path) {
         if (path == null) {
             return;
@@ -490,72 +461,4 @@ public class PythonScriptEngine implements ScriptEngine {
                               Map<String, Object> options) {
     }
 
-    private final class PythonBridge {
-        private final ScriptDefinition definition;
-        private final Map<String, Object> input;
-        private final ScriptExecutionContext executionContext;
-        private final ScriptStateBridge stateBridge;
-
-        private PythonBridge(ScriptDefinition definition,
-                             Map<String, Object> input,
-                             ScriptExecutionContext executionContext) {
-            this.definition = definition;
-            this.input = input == null ? Map.of() : new LinkedHashMap<>(input);
-            this.executionContext = executionContext;
-            this.stateBridge = new ScriptStateBridge(sharedStateApplicationService, definition, executionContext);
-        }
-
-        /**
-         * 构建统一的 JSON 响应。
-         * <p>
-         * 使用 {@link LinkedHashMap} 以支持 value 为 null 的场景（如 delete 操作）。
-         *
-         * @param ok    操作是否成功
-         * @param data  成功时为结果数据，失败时忽略
-         * @param error 失败时的错误摘要，成功时忽略
-         * @return JSON 格式的响应字符串
-         */
-        private String writeResponse(boolean ok, Object data, String error) {
-            Map<String, Object> response = new LinkedHashMap<>();
-            response.put("ok", ok);
-            if (ok) {
-                response.put("result", data);
-            } else {
-                response.put("error", error);
-            }
-            return jsonCodec.write(response);
-        }
-
-        private String respondInvocation(PythonInvocationRequest request) {
-            return respond(() -> scriptInvocationService.invokePublished(
-                    request.scriptId(), definition, executionContext, request.args()));
-        }
-
-        private String respondPlugin(PythonPluginRequest request) {
-            return respond(() -> pluginRuntimeService.invoke(
-                    request.pluginId(), request.action(), definition, executionContext, input, request.args()));
-        }
-
-        private String respondState(PythonStateRequest request) {
-            return respond(() -> switch (request.operation()) {
-                case "get" -> stateBridge.get(request.namespace(), request.key());
-                case "put" -> stateBridge.put(request.namespace(), request.key(), request.value(), request.options());
-                case "cas" -> stateBridge.cas(request.namespace(), request.key(), request.expectedVersion(), request.value(), request.options());
-                case "delete" -> {
-                    stateBridge.delete(request.namespace(), request.key());
-                    yield null;
-                }
-                case "list" -> stateBridge.list(request.namespace());
-                default -> throw new IllegalArgumentException("不支持的 state 操作: " + request.operation());
-            });
-        }
-
-        private String respond(java.util.function.Supplier<Object> action) {
-            try {
-                return writeResponse(true, action.get(), null);
-            } catch (Exception exception) {
-                return writeResponse(false, null, ErrorDetailSupport.summarize(exception));
-            }
-        }
-    }
 }

@@ -16,7 +16,7 @@ public final class ExecutionInputNormalizer {
     private ExecutionInputNormalizer() {
     }
 
-    public static Map<String, Object> normalizeMap(Map<String, Object> input) {
+    static Map<String, Object> normalizeMap(Map<String, Object> input) {
         if (input == null) {
             return new LinkedHashMap<>();
         }

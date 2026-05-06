@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
-import org.team4u.actiondock.domain.model.ConfigValue;
 
 import java.util.List;
 
@@ -94,20 +93,7 @@ public class ConfigValueController {
     @PostMapping("/{key}/restore-repository-default")
     public ApiResponse<ConfigValueDetailView> restoreRepositoryDefault(@PathVariable String key) {
         ConfigValueUsageAnalysisService.ManagedTemplate template = configValueUsageAnalysisService.resolveManagedTemplate(key);
-        configValueApplicationService.restoreManagedValue(
-                key,
-                new ConfigValue()
-                        .setKey(template.key())
-                        .setValue(template.value())
-                        .setDescription(template.label())
-                        .setSecret(template.secret())
-                        .setRepositoryId(template.repositoryId())
-                        .setRepositoryToolId(template.toolId())
-                        .setRepositoryVersion(template.version())
-                        .setPublishMode(template.publishMode())
-                        .setManaged(true)
-                        .setOverridden(false)
-        );
+        configValueApplicationService.restoreManagedValue(key, template.toConfigValue());
         return ApiResponse.success(
                 ConfigValueViewMapper.toDetailView(configValueUsageAnalysisService.analyze(key)),
                 "已恢复仓库默认值"

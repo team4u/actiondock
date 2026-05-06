@@ -1,7 +1,7 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -30,7 +30,7 @@ class RepositoryGitOperations {
         } catch (IOException exception) {
             throw new IllegalStateException("创建本地仓库目录失败", exception);
         }
-        String branch = SkillFileUtils.normalizeOrDefault(repository.getBranch(), DEFAULT_GIT_BRANCH);
+        String branch = NormalizeUtils.normalizeOrDefault(repository.getBranch(), DEFAULT_GIT_BRANCH);
         if (Files.notExists(root)) {
             GitCommandRunner.runGit(repositoriesRoot, List.of(
                     "git", "clone", "--branch", branch,
@@ -48,13 +48,13 @@ class RepositoryGitOperations {
         List<String> commitCommand = new ArrayList<>(List.of(
                 "git", "-C", root.toString(), "commit", "-m", "publish(" + toolId + "): " + version
         ));
-        String normalizedReleaseNotes = SkillFileUtils.normalizeNullable(releaseNotes);
+        String normalizedReleaseNotes = NormalizeUtils.normalizeNullable(releaseNotes);
         if (normalizedReleaseNotes != null) {
             commitCommand.add("-m");
             commitCommand.add(normalizedReleaseNotes);
         }
         GitCommandRunner.runGit(root, commitCommand, true);
-        GitCommandRunner.runGit(root, List.of("git", "-C", root.toString(), "push", "origin", SkillFileUtils.normalizeOrDefault(repository.getBranch(), DEFAULT_GIT_BRANCH)));
+        GitCommandRunner.runGit(root, List.of("git", "-C", root.toString(), "push", "origin", NormalizeUtils.normalizeOrDefault(repository.getBranch(), DEFAULT_GIT_BRANCH)));
     }
 
     String gitHead(Path root) {

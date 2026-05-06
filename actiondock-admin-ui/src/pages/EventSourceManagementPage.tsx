@@ -28,12 +28,12 @@ import {
   deleteEventSource,
   disableEventSource,
   enableEventSource,
-  listConfigValues,
   listEventSources,
-  listScripts,
   testEventSourceNormalization,
   updateEventSource
-} from "../api";
+} from "../features/triggers/api";
+import { listScripts } from "../features/scripts/api";
+import { listConfigValues } from "../features/settings/api";
 import { InfoHint } from "../components/InfoHint";
 import { ProcessorEditor } from "../components/ProcessorEditor";
 import { PageHeader } from "../components/PageHeader";

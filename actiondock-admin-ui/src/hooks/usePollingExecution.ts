@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getExecution } from "../api";
+import { getExecution } from "../features/executions/api";
 import type { ExecutionRecord } from "../types";
 import { isExecutionActive } from "../utils";
 

@@ -28,7 +28,6 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ApiError,
   developRepositoryTool,
   getCapabilityPackage,
   getRepositorySkill,
@@ -42,7 +41,7 @@ import {
   uninstallCapabilityPackage,
   updateCapabilityPackage,
   updateRepositoryTool
-} from "../api";
+} from "../features/resources/api";
 import { CodeEditor } from "../components/CodeEditor";
 import { DevelopmentSyncTag, getDevelopmentActionLabel } from "../components/domain/DevelopmentSyncTag";
 import { RiskLevelTag } from "../components/domain/RiskLevelTag";
@@ -52,6 +51,7 @@ import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useColorMode } from "../contexts/ColorModeContext";
+import { ApiError } from "../shared/api/httpClient";
 import type {
   CapabilityPackageDescriptor,
   CapabilityPackageDetail,

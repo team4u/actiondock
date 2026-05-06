@@ -1,5 +1,8 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.domain.model.ScriptSchedule;
+import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
+import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.PluginDependency;
@@ -9,12 +12,14 @@ import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillTypes;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.nio.file.Path;
 import java.util.function.Function;
 
 /**
@@ -46,8 +51,7 @@ public final class RepositoryCatalogTypes {
     public static final String CAPABILITY_PACKAGES_DIR = "packages";
     /** 仓库索引中的所有分节名称。 */
     public static final List<String> REPO_INDEX_SECTIONS = List.of(TOOLS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
-    /** 默认的仓库索引/文件 schema 版本号。 */
-    public static final int DEFAULT_VERSION = 1;
+    /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
 
     /** 仓库类型：Git 仓库。 */
     public static final String REPO_TYPE_GIT = "GIT";
@@ -122,10 +126,10 @@ public final class RepositoryCatalogTypes {
      * @param scriptIdMappings 脚本本地 ID 到运行时 ID 的映射
      * @return 第一个匹配入口的运行时 ID，如果没有匹配则返回 null
      */
-    public static String resolveRuntimeEntry(List<CapabilityPackageEntryFile> entries,
+    static String resolveRuntimeEntry(List<CapabilityPackageEntryFile> entries,
                                              Map<String, String> agentIdMappings,
                                              Map<String, String> scriptIdMappings) {
-        for (CapabilityPackageEntryFile entry : nullSafeList(entries)) {
+        for (CapabilityPackageEntryFile entry : NormalizeUtils.nullSafeList(entries)) {
             if (ENTRY_TYPE_AGENT.equalsIgnoreCase(entry.type())) {
                 return agentIdMappings.getOrDefault(entry.id(), entry.id());
             }
@@ -134,76 +138,6 @@ public final class RepositoryCatalogTypes {
             }
         }
         return null;
-    }
-
-    /**
-     * 创建一个新的仓库索引文件，替换其中的工具列表，保留其他条目不变。
-     */
-    public static RepositoryIndexFile withTools(RepositoryIndexFile current,
-                                                 RepositoryDefinition repository,
-                                                 List<RepositoryIndexEntry> tools) {
-        return withReplaced(current, repository, tools, null, null, null);
-    }
-
-    /**
-     * 创建一个新的仓库索引文件，替换其中的插件列表，保留其他条目不变。
-     */
-    public static RepositoryIndexFile withPlugins(RepositoryIndexFile current,
-                                                   RepositoryDefinition repository,
-                                                   List<RepositoryPluginIndexEntry> plugins) {
-        return withReplaced(current, repository, null, plugins, null, null);
-    }
-
-    /**
-     * 创建一个新的仓库索引文件，替换其中的能力包列表，保留其他条目不变。
-     */
-    public static RepositoryIndexFile withPackages(RepositoryIndexFile current,
-                                                    RepositoryDefinition repository,
-                                                    List<CapabilityPackageIndexEntry> packages) {
-        return withReplaced(current, repository, null, null, packages, null);
-    }
-
-    /**
-     * 创建一个新的仓库索引文件，替换其中的 Skill 列表，保留其他条目不变。
-     */
-    public static RepositoryIndexFile withSkills(RepositoryIndexFile current,
-                                                  RepositoryDefinition repository,
-                                                  List<RepositorySkillIndexEntry> skills) {
-        return withReplaced(current, repository, null, null, null, skills);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T extends Record> RepositoryIndexFile withReplaced(RepositoryIndexFile current,
-                                                                        RepositoryDefinition repository,
-                                                                        List<RepositoryIndexEntry> tools,
-                                                                        List<RepositoryPluginIndexEntry> plugins,
-                                                                        List<CapabilityPackageIndexEntry> packages,
-                                                                        List<RepositorySkillIndexEntry> skills) {
-        return new RepositoryIndexFile(
-                DEFAULT_VERSION,
-                repository.getName(),
-                normalizeNullable(repository.getDescription()),
-                tools != null ? tools : new ArrayList<>(nullSafeList(current == null ? null : current.tools())),
-                plugins != null ? plugins : new ArrayList<>(nullSafeList(current == null ? null : current.plugins())),
-                packages != null ? packages : new ArrayList<>(nullSafeList(current == null ? null : current.packages())),
-                skills != null ? skills : new ArrayList<>(nullSafeList(current == null ? null : current.skills()))
-        );
-    }
-
-    static <T> List<T> nullSafeList(List<T> list) {
-        return SkillFileUtils.nullSafeList(list);
-    }
-
-    static <T> List<T> upsertSorted(List<T> entries, T newEntry, Function<T, String> idExtractor) {
-        List<T> updated = new ArrayList<>(entries);
-        updated.removeIf(item -> idExtractor.apply(item).equals(idExtractor.apply(newEntry)));
-        updated.add(newEntry);
-        updated.sort(Comparator.comparing(idExtractor));
-        return updated;
-    }
-
-    static String normalizeNullable(String value) {
-        return SkillFileUtils.normalizeNullable(value);
     }
 
     public record RepositoryToolDescriptor(
@@ -550,6 +484,22 @@ public final class RepositoryCatalogTypes {
                                    List<CapabilityPackageIndexEntry> packages) {
             this(repositoryVersion, name, description, tools, plugins, packages, List.of());
         }
+
+        public List<RepositoryIndexEntry> safeTools() {
+            return tools == null ? List.of() : tools;
+        }
+
+        public List<RepositoryPluginIndexEntry> safePlugins() {
+            return plugins == null ? List.of() : plugins;
+        }
+
+        public List<CapabilityPackageIndexEntry> safeCapabilityPackages() {
+            return packages == null ? List.of() : packages;
+        }
+
+        public List<RepositorySkillIndexEntry> safeSkills() {
+            return skills == null ? List.of() : skills;
+        }
     }
 
     public record RepositoryIndexEntry(String id,
@@ -588,10 +538,10 @@ public final class RepositoryCatalogTypes {
                                                                      String releaseNotes) {
             return new RepositorySkillIndexEntry(
                     validation.skillId(),
-                    SkillFileUtils.normalize(validation.displayName(), "displayName 不能为空"),
-                    SkillFileUtils.normalize(version, SkillFileUtils.ERR_VERSION_REQUIRED),
-                    SkillFileUtils.normalizeNullable(validation.description()),
-                    SkillFileUtils.normalizeNullable(releaseNotes),
+                    NormalizeUtils.normalize(validation.displayName(), "displayName 不能为空"),
+                    NormalizeUtils.normalize(version, SkillFileUtils.ERR_VERSION_REQUIRED),
+                    NormalizeUtils.normalizeNullable(validation.description()),
+                    NormalizeUtils.normalizeNullable(releaseNotes),
                     SKILLS_DIR + "/" + validation.skillId() + "/" + SKILL_MANIFEST_FILE
             );
         }
@@ -774,7 +724,7 @@ public final class RepositoryCatalogTypes {
                                      boolean secret,
                                      String defaultValue) {
         public String resolvePublishMode() {
-            return (secret || defaultValue == null || defaultValue.isBlank())
+            return (secret || NormalizeUtils.isBlank(defaultValue))
                     ? PUBLISH_MODE_PLACEHOLDER
                     : PUBLISH_MODE_INLINE;
         }
@@ -801,5 +751,116 @@ public final class RepositoryCatalogTypes {
     }
 
     record ToolSourceState(String path, String commit, String digest) {
+    }
+
+    // ------------------------------------------------------------------
+    // 静态工具方法
+    // ------------------------------------------------------------------
+
+    static String capabilityPackageInstallationId(String repositoryId, String packageId) {
+        return NormalizeUtils.normalize(repositoryId, "repositoryId 不能为空") + ":" + NormalizeUtils.normalize(packageId, "packageId 不能为空");
+    }
+
+    static String aiPackageInternalId(String repositoryId, String packageId, String kind, String localId) {
+        return AI_PACKAGE_INTERNAL_PREFIX
+                + NormalizeUtils.normalize(repositoryId, "repositoryId 不能为空")
+                + "."
+                + NormalizeUtils.normalize(packageId, "packageId 不能为空")
+                + "."
+                + NormalizeUtils.normalize(kind, "kind 不能为空")
+                + "."
+                + NormalizeUtils.normalize(localId, "localId 不能为空");
+    }
+
+    static void assertPluginVersionAvailable(String repositoryId,
+                                             RepositoryIndexFile index,
+                                             String pluginId,
+                                             String version) {
+        assertVersionAvailable(ASSET_TYPE_PLUGIN, repositoryId, index == null ? null : index.plugins(), pluginId, version, RepositoryPluginIndexEntry::id, RepositoryPluginIndexEntry::version);
+    }
+
+    static void assertCapabilityPackageVersionAvailable(String repositoryId,
+                                                        RepositoryIndexFile index,
+                                                        String packageId,
+                                                        String version) {
+        assertVersionAvailable(ASSET_TYPE_CAPABILITY_PACKAGE, repositoryId, index == null ? null : index.packages(), packageId, version, CapabilityPackageIndexEntry::id, CapabilityPackageIndexEntry::version);
+    }
+
+    static void assertSkillVersionAvailable(String repositoryId,
+                                            RepositoryIndexFile index,
+                                            String skillId,
+                                            String version) {
+        assertVersionAvailable(ASSET_TYPE_SKILL, repositoryId, index == null ? null : index.skills(), skillId, version, RepositorySkillIndexEntry::id, RepositorySkillIndexEntry::version);
+    }
+
+    private static <T> void assertVersionAvailable(String assetType,
+                                                   String repositoryId,
+                                                   List<T> entries,
+                                                   String assetId,
+                                                   String version,
+                                                   Function<T, String> idExtractor,
+                                                   Function<T, String> versionExtractor) {
+        if (entries == null) {
+            return;
+        }
+        entries.stream()
+                .filter(entry -> Objects.equals(assetId, idExtractor.apply(entry)) && Objects.equals(version, versionExtractor.apply(entry)))
+                .findFirst()
+                .ifPresent(entry -> { throw new RepositoryVersionExistsException(assetType, repositoryId, assetId, version); });
+    }
+
+    static List<ScriptSchedule> resolvePublishSchedules(String scriptId,
+                                                         List<String> scheduleIds,
+                                                         ScriptScheduleRepository scheduleRepository) {
+        List<ScriptSchedule> schedules = new ArrayList<>();
+        for (String scheduleId : NormalizeUtils.nullSafeList(scheduleIds)) {
+            String normalizedScheduleId = NormalizeUtils.normalize(scheduleId, "定时任务 ID 不能为空");
+            ScriptSchedule schedule = scheduleRepository.findById(normalizedScheduleId)
+                    .orElseThrow(() -> new IllegalArgumentException("定时任务不存在: " + normalizedScheduleId));
+            if (!Objects.equals(scriptId, schedule.getScriptId())) {
+                throw new IllegalArgumentException("定时任务不属于当前脚本: " + normalizedScheduleId);
+            }
+            schedules.add(schedule);
+        }
+        return schedules;
+    }
+
+    /**
+     * 仓库相对路径，提供安全的路径解析和越界检查。
+     */
+    public record RelativeRepositoryPath(String value) {
+        public Path resolve(String child) {
+            return resolveInternal(child);
+        }
+
+        public RelativeRepositoryPath resolveNullable(String child) {
+            if (NormalizeUtils.isBlank(child)) {
+                return null;
+            }
+            Path resolved = resolveInternal(child);
+            return new RelativeRepositoryPath(resolved.toString().replace('\\', '/'));
+        }
+
+        private Path resolveInternal(String child) {
+            if (child != null && child.contains("..")) {
+                throw new IllegalArgumentException("仓库文件路径不允许包含 ..: " + child);
+            }
+            Path resolved = Path.of(value).resolve(child).normalize();
+            if (!resolved.startsWith(Path.of(value).normalize())) {
+                throw new IllegalArgumentException("仓库文件越界访问被拒绝: " + child);
+            }
+            return resolved;
+        }
+    }
+
+    static boolean isTrusted(RepositoryDefinition repository) {
+        return REPO_TRUST_TRUSTED.equalsIgnoreCase(repository.getTrustLevel());
+    }
+
+    static String resolveRelative(String parentPath, String nestedPath) {
+        if (nestedPath == null || nestedPath.isBlank()) {
+            return null;
+        }
+        return java.nio.file.Path.of(parentPath).getParent().resolve(nestedPath).toString().replace('\\', '/');
     }
 }

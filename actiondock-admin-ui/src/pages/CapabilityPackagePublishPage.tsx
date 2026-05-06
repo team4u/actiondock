@@ -22,22 +22,15 @@ import {
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  ApiError,
-  getCapabilityPackage,
-  listAiAgents,
-  listAiModels,
-  listAiToolsets,
-  listRepositories,
-  listScripts,
-  previewCapabilityPackagePublish,
-  publishCapabilityPackage
-} from "../api";
+import { listAiAgents, listAiModels, listAiToolsets } from "../features/ai/api";
+import { getCapabilityPackage, listRepositories, previewCapabilityPackagePublish, publishCapabilityPackage } from "../features/resources/api";
+import { listScripts } from "../features/scripts/api";
 import { MarkdownDescription } from "../components/MarkdownDescription";
 import { PageHeader } from "../components/PageHeader";
 import { RepositoryPublishBasicsForm } from "../components/RepositoryPublishBasicsForm";
 import { useDefaultOwner } from "../hooks/useDefaultOwner";
 import { getPublishableRepositories, pickDefaultPublishRepository } from "../repositoryPublish";
+import { ApiError } from "../shared/api/httpClient";
 import type {
   AiAgentProfile,
   AiModelProfile,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createPreset, deletePreset, listPresets, updatePreset } from "../api";
+import { createPreset, deletePreset, listPresets, updatePreset } from "../features/scripts/api";
 import type { ExecutionPreset, ExecutionPresetUpsertRequest } from "../types";
 
 export interface UseExecutionPresetsOptions {

@@ -7,7 +7,6 @@ import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.storage.jpa.entity.RepositoryToolInstallationEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataRepositoryToolInstallationRepository;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -31,11 +30,6 @@ public class JpaRepositoryToolInstallationRepositoryAdapter implements Repositor
     @Override
     public Optional<RepositoryToolInstallation> findByToolId(String toolId) {
         return repository.findById(toolId).map(JpaRepositoryToolInstallationRepositoryAdapter::toDomain);
-    }
-
-    @Override
-    public List<RepositoryToolInstallation> findAll() {
-        return repository.findAll().stream().map(JpaRepositoryToolInstallationRepositoryAdapter::toDomain).toList();
     }
 
     @Override

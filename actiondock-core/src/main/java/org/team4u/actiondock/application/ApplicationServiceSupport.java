@@ -10,6 +10,7 @@ import org.team4u.actiondock.domain.port.ProcessorEngine;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 /**
  * 应用服务层公共工具方法。
@@ -34,6 +35,21 @@ final class ApplicationServiceSupport {
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    static String normalizePattern(String value, String fieldName, Pattern pattern) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " 不能为空");
+        }
+        String normalized = value.trim();
+        if (!pattern.matcher(normalized).matches()) {
+            throw new IllegalArgumentException(fieldName + " 格式不合法: " + value);
+        }
+        return normalized;
+    }
+
+    static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     /**

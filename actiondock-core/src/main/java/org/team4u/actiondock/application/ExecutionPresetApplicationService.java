@@ -93,15 +93,6 @@ public class ExecutionPresetApplicationService {
         executionPresetRepository.deleteById(presetId);
     }
 
-    /**
-     * 清除指定脚本下的所有参数预设。
-     *
-     * @param scriptId 脚本 ID
-     */
-    public void clearByScriptId(String scriptId) {
-        executionPresetRepository.deleteByScriptId(scriptId);
-    }
-
     private static void ensurePresetBelongsToScript(ExecutionPreset preset, String scriptId) {
         if (!preset.getScriptId().equals(scriptId)) {
             throw new IllegalArgumentException("Preset does not belong to script: " + preset.getId());
@@ -115,9 +106,6 @@ public class ExecutionPresetApplicationService {
     }
 
     private static String normalize(String value, String message) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(message);
-        }
-        return value.trim();
+        return ApplicationServiceSupport.normalize(value, message);
     }
 }

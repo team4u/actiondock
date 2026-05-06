@@ -1,5 +1,7 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -51,7 +53,7 @@ public class HttpPluginArtifactResolver implements PluginArtifactResolver {
     }
 
     private static String resolveFileName(PluginArtifactRef artifact, URI uri) {
-        if (artifact.fileName() != null && !artifact.fileName().isBlank()) {
+        if (NormalizeUtils.isNotBlank(artifact.fileName())) {
             return artifact.fileName();
         }
         Path fileName = Path.of(uri.getPath()).getFileName();

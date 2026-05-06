@@ -1,24 +1,2 @@
-const TOKEN_KEY = "actiondock-admin-access-token";
-const AUTH_EVENT = "actiondock:auth-required";
-
-export function getApiKey(): string {
-  return window.localStorage.getItem(TOKEN_KEY) ?? "";
-}
-
-export function setApiKey(value: string): void {
-  const normalized = value.trim();
-  if (normalized) {
-    window.localStorage.setItem(TOKEN_KEY, normalized);
-    return;
-  }
-  window.localStorage.removeItem(TOKEN_KEY);
-}
-
-export function emitAuthRequired(): void {
-  window.dispatchEvent(new CustomEvent(AUTH_EVENT));
-}
-
-export function onAuthRequired(handler: () => void): () => void {
-  window.addEventListener(AUTH_EVENT, handler);
-  return () => window.removeEventListener(AUTH_EVENT, handler);
-}
+export { AuthProvider, useAuth } from "./shared/auth/AuthProvider";
+export { emitAuthRequired, getApiKey, onAuthRequired, onTokenChanged, setApiKey } from "./shared/auth/tokenStore";

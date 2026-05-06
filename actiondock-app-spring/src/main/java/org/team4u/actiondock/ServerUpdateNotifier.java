@@ -33,7 +33,7 @@ class ServerUpdateNotifier {
                 .start(this::checkAndLog);
     }
 
-    void checkAndLog() {
+    private void checkAndLog() {
         updateNotificationService.checkForUpdate(new UpdateNotificationRequest(
                         "server",
                         "actiondock",

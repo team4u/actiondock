@@ -12,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -137,7 +138,7 @@ public final class UpdateNotificationService {
             return false;
         }
         String normalized = value.trim().toLowerCase();
-        return "1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized) || "on".equals(normalized);
+        return Set.of("1", "true", "yes", "on").contains(normalized);
     }
 
     public record UpdateNotification(String displayName, String currentVersion, String latestVersion, String installCommand) {

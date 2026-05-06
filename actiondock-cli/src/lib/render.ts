@@ -1,6 +1,7 @@
 import { inspect } from "node:util";
 
 import type {
+  CapabilityView,
   EventDispatchRecord,
   EventIngestionView,
   EventRecord,
@@ -33,6 +34,46 @@ export function renderScriptList(items: ScriptDefinition[]): string {
       return `${item.id}${name}${type}${published}`;
     })
     .join("\n");
+}
+
+export function renderCapabilityList(items: CapabilityView[]): string {
+  if (items.length === 0) {
+    return "没有可用 capability。";
+  }
+
+  return items
+    .map((item) => {
+      const name = item.name ? ` ${item.name}` : "";
+      const runtime = item.runtime ? ` [${item.runtime}]` : "";
+      const published = item.publishedBinding ? " published" : " draft-only";
+      return `${item.id}${name}${runtime}${published}`;
+    })
+    .join("\n");
+}
+
+export function renderCapabilityDetail(item: CapabilityView): string {
+  const lines = [
+    `Capability: ${item.id}${item.name ? ` (${item.name})` : ""}`,
+    `Kind: ${item.kind ?? "-"}`,
+    `Runtime: ${item.runtime ?? "-"}`,
+    `Source: ${item.source ?? "-"}`,
+    `Status: ${item.status ?? "-"}`,
+    `Version: ${item.version ?? "-"}`,
+    `Published: ${item.publishedBinding ? "yes" : "no"}`
+  ];
+  if (item.scope) {
+    lines.push(`Scope: ${item.scope}`);
+  }
+  if (item.description) {
+    lines.push(`Description: ${item.description}`);
+  }
+  if (item.owner) {
+    lines.push(`Owner: ${item.owner}`);
+  }
+  if (item.tags && item.tags.length > 0) {
+    lines.push(`Tags: ${item.tags.join(", ")}`);
+  }
+  return lines.join("\n");
 }
 
 export function renderSchemaDetail(params: {

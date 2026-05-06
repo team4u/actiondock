@@ -22,7 +22,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { disableSkill, getSkillDetail, previewSkillFile, removeSkillFromTarget, restoreSkill, updateSkillVersion } from "../api";
+import { disableSkill, getSkillDetail, previewSkillFile, removeSkillFromTarget, restoreSkill, updateSkillVersion } from "../features/skills/api";
 import { PageHeader } from "../components/PageHeader";
 import { SkillFileBrowser } from "../components/SkillFileBrowser";
 import { useColorMode } from "../contexts/ColorModeContext";

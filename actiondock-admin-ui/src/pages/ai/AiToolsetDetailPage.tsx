@@ -4,11 +4,12 @@ import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useEffect, useMemo, useState, type ChangeEvent, type Key } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ApiError, createAiToolset, getAiToolset, listAiTools, testAiTool, updateAiToolset } from "../../api";
+import { createAiToolset, getAiToolset, listAiTools, testAiTool, updateAiToolset } from "../../features/ai/api";
 import { buildToolOptionsPayload, cloneToolConfigMap, type ToolConfigMap } from "../../aiAgentTools";
 import { AiToolPermissionTag } from "../../components/ai/AiTags";
 import { JsonPreview } from "../../components/JsonPreview";
 import { PageHeader } from "../../components/PageHeader";
+import { ApiError } from "../../shared/api/httpClient";
 import type { AiTool, AiToolExecutionResult, AiToolPermission, AiToolSourceType, AiToolset } from "../../types";
 import { parseJsonText, prettyJson } from "../../utils";
 

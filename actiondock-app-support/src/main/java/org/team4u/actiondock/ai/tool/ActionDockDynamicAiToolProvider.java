@@ -26,7 +26,7 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.ScriptRepository;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -77,7 +77,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
     @Override
     public Optional<AiTool> findTool(String name) {
-        if (name == null || name.isBlank()) {
+        if (NormalizeUtils.isBlank(name)) {
             return Optional.empty();
         }
         if (name.startsWith(SCRIPT_TOOL_PREFIX)) {
@@ -121,7 +121,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String description() {
-            String text = ActionDockAiTools.blankToNull(script.getDescription());
+            String text = NormalizeUtils.normalizeNullable(script.getDescription());
             return text == null
                     ? "调用已发布脚本 " + displayName()
                     : "调用已发布脚本 " + displayName() + "。 " + text;
@@ -139,7 +139,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String displayName() {
-            return ActionDockAiTools.blankToNull(script.getName()) == null ? script.getId() : script.getName();
+            return NormalizeUtils.normalizeNullable(script.getName()) == null ? script.getId() : script.getName();
         }
 
         @Override
@@ -207,7 +207,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String description() {
-            String text = ActionDockAiTools.blankToNull(agentProfile.getDescription());
+            String text = NormalizeUtils.normalizeNullable(agentProfile.getDescription());
             return text == null
                     ? "调用已启用 Agent " + displayName() + "，输入统一为 message + input。"
                     : "调用已启用 Agent " + displayName() + "。 " + text;
@@ -225,7 +225,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public String displayName() {
-            return ActionDockAiTools.blankToNull(agentProfile.getName()) == null ? agentProfile.getId() : agentProfile.getName();
+            return NormalizeUtils.normalizeNullable(agentProfile.getName()) == null ? agentProfile.getId() : agentProfile.getName();
         }
 
         @Override
@@ -273,7 +273,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         private String requireMessage(Map<String, Object> input) {
             String message = ObjectValues.stringValue(input == null ? null : input.get("message"));
-            if (message == null || message.isBlank()) {
+            if (NormalizeUtils.isBlank(message)) {
                 throw new IllegalArgumentException("message 不能为空");
             }
             return message;
@@ -336,7 +336,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
                 list.stream().map(String::valueOf).forEach(chain::add);
             }
             String parentAgentProfile = ObjectValues.stringValue(context.metadata().get("agentProfile"));
-            if (parentAgentProfile != null && !parentAgentProfile.isBlank() && !chain.contains(parentAgentProfile)) {
+            if (NormalizeUtils.isNotBlank(parentAgentProfile) && !chain.contains(parentAgentProfile)) {
                 chain.add(parentAgentProfile);
             }
         }
@@ -344,7 +344,7 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
     }
 
     private static List<String> append(List<String> values, String next) {
-        List<String> result = new ArrayList<>(SkillFileUtils.nullSafeList(values));
+        List<String> result = new ArrayList<>(NormalizeUtils.nullSafeList(values));
         result.add(next);
         return List.copyOf(result);
     }

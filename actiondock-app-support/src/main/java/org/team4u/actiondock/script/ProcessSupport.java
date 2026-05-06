@@ -1,5 +1,7 @@
 package org.team4u.actiondock.script;
 
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.team4u.actiondock.domain.model.ErrorDetail;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 
@@ -146,7 +148,7 @@ final class ProcessSupport {
         values.putAll(details);
         return new ErrorDetail()
                 .setType(PythonExecutionException.class.getName())
-                .setStackTrace((result.stderr() == null || result.stderr().isBlank()) ? result.stdout() : result.stderr())
+                .setStackTrace((NormalizeUtils.isBlank(result.stderr())) ? result.stdout() : result.stderr())
                 .setDetails(values);
     }
 

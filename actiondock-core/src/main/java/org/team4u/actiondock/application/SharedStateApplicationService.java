@@ -8,7 +8,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -73,8 +72,8 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                 .setSecret(secret)
                 .setExpiresAt(expiresAt)
                 .setUpdatedAt(now)
-                .setLastWriterScriptId(blankToNull(writerScriptId))
-                .setLastWriterExecutionId(blankToNull(writerExecutionId));
+                .setLastWriterScriptId(ApplicationServiceSupport.blankToNull(writerScriptId))
+                .setLastWriterExecutionId(ApplicationServiceSupport.blankToNull(writerExecutionId));
 
         if (existing == null) {
             target.setCreatedAt(now);
@@ -183,26 +182,11 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
     }
 
     private static String normalizeNamespace(String namespace) {
-        return normalizeToken(namespace, "namespace");
+        return ApplicationServiceSupport.normalizePattern(namespace, "namespace", TOKEN_PATTERN);
     }
 
     private static String normalizeKey(String key) {
-        return normalizeToken(key, "key");
-    }
-
-    private static String normalizeToken(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " 不能为空");
-        }
-        String normalized = value.trim();
-        if (!TOKEN_PATTERN.matcher(normalized).matches()) {
-            throw new IllegalArgumentException(fieldName + " 格式不合法: " + value);
-        }
-        return normalized;
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
+        return ApplicationServiceSupport.normalizePattern(key, "key", TOKEN_PATTERN);
     }
 
     @Override
@@ -233,8 +217,8 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                 .setExpiresAt(expiresAt)
                 .setCreatedAt(createdAt)
                 .setUpdatedAt(updatedAt)
-                .setLastWriterScriptId(blankToNull(writerScriptId))
-                .setLastWriterExecutionId(blankToNull(writerExecutionId));
+                .setLastWriterScriptId(ApplicationServiceSupport.blankToNull(writerScriptId))
+                .setLastWriterExecutionId(ApplicationServiceSupport.blankToNull(writerExecutionId));
     }
 
     private static SharedStateEntry buildEntry(SharedStateEntry base,
@@ -251,8 +235,8 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                 .setExpiresAt(expiresAt)
                 .setVersion(version)
                 .setUpdatedAt(updatedAt)
-                .setLastWriterScriptId(blankToNull(writerScriptId))
-                .setLastWriterExecutionId(blankToNull(writerExecutionId));
+                .setLastWriterScriptId(ApplicationServiceSupport.blankToNull(writerScriptId))
+                .setLastWriterExecutionId(ApplicationServiceSupport.blankToNull(writerExecutionId));
     }
 
 

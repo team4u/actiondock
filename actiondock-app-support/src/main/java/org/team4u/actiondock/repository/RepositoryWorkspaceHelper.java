@@ -1,0 +1,100 @@
+package org.team4u.actiondock.repository;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.shared.NormalizeUtils;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Set;
+
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
+
+final class RepositoryWorkspaceHelper {
+
+    private static final ObjectMapper METADATA_OBJECT_MAPPER = new ObjectMapper();
+    private static final Set<Class<?>> METADATA_TYPES = Set.of(
+            RepositoryCatalogTypes.RepositoryIndexFile.class,
+            RepositoryCatalogTypes.ToolFile.class,
+            RepositoryCatalogTypes.PluginFile.class,
+            RepositoryCatalogTypes.SkillFile.class,
+            RepositoryCatalogTypes.CapabilityPackageManifestFile.class,
+            RepositoryCatalogTypes.CapabilityPackageReleaseFile.class
+    );
+    private static final String ERR_MISSING_RELEASE_NOTES = "仓库元数据缺少 releaseNotes 字段: ";
+
+    private RepositoryWorkspaceHelper() {
+    }
+
+    static void assertLatestRepositoryMetadata(String raw, Class<?> type, String source) {
+        if (!METADATA_TYPES.contains(type)) {
+            return;
+        }
+        JsonNode root;
+        try {
+            root = METADATA_OBJECT_MAPPER.readTree(raw);
+        } catch (JsonProcessingException exception) {
+            return;
+        }
+        if (root == null || !root.isObject()) {
+            return;
+        }
+        if (type == RepositoryCatalogTypes.RepositoryIndexFile.class) {
+            for (String section : REPO_INDEX_SECTIONS) {
+                JsonNode entries = root.get(section);
+                if (entries == null || !entries.isArray()) {
+                    continue;
+                }
+                for (int index = 0; index < entries.size(); index++) {
+                    JsonNode entry = entries.get(index);
+                    if (entry != null && entry.isObject() && !entry.has("releaseNotes")) {
+                        throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " " + section + "[" + index + "].releaseNotes");
+                    }
+                }
+            }
+            return;
+        }
+        if (!root.has("releaseNotes")) {
+            throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " releaseNotes");
+        }
+    }
+
+    static void ensureRepositoryWorkspace(Path root, RepositoryDefinition repository, JsonCodec jsonCodec) {
+        try {
+            Files.createDirectories(root);
+            for (String dir : REPO_INDEX_SECTIONS) {
+                Files.createDirectories(root.resolve(dir));
+            }
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("初始化仓库目录失败: " + root, exception);
+        }
+        Path indexPath = root.resolve(REPOSITORY_INDEX_FILE);
+        if (Files.exists(indexPath)) {
+            return;
+        }
+        try {
+            Files.writeString(indexPath, jsonCodec.write(emptyRepositoryIndex(repository)), StandardCharsets.UTF_8);
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("初始化仓库索引失败: " + indexPath, exception);
+        }
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile emptyRepositoryIndex(RepositoryDefinition repository) {
+        String repositoryName = NormalizeUtils.normalizeNullable(repository == null ? null : repository.getName());
+        String repositoryId = NormalizeUtils.normalizeNullable(repository == null ? null : repository.getId());
+        return new RepositoryCatalogTypes.RepositoryIndexFile(
+                1,
+                repositoryName != null ? repositoryName : repositoryId,
+                NormalizeUtils.normalizeNullable(repository == null ? null : repository.getDescription()),
+                new ArrayList<>(),
+                new ArrayList<>(),
+                new ArrayList<>(),
+                new ArrayList<>()
+        );
+    }
+}

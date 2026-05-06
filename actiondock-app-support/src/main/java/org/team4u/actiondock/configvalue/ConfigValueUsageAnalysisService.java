@@ -11,11 +11,10 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
-import org.team4u.actiondock.skill.SkillFileUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -83,7 +82,7 @@ public class ConfigValueUsageAnalysisService {
         ManagedTemplate managedTemplate = resolveManagedTemplate(target).orElse(null);
         ConfigValueOrigin origin = resolveOrigin(target, managedTemplate, refs.templateDeclarations);
 
-        List<ImpactScript> impactedScripts = buildImpactMap(
+        List<ImpactScript> impactedScripts = ScriptImpactAnalyzer.buildImpactMap(
                 key, cascadingConfigKeys, ctx.scripts, ctx.schedules,
                 refs.pluginCascadeMatches, refs.templateDeclarations,
                 ctx.scriptsById, ctx.allToolDescriptors
@@ -174,7 +173,7 @@ public class ConfigValueUsageAnalysisService {
 
     private static List<ScriptReference> collectScriptReferences(String key, List<ScriptDefinition> scripts) {
         return scripts.stream()
-                .filter(script -> scriptUsesKey(script.getSource(), key))
+                .filter(script -> ScriptImpactAnalyzer.scriptUsesKey(script.getSource(), key))
                 .map(script -> new ScriptReference(
                         script.getId(),
                         script.getName(),
@@ -262,88 +261,6 @@ public class ConfigValueUsageAnalysisService {
         );
     }
 
-    private static List<ImpactScript> buildImpactMap(String key,
-                                                     Set<String> cascadingConfigKeys,
-                                                     List<ScriptDefinition> scripts,
-                                                     List<ScriptSchedule> schedules,
-                                                     Map<String, Set<String>> pluginCascadeMatches,
-                                                     List<TemplateDeclaration> templateDeclarations,
-                                                     Map<String, ScriptDefinition> scriptsById,
-                                                     List<RepositoryToolDescriptor> allToolDescriptors) {
-        Map<String, ImpactScriptAccumulator> impacts = new LinkedHashMap<>();
-        collectScriptSourceImpacts(impacts, scripts, cascadingConfigKeys, key);
-        collectScheduleImpacts(impacts, schedules, scriptsById, cascadingConfigKeys, key);
-        collectPluginCascadeImpacts(impacts, scripts, pluginCascadeMatches, key);
-        collectTemplateDeclarationImpacts(impacts, templateDeclarations, scriptsById, allToolDescriptors);
-        return impacts.values().stream()
-                .map(ImpactScriptAccumulator::toView)
-                .sorted(Comparator.comparing(ImpactScript::scriptId))
-                .toList();
-    }
-
-    private static void collectScriptSourceImpacts(Map<String, ImpactScriptAccumulator> impacts,
-                                                   List<ScriptDefinition> scripts,
-                                                   Set<String> cascadingConfigKeys,
-                                                   String key) {
-        for (ScriptDefinition script : scripts) {
-            Set<String> matchedKeys = filterScriptKeys(script.getSource(), cascadingConfigKeys);
-            addScriptImpact(impacts, script, matchedKeys, key, "脚本源码");
-        }
-    }
-
-    private static void collectScheduleImpacts(Map<String, ImpactScriptAccumulator> impacts,
-                                               List<ScriptSchedule> schedules,
-                                               Map<String, ScriptDefinition> scriptsById,
-                                               Set<String> cascadingConfigKeys,
-                                               String key) {
-        for (ScriptSchedule schedule : schedules) {
-            ScriptDefinition script = scriptsById.get(schedule.getScriptId());
-            if (script == null) {
-                continue;
-            }
-            Set<String> matchedKeys = PlaceholderKeyExtractor.filterPlaceholderKeys(schedule.getInput(), cascadingConfigKeys);
-            if (matchedKeys.isEmpty()) {
-                continue;
-            }
-            addImpact(impacts, script, buildIndirectReason("定时任务 " + schedule.getName(), matchedKeys, key));
-        }
-    }
-
-    private static void collectPluginCascadeImpacts(Map<String, ImpactScriptAccumulator> impacts,
-                                                    List<ScriptDefinition> scripts,
-                                                    Map<String, Set<String>> pluginCascadeMatches,
-                                                    String key) {
-        for (ScriptDefinition script : scripts) {
-            for (PluginDependency dependency : script.getPluginDependencies()) {
-                Set<String> matchedKeys = pluginCascadeMatches.get(dependency.getPluginId());
-                if (matchedKeys == null || matchedKeys.isEmpty()) {
-                    continue;
-                }
-                addImpact(impacts, script, buildIndirectReason("插件配置 " + dependency.getPluginId(), matchedKeys, key));
-            }
-        }
-    }
-
-    private static void collectTemplateDeclarationImpacts(Map<String, ImpactScriptAccumulator> impacts,
-                                                          List<TemplateDeclaration> templateDeclarations,
-                                                          Map<String, ScriptDefinition> scriptsById,
-                                                          List<RepositoryToolDescriptor> allToolDescriptors) {
-        Map<String, RepositoryToolDescriptor> descriptorsBySource = new LinkedHashMap<>();
-        for (RepositoryToolDescriptor descriptor : allToolDescriptors) {
-            descriptorsBySource.put(descriptor.repositoryId() + ":" + descriptor.toolId(), descriptor);
-        }
-        for (TemplateDeclaration declaration : templateDeclarations) {
-            RepositoryToolDescriptor descriptor = descriptorsBySource.get(
-                    declaration.repositoryId() + ":" + declaration.toolId()
-            );
-            if (descriptor == null) {
-                continue;
-            }
-            addImpact(impacts, scriptsById.get(descriptor.installedScriptId()), "仓库模板声明");
-            addImpact(impacts, scriptsById.get(descriptor.developmentScriptId()), "仓库模板声明");
-        }
-    }
-
     public ManagedTemplate resolveManagedTemplate(String key) {
         ConfigValue target = requireConfig(key);
         return resolveManagedTemplate(target)
@@ -365,15 +282,15 @@ public class ConfigValueUsageAnalysisService {
         String publishMode = template.resolvePublishMode();
         return Optional.of(new ManagedTemplate(
                 value.getKey(),
-                SkillFileUtils.normalizeNullable(detail.descriptor().repositoryId()),
+                NormalizeUtils.normalizeNullable(detail.descriptor().repositoryId()),
                 resolveRepositoryName(detail.descriptor().repositoryId()),
-                SkillFileUtils.normalizeNullable(detail.descriptor().toolId()),
-                SkillFileUtils.normalizeNullable(detail.descriptor().displayName()),
-                SkillFileUtils.normalizeNullable(detail.descriptor().version()),
-                SkillFileUtils.normalizeNullable(template.label()),
+                NormalizeUtils.normalizeNullable(detail.descriptor().toolId()),
+                NormalizeUtils.normalizeNullable(detail.descriptor().displayName()),
+                NormalizeUtils.normalizeNullable(detail.descriptor().version()),
+                NormalizeUtils.normalizeNullable(template.label()),
                 template.secret(),
                 publishMode,
-                publishMode.equals(PUBLISH_MODE_INLINE) ? SkillFileUtils.normalizeNullable(template.defaultValue()) : ""
+                publishMode.equals(PUBLISH_MODE_INLINE) ? NormalizeUtils.normalizeNullable(template.defaultValue()) : ""
         ));
     }
 
@@ -453,46 +370,11 @@ public class ConfigValueUsageAnalysisService {
                 tool.toolId(),
                 tool.displayName(),
                 tool.version(),
-                SkillFileUtils.normalizeNullable(item.label()),
+                NormalizeUtils.normalizeNullable(item.label()),
                 item.secret(),
                 item.resolvePublishMode(),
-                SkillFileUtils.normalizeNullable(item.defaultValue())
+                NormalizeUtils.normalizeNullable(item.defaultValue())
         );
-    }
-
-    private static void addScriptImpact(Map<String, ImpactScriptAccumulator> impacts,
-                                        ScriptDefinition script,
-                                        Set<String> matchedKeys,
-                                        String targetKey,
-                                        String sourceLabel) {
-        if (matchedKeys.isEmpty()) {
-            return;
-        }
-        if (matchedKeys.contains(targetKey)) {
-            addImpact(impacts, script, sourceLabel + "直接引用");
-        }
-        Set<String> indirectKeys = new LinkedHashSet<>(matchedKeys);
-        indirectKeys.remove(targetKey);
-        if (!indirectKeys.isEmpty()) {
-            addImpact(impacts, script, buildIndirectReason(sourceLabel, indirectKeys, targetKey));
-        }
-    }
-
-    private static void addImpact(Map<String, ImpactScriptAccumulator> impacts, ScriptDefinition script, String reason) {
-        if (script == null) {
-            return;
-        }
-        impacts.computeIfAbsent(script.getId(), key -> new ImpactScriptAccumulator(script))
-                .addReason(reason);
-    }
-
-    private static String buildIndirectReason(String prefix, Set<String> matchedKeys, String targetKey) {
-        Set<String> indirectKeys = new LinkedHashSet<>(matchedKeys);
-        indirectKeys.remove(targetKey);
-        if (indirectKeys.isEmpty()) {
-            return prefix + "直接引用";
-        }
-        return prefix + "通过配置 " + String.join(", ", indirectKeys) + " 间接受影响";
     }
 
     private static Set<String> collectCascadingConfigKeys(String targetKey, Map<String, Set<String>> configDependencies) {
@@ -514,27 +396,6 @@ public class ConfigValueUsageAnalysisService {
         return cascading;
     }
 
-    private static Set<String> filterScriptKeys(String source, Collection<String> keys) {
-        Set<String> matches = new LinkedHashSet<>();
-        for (String key : keys) {
-            if (scriptUsesKey(source, key)) {
-                matches.add(key);
-            }
-        }
-        return matches;
-    }
-
-    private static boolean scriptUsesKey(String source, String key) {
-        if (source == null || source.isBlank()) {
-            return false;
-        }
-        return source.contains("${config." + key + "}")
-                || source.contains("config[\"" + key + "\"]")
-                || source.contains("config['" + key + "']")
-                || source.contains("config.get(\"" + key + "\")")
-                || source.contains("config.get('" + key + "')");
-    }
-
     private static boolean containsPlaceholderKey(Object value, String key) {
         return PlaceholderKeyExtractor.filterPlaceholderKeys(value, Set.of(key)).contains(key);
     }
@@ -545,7 +406,7 @@ public class ConfigValueUsageAnalysisService {
     }
 
     private String resolveRepositoryName(String repositoryId) {
-        if (repositoryId == null || repositoryId.isBlank()) {
+        if (NormalizeUtils.isBlank(repositoryId)) {
             return null;
         }
         return services.listRepositories().get().stream()
@@ -634,33 +495,19 @@ public class ConfigValueUsageAnalysisService {
                                   boolean secret,
                                   String publishMode,
                                   String value) {
-    }
-
-    private static final class ImpactScriptAccumulator {
-        private final ScriptDefinition script;
-        private final Set<String> reasons = new LinkedHashSet<>();
-
-        private ImpactScriptAccumulator(ScriptDefinition script) {
-            this.script = script;
-        }
-
-        private ImpactScriptAccumulator addReason(String reason) {
-            if (reason != null && !reason.isBlank()) {
-                reasons.add(reason);
-            }
-            return this;
-        }
-
-        private ImpactScript toView() {
-            return new ImpactScript(
-                    script.getId(),
-                    script.getName(),
-                    script.getScope() == null ? null : script.getScope().name(),
-                    script.getRepositoryId(),
-                    script.getRepositoryToolId(),
-                    script.getRepositoryVersion(),
-                    new ArrayList<>(reasons)
-            );
+        public ConfigValue toConfigValue() {
+            return new ConfigValue()
+                    .setKey(key)
+                    .setValue(value)
+                    .setDescription(label)
+                    .setSecret(secret)
+                    .setRepositoryId(repositoryId)
+                    .setRepositoryToolId(toolId)
+                    .setRepositoryVersion(version)
+                    .setPublishMode(publishMode)
+                    .setManaged(true)
+                    .setOverridden(false);
         }
     }
+
 }

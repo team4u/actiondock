@@ -5,22 +5,15 @@ import org.team4u.actiondock.domain.model.EventDispatchStatus;
 import org.team4u.actiondock.domain.model.EventRecord;
 import org.team4u.actiondock.domain.model.EventRecordStatus;
 import org.team4u.actiondock.domain.model.EventSourceAuthConfig;
-import org.team4u.actiondock.domain.model.EventSourceAuthMode;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.port.EventRecordRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,13 +24,11 @@ public class EventIngestionApplicationService {
     private static final int MAX_HEADER_VALUE_BYTES = 8 * 1024;
     private static final int MAX_BODY_BYTES = 1024 * 1024;
     private static final String REDACTED = "[REDACTED]";
-    private static final String SIGNATURE_PAYLOAD_TIMESTAMP_DOT_RAW_BODY = "TIMESTAMP_DOT_RAW_BODY";
-    private static final String HMAC_SHA256_ALGORITHM = "HmacSHA256";
 
     private final EventSourceApplicationService eventSourceApplicationService;
     private final EventTriggerApplicationService eventTriggerApplicationService;
     private final EventRecordRepository eventRecordRepository;
-    private final ConfigValueApplicationService configValueApplicationService;
+    private final WebhookAuthenticator authenticator;
     private final JsonCodec jsonCodec;
 
     public EventIngestionApplicationService(EventSourceApplicationService eventSourceApplicationService,
@@ -48,7 +39,7 @@ public class EventIngestionApplicationService {
         this.eventSourceApplicationService = eventSourceApplicationService;
         this.eventTriggerApplicationService = eventTriggerApplicationService;
         this.eventRecordRepository = eventRecordRepository;
-        this.configValueApplicationService = configValueApplicationService;
+        this.authenticator = new WebhookAuthenticator(configValueApplicationService);
         this.jsonCodec = jsonCodec;
     }
 
@@ -153,17 +144,9 @@ public class EventIngestionApplicationService {
     }
 
     private void verifyAuth(EventSourceDefinition source, IncomingEventPayload payload) {
-        EventSourceAuthConfig auth = source.getAuth();
-        if (auth == null || auth.getMode() == null || auth.getMode() == EventSourceAuthMode.NONE) {
-            return;
-        }
-        boolean passed = switch (auth.getMode()) {
-            case HEADER_TOKEN -> verifyHeaderToken(auth, payload);
-            case QUERY_TOKEN -> verifyQueryToken(auth, payload);
-            case HMAC_SHA256 -> verifyHmac(auth, payload);
-            default -> true;
-        };
-        if (!passed) {
+        try {
+            authenticator.verify(source, payload);
+        } catch (EventAuthenticationException exception) {
             eventRecordRepository.save(new EventRecord()
                     .setId(UUID.randomUUID().toString())
                     .setSourceId(source.getId())
@@ -171,83 +154,8 @@ public class EventIngestionApplicationService {
                     .setStatus(EventRecordStatus.AUTH_FAILED)
                     .setErrorMessage("事件鉴权失败")
                     .setCreatedAt(LocalDateTime.now()));
-            throw new EventAuthenticationException("事件鉴权失败");
+            throw exception;
         }
-    }
-
-    private boolean verifyHeaderToken(EventSourceAuthConfig auth, IncomingEventPayload payload) {
-        String provided = valueByName(payload.getHeaders(), auth.getTokenHeader());
-        return verifyToken(provided, auth, "请求头");
-    }
-
-    private boolean verifyQueryToken(EventSourceAuthConfig auth, IncomingEventPayload payload) {
-        String provided = ObjectValues.stringValue(payload.getQuery().get(auth.getTokenQueryParam()));
-        return verifyToken(provided, auth, "查询参数");
-    }
-
-    private boolean verifyToken(String providedToken, EventSourceAuthConfig auth, String context) {
-        String secret = resolveSecret(auth);
-        return constantTimeEquals(secret, providedToken);
-    }
-
-    private boolean verifyHmac(EventSourceAuthConfig auth, IncomingEventPayload payload) {
-        String secret = resolveSecret(auth);
-        if (secret == null || secret.isBlank()) {
-            return false;
-        }
-        String signature = valueByName(payload.getHeaders(), auth.getSignatureHeader());
-        if (signature == null || signature.isBlank()) {
-            return false;
-        }
-        String prefix = auth.getSignaturePrefix() == null ? "" : auth.getSignaturePrefix();
-        if (!prefix.isEmpty() && !signature.startsWith(prefix)) {
-            return false;
-        }
-        String actual = prefix.isEmpty() ? signature : signature.substring(prefix.length());
-        String signingPayload = buildSigningPayload(auth, payload);
-        return constantTimeEquals(hmacSha256Bytes(secret, signingPayload), actual);
-    }
-
-    private static String buildSigningPayload(EventSourceAuthConfig auth, IncomingEventPayload payload) {
-        String rawBody = payload.getRawBody() == null ? "" : payload.getRawBody();
-        if (!SIGNATURE_PAYLOAD_TIMESTAMP_DOT_RAW_BODY.equalsIgnoreCase(auth.getSignaturePayload())) {
-            return rawBody;
-        }
-        String timestamp = valueByName(payload.getHeaders(), auth.getTimestampHeader());
-        if (timestamp == null || !isTimestampWithinSkew(timestamp, auth.getMaxSkewSeconds())) {
-            return "";
-        }
-        return timestamp + "." + rawBody;
-    }
-
-    private static boolean isTimestampWithinSkew(String timestamp, Integer maxSkewSeconds) {
-        if (maxSkewSeconds == null || maxSkewSeconds <= 0) {
-            return true;
-        }
-        try {
-            long epoch = Long.parseLong(timestamp);
-            Duration skew = Duration.between(Instant.ofEpochSecond(epoch), Instant.now());
-            return Math.abs(skew.toSeconds()) <= maxSkewSeconds;
-        } catch (NumberFormatException exception) {
-            return false;
-        }
-    }
-
-    private static byte[] hmacSha256Bytes(String secret, String payload) {
-        try {
-            Mac mac = Mac.getInstance(HMAC_SHA256_ALGORITHM);
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_SHA256_ALGORITHM));
-            return mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
-        } catch (Exception exception) {
-            throw new IllegalStateException("HMAC 计算失败", exception);
-        }
-    }
-
-    private String resolveSecret(EventSourceAuthConfig auth) {
-        if (auth.getSecretConfigKey() == null || auth.getSecretConfigKey().isBlank()) {
-            return null;
-        }
-        return configValueApplicationService.snapshot().get(auth.getSecretConfigKey());
     }
 
     /**
@@ -298,45 +206,6 @@ public class EventIngestionApplicationService {
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("请求体必须是 JSON 对象", exception);
         }
-    }
-
-    private static boolean constantTimeEquals(String expected, String actual) {
-        if (expected == null || actual == null) {
-            return false;
-        }
-        return constantTimeEquals(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static boolean constantTimeEquals(byte[] expected, byte[] actual) {
-        return MessageDigest.isEqual(expected, actual);
-    }
-
-    private static boolean constantTimeEquals(byte[] expected, String actualHex) {
-        if (expected == null || actualHex == null || actualHex.isBlank()) {
-            return false;
-        }
-        try {
-            byte[] actual = HexFormat.of().parseHex(actualHex);
-            return constantTimeEquals(expected, actual);
-        } catch (IllegalArgumentException exception) {
-            return false;
-        }
-    }
-
-    private static String valueByName(Map<String, Object> values, String key) {
-        if (values == null || values.isEmpty() || key == null || key.isBlank()) {
-            return null;
-        }
-        Object exact = values.get(key);
-        if (exact != null) {
-            return ObjectValues.stringValue(exact);
-        }
-        for (Map.Entry<String, Object> entry : values.entrySet()) {
-            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
-                return ObjectValues.stringValue(entry.getValue());
-            }
-        }
-        return null;
     }
 
     private static EventRecordStatus resolveRecordStatus(List<EventDispatchRecord> dispatches) {

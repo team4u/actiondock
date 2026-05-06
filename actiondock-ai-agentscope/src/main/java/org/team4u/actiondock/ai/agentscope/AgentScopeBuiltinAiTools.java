@@ -154,18 +154,19 @@ public final class AgentScopeBuiltinAiTools {
             );
         }
         Toolkit toolkit = new Toolkit();
-        if (localName.startsWith("dashscope_")) {
-            toolkit.registerTool(new DashScopeMultiModalTool(requiredSecret(secretResolver, options, "apiKeyConfigKey", "DashScope API Key 配置项不能为空")));
-        } else if (localName.startsWith("openai_")) {
-            String apiKey = requiredSecret(secretResolver, options, "apiKeyConfigKey", "OpenAI API Key 配置项不能为空");
-            String baseUrl = stringOption(options, "baseUrl", null);
-            toolkit.registerTool(baseUrl == null || baseUrl.isBlank() ? new OpenAIMultiModalTool(apiKey) : new OpenAIMultiModalTool(apiKey, baseUrl));
-        } else if ("list_directory".equals(localName) || "view_text_file".equals(localName)) {
-            toolkit.registerTool(new ReadFileTool(stringOption(options, "baseDir", ".")));
-        } else if ("insert_text_file".equals(localName) || "write_text_file".equals(localName)) {
-            toolkit.registerTool(new WriteFileTool(stringOption(options, "baseDir", ".")));
-        } else {
-            throw new IllegalArgumentException("不支持的 AgentScope 内置工具: " + localName);
+        switch (localName) {
+            case String s when s.startsWith("dashscope_") ->
+                toolkit.registerTool(new DashScopeMultiModalTool(requiredSecret(secretResolver, options, "apiKeyConfigKey", "DashScope API Key 配置项不能为空")));
+            case String s when s.startsWith("openai_") -> {
+                String apiKey = requiredSecret(secretResolver, options, "apiKeyConfigKey", "OpenAI API Key 配置项不能为空");
+                String baseUrl = stringOption(options, "baseUrl", null);
+                toolkit.registerTool(baseUrl == null || baseUrl.isBlank() ? new OpenAIMultiModalTool(apiKey) : new OpenAIMultiModalTool(apiKey, baseUrl));
+            }
+            case "list_directory", "view_text_file" ->
+                toolkit.registerTool(new ReadFileTool(stringOption(options, "baseDir", ".")));
+            case "insert_text_file", "write_text_file" ->
+                toolkit.registerTool(new WriteFileTool(stringOption(options, "baseDir", ".")));
+            default -> throw new IllegalArgumentException("不支持的 AgentScope 内置工具: " + localName);
         }
         AgentTool tool = toolkit.getTool(localName);
         if (tool == null) {

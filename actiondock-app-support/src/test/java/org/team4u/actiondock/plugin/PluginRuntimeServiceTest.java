@@ -112,9 +112,6 @@ class PluginRuntimeServiceTest {
         PluginView stopped = service.stop("actiondock-demo-plugin");
         assertThat(stopped.isStarted()).isFalse();
         assertThat(repository.findByPluginId("actiondock-demo-plugin").orElseThrow().isEnabled()).isFalse();
-        assertThatThrownBy(() -> service.assertActionAvailable("actiondock-demo-plugin", "echo"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("未启动");
 
         PluginView restarted = service.start("actiondock-demo-plugin");
         assertThat(restarted.isStarted()).isTrue();

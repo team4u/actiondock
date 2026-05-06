@@ -5,6 +5,7 @@ import org.team4u.actiondock.domain.model.SkillInstallation;
 import org.team4u.actiondock.domain.model.SkillTarget;
 import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.domain.port.SkillTargetRepository;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import static org.team4u.actiondock.skill.SkillTypes.*;
 
@@ -54,13 +55,13 @@ public class SkillTargetService {
 
     public SkillTarget saveTarget(SkillTarget request) {
         SkillTarget target = request == null ? new SkillTarget() : request;
-        String id = SkillFileUtils.normalizeOrDefault(target.getId(), UUID.randomUUID().toString());
-        String name = SkillFileUtils.normalize(target.getName(), "SkillTarget 名称不能为空");
-        String type = SkillFileUtils.normalizeOrDefault(target.getType(), TARGET_TYPE_CUSTOM).toUpperCase(Locale.ROOT);
+        String id = NormalizeUtils.normalizeOrDefault(target.getId(), UUID.randomUUID().toString());
+        String name = NormalizeUtils.normalize(target.getName(), "SkillTarget 名称不能为空");
+        String type = NormalizeUtils.normalizeOrDefault(target.getType(), TARGET_TYPE_CUSTOM).toUpperCase(Locale.ROOT);
         if (!VALID_TARGET_TYPES.contains(type)) {
             throw new IllegalArgumentException("SkillTarget type 仅支持 " + String.join(" / ", VALID_TARGET_TYPES));
         }
-        Path rootPath = SkillFileUtils.resolveTargetRoot(SkillFileUtils.normalize(target.getRootPath(), "SkillTarget rootPath 不能为空"));
+        Path rootPath = SkillFileUtils.resolveTargetRoot(NormalizeUtils.normalize(target.getRootPath(), "SkillTarget rootPath 不能为空"));
         boolean writable = SkillFileUtils.ensureDirectoryWritable(rootPath);
         LocalDateTime now = LocalDateTime.now();
         SkillTarget existing = skillTargetRepository.findById(id).orElse(null);
@@ -102,7 +103,7 @@ public class SkillTargetService {
                         continue;
                     }
                     String content = Files.readString(skillMd, StandardCharsets.UTF_8);
-                    SkillFileUtils.Frontmatter frontmatter = SkillFileUtils.parseFrontmatter(content);
+                    SkillManifestReader.Frontmatter frontmatter = SkillManifestReader.parseFrontmatter(content);
                     SkillInstallation deployment = pathToDeployment.get(child.toString());
                     ScannedInstallation scanned = scanInstallation(deployment, child);
                     items.add(new SkillTypes.SkillScanItem(
@@ -129,7 +130,7 @@ public class SkillTargetService {
         Path root = SkillFileUtils.resolveTargetRoot(target.getRootPath());
         Path dir = resolveScanDirectory(root, directoryId);
         String content = SkillFileUtils.readString(dir.resolve(SkillFileUtils.SKILL_MANIFEST_FILE));
-        SkillFileUtils.Frontmatter frontmatter = SkillFileUtils.parseFrontmatter(content);
+        SkillManifestReader.Frontmatter frontmatter = SkillManifestReader.parseFrontmatter(content);
         SkillInstallation deployment = skillInstallationRepository.findByTargetId(targetId).stream()
                 .filter(item -> Objects.equals(item.getInstalledPath(), dir.toString()))
                 .findFirst()
@@ -144,7 +145,7 @@ public class SkillTargetService {
                 scanned.skillId(),
                 scanned.enabled(),
                 scanned.version(),
-                SkillFileUtils.buildFileTree(dir, dir)
+                SkillFilePreviewBuilder.buildFileTree(dir, dir)
         );
     }
 
@@ -156,7 +157,7 @@ public class SkillTargetService {
         if (Files.notExists(file)) {
             throw new IllegalArgumentException("Skill 文件不存在: " + relativePath);
         }
-        return SkillFileUtils.buildFilePreview(dir, file);
+        return SkillFilePreviewBuilder.buildFilePreview(dir, file);
     }
 
     public void deleteUnmanagedScanDirectory(String targetId, String directoryId) {
@@ -181,8 +182,8 @@ public class SkillTargetService {
     }
 
     private static List<String> normalizeSkillIds(List<String> skillIds) {
-        return SkillFileUtils.nullSafeList(skillIds).stream()
-                .map(id -> SkillFileUtils.normalize(id, "skillId 不能为空"))
+        return NormalizeUtils.nullSafeList(skillIds).stream()
+                .map(id -> NormalizeUtils.normalize(id, "skillId 不能为空"))
                 .distinct()
                 .toList();
     }
@@ -197,7 +198,7 @@ public class SkillTargetService {
             return new SkillTypes.SkillSyncResult(skillId, targetId, STATUS_FAILED, "Skill 受管副本不存在", null);
         }
         Path targetRoot = SkillFileUtils.resolveTargetRoot(requireTarget(targetId).getRootPath());
-        Path targetDirectory = SkillFileUtils.normalizePath(targetRoot.resolve(skillId));
+        Path targetDirectory = NormalizeUtils.normalizePath(targetRoot.resolve(skillId));
         if (Files.exists(targetDirectory) && Files.notExists(targetDirectory.resolve(SkillFileUtils.INSTALL_MARKER_FILE))) {
             return new SkillTypes.SkillSyncResult(skillId, targetId, STATUS_SKIPPED, "目标中已存在同名未受管目录，已跳过", null);
         }
@@ -224,8 +225,8 @@ public class SkillTargetService {
     // ------------------------------------------------------------------
 
     private static Path resolveScanDirectory(Path root, String directoryId) {
-        String normalized = SkillFileUtils.normalize(directoryId, "目录 ID 不能为空");
-        Path dir = SkillFileUtils.normalizePath(root.resolve(normalized));
+        String normalized = NormalizeUtils.normalize(directoryId, "目录 ID 不能为空");
+        Path dir = NormalizeUtils.normalizePath(root.resolve(normalized));
         if (!dir.startsWith(root)) {
             throw new IllegalArgumentException("目录路径越界: " + directoryId);
         }

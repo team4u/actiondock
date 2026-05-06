@@ -1,7 +1,7 @@
 package org.team4u.actiondock.skill;
 
 import org.team4u.actiondock.domain.port.JsonCodec;
-import org.team4u.actiondock.repository.RepositoryCatalogTypes;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
 import static org.team4u.actiondock.skill.SkillTypes.*;
 import java.io.IOException;
@@ -13,19 +13,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 public class GithubSkillCollectionService {
-    private static final String DEFAULT_REF = RepositoryCatalogTypes.DEFAULT_GIT_BRANCH;
     private static final long MAX_REPOSITORY_ARCHIVE_SIZE = 100L * 1024L * 1024L;
-    private static final Pattern OWNER_REPO_PATTERN = Pattern.compile("[A-Za-z0-9_.-]+");
 
     private final SkillService skillService;
     private final JsonCodec jsonCodec;
@@ -60,7 +55,7 @@ public class GithubSkillCollectionService {
     }
 
     public GithubSkillInstallResponse install(String url, List<String> targetIds, List<String> skillPaths) {
-        List<String> normalizedTargetIds = SkillFileUtils.normalizeTargetIds(targetIds);
+        List<String> normalizedTargetIds = NormalizeUtils.normalizeTargetIds(targetIds);
         List<String> normalizedSkillPaths = normalizeSkillPaths(skillPaths);
         return withPreparedRepository(url, (source, repository) -> {
             Path collectionRoot = resolveCollectionRoot(repository.repoRoot(), source.path());
@@ -77,8 +72,8 @@ public class GithubSkillCollectionService {
         });
     }
 
-    private <T> T withPreparedRepository(String url, java.util.function.BiFunction<Source, PreparedRepository, T> action) {
-        Source source = parseSource(url);
+    private <T> T withPreparedRepository(String url, java.util.function.BiFunction<GithubUrlParser.Source, PreparedRepository, T> action) {
+        GithubUrlParser.Source source = GithubUrlParser.parseSource(url);
         Path tempDir = createTempDir();
         try {
             return action.apply(source, prepareRepository(source, tempDir));
@@ -152,7 +147,7 @@ public class GithubSkillCollectionService {
     }
 
     private static Path resolveCollectionRoot(Path repoRoot, String requestedPath) {
-        if (requestedPath != null && !requestedPath.isBlank()) {
+        if (NormalizeUtils.isNotBlank(requestedPath)) {
             return resolveRepoRelativePath(repoRoot, requestedPath);
         }
         Path lower = repoRoot.resolve("skills").normalize();
@@ -166,7 +161,7 @@ public class GithubSkillCollectionService {
         return lower;
     }
 
-    private PreparedRepository prepareRepository(Source source, Path tempDir) {
+    private PreparedRepository prepareRepository(GithubUrlParser.Source source, Path tempDir) {
         byte[] archive = downloadRepositoryArchive(source);
         Path extractRoot = tempDir.resolve("repo");
         try {
@@ -177,14 +172,14 @@ public class GithubSkillCollectionService {
                 if (topLevels.size() != 1) {
                     throw new IllegalArgumentException("GitHub 仓库归档结构异常");
                 }
-                return new PreparedRepository(SkillFileUtils.normalizePath(topLevels.get(0)));
+                return new PreparedRepository(NormalizeUtils.normalizePath(topLevels.get(0)));
             }
         } catch (IOException exception) {
             throw new IllegalStateException("解压 GitHub 仓库失败", exception);
         }
     }
 
-    private byte[] downloadRepositoryArchive(Source source) {
+    private byte[] downloadRepositoryArchive(GithubUrlParser.Source source) {
         byte[] body = archiveDownloader.download(source.owner(), source.repo(), source.ref());
         if (body == null || body.length == 0) {
             throw new IllegalArgumentException("下载 GitHub 仓库失败: 内容为空");
@@ -195,80 +190,10 @@ public class GithubSkillCollectionService {
         return body;
     }
 
-    private static Source parseSource(String rawUrl) {
-        String normalizedUrl = SkillFileUtils.normalize(rawUrl, "GitHub 链接不能为空");
-        URI uri = parseGitHubUri(normalizedUrl);
-        List<String> parts = Arrays.stream(Objects.toString(uri.getPath(), "").split("/"))
-                .filter(part -> !part.isBlank())
-                .toList();
-        if (parts.size() < 2) {
-            throw new IllegalArgumentException("GitHub 链接缺少 owner/repo");
-        }
-        String owner = validateOwnerRepoSegment(parts.get(0), "owner");
-        String repo = validateOwnerRepoSegment(stripGitSuffix(parts.get(1)), "repo");
-        String[] refAndPath = resolveRefAndPath(parts);
-        return new Source(normalizedUrl, owner, repo, refAndPath[0], refAndPath[1]);
-    }
-
-    private static URI parseGitHubUri(String url) {
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("GitHub 链接格式不正确", exception);
-        }
-        if (!"https".equalsIgnoreCase(uri.getScheme())) {
-            throw new IllegalArgumentException("仅支持 https GitHub 链接");
-        }
-        if (!"github.com".equalsIgnoreCase(uri.getHost())) {
-            throw new IllegalArgumentException("仅支持 github.com 链接");
-        }
-        return uri;
-    }
-
-    private static String[] resolveRefAndPath(List<String> parts) {
-        String ref = DEFAULT_REF;
-        String path = null;
-        if (parts.size() > 2) {
-            if (!"tree".equals(parts.get(2))) {
-                throw new IllegalArgumentException("仅支持仓库根链接或 /tree/{ref}/{path} 链接");
-            }
-            if (parts.size() < 4) {
-                throw new IllegalArgumentException("GitHub tree 链接缺少 ref");
-            }
-            ref = normalizeRef(parts.get(3));
-            path = parts.size() > 4 ? String.join("/", parts.subList(4, parts.size())) : null;
-            if (path != null) {
-                validateRelativePath(path);
-            }
-        }
-        return new String[]{ref, path};
-    }
-
-    private static String validateOwnerRepoSegment(String value, String label) {
-        String normalized = SkillFileUtils.normalize(value, "GitHub " + label + " 不能为空");
-        if (!OWNER_REPO_PATTERN.matcher(normalized).matches()) {
-            throw new IllegalArgumentException("GitHub " + label + " 格式不正确: " + normalized);
-        }
-        return normalized;
-    }
-
-    private static String stripGitSuffix(String repo) {
-        return repo.endsWith(".git") ? repo.substring(0, repo.length() - 4) : repo;
-    }
-
-    private static String normalizeRef(String ref) {
-        String normalized = SkillFileUtils.normalize(ref, "GitHub ref 不能为空");
-        if (normalized.contains("..") || normalized.contains("\\") || normalized.startsWith("/") || normalized.endsWith("/")) {
-            throw new IllegalArgumentException("GitHub ref 格式不正确: " + normalized);
-        }
-        return normalized;
-    }
-
     private static List<String> normalizeSkillPaths(List<String> skillPaths) {
-        List<String> normalized = SkillFileUtils.nullSafeList(skillPaths).stream()
-                .map(path -> SkillFileUtils.normalize(path, "Skill 路径不能为空"))
-                .peek(GithubSkillCollectionService::validateRelativePath)
+        List<String> normalized = NormalizeUtils.nullSafeList(skillPaths).stream()
+                .map(path -> NormalizeUtils.normalize(path, "Skill 路径不能为空"))
+                .peek(GithubUrlParser::validateRelativePath)
                 .distinct()
                 .toList();
         if (normalized.isEmpty()) {
@@ -277,15 +202,9 @@ public class GithubSkillCollectionService {
         return normalized;
     }
 
-    private static void validateRelativePath(String path) {
-        if (path.startsWith("/") || path.contains("\\") || path.contains("..")) {
-            throw new IllegalArgumentException("GitHub 仓库路径非法: " + path);
-        }
-    }
-
     private static Path resolveRepoRelativePath(Path repoRoot, String relativePath) {
-        validateRelativePath(relativePath);
-        Path normalizedRoot = SkillFileUtils.normalizePath(repoRoot);
+        GithubUrlParser.validateRelativePath(relativePath);
+        Path normalizedRoot = NormalizeUtils.normalizePath(repoRoot);
         Path resolved = normalizedRoot.resolve(relativePath).normalize();
         if (!resolved.startsWith(normalizedRoot)) {
             throw new IllegalArgumentException("GitHub 仓库路径越界: " + relativePath);
@@ -294,8 +213,8 @@ public class GithubSkillCollectionService {
     }
 
     private static String normalizeRepoRelativePath(Path repoRoot, Path path) {
-        Path normalizedRoot = SkillFileUtils.normalizePath(repoRoot);
-        Path normalizedPath = SkillFileUtils.normalizePath(path);
+        Path normalizedRoot = NormalizeUtils.normalizePath(repoRoot);
+        Path normalizedPath = NormalizeUtils.normalizePath(path);
         if (!normalizedPath.startsWith(normalizedRoot)) {
             throw new IllegalArgumentException("GitHub 仓库路径越界: " + path);
         }
@@ -311,22 +230,19 @@ public class GithubSkillCollectionService {
     }
 
     private static void unzipRepositoryArchive(byte[] content, Path directory) {
-        SkillFileUtils.unzipToDirectory(content, directory, MAX_REPOSITORY_ARCHIVE_SIZE, "GitHub 仓库归档");
+        SkillArchiveManager.unzipToDirectory(content, directory, MAX_REPOSITORY_ARCHIVE_SIZE, "GitHub 仓库归档");
     }
 
     private static String summarize(Throwable exception) {
         if (exception == null) {
             return "未知错误";
         }
-        if (exception.getMessage() != null && !exception.getMessage().isBlank()) {
+        if (NormalizeUtils.isNotBlank(exception.getMessage())) {
             return exception.getMessage();
         }
         return exception.getClass().getSimpleName();
     }
 
-
-    private record Source(String url, String owner, String repo, String ref, String path) {
-    }
 
     private record PreparedRepository(Path repoRoot) {
     }
@@ -371,6 +287,7 @@ public class GithubSkillCollectionService {
     ) {
     }
 
+    @FunctionalInterface
     interface RepositoryArchiveDownloader {
         byte[] download(String owner, String repo, String ref);
     }

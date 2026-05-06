@@ -2,7 +2,7 @@ import { Form } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { forkRepositoryTool } from "../api";
+import { forkRepositoryTool } from "../features/resources/api";
 import { getErrorMessage } from "../utils";
 import type { ForkFormValues, ScriptDefinition } from "../types";
 

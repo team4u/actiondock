@@ -1,8 +1,10 @@
 package org.team4u.actiondock.script;
 
+import org.team4u.actiondock.script.ProcessSupport;
+import org.team4u.actiondock.shared.NormalizeUtils;
+
 import org.team4u.actiondock.application.PythonRequirementsSupport;
 import org.team4u.actiondock.config.AppProperties;
-import org.team4u.actiondock.domain.model.ErrorDetail;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
@@ -38,7 +40,7 @@ import java.util.function.Consumer;
  *
  * @author jay.wu
  */
-public class PythonEnvironmentManager {
+class PythonEnvironmentManager {
 
     /** stderr 日志协议前缀，与 Python 脚本端的日志输出协议一致。 */
     static final String LOG_PREFIX = "__ACTIONDOCK_LOG__";
@@ -58,11 +60,11 @@ public class PythonEnvironmentManager {
     private final AppProperties.Python properties;
     private final Executor asyncExecutor;
 
-    public PythonEnvironmentManager(JsonCodec jsonCodec, AppProperties.Python properties) {
+    PythonEnvironmentManager(JsonCodec jsonCodec, AppProperties.Python properties) {
         this(jsonCodec, properties, null);
     }
 
-    public PythonEnvironmentManager(JsonCodec jsonCodec,
+    PythonEnvironmentManager(JsonCodec jsonCodec,
                                     AppProperties.Python properties,
                                     Executor asyncExecutor) {
         this.jsonCodec = Objects.requireNonNull(jsonCodec);
@@ -81,7 +83,7 @@ public class PythonEnvironmentManager {
      * @throws IOException          如果环境准备失败
      * @throws InterruptedException 如果被中断
      */
-    public PythonExecutable resolveRuntimeExecutable(PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
+    PythonExecutable resolveRuntimeExecutable(PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
                                                      ScriptDefinition definition,
                                                      ScriptExecutionContext executionContext,
                                                      String baseExecutable)
@@ -103,7 +105,7 @@ public class PythonEnvironmentManager {
      * @throws IOException          如果检测失败
      * @throws InterruptedException 如果被中断
      */
-    public PythonRuntimeInfo inspectRuntime(String executable, String scriptId) throws IOException, InterruptedException {
+    PythonRuntimeInfo inspectRuntime(String executable, String scriptId) throws IOException, InterruptedException {
         ProcessSupport.ProcessResult result = runCommand(
                 List.of(executable, "-c", VENV_VALIDATION_RUNNER),
                 null,
@@ -114,7 +116,7 @@ public class PythonEnvironmentManager {
         if (result.timedOut()) {
             throw new PythonExecutionException(
                     "检测 Python 运行环境超时",
-                    buildSimpleErrorDetail("PYTHON_RUNTIME_MISSING", Map.of(
+                    ProcessSupport.buildSimpleErrorDetail("PYTHON_RUNTIME_MISSING", Map.of(
                             "scriptId", scriptId,
                             "executable", executable,
                             "reason", "检测 Python 运行环境超时"
@@ -124,7 +126,7 @@ public class PythonEnvironmentManager {
         if (result.exitCode() != 0) {
             throw new PythonExecutionException(
                     "Python 运行环境不可用",
-                    buildErrorDetail("PYTHON_RUNTIME_MISSING", result, Map.of(
+                    ProcessSupport.buildErrorDetail("PYTHON_RUNTIME_MISSING", result, Map.of(
                             "scriptId", scriptId,
                             "executable", executable
                     ))
@@ -147,7 +149,7 @@ public class PythonEnvironmentManager {
      * @throws IOException          如果环境准备失败
      * @throws InterruptedException 如果被中断
      */
-    public Path prepareEnvironment(String executable,
+    Path prepareEnvironment(String executable,
                                    PythonRuntimeInfo runtimeInfo,
                                    PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
                                    ScriptDefinition definition,
@@ -187,7 +189,7 @@ public class PythonEnvironmentManager {
      * @throws IOException          如果安装失败
      * @throws InterruptedException 如果被中断
      */
-    public void installEnvironment(String executable,
+    void installEnvironment(String executable,
                                    Path envDir,
                                    PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
                                    ScriptDefinition definition,
@@ -210,7 +212,7 @@ public class PythonEnvironmentManager {
      * @throws IOException          如果创建失败
      * @throws InterruptedException 如果被中断
      */
-    public void createVirtualEnvironment(String executable,
+    void createVirtualEnvironment(String executable,
                                          Path envDir,
                                          ScriptDefinition definition,
                                          ScriptExecutionContext executionContext)
@@ -223,7 +225,7 @@ public class PythonEnvironmentManager {
         if (venvResult.timedOut() || venvResult.exitCode() != 0) {
             throw new PythonExecutionException(
                     "Python 虚拟环境创建失败",
-                    buildErrorDetail("PYTHON_ENV_PREPARE_FAILED", venvResult, Map.of(
+                    ProcessSupport.buildErrorDetail("PYTHON_ENV_PREPARE_FAILED", venvResult, Map.of(
                             "scriptId", definition.getId(),
                             "envDir", envDir.toString()
                     ))
@@ -241,7 +243,7 @@ public class PythonEnvironmentManager {
      * @throws IOException          如果安装失败
      * @throws InterruptedException 如果被中断
      */
-    public void installPipDependencies(Path envDir,
+    void installPipDependencies(Path envDir,
                                        PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
                                        ScriptDefinition definition,
                                        ScriptExecutionContext executionContext)
@@ -266,7 +268,7 @@ public class PythonEnvironmentManager {
         if (pipResult.timedOut() || pipResult.exitCode() != 0) {
             throw new PythonExecutionException(
                     "Python 依赖安装失败",
-                    buildErrorDetail("PYTHON_DEP_INSTALL_FAILED", pipResult, Map.of(
+                    ProcessSupport.buildErrorDetail("PYTHON_DEP_INSTALL_FAILED", pipResult, Map.of(
                             "scriptId", definition.getId(),
                             "envDir", envDir.toString(),
                             "requirements", parsedRequirements.normalizedText(),
@@ -281,9 +283,9 @@ public class PythonEnvironmentManager {
      *
      * @return 环境缓存目录路径
      */
-    public Path resolveEnvCacheDir() {
+    private Path resolveEnvCacheDir() {
         String configured = properties.getEnvCacheDir();
-        if (configured == null || configured.isBlank()) {
+        if (NormalizeUtils.isBlank(configured)) {
             return Path.of(AppProperties.defaultHomeDir(), "python-envs");
         }
         return Path.of(configured.trim());
@@ -295,7 +297,7 @@ public class PythonEnvironmentManager {
      * @param envDir 虚拟环境目录
      * @return Python 可执行文件的绝对路径字符串
      */
-    public static String resolveEnvironmentPython(Path envDir) {
+    private static String resolveEnvironmentPython(Path envDir) {
         Path unix = envDir.resolve("bin").resolve("python");
         if (Files.exists(unix)) {
             return unix.toString();
@@ -349,8 +351,8 @@ public class PythonEnvironmentManager {
 
     // ---- 日志和流读取辅助方法 ----
 
-    static void logInstallLine(ScriptExecutionContext executionContext, ExecutionLogLevel level, String line) {
-        if (executionContext != null && line != null && !line.isBlank()) {
+    private static void logInstallLine(ScriptExecutionContext executionContext, ExecutionLogLevel level, String line) {
+        if (executionContext != null && NormalizeUtils.isNotBlank(line)) {
             executionContext.log(level, "[python-install] " + line);
         }
     }
@@ -412,7 +414,7 @@ public class PythonEnvironmentManager {
      * @param preserveNames 需要保留的文件名集合
      * @throws IOException 如果清空失败
      */
-    public static void clearDirectoryContents(Path directory, Set<String> preserveNames) throws IOException {
+    private static void clearDirectoryContents(Path directory, Set<String> preserveNames) throws IOException {
         if (Files.notExists(directory)) {
             return;
         }
@@ -432,7 +434,7 @@ public class PythonEnvironmentManager {
      * @param path 目标路径
      * @throws IOException 如果删除失败
      */
-    public static void deleteRecursively(Path path) throws IOException {
+    private static void deleteRecursively(Path path) throws IOException {
         if (Files.isDirectory(path) && !Files.isSymbolicLink(path)) {
             try (var children = Files.list(path)) {
                 for (Path child : children.toList()) {
@@ -443,25 +445,15 @@ public class PythonEnvironmentManager {
         Files.deleteIfExists(path);
     }
 
-    // ---- 错误详情构建辅助方法 ----
-
-    static ErrorDetail buildErrorDetail(String code, ProcessSupport.ProcessResult result, Map<String, Object> details) {
-        return ProcessSupport.buildErrorDetail(code, result, details);
-    }
-
-    static ErrorDetail buildSimpleErrorDetail(String code, Map<String, Object> details) {
-        return ProcessSupport.buildSimpleErrorDetail(code, details);
-    }
-
     /**
      * Python 可执行文件信息，包含路径和版本号。
      */
-    public record PythonExecutable(String path, String version) {
+    record PythonExecutable(String path, String version) {
     }
 
     /**
      * Python 运行时信息，包含版本号。
      */
-    public record PythonRuntimeInfo(String version) {
+    record PythonRuntimeInfo(String version) {
     }
 }

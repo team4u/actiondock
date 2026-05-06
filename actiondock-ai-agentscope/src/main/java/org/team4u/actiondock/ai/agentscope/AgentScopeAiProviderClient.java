@@ -70,6 +70,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.team4u.actiondock.ai.agentscope.AgentScopeOptions.*;
+
 public class AgentScopeAiProviderClient implements AiProviderClient {
     private static final String PROVIDER_NAME = "AGENTSCOPE";
     // 与 AiAgentRuntimeImpl.DISABLE_OUTER_TIMEOUT_METADATA_KEY 保持一致
@@ -258,15 +260,15 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         String modelName = requireText(profile.getModelName(), "AI 模型名不能为空");
         String baseUrl = blankToNull(profile.getBaseUrl());
         return switch (modelProvider) {
-            case DASHSCOPE -> configureChatBuilder(DashScopeChatModel.builder().modelName(modelName).stream(streaming), apiKey, baseUrl).build();
-            case OPENAI, OPENAI_COMPATIBLE -> configureChatBuilder(OpenAIChatModel.builder().modelName(modelName).stream(streaming), apiKey, baseUrl).build();
-            case ANTHROPIC -> configureChatBuilder(AnthropicChatModel.builder().modelName(modelName).stream(streaming), apiKey, baseUrl).build();
-            case GEMINI -> configureChatBuilder(GeminiChatModel.builder().modelName(modelName).streamEnabled(streaming), apiKey, null).build();
-            case OLLAMA -> configureChatBuilder(OllamaChatModel.builder().modelName(modelName), null, baseUrl).build();
+            case DASHSCOPE -> configureAndBuild(DashScopeChatModel.builder().modelName(modelName).stream(streaming), apiKey, baseUrl).build();
+            case OPENAI, OPENAI_COMPATIBLE -> configureAndBuild(OpenAIChatModel.builder().modelName(modelName).stream(streaming), apiKey, baseUrl).build();
+            case ANTHROPIC -> configureAndBuild(AnthropicChatModel.builder().modelName(modelName).stream(streaming), apiKey, baseUrl).build();
+            case GEMINI -> configureAndBuild(GeminiChatModel.builder().modelName(modelName).streamEnabled(streaming), apiKey, null).build();
+            case OLLAMA -> configureAndBuild(OllamaChatModel.builder().modelName(modelName), null, baseUrl).build();
         };
     }
 
-    private static <B> B configureChatBuilder(B builder, String apiKey, String baseUrl) {
+    private static <B> B configureAndBuild(B builder, String apiKey, String baseUrl) {
         configureBuilder(builder, apiKey, baseUrl);
         return builder;
     }
@@ -292,17 +294,12 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         String baseUrl = blankToNull(profile.getBaseUrl());
         int dimensions = intOption(mergedOptions(profile.getDefaultOptions(), requestOptions), "dimensions", 0);
         return switch (modelProvider) {
-            case DASHSCOPE -> configureEmbeddingBuilder(DashScopeTextEmbedding.builder().modelName(modelName).dimensions(dimensions), apiKey, baseUrl).build();
-            case OPENAI, OPENAI_COMPATIBLE -> configureEmbeddingBuilder(OpenAITextEmbedding.builder().modelName(modelName).dimensions(dimensions), apiKey, baseUrl).build();
-            case OLLAMA -> configureEmbeddingBuilder(OllamaTextEmbedding.builder().modelName(modelName).dimensions(dimensions), null, baseUrl).build();
+            case DASHSCOPE -> configureAndBuild(DashScopeTextEmbedding.builder().modelName(modelName).dimensions(dimensions), apiKey, baseUrl).build();
+            case OPENAI, OPENAI_COMPATIBLE -> configureAndBuild(OpenAITextEmbedding.builder().modelName(modelName).dimensions(dimensions), apiKey, baseUrl).build();
+            case OLLAMA -> configureAndBuild(OllamaTextEmbedding.builder().modelName(modelName).dimensions(dimensions), null, baseUrl).build();
             case ANTHROPIC, GEMINI ->
                     throw new UnsupportedOperationException("AgentScope 当前 Embedding 适配未支持模型供应商: " + modelProvider);
         };
-    }
-
-    private static <B> B configureEmbeddingBuilder(B builder, String apiKey, String baseUrl) {
-        configureBuilder(builder, apiKey, baseUrl);
-        return builder;
     }
 
     /**
@@ -312,21 +309,27 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
      */
     private static void configureBuilder(Object builder, String apiKey, String baseUrl) {
         if (apiKey != null) {
-            if (builder instanceof DashScopeChatModel.Builder b) b.apiKey(apiKey);
-            else if (builder instanceof OpenAIChatModel.Builder b) b.apiKey(apiKey);
-            else if (builder instanceof AnthropicChatModel.Builder b) b.apiKey(apiKey);
-            else if (builder instanceof GeminiChatModel.Builder b) b.apiKey(apiKey);
-            else if (builder instanceof DashScopeTextEmbedding.Builder b) b.apiKey(apiKey);
-            else if (builder instanceof OpenAITextEmbedding.Builder b) b.apiKey(apiKey);
+            switch (builder) {
+                case DashScopeChatModel.Builder b -> b.apiKey(apiKey);
+                case OpenAIChatModel.Builder b -> b.apiKey(apiKey);
+                case AnthropicChatModel.Builder b -> b.apiKey(apiKey);
+                case GeminiChatModel.Builder b -> b.apiKey(apiKey);
+                case DashScopeTextEmbedding.Builder b -> b.apiKey(apiKey);
+                case OpenAITextEmbedding.Builder b -> b.apiKey(apiKey);
+                default -> {}
+            }
         }
         if (baseUrl != null) {
-            if (builder instanceof DashScopeChatModel.Builder b) b.baseUrl(baseUrl);
-            else if (builder instanceof OpenAIChatModel.Builder b) b.baseUrl(baseUrl);
-            else if (builder instanceof AnthropicChatModel.Builder b) b.baseUrl(baseUrl);
-            else if (builder instanceof OllamaChatModel.Builder b) b.baseUrl(baseUrl);
-            else if (builder instanceof DashScopeTextEmbedding.Builder b) b.baseUrl(baseUrl);
-            else if (builder instanceof OpenAITextEmbedding.Builder b) b.baseUrl(baseUrl);
-            else if (builder instanceof OllamaTextEmbedding.Builder b) b.baseUrl(baseUrl);
+            switch (builder) {
+                case DashScopeChatModel.Builder b -> b.baseUrl(baseUrl);
+                case OpenAIChatModel.Builder b -> b.baseUrl(baseUrl);
+                case AnthropicChatModel.Builder b -> b.baseUrl(baseUrl);
+                case OllamaChatModel.Builder b -> b.baseUrl(baseUrl);
+                case DashScopeTextEmbedding.Builder b -> b.baseUrl(baseUrl);
+                case OpenAITextEmbedding.Builder b -> b.baseUrl(baseUrl);
+                case OllamaTextEmbedding.Builder b -> b.baseUrl(baseUrl);
+                default -> {}
+            }
         }
     }
 
@@ -549,55 +552,5 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
 
     private static <T> T block(reactor.core.publisher.Mono<T> mono, Duration timeout) {
         return timeout == null ? mono.block() : mono.block(timeout);
-    }
-
-    private static String requireText(String value, String message) {
-        String text = blankToNull(value);
-        if (text == null) {
-            throw new IllegalArgumentException(message);
-        }
-        return text;
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    private static String stringOption(Map<String, Object> options, String key) {
-        return stringValue(options.get(key));
-    }
-
-    static String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private static Double doubleOption(Map<String, Object> options, String key) {
-        return numberOption(options, key, Number::doubleValue, Double::parseDouble);
-    }
-
-    private static Integer intOption(Map<String, Object> options, String key) {
-        return intOption(options, key, null);
-    }
-
-    private static Integer intOption(Map<String, Object> options, String key, Integer defaultValue) {
-        Integer value = numberOption(options, key, Number::intValue, Integer::parseInt);
-        return value != null ? value : defaultValue;
-    }
-
-    private static Long longOption(Map<String, Object> options, String key) {
-        return numberOption(options, key, Number::longValue, Long::parseLong);
-    }
-
-    private static <T> T numberOption(Map<String, Object> options, String key,
-                                       java.util.function.Function<Number, T> fromNumber,
-                                       java.util.function.Function<String, T> fromString) {
-        Object value = options.get(key);
-        if (value instanceof Number number) {
-            return fromNumber.apply(number);
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            return fromString.apply(text);
-        }
-        return null;
     }
 }

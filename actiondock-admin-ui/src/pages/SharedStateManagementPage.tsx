@@ -34,7 +34,6 @@ import type { ColumnsType } from "antd/es/table";
 import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ApiError,
   createSharedState,
   deleteSharedState,
   getSharedState,
@@ -42,7 +41,7 @@ import {
   listSharedStateNamespaces,
   purgeExpiredSharedState,
   updateSharedState
-} from "../api";
+} from "../features/settings/api";
 import { getApiKey } from "../auth";
 import { CodeEditor } from "../components/CodeEditor";
 import { ConfirmDangerAction } from "../components/ConfirmDangerAction";
@@ -51,6 +50,7 @@ import { TableLinkCell } from "../components/TableLinkCell";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { useCopyMessage } from "../hooks/useCopyMessage";
 import { buildSharedStateCasCliCommand, buildSharedStatePutCliCommand } from "../commands";
+import { ApiError } from "../shared/api/httpClient";
 import type { SharedStateDetail, SharedStateRequest, SharedStateSummary } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 

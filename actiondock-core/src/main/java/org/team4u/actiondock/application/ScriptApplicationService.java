@@ -185,7 +185,7 @@ public class ScriptApplicationService {
             throw new IllegalArgumentException("脚本已存在: " + normalizedId);
         }
         PublishedScriptSnapshot sourceSnapshot = source.getPublishedSnapshot();
-        ScriptDefinition fork = sourceSnapshot == null ? copyCurrentDefinition(source) : source.toPublishedDefinition();
+        ScriptDefinition fork = sourceSnapshot == null ? source.fullCopy() : source.toPublishedDefinition();
         fork.setId(normalizedId)
                 .setName(ApplicationServiceSupport.normalize(targetName, "Fork 名称不能为空"))
                 .setStatus(ScriptStatus.DRAFT)
@@ -201,10 +201,6 @@ public class ScriptApplicationService {
         ScriptDefinition saved = save(fork);
         copySchedulesToFork(source.getId(), saved.getId());
         return saved;
-    }
-
-    private static ScriptDefinition copyCurrentDefinition(ScriptDefinition source) {
-        return source.fullCopy();
     }
 
     private void copySchedulesToFork(String sourceScriptId, String forkScriptId) {

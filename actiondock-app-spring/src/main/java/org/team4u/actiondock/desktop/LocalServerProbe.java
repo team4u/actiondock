@@ -7,12 +7,14 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Detects whether the configured local port already serves ActionDock.
  */
 public class LocalServerProbe {
     private static final Duration TIMEOUT = Duration.ofMillis(600);
+    private static final Set<Integer> REDIRECT_STATUSES = Set.of(301, 302, 303, 307, 308);
 
     private final HttpClient httpClient;
 
@@ -50,7 +52,7 @@ public class LocalServerProbe {
             return true;
         }
         Optional<String> location = response.headers().firstValue("location");
-        return (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)
+        return REDIRECT_STATUSES.contains(status)
                 && location.map(value -> value.contains("/admin/app")).orElse(false);
     }
 

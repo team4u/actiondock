@@ -239,7 +239,7 @@ public class ExecutionApplicationService {
      * @throws IllegalArgumentException 如果 scriptId 为空
      */
     public List<ExecutionRecord> list(String scriptId) {
-        requireNonBlank(scriptId, "scriptId");
+        ApplicationServiceSupport.normalize(scriptId, "scriptId 不能为空");
         return executionRepository.findByScriptId(scriptId);
     }
 
@@ -251,7 +251,7 @@ public class ExecutionApplicationService {
      * @throws IllegalArgumentException 如果 scheduleId 为空
      */
     public List<ExecutionRecord> listByScheduleId(String scheduleId) {
-        requireNonBlank(scheduleId, "scheduleId");
+        ApplicationServiceSupport.normalize(scheduleId, "scheduleId 不能为空");
         return executionRepository.findByScheduleId(scheduleId);
     }
 
@@ -279,7 +279,7 @@ public class ExecutionApplicationService {
      * @throws IllegalArgumentException 如果 scriptId 为空或存在仍在执行中的记录
      */
     public void clear(String scriptId) {
-        requireNonBlank(scriptId, "scriptId");
+        ApplicationServiceSupport.normalize(scriptId, "scriptId 不能为空");
 
         List<ExecutionRecord> records = executionRepository.findByScriptId(scriptId);
         records.forEach(ExecutionApplicationService::ensureExecutionDeletable);
@@ -289,12 +289,6 @@ public class ExecutionApplicationService {
     private static void ensureExecutionDeletable(ExecutionRecord record) {
         if (record.getStatus() == ExecutionStatus.PENDING || record.getStatus() == ExecutionStatus.RUNNING) {
             throw new IllegalArgumentException("执行进行中，无法删除");
-        }
-    }
-
-    private static void requireNonBlank(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " 不能为空");
         }
     }
 }
