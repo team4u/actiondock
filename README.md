@@ -1,31 +1,32 @@
-# ActionDock
+# ActionDock 用户操作手册
 
-**ActionDock** 是一套把脚本、插件、仓库分发、AI 调用和运行治理放进同一运行体系的工具平台。
+> ActionDock 是一套把脚本、插件、仓库分发、AI 调用和运行治理放进同一运行体系的工具平台。同一份脚本定义，可以同时被人、REST API、CLI 和 Agent 使用。
 
-它解决的不是“怎么再多跑几个脚本”，而是怎么把零散脚本升级成团队可复用、可分发、可审计、可被 AI 稳定调用的脚本资产。
+---
 
-一句话概括：
+## 目录
 
-> **同一份脚本定义，可以同时被人、REST API、CLI 和 Agent 使用。**
+- [简介与快速开始](#简介与快速开始)
+- [脚本管理](#脚本管理)
+- [插件管理](#插件管理)
+- [Skills 管理](#skills-管理)
+- [AI 能力](#ai-能力)
+- [仓库与分发](#仓库与分发)
+- [触发中心](#触发中心)
+- [系统设置](#系统设置)
+- [脚本编写指南](#脚本编写指南)
+- [CLI 速查](#cli-速查)
+- [API 概览与常见问题](#api-概览与常见问题)
 
-## 为什么值得团队采用
+---
 
-很多团队都有类似问题：
+## 简介与快速开始
 
-- 脚本散落在个人目录、Jenkins、Cron、机器人配置里，没人知道哪份是最新
-- 接给 AI 的“工具”缺少稳定契约，参数靠 prompt 猜，调用结果也不统一
-- 配置、Token、游标、水位线各自落文件或塞数据库，跨脚本复用困难
-- 一旦要团队协作，就会碰到发布、回滚、依赖、权限、审计和分发问题
+### ActionDock 是什么
 
-ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
+ActionDock 解决的核心问题是：把零散脚本升级成团队可复用、可分发、可审计、可被 AI 稳定调用的脚本资产。
 
-- **统一脚本抽象**：脚本不是一段源码，而是带 `Schema`、发布快照、依赖、日志和执行入口的脚本资产
-- **多入口复用**：同一个脚本可被管理台、REST API、CLI、Agent 复用，不需要为不同入口各写一套适配
-- **仓库化协作**：脚本、插件、AI 能力包可从仓库发现、安装、更新，也支持同步成开发脚本继续演进
-- **AI 原生集成**：既能把平台脚本暴露给 Agent，也能用 AI 做脚本生成、诊断、Review 和发布辅助
-- **治理能力完整**：内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复，不再靠外围拼装
-
-## 它和普通脚本平台的区别
+它和普通脚本平台的区别：
 
 | 维度 | 脚本目录 + cron | 只暴露 API 的脚本服务 | ActionDock |
 |------|------------------|------------------------|------------|
@@ -36,469 +37,1041 @@ ActionDock 的价值在于，它把这些问题收敛到同一平台能力里：
 | AI 接入 | prompt 拼接 | 需额外接工具层 | AI Toolset、Agent、脚本桥接 |
 | 共享状态治理 | 落文件 / Redis 自管 | 另接状态服务 | 内建共享状态 `namespace + key + JSON + version + CAS` |
 | 多入口调用 | 各写各的 | API 为主 | UI、REST、CLI、Agent 共用同一脚本 |
-| 审计与执行记录 | 弱 | 取决于实现 | 执行记录、日志、调试视图、触发来源内建 |
 
-## 关键优势
+### 核心能力
 
-### 脚本能力复用与跨语言编排
+- 统一脚本抽象：脚本不是一段源码，而是带 Schema、发布快照、依赖、日志和执行入口的脚本资产
+- 多入口复用：管理台、REST API、CLI、Agent 共用同一脚本
+- 仓库化协作：脚本、插件、AI 能力包可从仓库发现、安装、更新
+- AI 原生集成：脚本可暴露给 Agent，AI 辅助生成、诊断、Review
+- 治理能力完整：内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复
 
-传统脚本是孤立的，互相之间没有调用机制。ActionDock 通过 `scripts.invoke()` 把脚本变成可组合的能力单元：
-
-- **脚本间调用**：`scripts.invoke("target-id", args)` 让一个脚本成为另一个脚本的组合积木
-- **跨语言透明调用**：Groovy 调 Python、Python 调 Groovy，路由由平台处理，调用方不关心对方用什么语言
-- **循环调用检测**：自动检测并阻止脚本间的无限递归
-- **发布版本锁定**：被调脚本强制走 published 版本，调用链始终稳定
-
-传统 Java 时代复用靠 jar 依赖，脚本时代没有 jar——ActionDock 填补的就是这个空白。
-
-### Schema 一次声明，四处生效
-
-每个脚本的 `inputSchema` / `outputSchema` 不只是文档，而是驱动多个入口的元数据：
-
-- CLI 自动展平为 `--name alice` 形式的 flag，不用手写 JSON
-- Admin UI 自动生成参数填写表单
-- AI Agent 自动理解为 tool description，无需额外 prompt 工程
-- 执行前自动校验入参格式，契约违约在调用时就能发现
-
-传统脚本参数全靠 README 口头约定，而 ActionDock 的 Schema 是机器可读、自动执行的契约。
-
-### 草稿-发布-回滚，脚本也有版本控制
-
-传统脚本改了就是改了，没有后悔药。ActionDock 提供完整的脚本生命周期：
-
-- 草稿可以反复调试（`--draft` 执行），不影响线上版本
-- 发布产生不可变快照，等价于给脚本打了一个稳定 tag
-- 被调脚本和定时任务始终走 published 版本，不会因草稿改动而意外中断
-- 草稿不满意可以 discard，一键回到上次发布版
-
-比 git tag 更轻量，比手动备份更可靠。
-
-### 跨脚本共享状态 + CAS 并发安全
-
-传统方案里，同步游标、OAuth Token、水位线、批次号各自落文件或塞数据库，格式不统一，并发也不安全。
-
-ActionDock 内建 `state` 门面，脚本直接 `state.get()` / `state.put()` 即可：
-
-- `namespace + key` 组织状态，不同脚本按命名空间隔离
-- `state.cas()` 提供乐观锁（Compare-And-Swap），解决并发写入冲突
-- `secret` 标记敏感数据，日志中自动脱敏
-- `expiresAt` 支持临时数据自动过期
-- 自动追踪 `lastWriterScriptId` / `lastWriterExecutionId`，出了问题可追溯
-
-脚本不需要自己管存储，不需要选型 Redis 还是数据库，直接用就行。
-
-### 统一调用门面，插件和脚本无差别对待
-
-对脚本来说，调用一个 Java 插件和调用另一个脚本，体验完全一致：
-
-```groovy
-// 调用插件
-def result = plugins.invoke("my-plugin", "hello", [name: "world"])
-
-// 调用另一个脚本
-def result = scripts.invoke("other-script", [name: "world"])
-```
-
-调用方不关心底层是编译型插件还是解释型脚本，这是真正的面向接口组合——能力本身比实现形式更重要。
-
-### AI 参与脚本全生命周期
-
-不只是"脚本调 AI"，而是 AI 参与从开发到上线的每一步：
-
-- **生成**：AI 根据需求生成脚本源码
-- **补全**：AI 自动补全 `inputSchema` / `outputSchema`
-- **校验**：语法检查 + Schema 一致性检查
-- **调试**：`--draft` 执行 + `--response-view debug` 返回完整上下文
-- **Review**：发布前 AI 审查脚本质量
-- **诊断**：执行失败时 AI 分析原因并给出修复建议
-- **发布说明**：AI 自动生成 Release Notes
-
-CLI 的 `create/patch/validate/run --draft/publish` 命令设计天然适配 AI Agent 工作流，形成完整的自动化闭环。
-
-### 仓库化分发——脚本领域的包管理器
-
-传统做法是 Git clone 或文件共享，ActionDock 的仓库模型更接近包管理器：
-
-- **发现**：浏览仓库目录，看到每个工具的 Schema、说明和依赖
-- **安装**：一键安装到本地，自动创建 `REPOSITORY` 作用域
-- **Fork**：安装后 fork 为个人脚本，自由修改
-- **同步**：开发完成后同步回仓库，团队共享
-- **更新**：上游有变更时可拉取更新，也可选择保留本地改动
-
-脚本不再散落在各处，而是有正式的发现、安装、升级、回退流程。
-
-### 零基础设施依赖，开箱即用
-
-- 内嵌 H2 数据库，不需要额外安装 MySQL / PostgreSQL
-- Groovy 引擎内嵌 JVM，不需要额外运行时（Python 类型脚本需要 python3）
-- Docker Compose 一键启动完整服务
-- npm 一行安装即可使用（`actiondock`）
-
-团队不需要运维配合，5 分钟就能跑起来验证价值。
-
-## 核心能力
-
-### 1. 把脚本变成可治理的脚本资产
-
-- 支持 `GROOVY` 和 `PYTHON` 两类脚本
-- 每个脚本都带输入/输出 `Schema`
-- 支持草稿编辑、校验、发布、发布快照执行、草稿回退
-- 支持同步/异步执行、结果视图与调试视图
-- 支持执行预设、执行记录、日志和错误详情
-
-这意味着脚本调用不再靠 README 口头约定，而是有明确契约和稳定入口。
-
-### 2. 团队协作与仓库分发
-
-- 仓库类型支持 `LOCAL_DIR`、`GIT`、`HTTP`
-- 仓库用途区分 `DISTRIBUTION` 和 `DEVELOPMENT`
-- 可以浏览仓库中的脚本、插件、AI 能力包并按需安装或更新
-- 已安装仓库脚本可以同步为本地开发脚本，继续修改、对比、再发布
-- 支持 `PERSONAL`、`REPOSITORY`、`FORK`、`DEVELOPMENT`、`SAMPLE` 等脚本作用域
-
-这套模型适合团队内部工具市场、公共脚本仓库、试点脚本孵化到正式纳管的全过程。
-
-### 3. 插件机制，不把所有能力写死在脚本里
-
-- 基于 PF4J 插件体系扩展平台能力
-- 插件通过 Manifest 声明动作、Schema、配置和示例
-- Groovy 和 Python 脚本都通过统一门面 `plugins.invoke(...)` 调用插件
-- 插件可以单独打包、安装、升级，也可来自仓库分发
-
-当脚本需要访问外部系统、封装内部 SDK 或沉淀共用能力时，不必把复杂逻辑都塞进脚本源码。
-
-### 4. AI 不是外挂，而是平台内建能力
-
-- 管理模型配置、Agent 配置、Toolset 和运行记录
-- 可把平台内工具聚合成 Agent 可消费的工具集
-- 内置 AI 能力，支持：
-  - 生成脚本
-  - 修复脚本
-  - 补全 Schema
-  - 诊断执行失败
-  - 发布前 Review
-  - 生成 Release Notes
-- `actiondock-ai` 系统插件可让 Groovy 和 Python 脚本直接调用 `chat`、`structured`、`embed`、`agentRun`
-
-当前 Provider 方向已包含 OpenAI、DashScope、Ollama、Gemini、Anthropic 的统一接入边界。
-
-### 5. 运行治理能力是内建的
-
-- **共享状态**：内建 `namespace + key + JSON value` 存储，支持 `secret`、`expiresAt`、`version` 和 CAS
-- **配置值管理**：支持全局配置值、引用关系分析、模板来源恢复
-- **访问控制**：支持访问令牌管理
-- **定时任务**：支持全局和脚本级调度
-- **备份恢复**：可导出脚本、调度、配置、仓库、插件、共享状态和 AI 配置
-
-这使它更像“团队工具运行平台”，而不是单纯的脚本编辑器。
-
-## 30 秒理解架构
-
-```text
-Script / Plugin / Repository / AI Package
-                  |
-                  v
-         Define / Publish / Install / Sync
-                  |
-                  v
-      ActionDock Runtime (Spring Boot + UI + CLI)
-                  |
-        +---------+----------+-----------+
-        |                    |           |
-        v                    v           v
-    Admin UI             REST API      CLI / Agent
-        |                    |           |
-        +---------+----------+-----------+
-                  |
-                  v
-    Execution / Logs / Schedules / Config / Shared State / AI Runs
-```
-
-核心理念是：
-
-- **脚本即入口**
-- **仓库即分发渠道**
-- **Schema 即调用契约**
-- **AI 也是平台消费者，而不是旁路系统**
-
-## 适合什么场景
-
-- 团队里已经有很多内部脚本，想统一纳管、发布和复用
-- 需要给 AI Agent 提供稳定、可审计、可配置的内部工具
-- 需要维护 OAuth Token、同步游标、水位线、批次号等跨脚本共享状态
-- 需要做“脚本仓库”而不是“脚本文件夹”，让安装、更新、开发同步都有正式流程
-- 需要在脚本开发阶段就把 Review、诊断、发布说明这些辅助动作工具化
-
-## 快速开始
-
-### 前置要求
+### 系统要求
 
 - JDK 21+
-- Maven 3.9+
-- Node.js 18+（前端或 CLI 开发需要）
-- Python 3.x（执行 `PYTHON` 类型脚本需要，默认命令为 `python3`）
+- Maven 3.9+（本地构建时）
+- Node.js 18+（前端开发或 CLI 时）
+- Python 3.x（执行 PYTHON 类型脚本时，默认命令为 `python3`）
+- Docker（可选，容器化部署时）
 
-### 本地启动
+### 安装与启动
+
+本地启动：
+
 
 ```bash
-# 编译全部模块
-mvn clean package -DskipTests
-
-# 启动服务
-mvn -pl actiondock-app-spring -am spring-boot:run
+npm install -g actiondock
+actiondock server     # 前台启动服务
 ```
 
-启动后：
-
+启动后访问：
 - 管理台：`http://localhost:5177/admin/app/scripts`
-- API：`http://localhost:5177/api`
+- REST API：`http://localhost:5177/api`
+- Swagger UI：`http://localhost:5177/swagger-ui.html`
 
-### Docker 启动
+### 第一个脚本：Hello World
 
-```bash
-docker compose up -d --build
-docker compose logs -f action-dock
-docker compose down
-```
+服务默认会初始化示例脚本 `hello-groovy`。
 
-### 试一个最小示例
+在管理台运行：
 
-服务默认会初始化示例脚本 `hello-groovy`。你可以直接调用：
+- 打开管理台，进入「脚本库」页面
+- 找到 `hello-groovy` 脚本
+- 点击「运行」按钮
+- 在输入表单中填入 `name: alice`
+- 点击执行，查看结果
+
+通过 REST API 运行：
 
 ```bash
 curl -X POST http://localhost:5177/api/scripts/hello-groovy/published/execute \
   -H 'Content-Type: application/json' \
-  -d '{
-    "input": {
-      "name": "alice"
-    },
-    "mode": "SYNC"
-  }'
+  -d '{"input": {"name": "alice"}, "mode": "SYNC"}'
 ```
 
-如果更偏向终端或 AI 调用，可以直接使用 CLI：
+通过 CLI 运行：
 
 ```bash
 actiondock script run hello-groovy --name alice --json
 ```
 
-## 分发形态
+### UI 导览
 
-### 单包 npm 分发
+管理台左侧导航分为四个区域：
 
-对外发布名为 `actiondock`：
+| 区域 | 包含功能 |
+|------|----------|
+| 能力 | 脚本库、插件管理、Skills 管理、AI（模型、Agent、Toolset、运行记录） |
+| 资源 | 仓库发现、仓库管理 |
+| 触发 | 触发中心（定时任务、事件源、事件触发、事件记录） |
+| 设置 | 配置值、共享状态、访问令牌、控制台凭证、数据备份 |
+
+---
+
+## 脚本管理
+
+脚本管理是 ActionDock 的核心功能。脚本不是普通的源码文件，而是带有输入/输出 Schema、发布快照、依赖声明的脚本资产。
+
+### 脚本库
+
+路径：管理台 → 能力 → 脚本库
+
+脚本库页面展示所有已创建和已安装的脚本，支持搜索和筛选。
+
+筛选条件：
+
+- 来源：全部 / 个人 (PERSONAL) / 仓库 (REPOSITORY) / Fork / 开发 (DEVELOPMENT) / 示例 (SAMPLE)
+- 状态：全部 / 已发布 (PUBLISHED) / 草稿 (DRAFT) / 可更新 (UPDATE_AVAILABLE) / 远程有变更 (REMOTE_CHANGES) / 已分叉 (DIVERGED) / 只读 (READ_ONLY)
+- 类型：全部 / Python / Groovy
+
+表格列：
+
+| 列 | 说明 |
+|----|------|
+| 脚本名称/ID | 脚本标识，点击进入编辑器 |
+| 来源/状态标签 | 显示脚本作用域和发布状态 |
+| 操作 | 运行、复制、导出、更新、卸载 |
+
+工具栏操作：
+
+- 刷新：重新加载脚本列表
+- 一键更新：同步所有仓库并更新所有可更新的脚本
+- 导出可编辑：批量导出个人脚本为 JSON 文件
+- 导入脚本：从 JSON 文件导入脚本
+- 新建脚本：创建新的个人脚本
+
+### 创建脚本
+
+点击「新建脚本」进入脚本编辑器。编辑器包含以下部分：
+
+基本信息：
+
+| 字段 | 说明 |
+|------|------|
+| Script ID | 脚本唯一标识符（创建后不可修改） |
+| 脚本名称 | 人类可读名称 |
+| 脚本类型 | `GROOVY` 或 `PYTHON` |
+| 打包类型 | `TOOL`（工具型）或 `FLOW`（流程型） |
+| 描述 | 脚本用途说明 |
+
+源码编辑：
+
+使用 Monaco Editor 编辑脚本源码，支持语法高亮和自动补全。
+
+Schema 定义：
+
+- inputSchema：定义脚本的输入参数结构（JSON Schema 格式），驱动 CLI flag 生成、UI 表单生成、AI 工具描述
+- outputSchema：定义脚本的输出结构
+
+依赖声明：
+
+- 脚本依赖：引用其他已发布脚本，通过 `scripts.invoke()` 调用
+- 插件依赖：声明所需插件及其 Action
+- AI 依赖：声明所需 AI 能力（如 CHAT、STRUCTURED_OUTPUT）
+
+Python 专属：
+
+- `pythonRequirements`：等同于 requirements.txt，声明第三方依赖
+
+### 编辑脚本
+
+点击脚本列表中的脚本名称进入编辑器。编辑器与创建页面相同，额外提供：
+
+- 只读标识：REPOSITORY 作用域的脚本为只读，需要 Fork 后才能编辑
+- 开发同步状态：DEVELOPMENT 作用域的脚本会显示同步状态标签：
+  - `SYNCED`：本地与远程一致
+  - `LOCAL_CHANGES`：有本地未同步修改
+  - `REMOTE_CHANGES`：远程有新版本
+  - `DIVERGED`：本地和远程都有修改，需要手动处理
+
+### 脚本生命周期
+
+```
+草稿 (DRAFT) → 发布 (PUBLISHED) → 归档 (ARCHIVED)
+     ↑              ↓
+     └── 丢弃草稿 ──┘
+```
+
+- 草稿：可以自由编辑和调试，通过 `--draft` 参数执行草稿版本，不影响线上版本
+- 发布：产生不可变快照，被调脚本和定时任务始终走 published 版本
+- 丢弃草稿：一键回到上次发布版本
+
+### 执行脚本
+
+在脚本编辑器的「执行」标签页中：
+
+- 输入表单根据 `inputSchema` 自动生成
+- 可切换「表单模式」和「JSON 模式」手动编辑输入
+- 选择执行模式：
+  - SYNC：同步等待结果返回
+  - ASYNC：异步提交，不等待结果
+- 查看执行结果（格式化输出）和调试视图（完整上下文、日志、错误详情）
+
+执行历史：
+
+执行历史表格显示每次执行的记录，包括：
+- 执行状态（PENDING / RUNNING / SUCCESS / FAILED）
+- 触发来源（MANUAL / SCHEDULED / AI_TOOL / EVENT）
+- 执行时间
+- 点击行可查看执行详情
+
+执行预设：
+
+保存常用的输入参数组合，方便重复执行。
+
+### 导入与导出
+
+- 导出：支持单个或批量导出个人脚本为 JSON 文件
+- 导入：上传 JSON 文件，对已有脚本会显示差异预览，确认后导入
+
+### Fork 仓库脚本
+
+对 REPOSITORY 作用域的脚本点击「Fork」：
+
+- 创建一个 FORK 作用域的可编辑副本
+- 可以独立修改、发布、管理
+- 与原始仓库脚本不再关联
+
+---
+
+## 插件管理
+
+插件机制让平台能力可以扩展，而不需要把所有功能写死在脚本里。
+
+### 插件列表
+
+路径：管理台 → 能力 → 插件管理
+
+表格列：
+
+| 列 | 说明 |
+|----|------|
+| Plugin ID | 插件标识（点击进入详情） |
+| 名称 | 人类可读名称 |
+| 状态 | `STARTED`（绿色）/ `STOPPED`（金色）/ `FAILED`（红色） |
+| 版本 | 插件版本号 |
+| 来源 | 仓库安装或手动上传 |
+| Actions 数 | 插件提供的动作数量 |
+
+工具栏：
+
+- 刷新：重新加载插件列表
+- 一键更新：同步所有仓库并更新所有仓库来源的插件
+- 上传安装：上传 `.jar` 文件安装插件
+
+### 安装插件
+
+- 点击「上传安装」按钮
+- 选择符合 PF4J 规范的 `.jar` 文件
+- 上传后插件出现在列表中（可能需要手动启动）
+
+### 插件生命周期管理
+
+对每个插件可执行以下操作：
+
+| 操作 | 说明 |
+|------|------|
+| 启动 | 激活插件 |
+| 停止 | 停用插件 |
+| 升级 | 上传新版本 `.jar` 文件（支持回滚） |
+| 卸载 | 移除插件（可勾选强制卸载） |
+
+### 插件详情
+
+点击插件 ID 进入详情页，可查看：
+
+- 插件 Manifest 信息（名称、描述、版本）
+- 可用 Actions 及其 Schema
+- 配置 Schema（如果插件可配置）
+- 插件依赖和版本要求
+- 配置编辑和保存
+- 调用 Action 进行调试
+
+### 在脚本中调用插件
+
+在 Groovy 脚本中：
+
+```groovy
+def result = plugins.invoke("my-plugin", "hello", [name: "world"])
+```
+
+在 Python 脚本中：
+
+```python
+result = plugins.invoke("my-plugin", "hello", {"name": "world"})
+```
+
+调用插件和调用另一个脚本的体验完全一致，调用方不关心底层是编译型插件还是解释型脚本。
+
+---
+
+## Skills 管理
+
+Skills 是可安装的技能包（例如 Claude Skills），可以安装到指定的目标目录中。
+
+### Skills 列表
+
+路径：管理台 → 能力 → Skills 管理
+
+Skills 管理页面包含两个标签页：
+
+- Skills 列表：已安装的技能包
+- 目标管理：技能安装的目标目录
+
+### 目标管理
+
+技能目标 (Skill Target) 是技能安装的目录。
+
+添加目标：
+
+| 字段 | 说明 |
+|------|------|
+| ID | 目标唯一标识 |
+| 名称 | 人类可读名称 |
+| 类型 | `CLAUDE` 或 `CUSTOM`（选择类型后自动建议路径，如 `~/.claude/skills`） |
+| 根路径 | 技能安装的目录 |
+| 启用 | 是否启用 |
+
+操作：添加、编辑、删除目标；扫描目标目录；同步安装到目标。
+
+### 安装 Skills
+
+路径：管理台 → 能力 → Skills 安装
+
+支持三种安装方式：
+
+- GitHub 集合：输入 GitHub 集合 URL，扫描并选择安装
+- 本地目录：选择本地目录进行安装
+- 归档文件：上传 `.zip` 归档文件
+
+安装时需要选择目标（可多选）。
+
+### 发布 Skills
+
+路径：管理台 → 能力 → Skills 发布
+
+将本地技能打包并发布到仓库进行分发。
+
+### Skill 详情
+
+点击 Skill 名称进入详情页，可查看：
+
+- Skill 元数据（ID、名称、描述、版本）
+- 文件浏览
+- 各目标的安装状态
+- 启用/禁用、删除操作
+
+---
+
+## AI 能力
+
+ActionDock 内建 AI 能力，不是外挂，而是平台原生功能。支持管理模型配置、Agent 配置、Toolset 和运行记录。
+
+### AI 概览
+
+路径：管理台 → 能力 → AI
+
+AI 概览页面展示：
+
+- 模型管理卡片：显示已启用的模型数量和警告（如缺少 API Key 配置）
+- Agent 管理卡片：显示已启用的 Agent 数量
+- Toolset 管理卡片：显示已启用的 Toolset 数量
+- 最近运行表格：最近 8 条 Agent 运行记录
+
+### 模型配置
+
+路径：管理台 → 能力 → AI → 模型管理
+
+配置字段：
+
+| 字段 | 说明 |
+|------|------|
+| ID | 模型配置唯一标识 |
+| 名称 | 人类可读名称 |
+| 模型供应商 | `DASHSCOPE` / `OPENAI` / `OPENAI_COMPATIBLE` / `ANTHROPIC` / `GEMINI` / `OLLAMA` |
+| 模型名称 | 供应商模型标识，如 `gpt-4o`、`qwen-max` |
+| Base URL | 自托管或兼容端点的地址（可选） |
+| API Key 配置键 | 引用 Config Value 中存储 API Key 的键名 |
+| 能力 | `CHAT` / `STRUCTURED_OUTPUT` / `EMBEDDING` |
+| 默认选项 | JSON 格式，如 `temperature`、`max_tokens` 等 |
+| 限制 | JSON 格式，如速率限制 |
+| 启用 | 是否启用 |
+
+提供「测试模型」按钮，发送测试 Prompt 验证连通性。
+
+### Agent 配置
+
+路径：管理台 → 能力 → AI → Agent 管理
+
+配置字段：
+
+| 字段 | 说明 |
+|------|------|
+| ID | Agent 唯一标识 |
+| 名称 | 人类可读名称 |
+| 描述 | Agent 用途说明 |
+| 模型配置 | 关联的模型配置（下拉选择） |
+| System Prompt | 系统提示词 |
+| Toolset 引用 | 关联的 Toolset（可多选） |
+| 直接工具 | 不在 Toolset 中的额外工具名称 |
+| Skill IDs | 加载到 Agent 上下文的 Skill |
+| 选项 | JSON 格式的 Agent 特定参数 |
+| 启用 | 是否启用 |
+
+提供「测试 Agent」按钮，直接启动一次测试运行。
+
+### Toolset 管理
+
+路径：管理台 → 能力 → AI → Toolset 管理
+
+Toolset 是工具的集合，定义 Agent 可以使用哪些工具。
+
+配置字段：
+
+| 字段 | 说明 |
+|------|------|
+| ID | Toolset 唯一标识 |
+| 名称 | 人类可读名称 |
+| 描述 | Toolset 用途说明 |
+| 工具列表 | 从已注册工具中搜索和选择 |
+| 最大权限 | `READ_ONLY` / `PROPOSE_CHANGE` / `CONTROLLED_ACTION` / `DANGEROUS_ACTION` |
+| 启用 | 是否启用 |
+
+工具来源：
+- SYSTEM：平台内置工具
+- SCRIPT：脚本暴露的工具
+- AGENT：Agent 级别工具
+
+### AI 运行记录
+
+路径：管理台 → 能力 → AI → 运行记录
+
+列表信息：
+
+| 列 | 说明 |
+|----|------|
+| Run ID | 运行标识 |
+| Agent | 使用的 Agent 配置 |
+| 状态 | `RUNNING` / `SUCCESS` / `FAILED` / `WAITING_APPROVAL` / `CANCELLED` / `INTERRUPTED` |
+| 调用方类型 | `SCRIPT` / `PLUGIN` / `ADMIN_TEST` / `AGENT` |
+| 开始时间 | 运行开始时间 |
+
+运行详情：
+
+点击 Run ID 进入详情页，可查看：
+
+- 步骤追踪面板：每个步骤的类型（`MODEL_REASONING`、`TOOL_CALL`、`TOOL_RESULT`、`APPROVAL`、`INTERRUPT`）、延迟、输入输出、错误
+- 用量统计：输入/输出/总 Token 数
+- 完整对话消息
+
+---
+
+## 仓库与分发
+
+仓库系统是 ActionDock 的包管理器，负责脚本、插件和 AI 能力包的发现、安装和分发。
+
+### 仓库发现
+
+路径：管理台 → 资源 → 仓库发现
+
+仓库发现页面浏览所有已配置仓库中的可用资源，分为以下类别：
+
+- 工具 (Tools)：可安装的脚本
+- 插件 (Plugins)：可安装的插件
+- AI 能力包：AI 相关的配置包
+- Skills：可安装的技能包
+
+每个资源项显示名称、描述、类型、版本、信任级别和依赖关系。支持一键安装和更新。
+
+### 仓库管理
+
+路径：管理台 → 资源 → 仓库管理
+
+表格列：
+
+| 列 | 说明 |
+|----|------|
+| ID | 仓库标识（点击进入详情） |
+| 名称 | 人类可读名称 |
+| 类型 | `GIT` / `HTTP` / `LOCAL_DIR` |
+| 用途 | `DISTRIBUTION`（分发）/ `DEVELOPMENT`（开发） |
+| 信任级别 | `TRUSTED`（受信）/ `UNTRUSTED`（非受信） |
+| 状态 | 同步状态 |
+| 操作 | 同步、编辑、删除 |
+
+创建/编辑仓库：
+
+| 字段 | 说明 |
+|------|------|
+| ID | 仓库唯一标识 |
+| 名称 | 人类可读名称 |
+| 类型 | `GIT` / `HTTP` / `LOCAL_DIR` |
+| URL | Git URL、HTTP URL 或本地目录路径 |
+| Branch | Git 类型时指定分支（可选） |
+| 启用 | 是否启用 |
+| 信任级别 | `TRUSTED` / `UNTRUSTED` |
+| 用途 | `DISTRIBUTION`（只读分发）/ `DEVELOPMENT`（可编辑开发） |
+| 描述 | 仓库用途说明 |
+
+### 安装仓库工具
+
+从仓库发现页面点击「安装」：
+
+- 确认对话框显示脚本的依赖信息
+- 可选择是否安装关联的依赖项
+- 安装后脚本出现在脚本库中，作用域为 `REPOSITORY`
+
+### 更新已安装工具
+
+- 一键更新：同步所有仓库后更新所有可更新的脚本
+- 单脚本更新：在脚本列表中对有 `UPDATE_AVAILABLE` 状态的脚本单独更新
+- 开发脚本同步：DEVELOPMENT 作用域的脚本可从远程拉取更新
+
+### 发布脚本到仓库
+
+从脚本编辑器中选择「发布到仓库」：
+
+- 选择目标仓库
+- 系统将已发布的脚本快照打包发布到仓库
+- 团队其他成员同步仓库后即可看到并安装
+
+---
+
+## 触发中心
+
+触发中心管理所有自动化执行方式：定时任务和事件驱动。
+
+### 概览
+
+路径：管理台 → 触发 → 触发中心
+
+触发中心包含四个标签页：
+
+| 标签页 | 功能 |
+|--------|------|
+| 定时触发 | Cron 定时任务管理 |
+| 事件源 | 外部事件接入口定义 |
+| 事件触发 | 事件到脚本的路由规则 |
+| 事件记录 | 事件接收和分发历史 |
+
+> 事件框架的详细配置指南请参考 [事件框架配置指南](event-framework.md)。
+
+### 定时任务
+
+路径：管理台 → 触发 → 定时任务编辑器
+
+列表信息：
+
+| 列 | 说明 |
+|----|------|
+| Schedule ID | 调度标识 |
+| 名称 | 人类可读名称 |
+| 脚本 | 关联的已发布脚本 |
+| Cron 表达式 | 标准 5 字段 Cron |
+| 启用状态 | 是否启用 |
+| 上次/下次执行 | 执行时间信息 |
+
+创建/编辑：
+
+| 字段 | 说明 |
+|------|------|
+| 脚本 ID | 选择已发布的脚本 |
+| 调度名称 | 人类可读名称 |
+| Cron 表达式 | 标准 5 字段格式（如 `0 */5 * * *` 表示每 5 分钟） |
+| 输入参数 | JSON 格式，匹配脚本的 `inputSchema` |
+| 启用 | 是否启用 |
+
+操作：启用、禁用、编辑、删除、查看最近执行结果。
+
+### 事件源
+
+事件源定义外部系统的接入口。
+
+创建字段：
+
+| 字段 | 说明 |
+|------|------|
+| 名称 | 人类可读名称 |
+| Key | 唯一业务键，如 `crm.customer.created` |
+| 传输方式 | 当前支持 `HTTP_WEBHOOK` |
+| Webhook 端点 | 系统自动生成，外部系统 POST 到此地址 |
+| 鉴权模式 | `NONE` / `HEADER_TOKEN` / `QUERY_TOKEN` / `HMAC_SHA256` |
+| 标准化处理器 | 将原始请求转为统一事件格式 |
+| 样例上下文 | 测试用的 Headers、Query、Body 样例 |
+
+鉴权模式建议：
+
+- 内部系统：先用 `HEADER_TOKEN`
+- 公开 Webhook：优先用 `HMAC_SHA256`
+
+测试标准化：使用样例上下文测试处理器输出，确认标准化结果符合预期。
+
+### 事件触发
+
+事件触发定义事件到脚本的路由规则。
+
+创建字段：
+
+| 字段 | 说明 |
+|------|------|
+| 名称 | 人类可读名称 |
+| 描述 | 触发器用途说明 |
+| 事件源 | 选择已配置的事件源 |
+| 目标脚本 | 必须是已发布 (PUBLISHED) 状态的脚本 |
+| 过滤处理器 | 输出 `{"matched": true/false}`，决定是否触发 |
+| 幂等处理器 | 输出 `{"key": "unique-id"}`，防止重复触发 |
+| 输入处理器 | 输出匹配目标脚本 `inputSchema` 的对象 |
+| 提交模式 | `SYNC`（同步）或 `ASYNC`（异步，推荐） |
+| 启用 | 是否启用 |
+
+调试流程：
+
+- 先使用「测试」按钮验证处理器输出（不执行目标脚本）
+- 再使用「试运行」创建一次真实的执行记录
+- 最后在「事件记录」中查看完整的链路信息
+
+### 事件记录
+
+列表信息：
+
+| 列 | 说明 |
+|----|------|
+| 记录 ID | 事件记录标识 |
+| 事件源 | 来源事件源 |
+| 标准事件 | 标准化后的事件摘要 |
+| 状态 | 处理状态 |
+| 时间戳 | 事件接收时间 |
+
+记录详情：
+
+点击记录可查看：
+
+- 原始请求（Headers、Query、Body）
+- 标准化事件
+- 分发记录（哪些触发器命中、执行结果、错误信息）
+
+### 处理器类型
+
+事件框架中使用的处理器支持三种模式：
+
+| 模式 | 适用场景 | 说明 |
+|------|----------|------|
+| `JSON_PATH` | 字段提取 | 从事件数据中提取指定字段 |
+| `TEMPLATE` | 结构拼装 | 使用 Mustache 模板引擎拼装输出 |
+| `SCRIPT_REF` | 复杂逻辑 | 引用已发布脚本处理复杂转换 |
+
+---
+
+## 系统设置
+
+系统设置提供平台级别的配置、安全和数据管理功能。
+
+### 配置值
+
+路径：管理台 → 设置 → 配置值
+
+全局配置值存储，用于管理 API Key、连接字符串等配置。
+
+表格列：
+
+| 列 | 说明 |
+|----|------|
+| Key | 配置键名（唯一） |
+| Value | 配置值（Secret 类型会脱敏显示） |
+| Has Value | 是否有值 |
+| 来源 | 手动创建或仓库默认值 |
+
+创建/编辑字段：
+
+| 字段 | 说明 |
+|------|------|
+| Key | 唯一配置键名 |
+| Value | 配置值（支持模板语法） |
+| 描述 | 配置用途说明 |
+| Secret | 标记为敏感值（在日志和 UI 中脱敏） |
+
+详情页标签：
+
+- 概览：键名、值、描述、Secret 状态、创建/更新时间
+- 影响：哪些脚本和资源引用了此配置值
+- 引用：反向依赖分析
+
+仓库默认值操作：
+
+- 复制为本地覆盖：在仓库默认值基础上创建本地覆盖
+- 恢复仓库默认：回到仓库原始默认值
+
+### 共享状态
+
+路径：管理台 → 设置 → 共享状态
+
+跨脚本共享的键值存储，支持命名空间隔离。
+
+特性：
+
+- `namespace + key` 组织状态，不同脚本按命名空间隔离
+- `secret` 标记敏感数据，日志中自动脱敏
+- `expiresAt` 支持临时数据自动过期
+- `version` 版本号和 CAS（Compare-And-Swap）乐观锁
+- 自动追踪 `lastWriterScriptId` / `lastWriterExecutionId`
+
+命名空间浏览器：切换不同命名空间查看条目。
+
+表格列：
+
+| 列 | 说明 |
+|----|------|
+| Key | 状态键名 |
+| Value 预览 | 值的摘要（Secret 类型脱敏） |
+| 版本 | 当前版本号 |
+| Secret | 是否为敏感值 |
+| 过期时间 | TTL 到期时间 |
+| 最后写入者 | 最后修改的脚本/执行 |
+
+操作：
+
+- 创建/更新条目（JSON 编辑器）
+- CAS 更新（并发安全）
+- 清理过期条目
+- 复制代码片段（Groovy / Python / CLI 格式的 `state.get()`、`state.put()` 等调用代码）
+
+### 访问令牌
+
+路径：管理台 → 设置 → 访问令牌
+
+管理用于 API 认证的 Bearer Token。
+
+表格列：
+
+| 列 | 说明 |
+|----|------|
+| Token ID | 令牌标识 |
+| 名称 | 人类可读名称 |
+| Token 值 | 脱敏显示，提供复制按钮 |
+| 启用状态 | 是否启用 |
+| 创建时间 | 创建时间戳 |
+
+操作：
+
+- 创建令牌（创建后 Token 值只显示一次，请妥善保存）
+- 启用/禁用令牌
+- 删除令牌
+- 设为控制台凭证（快速复制到浏览器会话）
+
+### 控制台凭证
+
+路径：管理台 → 设置 → 控制台凭证
+
+配置当前浏览器会话使用的 Bearer Token。
+
+- 输入 Token 后保存到浏览器本地存储
+- 状态指示器显示是否已配置
+- 清除凭证按钮
+- 如果没有配置任何访问令牌，所有 API 请求不需要认证（开放模式）
+
+### 数据备份与恢复
+
+路径：管理台 → 设置 → 数据备份
+
+#### 创建备份
+
+- 概览表格显示各类型数据量（脚本、调度、事件源、事件触发、配置值、执行预设、仓库、插件、共享状态、AI 模型、AI Agent、AI Toolset、Skill 目标、Skills）
+- 可勾选「包含 Secret 配置值和共享状态明文值」
+- 点击「创建备份」下载 `.zip` 文件（包含 `backup.json` 及 `plugins/`、`skills/` 目录）
+
+#### 恢复备份
+
+- 注意：恢复操作会覆盖现有数据
+- 上传 `.zip` 备份文件
+- 预览弹窗分析：每种数据类型将创建多少、覆盖多少
+- 确认后执行恢复
+- 结果摘要：每种数据类型的成功/跳过/失败计数及错误详情
+
+---
+
+## 脚本编写指南
+
+### 脚本结构基础
+
+Groovy 脚本模板：
+
+```groovy
+// input 是一个 Map，包含调用方传入的参数
+def name = input.name ?: "world"
+
+// 返回一个 Map 作为输出
+return [
+    greeting: "Hello, ${name}!",
+    timestamp: System.currentTimeMillis()
+]
+```
+
+Python 脚本模板：
+
+```python
+# input 是一个 dict，包含调用方传入的参数
+name = input.get("name", "world")
+
+# 返回一个 dict 作为输出
+return {
+    "greeting": f"Hello, {name}!",
+    "timestamp": int(time.time() * 1000)
+}
+```
+
+语言选择建议：
+
+- 需要快速脚本、Java 生态集成、简单逻辑 → Groovy
+- 需要 Python 生态库、数据处理、ML 推理 → Python
+
+### 输入输出 Schema
+
+`inputSchema` 和 `outputSchema` 使用 JSON Schema 格式定义。
+
+Schema 一次声明，四处生效：
+
+- CLI：自动展平为 `--name alice` 形式的 flag
+- Admin UI：自动生成参数填写表单
+- AI Agent：自动理解为 tool description
+- 执行校验：执行前自动校验入参格式
+
+Schema Builder：管理台提供可视化 Schema 编辑器，支持字段添加、类型选择、必填设置等。
+
+### 依赖声明
+
+脚本依赖（调用其他脚本）：
+
+在脚本的依赖声明中添加对其他已发布脚本的引用，然后在代码中调用：
+
+```groovy
+def result = scripts.invoke("other-script", [name: "world"])
+```
+
+跨语言透明调用：Groovy 调 Python、Python 调 Groovy 均可，路由由平台处理。
+
+插件依赖：声明所需插件及其 Action，确保运行时插件已安装。
+
+AI 依赖：声明所需 AI 能力，如 CHAT、STRUCTURED_OUTPUT。
+
+### 运行时 API
+
+#### 调用其他脚本
+
+```groovy
+// Groovy
+def result = scripts.invoke("target-script-id", [param1: "value1"])
+```
+
+```python
+# Python
+result = scripts.invoke("target-script-id", {"param1": "value1"})
+```
+
+#### 调用插件
+
+```groovy
+// Groovy
+def result = plugins.invoke("my-plugin", "action-name", [key: "value"])
+```
+
+```python
+# Python
+result = scripts.invoke("my-plugin", "action-name", {"key": "value"})
+```
+
+#### 调用 AI
+
+通过内置系统插件 `actiondock-ai`：
+
+```groovy
+// Groovy
+def chatResult = plugins.invoke("actiondock-ai", "chat", [
+    modelProfileId: "my-model",
+    messages: [[role: "user", content: "Hello"]]
+])
+```
+
+支持的 AI Action：`chat`、`structured`、`embed`、`agentRun`。
+
+#### 共享状态
+
+```groovy
+// Groovy
+def value = state.get("my-namespace", "my-key")
+state.put("my-namespace", "my-key", [data: "value"])
+state.cas("my-namespace", "my-key", [data: "new"], 3)  // version=3
+def entries = state.list("my-namespace")
+```
+
+```python
+# Python
+value = state.get("my-namespace", "my-key")
+state.put("my-namespace", "my-key", {"data": "value"})
+entries = state.list("my-namespace")
+```
+
+### Python 脚本专属
+
+第三方依赖：在 `pythonRequirements` 字段中声明，等同于 `requirements.txt` 格式。平台会自动将依赖安装到隔离缓存目录。
+
+Python 可用标准库：所有 Python 标准库模块均可直接使用。
+
+---
+
+## CLI 速查
+
+### 安装
 
 ```bash
 npm install -g actiondock
-actiondock --help
-actiondock desktop
-actiondock server
-actiondock service status
 ```
 
-`actiondock desktop` 启动或复用本机 Spring runtime，打开管理台，并常驻系统托盘。`actiondock server` 在前台启动本机服务。`actiondock service ...` 在 macOS 上管理用户级 LaunchAgent，在 Linux 上管理用户级 systemd service。
-
-#### 本地打包检查
-
-所有 npm 打包和发布操作都在 `actiondock-cli/` 目录执行。虽然目录名仍是 `actiondock-cli`，但发布包名是 `actiondock`。
-
-要求：
-
-- Node.js 18 或更高版本
-- JDK 21
-- Maven
-- npm registry 登录状态有效：`npm whoami`
-
-标准检查流程：
+### 配置
 
 ```bash
-cd actiondock-cli
-npm ci
-npm run prepack
-npm run pack:dry-run
+actiondock config set server <url>       # 设置服务器地址
+actiondock config set token <token>     # 设置访问令牌
+actiondock config show                   # 查看当前配置
 ```
 
-`npm run prepack` 会完成完整产物构建：
+环境变量方式：`ACTIONDOCK_BASE_URL`、`ACTIONDOCK_TOKEN`。
 
-- 编译 oclif CLI 到 `dist/`
-- Maven 构建 `actiondock-app-spring.jar`
-- Maven 自动构建 `actiondock-admin-ui` 并打进 jar
-- 复制 jar 到 `runtime/actiondock-app-spring.jar`
-- 生成 `jdeploy-bundle/`
-
-`npm run pack:dry-run` 用来确认 npm 包内容。必须包含：
-
-```text
-bin/**
-dist/**
-runtime/actiondock-app-spring.jar
-jdeploy-bundle/**
-jdeploy-bundle/jdeploy.cjs
-package.json
-README.md
-```
-
-不应该包含：
-
-```text
-src/**
-test/**
-node_modules/**
-actiondock-app-spring/target/**
-actiondock-admin-ui/node_modules/**
-```
-
-#### 发布 npm 包
-
-先确认 `actiondock-cli/package.json` 里的 `version` 已经是要发布的版本。
-
-推荐发布流程：
+### 脚本命令
 
 ```bash
-cd actiondock-cli
-npm ci
-npm run prepack
-npm run pack:dry-run
-npm publish --access public --ignore-scripts
+# 查看脚本列表
+actiondock script list
+actiondock script list --all
+
+# 查看 Schema
+actiondock script schema <script-id>
+
+# 执行脚本
+actiondock script run <script-id> --param1 value1 --json
+actiondock script run <script-id> --draft --response-view debug
+
+# 创建脚本
+actiondock script create --script-id <id> --name <name> --type groovy --source-file <path>
+
+# 更新脚本
+actiondock script patch <id> --source-file <path>
+
+# 校验脚本
+actiondock script validate <id>
+
+# 发布脚本
+actiondock script publish <id>
 ```
 
-这里使用 `--ignore-scripts` 是为了避免 `npm publish` 再次自动执行 `prepack`，因为前面已经显式构建并检查过产物。
-
-如果你想用 npm 生命周期一条命令完成构建和发布，也可以执行：
+### 服务管理
 
 ```bash
-cd actiondock-cli
-npm ci
-npm publish --access public
+actiondock desktop           # 启动桌面模式（打开管理台 + 系统托盘）
+actiondock server            # 前台启动服务
+actiondock service install   # 安装为系统服务
+actiondock service start     # 启动服务
+actiondock service status    # 查看状态
+actiondock service stop      # 停止服务
+actiondock service uninstall # 卸载系统服务
 ```
 
-这种方式会在发布前自动跑 `prepack`，耗时更长，但流程更短。
+### Schema 驱动的 CLI 参数
 
-发布后验证：
+CLI 会自动将 `inputSchema` 展平为 flag 形式：
 
 ```bash
-npm view actiondock name version
-npm install -g actiondock@latest
-actiondock --help
-actiondock server
+# 如果 Schema 定义了 name (string) 和 age (integer)
+actiondock script run my-script --name alice --age 30 --json
 ```
 
-#### 发布 jDeploy 桌面安装包
+能展开成 flag 的字段自动展开，对象和数组使用 `--input-json` 或文件输入。
 
-发布 GitHub Release 或推送 `v*` tag 后，`.github/workflows/jdeploy.yml` 会从统一 npm 包目录构建 runtime 和 jDeploy bundle，并上传桌面安装包。
+---
 
-推荐使用 GitHub Release：
+## API 概览与常见问题
 
-```bash
-gh release create v0.3.5 --target main --title "v0.3.5" --notes "ActionDock desktop release"
-```
+### API 访问
 
-也可以推送 tag 触发：
+- Base URL：`http://localhost:5177/api`
+- Swagger UI：`http://localhost:5177/swagger-ui.html`
+- 认证方式：`Authorization: Bearer <token>` 请求头
+- 开放模式：如果没有配置任何访问令牌，所有 API 请求不需要认证
 
-```bash
-git tag v0.3.5
-git push origin v0.3.5
-```
+### 主要端点分类
 
-CI 会执行：
+| 类别 | 端点 | 说明 |
+|------|------|------|
+| 脚本 | `/api/scripts` | 脚本 CRUD、发布、执行 |
+| 能力 | `/api/capabilities` | 统一能力入口 |
+| 执行 | `/api/executions` | 执行记录管理 |
+| 插件 | `/api/plugins` | 插件生命周期管理 |
+| 仓库 | `/api/repositories` | 仓库 CRUD、同步、安装 |
+| 定时 | `/api/schedules` | 定时任务管理 |
+| 共享状态 | `/api/shared-state` | 跨脚本状态管理 |
+| 配置值 | `/api/config-values` | 全局配置管理 |
+| 访问令牌 | `/api/access-tokens` | Token 管理 |
+| 事件源 | `/api/event-sources` | 事件源管理（`POST /events` 不需要认证） |
+| 事件触发 | `/api/event-triggers` | 触发规则管理 |
+| 事件记录 | `/api/event-records` | 事件历史查询 |
+| Skills | `/api/skills` | Skill 安装与管理 |
+| AI 模型 | `/api/ai/models` | 模型配置管理 |
+| AI Agent | `/api/ai/agents` | Agent 配置与运行 |
+| AI Toolset | `/api/ai/toolsets` | 工具集管理 |
+| AI 网关 | `/api/ai/chat`、`/api/ai/structured`、`/api/ai/embed` | 直接 AI 调用 |
 
-```text
-cd actiondock-cli
-npm ci
-npm run prepack
-```
+### 常见问题
 
-然后用 jDeploy 生成 Windows、macOS、Linux 安装包。
+脚本相关：
 
-#### 不再发布的包
+- 脚本校验失败：检查 Schema 格式是否正确，必填字段是否完整
+- 草稿执行 vs 发布执行：使用 `--draft` 或 `draft: true` 执行草稿版本
+- 依赖找不到：确认被依赖的脚本已发布，插件已安装
 
-不要再发布：
+插件相关：
 
-```text
-@actiondock/cli
-@actiondock/server
-actiondock-server
-```
+- 插件启动失败：检查 JAR 是否符合 PF4J 规范，Manifest 是否正确
+- 插件版本冲突：更新时如果版本冲突，需要先卸载再安装
 
-CLI 的价值不只是“把 API 搬到终端”，而是把脚本 `Schema` 展平为更适合人和 Agent 调用的参数形式：
+事件框架相关：
 
-```bash
-actiondock script run hello-groovy --name alice --json
-```
+- 事件没进来：检查 Webhook 地址是否正确、鉴权配置是否匹配
+- 触发器不命中：检查过滤处理器的 `matched` 输出是否为 `true`
+- 重复触发：检查幂等处理器的 `key` 是否稳定
+- 目标脚本必须已发布：保存事件触发时，目标脚本必须是 PUBLISHED 状态
 
-能展开成普通 flag 的字段就不要求手写 JSON；对象和数组再回退到 `--input-json` 或文件输入。
+AI 相关：
 
-如果你要让外部大模型持续生成并调试新脚本，推荐整个闭环都统一走 `script`：
+- 模型测试失败：检查 API Key 配置是否正确（Config Value 中的值）
+- OLLAMA 不需要 API Key：使用 OLLAMA 供应商时可以不配置 API Key
+- Agent 运行失败：检查 Toolset 中引用的工具是否存在且已启用
 
-```bash
-actiondock script create --script-id hello-world --name "Hello World" --type groovy --source-file ./hello.groovy --json
-actiondock script patch hello-world --source-file ./hello.v2.groovy --json
-actiondock script validate hello-world --json
-actiondock script run hello-world --draft --input-json '{"name":"alice"}' --response-view debug --json
-actiondock script publish hello-world --json
-```
+仓库相关：
 
-- `script create/patch/validate/publish` 负责作者态操作
-- `script run --draft` 负责调试草稿并返回结果
+- 同步失败：检查网络连接、Git 认证、分支名是否正确
+- 开发脚本冲突：`DIVERGED` 状态表示本地和远程都有修改，需要手动处理
 
-对应 REST API 里，调试更新建议优先走 `PATCH /api/scripts/{id}`，只允许更新 `source`、`inputSchema`、`outputSchema`，避免模型误覆盖整份脚本定义。
+### 术语表
 
-## 公开入口
-
-常见入口包括：
-
-- 管理台：`/admin/app/scripts`
-- 脚本与执行：`/api/scripts`、`/api/executions`
-- 插件与仓库：`/api/plugins`、`/api/repositories`
-- 定时任务：`/api/schedules`
-- 共享状态与配置：`/api/shared-state`、`/api/config-values`
-- AI 能力：`/api/ai`
-- CLI：`actiondock`
-
-## 文档地图
-
-根文档负责回答“它是什么、为什么值得引入、怎么最快试起来”。具体实现细节按模块拆分：
-
-如果你只关心事件框架，先看 [事件框架配置指南](docs/event-framework.md)。
-
-| 模块 | 说明 |
+| 术语 | 说明 |
 |------|------|
-| [事件框架配置指南](docs/event-framework.md) | Event Source / Event Trigger / Processor / Event Record 的完整配置与排障流程 |
-| [actiondock-app-spring](actiondock-app-spring/README.md) | Spring Boot Web 入口、REST API、管理台挂载方式 |
-| [actiondock-admin-ui](actiondock-admin-ui/README.md) | React 管理台、页面结构、前端开发方式 |
-| [actiondock-cli](actiondock-cli/README.md) | `actiondock` npm 发布包源码，包含 CLI、runtime bridge 和 jDeploy 分发配置 |
-| [actiondock-core](actiondock-core/README.md) | 脚本平台核心领域模型、执行模型、仓库与发布规则 |
-| [actiondock-app-support](actiondock-app-support/README.md) | 运行时装配、脚本引擎、插件运行时、仓库解析与默认配置 |
-| [actiondock-plugin-api](actiondock-plugin-api/README.md) | PF4J 插件 SPI、Manifest 协议、脚本侧调用上下文 |
-| [actiondock-plugin-template](actiondock-plugin-template/README.md) | 自定义插件模板与开发示例 |
-| [actiondock-storage-jpa](actiondock-storage-jpa/README.md) | JPA/H2 持久化适配、实体与仓储实现 |
-| [actiondock-ai-api](actiondock-ai-api/README.md) | AI 领域抽象：模型、Agent、Toolset、Tool、调用日志 |
-| [actiondock-ai-core](actiondock-ai-core/README.md) | AI 核心服务与运行时编排 |
-| [actiondock-ai-agentscope](actiondock-ai-agentscope/README.md) | 基于 AgentScope 的 Provider 实现与内置工具桥接 |
-| [actiondock-ai-plugin-bridge](actiondock-ai-plugin-bridge/README.md) | 内置系统插件 `actiondock-ai` 与脚本中的 AI 调用方式 |
-
-## 模块结构
-
-```text
-actiondock
-├── actiondock-core
-├── actiondock-ai-api
-├── actiondock-ai-core
-├── actiondock-ai-agentscope
-├── actiondock-ai-plugin-bridge
-├── actiondock-cli
-├── actiondock-plugin-api
-├── actiondock-plugin-template
-├── actiondock-storage-jpa
-├── actiondock-app-support
-├── actiondock-app-spring
-└── actiondock-admin-ui
-```
-
-## 建议阅读顺序
-
-1. 先看 [actiondock-core](actiondock-core/README.md)，理解脚本平台的核心模型
-2. 再看 [actiondock-app-support](actiondock-app-support/README.md)，理解运行时如何把脚本、插件、仓库和 AI 拼起来
-3. 然后看 [actiondock-app-spring](actiondock-app-spring/README.md) 和 [actiondock-admin-ui](actiondock-admin-ui/README.md)，理解对外入口
-4. 如果重点关注 AI，再看 [actiondock-ai-api](actiondock-ai-api/README.md)、[actiondock-ai-core](actiondock-ai-core/README.md)、[actiondock-ai-agentscope](actiondock-ai-agentscope/README.md)、[actiondock-ai-plugin-bridge](actiondock-ai-plugin-bridge/README.md)
-5. 如果要扩展插件，再看 [actiondock-plugin-api](actiondock-plugin-api/README.md) 和 [actiondock-plugin-template](actiondock-plugin-template/README.md)
+| Script Definition | 脚本定义，包含源码、Schema、依赖等完整元数据 |
+| Published Snapshot | 发布快照，脚本发布时产生的不可变版本 |
+| Draft | 草稿，可自由编辑的脚本版本 |
+| Scope（作用域） | `PERSONAL`（个人）/ `REPOSITORY`（仓库）/ `FORK`（Fork）/ `DEVELOPMENT`（开发）/ `SAMPLE`（示例） |
+| Packaging（打包类型） | `TOOL`（工具型，单次调用）/ `FLOW`（流程型，可能包含多步骤） |
+| Plugin | 插件，基于 PF4J 的扩展模块 |
+| Repository | 仓库，脚本/插件/Skills 的分发来源 |
+| Toolset | 工具集，Agent 可使用的一组工具 |
+| Agent Profile | Agent 配置，定义 AI Agent 的模型、提示词、工具 |
+| Model Profile | 模型配置，定义 AI 模型的供应商、名称、API Key |
+| Event Source | 事件源，外部系统的接入口 |
+| Event Trigger | 事件触发，事件到脚本的路由规则 |
+| Processor | 处理器，数据转换逻辑（`JSON_PATH` / `TEMPLATE` / `SCRIPT_REF`） |
+| Config Value | 配置值，全局键值配置 |
+| Shared State | 共享状态，跨脚本的键值存储 |
+| CAS | Compare-And-Swap，乐观锁机制 |
+| Access Token | 访问令牌，API 认证凭证 |
+| Skill | 技能包，可安装到目标目录的功能包 |
+| Skill Target | 技能目标，Skill 安装的目录 |
+| Execution Preset | 执行预设，保存的常用输入参数组合 |
+| Submit Mode | 提交模式，`SYNC`（同步）/ `ASYNC`（异步） |
