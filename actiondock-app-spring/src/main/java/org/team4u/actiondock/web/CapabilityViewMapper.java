@@ -29,7 +29,7 @@ public class CapabilityViewMapper {
                 sanitized.getOwner(),
                 sanitized.getTags(),
                 toDraftBinding(sanitized),
-                toPublishedBinding(sanitized.getPublishedSnapshot()),
+                toPublishedBinding(sanitized, sanitized.getPublishedSnapshot()),
                 sanitized.getCreatedAt(),
                 sanitized.getUpdatedAt()
         );
@@ -47,12 +47,12 @@ public class CapabilityViewMapper {
         );
     }
 
-    private CapabilityView.CapabilityBindingView toPublishedBinding(PublishedScriptSnapshot snapshot) {
+    private CapabilityView.CapabilityBindingView toPublishedBinding(ScriptDefinition source, PublishedScriptSnapshot snapshot) {
         if (snapshot == null) {
             return null;
         }
         return new CapabilityView.CapabilityBindingView(
-                null,
+                source.getVersion() == null ? null : String.valueOf(source.getVersion()),
                 snapshot.getSource(),
                 enumName(snapshot.getType()),
                 copySchema(snapshot.getInputSchema()),
