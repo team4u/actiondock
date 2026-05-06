@@ -78,7 +78,10 @@ class RepositoryControllerTest {
                         "digest",
                         null,
                         true,
-                        "DISTRIBUTION"
+                        "DISTRIBUTION",
+                        false,
+                        true,
+                        null
                 ));
 
         mockMvc.perform(multipart("/api/repositories/repo-1/publish-skill-archive")
