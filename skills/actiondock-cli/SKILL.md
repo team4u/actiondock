@@ -17,11 +17,10 @@ actiondock script list
 
 - 如果返回成功 → CLI 已安装，继续下一步。
 - 如果找不到命令 → 执行安装：
-- 如果server连接失败 → 提醒用户手动启动，等待用户确认启动后再继续：ActionDock Server 未运行，请手动启动：`actiondock-server`
+- 如果server连接失败 → 提醒用户手动启动，等待用户确认启动后再继续：ActionDock Server 未运行，请手动启动：`actiondock server`
 
 ```bash
-npm i -g @actiondock/cli
-npm i -g @actiondock/server
+npm i -g actiondock
 ```
 
 ## 主流程文档
