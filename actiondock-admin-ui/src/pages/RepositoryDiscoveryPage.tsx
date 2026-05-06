@@ -1537,10 +1537,10 @@ export function RepositoryDiscoveryPage() {
             onClick={() => openSkillInstall(skillDetail.descriptor)}
           >
             {skillDetail.descriptor.updateAvailable
-              ? "打开更新页"
+              ? "更新"
               : skillDetail.descriptor.installed
                 ? "已安装"
-                : "打开安装页"}
+                : "安装"}
           </Button>
         ) : null}
       >
