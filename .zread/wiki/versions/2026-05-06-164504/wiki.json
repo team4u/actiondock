@@ -1,0 +1,161 @@
+{
+  "id": "2026-05-06-164504",
+  "generated_at": "2026-05-06T08:45:04.5697565Z",
+  "language": "zh",
+  "pages": [
+    {
+      "slug": "1-xiang-mu-gai-shu",
+      "title": "项目概述",
+      "file": "1-xiang-mu-gai-shu.md",
+      "section": "入门",
+      "level": "Beginner"
+    },
+    {
+      "slug": "2-kuai-su-kai-shi",
+      "title": "快速开始",
+      "file": "2-kuai-su-kai-shi.md",
+      "section": "入门",
+      "level": "Beginner"
+    },
+    {
+      "slug": "3-xiang-mu-jia-gou",
+      "title": "项目架构",
+      "file": "3-xiang-mu-jia-gou.md",
+      "section": "入门",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "4-jiao-ben-sheng-ming-zhou-qi-guan-li",
+      "title": "脚本生命周期管理",
+      "file": "4-jiao-ben-sheng-ming-zhou-qi-guan-li.md",
+      "section": "核心功能",
+      "group": "脚本管理",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "5-jiao-ben-zhi-xing-yu-diao-shi",
+      "title": "脚本执行与调试",
+      "file": "5-jiao-ben-zhi-xing-yu-diao-shi.md",
+      "section": "核心功能",
+      "group": "脚本管理",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "6-jiao-ben-yi-lai-yu-diao-yong",
+      "title": "脚本依赖与调用",
+      "file": "6-jiao-ben-yi-lai-yu-diao-yong.md",
+      "section": "核心功能",
+      "group": "脚本管理",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "7-cha-jian-kai-fa-zhi-nan",
+      "title": "插件开发指南",
+      "file": "7-cha-jian-kai-fa-zhi-nan.md",
+      "section": "核心功能",
+      "group": "插件系统",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "8-cha-jian-sheng-ming-zhou-qi-guan-li",
+      "title": "插件生命周期管理",
+      "file": "8-cha-jian-sheng-ming-zhou-qi-guan-li.md",
+      "section": "核心功能",
+      "group": "插件系统",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "9-ai-mo-xing-pei-zhi",
+      "title": "AI 模型配置",
+      "file": "9-ai-mo-xing-pei-zhi.md",
+      "section": "核心功能",
+      "group": "AI 能力",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "10-agent-yu-toolset",
+      "title": "Agent 与 Toolset",
+      "file": "10-agent-yu-toolset.md",
+      "section": "核心功能",
+      "group": "AI 能力",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "11-ding-shi-ren-wu-guan-li",
+      "title": "定时任务管理",
+      "file": "11-ding-shi-ren-wu-guan-li.md",
+      "section": "触发与自动化",
+      "group": "触发中心",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "12-shi-jian-yuan-pei-zhi",
+      "title": "事件源配置",
+      "file": "12-shi-jian-yuan-pei-zhi.md",
+      "section": "触发与自动化",
+      "group": "触发中心",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "13-shi-jian-hong-fa-gui-ze",
+      "title": "事件触发规则",
+      "file": "13-shi-jian-hong-fa-gui-ze.md",
+      "section": "触发与自动化",
+      "group": "触发中心",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "14-pei-zhi-zhi-guan-li",
+      "title": "配置值管理",
+      "file": "14-pei-zhi-zhi-guan-li.md",
+      "section": "系统治理",
+      "group": "配置与状态",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "15-gong-xiang-zhuang-tai-guan-li",
+      "title": "共享状态管理",
+      "file": "15-gong-xiang-zhuang-tai-guan-li.md",
+      "section": "系统治理",
+      "group": "配置与状态",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "16-fang-wen-ling-pai-guan-li",
+      "title": "访问令牌管理",
+      "file": "16-fang-wen-ling-pai-guan-li.md",
+      "section": "系统治理",
+      "group": "安全与数据",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "17-shu-ju-bei-fen-yu-hui-fu",
+      "title": "数据备份与恢复",
+      "file": "17-shu-ju-bei-fen-yu-hui-fu.md",
+      "section": "系统治理",
+      "group": "安全与数据",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "18-cli-ming-ling-can-kao",
+      "title": "CLI 命令参考",
+      "file": "18-cli-ming-ling-can-kao.md",
+      "section": "开发参考",
+      "level": "Advanced"
+    },
+    {
+      "slug": "19-rest-api-can-kao",
+      "title": "REST API 参考",
+      "file": "19-rest-api-can-kao.md",
+      "section": "开发参考",
+      "level": "Advanced"
+    },
+    {
+      "slug": "20-cang-ku-fen-fa-ji-zhi",
+      "title": "仓库分发机制",
+      "file": "20-cang-ku-fen-fa-ji-zhi.md",
+      "section": "开发参考",
+      "level": "Advanced"
+    }
+  ]
+}

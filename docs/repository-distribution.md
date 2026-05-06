@@ -1,0 +1,293 @@
+# 仓库与分发
+
+## 一句话理解
+
+仓库系统是 ActionDock 的"包管理器"。你可以把脚本、插件和 Skills 发布到仓库（Git 仓库、HTTP 服务器或本地目录），团队成员通过仓库发现、一键安装、自动更新。仓库还支持 `DEVELOPMENT` 模式——直接从仓库源码目录同步开发中的脚本。
+
+## 仓库数据模型
+
+```java
+public class RepositoryDefinition {
+    private String id;               // 仓库唯一标识
+    private String name;             // 人类可读名称
+    private RepositoryType type;     // GIT / HTTP / LOCAL_DIR
+    private RepositoryPurpose purpose; // DISTRIBUTION / DEVELOPMENT
+    private String url;              // Git URL / HTTP URL / 本地路径
+    private String branch;           // Git 分支（可选）
+    private boolean enabled;         // 是否启用
+    private TrustLevel trustLevel;   // TRUSTED / UNTRUSTED
+    private String description;
+}
+```
+
+## 仓库类型
+
+| 类型 | URL 示例 | 说明 |
+|------|----------|------|
+| `GIT` | `https://github.com/org/actiondock-tools.git` | 从 Git 仓库自动同步 |
+| `HTTP` | `https://tools.example.com/repo.json` | 从 HTTP 端点下载索引 |
+| `LOCAL_DIR` | `C:\shared-tools` | 从本地目录加载 |
+
+## 仓库用途
+
+| 用途 | 说明 | 脚本编辑状态 |
+|------|------|--------------|
+| `DISTRIBUTION`（分发） | 只读分发，安装的脚本不可编辑 | 只读 |
+| `DEVELOPMENT`（开发同步） | 可从仓库拉取更新，本地可编辑 | 可编辑，显示同步状态 |
+
+## 仓库发现
+
+路径：管理台 → 资源 → 仓库发现
+
+### 资源分类
+
+仓库发现页面列出所有已配置仓库中的可用资源：
+
+| 分类 | 内容 | 安装后的行为 |
+|------|------|--------------|
+| 工具 (Tools) | 可安装的脚本 | 出现在脚本库，`REPOSITORY` 作用域 |
+| 插件 (Plugins) | 可安装的 PF4J 插件 | 出现在插件管理列表 |
+| AI 能力包 | AI 配置包 | 自动导入模型/Agent/Toolset 配置 |
+| Skills | 可安装的技能包 | 出现在 Skills 列表 |
+
+### 资源项信息
+
+每个资源项显示：
+
+- 名称和描述
+- 类型（Tool/Plugin/Skill）
+- 版本号
+- 信任级别（`TRUSTED` / `UNTRUSTED`）
+- 依赖关系
+
+### 安装流程
+
+1. 点击「安装」
+2. 确认对话框显示资产的依赖信息
+3. 可选择是否安装关联的依赖项
+4. 确认后安装
+5. 安装后的脚本出现在脚本库中，作用域为 `REPOSITORY`（只读）
+
+## 仓库管理
+
+路径：管理台 → 资源 → 仓库管理
+
+### 表格列
+
+| 列 | 说明 |
+|----|------|
+| ID | 仓库标识（点击进入详情） |
+| 名称 | 人类可读名称 |
+| 类型 | `GIT` / `HTTP` / `LOCAL_DIR` |
+| 用途 | `DISTRIBUTION` / `DEVELOPMENT` |
+| 信任级别 | `TRUSTED` / `UNTRUSTED` |
+| 状态 | 上次同步状态 |
+| 操作 | 同步、编辑、删除 |
+
+### 创建仓库
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| ID | 仓库唯一标识 | `team-scripts` |
+| 名称 | 人类可读名称 | `团队脚本库` |
+| 类型 | `GIT` / `HTTP` / `LOCAL_DIR` | `GIT` |
+| URL | Git URL/HTTP URL/本地路径 | `https://github.com/org/tools.git` |
+| Branch | Git 分支（可选） | `main` 或 `develop` |
+| 启用 | 是否启用 | 是 |
+| 信任级别 | `TRUSTED` / `UNTRUSTED` | 建议用 `UNTRUSTED` 先检查 |
+| 用途 | `DISTRIBUTION` / `DEVELOPMENT` | 见下方选择建议 |
+| 描述 | 仓库用途说明 | |
+
+### DISTRIBUTION vs DEVELOPMENT 选择建议
+
+**DISTRIBUTION（分发模式）：**
+
+适用场景：
+- 官方发布的稳定脚本
+- 团队成员只需要使用，不需要修改
+- 版本化管理
+
+安装后的脚本只读，如果用户需要修改必须先 Fork。
+
+**DEVELOPMENT（开发同步模式）：**
+
+适用场景：
+- 你的开发环境，脚本源码存放在 Git 仓库中
+- 你想在 ActionDock 中编辑运行，同时保持与 Git 同步
+- 团队协作开发
+
+该仓库的脚本出现在脚本库中为 `DEVELOPMENT` 作用域，本地可编辑。
+
+## 安装仓库工具
+
+### 通过管理台
+
+仓库发现页面 → 点击「安装」
+
+### 通过 REST API
+
+```bash
+# 列出仓库中的可用工具
+curl http://localhost:5177/api/repositories/{repoId}/tools
+
+# 安装工具
+curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/install
+```
+
+### 依赖处理
+
+安装时系统会检查：
+- 脚本依赖的其他脚本是否已安装
+- 需要的插件是否已安装
+- 目标脚本 ID 是否与已有脚本冲突
+
+如果有依赖缺失，安装对话框会提示，可以选择一起安装。
+
+## 更新已安装工具
+
+### 一键更新
+
+管理台「脚本库」或「插件管理」页面 → 点击「一键更新」：
+
+1. 同步所有已配置的仓库
+2. 检查所有仓库来源的脚本和插件是否有新版本
+3. 批量更新
+
+### 单脚本更新
+
+在脚本库中，状态为 `UPDATE_AVAILABLE` 的脚本：
+
+1. 点击该脚本的「更新」按钮
+2. 确认更新
+3. 更新后脚本内容变更为仓库最新版本
+
+### 开发脚本同步（DEVELOPMENT 模式）
+
+DEVELOPMENT 作用域的脚本显示同步状态标签：
+
+| 标签 | 含义 | 可做的操作 |
+|------|------|-----------|
+| `SYNCED` | 本地与远程一致 | 无需操作 |
+| `LOCAL_CHANGES` | 本地有未同步修改 | 发布到仓库 |
+| `REMOTE_CHANGES` | 远程有新版本 | `development-pull` 拉取更新 |
+| `DIVERGED` | 本地和远程都有修改 | `development-pull ?force=true` 覆盖 |
+
+通过 REST API 查看/拉取同步状态：
+
+```bash
+# 查看开发同步状态
+curl http://localhost:5177/api/scripts/{id}/development-status
+
+# 返回：
+# { "status": "REMOTE_CHANGES" }
+
+# 拉取远程更新
+curl -X POST http://localhost:5177/api/scripts/{id}/development-pull
+
+# 强制拉取（放弃本地修改）
+curl -X POST "http://localhost:5177/api/scripts/{id}/development-pull?force=true"
+```
+
+## 发布脚本到仓库
+
+### 前提条件
+
+1. 脚本已发布（PUBLISHED 状态）
+2. 目标仓库已配置且可访问
+
+### 发布步骤
+
+1. 打开脚本编辑器
+2. 点击「发布到仓库」
+3. 选择目标仓库
+4. 系统将当前已发布快照打包并推送到仓库
+
+### 发布格式
+
+发布到 Git 仓库时，系统在仓库中生成标准化的目录结构：
+
+```text
+repo-root/
+├── index.json           # 仓库索引
+├── tools/
+│   ├── my-script/
+│   │   ├── v1/
+│   │   │   ├── definition.json  # 脚本定义
+│   │   │   └── source.groovy    # 源码
+│   │   └── v2/
+│   │       ├── definition.json
+│   │       └── source.groovy
+│   └── ...
+└── plugins/
+    └── ...
+```
+
+### 通过 REST API 发布
+
+```bash
+# 获取可发布到的仓库列表
+curl http://localhost:5177/api/scripts/{id}/publishable-repositories
+
+# 发布到仓库
+curl -X POST http://localhost:5177/api/scripts/{id}/publish \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <token>' \
+  -d '{
+    "repositoryId": "my-repo"
+  }'
+```
+
+## REST API 完整参考
+
+```bash
+# 仓库 CRUD
+GET    /api/repositories                        # 列表
+POST   /api/repositories                        # 创建
+GET    /api/repositories/{id}                   # 详情
+PUT    /api/repositories/{id}                   # 更新
+DELETE /api/repositories/{id}                   # 删除
+
+# 仓库操作
+POST   /api/repositories/{id}/sync              # 同步仓库
+GET    /api/repositories/{id}/tools             # 列出可用工具
+POST   /api/repositories/{id}/tools/{toolId}/install  # 安装工具
+```
+
+## 常见问题
+
+### Q: 同步失败
+
+检查：
+1. 网络连接是否正常
+2. Git 认证是否正确（HTTPS 需要 Token，SSH 需要 Key）
+3. 分支名是否正确
+4. URL 是否可访问
+
+### Q: 开发脚本冲突（DIVERGED）
+
+本地和远程都有修改时：
+- 如果本地修改不重要：使用 `?force=true` 强制拉取远程版本覆盖本地
+- 如果本地修改要保留：先手动备份，然后重新编辑合并
+
+### Q: 安装的脚本怎么修改
+
+`REPOSITORY` 作用域的脚本是只读的。如果需要修改：
+1. Fork 该脚本
+2. 修改 Fork 后的副本
+3. 如果需要贡献回仓库，通过仓库的 PR 流程
+
+### Q: 仓库里的脚本版本管理
+
+仓库中的脚本按版本号组织。安装时安装最新版本，更新时升级到最新的可用版本。
+
+## 最佳实践
+
+- **区分分发和开发**：正式发布的脚本用 `DISTRIBUTION`，个人开发用 `DEVELOPMENT`
+- **信任级别**：对外部仓库先用 `UNTRUSTED`，审查后再提升
+- **定期同步**：养成定期一键更新的习惯，获取最新的工具和修复
+- **版本管理**：发布到仓库前确保脚本已发布（创建快照），避免半成品分发
+- **开发同步**：DEVELOPMENT 模式下，在 Git 中修改源码后触发仓库同步，然后通过 `development-pull` 拉取到 ActionDock
+
+---
+
+> [返回目录](user-manual.md) | 下一步：了解 [触发中心](trigger-center.md)
