@@ -1159,6 +1159,9 @@ export interface RepositorySkillDescriptor {
   entrypointPath: string;
   digest?: string;
   riskLevel?: string;
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
   trusted: boolean;
   repositoryUsage?: RepositoryUsage;
 }

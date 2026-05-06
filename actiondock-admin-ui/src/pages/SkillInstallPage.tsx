@@ -23,15 +23,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   importSkill,
+  installSkillArchive,
   installGithubSkillCollection,
   installSkillDirectory,
   listSkillTargets,
   scanGithubSkillCollection,
   validateSkillArchive
 } from "../features/skills/api";
+import { downloadRepositorySkillArchive, getRepositorySkill } from "../features/resources/api";
 import { PageHeader } from "../components/PageHeader";
 import type { GithubSkillInstallResponse, GithubSkillScanItem, GithubSkillScanResponse, SkillTarget } from "../types";
 import { getErrorMessage } from "../utils";
+import { clearSkillInstallSession, readSkillInstallSession } from "../skillInstallSession";
 
 const { Paragraph, Text } = Typography;
 
@@ -44,6 +47,9 @@ export function SkillInstallPage() {
   const [githubScan, setGithubScan] = useState<GithubSkillScanResponse | null>(null);
   const [selectedGithubSkillPaths, setSelectedGithubSkillPaths] = useState<string[]>([]);
   const [githubInstallResult, setGithubInstallResult] = useState<GithubSkillInstallResponse | null>(null);
+  const [repositoryArchive, setRepositoryArchive] = useState<File | null>(null);
+  const [repositorySession, setRepositorySession] = useState<ReturnType<typeof readSkillInstallSession>>(null);
+  const [repositorySkillName, setRepositorySkillName] = useState("");
   const [loading, setLoading] = useState(true);
   const [installing, setInstalling] = useState(false);
   const [githubScanning, setGithubScanning] = useState(false);
@@ -64,6 +70,33 @@ export function SkillInstallPage() {
         messageApi.error(getErrorMessage(error, "加载 SkillTarget 失败"));
       } finally {
         setLoading(false);
+      }
+    })();
+  }, [messageApi]);
+
+  useEffect(() => {
+    void (async () => {
+      const session = readSkillInstallSession();
+      if (!session) {
+        setRepositorySession(null);
+        setRepositoryArchive(null);
+        setRepositorySkillName("");
+        return;
+      }
+      try {
+        const [detail, archive] = await Promise.all([
+          getRepositorySkill(session.repositoryId, session.skillId),
+          downloadRepositorySkillArchive(session.repositoryId, session.skillId)
+        ]);
+        setRepositorySession(session);
+        setRepositoryArchive(new File([archive], `${session.skillId}.zip`, { type: "application/zip" }));
+        setRepositorySkillName(detail.descriptor.displayName || detail.descriptor.skillId);
+      } catch (error) {
+        setRepositorySession(null);
+        setRepositoryArchive(null);
+        setRepositorySkillName("");
+        clearSkillInstallSession();
+        messageApi.error(getErrorMessage(error, "加载仓库 Skill 安装内容失败"));
       }
     })();
   }, [messageApi]);
@@ -205,6 +238,28 @@ export function SkillInstallPage() {
     }
   };
 
+  const handleInstallRepositoryArchive = async () => {
+    const selectedTargetIds = ensureTargets();
+    if (!selectedTargetIds || !repositorySession || !repositoryArchive) {
+      return;
+    }
+    setInstalling(true);
+    try {
+      await installSkillArchive({
+        targetIds: selectedTargetIds,
+        repositoryId: repositorySession.repositoryId,
+        archive: repositoryArchive
+      });
+      clearSkillInstallSession();
+      messageApi.success(`Skill 已${repositorySession.action === "update" ? "更新" : "安装"}：${repositorySkillName || repositorySession.skillId}`);
+      navigate(repositorySession.returnTo || "/skills");
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "安装仓库 Skill 失败"));
+    } finally {
+      setInstalling(false);
+    }
+  };
+
   const handleScanGithubCollection = async () => {
     if (!githubUrl.trim()) {
       messageApi.warning("请输入 GitHub 仓库或目录链接");
@@ -317,6 +372,25 @@ export function SkillInstallPage() {
                   style={{ width: "100%", maxWidth: 420 }}
                 />
               </Space>
+              {repositorySession && repositoryArchive ? (
+                <section className="skill-install-panel skill-install-panel--wide">
+                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                    <Space direction="vertical" size={4}>
+                      <Text strong>{repositorySession.action === "update" ? "从仓库更新 Skill" : "从仓库安装 Skill"}</Text>
+                      <Paragraph type="secondary">
+                        当前已载入仓库 Skill 归档，安装会同步更新受管副本和所选目标目录。
+                      </Paragraph>
+                    </Space>
+                    <Space wrap size={[8, 8]}>
+                      <Tag color="blue">{repositorySkillName || repositorySession.skillId}</Tag>
+                      <Tag>{repositorySession.repositoryId}</Tag>
+                    </Space>
+                    <Button type="primary" loading={installing} onClick={() => void handleInstallRepositoryArchive()}>
+                      {repositorySession.action === "update" ? "更新所选目标" : "安装到所选目标"}
+                    </Button>
+                  </Space>
+                </section>
+              ) : null}
               <section className="skill-install-panel skill-install-panel--wide">
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
                   <Space direction="vertical" size={4}>

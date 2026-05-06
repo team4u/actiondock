@@ -19,6 +19,7 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
+import org.team4u.actiondock.domain.port.ManagedSkillRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
@@ -57,6 +58,7 @@ public class RepositoryCatalogService {
             RepositoryDefinitionRepository repositoryDefinitionRepository,
             RepositoryToolInstallationRepository repositoryToolInstallationRepository,
             CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
+            ManagedSkillRepository managedSkillRepository,
             ScriptRepository scriptRepository,
             ScriptScheduleRepository scriptScheduleRepository,
             ExecutionPresetRepository executionPresetRepository,
@@ -151,6 +153,10 @@ public class RepositoryCatalogService {
         return aiPackageService;
     }
 
+    private RepositorySkillService skillService() {
+        return new RepositorySkillService(this, jsonCodec, repositoriesRoot);
+    }
+
     public List<RepositoryDefinition> listRepositories() {
         return definitionService.listRepositories();
     }
@@ -243,7 +249,7 @@ public class RepositoryCatalogService {
                 index.safeSkills(), skillId, RepositoryCatalogTypes.RepositorySkillIndexEntry::id, "仓库 Skill");
         RepositoryCatalogTypes.SkillFile skill = readSkillFile(repository, entry.skillPath());
         String content = readRepositoryFile(repository, parentDirectoryPath(entry.skillPath()).resolve(skill.entrypointPath()));
-        return new RepositoryCatalogTypes.RepositorySkillDetail(RepositorySkillService.toSkillDescriptor(repository, skill, entry.skillPath()), content);
+        return new RepositoryCatalogTypes.RepositorySkillDetail(skillService().toSkillDescriptor(repository, skill, entry.skillPath()), content);
     }
 
     public RepositoryCatalogTypes.RepositoryToolDetail getRepositoryTool(String repositoryId, String toolId) {

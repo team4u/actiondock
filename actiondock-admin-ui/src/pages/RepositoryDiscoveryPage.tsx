@@ -1,5 +1,4 @@
 import {
-  CopyOutlined,
   DownloadOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -23,7 +22,6 @@ import {
   Typography,
   message
 } from "antd";
-import JSZip from "jszip";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -70,11 +68,18 @@ import type {
   ScriptDependency
 } from "../types";
 import { getErrorMessage } from "../utils";
-import { writeInlineSkillPublishSession, writeSkillPublishSession } from "../skillPublishSession";
+import { writeSkillInstallSession } from "../skillInstallSession";
 
 const { Text } = Typography;
 
 type InstallAction = "install" | "update";
+
+function getSkillInstallLabel(record: RepositorySkillDescriptor): string {
+  if (!record.installed) {
+    return "安装 Skill";
+  }
+  return record.updateAvailable ? "更新 Skill" : "已安装";
+}
 
 function renderPluginDependencies(dependencies: PluginDependency[]) {
   if (dependencies.length === 0) {
@@ -502,6 +507,17 @@ export function RepositoryDiscoveryPage() {
     } finally {
       setSkillDetailLoading(false);
     }
+  };
+
+  const openSkillInstall = (descriptor: RepositorySkillDescriptor) => {
+    writeSkillInstallSession({
+      source: "REPOSITORY_REF",
+      repositoryId: descriptor.repositoryId,
+      skillId: descriptor.skillId,
+      action: descriptor.installed ? "update" : "install",
+      returnTo: "/discover"
+    });
+    navigate("/skills/install");
   };
 
   const handleRepositoryPluginAction = async (record: RepositoryPluginDescriptor, action: "install" | "update", force = false) => {
@@ -954,31 +970,12 @@ export function RepositoryDiscoveryPage() {
           </Button>
           <Button
             size="small"
-            icon={<CopyOutlined />}
-            onClick={() => void fetchSkillDetail(record)
-              .then(async (detail) => {
-                const zip = new JSZip();
-                zip.file(`${detail.descriptor.skillId}/SKILL.md`, detail.content);
-                zip.file(`${detail.descriptor.skillId}/skill.json`, JSON.stringify({
-                  schemaVersion: 1,
-                  skillId: detail.descriptor.skillId,
-                  displayName: detail.descriptor.displayName,
-                  version: detail.descriptor.version,
-                  description: detail.descriptor.description || detail.descriptor.displayName,
-                  owner: detail.descriptor.owner,
-                  tags: detail.descriptor.tags,
-                  riskLevel: detail.descriptor.riskLevel,
-                  entrypointPath: "SKILL.md"
-                }, null, 2));
-                const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-                await writeInlineSkillPublishSession(`${detail.descriptor.skillId}.zip`, archive);
-                navigate("/skills/publish");
-              })
-              .catch((error) => {
-                messageApi.error(getErrorMessage(error, "加载 Skill 详情失败"));
-              })}
+            type={record.updateAvailable ? "primary" : "default"}
+            ghost={record.updateAvailable}
+            disabled={record.installed && !record.updateAvailable}
+            onClick={() => openSkillInstall(record)}
           >
-            发布 Skill
+            {getSkillInstallLabel(record)}
           </Button>
         </Space>
       )
@@ -1542,16 +1539,14 @@ export function RepositoryDiscoveryPage() {
         extra={skillDetail ? (
           <Button
             type="primary"
-            onClick={() => {
-              writeSkillPublishSession({
-                source: "REPOSITORY_REF",
-                repositoryId: skillDetail.descriptor.repositoryId,
-                skillId: skillDetail.descriptor.skillId
-              });
-              navigate("/skills/publish");
-            }}
+            disabled={skillDetail.descriptor.installed && !skillDetail.descriptor.updateAvailable}
+            onClick={() => openSkillInstall(skillDetail.descriptor)}
           >
-            打开发布页
+            {skillDetail.descriptor.updateAvailable
+              ? "打开更新页"
+              : skillDetail.descriptor.installed
+                ? "已安装"
+                : "打开安装页"}
           </Button>
         ) : null}
       >

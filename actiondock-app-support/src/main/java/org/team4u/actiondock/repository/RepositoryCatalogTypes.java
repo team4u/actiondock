@@ -430,6 +430,9 @@ public final class RepositoryCatalogTypes {
             String entrypointPath,
             String digest,
             String riskLevel,
+            boolean installed,
+            String installedVersion,
+            boolean updateAvailable,
             boolean trusted,
             String repositoryUsage
     ) {

@@ -4,6 +4,7 @@ import {
   ReloadOutlined,
   RocketOutlined,
   StopOutlined,
+  SyncOutlined,
   UndoOutlined
 } from "@ant-design/icons";
 import {
@@ -23,11 +24,13 @@ import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { disableSkill, getSkillDetail, previewSkillFile, removeSkillFromTarget, restoreSkill, updateSkillVersion } from "../features/skills/api";
+import { getRepositorySkill } from "../features/resources/api";
 import { PageHeader } from "../components/PageHeader";
 import { SkillFileBrowser } from "../components/SkillFileBrowser";
 import { useColorMode } from "../contexts/ColorModeContext";
+import { writeSkillInstallSession } from "../skillInstallSession";
 import { writeSkillPublishSession } from "../skillPublishSession";
-import type { SkillDeployment, SkillDetail, SkillFilePreview } from "../types";
+import type { RepositorySkillDescriptor, SkillDeployment, SkillDetail, SkillFilePreview } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
@@ -42,6 +45,7 @@ export function SkillDetailPage() {
   const [acting, setActing] = useState(false);
   const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [versionDraft, setVersionDraft] = useState("");
+  const [repositoryDescriptor, setRepositoryDescriptor] = useState<RepositorySkillDescriptor | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDetail = async () => {
@@ -50,7 +54,18 @@ export function SkillDetailPage() {
     }
     setLoading(true);
     try {
-      setDetail(await getSkillDetail(skillId));
+      const loaded = await getSkillDetail(skillId);
+      setDetail(loaded);
+      if (loaded.skill.repositoryId) {
+        try {
+          const repositoryDetail = await getRepositorySkill(loaded.skill.repositoryId, skillId);
+          setRepositoryDescriptor(repositoryDetail.descriptor);
+        } catch {
+          setRepositoryDescriptor(null);
+        }
+      } else {
+        setRepositoryDescriptor(null);
+      }
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载 Skill 详情失败"));
     } finally {
@@ -129,6 +144,20 @@ export function SkillDetailPage() {
       skillId
     });
     navigate("/skills/publish");
+  };
+
+  const handleRepositoryUpdate = () => {
+    if (!skillId || !detail?.skill.repositoryId) {
+      return;
+    }
+    writeSkillInstallSession({
+      source: "REPOSITORY_REF",
+      repositoryId: detail.skill.repositoryId,
+      skillId,
+      action: "update",
+      returnTo: "/discover"
+    });
+    navigate("/skills/install");
   };
 
   const openVersionModal = () => {
@@ -218,6 +247,17 @@ export function SkillDetailPage() {
               <Button icon={<RocketOutlined />} onClick={() => void handlePublish()}>
                 发布到仓库
               </Button>
+              {detail?.skill.repositoryId ? (
+                <Button
+                  icon={<SyncOutlined />}
+                  type={repositoryDescriptor?.updateAvailable ? "primary" : "default"}
+                  ghost={Boolean(repositoryDescriptor?.updateAvailable)}
+                  disabled={!repositoryDescriptor?.updateAvailable}
+                  onClick={handleRepositoryUpdate}
+                >
+                  {repositoryDescriptor?.updateAvailable ? "从仓库更新" : "已是最新"}
+                </Button>
+              ) : null}
               <Button icon={<EditOutlined />} onClick={openVersionModal} disabled={!detail}>
                 编辑版本
               </Button>

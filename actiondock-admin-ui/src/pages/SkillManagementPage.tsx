@@ -39,14 +39,16 @@ import {
   syncSkillInstallationsToTarget,
   updateSkillTarget
 } from "../features/skills/api";
+import { listRepositories, listSkillsByRepository, syncRepository } from "../features/resources/api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
+import { writeSkillInstallSession } from "../skillInstallSession";
 import {
   buildSkillManagementSearch,
   resolveSkillManagementTab,
   type SkillManagementTab
 } from "../skillRouting";
-import type { Skill, SkillSyncResult, SkillTarget } from "../types";
+import type { RepositorySkillDescriptor, Skill, SkillSyncResult, SkillTarget } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
 
 const { Text } = Typography;
@@ -77,6 +79,7 @@ export function SkillManagementPage() {
   const activeTab = useMemo(() => resolveSkillManagementTab(searchParams), [searchParams]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [targets, setTargets] = useState<SkillTarget[]>([]);
+  const [repositorySkillMap, setRepositorySkillMap] = useState<Map<string, RepositorySkillDescriptor>>(new Map());
   const [loading, setLoading] = useState(true);
   const [savingTarget, setSavingTarget] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
@@ -99,9 +102,22 @@ export function SkillManagementPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [skillData, targetData] = await Promise.all([listSkills(), listSkillTargets()]);
+      const [skillData, targetData, repositories] = await Promise.all([listSkills(), listSkillTargets(), listRepositories()]);
       setSkills(skillData);
       setTargets(targetData);
+      const nextRepositorySkillMap = new Map<string, RepositorySkillDescriptor>();
+      for (const repository of repositories.filter((item) => item.enabled)) {
+        try {
+          await syncRepository(repository.id);
+          const descriptors = await listSkillsByRepository(repository.id);
+          for (const descriptor of descriptors) {
+            nextRepositorySkillMap.set(`${descriptor.repositoryId}:${descriptor.skillId}`, descriptor);
+          }
+        } catch {
+          // best-effort refresh; page-level load already has local skills data
+        }
+      }
+      setRepositorySkillMap(nextRepositorySkillMap);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载 Skill 管理数据失败"));
     } finally {
@@ -112,6 +128,20 @@ export function SkillManagementPage() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  const openRepositorySkillUpdate = (skill: Skill) => {
+    if (!skill.repositoryId) {
+      return;
+    }
+    writeSkillInstallSession({
+      source: "REPOSITORY_REF",
+      repositoryId: skill.repositoryId,
+      skillId: skill.skillId,
+      action: "update",
+      returnTo: "/discover"
+    });
+    navigate("/skills/install");
+  };
 
   const syncCandidateList = skills
     .filter((skill) => !skill.targets.some((target) => target.targetId === syncTarget?.id))
@@ -180,6 +210,7 @@ export function SkillManagementPage() {
           </Tag>
           {record.disabledTargetCount > 0 ? <Tag>停用 {record.disabledTargetCount}</Tag> : null}
           {record.repositoryId ? <Tag>{record.repositoryId}</Tag> : <Tag>本地导入</Tag>}
+          {record.repositoryId && repositorySkillMap.get(`${record.repositoryId}:${record.skillId}`)?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
         </Space>
       )
     },
@@ -197,6 +228,18 @@ export function SkillManagementPage() {
           <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/skills/${encodeURIComponent(record.skillId)}`)}>
             详情
           </Button>
+          {record.repositoryId ? (
+            <Button
+              size="small"
+              icon={<SyncOutlined />}
+              type={repositorySkillMap.get(`${record.repositoryId}:${record.skillId}`)?.updateAvailable ? "primary" : "default"}
+              ghost={Boolean(repositorySkillMap.get(`${record.repositoryId}:${record.skillId}`)?.updateAvailable)}
+              disabled={!repositorySkillMap.get(`${record.repositoryId}:${record.skillId}`)?.updateAvailable}
+              onClick={() => openRepositorySkillUpdate(record)}
+            >
+              {repositorySkillMap.get(`${record.repositoryId}:${record.skillId}`)?.updateAvailable ? "更新" : "已安装"}
+            </Button>
+          ) : null}
           <Button
             size="small"
             icon={record.enabledTargetCount > 0 ? <StopOutlined /> : <UndoOutlined />}

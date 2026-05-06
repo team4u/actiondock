@@ -46,7 +46,7 @@ final class SkillRepositoryPublisher {
 
         Path tempDir = null;
         try {
-            tempDir = Files.createTempDirectory(session.root(), "skill-publish-archive-");
+            tempDir = Files.createTempDirectory("skill-publish-archive-");
             SkillArchiveManager.unzipArchive(content, tempDir);
             Path skillRoot = SkillFileUtils.locateSkillRoot(tempDir);
             SkillTypes.SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(

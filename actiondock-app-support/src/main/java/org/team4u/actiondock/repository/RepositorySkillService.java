@@ -1,5 +1,6 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.domain.model.ManagedSkill;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.skill.SkillFileUtils;
@@ -135,7 +136,7 @@ public class RepositorySkillService {
         assertNonHttpRepository(repository);
         Path tempDir = null;
         try {
-            tempDir = Files.createTempDirectory(repositoriesRoot, "skill-publish-archive-");
+            tempDir = Files.createTempDirectory("skill-publish-archive-");
             SkillArchiveManager.unzipArchive(content, tempDir);
             Path skillRoot = SkillFileUtils.locateSkillRoot(tempDir);
             SkillTypes.SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(skillRoot, fileName, false, jsonCodec);
@@ -228,12 +229,22 @@ public class RepositorySkillService {
         catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withSkills(current, repository, entries));
     }
 
-    static RepositoryCatalogTypes.RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.SkillFile skill, String skillPath) {
+    RepositoryCatalogTypes.RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.SkillFile skill, String skillPath) {
+        String repositoryId = repository.getId();
+        String skillId = NormalizeUtils.normalize(skill.skillId(), "skillId 不能为空");
+        ManagedSkill installedSkill = repositoryId == null ? null : catalog.getRepos()
+                .managedSkillRepository()
+                .findBySkillId(skillId)
+                .filter(item -> java.util.Objects.equals(repositoryId, item.getRepositoryId()))
+                .orElse(null);
+        boolean installed = installedSkill != null;
+        String installedVersion = installed ? NormalizeUtils.normalizeNullable(installedSkill.getVersion()) : null;
+        String version = NormalizeUtils.normalize(skill.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
         return new RepositoryCatalogTypes.RepositorySkillDescriptor(
-                repository.getId(),
-                NormalizeUtils.normalize(skill.skillId(), "skillId 不能为空"),
+                repositoryId,
+                skillId,
                 NormalizeUtils.normalizeOrDefault(skill.displayName(), skill.skillId()),
-                NormalizeUtils.normalize(skill.version(), SkillFileUtils.ERR_VERSION_REQUIRED),
+                version,
                 NormalizeUtils.normalizeNullable(skill.description()),
                 null,
                 NormalizeUtils.normalizeNullable(skill.owner()),
@@ -242,6 +253,9 @@ public class RepositorySkillService {
                 RepositoryCatalogTypes.resolveRelative(skillPath, NormalizeUtils.normalizeOrDefault(skill.entrypointPath(), SkillFileUtils.SKILL_MANIFEST_FILE)),
                 NormalizeUtils.normalizeNullable(skill.digest()),
                 NormalizeUtils.normalizeNullable(skill.riskLevel()),
+                installed,
+                installedVersion,
+                installed && !java.util.Objects.equals(installedVersion, version),
                 RepositoryCatalogTypes.isTrusted(repository),
                 repository.getUsage()
         );
