@@ -31,6 +31,9 @@ const SkillDetailPage = lazy(() =>
 const ScanSkillsPage = lazy(() =>
   import("../../pages/ScanSkillsPage").then((module) => ({ default: module.ScanSkillsPage }))
 );
+const RepositorySkillInstallPage = lazy(() =>
+  import("../../pages/RepositorySkillInstallPage").then((module) => ({ default: module.RepositorySkillInstallPage }))
+);
 
 export const resourcesFeature: AppFeatureDefinition = {
   key: "resources",
@@ -46,6 +49,7 @@ export const resourcesFeature: AppFeatureDefinition = {
     { path: "/packages/publish", element: <CapabilityPackagePublishPage />, title: "能力包发布", navKey: "resources" },
     { path: "/packages/:packageId/releases/new", element: <CapabilityPackagePublishPage />, title: "能力包发布", navKey: "resources" },
     { path: "/packages/:packageId/releases/:version", element: <CapabilityPackagePublishPage />, title: "能力包发布", navKey: "resources" },
-    { path: "/repositories", element: <RepositoryManagementPage />, title: "仓库", navKey: "resources" }
+    { path: "/repositories", element: <RepositoryManagementPage />, title: "仓库", navKey: "resources" },
+    { path: "/discover/skills/install", element: <RepositorySkillInstallPage />, title: "安装 Skill", navKey: "resources" }
   ]
 };

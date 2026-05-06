@@ -10,7 +10,6 @@ import {
   Card,
   Empty,
   Input,
-  Select,
   Space,
   Table,
   Tag,
@@ -19,92 +18,37 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import JSZip from "jszip";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   importSkill,
-  installSkillArchive,
-  installGithubSkillCollection,
   installSkillDirectory,
   listSkillTargets,
   scanGithubSkillCollection,
-  validateSkillArchive
+  validateSkillArchive,
+  installGithubSkillCollection
 } from "../features/skills/api";
-import { downloadRepositorySkillArchive, getRepositorySkill } from "../features/resources/api";
 import { PageHeader } from "../components/PageHeader";
+import { SkillTargetSelector, useSkillTargets } from "../components/SkillTargetSelector";
 import type { GithubSkillInstallResponse, GithubSkillScanItem, GithubSkillScanResponse, SkillTarget } from "../types";
 import { getErrorMessage } from "../utils";
-import { clearSkillInstallSession, readSkillInstallSession } from "../skillInstallSession";
 
 const { Paragraph, Text } = Typography;
 
 export function SkillInstallPage() {
   const navigate = useNavigate();
-  const [targets, setTargets] = useState<SkillTarget[]>([]);
-  const [targetIds, setTargetIds] = useState<string[]>([]);
+  const { targets, targetIds, setTargetIds, loading, ensureTargets, contextHolder } = useSkillTargets();
   const [directory, setDirectory] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const [githubScan, setGithubScan] = useState<GithubSkillScanResponse | null>(null);
   const [selectedGithubSkillPaths, setSelectedGithubSkillPaths] = useState<string[]>([]);
   const [githubInstallResult, setGithubInstallResult] = useState<GithubSkillInstallResponse | null>(null);
-  const [repositoryArchive, setRepositoryArchive] = useState<File | null>(null);
-  const [repositorySession, setRepositorySession] = useState<ReturnType<typeof readSkillInstallSession>>(null);
-  const [repositorySkillName, setRepositorySkillName] = useState("");
-  const [loading, setLoading] = useState(true);
   const [installing, setInstalling] = useState(false);
   const [githubScanning, setGithubScanning] = useState(false);
-  const [messageApi, contextHolder] = message.useMessage();
+  const [messageApi, messageContextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputAttributes = { webkitdirectory: "", directory: "" } as Record<string, string>;
-
-  useEffect(() => {
-    void (async () => {
-      setLoading(true);
-      try {
-        const targetData = await listSkillTargets();
-        const available = targetData.filter((item) => item.enabled && item.writable);
-        setTargets(available);
-        setTargetIds(available.map((item) => item.id));
-      } catch (error) {
-        messageApi.error(getErrorMessage(error, "加载 SkillTarget 失败"));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [messageApi]);
-
-  useEffect(() => {
-    void (async () => {
-      const session = readSkillInstallSession();
-      if (!session) {
-        setRepositorySession(null);
-        setRepositoryArchive(null);
-        setRepositorySkillName("");
-        return;
-      }
-      try {
-        const [detail, archive] = await Promise.all([
-          getRepositorySkill(session.repositoryId, session.skillId),
-          downloadRepositorySkillArchive(session.repositoryId, session.skillId)
-        ]);
-        setRepositorySession(session);
-        setRepositoryArchive(new File([archive], `${session.skillId}.zip`, { type: "application/zip" }));
-        setRepositorySkillName(detail.descriptor.displayName || detail.descriptor.skillId);
-      } catch (error) {
-        setRepositorySession(null);
-        setRepositoryArchive(null);
-        setRepositorySkillName("");
-        clearSkillInstallSession();
-        messageApi.error(getErrorMessage(error, "加载仓库 Skill 安装内容失败"));
-      }
-    })();
-  }, [messageApi]);
-
-  const targetOptions = useMemo(
-    () => targets.map((item) => ({ value: item.id, label: `${item.name} (${item.type})` })),
-    [targets]
-  );
 
   const githubSkillColumns: ColumnsType<GithubSkillScanItem> = useMemo(
     () => [
@@ -143,14 +87,6 @@ export function SkillInstallPage() {
     ],
     []
   );
-
-  const ensureTargets = (): string[] | null => {
-    if (targetIds.length === 0) {
-      messageApi.warning("请选择至少一个安装目标");
-      return null;
-    }
-    return targetIds;
-  };
 
   const handleUploadFile = async (file?: File) => {
     if (!file) {
@@ -238,28 +174,6 @@ export function SkillInstallPage() {
     }
   };
 
-  const handleInstallRepositoryArchive = async () => {
-    const selectedTargetIds = ensureTargets();
-    if (!selectedTargetIds || !repositorySession || !repositoryArchive) {
-      return;
-    }
-    setInstalling(true);
-    try {
-      await installSkillArchive({
-        targetIds: selectedTargetIds,
-        repositoryId: repositorySession.repositoryId,
-        archive: repositoryArchive
-      });
-      clearSkillInstallSession();
-      messageApi.success(`Skill 已${repositorySession.action === "update" ? "更新" : "安装"}：${repositorySkillName || repositorySession.skillId}`);
-      navigate(repositorySession.returnTo || "/skills");
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "安装仓库 Skill 失败"));
-    } finally {
-      setInstalling(false);
-    }
-  };
-
   const handleScanGithubCollection = async () => {
     if (!githubUrl.trim()) {
       messageApi.warning("请输入 GitHub 仓库或目录链接");
@@ -320,6 +234,7 @@ export function SkillInstallPage() {
   return (
     <>
       {contextHolder}
+      {messageContextHolder}
       <input
         ref={fileInputRef}
         type="file"
@@ -356,41 +271,11 @@ export function SkillInstallPage() {
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可安装的目标，请先创建并启用可写的 SkillTarget" />
           ) : (
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
-              <Alert
-                showIcon
-                type="info"
-                message="只展示已启用且可写的目标目录。安装后会同步写入目标目录和 ActionDock 受管副本。"
+              <SkillTargetSelector
+                targets={targets}
+                targetIds={targetIds}
+                onTargetIdsChange={setTargetIds}
               />
-              <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                <Text strong>安装目标</Text>
-                <Select
-                  mode="multiple"
-                  value={targetIds}
-                  options={targetOptions}
-                  onChange={setTargetIds}
-                  maxTagCount="responsive"
-                  style={{ width: "100%", maxWidth: 420 }}
-                />
-              </Space>
-              {repositorySession && repositoryArchive ? (
-                <section className="skill-install-panel skill-install-panel--wide">
-                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                    <Space direction="vertical" size={4}>
-                      <Text strong>{repositorySession.action === "update" ? "从仓库更新 Skill" : "从仓库安装 Skill"}</Text>
-                      <Paragraph type="secondary">
-                        当前已载入仓库 Skill 归档，安装会同步更新受管副本和所选目标目录。
-                      </Paragraph>
-                    </Space>
-                    <Space wrap size={[8, 8]}>
-                      <Tag color="blue">{repositorySkillName || repositorySession.skillId}</Tag>
-                      <Tag>{repositorySession.repositoryId}</Tag>
-                    </Space>
-                    <Button type="primary" loading={installing} onClick={() => void handleInstallRepositoryArchive()}>
-                      {repositorySession.action === "update" ? "更新所选目标" : "安装到所选目标"}
-                    </Button>
-                  </Space>
-                </section>
-              ) : null}
               <section className="skill-install-panel skill-install-panel--wide">
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
                   <Space direction="vertical" size={4}>

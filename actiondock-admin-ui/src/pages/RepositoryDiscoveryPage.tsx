@@ -514,10 +514,9 @@ export function RepositoryDiscoveryPage() {
       source: "REPOSITORY_REF",
       repositoryId: descriptor.repositoryId,
       skillId: descriptor.skillId,
-      action: descriptor.installed ? "update" : "install",
-      returnTo: "/discover"
+      action: descriptor.installed ? "update" : "install"
     });
-    navigate("/skills/install");
+    navigate("/discover/skills/install");
   };
 
   const handleRepositoryPluginAction = async (record: RepositoryPluginDescriptor, action: "install" | "update", force = false) => {
