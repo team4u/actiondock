@@ -20,9 +20,6 @@ const PluginDetailPage = lazy(() =>
 const SkillManagementPage = lazy(() =>
   import("../../pages/SkillManagementPage").then((module) => ({ default: module.SkillManagementPage }))
 );
-const SkillInstallPage = lazy(() =>
-  import("../../pages/SkillInstallPage").then((module) => ({ default: module.SkillInstallPage }))
-);
 const SkillPublishPage = lazy(() =>
   import("../../pages/SkillPublishPage").then((module) => ({ default: module.SkillPublishPage }))
 );
@@ -80,7 +77,6 @@ export const capabilitiesFeature: AppFeatureDefinition = {
     { path: "/plugins", element: <PluginManagementPage />, title: "插件", navKey: "capabilities" },
     { path: "/plugins/:pluginId", element: <PluginDetailPage />, title: "插件详情", navKey: "capabilities" },
     { path: "/skills", element: <SkillManagementPage />, title: "Skills", navKey: "capabilities" },
-    { path: "/skills/install", element: <SkillInstallPage />, title: "安装技能", navKey: "capabilities" },
     { path: "/skills/publish", element: <SkillPublishPage />, title: "发布技能", navKey: "capabilities" },
     { path: "/skills/scan/:targetId", element: <ScanSkillsPage />, title: "扫描目标", navKey: "capabilities" },
     { path: "/skills/:skillId", element: <SkillDetailPage />, title: "技能详情", navKey: "capabilities" },

@@ -27,8 +27,8 @@ import { disableSkill, getSkillDetail, previewSkillFile, removeSkillFromTarget, 
 import { getRepositorySkill } from "../features/resources/api";
 import { PageHeader } from "../components/PageHeader";
 import { SkillFileBrowser } from "../components/SkillFileBrowser";
+import { RepositorySkillInstallDrawer } from "../components/RepositorySkillInstallDrawer";
 import { useColorMode } from "../contexts/ColorModeContext";
-import { writeSkillInstallSession } from "../skillInstallSession";
 import { writeSkillPublishSession } from "../skillPublishSession";
 import type { RepositorySkillDescriptor, SkillDeployment, SkillDetail, SkillFilePreview } from "../types";
 import { formatDateTime, getErrorMessage } from "../utils";
@@ -46,6 +46,7 @@ export function SkillDetailPage() {
   const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [versionDraft, setVersionDraft] = useState("");
   const [repositoryDescriptor, setRepositoryDescriptor] = useState<RepositorySkillDescriptor | null>(null);
+  const [repositoryUpdateOpen, setRepositoryUpdateOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDetail = async () => {
@@ -150,14 +151,7 @@ export function SkillDetailPage() {
     if (!skillId || !detail?.skill.repositoryId) {
       return;
     }
-    writeSkillInstallSession({
-      source: "REPOSITORY_REF",
-      repositoryId: detail.skill.repositoryId,
-      skillId,
-      action: "update",
-      returnTo: "/discover"
-    });
-    navigate("/skills/install");
+    setRepositoryUpdateOpen(true);
   };
 
   const openVersionModal = () => {
@@ -327,6 +321,27 @@ export function SkillDetailPage() {
             <Input value={versionDraft} onChange={(event) => setVersionDraft(event.target.value)} placeholder="例如 1.2.0" />
           </Space>
         </Modal>
+
+        <RepositorySkillInstallDrawer
+          open={repositoryUpdateOpen}
+          descriptor={repositoryDescriptor && detail?.skill.repositoryId ? {
+            repositoryId: detail.skill.repositoryId,
+            skillId: detail.skill.skillId,
+            displayName: detail.skill.displayName || detail.skill.skillId,
+            installed: true,
+            updateAvailable: repositoryDescriptor.updateAvailable,
+            version: repositoryDescriptor.version,
+            description: null,
+            owner: null,
+            trusted: repositoryDescriptor.trusted,
+            riskLevel: repositoryDescriptor.riskLevel
+          } : null}
+          onClose={() => setRepositoryUpdateOpen(false)}
+          onSuccess={() => {
+            setRepositoryUpdateOpen(false);
+            void loadDetail();
+          }}
+        />
       </Space>
     </>
   );

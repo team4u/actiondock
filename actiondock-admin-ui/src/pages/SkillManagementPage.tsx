@@ -39,10 +39,11 @@ import {
   syncSkillInstallationsToTarget,
   updateSkillTarget
 } from "../features/skills/api";
-import { listRepositories, listSkillsByRepository, syncRepository } from "../features/resources/api";
+import { listRepositories, listSkillsByRepository } from "../features/resources/api";
 import { PageHeader } from "../components/PageHeader";
 import { TableLinkCell } from "../components/TableLinkCell";
-import { writeSkillInstallSession } from "../skillInstallSession";
+import { SkillInstallDrawer } from "../components/SkillInstallDrawer";
+import { RepositorySkillInstallDrawer } from "../components/RepositorySkillInstallDrawer";
 import {
   buildSkillManagementSearch,
   resolveSkillManagementTab,
@@ -90,6 +91,8 @@ export function SkillManagementPage() {
   const [syncTarget, setSyncTarget] = useState<SkillTarget | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [selectedSyncSkillIds, setSelectedSyncSkillIds] = useState<React.Key[]>([]);
+  const [installDrawerOpen, setInstallDrawerOpen] = useState(false);
+  const [repositoryUpdateSkill, setRepositoryUpdateSkill] = useState<Skill | null>(null);
 
   const applyTypeTemplate = (nextType: string) => {
     form.setFieldsValue({
@@ -106,15 +109,14 @@ export function SkillManagementPage() {
       setSkills(skillData);
       setTargets(targetData);
       const nextRepositorySkillMap = new Map<string, RepositorySkillDescriptor>();
-      for (const repository of repositories.filter((item) => item.enabled)) {
-        try {
-          await syncRepository(repository.id);
-          const descriptors = await listSkillsByRepository(repository.id);
-          for (const descriptor of descriptors) {
+      const results = await Promise.allSettled(
+        repositories.filter((item) => item.enabled).map((repository) => listSkillsByRepository(repository.id))
+      );
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          for (const descriptor of result.value) {
             nextRepositorySkillMap.set(`${descriptor.repositoryId}:${descriptor.skillId}`, descriptor);
           }
-        } catch {
-          // best-effort refresh; page-level load already has local skills data
         }
       }
       setRepositorySkillMap(nextRepositorySkillMap);
@@ -133,14 +135,7 @@ export function SkillManagementPage() {
     if (!skill.repositoryId) {
       return;
     }
-    writeSkillInstallSession({
-      source: "REPOSITORY_REF",
-      repositoryId: skill.repositoryId,
-      skillId: skill.skillId,
-      action: "update",
-      returnTo: "/discover"
-    });
-    navigate("/skills/install");
+    setRepositoryUpdateSkill(skill);
   };
 
   const syncCandidateList = skills
@@ -424,7 +419,7 @@ export function SkillManagementPage() {
               <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
                 刷新
               </Button>
-              <Button type="primary" onClick={() => navigate("/skills/install")}>
+              <Button type="primary" onClick={() => setInstallDrawerOpen(true)}>
                 安装 Skill
               </Button>
               <Button onClick={openCreateTarget}>新增目标</Button>
@@ -593,6 +588,36 @@ export function SkillManagementPage() {
           />
         </Space>
       </Drawer>
+
+      <SkillInstallDrawer
+        open={installDrawerOpen}
+        onClose={() => setInstallDrawerOpen(false)}
+        onSuccess={() => {
+          setInstallDrawerOpen(false);
+          void loadData();
+        }}
+      />
+
+      <RepositorySkillInstallDrawer
+        open={repositoryUpdateSkill !== null}
+        descriptor={repositoryUpdateSkill ? {
+          repositoryId: repositoryUpdateSkill.repositoryId!,
+          skillId: repositoryUpdateSkill.skillId,
+          displayName: repositoryUpdateSkill.displayName || repositoryUpdateSkill.skillId,
+          installed: true,
+          updateAvailable: true,
+          version: repositoryUpdateSkill.version,
+          description: null,
+          owner: null,
+          trusted: false,
+          riskLevel: "UNKNOWN"
+        } : null}
+        onClose={() => setRepositoryUpdateSkill(null)}
+        onSuccess={() => {
+          setRepositoryUpdateSkill(null);
+          void loadData();
+        }}
+      />
     </>
   );
 }
