@@ -52,7 +52,7 @@ public class CapabilityViewMapper {
             return null;
         }
         return new CapabilityView.CapabilityBindingView(
-                source.getVersion() == null ? null : String.valueOf(source.getVersion()),
+                null,
                 snapshot.getSource(),
                 enumName(snapshot.getType()),
                 copySchema(snapshot.getInputSchema()),
