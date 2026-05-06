@@ -28,6 +28,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  installRepositoryPlugin,
   developRepositoryTool,
   getCapabilityPackage,
   getRepositorySkill,
@@ -36,10 +37,12 @@ import {
   installRepositoryTool,
   listCapabilityPackages,
   listRepositories,
+  listRepositoryPlugins,
   listRepositorySkills,
   listRepositoryTools,
   uninstallCapabilityPackage,
   updateCapabilityPackage,
+  updateRepositoryPlugin,
   updateRepositoryTool
 } from "../features/resources/api";
 import { CodeEditor } from "../components/CodeEditor";
@@ -58,6 +61,8 @@ import type {
   PluginDependency,
   RepositoryAiPackageDependency,
   RepositoryDefinition,
+  RepositoryPluginConflict,
+  RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
   RepositorySkillDetail,
   RepositoryToolDescriptor,
@@ -165,6 +170,109 @@ function renderExternalDependencies(dependencies: RepositoryAiPackageDependency[
   );
 }
 
+function renderRepositoryPlugins(
+  plugins: RepositoryPluginDescriptor[],
+  actionKey: string | null,
+  onAction: (record: RepositoryPluginDescriptor, action: "install" | "update", force?: boolean) => Promise<void>
+) {
+  if (plugins.length === 0) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可发现的插件。先到仓库管理页添加并同步仓库。" />;
+  }
+
+  return (
+    <Table<RepositoryPluginDescriptor>
+      rowKey={(item) => `${item.repositoryId}:${item.pluginId}`}
+      loading={false}
+      size="small"
+      pagination={{ pageSize: 10, showSizeChanger: true }}
+      dataSource={plugins}
+      scroll={{ x: 980 }}
+      columns={[
+        {
+          title: "插件",
+          key: "plugin",
+          render: (_value, record) => (
+            <Space direction="vertical" size={2}>
+              <Space wrap size={[8, 8]}>
+                <Text strong>{record.displayName || record.pluginId}</Text>
+                <Text code>{record.pluginId}</Text>
+              </Space>
+              <Text type="secondary">{record.description || "未填写描述"}</Text>
+              {record.releaseNotes ? (
+                <MarkdownDescription value={record.releaseNotes} className="markdown-description--compact" />
+              ) : null}
+            </Space>
+          )
+        },
+        {
+          title: "来源",
+          key: "repository",
+          width: 150,
+          render: (_value, record) => (
+            <Space direction="vertical" size={2}>
+              <Text>{record.repositoryId}</Text>
+              {record.trusted ? <Tag color="green">可信仓库</Tag> : <Tag color="gold">未信任</Tag>}
+            </Space>
+          )
+        },
+        {
+          title: "版本",
+          key: "version",
+          width: 150,
+          render: (_value, record) => (
+            <Space direction="vertical" size={2}>
+              <Text>远端 {record.version}</Text>
+              {record.installedVersion ? <Text type="secondary">本机 {record.installedVersion}</Text> : null}
+            </Space>
+          )
+        },
+        {
+          title: "状态",
+          key: "state",
+          width: 140,
+          render: (_value, record) => (
+            <Space direction="vertical" size={2}>
+              {record.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
+              {record.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
+              {record.dependentToolCount > 0 ? <Tag color="purple">{record.dependentToolCount} 个脚本依赖</Tag> : null}
+            </Space>
+          )
+        },
+        {
+          title: "操作",
+          key: "actions",
+          width: 180,
+          render: (_value, record) => (
+            record.installed ? (
+              <Button
+                size="small"
+                icon={<SyncOutlined />}
+                type={record.updateAvailable ? "primary" : "default"}
+                ghost={record.updateAvailable}
+                disabled={!record.updateAvailable}
+                loading={actionKey === `update:${record.repositoryId}:${record.pluginId}`}
+                onClick={() => void onAction(record, "update")}
+              >
+                更新
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                type="primary"
+                icon={<DownloadOutlined />}
+                loading={actionKey === `install:${record.repositoryId}:${record.pluginId}`}
+                onClick={() => void onAction(record, "install")}
+              >
+                安装
+              </Button>
+            )
+          )
+        }
+      ]}
+    />
+  );
+}
+
 export function RepositoryDiscoveryPage() {
   const navigate = useNavigate();
   const colorMode = useColorMode();
@@ -173,6 +281,7 @@ export function RepositoryDiscoveryPage() {
   const [tools, setTools] = useState<RepositoryToolDescriptor[]>([]);
   const [packages, setPackages] = useState<CapabilityPackageDescriptor[]>([]);
   const [skills, setSkills] = useState<RepositorySkillDescriptor[]>([]);
+  const [plugins, setPlugins] = useState<RepositoryPluginDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -202,10 +311,12 @@ export function RepositoryDiscoveryPage() {
         listCapabilityPackages(),
         listRepositorySkills()
       ]);
+      const pluginData = await listRepositoryPlugins();
       setRepositories(repositoryData);
       setTools(toolData);
       setPackages(packageData);
       setSkills(skillData);
+      setPlugins(pluginData);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载仓库目录失败"));
     } finally {
@@ -314,6 +425,39 @@ export function RepositoryDiscoveryPage() {
     });
   }, [repositoryFilter, searchText, skills, trustFilter]);
 
+  const filteredPlugins = useMemo(() => {
+    const keyword = searchText.trim().toLowerCase();
+    return plugins.filter((item) => {
+      if (repositoryFilter !== "ALL" && item.repositoryId !== repositoryFilter) {
+        return false;
+      }
+      if (installFilter === "INSTALLED" && !item.installed) {
+        return false;
+      }
+      if (installFilter === "NOT_INSTALLED" && item.installed) {
+        return false;
+      }
+      if (trustFilter === "TRUSTED" && !item.trusted) {
+        return false;
+      }
+      if (trustFilter === "UNTRUSTED" && item.trusted) {
+        return false;
+      }
+      if (!keyword) {
+        return true;
+      }
+      const haystack = [
+        item.displayName,
+        item.pluginId,
+        item.description ?? "",
+        item.owner ?? "",
+        item.repositoryId,
+        ...item.tags
+      ].join(" ").toLowerCase();
+      return keyword.split(/\s+/).every((part) => haystack.includes(part));
+    });
+  }, [installFilter, plugins, repositoryFilter, searchText, trustFilter]);
+
   const openDetail = async (descriptor: RepositoryToolDescriptor) => {
     setDetailOpen(true);
     setDetailLoading(true);
@@ -357,6 +501,27 @@ export function RepositoryDiscoveryPage() {
       setSkillDetail(null);
     } finally {
       setSkillDetailLoading(false);
+    }
+  };
+
+  const handleRepositoryPluginAction = async (record: RepositoryPluginDescriptor, action: "install" | "update", force = false) => {
+    setActionKey(`${action}:${record.repositoryId}:${record.pluginId}`);
+    try {
+      if (action === "install") {
+        await installRepositoryPlugin(record.repositoryId, record.pluginId, { force });
+      } else {
+        await updateRepositoryPlugin(record.repositoryId, record.pluginId, { force });
+      }
+      messageApi.success(action === "install" ? "插件已安装" : "插件已更新");
+      await loadData();
+    } catch (error) {
+      if (error instanceof ApiError) {
+        messageApi.error(error.message);
+      } else {
+        messageApi.error(getErrorMessage(error, action === "install" ? "安装插件失败" : "更新插件失败"));
+      }
+    } finally {
+      setActionKey(null);
     }
   };
 
@@ -994,6 +1159,11 @@ export function RepositoryDiscoveryPage() {
                     }}
                   />
                 )
+              },
+              {
+                key: "plugins",
+                label: `插件 (${filteredPlugins.length})`,
+                children: renderRepositoryPlugins(filteredPlugins, actionKey, handleRepositoryPluginAction)
               }
             ]}
           />

@@ -1,5 +1,4 @@
 import {
-  DeleteOutlined,
   DownloadOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
@@ -7,62 +6,39 @@ import {
   SyncOutlined,
   UploadOutlined
 } from "@ant-design/icons";
-import { Button, Card, Descriptions, Drawer, Modal, Space, Spin, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useRef, useState } from "react";
+import { installPlugin, listPlugins, startPlugin, stopPlugin, upgradePlugin, uninstallPlugin } from "../features/plugins/api";
 import {
-  getPlugin,
-  installPlugin,
-  listPlugins,
-  startPlugin,
-  stopPlugin,
-  upgradePlugin,
-  uninstallPlugin
-} from "../features/plugins/api";
-import {
-  installRepositoryPlugin,
   listPluginsByRepository,
   listRepositories,
-  listRepositoryPlugins,
   syncRepository,
   updateRepositoryPlugin
 } from "../features/resources/api";
-import { getApiKey } from "../auth";
 import { PageHeader } from "../components/PageHeader";
-import { MarkdownDescription } from "../components/MarkdownDescription";
-import { PluginActionsOverview } from "../components/PluginActionsOverview";
 import { TableLinkCell } from "../components/TableLinkCell";
 import { useActionWithLoading } from "../hooks/useActionWithLoading";
 import { ApiError } from "../shared/api/httpClient";
-import type { PluginAction, PluginView, RepositoryPluginConflict, RepositoryPluginDescriptor } from "../types";
+import type { PluginView, RepositoryPluginConflict, RepositoryPluginDescriptor } from "../types";
 import { getErrorMessage } from "../utils";
 
 const { Text } = Typography;
 
 export function PluginManagementPage() {
-  const apiKey = getApiKey() || undefined;
-  const origin = window.location.origin;
   const [plugins, setPlugins] = useState<PluginView[]>([]);
-  const [repositoryPlugins, setRepositoryPlugins] = useState<RepositoryPluginDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const { actionId, withAction } = useActionWithLoading();
   const [pendingUploadPluginId, setPendingUploadPluginId] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
-  const [modal, modalContextHolder] = Modal.useModal();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [drawerDescriptor, setDrawerDescriptor] = useState<RepositoryPluginDescriptor | null>(null);
-  const [drawerActions, setDrawerActions] = useState<PluginAction[]>([]);
-  const [drawerDescription, setDrawerDescription] = useState("");
-  const [drawerActionsLoading, setDrawerActionsLoading] = useState(false);
 
   const loadPlugins = async () => {
     setLoading(true);
     try {
-      const [pluginData, repositoryPluginData] = await Promise.all([listPlugins(), listRepositoryPlugins()]);
-      setPlugins(pluginData);
-      setRepositoryPlugins(repositoryPluginData);
+      setPlugins(await listPlugins());
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "加载插件失败";
       messageApi.error(detail);
@@ -85,14 +61,6 @@ export function PluginManagementPage() {
     });
   };
 
-  const refreshRepositoryPlugins = async () => {
-    try {
-      setRepositoryPlugins(await listRepositoryPlugins());
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "刷新仓库插件失败"));
-    }
-  };
-
   const formatConflicts = (conflicts: RepositoryPluginConflict[]) =>
     conflicts
       .slice(0, 8)
@@ -107,38 +75,6 @@ export function PluginManagementPage() {
     error.data !== null &&
     "code" in error.data &&
     (error.data as { code?: string }).code === "PLUGIN_VERSION_CONFLICT";
-
-  const handleRepositoryPluginAction = async (record: RepositoryPluginDescriptor, action: "install" | "update", force = false) => {
-    await withAction(`${action}:${record.repositoryId}:${record.pluginId}`, async () => {
-      try {
-        const result = action === "install"
-          ? await installRepositoryPlugin(record.repositoryId, record.pluginId, { force })
-          : await updateRepositoryPlugin(record.repositoryId, record.pluginId, { force });
-        replacePlugin(result.plugin);
-        await refreshRepositoryPlugins();
-        messageApi.success(action === "install" ? "插件已从仓库安装" : "插件已从仓库更新");
-      } catch (error) {
-        if (isPluginVersionConflict(error)) {
-          const conflicts = ((error.data as { conflicts?: RepositoryPluginConflict[] }).conflicts ?? []);
-          await modal.confirm({
-            title: "插件版本会影响已安装脚本",
-            okText: "强制覆盖",
-            cancelText: "取消",
-            width: 620,
-            content: (
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <Text>以下脚本声明的插件版本范围不满足仓库版本。强制覆盖后，这些脚本可能运行失败。</Text>
-                <pre className="script-import-result__code">{formatConflicts(conflicts)}</pre>
-              </Space>
-            ),
-            onOk: () => handleRepositoryPluginAction(record, action, true)
-          });
-          return;
-        }
-        messageApi.error(getErrorMessage(error, action === "install" ? "安装仓库插件失败" : "更新仓库插件失败"));
-      }
-    });
-  };
 
   const handlePluginUpload = async (file?: File) => {
     const targetPluginId = pendingUploadPluginId;
@@ -185,15 +121,7 @@ export function PluginManagementPage() {
     const repositoryFailures: string[] = [];
     const pluginFailures: string[] = [];
     let updatedCount = 0;
-
     try {
-      const installedPlugins = await listPlugins();
-      const repositoryInstalledPlugins = new Map(
-        installedPlugins
-          .filter((plugin) => Boolean(plugin.repositoryId))
-          .map((plugin) => [plugin.pluginId, plugin])
-      );
-
       const repositories = await listRepositories();
       const syncedRepositoryIds: string[] = [];
       for (const repository of repositories.filter((item) => item.enabled)) {
@@ -205,7 +133,12 @@ export function PluginManagementPage() {
         }
       }
 
+      const installedPlugins = await listPlugins();
+      const repositoryInstalledPlugins = new Map(
+        installedPlugins.filter((item) => Boolean(item.repositoryId)).map((item) => [item.pluginId, item])
+      );
       const targetByPluginId = new Map<string, RepositoryPluginDescriptor>();
+
       for (const repositoryId of syncedRepositoryIds) {
         try {
           const descriptors = await listPluginsByRepository(repositoryId);
@@ -227,10 +160,10 @@ export function PluginManagementPage() {
         }
       }
 
-      const updateTargets = [...targetByPluginId.values()];
-      for (const plugin of updateTargets) {
+      for (const plugin of targetByPluginId.values()) {
         try {
-          await updateRepositoryPlugin(plugin.repositoryId, plugin.pluginId, { force: false });
+          const result = await updateRepositoryPlugin(plugin.repositoryId, plugin.pluginId, { force: false });
+          replacePlugin(result.plugin);
           updatedCount += 1;
         } catch (error) {
           const fallbackMessage = isPluginVersionConflict(error) ? "版本冲突" : "更新失败";
@@ -239,19 +172,14 @@ export function PluginManagementPage() {
       }
 
       await loadPlugins();
-
-      if (updateTargets.length === 0 && repositoryFailures.length === 0) {
+      if (targetByPluginId.size === 0 && repositoryFailures.length === 0) {
         messageApi.success("已是最新");
         return;
       }
-
       if (repositoryFailures.length > 0 || pluginFailures.length > 0) {
-        messageApi.warning(
-          `更新完成，成功 ${updatedCount} 个，失败 ${repositoryFailures.length + pluginFailures.length} 项`
-        );
+        messageApi.warning(`更新完成，成功 ${updatedCount} 个，失败 ${repositoryFailures.length + pluginFailures.length} 项`);
         return;
       }
-
       messageApi.success(`已更新 ${updatedCount} 个插件`);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "一键更新失败"));
@@ -265,30 +193,17 @@ export function PluginManagementPage() {
       title: "插件 ID",
       dataIndex: "pluginId",
       key: "pluginId",
-      render: (value: string) => (
-        <TableLinkCell to={`/plugins/${value}`}>{value}</TableLinkCell>
-      )
+      render: (value: string) => <TableLinkCell to={`/plugins/${value}`}>{value}</TableLinkCell>
     },
-    {
-      title: "名称",
-      dataIndex: "name",
-      key: "name"
-    },
+    { title: "名称", dataIndex: "name", key: "name" },
     {
       title: "状态",
       dataIndex: "state",
       key: "state",
       width: 120,
-      render: (state: string, record) => (
-        <Tag color={record.started ? "green" : state === "FAILED" ? "red" : "gold"}>{state}</Tag>
-      )
+      render: (state: string, record) => <Tag color={record.started ? "green" : state === "FAILED" ? "red" : "gold"}>{state}</Tag>
     },
-    {
-      title: "版本",
-      dataIndex: "version",
-      key: "version",
-      width: 120
-    },
+    { title: "版本", dataIndex: "version", key: "version", width: 120 },
     {
       title: "来源",
       key: "source",
@@ -303,12 +218,7 @@ export function PluginManagementPage() {
           <Tag>手动上传</Tag>
         )
     },
-    {
-      title: "动作数",
-      key: "actions",
-      width: 100,
-      render: (_: unknown, record) => record.actions.length
-    },
+    { title: "动作数", key: "actions", width: 100, render: (_: unknown, record) => record.actions.length },
     {
       title: "操作",
       key: "operations",
@@ -357,108 +267,22 @@ export function PluginManagementPage() {
               启动
             </Button>
           )}
-        </Space>
-      )
-    }
-  ];
-
-  const repositoryColumns: ColumnsType<RepositoryPluginDescriptor> = [
-    {
-      title: "仓库插件",
-      key: "plugin",
-      render: (_: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          <Space wrap size={[8, 8]}>
-            <TableLinkCell
-              to="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setDrawerDescriptor(record);
-                setDrawerActions([]);
-                setDrawerDescription("");
-                setDrawerActionsLoading(true);
-                getPlugin(record.pluginId)
-                  .then((plugin) => {
-                    setDrawerActions(plugin.actions);
-                    setDrawerDescription(plugin.description);
-                  })
-                  .catch(() => {})
-                  .finally(() => setDrawerActionsLoading(false));
-              }}
-            >
-              {record.displayName || record.pluginId}
-            </TableLinkCell>
-            <Text code>{record.pluginId}</Text>
-          </Space>
-          <Text type="secondary">{record.description || "未填写描述"}</Text>
-          {record.releaseNotes ? (
-            <MarkdownDescription value={record.releaseNotes} className="markdown-description--compact" />
-          ) : null}
-        </Space>
-      )
-    },
-    {
-      title: "来源",
-      key: "repository",
-      width: 150,
-      render: (_: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          <Text>{record.repositoryId}</Text>
-          {record.trusted ? <Tag color="green">可信仓库</Tag> : <Tag color="gold">未信任</Tag>}
-        </Space>
-      )
-    },
-    {
-      title: "版本",
-      key: "version",
-      width: 150,
-      render: (_: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          <Text>远端 {record.version}</Text>
-          {record.installedVersion ? <Text type="secondary">本机 {record.installedVersion}</Text> : null}
-        </Space>
-      )
-    },
-    {
-      title: "状态",
-      key: "state",
-      width: 140,
-      render: (_: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          {record.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
-          {record.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-          {record.dependentToolCount > 0 ? <Tag color="purple">{record.dependentToolCount} 个脚本依赖</Tag> : null}
-        </Space>
-      )
-    },
-    {
-      title: "操作",
-      key: "actions",
-      width: 180,
-      render: (_: unknown, record) => (
-        record.installed ? (
           <Button
             size="small"
-            icon={<SyncOutlined />}
-            type={record.updateAvailable ? "primary" : "default"}
-            ghost={record.updateAvailable}
-            disabled={!record.updateAvailable}
-            loading={actionId === `update:${record.repositoryId}:${record.pluginId}`}
-            onClick={() => void handleRepositoryPluginAction(record, "update")}
-          >
-            更新
-          </Button>
-        ) : (
-          <Button
-            size="small"
-            type="primary"
+            danger
             icon={<DownloadOutlined />}
-            loading={actionId === `install:${record.repositoryId}:${record.pluginId}`}
-            onClick={() => void handleRepositoryPluginAction(record, "install")}
+            loading={actionId === record.pluginId}
+            onClick={() =>
+              void withAction(record.pluginId, async () => {
+                await uninstallPlugin(record.pluginId);
+                setPlugins((previous) => previous.filter((item) => item.pluginId !== record.pluginId));
+                messageApi.success("插件已卸载");
+              })
+            }
           >
-            安装
+            卸载
           </Button>
-        )
+        </Space>
       )
     }
   ];
@@ -466,7 +290,6 @@ export function PluginManagementPage() {
   return (
     <>
       {contextHolder}
-      {modalContextHolder}
       <input
         ref={fileInputRef}
         type="file"
@@ -486,12 +309,7 @@ export function PluginManagementPage() {
               <Button icon={<ReloadOutlined />} onClick={() => void loadPlugins()} loading={loading}>
                 刷新
               </Button>
-              <Button
-                icon={<SyncOutlined />}
-                loading={bulkUpdating}
-                disabled={loading || uploading}
-                onClick={() => void handleUpdateAll()}
-              >
+              <Button icon={<SyncOutlined />} loading={bulkUpdating} disabled={loading || uploading} onClick={() => void handleUpdateAll()}>
                 一键更新
               </Button>
               <Button
@@ -518,78 +336,7 @@ export function PluginManagementPage() {
             scroll={{ x: 980 }}
           />
         </Card>
-        <Card title="仓库插件">
-          <Table
-            rowKey={(item: RepositoryPluginDescriptor) => `${item.repositoryId}:${item.pluginId}`}
-            loading={loading}
-            columns={repositoryColumns}
-            dataSource={repositoryPlugins}
-            pagination={{ pageSize: 8, responsive: true }}
-            scroll={{ x: 900 }}
-          />
-        </Card>
       </Space>
-      <Drawer
-        title={drawerDescriptor?.displayName || drawerDescriptor?.pluginId || "仓库插件详情"}
-        open={drawerDescriptor !== null}
-        onClose={() => setDrawerDescriptor(null)}
-        width={680}
-        destroyOnClose
-      >
-        {drawerDescriptor ? (
-          <Space direction="vertical" size={20} style={{ width: "100%" }}>
-            <Text type="secondary">{drawerDescriptor.pluginId}</Text>
-            <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label="版本">{drawerDescriptor.version}</Descriptions.Item>
-              <Descriptions.Item label="来源仓库">{drawerDescriptor.repositoryId}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Space size={4}>
-                  {drawerDescriptor.installed ? <Tag color="blue">已安装{drawerDescriptor.installedVersion ? ` (${drawerDescriptor.installedVersion})` : ""}</Tag> : <Tag>未安装</Tag>}
-                  {drawerDescriptor.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-                  {drawerDescriptor.trusted ? <Tag color="green">可信仓库</Tag> : <Tag color="gold">未信任</Tag>}
-                </Space>
-              </Descriptions.Item>
-              <Descriptions.Item label="风险等级">{drawerDescriptor.riskLevel || "—"}</Descriptions.Item>
-              <Descriptions.Item label="维护人">{drawerDescriptor.owner || "—"}</Descriptions.Item>
-              <Descriptions.Item label="依赖脚本数">{drawerDescriptor.dependentToolCount}</Descriptions.Item>
-              <Descriptions.Item label="标签">
-                {drawerDescriptor.tags.length > 0 ? drawerDescriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : "—"}
-              </Descriptions.Item>
-              {drawerDescriptor.artifact?.uri ? (
-                <Descriptions.Item label="插件包 URI">
-                  <Text code style={{ wordBreak: "break-all", fontSize: 12 }}>{drawerDescriptor.artifact.uri}</Text>
-                </Descriptions.Item>
-              ) : null}
-              {drawerDescriptor.artifact?.sha256 ? (
-                <Descriptions.Item label="SHA-256">
-                  <Text code style={{ wordBreak: "break-all", fontSize: 12 }}>{drawerDescriptor.artifact.sha256}</Text>
-                </Descriptions.Item>
-              ) : null}
-            </Descriptions>
-            {drawerDescriptor.releaseNotes ? (
-              <div>
-                <Text strong style={{ display: "block", marginBottom: 8 }}>发布日志</Text>
-                <MarkdownDescription value={drawerDescriptor.releaseNotes} className="markdown-description--panel" />
-              </div>
-            ) : null}
-            {drawerActionsLoading ? (
-              <div style={{ textAlign: "center", padding: "24px 0" }}><Spin /></div>
-            ) : drawerActions.length > 0 ? (
-              <div>
-                <Text strong style={{ display: "block", marginBottom: 12 }}>动作与字段</Text>
-                <PluginActionsOverview
-                  messageApi={messageApi}
-                  description={drawerDescription}
-                  actions={drawerActions}
-                  commandContext={drawerDescriptor ? { apiKey, origin, pluginId: drawerDescriptor.pluginId } : undefined}
-                />
-              </div>
-            ) : !drawerDescriptor.installed ? (
-              <Text type="secondary">插件未安装，无法查看动作和字段信息。安装后即可查看。</Text>
-            ) : null}
-          </Space>
-        ) : null}
-      </Drawer>
     </>
   );
 }
