@@ -199,7 +199,7 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
-    void repositoryMetadataRejectsIndexEntriesWithoutReleaseNotes() {
+    void repositoryMetadataAllowsMissingReleaseNotes() {
         String indexJson = """
                 {
                   "repositoryVersion": 1,
@@ -248,27 +248,21 @@ class RepositoryCatalogServiceTest {
                 }
                 """;
 
-        assertThatThrownBy(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
+        assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 indexJson,
                 RepositoryIndexFile.class,
                 "actiondock.repository.json"
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("tools[0].releaseNotes");
-        assertThatThrownBy(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
+        )).doesNotThrowAnyException();
+        assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 toolJson,
                 ToolFile.class,
                 "tool.json"
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("tool.json releaseNotes");
-        assertThatThrownBy(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
+        )).doesNotThrowAnyException();
+        assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 pluginJson,
                 PluginFile.class,
                 "plugin.json"
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("plugin.json releaseNotes");
+        )).doesNotThrowAnyException();
     }
 
     @Test

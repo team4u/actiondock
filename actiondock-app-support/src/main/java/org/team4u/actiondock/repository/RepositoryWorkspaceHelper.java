@@ -26,8 +26,6 @@ final class RepositoryWorkspaceHelper {
             RepositoryCatalogTypes.CapabilityPackageManifestFile.class,
             RepositoryCatalogTypes.CapabilityPackageReleaseFile.class
     );
-    private static final String ERR_MISSING_RELEASE_NOTES = "仓库元数据缺少 releaseNotes 字段: ";
-
     private RepositoryWorkspaceHelper() {
     }
 
@@ -43,24 +41,6 @@ final class RepositoryWorkspaceHelper {
         }
         if (root == null || !root.isObject()) {
             return;
-        }
-        if (type == RepositoryCatalogTypes.RepositoryIndexFile.class) {
-            for (String section : REPO_INDEX_SECTIONS) {
-                JsonNode entries = root.get(section);
-                if (entries == null || !entries.isArray()) {
-                    continue;
-                }
-                for (int index = 0; index < entries.size(); index++) {
-                    JsonNode entry = entries.get(index);
-                    if (entry != null && entry.isObject() && !entry.has("releaseNotes")) {
-                        throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " " + section + "[" + index + "].releaseNotes");
-                    }
-                }
-            }
-            return;
-        }
-        if (!root.has("releaseNotes")) {
-            throw new IllegalArgumentException(ERR_MISSING_RELEASE_NOTES + source + " releaseNotes");
         }
     }
 
