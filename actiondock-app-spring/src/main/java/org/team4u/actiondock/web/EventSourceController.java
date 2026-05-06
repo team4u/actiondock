@@ -77,8 +77,8 @@ public class EventSourceController {
     public ApiResponse<List<EventRecord>> listEvents(@PathVariable String id,
                                                      @RequestParam(required = false) Integer limit) {
         List<EventRecord> records = eventRecordApplicationService.listBySourceId(id);
-        if (limit != null && limit > 0 && records.size() > limit) {
-            records = records.subList(0, limit);
+        if (limit != null && limit > 0) {
+            records = records.stream().limit(limit).toList();
         }
         return ApiResponse.success(records);
     }

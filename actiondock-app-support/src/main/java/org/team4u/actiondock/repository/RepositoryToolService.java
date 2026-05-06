@@ -153,7 +153,7 @@ public class RepositoryToolService {
         repos.scriptRepository().save(definition);
         configTemplateSyncService.syncConfigTemplates(repositoryId, detail.descriptor().toolId(), detail.descriptor().version(), detail.configTemplate());
         if (options.installSchedules()) {
-            syncScheduleTemplates(definition, detail.scheduleTemplate());
+            syncScheduleTemplates(definition, detail.scheduleTemplate(), now);
         }
         return saveToolInstallationRecord(definition, existing, detail, now);
     }
@@ -228,7 +228,7 @@ public class RepositoryToolService {
         }
     }
 
-    private void syncScheduleTemplates(ScriptDefinition definition, List<ScheduleTemplateItem> templates) {
+    private void syncScheduleTemplates(ScriptDefinition definition, List<ScheduleTemplateItem> templates, LocalDateTime now) {
         List<ScriptSchedule> all = repos.scriptScheduleRepository().findAll();
         for (ScheduleTemplateItem template : templates) {
             ScriptSchedule existing = all.stream()
@@ -249,8 +249,8 @@ public class RepositoryToolService {
                     .setRepositoryId(definition.getRepositoryId())
                     .setRepositoryToolId(definition.getId())
                     .setRepositoryVersion(definition.getRepositoryVersion())
-                    .setCreatedAt(existing == null ? LocalDateTime.now() : existing.getCreatedAt())
-                    .setUpdatedAt(LocalDateTime.now());
+                    .setCreatedAt(existing == null ? now : existing.getCreatedAt())
+                    .setUpdatedAt(now);
             repos.scriptScheduleRepository().save(schedule);
         }
     }

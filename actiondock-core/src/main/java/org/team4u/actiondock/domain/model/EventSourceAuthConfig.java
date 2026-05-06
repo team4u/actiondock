@@ -91,4 +91,24 @@ public class EventSourceAuthConfig {
         this.secretConfigKey = secretConfigKey;
         return this;
     }
+
+    public void validate() {
+        if (mode == null || mode == EventSourceAuthMode.NONE) {
+            return;
+        }
+        switch (mode) {
+            case HEADER_TOKEN -> normalize(tokenHeader, "Header Token 缺少 tokenHeader");
+            case QUERY_TOKEN -> normalize(tokenQueryParam, "Query Token 缺少 tokenQueryParam");
+            case HMAC_SHA256 -> {
+                normalize(signatureHeader, "HMAC 缺少 signatureHeader");
+                normalize(secretConfigKey, "HMAC 缺少 secretConfigKey");
+            }
+        }
+    }
+
+    private static void normalize(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+    }
 }

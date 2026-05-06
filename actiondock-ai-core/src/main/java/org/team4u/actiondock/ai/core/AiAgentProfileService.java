@@ -12,8 +12,7 @@ import java.util.List;
 
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
-import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_ENTRY_PREFIX;
-import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
+
 
 public class AiAgentProfileService {
 
@@ -58,7 +57,7 @@ public class AiAgentProfileService {
 
     public List<AiAgentProfile> list(boolean includeManaged) {
         return list().stream()
-                .filter(profile -> includeManaged || (!profile.getId().startsWith(MANAGED_INTERNAL_PREFIX) && !profile.getId().startsWith(MANAGED_ENTRY_PREFIX)))
+                .filter(profile -> includeManaged || !ScriptPackaging.isManagedId(profile.getId()))
                 .toList();
     }
 
@@ -70,15 +69,9 @@ public class AiAgentProfileService {
     public AiAgentProfile save(AiAgentProfile profile) {
         validate(profile);
         assertMutable(profile.getId());
-        LocalDateTime now = LocalDateTime.now();
-        AiAgentProfile existing = repository.findById(profile.getId()).orElse(null);
-        if (existing == null) {
-            profile.setCreatedAt(now);
-        } else if (profile.getCreatedAt() == null) {
-            profile.setCreatedAt(existing.getCreatedAt());
-        }
-        profile.setUpdatedAt(now);
-        return repository.save(profile);
+        return AiTimestampSupport.saveWithTimestamps(profile, profile.getId(),
+                repository::findById, AiAgentProfile::getCreatedAt,
+                AiAgentProfile::setCreatedAt, AiAgentProfile::setUpdatedAt, repository::save);
     }
 
     public void delete(String id) {

@@ -91,7 +91,7 @@ public final class SkillArchiveManager {
         unzipToDirectory(content, directory);
     }
 
-    public static void writeManifest(Path directory,
+    public static String writeManifest(Path directory,
                                      SkillTypes.SkillValidationResult validation,
                                      String manifestVersion,
                                      JsonCodec jsonCodec) {
@@ -102,6 +102,7 @@ public final class SkillArchiveManager {
         } catch (IOException exception) {
             throw new IllegalStateException("写入 Skill 清单失败", exception);
         }
+        return digest;
     }
 
     public static void writeInstallMarker(Path directory,

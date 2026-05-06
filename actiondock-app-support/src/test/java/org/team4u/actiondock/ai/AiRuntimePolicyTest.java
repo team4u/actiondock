@@ -61,7 +61,7 @@ import java.util.concurrent.Executor;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AiRuntimePolicyTest {
-    private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = AiAgentRuntimeImpl.DISABLE_OUTER_TIMEOUT_METADATA_KEY;
+    private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = AiAgentRunContext.DISABLE_OUTER_TIMEOUT_METADATA_KEY;
 
     @Test
     void builtInToolsExposeCurrentScriptWithoutMutatingStorage() {

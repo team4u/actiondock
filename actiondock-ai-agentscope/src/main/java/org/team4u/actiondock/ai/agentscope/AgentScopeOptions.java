@@ -1,5 +1,7 @@
 package org.team4u.actiondock.ai.agentscope;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.Map;
 import java.util.function.Function;
 
@@ -9,6 +11,8 @@ import java.util.function.Function;
  * @author jay.wu
  */
 final class AgentScopeOptions {
+
+    static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private AgentScopeOptions() {
     }
@@ -26,10 +30,10 @@ final class AgentScopeOptions {
     }
 
     static String stringOption(Map<String, Object> options, String key) {
-        return stringValue(options.get(key));
+        return toStringOrNull(options.get(key));
     }
 
-    static String stringValue(Object value) {
+    static String toStringOrNull(Object value) {
         return value == null ? null : String.valueOf(value);
     }
 

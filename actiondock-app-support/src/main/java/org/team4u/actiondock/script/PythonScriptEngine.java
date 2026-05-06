@@ -323,36 +323,26 @@ public class PythonScriptEngine implements ScriptEngine {
                                    Consumer<ProcessSupport.LogEvent> logConsumer,
                                    OutputStream stdinStream,
                                    PythonBridge bridge) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                ProcessSupport.LogEvent event = parseLogEvent(line);
-                if (event != null) {
-                    logConsumer.accept(event);
-                    continue;
-                }
-                if (line.startsWith(INVOKE_PREFIX)) {
-                    handleInvocation(line.substring(INVOKE_PREFIX.length()), stdinStream, bridge);
-                    continue;
-                }
-                if (line.startsWith(PLUGIN_PREFIX)) {
-                    handlePlugin(line.substring(PLUGIN_PREFIX.length()), stdinStream, bridge);
-                    continue;
-                }
-                if (line.startsWith(STATE_PREFIX)) {
-                    handleState(line.substring(STATE_PREFIX.length()), stdinStream, bridge);
-                    continue;
-                }
-                if (output.length() > 0) {
-                    output.append('\n');
-                }
-                output.append(line);
+        return ProcessSupport.readStreamLineByLine(stream, line -> {
+            ProcessSupport.LogEvent event = parseLogEvent(line);
+            if (event != null) {
+                logConsumer.accept(event);
+                return true;
             }
-            return output.toString();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read Python process output", e);
-        }
+            if (line.startsWith(INVOKE_PREFIX)) {
+                handleInvocation(line.substring(INVOKE_PREFIX.length()), stdinStream, bridge);
+                return true;
+            }
+            if (line.startsWith(PLUGIN_PREFIX)) {
+                handlePlugin(line.substring(PLUGIN_PREFIX.length()), stdinStream, bridge);
+                return true;
+            }
+            if (line.startsWith(STATE_PREFIX)) {
+                handleState(line.substring(STATE_PREFIX.length()), stdinStream, bridge);
+                return true;
+            }
+            return false;
+        });
     }
 
     private void handleInvocation(String payload,

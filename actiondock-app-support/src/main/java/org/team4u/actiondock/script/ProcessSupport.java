@@ -5,8 +5,10 @@ import org.team4u.actiondock.shared.NormalizeUtils;
 import org.team4u.actiondock.domain.model.ErrorDetail;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -89,6 +91,34 @@ final class ProcessSupport {
     }
 
     // ---- 日志解析辅助方法 ----
+
+    /**
+     * 逐行读取输入流，对每一行调用 consumer。
+     * <p>
+     * 非 consumer 消费的行以换行符拼接为结果字符串返回。
+     *
+     * @param stream        输入流
+     * @param lineProcessor 对每行的处理，返回 true 表示该行已消费（不拼入结果）
+     * @return 拼接后的非消费行内容
+     */
+    static String readStreamLineByLine(InputStream stream, java.util.function.Predicate<String> lineProcessor) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (lineProcessor.test(line)) {
+                    continue;
+                }
+                if (output.length() > 0) {
+                    output.append('\n');
+                }
+                output.append(line);
+            }
+            return output.toString();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read Python process output", e);
+        }
+    }
 
     /**
      * 解析 stderr 行为结构化日志事件。

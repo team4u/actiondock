@@ -32,16 +32,9 @@ public final class ScriptViewMapper {
         if (snapshot == null) {
             return null;
         }
-        return new PublishedScriptSnapshot()
-                .setName(snapshot.getName())
-                .setType(snapshot.getType())
-                .setPackaging(snapshot.getPackaging())
-                .setSource(snapshot.getSource())
-                .setPythonRequirements(snapshot.getPythonRequirements())
+        return new PublishedScriptSnapshot(snapshot)
                 .setInputSchema(sanitizeSchema(snapshot.getInputSchema()))
-                .setOutputSchema(sanitizeSchema(snapshot.getOutputSchema()))
-                .setScriptDependencies(snapshot.getScriptDependencies())
-                .setAiDependencies(snapshot.getAiDependencies());
+                .setOutputSchema(sanitizeSchema(snapshot.getOutputSchema()));
     }
 
     /**

@@ -1,7 +1,6 @@
 package org.team4u.actiondock.ai.agentscope;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.embedding.EmbeddingModel;
 import io.agentscope.core.embedding.dashscope.DashScopeTextEmbedding;
@@ -74,10 +73,6 @@ import static org.team4u.actiondock.ai.agentscope.AgentScopeOptions.*;
 
 public class AgentScopeAiProviderClient implements AiProviderClient {
     private static final String PROVIDER_NAME = "AGENTSCOPE";
-    // 与 AiAgentRuntimeImpl.DISABLE_OUTER_TIMEOUT_METADATA_KEY 保持一致
-    private static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     private final AiSecretResolver secretResolver;
     private final AiAgentSkillRegistry skillRegistry;
 
@@ -166,7 +161,18 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 outerAgentTimeout(modelProfile, options, context));
         String text = result == null ? "" : result.getTextContent();
         AiUsage usage = result == null ? AiUsage.empty() : toUsage(result.getChatUsage());
-        AiAgentStep step = new AiAgentStep(
+        AiAgentStep step = buildFinalReasoningStep(context, stepIndex, modelProfile, text, started);
+        steps.add(step);
+        effectiveObserver.onTextDelta(text, text);
+        return new AiAgentRunResult(null, AiRunStatus.SUCCESS, Map.of("text", text), steps, usage, null);
+    }
+
+    private static AiAgentStep buildFinalReasoningStep(AiAgentRunContext context,
+                                                       AtomicInteger stepIndex,
+                                                       AiModelProfile modelProfile,
+                                                       String text,
+                                                       long startedAt) {
+        return new AiAgentStep(
                 UUID.randomUUID().toString(),
                 runId(context),
                 stepIndex.incrementAndGet(),
@@ -177,13 +183,10 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
                 Map.of(),
                 Map.of("text", text),
                 AiStepStatus.SUCCESS,
-                System.currentTimeMillis() - started,
+                System.currentTimeMillis() - startedAt,
                 null,
                 LocalDateTime.now()
         );
-        steps.add(step);
-        effectiveObserver.onTextDelta(text, text);
-        return new AiAgentRunResult(null, AiRunStatus.SUCCESS, Map.of("text", text), steps, usage, null);
     }
 
     private ReActAgent buildReActAgent(AiAgentProfile agentProfile,
@@ -368,7 +371,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
     }
 
     static String runId(AiAgentRunContext context) {
-        return context == null || context.metadata() == null ? null : stringValue(context.metadata().get("agentRunId"));
+        return context == null || context.metadata() == null ? null : AgentScopeOptions.toStringOrNull(context.metadata().get("agentRunId"));
     }
 
     private final class ProgressHook implements Hook {
@@ -447,7 +450,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
 
     private static JsonNode structuredOutputSchema(Map<String, Object> outputSchema) {
         try {
-            return OBJECT_MAPPER.valueToTree(
+            return AgentScopeOptions.OBJECT_MAPPER.valueToTree(
                     outputSchema == null || outputSchema.isEmpty()
                             ? Map.of("type", "object")
                             : outputSchema
@@ -544,7 +547,7 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
         if (context == null || context.metadata() == null) {
             return false;
         }
-        return Boolean.TRUE.equals(context.metadata().get(DISABLE_OUTER_TIMEOUT_METADATA_KEY));
+        return Boolean.TRUE.equals(context.metadata().get(AiAgentRunContext.DISABLE_OUTER_TIMEOUT_METADATA_KEY));
     }
 
     private static <T> T block(reactor.core.publisher.Mono<T> mono, Duration timeout) {

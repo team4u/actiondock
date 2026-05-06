@@ -1,7 +1,6 @@
 package org.team4u.actiondock.ai.agentscope;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.tool.AgentTool;
@@ -32,7 +31,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 class AgentScopeToolAdapter implements AgentTool {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final System.Logger log = System.getLogger(AgentScopeToolAdapter.class.getName());
     private static final String TOOL_EXECUTION_FAILED = "工具执行失败";
 
@@ -101,27 +99,28 @@ class AgentScopeToolAdapter implements AgentTool {
     public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
         String stepId = UUID.randomUUID().toString();
         Map<String, Object> input = param == null || param.getInput() == null ? Map.of() : param.getInput();
+        AiAgentRunContext effective = context != null ? context : AiAgentRunContext.adminTest();
 
         AiAgentStep startStep = buildToolStep(
-                stepId, AgentScopeAiProviderClient.runId(context), stepIndex.incrementAndGet(), tool,
+                stepId, AgentScopeAiProviderClient.runId(effective), stepIndex.incrementAndGet(), tool,
                 input, Map.of(), AiStepStatus.RUNNING, null, null
         );
         steps.add(startStep);
         observer.onStep(startStep);
 
         AiToolExecutionResult result = toolRegistry.invoke(tool.name(), input, new AiToolExecutionContext(
-                context == null || context.metadata() == null ? null : AgentScopeOptions.stringValue(context.metadata().get("agentRunId")),
+                effective.metadata() == null ? null : AgentScopeOptions.toStringOrNull(effective.metadata().get("agentRunId")),
                 stepId,
-                context == null ? null : context.callerType(),
-                context == null ? null : context.scriptId(),
-                context == null ? null : context.executionId(),
-                context == null ? null : context.userId(),
-                toolMetadata(request, context, param)
+                effective.callerType(),
+                effective.scriptId(),
+                effective.executionId(),
+                effective.userId(),
+                toolMetadata(request, effective, param)
         ));
 
         Map<String, Object> output = result.output() == null ? Map.of() : result.output();
         AiAgentStep resultStep = buildToolStep(
-                UUID.randomUUID().toString(), AgentScopeAiProviderClient.runId(context), stepIndex.incrementAndGet(), tool,
+                UUID.randomUUID().toString(), AgentScopeAiProviderClient.runId(effective), stepIndex.incrementAndGet(), tool,
                 Map.of(), output, result.success() ? AiStepStatus.SUCCESS : AiStepStatus.FAILED,
                 result.latencyMs(), result.errorMessage()
         );
@@ -161,7 +160,7 @@ class AgentScopeToolAdapter implements AgentTool {
     }
 
     private static Map<String, Object> toolMetadata(AiAgentRunRequest request, AiAgentRunContext context, ToolCallParam param) {
-        Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
+        Map<String, Object> metadata = new LinkedHashMap<>(context.metadata() == null ? Map.of() : context.metadata());
         metadata.put("agentProfile", request == null ? null : request.agentProfile());
         metadata.put("agentScopeToolCallId", param == null || param.getToolUseBlock() == null ? null : param.getToolUseBlock().getId());
         return metadata;
@@ -169,7 +168,7 @@ class AgentScopeToolAdapter implements AgentTool {
 
     private static String toJson(Object value) {
         try {
-            return OBJECT_MAPPER.writeValueAsString(value);
+            return AgentScopeOptions.OBJECT_MAPPER.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             log.log(System.Logger.Level.WARNING, "JSON 序列化失败，返回空对象: {0}", exception.getMessage());
             return "{}";

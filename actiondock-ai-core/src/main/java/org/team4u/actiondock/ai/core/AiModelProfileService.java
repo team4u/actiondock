@@ -9,7 +9,6 @@ import java.util.List;
 
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
-import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
 
 public class AiModelProfileService {
 
@@ -31,7 +30,7 @@ public class AiModelProfileService {
 
     public List<AiModelProfile> list(boolean includeManaged) {
         return list().stream()
-                .filter(profile -> includeManaged || !profile.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .filter(profile -> includeManaged || !ScriptPackaging.isManagedId(profile.getId()))
                 .toList();
     }
 
@@ -43,15 +42,9 @@ public class AiModelProfileService {
     public AiModelProfile save(AiModelProfile profile) {
         validate(profile);
         assertMutable(profile.getId());
-        LocalDateTime now = LocalDateTime.now();
-        AiModelProfile existing = repository.findById(profile.getId()).orElse(null);
-        if (existing == null) {
-            profile.setCreatedAt(now);
-        } else if (profile.getCreatedAt() == null) {
-            profile.setCreatedAt(existing.getCreatedAt());
-        }
-        profile.setUpdatedAt(now);
-        return repository.save(profile);
+        return AiTimestampSupport.saveWithTimestamps(profile, profile.getId(),
+                repository::findById, AiModelProfile::getCreatedAt,
+                AiModelProfile::setCreatedAt, AiModelProfile::setUpdatedAt, repository::save);
     }
 
     public void delete(String id) {

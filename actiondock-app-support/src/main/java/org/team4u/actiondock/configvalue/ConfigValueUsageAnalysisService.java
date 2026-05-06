@@ -79,7 +79,7 @@ public class ConfigValueUsageAnalysisService {
         Set<String> cascadingConfigKeys = collectCascadingConfigKeys(key, ctx.configDependencies);
         AnalysisReferences refs = collectAnalysisReferences(key, ctx, cascadingConfigKeys);
 
-        ManagedTemplate managedTemplate = resolveManagedTemplate(target).orElse(null);
+        ManagedTemplate managedTemplate = resolveManagedTemplate(target, ctx.repositoryNameById()).orElse(null);
         ConfigValueOrigin origin = resolveOrigin(target, managedTemplate, refs.templateDeclarations);
 
         List<ImpactScript> impactedScripts = ScriptImpactAnalyzer.buildImpactMap(
@@ -110,8 +110,11 @@ public class ConfigValueUsageAnalysisService {
         List<RepositoryToolDescriptor> allToolDescriptors = services.listAllRepositoryTools().get();
         Map<String, Set<String>> configDependencies = buildConfigDependencies(configValues);
         Map<String, ScriptDefinition> scriptsById = buildScriptsById(scripts);
+        Map<String, String> repositoryNameById = services.listRepositories().get().stream()
+                .filter(r -> r.getId() != null && r.getName() != null)
+                .collect(Collectors.toMap(RepositoryDefinition::getId, RepositoryDefinition::getName, (a, b) -> a));
         return new AnalysisContext(configValues, scripts, schedules, plugins,
-                allToolDescriptors, configDependencies, scriptsById);
+                allToolDescriptors, configDependencies, scriptsById, repositoryNameById);
     }
 
     private AnalysisReferences collectAnalysisReferences(String key,
@@ -135,7 +138,8 @@ public class ConfigValueUsageAnalysisService {
             List<PluginRegistration> plugins,
             List<RepositoryToolDescriptor> allToolDescriptors,
             Map<String, Set<String>> configDependencies,
-            Map<String, ScriptDefinition> scriptsById
+            Map<String, ScriptDefinition> scriptsById,
+            Map<String, String> repositoryNameById
     ) {
     }
 
@@ -263,11 +267,11 @@ public class ConfigValueUsageAnalysisService {
 
     public ManagedTemplate resolveManagedTemplate(String key) {
         ConfigValue target = requireConfig(key);
-        return resolveManagedTemplate(target)
+        return resolveManagedTemplate(target, cachedRepositoryNameById())
                 .orElseThrow(() -> new IllegalArgumentException("来源仓库模板不存在，无法恢复默认值"));
     }
 
-    private Optional<ManagedTemplate> resolveManagedTemplate(ConfigValue value) {
+    private Optional<ManagedTemplate> resolveManagedTemplate(ConfigValue value, Map<String, String> repositoryNameById) {
         if (!value.isManaged() || value.getRepositoryId() == null || value.getRepositoryToolId() == null) {
             return Optional.empty();
         }
@@ -283,7 +287,7 @@ public class ConfigValueUsageAnalysisService {
         return Optional.of(new ManagedTemplate(
                 value.getKey(),
                 NormalizeUtils.normalizeNullable(detail.descriptor().repositoryId()),
-                resolveRepositoryName(detail.descriptor().repositoryId()),
+                resolveRepositoryName(detail.descriptor().repositoryId(), repositoryNameById),
                 NormalizeUtils.normalizeNullable(detail.descriptor().toolId()),
                 NormalizeUtils.normalizeNullable(detail.descriptor().displayName()),
                 NormalizeUtils.normalizeNullable(detail.descriptor().version()),
@@ -397,7 +401,7 @@ public class ConfigValueUsageAnalysisService {
     }
 
     private static boolean containsPlaceholderKey(Object value, String key) {
-        return PlaceholderKeyExtractor.filterPlaceholderKeys(value, Set.of(key)).contains(key);
+        return PlaceholderKeyExtractor.containsPlaceholderKey(value, key);
     }
 
     private ConfigValue requireConfig(String key) {
@@ -405,16 +409,14 @@ public class ConfigValueUsageAnalysisService {
                 .orElseThrow(() -> new IllegalArgumentException("配置值不存在: " + key));
     }
 
-    private String resolveRepositoryName(String repositoryId) {
-        if (NormalizeUtils.isBlank(repositoryId)) {
-            return null;
-        }
+    private static String resolveRepositoryName(String repositoryId, Map<String, String> nameById) {
+        return nameById.get(repositoryId);
+    }
+
+    private Map<String, String> cachedRepositoryNameById() {
         return services.listRepositories().get().stream()
-                .filter(repository -> repositoryId.equals(repository.getId()))
-                .map(RepositoryDefinition::getName)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
+                .filter(r -> r.getId() != null && r.getName() != null)
+                .collect(Collectors.toMap(RepositoryDefinition::getId, RepositoryDefinition::getName, (a, b) -> a));
     }
 
     public record ConfigValueInsight(

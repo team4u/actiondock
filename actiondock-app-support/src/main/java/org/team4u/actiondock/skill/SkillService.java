@@ -242,9 +242,7 @@ public class SkillService {
 
     private String persistManifestAndComputeDigest(Path managedPath, String skillId, String normalizedVersion) {
         SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(managedPath, skillId, false, jsonCodec);
-        SkillArchiveManager.writeManifest(managedPath, validation, normalizedVersion, jsonCodec);
-        SkillValidationResult persistedValidation = SkillFileUtils.validateSkillDirectory(managedPath, skillId, false, jsonCodec);
-        return SkillArchiveManager.computePublishDigest(managedPath, persistedValidation, normalizedVersion, jsonCodec);
+        return SkillArchiveManager.writeManifest(managedPath, validation, normalizedVersion, jsonCodec);
     }
 
     private ManagedSkill saveManagedSkillVersion(ManagedSkill existingSkill, String normalizedVersion, String digest, LocalDateTime now) {
@@ -415,11 +413,11 @@ public class SkillService {
 
 
     private static String resolveManagedVersion(SkillValidationResult validation, ManagedSkill existingSkill) {
-        if (validation.manifestPresent()) {
-            return NormalizeUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
-        }
-        if (existingSkill != null && NormalizeUtils.normalizeNullable(existingSkill.getVersion()) != null) {
-            return NormalizeUtils.normalizeNullable(existingSkill.getVersion());
+        if (!validation.manifestPresent() && existingSkill != null) {
+            String existingVersion = NormalizeUtils.normalizeNullable(existingSkill.getVersion());
+            if (existingVersion != null) {
+                return existingVersion;
+            }
         }
         return NormalizeUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
     }

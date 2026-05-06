@@ -117,7 +117,7 @@ final class ApplicationServiceSupport {
         return context;
     }
 
-    private static void setMapField(Map<String, Object> source, String key, Consumer<Map<String, Object>> setter) {
+    static void setMapField(Map<String, Object> source, String key, Consumer<Map<String, Object>> setter) {
         if (source.get(key) instanceof Map<?, ?> map) {
             setter.accept(MapValueConverter.toResultMap(map));
         }

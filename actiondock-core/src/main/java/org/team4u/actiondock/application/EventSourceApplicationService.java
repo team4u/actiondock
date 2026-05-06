@@ -172,9 +172,9 @@ public class EventSourceApplicationService {
         setStringField(output, "actor", event::setActor);
         setStringField(output, "subject", event::setSubject);
         setStringField(output, "timestamp", event::setTimestamp);
-        setMapField(output, "headers", event::setHeaders);
-        setMapField(output, "query", event::setQuery);
-        setMapField(output, "body", event::setBody);
+        ApplicationServiceSupport.setMapField(output, "headers", event::setHeaders);
+        ApplicationServiceSupport.setMapField(output, "query", event::setQuery);
+        ApplicationServiceSupport.setMapField(output, "body", event::setBody);
     }
 
     private static void setStringField(Map<String, Object> output, String key, java.util.function.Consumer<String> setter) {
@@ -183,25 +183,9 @@ public class EventSourceApplicationService {
         }
     }
 
-    private static void setMapField(Map<String, Object> output, String key, java.util.function.Consumer<Map<String, Object>> setter) {
-        if (output.get(key) instanceof Map<?, ?> map) {
-            setter.accept(MapValueConverter.toResultMap(map));
-        }
-    }
-
     private static void validateAuth(EventSourceAuthConfig auth) {
-        if (auth == null || auth.getMode() == null || auth.getMode() == EventSourceAuthMode.NONE) {
-            return;
-        }
-        switch (auth.getMode()) {
-            case HEADER_TOKEN -> ApplicationServiceSupport.normalize(auth.getTokenHeader(), "Header Token 缺少 tokenHeader");
-            case QUERY_TOKEN -> ApplicationServiceSupport.normalize(auth.getTokenQueryParam(), "Query Token 缺少 tokenQueryParam");
-            case HMAC_SHA256 -> {
-                ApplicationServiceSupport.normalize(auth.getSignatureHeader(), "HMAC 缺少 signatureHeader");
-                ApplicationServiceSupport.normalize(auth.getSecretConfigKey(), "HMAC 缺少 secretConfigKey");
-            }
-            default -> {
-            }
+        if (auth != null) {
+            auth.validate();
         }
     }
 

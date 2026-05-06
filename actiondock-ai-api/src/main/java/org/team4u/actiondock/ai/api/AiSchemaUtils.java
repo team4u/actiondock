@@ -1,5 +1,6 @@
 package org.team4u.actiondock.ai.api;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -8,6 +9,14 @@ import java.util.Map;
 public final class AiSchemaUtils {
 
     private AiSchemaUtils() {
+    }
+
+    public static Map<String, Map<String, Object>> copyOptions(Map<String, Map<String, Object>> source) {
+        Map<String, Map<String, Object>> copy = new LinkedHashMap<>();
+        if (source != null) {
+            source.forEach((key, value) -> copy.put(key, value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value)));
+        }
+        return copy;
     }
 
     public static Map<String, Object> objectSchema(Map<String, Object> properties) {

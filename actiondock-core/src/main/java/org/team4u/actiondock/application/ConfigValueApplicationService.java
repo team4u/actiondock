@@ -268,16 +268,16 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         return buildConfigValue(
                 key, value, normalizeDescription(source.getDescription()),
                 new ConfigValueFlags(source.isSecret(), source.isManaged(), source.isOverridden()),
-                fallback == null ? source.getRepositoryId() :
-                        (source.getRepositoryId() == null ? fallback.getRepositoryId() : source.getRepositoryId()),
-                fallback == null ? source.getRepositoryToolId() :
-                        (source.getRepositoryToolId() == null ? fallback.getRepositoryToolId() : source.getRepositoryToolId()),
-                fallback == null ? source.getRepositoryVersion() :
-                        (source.getRepositoryVersion() == null ? fallback.getRepositoryVersion() : source.getRepositoryVersion()),
-                fallback == null ? source.getPublishMode() :
-                        (source.getPublishMode() == null ? fallback.getPublishMode() : source.getPublishMode()),
+                coalesce(source.getRepositoryId(), fallback, ConfigValue::getRepositoryId),
+                coalesce(source.getRepositoryToolId(), fallback, ConfigValue::getRepositoryToolId),
+                coalesce(source.getRepositoryVersion(), fallback, ConfigValue::getRepositoryVersion),
+                coalesce(source.getPublishMode(), fallback, ConfigValue::getPublishMode),
                 null, null
         );
+    }
+
+    private static String coalesce(String value, ConfigValue fallback, java.util.function.Function<ConfigValue, String> getter) {
+        return value != null ? value : (fallback == null ? null : getter.apply(fallback));
     }
 
     private static String normalizeKey(String key) {

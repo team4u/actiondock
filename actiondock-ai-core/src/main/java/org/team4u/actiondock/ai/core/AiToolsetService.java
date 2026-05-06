@@ -10,7 +10,6 @@ import java.util.List;
 
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
-import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
 
 public class AiToolsetService {
 
@@ -40,7 +39,7 @@ public class AiToolsetService {
 
     public List<AiToolset> list(boolean includeManaged) {
         return list().stream()
-                .filter(toolset -> includeManaged || !toolset.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .filter(toolset -> includeManaged || !ScriptPackaging.isManagedId(toolset.getId()))
                 .toList();
     }
 
@@ -52,15 +51,9 @@ public class AiToolsetService {
     public AiToolset save(AiToolset toolset) {
         validate(toolset);
         assertMutable(toolset.getId());
-        LocalDateTime now = LocalDateTime.now();
-        AiToolset existing = repository.findById(toolset.getId()).orElse(null);
-        if (existing == null) {
-            toolset.setCreatedAt(now);
-        } else if (toolset.getCreatedAt() == null) {
-            toolset.setCreatedAt(existing.getCreatedAt());
-        }
-        toolset.setUpdatedAt(now);
-        return repository.save(toolset);
+        return AiTimestampSupport.saveWithTimestamps(toolset, toolset.getId(),
+                repository::findById, AiToolset::getCreatedAt,
+                AiToolset::setCreatedAt, AiToolset::setUpdatedAt, repository::save);
     }
 
     public void delete(String id) {

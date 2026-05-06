@@ -164,4 +164,23 @@ public class ScriptSchedule {
         this.updatedAt = updatedAt;
         return this;
     }
+
+    public ScriptSchedule copy() {
+        return new ScriptSchedule()
+                .setId(id)
+                .setScriptId(scriptId)
+                .setName(name)
+                .setCronExpression(cronExpression)
+                .setInput(input)
+                .setEnabled(enabled)
+                .setEditable(editable)
+                .setRepositoryId(repositoryId)
+                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryPackageId(repositoryPackageId)
+                .setRepositoryVersion(repositoryVersion)
+                .setLastTriggeredAt(lastTriggeredAt)
+                .setLastExecutionId(lastExecutionId)
+                .setCreatedAt(createdAt)
+                .setUpdatedAt(updatedAt);
+    }
 }

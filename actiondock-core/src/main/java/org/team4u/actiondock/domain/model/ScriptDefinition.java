@@ -261,41 +261,29 @@ public class ScriptDefinition {
     }
 
     public List<PluginDependency> getPluginDependencies() {
-        return pluginDependencies.stream()
-                .map(PluginDependency::copy)
-                .toList();
+        return SchemaValueCopier.copyList(pluginDependencies, PluginDependency::copy);
     }
 
     public ScriptDefinition setPluginDependencies(List<PluginDependency> pluginDependencies) {
-        this.pluginDependencies = pluginDependencies == null ? new ArrayList<>() : pluginDependencies.stream()
-                .map(PluginDependency::copy)
-                .toList();
+        this.pluginDependencies = SchemaValueCopier.copyList(pluginDependencies, PluginDependency::copy);
         return this;
     }
 
     public List<ScriptDependency> getScriptDependencies() {
-        return scriptDependencies.stream()
-                .map(ScriptDependency::copy)
-                .toList();
+        return SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
     }
 
     public ScriptDefinition setScriptDependencies(List<ScriptDependency> scriptDependencies) {
-        this.scriptDependencies = scriptDependencies == null ? new ArrayList<>() : scriptDependencies.stream()
-                .map(ScriptDependency::copy)
-                .toList();
+        this.scriptDependencies = SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
         return this;
     }
 
     public List<AiDependency> getAiDependencies() {
-        return aiDependencies.stream()
-                .map(AiDependency::copy)
-                .toList();
+        return SchemaValueCopier.copyList(aiDependencies, AiDependency::copy);
     }
 
     public ScriptDefinition setAiDependencies(List<AiDependency> aiDependencies) {
-        this.aiDependencies = aiDependencies == null ? new ArrayList<>() : aiDependencies.stream()
-                .map(AiDependency::copy)
-                .toList();
+        this.aiDependencies = SchemaValueCopier.copyList(aiDependencies, AiDependency::copy);
         return this;
     }
 
@@ -395,19 +383,12 @@ public class ScriptDefinition {
             throw new IllegalStateException("脚本尚未发布: " + id);
         }
 
-        return copyMetadataTo(new ScriptDefinition()
-                .setName(snapshot.getName())
-                .setType(snapshot.getType())
-                .setPackaging(snapshot.getPackaging())
-                .setSource(snapshot.getSource())
-                .setPythonRequirements(snapshot.getPythonRequirements())
-                .setInputSchema(snapshot.getInputSchema())
-                .setOutputSchema(snapshot.getOutputSchema())
+        ScriptDefinition definition = new ScriptDefinition()
                 .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(version)
-                .setPublishedSnapshot(snapshot)
-                .setScriptDependencies(snapshot.getScriptDependencies())
-                .setAiDependencies(snapshot.getAiDependencies()));
+                .setPublishedSnapshot(snapshot);
+        snapshot.applyTo(definition);
+        return copyMetadataTo(definition);
     }
 
     public LocalDateTime getCreatedAt() {
@@ -529,19 +510,12 @@ public class ScriptDefinition {
     }
 
     public ScriptDefinition fullCopy() {
-        return copyMetadataTo(new ScriptDefinition()
-                .setName(name)
-                .setType(type)
-                .setPackaging(packaging)
-                .setSource(source)
-                .setPythonRequirements(pythonRequirements)
-                .setInputSchema(inputSchema)
-                .setOutputSchema(outputSchema)
+        ScriptDefinition copy = new ScriptDefinition()
                 .setStatus(status)
                 .setVersion(version)
-                .setPublishedSnapshot(publishedSnapshot)
-                .setScriptDependencies(scriptDependencies)
-                .setAiDependencies(aiDependencies));
+                .setPublishedSnapshot(publishedSnapshot);
+        snapshotCurrent().applyTo(copy);
+        return copyMetadataTo(copy);
     }
 
     public void normalizePublicationState() {

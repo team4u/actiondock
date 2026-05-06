@@ -71,13 +71,17 @@ class ScriptControllerTest {
 
     @Test
     void detailReturnsWrappedScriptDefinition() throws Exception {
-        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition().setId("script-1").setName("Hello"));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Hello")
+                .setSource("return [message: 'hi']"));
 
         mockMvc.perform(get("/api/scripts/script-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(0))
                 .andExpect(jsonPath("$.data.id").value("script-1"))
-                .andExpect(jsonPath("$.data.name").value("Hello"));
+                .andExpect(jsonPath("$.data.name").value("Hello"))
+                .andExpect(jsonPath("$.data.source").value("return [message: 'hi']"));
     }
 
     @Test

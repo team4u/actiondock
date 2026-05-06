@@ -9,6 +9,8 @@ public record AiAgentRunContext(
         String userId,
         Map<String, Object> metadata
 ) {
+    public static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
+
     public static AiAgentRunContext adminTest() {
         return new AiAgentRunContext(AiCallerType.ADMIN_TEST, null, null, null, Map.of());
     }

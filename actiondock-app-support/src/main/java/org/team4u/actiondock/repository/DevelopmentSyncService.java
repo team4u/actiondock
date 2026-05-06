@@ -151,7 +151,7 @@ class DevelopmentSyncService {
         ScriptPackaging packaging = ScriptPackaging.fromNullableName(d.packaging());
         Map<String, Object> inputSchema = catalog.readSchema(repositoryId, d.inputSchemaPath());
         Map<String, Object> outputSchema = catalog.readSchema(repositoryId, d.outputSchemaPath());
-        return new ScriptDefinition()
+        ScriptDefinition definition = new ScriptDefinition()
                 .setId(scriptId)
                 .setName(d.displayName())
                 .setType(ScriptType.valueOf(d.type()))
@@ -161,15 +161,6 @@ class DevelopmentSyncService {
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
                 .setStatus(ScriptStatus.PUBLISHED)
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
-                        .setName(d.displayName())
-                        .setType(ScriptType.valueOf(d.type()))
-                        .setPackaging(packaging)
-                        .setSource(detail.source())
-                        .setPythonRequirements(detail.pythonRequirements())
-                        .setInputSchema(inputSchema)
-                        .setOutputSchema(outputSchema)
-                        .setScriptDependencies(d.scriptDependencies()))
                 .setRepositoryId(repositoryId)
                 .setRepositoryToolId(d.toolId())
                 .setRepositoryVersion(d.version())
@@ -178,6 +169,8 @@ class DevelopmentSyncService {
                 .setTags(d.tags())
                 .setScriptDependencies(d.scriptDependencies())
                 .setPluginDependencies(d.pluginDependencies());
+        definition.setPublishedSnapshot(definition.snapshotCurrent());
+        return definition;
     }
 
     static ScriptDefinition applyLifecycle(ScriptDefinition def, ScriptDefinition existing,

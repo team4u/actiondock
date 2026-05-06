@@ -52,10 +52,6 @@ public class AiAgentProfile {
     public AiAgentProfile setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; return this; }
 
     private static Map<String, Map<String, Object>> copyOptions(Map<String, Map<String, Object>> source) {
-        Map<String, Map<String, Object>> copy = new LinkedHashMap<>();
-        if (source != null) {
-            source.forEach((key, value) -> copy.put(key, value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value)));
-        }
-        return copy;
+        return AiSchemaUtils.copyOptions(source);
     }
 }

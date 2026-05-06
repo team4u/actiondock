@@ -14,7 +14,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import static org.team4u.actiondock.domain.model.ScriptPackaging.MANAGED_INTERNAL_PREFIX;
 
 /**
  * 脚本应用服务，提供脚本定义的 CRUD 操作和发布管理。
@@ -114,7 +113,7 @@ public class ScriptApplicationService {
 
     public List<ScriptDefinition> list(boolean includeManaged) {
         return list().stream()
-                .filter(definition -> includeManaged || !definition.getId().startsWith(MANAGED_INTERNAL_PREFIX))
+                .filter(definition -> includeManaged || !ScriptPackaging.isManagedId(definition.getId()))
                 .toList();
     }
 
@@ -206,12 +205,9 @@ public class ScriptApplicationService {
     private void copySchedulesToFork(String sourceScriptId, String forkScriptId) {
         LocalDateTime now = LocalDateTime.now();
         for (ScriptSchedule sourceSchedule : scriptScheduleRepository.findByScriptId(sourceScriptId)) {
-            scriptScheduleRepository.save(new ScriptSchedule()
+            scriptScheduleRepository.save(sourceSchedule.copy()
                     .setId(UUID.randomUUID().toString())
                     .setScriptId(forkScriptId)
-                    .setName(sourceSchedule.getName())
-                    .setCronExpression(sourceSchedule.getCronExpression())
-                    .setInput(sourceSchedule.getInput())
                     .setEnabled(false)
                     .setEditable(true)
                     .setRepositoryId(null)

@@ -38,15 +38,15 @@ public class PublishedScriptSnapshot {
         if (other == null) {
             return;
         }
-        this.name = other.getName();
-        this.type = other.getType();
-        this.packaging = other.getPackaging();
-        this.source = other.getSource();
-        this.pythonRequirements = other.getPythonRequirements();
-        this.inputSchema = SchemaValueCopier.copyMap(other.getInputSchema());
-        this.outputSchema = SchemaValueCopier.copyMap(other.getOutputSchema());
-        this.scriptDependencies = other.getScriptDependencies();
-        this.aiDependencies = other.getAiDependencies();
+        setName(other.name);
+        setType(other.type);
+        setPackaging(other.packaging);
+        setSource(other.source);
+        setPythonRequirements(other.pythonRequirements);
+        setInputSchema(other.inputSchema);
+        setOutputSchema(other.outputSchema);
+        setScriptDependencies(other.scriptDependencies);
+        setAiDependencies(other.aiDependencies);
     }
 
     public String getName() {
@@ -123,28 +123,20 @@ public class PublishedScriptSnapshot {
     }
 
     public List<ScriptDependency> getScriptDependencies() {
-        return scriptDependencies.stream()
-                .map(ScriptDependency::copy)
-                .toList();
+        return SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
     }
 
     public PublishedScriptSnapshot setScriptDependencies(List<ScriptDependency> scriptDependencies) {
-        this.scriptDependencies = scriptDependencies == null ? new ArrayList<>() : scriptDependencies.stream()
-                .map(ScriptDependency::copy)
-                .toList();
+        this.scriptDependencies = SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
         return this;
     }
 
     public List<AiDependency> getAiDependencies() {
-        return aiDependencies.stream()
-                .map(AiDependency::copy)
-                .toList();
+        return SchemaValueCopier.copyList(aiDependencies, AiDependency::copy);
     }
 
     public PublishedScriptSnapshot setAiDependencies(List<AiDependency> aiDependencies) {
-        this.aiDependencies = aiDependencies == null ? new ArrayList<>() : aiDependencies.stream()
-                .map(AiDependency::copy)
-                .toList();
+        this.aiDependencies = SchemaValueCopier.copyList(aiDependencies, AiDependency::copy);
         return this;
     }
 

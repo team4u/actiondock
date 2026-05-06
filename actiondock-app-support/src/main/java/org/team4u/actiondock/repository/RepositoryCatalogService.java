@@ -347,14 +347,15 @@ public class RepositoryCatalogService {
             repos.scriptScheduleRepository().deleteByScriptId(scriptId);
             repos.scriptRepository().deleteById(scriptId);
         }
-        for (String agentId : installation.getAgentIds()) {
-            repos.aiAgentProfileRepository().deleteById(agentId);
-        }
-        for (String toolsetId : installation.getToolsetIds()) {
-            repos.aiToolsetRepository().deleteById(toolsetId);
-        }
-        for (String modelId : installation.getModelIds()) {
-            repos.aiModelProfileRepository().deleteById(modelId);
+        deleteAllByIds(installation.getAgentIds(), repos.aiAgentProfileRepository()::deleteById);
+        deleteAllByIds(installation.getToolsetIds(), repos.aiToolsetRepository()::deleteById);
+        deleteAllByIds(installation.getModelIds(), repos.aiModelProfileRepository()::deleteById);
+        deleteAllByIds(installation.getScheduleIds(), repos.scriptScheduleRepository()::deleteById);
+    }
+
+    private static void deleteAllByIds(List<String> ids, java.util.function.Consumer<String> deleter) {
+        for (String id : ids) {
+            deleter.accept(id);
         }
     }
 
@@ -744,16 +745,16 @@ public class RepositoryCatalogService {
         return definitionService.resolveRepositoryRoot(repository);
     }
 
+    private static String resolveUsage(RepositoryDefinition repository) {
+        return NormalizeUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION);
+    }
+
     /**
      * 安全地解析仓库相对路径，防止路径遍历攻击。
      * <p>
      * 拒绝绝对路径、空路径、包含 {@code ..} 的路径，
      * 并通过 normalize/toRealPath 确认解析后仍在仓库根目录下。
      */
-    private static String resolveUsage(RepositoryDefinition repository) {
-        return NormalizeUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION);
-    }
-
     Path safeResolveRepositoryPath(Path root, String relativePath) {
         return safeResolvePath(root, relativePath, "仓库文件路径");
     }

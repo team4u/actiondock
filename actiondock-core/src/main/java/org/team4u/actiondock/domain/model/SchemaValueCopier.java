@@ -4,11 +4,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
- * Schema 值拷贝工具类，提供 Map 结构的深拷贝功能。
+ * Schema 值拷贝工具类，提供 Map 和 List 结构的深拷贝功能。
  * <p>
- * 用于确保领域对象中的 Map 类型字段在存储和传递过程中保持独立性，
+ * 用于确保领域对象中的 Map/List 类型字段在存储和传递过程中保持独立性，
  * 避免意外的引用共享导致的修改冲突。
  *
  * @author jay.wu
@@ -30,6 +31,18 @@ public final class SchemaValueCopier {
         Map<String, Object> result = new LinkedHashMap<>();
         value.forEach((key, item) -> result.put(key, copyValue(item)));
         return result;
+    }
+
+    /**
+     * 对列表元素逐一执行深拷贝。
+     *
+     * @param source  源列表，可以为 null
+     * @param copyFn  单个元素的拷贝函数
+     * @param <T>     元素类型
+     * @return 拷贝后的新列表，如果源为 null 则返回空列表
+     */
+    public static <T> List<T> copyList(List<T> source, Function<T, T> copyFn) {
+        return source == null ? new ArrayList<>() : source.stream().map(copyFn).toList();
     }
 
     /**

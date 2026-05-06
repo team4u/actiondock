@@ -208,17 +208,10 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                                                long version,
                                                LocalDateTime createdAt,
                                                LocalDateTime updatedAt) {
-        return new SharedStateEntry()
+        return applyUpdateFields(new SharedStateEntry()
                 .setNamespace(namespace)
                 .setKey(key)
-                .setValue(value)
-                .setSecret(secret)
-                .setVersion(version)
-                .setExpiresAt(expiresAt)
-                .setCreatedAt(createdAt)
-                .setUpdatedAt(updatedAt)
-                .setLastWriterScriptId(ApplicationServiceSupport.blankToNull(writerScriptId))
-                .setLastWriterExecutionId(ApplicationServiceSupport.blankToNull(writerExecutionId));
+                .setCreatedAt(createdAt), value, secret, expiresAt, writerScriptId, writerExecutionId, version, updatedAt);
     }
 
     private static SharedStateEntry buildEntry(SharedStateEntry base,
@@ -229,7 +222,18 @@ public class SharedStateApplicationService extends OptionalServiceSupport {
                                                String writerExecutionId,
                                                long version,
                                                LocalDateTime updatedAt) {
-        return base.copy()
+        return applyUpdateFields(base.copy(), value, secret, expiresAt, writerScriptId, writerExecutionId, version, updatedAt);
+    }
+
+    private static SharedStateEntry applyUpdateFields(SharedStateEntry entry,
+                                                      Object value,
+                                                      boolean secret,
+                                                      LocalDateTime expiresAt,
+                                                      String writerScriptId,
+                                                      String writerExecutionId,
+                                                      long version,
+                                                      LocalDateTime updatedAt) {
+        return entry
                 .setValue(value)
                 .setSecret(secret)
                 .setExpiresAt(expiresAt)

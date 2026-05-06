@@ -38,8 +38,8 @@ class ConfigPlaceholderResolver {
         if (source == null) {
             return new LinkedHashMap<>();
         }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> resolved = (Map<String, Object>) resolveObject(source, configValues);
+        Map<String, Object> resolved = new LinkedHashMap<>();
+        source.forEach((key, item) -> resolved.put(key, resolveObject(item, configValues)));
         return resolved;
     }
 

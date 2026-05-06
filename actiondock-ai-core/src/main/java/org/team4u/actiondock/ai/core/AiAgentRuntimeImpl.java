@@ -29,7 +29,6 @@ import java.util.UUID;
 import java.util.concurrent.Executor;
 
 public class AiAgentRuntimeImpl implements AiAgentRuntime {
-    public static final String DISABLE_OUTER_TIMEOUT_METADATA_KEY = "disableOuterTimeout";
 
     private final AiAgentProfileService agentProfileService;
     private final AiModelProfileRepository modelProfileRepository;
@@ -326,7 +325,7 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
         metadata.remove("maxToolPermission");
         metadata.remove("dangerousActionsAllowed");
         metadata.put("agentRunId", runId);
-        metadata.put(DISABLE_OUTER_TIMEOUT_METADATA_KEY, asyncSubmission);
+        metadata.put(AiAgentRunContext.DISABLE_OUTER_TIMEOUT_METADATA_KEY, asyncSubmission);
         return new AiAgentRunContext(
                 callerType,
                 effective.scriptId(),

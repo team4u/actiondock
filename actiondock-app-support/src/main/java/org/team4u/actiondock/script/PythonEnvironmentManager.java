@@ -335,17 +335,7 @@ class PythonEnvironmentManager {
                 readLoggedStream(process.getInputStream(), line -> logInstallLine(executionContext, ExecutionLogLevel.INFO, line)));
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
                 readLoggedStream(process.getErrorStream(), line -> logInstallLine(executionContext, ExecutionLogLevel.WARN, line)));
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            process.waitFor();
-        }
-        return new ProcessSupport.ProcessResult(
-                finished ? process.exitValue() : -1,
-                stdoutFuture.join(),
-                stderrFuture.join(),
-                !finished
-        );
+        return ProcessSupport.runProcessToCompletion(process, null, stdoutFuture, stderrFuture, timeoutSeconds, properties.getTimeoutSeconds());
     }
 
     // ---- 日志和流读取辅助方法 ----
@@ -357,43 +347,23 @@ class PythonEnvironmentManager {
     }
 
     private static String readLoggedStream(InputStream stream, Consumer<String> lineConsumer) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (output.length() > 0) {
-                    output.append('\n');
-                }
-                output.append(line);
-                if (lineConsumer != null) {
-                    lineConsumer.accept(line);
-                }
+        return ProcessSupport.readStreamLineByLine(stream, line -> {
+            if (lineConsumer != null) {
+                lineConsumer.accept(line);
             }
-            return output.toString();
-        } catch (IOException exception) {
-            throw new IllegalStateException("Failed to read Python process output", exception);
-        }
+            return false;
+        });
     }
 
     private String readErrorStreamForEnv(InputStream stream, Consumer<ProcessSupport.LogEvent> logConsumer) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                ProcessSupport.LogEvent event = parseLogEvent(line);
-                if (event != null) {
-                    logConsumer.accept(event);
-                    continue;
-                }
-                if (output.length() > 0) {
-                    output.append('\n');
-                }
-                output.append(line);
+        return ProcessSupport.readStreamLineByLine(stream, line -> {
+            ProcessSupport.LogEvent event = parseLogEvent(line);
+            if (event != null) {
+                logConsumer.accept(event);
+                return true;
             }
-            return output.toString();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read Python process output", e);
-        }
+            return false;
+        });
     }
 
     private ProcessSupport.LogEvent parseLogEvent(String line) {

@@ -21,7 +21,7 @@ public class CapabilityViewMapper {
                 "script",
                 sanitized.getName(),
                 enumName(sanitized.getType()),
-                "local",
+                sanitized.getSource(),
                 enumName(sanitized.getStatus()),
                 sanitized.getVersion(),
                 enumName(sanitized.getScope()),
@@ -38,7 +38,7 @@ public class CapabilityViewMapper {
     private CapabilityView.CapabilityBindingView toDraftBinding(ScriptDefinition source) {
         return new CapabilityView.CapabilityBindingView(
                 source.getVersion() == null ? null : String.valueOf(source.getVersion()),
-                "local",
+                source.getSource(),
                 enumName(source.getType()),
                 copySchema(source.getInputSchema()),
                 copySchema(source.getOutputSchema()),

@@ -268,6 +268,12 @@ public class PluginRuntimeService {
         );
     }
 
+    private PluginRegistration saveRegistration(String pluginId, String fileName,
+                                                boolean enabled, PluginRegistration previous) {
+        return saveRegistration(pluginId, fileName, enabled, previous,
+                previous.getRepositoryId(), previous.getRepositoryPluginId(), previous.getRepositoryVersion());
+    }
+
     private void cleanupFailedInstall(String pluginId, Path destination) {
         if (pluginId != null) {
             unloadIfLoaded(pluginId);
@@ -386,7 +392,7 @@ public class PluginRuntimeService {
             ensureEnabled();
             PluginRegistration registration = requireRegistration(pluginId);
             loadRegisteredPlugin(registration);
-            PluginRegistration saved = saveRegistration(pluginId, registration.getFileName(), true, registration, null, null, null);
+            PluginRegistration saved = saveRegistration(pluginId, registration.getFileName(), true, registration);
             return PluginViewMapper.toPluginView(saved, pluginManager);
         });
     }
@@ -424,13 +430,14 @@ public class PluginRuntimeService {
             pluginRegistryRepository.deleteByPluginId(pluginId);
             manifestCache.remove(pluginId);
             configManager.deleteConfig(pluginId);
+            return null;
         });
     }
 
     private void assertActionAvailable(String pluginId, String action) {
         withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
-                return;
+                return null;
             }
             PluginRegistration registration = requireRegistration(pluginId);
             if (!registration.isEnabled() || !isLoadedAndStarted(pluginId)) {
@@ -442,6 +449,7 @@ public class PluginRuntimeService {
             if (!exists) {
                 throw new IllegalArgumentException("插件动作不存在: " + pluginId + "/" + action);
             }
+            return null;
         });
     }
 
@@ -529,7 +537,7 @@ public class PluginRuntimeService {
         pluginRegistryRepository.findEnabled().forEach(registration -> {
             try {
                 loadRegisteredPlugin(registration);
-                saveRegistration(registration.getPluginId(), registration.getFileName(), true, registration, null, null, null);
+                saveRegistration(registration.getPluginId(), registration.getFileName(), true, registration);
             } catch (Exception e) {
                 LOGGER.warn("Failed to load plugin on startup: {}", registration.getPluginId(), e);
             }
@@ -667,24 +675,6 @@ public class PluginRuntimeService {
             return action.get();
         } finally {
             lock.readLock().unlock();
-        }
-    }
-
-    private static void withReadLock(ReentrantReadWriteLock lock, Runnable action) {
-        lock.readLock().lock();
-        try {
-            action.run();
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
-    private static void withWriteLock(ReentrantReadWriteLock lock, Runnable action) {
-        lock.writeLock().lock();
-        try {
-            action.run();
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 

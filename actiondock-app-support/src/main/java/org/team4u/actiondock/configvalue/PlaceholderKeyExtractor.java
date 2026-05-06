@@ -54,8 +54,14 @@ public final class PlaceholderKeyExtractor {
     public static Set<String> filterPlaceholderKeys(Object value, Collection<String> keys) {
         Set<String> found = new LinkedHashSet<>();
         collectPlaceholderKeys(value, found);
-        found.retainAll(new LinkedHashSet<>(keys));
+        found.retainAll(keys instanceof Set<?> ? (Set<String>) keys : new LinkedHashSet<>(keys));
         return found;
+    }
+
+    public static boolean containsPlaceholderKey(Object value, String key) {
+        Set<String> found = new LinkedHashSet<>();
+        collectPlaceholderKeys(value, found);
+        return found.contains(key);
     }
 
 }
