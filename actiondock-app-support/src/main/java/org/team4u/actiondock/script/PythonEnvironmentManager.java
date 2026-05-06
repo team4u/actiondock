@@ -1,6 +1,5 @@
 package org.team4u.actiondock.script;
 
-import org.team4u.actiondock.script.ProcessSupport;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
 import org.team4u.actiondock.application.PythonRequirementsSupport;
@@ -317,7 +316,7 @@ class PythonEnvironmentManager {
         processBuilder.command(command);
         processBuilder.environment().put("ACTIONDOCK_CONFIG_JSON", configJson == null ? "{}" : configJson);
         Process process = processBuilder.start();
-        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> readStream(process.getInputStream()), asyncExecutor);
+        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> ProcessSupport.readStream(process.getInputStream()), asyncExecutor);
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
                 readErrorStreamForEnv(
                         process.getErrorStream(),
@@ -355,10 +354,6 @@ class PythonEnvironmentManager {
         if (executionContext != null && NormalizeUtils.isNotBlank(line)) {
             executionContext.log(level, "[python-install] " + line);
         }
-    }
-
-    private static String readStream(InputStream stream) {
-        return ProcessSupport.readStream(stream);
     }
 
     private static String readLoggedStream(InputStream stream, Consumer<String> lineConsumer) {

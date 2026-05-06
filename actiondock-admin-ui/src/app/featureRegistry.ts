@@ -15,5 +15,6 @@ export interface AppFeatureDefinition {
   section: AppSectionKey;
   navLabel: string;
   navPath: (colorMode: ColorMode) => string;
+  navItems: { label: string; path: string }[];
   routes: (colorMode: ColorMode) => AppFeatureRoute[];
 }

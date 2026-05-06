@@ -35,20 +35,17 @@ const ScanSkillsPage = lazy(() =>
 export const resourcesFeature: AppFeatureDefinition = {
   key: "resources",
   section: "resources",
-  navLabel: "Resources",
+  navLabel: "资源",
   navPath: () => "/discover",
+  navItems: [
+    { label: "发现", path: "/discover" },
+    { label: "仓库", path: "/repositories" }
+  ],
   routes: () => [
-    { path: "/discover", element: <RepositoryDiscoveryPage />, title: "Resource Discovery", navKey: "resources" },
-    { path: "/packages/publish", element: <CapabilityPackagePublishPage />, title: "Publish Package", navKey: "resources" },
-    { path: "/packages/:packageId/releases/new", element: <CapabilityPackagePublishPage />, title: "Publish Package", navKey: "resources" },
-    { path: "/packages/:packageId/releases/:version", element: <CapabilityPackagePublishPage />, title: "Publish Package", navKey: "resources" },
-    { path: "/repositories", element: <RepositoryManagementPage />, title: "Repositories", navKey: "resources" },
-    { path: "/plugins", element: <PluginManagementPage />, title: "Plugins", navKey: "resources" },
-    { path: "/plugins/:pluginId", element: <PluginDetailPage />, title: "Plugin Detail", navKey: "resources" },
-    { path: "/skills", element: <SkillManagementPage />, title: "Skills", navKey: "resources" },
-    { path: "/skills/install", element: <SkillInstallPage />, title: "Install Skill", navKey: "resources" },
-    { path: "/skills/publish", element: <SkillPublishPage />, title: "Publish Skill", navKey: "resources" },
-    { path: "/skills/scan/:targetId", element: <ScanSkillsPage />, title: "Scan Target", navKey: "resources" },
-    { path: "/skills/:skillId", element: <SkillDetailPage />, title: "Skill Detail", navKey: "resources" }
+    { path: "/discover", element: <RepositoryDiscoveryPage />, title: "发现", navKey: "resources" },
+    { path: "/packages/publish", element: <CapabilityPackagePublishPage />, title: "能力包发布", navKey: "resources" },
+    { path: "/packages/:packageId/releases/new", element: <CapabilityPackagePublishPage />, title: "能力包发布", navKey: "resources" },
+    { path: "/packages/:packageId/releases/:version", element: <CapabilityPackagePublishPage />, title: "能力包发布", navKey: "resources" },
+    { path: "/repositories", element: <RepositoryManagementPage />, title: "仓库", navKey: "resources" }
   ]
 };

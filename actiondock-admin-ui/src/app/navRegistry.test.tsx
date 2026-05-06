@@ -10,8 +10,8 @@ describe("app nav registry", () => {
   });
 
   it("resolves manifest-provided titles", () => {
-    expect(resolveTitle("/scripts", "capabilities")).toBe("Capabilities");
-    expect(resolveTitle("/scripts/abc/run", "capabilities")).toBe("Capability Run");
-    expect(resolveTitle("/plugins/hello", "resources")).toBe("Plugin Detail");
+    expect(resolveTitle("/scripts", "capabilities")).toBe("脚本");
+    expect(resolveTitle("/scripts/abc/run", "capabilities")).toBe("脚本运行");
+    expect(resolveTitle("/plugins/hello", "resources")).toBe("插件详情");
   });
 });

@@ -31,6 +31,7 @@ import java.util.logging.Logger;
  */
 public class AwtDesktopControls implements DesktopControls {
     private static final Logger LOGGER = Logger.getLogger(AwtDesktopControls.class.getName());
+    private static final String APP_NAME = "ActionDock";
 
     @Override
     public DesktopControl show(URI adminUri, Runnable openAction, Runnable quitAction) {
@@ -63,8 +64,8 @@ public class AwtDesktopControls implements DesktopControls {
         SystemTray tray = SystemTray.getSystemTray();
         PopupMenu menu = new PopupMenu();
         MenuItem openItem = new MenuItem("Open Admin Console");
-        MenuItem quitItem = new MenuItem("Quit ActionDock");
-        TrayIcon trayIcon = new TrayIcon(createTrayImage(), "ActionDock", menu);
+        MenuItem quitItem = new MenuItem("Quit " + APP_NAME);
+        TrayIcon trayIcon = new TrayIcon(createTrayImage(), APP_NAME, menu);
 
         openItem.addActionListener(event -> openAction.run());
         quitItem.addActionListener(event -> {
@@ -99,9 +100,9 @@ public class AwtDesktopControls implements DesktopControls {
             CountDownLatch exitLatch
     ) {
         SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("ActionDock");
+            JFrame frame = new JFrame(APP_NAME);
             JButton openButton = new JButton("Open Admin Console");
-            JButton quitButton = new JButton("Quit ActionDock");
+            JButton quitButton = new JButton("Quit " + APP_NAME);
             JPanel actions = new JPanel();
             actions.add(openButton);
             actions.add(quitButton);
@@ -120,7 +121,7 @@ public class AwtDesktopControls implements DesktopControls {
 
             frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
             frame.setLayout(new BorderLayout(12, 12));
-            frame.add(new JLabel("ActionDock is running at " + adminUri), BorderLayout.CENTER);
+            frame.add(new JLabel(APP_NAME + " is running at " + adminUri), BorderLayout.CENTER);
             frame.add(actions, BorderLayout.SOUTH);
             frame.setSize(460, 140);
             frame.setLocationRelativeTo(null);

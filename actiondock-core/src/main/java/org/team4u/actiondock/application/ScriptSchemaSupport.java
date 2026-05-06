@@ -197,33 +197,21 @@ public class ScriptSchemaSupport {
     }
 
     private static String detectType(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof String) {
-            return "string";
-        }
-        if (value instanceof Boolean) {
-            return "boolean";
-        }
-        if (value instanceof Number) {
-            return isInteger(value) ? "integer" : "number";
-        }
-        if (value instanceof List<?>) {
-            return "array";
-        }
-        if (value instanceof Map<?, ?>) {
-            return "object";
-        }
-        return value.getClass().getSimpleName();
+        return switch (value) {
+            case null -> "null";
+            case String s -> "string";
+            case Boolean b -> "boolean";
+            case Number n -> isInteger(n) ? "integer" : "number";
+            case List<?> l -> "array";
+            case Map<?, ?> m -> "object";
+            default -> value.getClass().getSimpleName();
+        };
     }
 
     private static String describeActualType(Object value) {
         String logicalType = detectType(value);
-        if (value == null) {
-            return logicalType;
-        }
-        if (value instanceof String || value instanceof Boolean || value instanceof Number || value instanceof List<?> || value instanceof Map<?, ?>) {
+        if (value == null || value instanceof String || value instanceof Boolean
+                || value instanceof Number || value instanceof List<?> || value instanceof Map<?, ?>) {
             return logicalType;
         }
         return logicalType + " (" + value.getClass().getName() + ")";

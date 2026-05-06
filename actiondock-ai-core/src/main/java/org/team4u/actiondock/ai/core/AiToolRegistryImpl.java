@@ -10,6 +10,7 @@ import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.ai.api.ConfigurableAiTool;
 import org.team4u.actiondock.ai.api.AiAgentProfile;
+import org.team4u.actiondock.domain.model.SchemaValueCopier;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -109,7 +110,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
 
     private AgentToolResolution resolveAgentTools(AiAgentProfile agentProfile) {
         if (agentProfile == null) {
-            return new AgentToolResolution(List.of(), List.of(), 0);
+            return new AgentToolResolution(List.of(), List.of());
         }
         Map<String, ToolAccumulator> accumulators = new LinkedHashMap<>();
         List<AgentToolConflict> conflicts = new ArrayList<>();
@@ -117,14 +118,10 @@ public class AiToolRegistryImpl implements AiToolRegistry {
         collectDirectTools(agentProfile, accumulators, conflicts);
 
         List<ResolvedAgentTool> resolvedTools = new ArrayList<>();
-        int mergedToolCount = 0;
         for (ToolAccumulator accumulator : accumulators.values()) {
             if (accumulator.conflicting) {
                 conflicts.add(new AgentToolConflict(accumulator.toolName, List.copyOf(accumulator.sources), "配置不一致"));
                 continue;
-            }
-            if (accumulator.sources.size() > 1) {
-                mergedToolCount++;
             }
             resolvedTools.add(new ResolvedAgentTool(
                     accumulator.tool,
@@ -132,7 +129,7 @@ public class AiToolRegistryImpl implements AiToolRegistry {
                     List.copyOf(accumulator.sources)
             ));
         }
-        return new AgentToolResolution(List.copyOf(resolvedTools), List.copyOf(conflicts), mergedToolCount);
+        return new AgentToolResolution(List.copyOf(resolvedTools), List.copyOf(conflicts));
     }
 
     private static void ensureAllowed(AiTool tool, AiToolPermission maxPermission, String label) {
@@ -219,30 +216,12 @@ public class AiToolRegistryImpl implements AiToolRegistry {
     }
 
     private static Map<String, Object> normalizeOptions(Map<String, Object> options) {
-        Map<String, Object> normalized = new LinkedHashMap<>();
-        if (options != null) {
-            options.forEach((key, value) -> normalized.put(key, normalizeValue(value)));
-        }
-        return normalized;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Object normalizeValue(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> normalized = new LinkedHashMap<>();
-            map.forEach((key, item) -> normalized.put(String.valueOf(key), normalizeValue(item)));
-            return normalized;
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().map(AiToolRegistryImpl::normalizeValue).toList();
-        }
-        return value;
+        return SchemaValueCopier.copyMap(options);
     }
 
     private record AgentToolResolution(
             List<ResolvedAgentTool> tools,
-            List<AgentToolConflict> conflicts,
-            int mergedToolCount
+            List<AgentToolConflict> conflicts
     ) {
     }
 

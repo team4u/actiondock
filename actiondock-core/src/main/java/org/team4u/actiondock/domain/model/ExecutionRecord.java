@@ -165,7 +165,7 @@ public class ExecutionRecord {
     }
 
     public ExecutionRecord setInput(Map<String, Object> input) {
-        this.input = input == null ? new LinkedHashMap<>() : input;
+        this.input = input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
         return this;
     }
 
@@ -179,7 +179,7 @@ public class ExecutionRecord {
     }
 
     public ExecutionRecord setOutput(Map<String, Object> output) {
-        this.output = output == null ? new LinkedHashMap<>() : output;
+        this.output = output == null ? new LinkedHashMap<>() : new LinkedHashMap<>(output);
         return this;
     }
 

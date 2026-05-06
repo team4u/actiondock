@@ -14,9 +14,9 @@ import java.util.List;
  */
 @Component
 class ScheduleControllerSupport {
-    final ScheduleApplicationService scheduleApplicationService;
-    final ScriptScheduleDispatcher scriptScheduleDispatcher;
-    final ScriptScheduleViewMapper scriptScheduleViewMapper;
+    private final ScheduleApplicationService scheduleApplicationService;
+    private final ScriptScheduleDispatcher scriptScheduleDispatcher;
+    private final ScriptScheduleViewMapper scriptScheduleViewMapper;
 
     ScheduleControllerSupport(ScheduleApplicationService scheduleApplicationService,
                               ScriptScheduleDispatcher scriptScheduleDispatcher,

@@ -1,6 +1,7 @@
 package org.team4u.actiondock.domain.model;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -66,7 +67,7 @@ public class ScriptSchedule {
     }
 
     public Map<String, Object> getInput() {
-        return input;
+        return Collections.unmodifiableMap(input);
     }
 
     public ScriptSchedule setInput(Map<String, Object> input) {

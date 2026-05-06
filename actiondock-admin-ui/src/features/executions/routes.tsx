@@ -38,23 +38,12 @@ const AiAgentProfileDetailPage = lazy(() =>
 export const executionsFeature: AppFeatureDefinition = {
   key: "executions",
   section: "executions",
-  navLabel: "Executions",
+  navLabel: "触发",
   navPath: () => "/triggers",
+  navItems: [],
   routes: (colorMode) => [
-    { path: "/triggers", element: <TriggerCenterPage />, title: "Executions", navKey: "executions" },
-    { path: "/schedules/new", element: <ScheduleEditorPage mode="create" colorMode={colorMode} />, title: "Schedule Editor", navKey: "executions" },
-    { path: "/schedules/:id", element: <ScheduleEditorPage mode="edit" colorMode={colorMode} />, title: "Schedule Editor", navKey: "executions" },
-    { path: "/ai", element: <AiOverviewPage />, title: "AI Capabilities", navKey: "executions" },
-    { path: "/ai/models", element: <AiModelProfileListPage />, title: "Model Profiles", navKey: "executions" },
-    { path: "/ai/models/new", element: <AiModelProfileDetailPage />, title: "Model Profile", navKey: "executions" },
-    { path: "/ai/models/:id", element: <AiModelProfileDetailPage />, title: "Model Profile", navKey: "executions" },
-    { path: "/ai/agents", element: <AiAgentProfileListPage />, title: "Agent Profiles", navKey: "executions" },
-    { path: "/ai/agents/new", element: <AiAgentProfileDetailPage />, title: "Agent Profile", navKey: "executions" },
-    { path: "/ai/agents/:id", element: <AiAgentProfileDetailPage />, title: "Agent Profile", navKey: "executions" },
-    { path: "/ai/toolsets", element: <AiToolsetListPage />, title: "Toolsets", navKey: "executions" },
-    { path: "/ai/toolsets/new", element: <AiToolsetDetailPage />, title: "Toolset", navKey: "executions" },
-    { path: "/ai/toolsets/:id", element: <AiToolsetDetailPage />, title: "Toolset", navKey: "executions" },
-    { path: "/ai/runs", element: <AiRunListPage />, title: "AI Runs", navKey: "executions" },
-    { path: "/ai/runs/:runId", element: <AiRunDetailPage />, title: "AI Run Detail", navKey: "executions" }
+    { path: "/triggers", element: <TriggerCenterPage />, title: "触发中心", navKey: "executions" },
+    { path: "/schedules/new", element: <ScheduleEditorPage mode="create" colorMode={colorMode} />, title: "定时任务编辑器", navKey: "executions" },
+    { path: "/schedules/:id", element: <ScheduleEditorPage mode="edit" colorMode={colorMode} />, title: "定时任务编辑器", navKey: "executions" }
   ]
 };

@@ -19,7 +19,7 @@ public enum AiToolPermission {
         }
         try {
             return AiToolPermission.valueOf(String.valueOf(value).trim().toUpperCase());
-        } catch (RuntimeException ignored) {
+        } catch (IllegalArgumentException ignored) {
             return fallback;
         }
     }

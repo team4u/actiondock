@@ -3,7 +3,7 @@ import { Button, Drawer, Grid, Layout, Menu, Spin, Typography } from "antd";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { ColorMode } from "../contexts/ColorModeContext";
-import { appNavItems, resolveSelectedNavKey, resolveTitle } from "./navRegistry";
+import { appNavItems, resolveSelectedMenuKey, resolveSelectedNavKey, resolveTitle } from "./navRegistry";
 import { createAppRouteEntries } from "./routeRegistry";
 
 const { Header, Content, Sider } = Layout;
@@ -17,11 +17,28 @@ export function AppShell({ colorMode }: { colorMode: ColorMode }) {
   const isMobile = !screens.lg;
   const isDark = colorMode === "dark";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [openKeys, setOpenKeys] = useState<string[]>(
+    () => appNavItems.filter((item) => item.children.length > 0).map((item) => item.key)
+  );
   const selectedNavKey = resolveSelectedNavKey(location.pathname);
+  const selectedMenuKey = resolveSelectedMenuKey(location.pathname);
   const title = resolveTitle(location.pathname, selectedNavKey);
   const routeEntries = useMemo(() => createAppRouteEntries(colorMode), [colorMode]);
+  const navPathMap = useMemo(() => {
+    const next = new Map<string, string>();
+    for (const item of appNavItems) {
+      next.set(item.key, item.getPath(colorMode));
+      for (const child of item.children) {
+        next.set(child.key, child.path);
+      }
+    }
+    return next;
+  }, [colorMode]);
 
   useEffect(() => setMobileNavOpen(false), [location.pathname]);
+  useEffect(() => {
+    setOpenKeys(appNavItems.filter((item) => item.children.length > 0).map((item) => item.key));
+  }, []);
 
   const navigationMenu = (
     <div className="app-navigation">
@@ -32,11 +49,24 @@ export function AppShell({ colorMode }: { colorMode: ColorMode }) {
       <Menu
         mode="inline"
         theme={isDark ? "dark" : "light"}
-        selectedKeys={[selectedNavKey]}
+        selectedKeys={[selectedMenuKey]}
+        openKeys={openKeys}
+        onOpenChange={(keys) => setOpenKeys(keys.map((key) => String(key)))}
+        onClick={({ key }) => {
+          const path = navPathMap.get(String(key));
+          if (path) {
+            navigate(path);
+          }
+        }}
         items={appNavItems.map((item) => ({
           key: item.key,
           label: item.label,
-          onClick: () => navigate(item.getPath(colorMode))
+          children: item.children.length > 0
+            ? item.children.map((child) => ({
+                key: child.key,
+                label: child.label
+              }))
+            : undefined
         }))}
       />
     </div>

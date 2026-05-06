@@ -48,13 +48,14 @@ public class SharedStateController {
 
     @PostMapping
     public ApiResponse<SharedStateDetailView> create(@RequestBody SharedStateRequest request) {
+        SharedStateRequest req = request != null ? request : new SharedStateRequest();
         return ApiResponse.success(
                 toDetailView(sharedStateApplicationService.put(
-                        request == null ? null : request.getNamespace(),
-                        request == null ? null : request.getKey(),
-                        request == null ? null : request.getValue(),
-                        request != null && request.isSecret(),
-                        request == null ? null : request.getExpiresAt(),
+                        req.getNamespace(),
+                        req.getKey(),
+                        req.getValue(),
+                        req.isSecret(),
+                        req.getExpiresAt(),
                         null,
                         null
                 )),
@@ -69,13 +70,14 @@ public class SharedStateController {
 
     @PostMapping("/cas")
     public ApiResponse<SharedStateCompareAndSetView> compareAndSet(@RequestBody SharedStateCompareAndSetRequest request) {
+        SharedStateCompareAndSetRequest req = request != null ? request : new SharedStateCompareAndSetRequest();
         SharedStateApplicationService.CompareAndSetResult result = sharedStateApplicationService.compareAndSet(
-                request == null ? null : request.getNamespace(),
-                request == null ? null : request.getKey(),
-                request == null ? null : request.getExpectedVersion(),
-                request == null ? null : request.getValue(),
-                request != null && request.isSecret(),
-                request == null ? null : request.getExpiresAt(),
+                req.getNamespace(),
+                req.getKey(),
+                req.getExpectedVersion(),
+                req.getValue(),
+                req.isSecret(),
+                req.getExpiresAt(),
                 null,
                 null
         );
@@ -99,9 +101,8 @@ public class SharedStateController {
     /**
      * 构建共享状态视图的基础字段。
      */
-    private static <T extends SharedStateSummaryView> T buildBaseView(T view, SharedStateEntry entry) {
-        return (T) view
-                .setNamespace(entry.getNamespace())
+    private static void fillBaseView(SharedStateSummaryView view, SharedStateEntry entry) {
+        view.setNamespace(entry.getNamespace())
                 .setKey(entry.getKey())
                 .setSecret(entry.isSecret())
                 .setVersion(entry.getVersion())
@@ -113,11 +114,15 @@ public class SharedStateController {
     }
 
     private static SharedStateSummaryView toSummaryView(SharedStateEntry entry) {
-        return buildBaseView(new SharedStateSummaryView(), entry);
+        SharedStateSummaryView view = new SharedStateSummaryView();
+        fillBaseView(view, entry);
+        return view;
     }
 
     private static SharedStateDetailView toDetailView(SharedStateEntry entry) {
-        return buildBaseView(new SharedStateDetailView(), entry)
-                .setValue(entry.getValue());
+        SharedStateDetailView view = new SharedStateDetailView();
+        fillBaseView(view, entry);
+        view.setValue(entry.getValue());
+        return view;
     }
 }

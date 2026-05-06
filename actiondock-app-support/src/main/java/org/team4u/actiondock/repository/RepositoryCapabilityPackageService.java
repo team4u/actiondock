@@ -100,7 +100,7 @@ public class RepositoryCapabilityPackageService {
 
     public void uninstallCapabilityPackage(String repositoryId, String packageId) {
         CapabilityPackageInstallation installation = repos.capabilityPackageInstallationRepository()
-                .findByInstallationId(capabilityPackageInstallationId(repositoryId, packageId))
+                .findByInstallationId(RepositoryCatalogTypes.capabilityPackageInstallationId(repositoryId, packageId))
                 .orElseThrow(() -> new IllegalArgumentException("能力包尚未安装: " + packageId));
         catalog.uninstallManagedCapabilityPackageAssets(installation);
         for (String presetId : installation.getPresetIds()) {
@@ -127,7 +127,7 @@ public class RepositoryCapabilityPackageService {
                                                                                                       String packageId,
                                                                                                       boolean updateOnly,
                                                                                                       LinkedHashSet<String> visiting) {
-        String installationId = capabilityPackageInstallationId(repositoryId, packageId);
+        String installationId = RepositoryCatalogTypes.capabilityPackageInstallationId(repositoryId, packageId);
         if (!visiting.add(installationId)) {
             throw new IllegalStateException("检测到能力包循环依赖: " + String.join(" -> ", visiting) + " -> " + installationId);
         }
@@ -159,7 +159,7 @@ public class RepositoryCapabilityPackageService {
         InstallationContext ctx = buildInstallationContext(repositoryId, packageId, detail.releaseFile());
         InstalledAssets assets = installAllAssets(detail, ctx);
         configTemplateSyncService.syncConfigTemplates(repositoryId, packageId, detail.descriptor().version(), detail.configTemplate());
-        String installationId = capabilityPackageInstallationId(repositoryId, packageId);
+        String installationId = RepositoryCatalogTypes.capabilityPackageInstallationId(repositoryId, packageId);
         return persistInstallationRecord(installationId, repositoryId, packageId, detail, existing, ctx, assets);
     }
 
@@ -229,7 +229,7 @@ public class RepositoryCapabilityPackageService {
 
     private void resolveAiPackageDependency(RepositoryAiPackageDependency dependency,
                                             LinkedHashSet<String> visiting) {
-        String dependencyInstallationId = capabilityPackageInstallationId(dependency.repositoryId(), dependency.assetId());
+        String dependencyInstallationId = RepositoryCatalogTypes.capabilityPackageInstallationId(dependency.repositoryId(), dependency.assetId());
         boolean alreadyInstalled = repos.capabilityPackageInstallationRepository().findByInstallationId(dependencyInstallationId).isPresent();
         installOrUpdateCapabilityPackage(dependency.repositoryId(), dependency.assetId(), alreadyInstalled, visiting);
     }
@@ -297,16 +297,16 @@ public class RepositoryCapabilityPackageService {
         Map<String, String> agentIdMappings = new LinkedHashMap<>();
         Map<String, String> scriptIdMappings = new LinkedHashMap<>();
         for (AiPackageModelFile model : NormalizeUtils.nullSafeList(release == null ? null : release.models())) {
-            modelIdMappings.put(model.id(), aiPackageInternalId(repositoryId, packageId, "model", model.id()));
+            modelIdMappings.put(model.id(), RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, "model", model.id()));
         }
         for (AiPackageToolsetFile toolset : NormalizeUtils.nullSafeList(release == null ? null : release.toolsets())) {
-            toolsetIdMappings.put(toolset.id(), aiPackageInternalId(repositoryId, packageId, "toolset", toolset.id()));
+            toolsetIdMappings.put(toolset.id(), RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, "toolset", toolset.id()));
         }
         for (AiPackageAgentFile agent : NormalizeUtils.nullSafeList(release == null ? null : release.agents())) {
-            agentIdMappings.put(agent.id(), aiPackageInternalId(repositoryId, packageId, "agent", agent.id()));
+            agentIdMappings.put(agent.id(), RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, "agent", agent.id()));
         }
         for (AiPackageScriptFile script : NormalizeUtils.nullSafeList(release == null ? null : release.scripts())) {
-            scriptIdMappings.put(script.id(), aiPackageInternalId(repositoryId, packageId, "script", script.id()));
+            scriptIdMappings.put(script.id(), RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, "script", script.id()));
         }
         return new InstallationContext(repositoryId, packageId, LocalDateTime.now(),
                 release, modelIdMappings, toolsetIdMappings, agentIdMappings, scriptIdMappings);
@@ -469,12 +469,4 @@ public class RepositoryCapabilityPackageService {
         return installedIds;
     }
 
-
-    private static String aiPackageInternalId(String repositoryId, String packageId, String kind, String localId) {
-        return RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, kind, localId);
-    }
-
-    private static String capabilityPackageInstallationId(String repositoryId, String packageId) {
-        return RepositoryCatalogTypes.capabilityPackageInstallationId(repositoryId, packageId);
-    }
 }

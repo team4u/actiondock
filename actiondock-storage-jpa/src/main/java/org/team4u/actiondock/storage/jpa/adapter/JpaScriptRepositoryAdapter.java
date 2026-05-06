@@ -82,15 +82,17 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setPythonRequirements(definition.getPythonRequirements());
         entity.setInputSchemaJson(jsonCodec.write(definition.getInputSchema()));
         entity.setOutputSchemaJson(jsonCodec.write(definition.getOutputSchema()));
-        entity.setPublishedName(publishedSnapshot == null ? null : publishedSnapshot.getName());
-        entity.setPublishedType(publishedSnapshot == null ? null : publishedSnapshot.getType().name());
-        entity.setPublishedPackaging(publishedSnapshot == null ? null : publishedSnapshot.getPackaging().name());
-        entity.setPublishedSource(publishedSnapshot == null ? null : publishedSnapshot.getSource());
-        entity.setPublishedPythonRequirements(publishedSnapshot == null ? null : publishedSnapshot.getPythonRequirements());
-        entity.setPublishedInputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getInputSchema()));
-        entity.setPublishedOutputSchemaJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getOutputSchema()));
-        entity.setPublishedScriptDependenciesJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getScriptDependencies()));
-        entity.setPublishedAiDependenciesJson(publishedSnapshot == null ? null : jsonCodec.write(publishedSnapshot.getAiDependencies()));
+        if (publishedSnapshot != null) {
+            entity.setPublishedName(publishedSnapshot.getName());
+            entity.setPublishedType(publishedSnapshot.getType().name());
+            entity.setPublishedPackaging(publishedSnapshot.getPackaging().name());
+            entity.setPublishedSource(publishedSnapshot.getSource());
+            entity.setPublishedPythonRequirements(publishedSnapshot.getPythonRequirements());
+            entity.setPublishedInputSchemaJson(jsonCodec.write(publishedSnapshot.getInputSchema()));
+            entity.setPublishedOutputSchemaJson(jsonCodec.write(publishedSnapshot.getOutputSchema()));
+            entity.setPublishedScriptDependenciesJson(jsonCodec.write(publishedSnapshot.getScriptDependencies()));
+            entity.setPublishedAiDependenciesJson(jsonCodec.write(publishedSnapshot.getAiDependencies()));
+        }
         entity.setStatus(definition.getStatus().name());
         entity.setVersionValue(definition.getVersion());
         entity.setScope(definition.getScope().name());

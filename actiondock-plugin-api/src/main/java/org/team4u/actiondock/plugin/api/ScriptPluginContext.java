@@ -1,5 +1,6 @@
 package org.team4u.actiondock.plugin.api;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -48,7 +49,7 @@ public class ScriptPluginContext {
     }
 
     public Map<String, Object> getScriptInput() {
-        return scriptInput;
+        return Collections.unmodifiableMap(scriptInput);
     }
 
     public ScriptPluginContext setScriptInput(Map<String, Object> scriptInput) {
@@ -57,7 +58,7 @@ public class ScriptPluginContext {
     }
 
     public Map<String, Object> getPluginConfig() {
-        return pluginConfig;
+        return Collections.unmodifiableMap(pluginConfig);
     }
 
     /**

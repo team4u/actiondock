@@ -380,19 +380,18 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
 
         @Override
         public <T extends HookEvent> Mono<T> onEvent(T event) {
-            if (event instanceof ReasoningChunkEvent reasoningChunkEvent) {
-                observer.onTextDelta(
-                        textValue(reasoningChunkEvent.getIncrementalChunk()),
-                        textValue(reasoningChunkEvent.getAccumulated())
-                );
-            } else if (event instanceof SummaryChunkEvent summaryChunkEvent) {
-                observer.onTextDelta(
-                        textValue(summaryChunkEvent.getIncrementalChunk()),
-                        textValue(summaryChunkEvent.getAccumulated())
-                );
-            } else if (event instanceof PostCallEvent postCallEvent) {
-                String text = textValue(postCallEvent.getFinalMessage());
-                observer.onTextDelta(text, text);
+            switch (event) {
+                case ReasoningChunkEvent e -> observer.onTextDelta(
+                        textValue(e.getIncrementalChunk()),
+                        textValue(e.getAccumulated()));
+                case SummaryChunkEvent e -> observer.onTextDelta(
+                        textValue(e.getIncrementalChunk()),
+                        textValue(e.getAccumulated()));
+                case PostCallEvent e -> {
+                    String text = textValue(e.getFinalMessage());
+                    observer.onTextDelta(text, text);
+                }
+                default -> {}
             }
             return Mono.just(event);
         }
@@ -460,10 +459,8 @@ public class AgentScopeAiProviderClient implements AiProviderClient {
 
     private static StructuredOutputReminder structuredOutputReminder(Map<String, Object> options) {
         String reminder = stringOption(options, "structuredOutputReminder");
-        if (reminder == null) {
-            return StructuredOutputReminder.TOOL_CHOICE;
-        }
-        return switch (reminder.trim().toUpperCase()) {
+        String normalized = reminder == null ? "TOOL_CHOICE" : reminder.trim().toUpperCase();
+        return switch (normalized) {
             case "TOOL_CHOICE" -> StructuredOutputReminder.TOOL_CHOICE;
             case "PROMPT" -> StructuredOutputReminder.PROMPT;
             default -> throw new IllegalArgumentException("Unsupported structuredOutputReminder: " + reminder);

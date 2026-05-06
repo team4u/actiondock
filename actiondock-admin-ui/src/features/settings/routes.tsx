@@ -9,9 +9,10 @@ const SystemSettingsPage = lazy(() =>
 export const settingsFeature: AppFeatureDefinition = {
   key: "settings",
   section: "settings",
-  navLabel: "Settings",
+  navLabel: "设置",
   navPath: () => `/settings${buildSystemSettingsSearch("config-values")}`,
+  navItems: [],
   routes: () => [
-    { path: "/settings", element: <SystemSettingsPage />, title: "Settings", navKey: "settings" }
+    { path: "/settings", element: <SystemSettingsPage />, title: "系统设置", navKey: "settings" }
   ]
 };

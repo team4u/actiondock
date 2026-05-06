@@ -22,37 +22,10 @@ public final class ScriptViewMapper {
      * 创建去除 UI 扩展字段的脚本定义副本，用于 API 响应。
      */
     public static ScriptDefinition withoutUiSchema(ScriptDefinition source) {
-        PublishedScriptSnapshot sanitizedSnapshot = sanitizeSnapshot(source.getPublishedSnapshot());
-        return new ScriptDefinition()
-                .setName(source.getName())
-                .setType(source.getType())
-                .setSource(source.getSource())
-                .setPythonRequirements(source.getPythonRequirements())
-                .setPackaging(source.getPackaging())
+        return source.fullCopy()
                 .setInputSchema(sanitizeSchema(source.getInputSchema()))
                 .setOutputSchema(sanitizeSchema(source.getOutputSchema()))
-                .setPublishedSnapshot(sanitizedSnapshot)
-                .setStatus(source.getStatus())
-                .setVersion(source.getVersion())
-                .setScriptDependencies(source.getScriptDependencies())
-                .setAiDependencies(source.getAiDependencies())
-                .setId(source.getId())
-                .setScope(source.getScope())
-                .setRepositoryId(source.getRepositoryId())
-                .setRepositoryToolId(source.getRepositoryToolId())
-                .setRepositoryVersion(source.getRepositoryVersion())
-                .setSourcePath(source.getSourcePath())
-                .setSourceCommit(source.getSourceCommit())
-                .setSourceDigest(source.getSourceDigest())
-                .setSourceSyncedAt(source.getSourceSyncedAt())
-                .setDirty(source.isDirty())
-                .setEditable(source.isEditable())
-                .setOwner(source.getOwner())
-                .setDescription(source.getDescription())
-                .setTags(source.getTags())
-                .setPluginDependencies(source.getPluginDependencies())
-                .setCreatedAt(source.getCreatedAt())
-                .setUpdatedAt(source.getUpdatedAt());
+                .setPublishedSnapshot(sanitizeSnapshot(source.getPublishedSnapshot()));
     }
 
     private static PublishedScriptSnapshot sanitizeSnapshot(PublishedScriptSnapshot snapshot) {

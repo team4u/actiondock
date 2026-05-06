@@ -92,13 +92,7 @@ class PluginViewMapper {
     }
 
     private static PluginActionView toActionView(PluginActionManifest action) {
-        return new PluginActionView()
-                .setAction(action.getAction())
-                .setTitle(action.getTitle())
-                .setDescription(action.getDescription())
-                .setInputSchema(action.getInputSchema())
-                .setOutputSchema(action.getOutputSchema())
-                .setExampleArgs(action.getExampleArgs());
+        return toActionView(toActionMetadata(action));
     }
 
     private static PluginActionMetadata toActionMetadata(PluginActionManifest action) {

@@ -80,17 +80,17 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
         if (NormalizeUtils.isBlank(name)) {
             return Optional.empty();
         }
-        if (name.startsWith(SCRIPT_TOOL_PREFIX)) {
-            return scriptRepository.findById(name.substring(SCRIPT_TOOL_PREFIX.length()))
-                    .filter(ActionDockDynamicAiToolProvider::isPublishedToolScript)
-                    .map(PublishedScriptTool::new);
-        }
-        if (name.startsWith(AGENT_TOOL_PREFIX)) {
-            return agentProfileRepository.findById(name.substring(AGENT_TOOL_PREFIX.length()))
-                    .filter(ActionDockDynamicAiToolProvider::isVisibleAgentTool)
-                    .map(AgentProfileTool::new);
-        }
-        return Optional.empty();
+        return switch (name) {
+            case String s when s.startsWith(SCRIPT_TOOL_PREFIX) ->
+                    scriptRepository.findById(s.substring(SCRIPT_TOOL_PREFIX.length()))
+                            .filter(ActionDockDynamicAiToolProvider::isPublishedToolScript)
+                            .map(PublishedScriptTool::new);
+            case String s when s.startsWith(AGENT_TOOL_PREFIX) ->
+                    agentProfileRepository.findById(s.substring(AGENT_TOOL_PREFIX.length()))
+                            .filter(ActionDockDynamicAiToolProvider::isVisibleAgentTool)
+                            .map(AgentProfileTool::new);
+            default -> Optional.empty();
+        };
     }
 
     private static boolean isPublishedToolScript(ScriptDefinition script) {

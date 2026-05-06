@@ -2,6 +2,7 @@ package org.team4u.actiondock.domain.model;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -98,7 +99,7 @@ public class ScriptDefinition {
     }
 
     public Map<String, Object> getInputSchema() {
-        return inputSchema;
+        return Collections.unmodifiableMap(inputSchema);
     }
 
     public ScriptDefinition setInputSchema(Map<String, Object> inputSchema) {
@@ -107,7 +108,7 @@ public class ScriptDefinition {
     }
 
     public Map<String, Object> getOutputSchema() {
-        return outputSchema;
+        return Collections.unmodifiableMap(outputSchema);
     }
 
     public ScriptDefinition setOutputSchema(Map<String, Object> outputSchema) {
@@ -528,8 +529,7 @@ public class ScriptDefinition {
     }
 
     public ScriptDefinition fullCopy() {
-        return new ScriptDefinition()
-                .setId(id)
+        return copyMetadataTo(new ScriptDefinition()
                 .setName(name)
                 .setType(type)
                 .setPackaging(packaging)
@@ -540,23 +540,8 @@ public class ScriptDefinition {
                 .setStatus(status)
                 .setVersion(version)
                 .setPublishedSnapshot(publishedSnapshot)
-                .setScope(scope)
-                .setRepositoryId(repositoryId)
-                .setRepositoryToolId(repositoryToolId)
-                .setRepositoryVersion(repositoryVersion)
-                .setSourcePath(getSourcePath())
-                .setSourceCommit(getSourceCommit())
-                .setSourceDigest(getSourceDigest())
-                .setSourceSyncedAt(getSourceSyncedAt())
-                .setDirty(isDirty())
-                .setEditable(editable)
-                .setOwner(owner)
-                .setDescription(description)
-                .setTags(tags)
                 .setScriptDependencies(scriptDependencies)
-                .setAiDependencies(aiDependencies)
-                .setCreatedAt(createdAt)
-                .setUpdatedAt(updatedAt);
+                .setAiDependencies(aiDependencies));
     }
 
     public void normalizePublicationState() {

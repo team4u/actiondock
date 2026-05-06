@@ -1,5 +1,6 @@
 package org.team4u.actiondock.plugin.api;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -44,7 +45,7 @@ public class PluginActionManifest {
     }
 
     public Map<String, Object> getInputSchema() {
-        return inputSchema;
+        return Collections.unmodifiableMap(inputSchema);
     }
 
     public PluginActionManifest setInputSchema(Map<String, Object> inputSchema) {
@@ -53,7 +54,7 @@ public class PluginActionManifest {
     }
 
     public Map<String, Object> getOutputSchema() {
-        return outputSchema;
+        return Collections.unmodifiableMap(outputSchema);
     }
 
     public PluginActionManifest setOutputSchema(Map<String, Object> outputSchema) {
@@ -62,7 +63,7 @@ public class PluginActionManifest {
     }
 
     public Map<String, Object> getExampleArgs() {
-        return exampleArgs;
+        return Collections.unmodifiableMap(exampleArgs);
     }
 
     public PluginActionManifest setExampleArgs(Map<String, Object> exampleArgs) {

@@ -320,17 +320,18 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
                                                   AiAgentRunContext context,
                                                   String runId,
                                                   boolean asyncSubmission) {
-        AiCallerType callerType = context == null || context.callerType() == null ? AiCallerType.ADMIN_TEST : context.callerType();
-        Map<String, Object> metadata = new LinkedHashMap<>(context == null || context.metadata() == null ? Map.of() : context.metadata());
+        AiAgentRunContext effective = context != null ? context : AiAgentRunContext.adminTest();
+        AiCallerType callerType = effective.callerType() != null ? effective.callerType() : AiCallerType.ADMIN_TEST;
+        Map<String, Object> metadata = new LinkedHashMap<>(effective.metadata() != null ? effective.metadata() : Map.of());
         metadata.remove("maxToolPermission");
         metadata.remove("dangerousActionsAllowed");
         metadata.put("agentRunId", runId);
         metadata.put(DISABLE_OUTER_TIMEOUT_METADATA_KEY, asyncSubmission);
         return new AiAgentRunContext(
                 callerType,
-                context == null ? null : context.scriptId(),
-                context == null ? null : context.executionId(),
-                context == null ? null : context.userId(),
+                effective.scriptId(),
+                effective.executionId(),
+                effective.userId(),
                 metadata
         );
     }

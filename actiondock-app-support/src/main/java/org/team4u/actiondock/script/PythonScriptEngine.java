@@ -189,8 +189,6 @@ public class PythonScriptEngine implements ScriptEngine {
                     ctx.bridge
             );
             return processExecuteResult(result, ctx.command);
-        } catch (PythonExecutionException exception) {
-            throw exception;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to execute Python script", e);
         } catch (InterruptedException e) {

@@ -92,9 +92,10 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         entity.setOutputJson(jsonCodec.write(record.getOutput()));
         entity.setLogsJson(jsonCodec.write(record.getLogs()));
         entity.setErrorMessage(record.getErrorMessage());
-        entity.setErrorType(record.getErrorDetail() == null ? null : record.getErrorDetail().getType());
-        entity.setErrorStackTrace(record.getErrorDetail() == null ? null : record.getErrorDetail().getStackTrace());
-        entity.setErrorDetailsJson(record.getErrorDetail() == null ? null : jsonCodec.write(record.getErrorDetail().getDetails()));
+        ErrorDetail errorDetail = record.getErrorDetail();
+        entity.setErrorType(errorDetail == null ? null : errorDetail.getType());
+        entity.setErrorStackTrace(errorDetail == null ? null : errorDetail.getStackTrace());
+        entity.setErrorDetailsJson(errorDetail == null ? null : jsonCodec.write(errorDetail.getDetails()));
         entity.setCreatedAt(record.getCreatedAt());
         entity.setStartedAt(record.getStartedAt());
         entity.setFinishedAt(record.getFinishedAt());

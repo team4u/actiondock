@@ -24,8 +24,6 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
-import org.team4u.actiondock.repository.RepositoryCatalogTypes;
-import org.team4u.actiondock.repository.RepositoryIndexUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
@@ -173,8 +171,9 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         switch (repository.getType()) {
             case REPO_TYPE_GIT -> {
-                gitOps.syncGitRepository(repository, resolveRepositoryRoot(repository));
-                RepositoryWorkspaceHelper.ensureRepositoryWorkspace(resolveRepositoryRoot(repository), repository, jsonCodec);
+                Path root = resolveRepositoryRoot(repository);
+                gitOps.syncGitRepository(repository, root);
+                RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
             }
             case REPO_TYPE_LOCAL_DIR -> ensureLocalDirRepository(repository);
             default -> readRepositoryIndex(repository);
@@ -690,10 +689,10 @@ public class RepositoryCatalogService {
         if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
             ensureLocalDirRepository(repository);
         }
-        if (REPO_TYPE_GIT.equals(repository.getType()) && Files.notExists(root)) {
-            gitOps.syncGitRepository(repository, root);
-        }
         if (REPO_TYPE_GIT.equals(repository.getType())) {
+            if (Files.notExists(root)) {
+                gitOps.syncGitRepository(repository, root);
+            }
             RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
         }
         return readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class);
