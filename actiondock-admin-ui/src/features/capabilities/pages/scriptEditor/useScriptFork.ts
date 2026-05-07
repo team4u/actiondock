@@ -1,7 +1,7 @@
 import { Form } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
-import { useForkScript } from "../../../../hooks/useForkScript";
-import type { ScriptDefinition } from "../../../../types";
+import { useForkScript } from "../../../../shared/hooks/useForkScript";
+import type { ScriptDefinition } from "../../../../shared/types";
 import type { ForkFormValues } from "./types";
 
 export interface UseScriptForkParams {

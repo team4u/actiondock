@@ -12,7 +12,7 @@ import type {
   ProcessorTestResult,
   ScriptSchedule,
   ScriptScheduleUpsertRequest
-} from "../../types";
+} from "../../shared/types";
 
 export function listSchedules(): Promise<ScriptSchedule[]> {
   return request<ScriptSchedule[]>("/api/schedules");

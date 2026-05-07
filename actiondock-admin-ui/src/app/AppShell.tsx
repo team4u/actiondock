@@ -2,7 +2,7 @@ import { MenuOutlined } from "@ant-design/icons";
 import { Button, Drawer, Grid, Layout, Menu, Spin, Typography } from "antd";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import type { ColorMode } from "../contexts/ColorModeContext";
+import type { ColorMode } from "../shared/contexts/ColorModeContext";
 import { appNavItems, resolveSelectedMenuKey, resolveSelectedNavKey, resolveTitle } from "./navRegistry";
 import { createAppRouteEntries } from "./routeRegistry";
 

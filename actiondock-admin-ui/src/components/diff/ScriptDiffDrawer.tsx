@@ -1,7 +1,7 @@
 import { Drawer, Space, Typography } from "antd";
 import { ScriptDiffPanel } from "./ScriptDiffPanel";
-import type { ScriptDiffResult } from "../../scriptDiff";
-import type { ScriptType } from "../../types";
+import type { ScriptDiffResult } from "../../services/scriptDiff";
+import type { ScriptType } from "../../shared/types";
 
 const { Text, Title } = Typography;
 

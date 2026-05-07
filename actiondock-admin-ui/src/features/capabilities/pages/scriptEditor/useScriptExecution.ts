@@ -10,21 +10,21 @@ import { executeCapability } from "../../api";
 import { ApiError } from "../../../../shared/api/httpClient";
 import {
   buildExecutionInputFromValues
-} from "../../../../commands";
-import { usePollingExecution } from "../../../../hooks/usePollingExecution";
+} from "../../../../services/commands";
+import { usePollingExecution } from "../../../../shared/hooks/usePollingExecution";
 import {
   buildSchemaObjectEditorJsonText,
   parseSchemaObjectEditorJsonText
-} from "../../../../schemaObjectEditorSupport";
+} from "../../../../services/schemaObjectEditorSupport";
 import {
   buildSchemaFieldRefillState,
   buildSchemaFieldInitialState,
   buildSchemaFieldMergedState,
   isValidationErrorData
-} from "../../../../schemaExecution";
-import { resolveSchemaFields } from "../../../../schema";
-import { isExecutionActive, parseJsonText } from "../../../../utils";
-import type { ExecutionRecord, ScriptDefinition, SubmitMode, ValidationErrorData } from "../../../../types";
+} from "../../../../services/schemaExecution";
+import { resolveSchemaFields } from "../../../../services/schema";
+import { isExecutionActive, parseJsonText } from "../../../../services/utils";
+import type { ExecutionRecord, ScriptDefinition, SubmitMode, ValidationErrorData } from "../../../../shared/types";
 import type { ExecutionInputMode } from "./types";
 
 export interface UseScriptExecutionParams {

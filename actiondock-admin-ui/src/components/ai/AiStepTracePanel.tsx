@@ -1,9 +1,9 @@
 import { Alert, Collapse, Empty, Typography } from "antd";
 import { DownOutlined, RightOutlined } from "@ant-design/icons";
 import { useState } from "react";
-import type { AiAgentStep, AiStepType } from "../../types";
+import type { AiAgentStep, AiStepType } from "../../shared/types";
 import { AiToolPermissionTag } from "./AiTags";
-import { formatDateTime, prettyJson } from "../../utils";
+import { formatDateTime, prettyJson } from "../../services/utils";
 
 const { Text } = Typography;
 

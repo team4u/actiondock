@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { ColorMode } from "../contexts/ColorModeContext";
+import type { ColorMode } from "../shared/contexts/ColorModeContext";
 
 export type AppSectionKey = "capabilities" | "resources" | "executions" | "settings";
 

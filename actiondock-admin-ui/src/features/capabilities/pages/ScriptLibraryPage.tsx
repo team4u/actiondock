@@ -45,25 +45,25 @@ import {
   updateRepositoryTool
 } from "../../resources/api";
 import { ScriptImportDiffModal, type ScriptImportDiffItem } from "../../../components/diff/ScriptImportDiffModal";
-import { ConfirmDangerAction } from "../../../components/ConfirmDangerAction";
-import { capabilityToScriptDefinition } from "../../../capabilities";
-import { PageHeader } from "../../../components/PageHeader";
-import { ScopeTag, getScopeLabel } from "../../../components/ScopeTag";
-import { TableLinkCell } from "../../../components/TableLinkCell";
+import { ConfirmDangerAction } from "../../../components/common/ConfirmDangerAction";
+import { capabilityToScriptDefinition } from "../../../services/capabilities";
+import { PageHeader } from "../../../components/common/PageHeader";
+import { ScopeTag, getScopeLabel } from "../../../components/common/ScopeTag";
+import { TableLinkCell } from "../../../components/common/TableLinkCell";
 import {
   analyzeScriptImport,
   buildScriptExportBundle,
   downloadJsonFile,
   formatScriptExportFileName,
   parseScriptImportBundle
-} from "../../../scriptTransfer";
-import { buildScriptDiff, toDiffTarget } from "../../../scriptDiff";
+} from "../../../services/scriptTransfer";
+import { buildScriptDiff, toDiffTarget } from "../../../services/scriptDiff";
 import { ApiError } from "../../../shared/api/httpClient";
-import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptStatus, ScriptType } from "../../../types";
-import { formatDateTime, getErrorMessage } from "../../../utils";
+import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptStatus, ScriptType } from "../../../shared/types";
+import { formatDateTime, getErrorMessage } from "../../../services/utils";
 import { DevelopmentSyncTag } from "../../../components/domain/DevelopmentSyncTag";
-import { ForkScriptModal } from "../../../components/ForkScriptModal";
-import { useForkScript } from "../../../hooks/useForkScript";
+import { ForkScriptModal } from "../../../components/common/ForkScriptModal";
+import { useForkScript } from "../../../shared/hooks/useForkScript";
 
 const { Text } = Typography;
 

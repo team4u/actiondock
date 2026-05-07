@@ -1,5 +1,5 @@
 import { Tag } from "antd";
-import type { DevelopmentSyncState } from "../../types";
+import type { DevelopmentSyncState } from "../../shared/types";
 
 interface DevelopmentSyncTagProps {
   state?: DevelopmentSyncState;

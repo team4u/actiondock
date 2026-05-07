@@ -23,36 +23,36 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useColorMode } from "../../../contexts/ColorModeContext";
+import { useColorMode } from "../../../shared/contexts/ColorModeContext";
 import { executeCapability, getCapability } from "../api";
 import { getExecution } from "../../executions/api";
-import { BatchRunPanel } from "../../../components/BatchRunPanel";
-import { ExecutionPresetBar } from "../../../components/ExecutionPresetBar";
-import { ExecutionResultCard } from "../../../components/ExecutionResultCard";
-import { usePollingExecution } from "../../../hooks/usePollingExecution";
-import { resolveSchemaFields } from "../../../schema";
+import { BatchRunPanel } from "../../../components/execution/BatchRunPanel";
+import { ExecutionPresetBar } from "../../../components/execution/ExecutionPresetBar";
+import { ExecutionResultCard } from "../../../components/execution/ExecutionResultCard";
+import { usePollingExecution } from "../../../shared/hooks/usePollingExecution";
+import { resolveSchemaFields } from "../../../services/schema";
 import {
   buildSchemaExecutionInput,
   buildSchemaFieldInitialState,
   buildSchemaFieldRefillState,
   formatSchemaFieldSupplement,
   isValidationErrorData
-} from "../../../schemaExecution";
+} from "../../../services/schemaExecution";
 import {
   buildSchemaFieldRules,
   getSchemaFieldValuePropName,
   renderSchemaFieldInput
-} from "../../../schemaForm";
+} from "../../../services/schemaForm";
 import type {
   ExecutionResponse,
   ScriptDefinition,
   SubmitMode,
   CapabilityView,
   ValidationErrorData
-} from "../../../types";
-import { capabilityToScriptDefinition } from "../../../capabilities";
+} from "../../../shared/types";
+import { capabilityToScriptDefinition } from "../../../services/capabilities";
 import { ApiError } from "../../../shared/api/httpClient";
-import { getErrorMessage, isExecutionActive } from "../../../utils";
+import { getErrorMessage, isExecutionActive } from "../../../services/utils";
 
 const { Text, Title } = Typography;
 

@@ -10,7 +10,7 @@ import type {
   SharedStateDetail,
   SharedStateRequest,
   SharedStateSummary
-} from "../../types";
+} from "../../shared/types";
 
 export function listConfigValues(): Promise<ConfigValue[]> {
   return request<ConfigValue[]>("/api/config-values");

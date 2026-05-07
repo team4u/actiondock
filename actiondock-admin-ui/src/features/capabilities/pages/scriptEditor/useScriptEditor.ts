@@ -19,16 +19,16 @@ import {
 } from "../../../resources/api";
 import { listPluginReferences, listPlugins } from "../../../plugins/api";
 import { ApiError } from "../../../../shared/api/httpClient";
-import { capabilityToScriptDefinition } from "../../../../capabilities";
-import { readAndClearPreset } from "../../../../components/processorScriptPresets";
-import { buildDuplicatedScriptDefinition } from "../../../../scriptDuplication";
-import { createEmptySchemaEditorState, deserializeSchema, deserializeSchemaJsonText, serializeSchemaEditorState } from "../../../../schema";
-import { extractPluginDependenciesFromSource } from "../../../../pluginDependencies";
-import { extractAiDependenciesFromSource } from "../../../../aiDependencies";
-import { parseGeneratedScriptText } from "../../../../generatedScript";
-import { buildScriptEditorHeaderActionModel } from "../../../../pages/scriptEditorHeaderActions";
-import type { DevelopmentStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../../../types";
-import type { SchemaEditorState } from "../../../../schema";
+import { capabilityToScriptDefinition } from "../../../../services/capabilities";
+import { readAndClearPreset } from "../../../../components/plugin/processorScriptPresets";
+import { buildDuplicatedScriptDefinition } from "../../../../services/scriptDuplication";
+import { createEmptySchemaEditorState, deserializeSchema, deserializeSchemaJsonText, serializeSchemaEditorState } from "../../../../services/schema";
+import { extractPluginDependenciesFromSource } from "../../../../services/pluginDependencies";
+import { extractAiDependenciesFromSource } from "../../../../services/aiDependencies";
+import { parseGeneratedScriptText } from "../../../../services/generatedScript";
+import { buildScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
+import type { DevelopmentStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../../../shared/types";
+import type { SchemaEditorState } from "../../../../services/schema";
 import {
   type ScriptEditorFormValues,
   getDefaultSource,

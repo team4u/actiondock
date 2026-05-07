@@ -1,6 +1,6 @@
 import { Alert, Space, Typography } from "antd";
 import { RiskLevelTag } from "../domain/RiskLevelTag";
-import type { ScriptDiffResult } from "../../scriptDiff";
+import type { ScriptDiffResult } from "../../services/scriptDiff";
 
 const { Text } = Typography;
 

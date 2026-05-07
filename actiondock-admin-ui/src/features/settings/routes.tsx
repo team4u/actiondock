@@ -1,9 +1,9 @@
 import { lazy } from "react";
 import type { AppFeatureDefinition } from "../../app/featureRegistry";
-import { buildSystemSettingsSearch } from "../../settingsRouting";
+import { buildSystemSettingsSearch } from "../../services/settingsRouting";
 
 const SystemSettingsPage = lazy(() =>
-  import("../../pages/SystemSettingsPage").then((module) => ({ default: module.SystemSettingsPage }))
+  import("./pages/SystemSettingsPage").then((module) => ({ default: module.SystemSettingsPage }))
 );
 
 export const settingsFeature: AppFeatureDefinition = {

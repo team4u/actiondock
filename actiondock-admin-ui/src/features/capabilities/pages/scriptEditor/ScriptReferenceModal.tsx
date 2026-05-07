@@ -1,16 +1,16 @@
 import { Button, Descriptions, Drawer, Row, Space, Tag, Typography } from "antd";
-import { Col } from "../../../../components/SafeCol";
+import { Col } from "../../../../components/common/SafeCol";
 import type { MessageInstance } from "antd/es/message/interface";
 import { CopyOutlined } from "@ant-design/icons";
-import { getApiKey } from "../../../../auth";
-import { CommandPanel } from "../../../../components/CommandPanel";
-import { SchemaFieldList } from "../../../../components/SchemaFieldList";
-import { buildCliCommandPresets, buildExecuteCliCommand } from "../../../../commands";
-import { buildSchemaFieldExampleValues } from "../../../../schemaExecution";
-import { resolveSchemaFields } from "../../../../schema";
-import { buildScriptInvokeSnippet } from "../../../../scriptInvocationSnippets";
-import { useCopyMessage } from "../../../../hooks/useCopyMessage";
-import type { ScriptDefinition, ScriptType } from "../../../../types";
+import { getApiKey } from "../../../../shared/auth/auth";
+import { CommandPanel } from "../../../../components/execution/CommandPanel";
+import { SchemaFieldList } from "../../../../components/schema/SchemaFieldList";
+import { buildCliCommandPresets, buildExecuteCliCommand } from "../../../../services/commands";
+import { buildSchemaFieldExampleValues } from "../../../../services/schemaExecution";
+import { resolveSchemaFields } from "../../../../services/schema";
+import { buildScriptInvokeSnippet } from "../../../../services/scriptInvocationSnippets";
+import { useCopyMessage } from "../../../../shared/hooks/useCopyMessage";
+import type { ScriptDefinition, ScriptType } from "../../../../shared/types";
 
 const { Text } = Typography;
 

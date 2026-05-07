@@ -1,4 +1,4 @@
-import type { RepositoryDefinition, RepositoryToolDescriptor } from "../../types";
+import type { RepositoryDefinition, RepositoryToolDescriptor } from "../../shared/types";
 
 export function getRepositoryTypeLabel(type: RepositoryDefinition["type"]): string {
   switch (type) {

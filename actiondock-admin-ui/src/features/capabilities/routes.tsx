@@ -12,49 +12,49 @@ const ScriptRunPage = lazy(() =>
   import("./pages/ScriptRunPage").then((module) => ({ default: module.ScriptRunPage }))
 );
 const PluginManagementPage = lazy(() =>
-  import("../../pages/PluginManagementPage").then((module) => ({ default: module.PluginManagementPage }))
+  import("../plugins/pages/PluginManagementPage").then((module) => ({ default: module.PluginManagementPage }))
 );
 const PluginDetailPage = lazy(() =>
-  import("../../pages/PluginDetailPage").then((module) => ({ default: module.PluginDetailPage }))
+  import("../plugins/pages/PluginDetailPage").then((module) => ({ default: module.PluginDetailPage }))
 );
 const SkillManagementPage = lazy(() =>
-  import("../../pages/SkillManagementPage").then((module) => ({ default: module.SkillManagementPage }))
+  import("../skills/pages/SkillManagementPage").then((module) => ({ default: module.SkillManagementPage }))
 );
 const SkillPublishPage = lazy(() =>
-  import("../../pages/SkillPublishPage").then((module) => ({ default: module.SkillPublishPage }))
+  import("../skills/pages/SkillPublishPage").then((module) => ({ default: module.SkillPublishPage }))
 );
 const SkillDetailPage = lazy(() =>
-  import("../../pages/SkillDetailPage").then((module) => ({ default: module.SkillDetailPage }))
+  import("../skills/pages/SkillDetailPage").then((module) => ({ default: module.SkillDetailPage }))
 );
 const ScanSkillsPage = lazy(() =>
-  import("../../pages/ScanSkillsPage").then((module) => ({ default: module.ScanSkillsPage }))
+  import("../skills/pages/ScanSkillsPage").then((module) => ({ default: module.ScanSkillsPage }))
 );
 const AiOverviewPage = lazy(() =>
-  import("../../pages/ai/AiOverviewPage").then((module) => ({ default: module.AiOverviewPage }))
+  import("../ai/pages/AiOverviewPage").then((module) => ({ default: module.AiOverviewPage }))
 );
 const AiModelProfileListPage = lazy(() =>
-  import("../../pages/ai/AiModelProfileListPage").then((module) => ({ default: module.AiModelProfileListPage }))
+  import("../ai/pages/AiModelProfileListPage").then((module) => ({ default: module.AiModelProfileListPage }))
 );
 const AiAgentProfileListPage = lazy(() =>
-  import("../../pages/ai/AiAgentProfileListPage").then((module) => ({ default: module.AiAgentProfileListPage }))
+  import("../ai/pages/AiAgentProfileListPage").then((module) => ({ default: module.AiAgentProfileListPage }))
 );
 const AiToolsetListPage = lazy(() =>
-  import("../../pages/ai/AiToolsetListPage").then((module) => ({ default: module.AiToolsetListPage }))
+  import("../ai/pages/AiToolsetListPage").then((module) => ({ default: module.AiToolsetListPage }))
 );
 const AiToolsetDetailPage = lazy(() =>
-  import("../../pages/ai/AiToolsetDetailPage").then((module) => ({ default: module.AiToolsetDetailPage }))
+  import("../ai/pages/AiToolsetDetailPage").then((module) => ({ default: module.AiToolsetDetailPage }))
 );
 const AiRunListPage = lazy(() =>
-  import("../../pages/ai/AiRunListPage").then((module) => ({ default: module.AiRunListPage }))
+  import("../ai/pages/AiRunListPage").then((module) => ({ default: module.AiRunListPage }))
 );
 const AiRunDetailPage = lazy(() =>
-  import("../../pages/ai/AiRunDetailPage").then((module) => ({ default: module.AiRunDetailPage }))
+  import("../ai/pages/AiRunDetailPage").then((module) => ({ default: module.AiRunDetailPage }))
 );
 const AiModelProfileDetailPage = lazy(() =>
-  import("../../pages/ai/AiProfileDetailPage").then((module) => ({ default: module.AiModelProfileDetailPage }))
+  import("../ai/pages/AiProfileDetailPage").then((module) => ({ default: module.AiModelProfileDetailPage }))
 );
 const AiAgentProfileDetailPage = lazy(() =>
-  import("../../pages/ai/AiProfileDetailPage").then((module) => ({ default: module.AiAgentProfileDetailPage }))
+  import("../ai/pages/AiProfileDetailPage").then((module) => ({ default: module.AiAgentProfileDetailPage }))
 );
 
 export const capabilitiesFeature: AppFeatureDefinition = {

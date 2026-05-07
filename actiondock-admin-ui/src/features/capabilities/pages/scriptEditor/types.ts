@@ -10,9 +10,9 @@ import type {
   ScriptDefinition,
   ScriptPackaging,
   ScriptType
-} from "../../../../types";
-import type { SchemaEditorState } from "../../../../schema";
-import type { ScriptEditorHeaderActionModel } from "../../../../pages/scriptEditorHeaderActions";
+} from "../../../../shared/types";
+import type { SchemaEditorState } from "../../../../services/schema";
+import type { ScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
 
 export interface ScriptEditorPageProps {
   colorMode: "light" | "dark";
@@ -47,7 +47,7 @@ export interface PublishScriptDependencyDraft {
   state: "AUTO" | "MANUAL" | "UNRESOLVED";
 }
 
-export type { ForkFormValues } from "../../../../types";
+export type { ForkFormValues } from "../../../../shared/types";
 
 export type ExecutionInputMode = "SCHEMA" | "JSON";
 

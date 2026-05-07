@@ -1,4 +1,4 @@
-import type { ColorMode } from "../contexts/ColorModeContext";
+import type { ColorMode } from "../shared/contexts/ColorModeContext";
 import { appFeatures } from "./features";
 import type { AppFeatureRoute, AppSectionKey } from "./featureRegistry";
 

@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import type { SchemaFieldDefinition } from "../schema";
+import type { SchemaFieldDefinition } from "../services/schema";
 import type {
   BatchDraftItem,
   BatchSourceDraft,

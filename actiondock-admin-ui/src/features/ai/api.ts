@@ -12,7 +12,7 @@ import type {
   AiTool,
   AiToolExecutionResult,
   AiToolset
-} from "../../types";
+} from "../../shared/types";
 
 export function listAiModels(): Promise<AiModelProfile[]> {
   return request<AiModelProfile[]>("/api/ai/models");

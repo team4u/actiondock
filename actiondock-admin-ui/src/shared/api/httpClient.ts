@@ -1,5 +1,5 @@
 import { emitAuthRequired, getApiKey } from "../auth/tokenStore";
-import type { ApiErrorPayload, ApiResponse } from "../../types";
+import type { ApiErrorPayload, ApiResponse } from "../../shared/types";
 
 export const JSON_HEADERS = {
   "Content-Type": "application/json"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SchemaFieldDefinition } from "../schema";
+import type { SchemaFieldDefinition } from "../services/schema";
 import {
   buildAutoCsvMapping,
   buildDraftFromCsvSource,

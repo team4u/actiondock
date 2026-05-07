@@ -34,16 +34,16 @@ import JSZip from "jszip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { executeScript, getExecution } from "../../../executions/api";
-import { getApiKey } from "../../../../auth";
-import { ScopeTag } from "../../../../components/ScopeTag";
-import { Col } from "../../../../components/SafeCol";
-import { ExecutionPresetBar } from "../../../../components/ExecutionPresetBar";
+import { getApiKey } from "../../../../shared/auth/auth";
+import { ScopeTag } from "../../../../components/common/ScopeTag";
+import { Col } from "../../../../components/common/SafeCol";
+import { ExecutionPresetBar } from "../../../../components/execution/ExecutionPresetBar";
 import {
   buildCliCommandPresets,
   buildCommandPresets,
   buildHttpCommandPresets,
   buildExecutionInputFromValues
-} from "../../../../commands";
+} from "../../../../services/commands";
 import {
   buildExecuteCliCommand,
   buildExecuteCurlCommand,
@@ -55,16 +55,16 @@ import {
   buildToolDetailPowerShellCommand,
   buildToolSchemaCliCommand,
   resolveExecutionCommandInput
-} from "../../../../commands";
-import { formatDateTime, parseJsonText } from "../../../../utils";
-import { useCopyMessage } from "../../../../hooks/useCopyMessage";
-import { buildScriptSkillExample } from "../../../../skillExamples";
-import { writeInlineSkillPublishSession } from "../../../../skillPublishSession";
+} from "../../../../services/commands";
+import { formatDateTime, parseJsonText } from "../../../../services/utils";
+import { useCopyMessage } from "../../../../shared/hooks/useCopyMessage";
+import { buildScriptSkillExample } from "../../../../services/skillExamples";
+import { writeInlineSkillPublishSession } from "../../../../services/skillPublishSession";
 import { DevelopmentSyncTag } from "../../../../components/domain/DevelopmentSyncTag";
 import { ScriptDiffDrawer } from "../../../../components/diff/ScriptDiffDrawer";
 import { ScriptDiffSummary } from "../../../../components/diff/ScriptDiffSummary";
-import { formatSchemaEditorState } from "../../../../schema";
-import { buildPublishDiffTarget, buildPublishScriptDiff } from "../../../../scriptDiff";
+import { formatSchemaEditorState } from "../../../../services/schema";
+import { buildPublishDiffTarget, buildPublishScriptDiff } from "../../../../services/scriptDiff";
 import { useScriptEditor } from "./useScriptEditor";
 import { useScriptExecution } from "./useScriptExecution";
 import { useScriptPublishToRepo } from "./useScriptPublishToRepo";
@@ -72,7 +72,7 @@ import { useScriptFork } from "./useScriptFork";
 import { useScriptReferences } from "./useScriptReferences";
 import { GeneratedScriptImportModal } from "./GeneratedScriptImportModal";
 import { PublishToRepositoryModal } from "./PublishToRepositoryModal";
-import { ForkScriptModal } from "../../../../components/ForkScriptModal";
+import { ForkScriptModal } from "../../../../components/common/ForkScriptModal";
 import { ScriptReferenceModal } from "./ScriptReferenceModal";
 import { PluginReferenceModal } from "./PluginReferenceModal";
 import { ScriptDefinitionTab } from "./ScriptDefinitionTab";
@@ -80,7 +80,7 @@ import { ScriptCommandsTab } from "./ScriptCommandsTab";
 import { ScriptExecutionTab } from "./ScriptExecutionTab";
 import type { ScriptEditorFormValues } from "./types";
 import type { ScriptEditorPageProps } from "./types";
-import type { ScriptType } from "../../../../types";
+import type { ScriptType } from "../../../../shared/types";
 
 const { Text } = Typography;
 

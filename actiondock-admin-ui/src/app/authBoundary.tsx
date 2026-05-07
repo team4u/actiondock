@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { onAuthRequired } from "../auth";
-import { buildSystemSettingsSearch, isSystemSettingsRoute } from "../settingsRouting";
+import { onAuthRequired } from "../shared/auth/auth";
+import { buildSystemSettingsSearch, isSystemSettingsRoute } from "../services/settingsRouting";
 
 export function AuthBoundary({ children }: { children: ReactNode }) {
   const navigate = useNavigate();

@@ -1,8 +1,8 @@
 import { Empty, List, Modal, Space, Typography } from "antd";
 import { ScriptDiffPanel } from "./ScriptDiffPanel";
 import { RiskLevelTag } from "../domain/RiskLevelTag";
-import type { ScriptDiffResult } from "../../scriptDiff";
-import type { ScriptDefinition } from "../../types";
+import type { ScriptDiffResult } from "../../services/scriptDiff";
+import type { ScriptDefinition } from "../../shared/types";
 
 const { Text } = Typography;
 

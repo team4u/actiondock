@@ -1,6 +1,6 @@
 import { Alert, Card, Empty, Space, Table, Tag, Typography } from "antd";
 import { RiskLevelTag } from "../domain/RiskLevelTag";
-import type { SchemaDiffSummary } from "../../scriptDiff";
+import type { SchemaDiffSummary } from "../../services/scriptDiff";
 
 const { Text } = Typography;
 

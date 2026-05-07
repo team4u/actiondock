@@ -1,11 +1,11 @@
 import { CodeOutlined } from "@ant-design/icons";
 import { Card, Empty, Form, Input, Row, Select, Space, Table, Tabs, Tag, Typography } from "antd";
-import { Col } from "../../../../components/SafeCol";
-import { CodeEditor } from "../../../../components/CodeEditor";
-import { SchemaBuilder } from "../../../../components/SchemaBuilder";
+import { Col } from "../../../../components/common/SafeCol";
+import { CodeEditor } from "../../../../components/common/CodeEditor";
+import { SchemaBuilder } from "../../../../components/schema/SchemaBuilder";
 import type { FormInstance } from "antd";
-import type { PluginReferenceView, ScriptDefinition, ScriptType } from "../../../../types";
-import type { SchemaEditorState } from "../../../../schema";
+import type { PluginReferenceView, ScriptDefinition, ScriptType } from "../../../../shared/types";
+import type { SchemaEditorState } from "../../../../services/schema";
 import {
   getSourceFileName,
   getSourceLanguage,

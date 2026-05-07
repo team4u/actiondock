@@ -5,7 +5,7 @@ import type {
   PluginInvokeResponse,
   PluginReferenceView,
   PluginView
-} from "../../types";
+} from "../../shared/types";
 
 export function listPlugins(): Promise<PluginView[]> {
   return request<PluginView[]>("/api/plugins");

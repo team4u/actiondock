@@ -1,5 +1,5 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { ExecuteRequest, ExecutionRecord, ExecutionResponse } from "../../types";
+import type { ExecuteRequest, ExecutionRecord, ExecutionResponse } from "../../shared/types";
 
 export function executeScript(payload: ExecuteRequest): Promise<ExecutionResponse> {
   return request<ExecutionResponse>("/api/executions", {

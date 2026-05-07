@@ -1,5 +1,5 @@
 import { Tag } from "antd";
-import type { AiCapability, AiRunStatus, AiToolPermission } from "../../types";
+import type { AiCapability, AiRunStatus, AiToolPermission } from "../../shared/types";
 
 export function AiCapabilityTag({ capability }: { capability: AiCapability }) {
   return <Tag color={capability === "AGENT_RUN" ? "purple" : capability === "EMBEDDING" ? "gold" : "blue"}>{capability}</Tag>;

@@ -1,8 +1,8 @@
 import { Drawer, Space, Typography } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
-import { getApiKey } from "../../../../auth";
-import { PluginActionsOverview } from "../../../../components/PluginActionsOverview";
-import type { PluginReferenceView, ScriptType } from "../../../../types";
+import { getApiKey } from "../../../../shared/auth/auth";
+import { PluginActionsOverview } from "../../../../components/plugin/PluginActionsOverview";
+import type { PluginReferenceView, ScriptType } from "../../../../shared/types";
 
 const { Text } = Typography;
 

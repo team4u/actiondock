@@ -1,5 +1,5 @@
 import { DiffEditor } from "@monaco-editor/react";
-import type { ScriptType } from "../../types";
+import type { ScriptType } from "../../shared/types";
 
 interface SourceDiffViewerProps {
   type?: ScriptType;

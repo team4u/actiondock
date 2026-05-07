@@ -11,7 +11,7 @@ import type {
   SkillSyncResponse,
   SkillTarget,
   SkillValidationResult
-} from "../../types";
+} from "../../shared/types";
 
 export function listSkills(): Promise<Skill[]> {
   return request<Skill[]>("/api/skills");

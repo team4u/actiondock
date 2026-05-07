@@ -20,23 +20,23 @@ import type {
   RepositoryToolDescriptor,
   ScriptDefinition,
   ScriptSchedule
-} from "../../../../types";
-import { getErrorMessage } from "../../../../utils";
-import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../../../scriptDependencies";
-import { getEnabledRepositories, getPublishableRepositories } from "../../../../repositoryPublish";
+} from "../../../../shared/types";
+import { getErrorMessage } from "../../../../services/utils";
+import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../../../services/scriptDependencies";
+import { getEnabledRepositories, getPublishableRepositories } from "../../../../services/repositoryPublish";
 import {
   buildRepositoryPublishDiffTarget,
   buildScriptDiff,
   toRepositoryToolDiffTarget
-} from "../../../../scriptDiff";
+} from "../../../../services/scriptDiff";
 import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues } from "./types";
 import {
   suggestNextRepositoryVersion,
   toTagOptions
 } from "./types";
 import type { RepositoryPublishVersionSuggestion } from "./types";
-import type { ScriptDiffResult, ScriptDiffTarget } from "../../../../scriptDiff";
-import { useDefaultOwner } from "../../../../hooks/useDefaultOwner";
+import type { ScriptDiffResult, ScriptDiffTarget } from "../../../../services/scriptDiff";
+import { useDefaultOwner } from "../../../../shared/hooks/useDefaultOwner";
 
 function normalizeTagValues(tags: string[] | undefined): string[] {
   return (tags ?? []).filter((item) => item.trim().length > 0);

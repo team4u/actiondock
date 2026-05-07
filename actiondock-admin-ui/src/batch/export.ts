@@ -1,6 +1,6 @@
 import Papa from "papaparse";
-import type { SchemaFieldDefinition } from "../schema";
-import { downloadJsonFile } from "../scriptTransfer";
+import type { SchemaFieldDefinition } from "../services/schema";
+import { downloadJsonFile } from "../services/scriptTransfer";
 import type { BatchSession } from "./types";
 
 export function downloadTextFile(fileName: string, payload: string, contentType: string): void {

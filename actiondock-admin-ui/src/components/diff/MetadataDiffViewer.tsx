@@ -1,6 +1,6 @@
 import { Empty, Table } from "antd";
 import { RiskLevelTag } from "../domain/RiskLevelTag";
-import type { MetadataDiffSummary } from "../../scriptDiff";
+import type { MetadataDiffSummary } from "../../services/scriptDiff";
 
 interface MetadataDiffViewerProps {
   diff: MetadataDiffSummary;

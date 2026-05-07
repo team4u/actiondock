@@ -13,7 +13,7 @@ import {
 } from "antd";
 import type { FormInstance } from "antd";
 import { ScriptDiffPanel } from "../../../../components/diff/ScriptDiffPanel";
-import { RepositoryPublishBasicsForm } from "../../../../components/RepositoryPublishBasicsForm";
+import { RepositoryPublishBasicsForm } from "../../../../components/repository/RepositoryPublishBasicsForm";
 import type {
   PluginDependency,
   RepositoryDefinition,
@@ -21,7 +21,7 @@ import type {
   RepositoryToolDescriptor,
   ScriptSchedule,
   ScriptType
-} from "../../../../types";
+} from "../../../../shared/types";
 import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues, RepositoryPublishVersionSuggestion } from "./types";
 
 const { Text } = Typography;
@@ -136,7 +136,7 @@ interface PublishToRepositoryModalProps {
   schedules: ScriptSchedule[];
   configPreview: RepositoryPublishConfigPreview | null;
   configPreviewLoading: boolean;
-  repositoryDiff: import("../../../../scriptDiff").ScriptDiffResult | null;
+  repositoryDiff: import("../../../../services/scriptDiff").ScriptDiffResult | null;
   repositoryDiffLoading: boolean;
   repositoryContentUnchanged: boolean;
   theme: "vs-light" | "vs-dark";

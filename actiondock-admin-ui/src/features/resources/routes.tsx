@@ -2,34 +2,34 @@ import { lazy } from "react";
 import type { AppFeatureDefinition } from "../../app/featureRegistry";
 
 const RepositoryDiscoveryPage = lazy(() =>
-  import("../../pages/RepositoryDiscoveryPage").then((module) => ({ default: module.RepositoryDiscoveryPage }))
+  import("./pages/RepositoryDiscoveryPage").then((module) => ({ default: module.RepositoryDiscoveryPage }))
 );
 const CapabilityPackagePublishPage = lazy(() =>
-  import("../../pages/CapabilityPackagePublishPage").then((module) => ({ default: module.CapabilityPackagePublishPage }))
+  import("./pages/CapabilityPackagePublishPage").then((module) => ({ default: module.CapabilityPackagePublishPage }))
 );
 const RepositoryManagementPage = lazy(() =>
-  import("../../pages/RepositoryManagementPage").then((module) => ({ default: module.RepositoryManagementPage }))
+  import("./pages/RepositoryManagementPage").then((module) => ({ default: module.RepositoryManagementPage }))
 );
 const PluginManagementPage = lazy(() =>
-  import("../../pages/PluginManagementPage").then((module) => ({ default: module.PluginManagementPage }))
+  import("../plugins/pages/PluginManagementPage").then((module) => ({ default: module.PluginManagementPage }))
 );
 const PluginDetailPage = lazy(() =>
-  import("../../pages/PluginDetailPage").then((module) => ({ default: module.PluginDetailPage }))
+  import("../plugins/pages/PluginDetailPage").then((module) => ({ default: module.PluginDetailPage }))
 );
 const SkillManagementPage = lazy(() =>
-  import("../../pages/SkillManagementPage").then((module) => ({ default: module.SkillManagementPage }))
+  import("../skills/pages/SkillManagementPage").then((module) => ({ default: module.SkillManagementPage }))
 );
 const SkillInstallPage = lazy(() =>
-  import("../../pages/SkillInstallPage").then((module) => ({ default: module.SkillInstallPage }))
+  import("../skills/pages/SkillInstallPage").then((module) => ({ default: module.SkillInstallPage }))
 );
 const SkillPublishPage = lazy(() =>
-  import("../../pages/SkillPublishPage").then((module) => ({ default: module.SkillPublishPage }))
+  import("../skills/pages/SkillPublishPage").then((module) => ({ default: module.SkillPublishPage }))
 );
 const SkillDetailPage = lazy(() =>
-  import("../../pages/SkillDetailPage").then((module) => ({ default: module.SkillDetailPage }))
+  import("../skills/pages/SkillDetailPage").then((module) => ({ default: module.SkillDetailPage }))
 );
 const ScanSkillsPage = lazy(() =>
-  import("../../pages/ScanSkillsPage").then((module) => ({ default: module.ScanSkillsPage }))
+  import("../skills/pages/ScanSkillsPage").then((module) => ({ default: module.ScanSkillsPage }))
 );
 
 export const resourcesFeature: AppFeatureDefinition = {

@@ -2,37 +2,37 @@ import { lazy } from "react";
 import type { AppFeatureDefinition } from "../../app/featureRegistry";
 
 const TriggerCenterPage = lazy(() =>
-  import("../../pages/TriggerCenterPage").then((module) => ({ default: module.TriggerCenterPage }))
+  import("./pages/TriggerCenterPage").then((module) => ({ default: module.TriggerCenterPage }))
 );
 const ScheduleEditorPage = lazy(() =>
-  import("../../pages/ScheduleEditorPage").then((module) => ({ default: module.ScheduleEditorPage }))
+  import("./pages/ScheduleEditorPage").then((module) => ({ default: module.ScheduleEditorPage }))
 );
 const AiOverviewPage = lazy(() =>
-  import("../../pages/ai/AiOverviewPage").then((module) => ({ default: module.AiOverviewPage }))
+  import("../ai/pages/AiOverviewPage").then((module) => ({ default: module.AiOverviewPage }))
 );
 const AiModelProfileListPage = lazy(() =>
-  import("../../pages/ai/AiModelProfileListPage").then((module) => ({ default: module.AiModelProfileListPage }))
+  import("../ai/pages/AiModelProfileListPage").then((module) => ({ default: module.AiModelProfileListPage }))
 );
 const AiAgentProfileListPage = lazy(() =>
-  import("../../pages/ai/AiAgentProfileListPage").then((module) => ({ default: module.AiAgentProfileListPage }))
+  import("../ai/pages/AiAgentProfileListPage").then((module) => ({ default: module.AiAgentProfileListPage }))
 );
 const AiToolsetListPage = lazy(() =>
-  import("../../pages/ai/AiToolsetListPage").then((module) => ({ default: module.AiToolsetListPage }))
+  import("../ai/pages/AiToolsetListPage").then((module) => ({ default: module.AiToolsetListPage }))
 );
 const AiToolsetDetailPage = lazy(() =>
-  import("../../pages/ai/AiToolsetDetailPage").then((module) => ({ default: module.AiToolsetDetailPage }))
+  import("../ai/pages/AiToolsetDetailPage").then((module) => ({ default: module.AiToolsetDetailPage }))
 );
 const AiRunListPage = lazy(() =>
-  import("../../pages/ai/AiRunListPage").then((module) => ({ default: module.AiRunListPage }))
+  import("../ai/pages/AiRunListPage").then((module) => ({ default: module.AiRunListPage }))
 );
 const AiRunDetailPage = lazy(() =>
-  import("../../pages/ai/AiRunDetailPage").then((module) => ({ default: module.AiRunDetailPage }))
+  import("../ai/pages/AiRunDetailPage").then((module) => ({ default: module.AiRunDetailPage }))
 );
 const AiModelProfileDetailPage = lazy(() =>
-  import("../../pages/ai/AiProfileDetailPage").then((module) => ({ default: module.AiModelProfileDetailPage }))
+  import("../ai/pages/AiProfileDetailPage").then((module) => ({ default: module.AiModelProfileDetailPage }))
 );
 const AiAgentProfileDetailPage = lazy(() =>
-  import("../../pages/ai/AiProfileDetailPage").then((module) => ({ default: module.AiAgentProfileDetailPage }))
+  import("../ai/pages/AiProfileDetailPage").then((module) => ({ default: module.AiAgentProfileDetailPage }))
 );
 
 export const executionsFeature: AppFeatureDefinition = {

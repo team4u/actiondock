@@ -1,5 +1,5 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { ExecutionPreset, ExecutionPresetUpsertRequest, ScriptDefinition } from "../../types";
+import type { ExecutionPreset, ExecutionPresetUpsertRequest, ScriptDefinition } from "../../shared/types";
 
 export function listScripts(): Promise<ScriptDefinition[]> {
   return request<ScriptDefinition[]>("/api/scripts?includeUiSchema=true");

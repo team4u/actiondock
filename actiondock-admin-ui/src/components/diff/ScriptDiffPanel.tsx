@@ -4,8 +4,8 @@ import { SourceDiffViewer } from "./SourceDiffViewer";
 import { SchemaDiffViewer } from "./SchemaDiffViewer";
 import { MetadataDiffViewer } from "./MetadataDiffViewer";
 import { DependencyDiffViewer } from "./DependencyDiffViewer";
-import type { ScriptDiffResult } from "../../scriptDiff";
-import type { ScriptType } from "../../types";
+import type { ScriptDiffResult } from "../../services/scriptDiff";
+import type { ScriptType } from "../../shared/types";
 
 const { Text } = Typography;
 

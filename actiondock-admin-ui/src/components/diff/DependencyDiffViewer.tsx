@@ -1,6 +1,6 @@
 import { Card, Empty, Space, Table, Typography } from "antd";
 import { RiskLevelTag } from "../domain/RiskLevelTag";
-import type { DependencyDiffSummary } from "../../scriptDiff";
+import type { DependencyDiffSummary } from "../../services/scriptDiff";
 
 const { Text } = Typography;
 

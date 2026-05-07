@@ -1,5 +1,5 @@
 import { theme, type ThemeConfig } from "antd";
-import type { ColorMode } from "../contexts/ColorModeContext";
+import type { ColorMode } from "../shared/contexts/ColorModeContext";
 
 export function createAdminTheme(colorMode: ColorMode): ThemeConfig {
   const isDark = colorMode === "dark";

@@ -1,5 +1,5 @@
-import type { SchemaFieldDefinition } from "../schema";
-import type { ExecutionRecord, ExecutionResponse, SubmitMode } from "../types";
+import type { SchemaFieldDefinition } from "../services/schema";
+import type { ExecutionRecord, ExecutionResponse, SubmitMode } from "../shared/types";
 
 export type BatchSurface = "editor" | "published";
 export type BatchInputSource = "JSON_ARRAY" | "JSONL" | "CSV";

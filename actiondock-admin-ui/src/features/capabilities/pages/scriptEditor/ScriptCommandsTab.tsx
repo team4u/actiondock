@@ -1,10 +1,10 @@
 import { Alert, Collapse, Descriptions, Space, Typography } from "antd";
 import { Grid } from "antd";
-import { CommandPanel, type CommandPreset } from "../../../../components/CommandPanel";
-import { InfoHint } from "../../../../components/InfoHint";
-import { JsonPreview } from "../../../../components/JsonPreview";
-import { SkillExamplePanel } from "../../../../components/SkillExamplePanel";
-import { getCommandInputSourceLabel, type ResolvedCommandInput } from "../../../../commands";
+import { CommandPanel, type CommandPreset } from "../../../../components/execution/CommandPanel";
+import { InfoHint } from "../../../../components/common/InfoHint";
+import { JsonPreview } from "../../../../components/common/JsonPreview";
+import { SkillExamplePanel } from "../../../../components/skill/SkillExamplePanel";
+import { getCommandInputSourceLabel, type ResolvedCommandInput } from "../../../../services/commands";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;

@@ -23,7 +23,7 @@ import type {
   ResourceLifecycleOperationView,
   ResourceLifecycleRequest,
   ScriptDefinition
-} from "../../types";
+} from "../../shared/types";
 
 export function listRepositories(): Promise<RepositoryDefinition[]> {
   return request<RepositoryDefinition[]>("/api/repositories");

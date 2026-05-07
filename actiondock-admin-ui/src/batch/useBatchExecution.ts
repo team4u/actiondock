@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError } from "../api";
-import type { ExecutionRecord } from "../types";
-import { isValidationErrorData } from "../schemaExecution";
-import { isExecutionActive } from "../utils";
+import { ApiError } from "../services/api";
+import type { ExecutionRecord } from "../shared/types";
+import { isValidationErrorData } from "../services/schemaExecution";
+import { isExecutionActive } from "../services/utils";
 import {
   buildBatchSessionStats,
   createBatchSession,

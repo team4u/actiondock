@@ -1,5 +1,5 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { CapabilityView, ExecuteRequest, ExecutionResponse, ScriptDefinition } from "../../types";
+import type { CapabilityView, ExecuteRequest, ExecutionResponse, ScriptDefinition } from "../../shared/types";
 
 export function listCapabilities(): Promise<CapabilityView[]> {
   return request<CapabilityView[]>("/api/capabilities?includeUiSchema=true");

@@ -9,21 +9,21 @@ import {
   PlayCircleOutlined,
   ReloadOutlined
 } from "@ant-design/icons";
-import { Col } from "../../../../components/SafeCol";
-import { ConfirmDangerAction } from "../../../../components/ConfirmDangerAction";
-import { ExecutionResultCard } from "../../../../components/ExecutionResultCard";
-import { SchemaObjectEditor } from "../../../../components/SchemaObjectEditor";
-import { BatchRunPanel } from "../../../../components/BatchRunPanel";
+import { Col } from "../../../../components/common/SafeCol";
+import { ConfirmDangerAction } from "../../../../components/common/ConfirmDangerAction";
+import { ExecutionResultCard } from "../../../../components/execution/ExecutionResultCard";
+import { SchemaObjectEditor } from "../../../../components/schema/SchemaObjectEditor";
+import { BatchRunPanel } from "../../../../components/execution/BatchRunPanel";
 import type { ReactNode } from "react";
-import type { SchemaFieldDefinition } from "../../../../schema";
-import { formatDateTime, getExecutionStatusColor, isExecutionActive } from "../../../../utils";
+import type { SchemaFieldDefinition } from "../../../../services/schema";
+import { formatDateTime, getExecutionStatusColor, isExecutionActive } from "../../../../services/utils";
 import type {
   ExecutionRecord,
   ExecutionStatus,
   ScriptDefinition,
   SubmitMode,
   ValidationErrorData
-} from "../../../../types";
+} from "../../../../shared/types";
 import type { BatchExecutionFetcher, BatchExecutionSubmitter } from "../../../../batch/types";
 import type { ExecutionInputMode } from "./types";
 

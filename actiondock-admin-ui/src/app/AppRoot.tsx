@@ -1,8 +1,8 @@
 import { App as AntdApp, ConfigProvider } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { AuthProvider } from "../auth";
-import { ColorModeContext, type ColorMode } from "../contexts/ColorModeContext";
-import { ErrorBoundary } from "../components/ErrorBoundary";
+import { AuthProvider } from "../shared/auth/auth";
+import { ColorModeContext, type ColorMode } from "../shared/contexts/ColorModeContext";
+import { ErrorBoundary } from "../components/common/ErrorBoundary";
 import { createAdminTheme } from "./theme";
 import { AppShell } from "./AppShell";
 import { AuthBoundary } from "./authBoundary";

@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import type { PluginReferenceView, ScriptDefinition } from "../../../../types";
+import type { PluginReferenceView, ScriptDefinition } from "../../../../shared/types";
 
 export interface UseScriptReferencesParams {
   currentScript: ScriptDefinition | null;
