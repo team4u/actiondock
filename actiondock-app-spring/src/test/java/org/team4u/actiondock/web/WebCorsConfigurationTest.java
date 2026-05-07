@@ -6,6 +6,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.team4u.actiondock.web.common.GlobalExceptionHandler;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.application.ScriptApplicationService;
