@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.core.AiToolsetService;
-import org.team4u.actiondock.web.ApiResponse;
+import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
 

@@ -12,7 +12,7 @@ import org.team4u.actiondock.ai.api.AiEmbeddingResponse;
 import org.team4u.actiondock.ai.api.AiGateway;
 import org.team4u.actiondock.ai.api.AiStructuredRequest;
 import org.team4u.actiondock.ai.api.AiStructuredResponse;
-import org.team4u.actiondock.web.ApiResponse;
+import org.team4u.actiondock.web.common.ApiResponse;
 
 @RestController
 @RequestMapping("/api/ai")

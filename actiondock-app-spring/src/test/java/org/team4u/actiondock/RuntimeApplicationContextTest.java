@@ -5,9 +5,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.team4u.actiondock.bootstrap.SampleDataInitializer;
-import org.team4u.actiondock.web.AdminUiController;
-import org.team4u.actiondock.web.ExecutionController;
-import org.team4u.actiondock.web.ScriptController;
+import org.team4u.actiondock.web.common.AdminUiController;
+import org.team4u.actiondock.web.execution.ExecutionController;
+import org.team4u.actiondock.web.script.ScriptController;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

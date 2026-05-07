@@ -11,7 +11,7 @@ import org.team4u.actiondock.ai.api.AiToolDescriptor;
 import org.team4u.actiondock.ai.api.AiToolExecutionContext;
 import org.team4u.actiondock.ai.api.AiToolExecutionResult;
 import org.team4u.actiondock.ai.core.AiToolRegistryImpl;
-import org.team4u.actiondock.web.ApiResponse;
+import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
 import java.util.Map;

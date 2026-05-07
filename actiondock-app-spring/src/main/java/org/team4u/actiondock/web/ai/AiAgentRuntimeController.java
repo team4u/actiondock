@@ -15,7 +15,7 @@ import org.team4u.actiondock.ai.api.AiAgentRunSnapshot;
 import org.team4u.actiondock.ai.api.AiAgentRunSubmission;
 import org.team4u.actiondock.ai.api.AiAgentResumeCommand;
 import org.team4u.actiondock.ai.core.AiAgentRuntimeImpl;
-import org.team4u.actiondock.web.ApiResponse;
+import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
 

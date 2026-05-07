@@ -14,7 +14,7 @@ import org.team4u.actiondock.ai.api.AiChatResponse;
 import org.team4u.actiondock.ai.api.AiGateway;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.core.AiModelProfileService;
-import org.team4u.actiondock.web.ApiResponse;
+import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
 

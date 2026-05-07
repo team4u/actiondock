@@ -14,7 +14,6 @@ import org.team4u.actiondock.schedule.ScheduleConfiguration;
 import org.team4u.actiondock.storage.jpa.StorageConfiguration;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
-import org.team4u.actiondock.web.ScriptController;
 
 import java.util.Arrays;
 import java.util.Set;
@@ -24,7 +23,13 @@ import java.util.Set;
  *
  * @author jay.wu
  */
-@SpringBootApplication(scanBasePackageClasses = {ScriptController.class, SampleDataInitializer.class})
+@SpringBootApplication(scanBasePackages = {
+        "org.team4u.actiondock.web",
+        "org.team4u.actiondock.bootstrap",
+        "org.team4u.actiondock.desktop",
+        "org.team4u.actiondock.schedule",
+        "org.team4u.actiondock.update"
+})
 @EntityScan(basePackageClasses = ScriptEntity.class)
 @EnableJpaRepositories(basePackageClasses = SpringDataScriptEntityRepository.class)
 @Import({RuntimeConfiguration.class, StorageConfiguration.class, AuthConfiguration.class, WebCorsConfiguration.class, ScheduleConfiguration.class})
