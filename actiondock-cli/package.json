@@ -1,6 +1,6 @@
 {
   "name": "actiondock",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "ActionDock local automation runtime, CLI, server, admin UI, and desktop tray app",
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,6 @@
   "files": [
     "bin",
     "dist",
-    "runtime/actiondock-app-spring.jar",
     "jdeploy-bundle",
     "README.md"
   ],

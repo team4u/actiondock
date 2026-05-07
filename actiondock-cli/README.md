@@ -65,7 +65,8 @@ npm link
 ```
 
 `prepack` compiles the TypeScript CLI, builds the Spring runtime jar, copies it
-to `runtime/actiondock-app-spring.jar`, and generates `jdeploy-bundle/`.
+to `runtime/actiondock-app-spring.jar`, and generates `jdeploy-bundle/` for the
+published package.
 
 Check package contents before publishing:
 
@@ -119,8 +120,8 @@ npm run pack:dry-run
 ```text
 bin/**
 dist/**
-runtime/actiondock-app-spring.jar
 jdeploy-bundle/**
+jdeploy-bundle/actiondock-app-spring.jar
 jdeploy-bundle/jdeploy.cjs
 package.json
 README.md
