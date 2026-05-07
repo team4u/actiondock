@@ -59,6 +59,13 @@ public class ScriptEntity {
 
     @Lob
     private String publishedOutputSchemaJson;
+    private String publishedOwner;
+    @Lob
+    private String publishedDescription;
+    @Lob
+    private String publishedTagsJson;
+    @Lob
+    private String publishedPluginDependenciesJson;
     @Lob
     private String publishedScriptDependenciesJson;
     @Lob
@@ -120,6 +127,14 @@ public class ScriptEntity {
     public void setPublishedInputSchemaJson(String publishedInputSchemaJson) { this.publishedInputSchemaJson = publishedInputSchemaJson; }
     public String getPublishedOutputSchemaJson() { return publishedOutputSchemaJson; }
     public void setPublishedOutputSchemaJson(String publishedOutputSchemaJson) { this.publishedOutputSchemaJson = publishedOutputSchemaJson; }
+    public String getPublishedOwner() { return publishedOwner; }
+    public void setPublishedOwner(String publishedOwner) { this.publishedOwner = publishedOwner; }
+    public String getPublishedDescription() { return publishedDescription; }
+    public void setPublishedDescription(String publishedDescription) { this.publishedDescription = publishedDescription; }
+    public String getPublishedTagsJson() { return publishedTagsJson; }
+    public void setPublishedTagsJson(String publishedTagsJson) { this.publishedTagsJson = publishedTagsJson; }
+    public String getPublishedPluginDependenciesJson() { return publishedPluginDependenciesJson; }
+    public void setPublishedPluginDependenciesJson(String publishedPluginDependenciesJson) { this.publishedPluginDependenciesJson = publishedPluginDependenciesJson; }
     public String getPublishedScriptDependenciesJson() { return publishedScriptDependenciesJson; }
     public void setPublishedScriptDependenciesJson(String publishedScriptDependenciesJson) { this.publishedScriptDependenciesJson = publishedScriptDependenciesJson; }
     public String getPublishedAiDependenciesJson() { return publishedAiDependenciesJson; }

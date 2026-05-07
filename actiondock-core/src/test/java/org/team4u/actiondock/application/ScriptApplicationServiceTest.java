@@ -2,6 +2,7 @@ package org.team4u.actiondock.application;
 
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
@@ -143,6 +144,14 @@ class ScriptApplicationServiceTest {
                 .setType(ScriptType.GROOVY)
                 .setPackaging(ScriptPackaging.FLOW)
                 .setSource("return [message: 'draft']")
+                .setPythonRequirements("requests==2.31.0")
+                .setOwner("alice")
+                .setDescription("draft desc")
+                .setTags(List.of("demo"))
+                .setPluginDependencies(List.of(new PluginDependency()
+                        .setPluginId("email-plugin")
+                        .setVersionRange(">= 1.0.0")
+                        .setRequiredActions(List.of("send"))))
                 .setInputSchema(Map.of("type", "object"))
                 .setOutputSchema(Map.of("type", "object"))
                 .setVersion(2)
@@ -157,6 +166,11 @@ class ScriptApplicationServiceTest {
         assertThat(published.getPackaging()).isEqualTo(ScriptPackaging.FLOW);
         assertThat(published.getPublishedSnapshot().getPackaging()).isEqualTo(ScriptPackaging.FLOW);
         assertThat(published.getPublishedSnapshot().getSource()).isEqualTo("return [message: 'draft']");
+        assertThat(published.getPublishedSnapshot().getPythonRequirements()).isEqualTo("requests==2.31.0");
+        assertThat(published.getPublishedSnapshot().getOwner()).isEqualTo("alice");
+        assertThat(published.getPublishedSnapshot().getDescription()).isEqualTo("draft desc");
+        assertThat(published.getPublishedSnapshot().getTags()).containsExactly("demo");
+        assertThat(published.getPublishedSnapshot().getPluginDependencies()).hasSize(1);
         assertThat(published.getHasUnpublishedChanges()).isFalse();
         assertThat(published.getUpdatedAt()).isNotNull();
     }
@@ -210,8 +224,16 @@ class ScriptApplicationServiceTest {
                         .setType(ScriptType.GROOVY)
                         .setPackaging(ScriptPackaging.FLOW)
                         .setSource("return [message: 'live']")
+                        .setPythonRequirements("requests==2.31.0")
+                        .setOwner("platform")
+                        .setDescription("published desc")
+                        .setTags(List.of("stable"))
                         .setInputSchema(Map.of("type", "object"))
-                        .setOutputSchema(Map.of("properties", Map.of("message", Map.of("type", "string")))))
+                        .setOutputSchema(Map.of("properties", Map.of("message", Map.of("type", "string"))))
+                        .setPluginDependencies(List.of(new PluginDependency()
+                                .setPluginId("email-plugin")
+                                .setVersionRange(">= 1.0.0")
+                                .setRequiredActions(List.of("send")))))
                 .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(4)));
 
@@ -221,6 +243,11 @@ class ScriptApplicationServiceTest {
         assertThat(published.getType()).isEqualTo(ScriptType.GROOVY);
         assertThat(published.getPackaging()).isEqualTo(ScriptPackaging.FLOW);
         assertThat(published.getSource()).isEqualTo("return [message: 'live']");
+        assertThat(published.getPythonRequirements()).isEqualTo("requests==2.31.0");
+        assertThat(published.getOwner()).isEqualTo("platform");
+        assertThat(published.getDescription()).isEqualTo("published desc");
+        assertThat(published.getTags()).containsExactly("stable");
+        assertThat(published.getPluginDependencies()).hasSize(1);
         assertThat(published.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
         assertThat(published.getHasUnpublishedChanges()).isFalse();
     }
@@ -238,6 +265,7 @@ class ScriptApplicationServiceTest {
                         .setType(ScriptType.GROOVY)
                         .setPackaging(ScriptPackaging.FLOW)
                         .setSource("return [message: 'live']")
+                        .setDescription("published desc")
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("type", "object")))
                 .setStatus(ScriptStatus.PUBLISHED)
@@ -250,8 +278,36 @@ class ScriptApplicationServiceTest {
         assertThat(discarded.getType()).isEqualTo(ScriptType.GROOVY);
         assertThat(discarded.getPackaging()).isEqualTo(ScriptPackaging.FLOW);
         assertThat(discarded.getSource()).isEqualTo("return [message: 'live']");
+        assertThat(discarded.getDescription()).isEqualTo("published desc");
         assertThat(discarded.getVersion()).isEqualTo(5);
         assertThat(discarded.getHasUnpublishedChanges()).isFalse();
+    }
+
+    @Test
+    void getPublishedLeavesMissingLegacySnapshotFieldsEmpty() {
+        when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Draft")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [message: 'draft']")
+                .setOwner("draft-owner")
+                .setDescription("draft desc")
+                .setTags(List.of("draft"))
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("Live")
+                        .setType(ScriptType.GROOVY)
+                        .setSource("return [message: 'live']")
+                        .setInputSchema(Map.of("type", "object"))
+                        .setOutputSchema(Map.of("type", "object")))
+                .setStatus(ScriptStatus.PUBLISHED)
+                .setVersion(2)));
+
+        ScriptDefinition published = service.getPublished("script-1");
+
+        assertThat(published.getOwner()).isNull();
+        assertThat(published.getDescription()).isNull();
+        assertThat(published.getTags()).isEmpty();
+        assertThat(published.getPluginDependencies()).isEmpty();
     }
 
     @Test

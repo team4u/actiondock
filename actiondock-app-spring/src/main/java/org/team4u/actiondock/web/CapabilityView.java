@@ -19,6 +19,7 @@ public record CapabilityView(
         String description,
         String owner,
         List<String> tags,
+        Boolean hasUnpublishedChanges,
         CapabilityBindingView draftBinding,
         CapabilityBindingView publishedBinding,
         LocalDateTime createdAt,
@@ -26,12 +27,19 @@ public record CapabilityView(
 ) {
     public record CapabilityBindingView(
             String version,
+            String name,
             String source,
             String runtime,
             Map<String, Object> inputSchema,
             Map<String, Object> outputSchema,
             String packaging,
-            List<?> dependencies
+            String pythonRequirements,
+            String description,
+            String owner,
+            List<String> tags,
+            List<?> scriptDependencies,
+            List<?> pluginDependencies,
+            List<?> aiDependencies
     ) {
     }
 }

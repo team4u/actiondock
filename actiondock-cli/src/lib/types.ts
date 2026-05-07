@@ -6,12 +6,19 @@ export interface ApiEnvelope<T> {
 
 export interface CapabilityBindingView {
   version?: string | null;
+  name?: string | null;
   source?: string | null;
   runtime?: string | null;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   packaging?: string | null;
-  dependencies?: unknown[];
+  pythonRequirements?: string | null;
+  description?: string | null;
+  owner?: string | null;
+  tags?: string[] | null;
+  scriptDependencies?: unknown[];
+  pluginDependencies?: unknown[];
+  aiDependencies?: unknown[];
 }
 
 export interface CapabilityView {
@@ -26,6 +33,7 @@ export interface CapabilityView {
   description?: string;
   owner?: string;
   tags?: string[];
+  hasUnpublishedChanges?: boolean;
   draftBinding?: CapabilityBindingView | null;
   publishedBinding?: CapabilityBindingView | null;
   createdAt?: string | null;
@@ -50,9 +58,17 @@ export interface ScriptDefinition {
   publishedSnapshot?: {
     name?: string;
     type?: string;
+    packaging?: string;
+    source?: string;
     pythonRequirements?: string;
+    owner?: string;
+    description?: string;
+    tags?: string[];
     inputSchema?: Record<string, unknown>;
     outputSchema?: Record<string, unknown>;
+    scriptDependencies?: unknown[];
+    pluginDependencies?: unknown[];
+    aiDependencies?: unknown[];
   } | null;
 }
 

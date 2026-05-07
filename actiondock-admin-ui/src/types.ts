@@ -33,7 +33,11 @@ export interface PublishedScriptSnapshot {
   pythonRequirements?: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
+  owner?: string;
+  description?: string;
+  tags?: string[];
   scriptDependencies?: ScriptDependency[];
+  pluginDependencies?: PluginDependency[];
   aiDependencies?: AiDependency[];
 }
 
@@ -72,12 +76,19 @@ export interface ScriptDefinition {
 
 export interface CapabilityBinding {
   version?: string | null;
+  name?: string | null;
   source?: string | null;
   runtime?: ScriptType | string | null;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   packaging?: ScriptPackaging | string | null;
-  dependencies?: unknown[];
+  pythonRequirements?: string | null;
+  description?: string | null;
+  owner?: string | null;
+  tags?: string[] | null;
+  scriptDependencies?: ScriptDependency[] | null;
+  pluginDependencies?: PluginDependency[] | null;
+  aiDependencies?: AiDependency[] | null;
 }
 
 export interface CapabilityView {
@@ -92,6 +103,7 @@ export interface CapabilityView {
   description?: string;
   owner?: string;
   tags?: string[];
+  hasUnpublishedChanges?: boolean;
   draftBinding?: CapabilityBinding | null;
   publishedBinding?: CapabilityBinding | null;
   createdAt?: string;

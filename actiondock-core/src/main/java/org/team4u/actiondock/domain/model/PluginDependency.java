@@ -2,6 +2,7 @@ package org.team4u.actiondock.domain.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 脚本声明的插件依赖。
@@ -45,5 +46,23 @@ public class PluginDependency {
                 .setPluginId(pluginId)
                 .setVersionRange(versionRange)
                 .setRequiredActions(requiredActions);
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (!(object instanceof PluginDependency other)) {
+            return false;
+        }
+        return Objects.equals(pluginId, other.pluginId)
+                && Objects.equals(versionRange, other.versionRange)
+                && Objects.equals(requiredActions, other.requiredActions);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(pluginId, versionRange, requiredActions);
     }
 }

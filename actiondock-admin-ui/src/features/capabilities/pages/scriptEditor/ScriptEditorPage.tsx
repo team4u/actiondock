@@ -300,6 +300,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         type: previewScriptType,
         packaging: (watchedScriptValues?.packaging as "TOOL" | "FLOW" | undefined) ?? editor.currentScript?.packaging ?? "TOOL",
         source: editor.sourceText,
+        pythonRequirements: watchedScriptValues?.pythonRequirements ?? editor.currentScript?.pythonRequirements,
         inputSchema: resolvePreviewSchema(previewInputSchemaText),
         outputSchema: resolvePreviewSchema(previewOutputSchemaText),
         rawInputSchemaText: previewInputSchemaText,
@@ -308,7 +309,10 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         owner: editor.currentScript?.owner,
         tags: editor.currentScript?.tags ?? [],
         scriptDependencies: editor.currentScript?.scriptDependencies,
-        pluginDependencies: previewScriptType === "GROOVY" ? editor.detectedPluginDependencies : []
+        pluginDependencies: previewScriptType === "GROOVY" ? editor.detectedPluginDependencies : [],
+        aiDependencies: editor.detectedAiDependencies.map((item) =>
+          [item.capability, item.profile ?? "", item.agentProfile ?? "", item.required ? "required" : "optional"].join(":")
+        )
       }),
     [
       editor.currentScript?.description,
@@ -323,7 +327,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       previewScriptType,
       watchedScriptValues?.description,
       watchedScriptValues?.name,
-      watchedScriptValues?.packaging
+      watchedScriptValues?.packaging,
+      watchedScriptValues?.pythonRequirements
     ]
   );
   const publishToRepo = useScriptPublishToRepo({

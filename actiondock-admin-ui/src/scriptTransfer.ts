@@ -179,9 +179,14 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
     type: type as ScriptType,
     packaging: (packaging as ScriptPackaging | undefined) ?? "TOOL",
     source,
+    pythonRequirements: assertOptionalString(value.pythonRequirements, `${fieldName}.pythonRequirements`),
+    owner: assertOptionalString(value.owner, `${fieldName}.owner`),
+    description: assertOptionalString(value.description, `${fieldName}.description`),
+    tags: assertOptionalStringArray(value.tags, `${fieldName}.tags`),
     inputSchema: assertSchemaObject(value.inputSchema, `${fieldName}.inputSchema`),
     outputSchema: assertSchemaObject(value.outputSchema, `${fieldName}.outputSchema`),
-    scriptDependencies: parseScriptDependencies(value.scriptDependencies, `${fieldName}.scriptDependencies`)
+    scriptDependencies: parseScriptDependencies(value.scriptDependencies, `${fieldName}.scriptDependencies`),
+    pluginDependencies: parsePluginDependencies(value.pluginDependencies, `${fieldName}.pluginDependencies`)
   };
 }
 

@@ -28,6 +28,7 @@ public class CapabilityViewMapper {
                 sanitized.getDescription(),
                 sanitized.getOwner(),
                 sanitized.getTags(),
+                sanitized.getHasUnpublishedChanges(),
                 toDraftBinding(sanitized),
                 toPublishedBinding(sanitized, sanitized.getPublishedSnapshot()),
                 sanitized.getCreatedAt(),
@@ -38,12 +39,19 @@ public class CapabilityViewMapper {
     private CapabilityView.CapabilityBindingView toDraftBinding(ScriptDefinition source) {
         return new CapabilityView.CapabilityBindingView(
                 source.getVersion() == null ? null : String.valueOf(source.getVersion()),
+                source.getName(),
                 source.getSource(),
                 enumName(source.getType()),
                 copySchema(source.getInputSchema()),
                 copySchema(source.getOutputSchema()),
                 enumName(source.getPackaging()),
-                List.copyOf(source.getScriptDependencies())
+                source.getPythonRequirements(),
+                source.getDescription(),
+                source.getOwner(),
+                List.copyOf(source.getTags()),
+                List.copyOf(source.getScriptDependencies()),
+                List.copyOf(source.getPluginDependencies()),
+                List.copyOf(source.getAiDependencies())
         );
     }
 
@@ -53,12 +61,19 @@ public class CapabilityViewMapper {
         }
         return new CapabilityView.CapabilityBindingView(
                 null,
+                snapshot.getName(),
                 snapshot.getSource(),
                 enumName(snapshot.getType()),
                 copySchema(snapshot.getInputSchema()),
                 copySchema(snapshot.getOutputSchema()),
                 enumName(snapshot.getPackaging()),
-                List.copyOf(snapshot.getScriptDependencies())
+                snapshot.getPythonRequirements(),
+                snapshot.getDescription(),
+                snapshot.getOwner(),
+                List.copyOf(snapshot.getTags()),
+                List.copyOf(snapshot.getScriptDependencies()),
+                List.copyOf(snapshot.getPluginDependencies()),
+                List.copyOf(snapshot.getAiDependencies())
         );
     }
 

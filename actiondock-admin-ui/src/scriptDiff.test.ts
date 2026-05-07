@@ -14,6 +14,7 @@ function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
     type: "GROOVY",
     packaging: "TOOL",
     source: "return [message: 'ok']",
+    pythonRequirements: "requests==2.31.0",
     inputSchema: {
       type: "object",
       properties: {
@@ -287,14 +288,25 @@ describe("buildPublishScriptDiff", () => {
 
   it("reports no changes when publish target matches the published snapshot", () => {
     const current = script({
-      description: "Updated docs",
-      owner: "platform",
-      tags: ["demo"],
+      description: "draft desc",
+      owner: "draft-owner",
+      tags: ["draft"],
+      pluginDependencies: [
+        {
+          pluginId: "draft-plugin",
+          versionRange: ">= 9.9.9",
+          requiredActions: ["draft"]
+        }
+      ],
       publishedSnapshot: {
         name: "User Query",
         type: "GROOVY",
         packaging: "TOOL",
         source: "return [message: 'ok']",
+        pythonRequirements: "requests==2.31.0",
+        description: "published desc",
+        owner: "platform",
+        tags: ["demo"],
         inputSchema: {
           type: "object",
           properties: {
@@ -308,7 +320,19 @@ describe("buildPublishScriptDiff", () => {
           }
         },
         scriptDependencies: [],
-        aiDependencies: []
+        pluginDependencies: [
+          {
+            pluginId: "email-plugin",
+            versionRange: ">= 1.0.0",
+            requiredActions: ["send"]
+          }
+        ],
+        aiDependencies: [
+          {
+            capability: "CHAT",
+            required: true
+          }
+        ]
       }
     });
 
@@ -319,18 +343,61 @@ describe("buildPublishScriptDiff", () => {
         type: current.type,
         packaging: current.packaging,
         source: current.source,
+        pythonRequirements: current.pythonRequirements,
         inputSchema: current.inputSchema,
         outputSchema: current.outputSchema,
-        description: current.description,
-        owner: current.owner,
-        tags: current.tags,
+        description: current.publishedSnapshot?.description,
+        owner: current.publishedSnapshot?.owner,
+        tags: current.publishedSnapshot?.tags,
         scriptDependencies: current.scriptDependencies,
-        pluginDependencies: current.pluginDependencies
+        pluginDependencies: current.publishedSnapshot?.pluginDependencies,
+        aiDependencies: ["CHAT:::required"]
       })
     );
 
     expect(diff.hasChanges).toBe(false);
     expect(diff.comparisonMode).toBe("COMPARE");
     expect(diff.metadata.changed).toBe(false);
+  });
+
+  it("detects python requirements and ai dependency publish changes", () => {
+    const current = script({
+      publishedSnapshot: {
+        name: "User Query",
+        type: "GROOVY",
+        packaging: "TOOL",
+        source: "return [message: 'ok']",
+        pythonRequirements: "requests==2.30.0",
+        inputSchema: script().inputSchema,
+        outputSchema: script().outputSchema,
+        aiDependencies: [{ capability: "CHAT", profile: "", agentProfile: "", required: true }]
+      }
+    });
+
+    const diff = buildPublishScriptDiff(
+      current,
+      buildPublishDiffTarget({
+        name: current.name,
+        type: current.type,
+        packaging: current.packaging,
+        source: current.source,
+        pythonRequirements: "requests==2.31.0",
+        inputSchema: current.inputSchema,
+        outputSchema: current.outputSchema,
+        aiDependencies: ["AGENT_RUN:::required"]
+      })
+    );
+
+    expect(diff.metadata.changed).toBe(true);
+    expect(diff.metadata.changes).toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: "pythonRequirements" })])
+    );
+    expect(diff.dependencies.changed).toBe(true);
+    expect(diff.dependencies.added).toEqual(
+      expect.arrayContaining([expect.objectContaining({ dependencyId: "AI:AGENT_RUN:::required" })])
+    );
+    expect(diff.dependencies.removed).toEqual(
+      expect.arrayContaining([expect.objectContaining({ dependencyId: "AI:CHAT:::required" })])
+    );
   });
 });

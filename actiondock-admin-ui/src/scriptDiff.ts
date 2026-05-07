@@ -19,6 +19,7 @@ export interface ScriptDiffTarget {
   type?: ScriptType;
   packaging?: ScriptPackaging;
   source?: string;
+  pythonRequirements?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   description?: string;
@@ -26,6 +27,7 @@ export interface ScriptDiffTarget {
   tags?: string[];
   scriptDependencies?: ScriptDependency[];
   pluginDependencies?: PluginDependency[];
+  aiDependencies?: string[];
   rawInputSchemaText?: string;
   rawOutputSchemaText?: string;
 }
@@ -462,6 +464,7 @@ function diffMetadata(
           { field: "name", label: "名称", risk: "LOW" as RiskLevel },
           { field: "type", label: "类型", risk: "HIGH" as RiskLevel },
           { field: "packaging", label: "打包属性", risk: "HIGH" as RiskLevel },
+          { field: "pythonRequirements", label: "Python 依赖", risk: "MEDIUM" as RiskLevel },
           { field: "description", label: "说明", risk: "LOW" as RiskLevel },
           { field: "owner", label: "Owner", risk: "LOW" as RiskLevel },
           { field: "tags", label: "标签", risk: "LOW" as RiskLevel }
@@ -470,6 +473,7 @@ function diffMetadata(
           { field: "name", label: "名称", risk: "LOW" as RiskLevel },
           { field: "type", label: "类型", risk: "HIGH" as RiskLevel },
           { field: "packaging", label: "打包属性", risk: "HIGH" as RiskLevel },
+          { field: "pythonRequirements", label: "Python 依赖", risk: "MEDIUM" as RiskLevel },
           { field: "description", label: "说明", risk: "LOW" as RiskLevel },
           { field: "owner", label: "Owner", risk: "LOW" as RiskLevel },
           { field: "tags", label: "标签", risk: "LOW" as RiskLevel }
@@ -535,6 +539,10 @@ function normalizeScriptDependencyChange(
   };
 }
 
+function normalizeAiDependencies(dependencies: ScriptDiffTarget["aiDependencies"]): string[] {
+  return [...(dependencies ?? [])].sort();
+}
+
 function diffDependencies(
   base: ScriptDiffTarget | undefined,
   target: ScriptDiffTarget,
@@ -553,6 +561,8 @@ function diffDependencies(
   const targetScriptDependencies = new Map(
     (target.scriptDependencies ?? []).map((dependency) => [normalizeScriptDependencyKey(dependency), dependency])
   );
+  const baseAiDependencies = normalizeAiDependencies(base?.aiDependencies);
+  const targetAiDependencies = normalizeAiDependencies(target.aiDependencies);
 
   const added: DependencyChange[] = [];
   const removed: DependencyChange[] = [];
@@ -656,6 +666,25 @@ function diffDependencies(
         added.push(normalizeScriptDependencyChange(dependency, "MEDIUM"));
       }
     }
+
+    const removedAiDependencies = baseAiDependencies.filter((item) => !targetAiDependencies.includes(item));
+    const addedAiDependencies = targetAiDependencies.filter((item) => !baseAiDependencies.includes(item));
+    for (const dependencyId of removedAiDependencies) {
+      removed.push({
+        dependencyType: "PLUGIN",
+        dependencyId: `AI:${dependencyId}`,
+        requiredActions: [],
+        risk: "LOW"
+      });
+    }
+    for (const dependencyId of addedAiDependencies) {
+      added.push({
+        dependencyType: "PLUGIN",
+        dependencyId: `AI:${dependencyId}`,
+        requiredActions: [],
+        risk: "LOW"
+      });
+    }
   }
 
   return {
@@ -737,13 +766,17 @@ function toPublishBase(script: ScriptDefinition): ScriptDiffTarget | undefined {
     type: snapshot.type,
     packaging: snapshot.packaging,
     source: snapshot.source,
+    pythonRequirements: snapshot.pythonRequirements,
+    description: normalizeString(snapshot.description),
+    owner: normalizeString(snapshot.owner),
+    tags: normalizeStringArray(snapshot.tags),
     inputSchema: snapshot.inputSchema,
     outputSchema: snapshot.outputSchema,
-    description: normalizeString(script.description),
-    owner: normalizeString(script.owner),
-    tags: normalizeStringArray(script.tags),
     scriptDependencies: snapshot.scriptDependencies,
-    pluginDependencies: script.pluginDependencies
+    pluginDependencies: snapshot.pluginDependencies,
+    aiDependencies: normalizeAiDependencies(
+      snapshot.aiDependencies?.map((item) => [item.capability, item.profile ?? "", item.agentProfile ?? "", item.required ? "required" : "optional"].join(":"))
+    )
   };
 }
 
@@ -753,13 +786,17 @@ export function toDiffTarget(script: ScriptDefinition): ScriptDiffTarget {
     type: script.type,
     packaging: script.packaging,
     source: script.source,
+    pythonRequirements: script.pythonRequirements,
     inputSchema: script.inputSchema,
     outputSchema: script.outputSchema,
     description: script.description,
     owner: script.owner,
     tags: script.tags,
     scriptDependencies: script.scriptDependencies,
-    pluginDependencies: script.pluginDependencies
+    pluginDependencies: script.pluginDependencies,
+    aiDependencies: normalizeAiDependencies(
+      script.aiDependencies?.map((item) => [item.capability, item.profile ?? "", item.agentProfile ?? "", item.required ? "required" : "optional"].join(":"))
+    )
   };
 }
 
@@ -777,7 +814,8 @@ export function buildPublishDiffTarget(
     | "tags"
     | "scriptDependencies"
     | "pluginDependencies"
-  >> & {
+    | "pythonRequirements"
+  >> & Pick<ScriptDiffTarget, "aiDependencies"> & {
     rawInputSchemaText?: string;
     rawOutputSchemaText?: string;
   }
@@ -787,6 +825,7 @@ export function buildPublishDiffTarget(
     type: script.type,
     packaging: script.packaging,
     source: script.source,
+    pythonRequirements: script.pythonRequirements,
     inputSchema: script.inputSchema,
     outputSchema: script.outputSchema,
     rawInputSchemaText: script.rawInputSchemaText,
@@ -795,7 +834,8 @@ export function buildPublishDiffTarget(
     owner: normalizeString(script.owner),
     tags: normalizeStringArray(script.tags),
     scriptDependencies: script.scriptDependencies,
-    pluginDependencies: script.pluginDependencies
+    pluginDependencies: script.pluginDependencies,
+    aiDependencies: normalizeAiDependencies(script.aiDependencies)
   };
 }
 
@@ -805,11 +845,13 @@ export function buildRepositoryPublishDiffTarget(target: ScriptDiffTarget): Scri
     type: target.type,
     packaging: target.packaging,
     source: target.source,
+    pythonRequirements: target.pythonRequirements,
     description: normalizeString(target.description),
     owner: normalizeString(target.owner),
     tags: normalizeStringArray(target.tags),
     scriptDependencies: target.scriptDependencies,
-    pluginDependencies: target.pluginDependencies
+    pluginDependencies: target.pluginDependencies,
+    aiDependencies: target.aiDependencies
   };
 }
 
@@ -819,11 +861,15 @@ export function toRepositoryToolDiffTarget(detail: RepositoryToolDetail): Script
     type: detail.descriptor.type,
     packaging: detail.descriptor.packaging,
     source: detail.source,
+    pythonRequirements: detail.pythonRequirements,
     description: normalizeString(detail.descriptor.description),
     owner: normalizeString(detail.descriptor.owner),
     tags: normalizeStringArray(detail.descriptor.tags),
     scriptDependencies: detail.descriptor.scriptDependencies,
-    pluginDependencies: detail.descriptor.pluginDependencies
+    pluginDependencies: detail.descriptor.pluginDependencies,
+    aiDependencies: normalizeAiDependencies(
+      detail.descriptor.aiDependencies?.map((item) => [item.capability, item.profile ?? "", item.agentProfile ?? "", item.required ? "required" : "optional"].join(":"))
+    )
   };
 }
 

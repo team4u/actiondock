@@ -90,6 +90,10 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
             entity.setPublishedPythonRequirements(publishedSnapshot.getPythonRequirements());
             entity.setPublishedInputSchemaJson(jsonCodec.write(publishedSnapshot.getInputSchema()));
             entity.setPublishedOutputSchemaJson(jsonCodec.write(publishedSnapshot.getOutputSchema()));
+            entity.setPublishedOwner(publishedSnapshot.getOwner());
+            entity.setPublishedDescription(publishedSnapshot.getDescription());
+            entity.setPublishedTagsJson(jsonCodec.write(publishedSnapshot.getTags()));
+            entity.setPublishedPluginDependenciesJson(jsonCodec.write(publishedSnapshot.getPluginDependencies()));
             entity.setPublishedScriptDependenciesJson(jsonCodec.write(publishedSnapshot.getScriptDependencies()));
             entity.setPublishedAiDependenciesJson(jsonCodec.write(publishedSnapshot.getAiDependencies()));
         }
@@ -166,7 +170,9 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
     private PublishedScriptSnapshot toSnapshot(ScriptEntity entity) {
         if (entity.getPublishedType() == null && entity.getPublishedPackaging() == null
                 && entity.getPublishedSource() == null && entity.getPublishedName() == null
-                && entity.getPublishedInputSchemaJson() == null && entity.getPublishedOutputSchemaJson() == null) {
+                && entity.getPublishedInputSchemaJson() == null && entity.getPublishedOutputSchemaJson() == null
+                && entity.getPublishedOwner() == null && entity.getPublishedDescription() == null
+                && entity.getPublishedTagsJson() == null && entity.getPublishedPluginDependenciesJson() == null) {
             return null;
         }
 
@@ -178,6 +184,10 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setPythonRequirements(entity.getPublishedPythonRequirements())
                 .setInputSchema(jsonCodec.readMap(entity.getPublishedInputSchemaJson()))
                 .setOutputSchema(jsonCodec.readMap(entity.getPublishedOutputSchemaJson()))
+                .setOwner(entity.getPublishedOwner())
+                .setDescription(entity.getPublishedDescription())
+                .setTags(jsonCodec.readList(entity.getPublishedTagsJson(), String.class))
+                .setPluginDependencies(jsonCodec.readList(entity.getPublishedPluginDependenciesJson(), PluginDependency.class))
                 .setScriptDependencies(jsonCodec.readList(entity.getPublishedScriptDependenciesJson(), ScriptDependency.class))
                 .setAiDependencies(jsonCodec.readList(entity.getPublishedAiDependenciesJson(), AiDependency.class));
     }

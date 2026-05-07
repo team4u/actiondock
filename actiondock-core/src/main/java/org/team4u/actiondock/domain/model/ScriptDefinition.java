@@ -331,7 +331,11 @@ public class ScriptDefinition {
                 .setPythonRequirements(pythonRequirements)
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
+                .setOwner(owner)
+                .setDescription(description)
+                .setTags(tags)
                 .setScriptDependencies(scriptDependencies)
+                .setPluginDependencies(pluginDependencies)
                 .setAiDependencies(aiDependencies);
     }
 
@@ -369,10 +373,6 @@ public class ScriptDefinition {
                 .setSourceSyncedAt(getSourceSyncedAt())
                 .setDirty(isDirty())
                 .setEditable(editable)
-                .setOwner(owner)
-                .setDescription(description)
-                .setTags(tags)
-                .setPluginDependencies(pluginDependencies)
                 .setCreatedAt(createdAt)
                 .setUpdatedAt(updatedAt);
     }

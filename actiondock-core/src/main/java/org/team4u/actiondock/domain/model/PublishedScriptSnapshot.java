@@ -23,7 +23,11 @@ public class PublishedScriptSnapshot {
     private String pythonRequirements;
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
     private Map<String, Object> outputSchema = new LinkedHashMap<>();
+    private String owner;
+    private String description;
+    private List<String> tags = new ArrayList<>();
     private List<ScriptDependency> scriptDependencies = new ArrayList<>();
+    private List<PluginDependency> pluginDependencies = new ArrayList<>();
     private List<AiDependency> aiDependencies = new ArrayList<>();
 
     public PublishedScriptSnapshot() {
@@ -45,7 +49,11 @@ public class PublishedScriptSnapshot {
         setPythonRequirements(other.pythonRequirements);
         setInputSchema(other.inputSchema);
         setOutputSchema(other.outputSchema);
+        setOwner(other.owner);
+        setDescription(other.description);
+        setTags(other.tags);
         setScriptDependencies(other.scriptDependencies);
+        setPluginDependencies(other.pluginDependencies);
         setAiDependencies(other.aiDependencies);
     }
 
@@ -122,12 +130,48 @@ public class PublishedScriptSnapshot {
         return this;
     }
 
+    public String getOwner() {
+        return owner;
+    }
+
+    public PublishedScriptSnapshot setOwner(String owner) {
+        this.owner = owner;
+        return this;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public PublishedScriptSnapshot setDescription(String description) {
+        this.description = description;
+        return this;
+    }
+
+    public List<String> getTags() {
+        return List.copyOf(tags);
+    }
+
+    public PublishedScriptSnapshot setTags(List<String> tags) {
+        this.tags = tags == null ? new ArrayList<>() : new ArrayList<>(tags);
+        return this;
+    }
+
     public List<ScriptDependency> getScriptDependencies() {
         return SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
     }
 
     public PublishedScriptSnapshot setScriptDependencies(List<ScriptDependency> scriptDependencies) {
         this.scriptDependencies = SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
+        return this;
+    }
+
+    public List<PluginDependency> getPluginDependencies() {
+        return SchemaValueCopier.copyList(pluginDependencies, PluginDependency::copy);
+    }
+
+    public PublishedScriptSnapshot setPluginDependencies(List<PluginDependency> pluginDependencies) {
+        this.pluginDependencies = SchemaValueCopier.copyList(pluginDependencies, PluginDependency::copy);
         return this;
     }
 
@@ -157,7 +201,11 @@ public class PublishedScriptSnapshot {
         target.setPythonRequirements(pythonRequirements);
         target.setInputSchema(inputSchema);
         target.setOutputSchema(outputSchema);
+        target.setOwner(owner);
+        target.setDescription(description);
+        target.setTags(tags);
         target.setScriptDependencies(scriptDependencies);
+        target.setPluginDependencies(pluginDependencies);
         target.setAiDependencies(aiDependencies);
     }
 
@@ -176,12 +224,30 @@ public class PublishedScriptSnapshot {
                 && Objects.equals(pythonRequirements, other.pythonRequirements)
                 && Objects.equals(inputSchema, other.inputSchema)
                 && Objects.equals(outputSchema, other.outputSchema)
+                && Objects.equals(owner, other.owner)
+                && Objects.equals(description, other.description)
+                && Objects.equals(tags, other.tags)
                 && Objects.equals(scriptDependencies, other.scriptDependencies)
+                && Objects.equals(pluginDependencies, other.pluginDependencies)
                 && Objects.equals(aiDependencies, other.aiDependencies);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, type, packaging, source, pythonRequirements, inputSchema, outputSchema, scriptDependencies, aiDependencies);
+        return Objects.hash(
+                name,
+                type,
+                packaging,
+                source,
+                pythonRequirements,
+                inputSchema,
+                outputSchema,
+                owner,
+                description,
+                tags,
+                scriptDependencies,
+                pluginDependencies,
+                aiDependencies
+        );
     }
 }
