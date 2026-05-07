@@ -1,5 +1,6 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
 import type {
+  DevelopmentStatus,
   EventDispatchRecord,
   EventRecord,
   EventSourceDefinition,
@@ -108,6 +109,16 @@ export function testEventSourceNormalization(id: string, payload: IncomingEventP
 
 export function listEventSourceEvents(id: string): Promise<EventRecord[]> {
   return request<EventRecord[]>(`/api/event-sources/${id}/events`);
+}
+
+export function getEventSourceDevelopmentStatus(id: string): Promise<DevelopmentStatus> {
+  return request<DevelopmentStatus>(`/api/event-sources/${id}/development-status`);
+}
+
+export function pullDevelopmentEventSource(id: string, force = false): Promise<EventSourceDefinition> {
+  return request<EventSourceDefinition>(`/api/event-sources/${id}/development-pull?force=${force}`, {
+    method: "POST"
+  });
 }
 
 export function listEventTriggers(): Promise<EventTrigger[]> {

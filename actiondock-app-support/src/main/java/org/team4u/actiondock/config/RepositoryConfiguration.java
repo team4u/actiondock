@@ -10,6 +10,8 @@ import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
+import org.team4u.actiondock.domain.port.EventSourceRepository;
+import org.team4u.actiondock.domain.port.EventTriggerRepository;
 import org.team4u.actiondock.repository.*;
 
 import java.util.List;
@@ -40,12 +42,15 @@ public class RepositoryConfiguration {
     @Bean
     public RepositoryCatalogService repositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                                              RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+                                                             RepositoryEventSourceInstallationRepository repositoryEventSourceInstallationRepository,
                                                              CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
                                                              ManagedSkillRepository managedSkillRepository,
                                                              ScriptRepository scriptRepository,
                                                              ScriptScheduleRepository scriptScheduleRepository,
                                                              ExecutionPresetRepository executionPresetRepository,
                                                              ConfigValueRepository configValueRepository,
+                                                             EventSourceRepository eventSourceRepository,
+                                                             EventTriggerRepository eventTriggerRepository,
                                                              AiModelProfileRepository aiModelProfileRepository,
                                                              AiAgentProfileRepository aiAgentProfileRepository,
                                                              AiToolsetRepository aiToolsetRepository,
@@ -59,12 +64,15 @@ public class RepositoryConfiguration {
                 new RepositoryCatalogService.Repositories(
                         repositoryDefinitionRepository,
                         repositoryToolInstallationRepository,
+                        repositoryEventSourceInstallationRepository,
                         capabilityPackageInstallationRepository,
                         managedSkillRepository,
                         scriptRepository,
                         scriptScheduleRepository,
                         executionPresetRepository,
                         configValueRepository,
+                        eventSourceRepository,
+                        eventTriggerRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository
@@ -111,8 +119,11 @@ public class RepositoryConfiguration {
             ScriptRepository scriptRepository,
             ScriptScheduleRepository scriptScheduleRepository,
             ConfigValueRepository configValueRepository,
+            EventSourceRepository eventSourceRepository,
+            EventTriggerRepository eventTriggerRepository,
             RepositoryDefinitionRepository repositoryDefinitionRepository,
             RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+            RepositoryEventSourceInstallationRepository repositoryEventSourceInstallationRepository,
             ManagedSkillRepository managedSkillRepository,
             ScriptApplicationService scriptApplicationService,
             ConfigValueApplicationService configValueApplicationService,
@@ -124,12 +135,15 @@ public class RepositoryConfiguration {
                 new RepositoryCatalogService.Repositories(
                         repositoryDefinitionRepository,
                         repositoryToolInstallationRepository,
+                        repositoryEventSourceInstallationRepository,
                         capabilityPackageInstallationRepository,
                         managedSkillRepository,
                         scriptRepository,
                         scriptScheduleRepository,
                         executionPresetRepository,
                         configValueRepository,
+                        eventSourceRepository,
+                        eventTriggerRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository
@@ -180,6 +194,17 @@ public class RepositoryConfiguration {
                 repositoryCatalogService,
                 jsonCodec,
                 repositoryCatalogService.getRepositoriesRoot()
+        );
+    }
+
+    @Bean
+    public RepositoryEventSourceService repositoryEventSourceService(RepositoryCatalogService repositoryCatalogService,
+                                                                     RepositoryToolService repositoryToolService) {
+        return new RepositoryEventSourceService(
+                repositoryCatalogService,
+                repositoryCatalogService.getRepos(),
+                repositoryCatalogService.getConfigTemplateSyncService(),
+                repositoryToolService
         );
     }
 }

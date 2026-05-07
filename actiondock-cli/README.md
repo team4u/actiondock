@@ -40,6 +40,11 @@ If your ActionDock service runs locally, CLI commands default to
 actiondock script list
 actiondock script schema hello-world
 actiondock script run hello-world --message hello --name alice --json
+actiondock event-source repository-list
+actiondock event-source repository-get demo-repo github-webhook
+actiondock event-source repository-install demo-repo github-webhook
+actiondock event-source repository-develop demo-repo github-webhook --source-id github-webhook-dev
+actiondock event-source development-status github-webhook-dev
 ```
 
 If the service requires auth, store a token:

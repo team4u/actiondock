@@ -3,6 +3,7 @@ package org.team4u.actiondock.application;
 import org.team4u.actiondock.domain.model.EventSourceAuthConfig;
 import org.team4u.actiondock.domain.model.EventSourceAuthMode;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
+import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.model.EventSourceTransport;
 import org.team4u.actiondock.domain.model.EventSourceTransportType;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
@@ -42,6 +43,9 @@ public class EventSourceApplicationService {
         }
         LocalDateTime now = LocalDateTime.now();
         EventSourceDefinition target = resolveTarget(definition, now);
+        if (target.getScope() == EventSourceScope.REPOSITORY) {
+            throw new IllegalArgumentException("仓库事件源仅支持通过仓库更新");
+        }
 
         String key = ApplicationServiceSupport.normalize(definition.getKey(), "事件源 Key 不能为空");
         String name = ApplicationServiceSupport.normalize(definition.getName(), "事件源名称不能为空");
@@ -102,6 +106,7 @@ public class EventSourceApplicationService {
         target.setKey(key)
                 .setName(name)
                 .setDescription(definition.getDescription())
+                .setEditable(definition.isEditable())
                 .setEnabled(definition.isEnabled())
                 .setTransport(transport)
                 .setAuth(definition.getAuth())

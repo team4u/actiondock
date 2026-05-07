@@ -2,6 +2,8 @@ export type ScriptStatus = "DRAFT" | "PUBLISHED";
 export type ScriptType = "GROOVY" | "PYTHON";
 export type ScriptPackaging = "TOOL" | "FLOW";
 export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "DEVELOPMENT" | "SAMPLE";
+export type EventSourceScope = "PERSONAL" | "REPOSITORY" | "DEVELOPMENT";
+export type EventTriggerScope = "PERSONAL" | "REPOSITORY" | "DEVELOPMENT";
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
@@ -450,6 +452,16 @@ export interface EventSourceDefinition {
   key: string;
   name: string;
   description?: string;
+  scope?: EventSourceScope;
+  repositoryId?: string;
+  repositoryEventSourceId?: string;
+  repositoryVersion?: string;
+  sourcePath?: string;
+  sourceCommit?: string;
+  sourceDigest?: string;
+  sourceSyncedAt?: string;
+  dirty?: boolean;
+  editable?: boolean;
   enabled: boolean;
   transport: EventSourceTransport;
   auth?: EventSourceAuthConfig;
@@ -464,6 +476,12 @@ export interface EventTrigger {
   id: string;
   name: string;
   description?: string;
+  scope?: EventTriggerScope;
+  repositoryId?: string;
+  repositoryEventSourceId?: string;
+  repositoryVersion?: string;
+  repositoryTriggerId?: string;
+  editable?: boolean;
   enabled: boolean;
   sourceId: string;
   targetScriptId: string;
@@ -899,6 +917,90 @@ export interface RepositoryToolDetail {
   scheduleTemplate: RepositoryScheduleTemplateItem[];
 }
 
+export interface RepositoryEventTriggerBinding {
+  templateId: string;
+  repositoryId?: string;
+  toolId: string;
+  versionRange?: string;
+  scriptId?: string;
+}
+
+export interface RepositoryEventTriggerTemplateItem {
+  id: string;
+  name: string;
+  description?: string;
+  enabledByDefault: boolean;
+  targetScriptDependency: ScriptDependency;
+  filterProcessor?: ProcessorDefinition;
+  idempotencyProcessor?: ProcessorDefinition;
+  inputProcessor?: ProcessorDefinition;
+  submitMode?: SubmitMode;
+  responseView?: string;
+}
+
+export interface RepositoryEventSourceDescriptor {
+  repositoryId: string;
+  eventSourceId: string;
+  installedSourceId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  eventSourcePath: string;
+  configTemplatePath?: string;
+  triggerTemplatePath?: string;
+  digest?: string;
+  scriptDependencies: ScriptDependency[];
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
+  trusted: boolean;
+  repositoryUsage?: RepositoryUsage;
+  developmentSourceId?: string;
+  developmentDirty?: boolean;
+  developmentRemoteChanged?: boolean;
+  developmentSyncState?: DevelopmentSyncState;
+}
+
+export interface RepositoryEventSourceDetail {
+  descriptor: RepositoryEventSourceDescriptor;
+  eventSource: {
+    schemaVersion: number;
+    eventSourceId: string;
+    displayName: string;
+    version: string;
+    description?: string;
+    releaseNotes?: string;
+    owner?: string;
+    tags: string[];
+    digest?: string;
+    transport: EventSourceTransport;
+    auth?: EventSourceAuthConfig;
+    normalizationProcessor?: ProcessorDefinition;
+    sampleContext?: Record<string, unknown>;
+    scriptDependencies: ScriptDependency[];
+    configTemplatePath?: string;
+    triggerTemplatePath?: string;
+  };
+  configTemplate: RepositoryConfigTemplateItem[];
+  triggerTemplate: RepositoryEventTriggerTemplateItem[];
+}
+
+export interface RepositoryEventSourceInstallation {
+  sourceId: string;
+  repositoryId: string;
+  eventSourceId: string;
+  name: string;
+  version: string;
+  latestVersion?: string;
+  owner?: string;
+  description?: string;
+  installedAt?: string;
+  updatedAt?: string;
+}
+
 export interface RepositoryAiPackageDependency {
   assetType: "AI_PACKAGE" | "TOOL" | string;
   repositoryId: string;
@@ -1114,7 +1216,7 @@ export interface RepositoryInstallRequest {
   forcePluginUpgrade?: boolean;
 }
 
-export type ResourceLifecycleResourceType = "REPOSITORY_TOOL" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
+export type ResourceLifecycleResourceType = "REPOSITORY_TOOL" | "REPOSITORY_EVENT_SOURCE" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
 export type ResourceLifecycleOperation = "install" | "update" | "develop" | "publish" | "preview" | "uninstall";
 
 export interface ResourceLifecycleRequest<TPayload = Record<string, unknown>> {
@@ -1398,6 +1500,32 @@ export interface RepositoryPublishConfigCandidate {
 export interface RepositoryPublishConfigPreview {
   items: RepositoryPublishConfigCandidate[];
   missingKeys: string[];
+}
+
+export interface RepositoryEventSourcePublishPreviewRequest {
+  sourceId: string;
+  triggerIds?: string[];
+}
+
+export interface RepositoryEventSourcePublishPreview {
+  items: RepositoryPublishConfigCandidate[];
+  missingKeys: string[];
+  triggerTemplate: RepositoryEventTriggerTemplateItem[];
+  scriptDependencies: ScriptDependency[];
+}
+
+export interface RepositoryEventSourcePublishRequest {
+  sourceId: string;
+  eventSourceId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  releaseNotes?: string;
+  tags?: string[];
+  triggerIds?: string[];
+  configItems?: RepositoryPublishConfigItem[];
+  triggerBindings?: RepositoryEventTriggerBinding[];
+  force?: boolean;
 }
 
 export interface RepositoryPublishRequest {

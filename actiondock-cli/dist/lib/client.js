@@ -161,6 +161,14 @@ export class ActionDockClient {
     async listEventSources() {
         return this.requestJson("/api/event-sources");
     }
+    async getEventSourceDevelopmentStatus(sourceId) {
+        return this.requestJson(`/api/event-sources/${sourceId}/development-status`);
+    }
+    async pullDevelopmentEventSource(sourceId, force = false) {
+        return this.requestJson(`/api/event-sources/${sourceId}/development-pull?force=${force}`, {
+            method: "POST"
+        });
+    }
     async getEventSource(sourceId) {
         return this.requestJson(`/api/event-sources/${sourceId}`);
     }
@@ -271,6 +279,54 @@ export class ActionDockClient {
     }
     async listPlugins() {
         return this.requestJson("/api/plugins");
+    }
+    async listRepositories() {
+        return this.requestJson("/api/repositories");
+    }
+    async listRepositoryEventSources() {
+        return this.requestJson("/api/repositories/event-sources");
+    }
+    async listRepositoryEventSourcesByRepository(repositoryId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/event-sources`);
+    }
+    async getRepositoryEventSource(repositoryId, eventSourceId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/event-sources/${eventSourceId}`);
+    }
+    async installRepositoryEventSource(repositoryId, eventSourceId, payload) {
+        return this.requestJson("/api/resource-lifecycle/operations", {
+            method: "POST",
+            body: JSON.stringify({
+                resourceType: "REPOSITORY_EVENT_SOURCE",
+                operation: "install",
+                repositoryId,
+                resourceId: eventSourceId,
+                payload
+            })
+        });
+    }
+    async updateRepositoryEventSource(repositoryId, eventSourceId, payload) {
+        return this.requestJson("/api/resource-lifecycle/operations", {
+            method: "POST",
+            body: JSON.stringify({
+                resourceType: "REPOSITORY_EVENT_SOURCE",
+                operation: "update",
+                repositoryId,
+                resourceId: eventSourceId,
+                payload
+            })
+        });
+    }
+    async developRepositoryEventSource(repositoryId, eventSourceId, sourceId) {
+        return this.requestJson("/api/resource-lifecycle/operations", {
+            method: "POST",
+            body: JSON.stringify({
+                resourceType: "REPOSITORY_EVENT_SOURCE",
+                operation: "develop",
+                repositoryId,
+                resourceId: eventSourceId,
+                payload: sourceId ? { scriptId: sourceId } : {}
+            })
+        });
     }
     async getPlugin(pluginId) {
         return this.requestJson(`/api/plugins/${pluginId}`);

@@ -26,31 +26,38 @@ final class RepositoryIndexUtils {
     static RepositoryCatalogTypes.RepositoryIndexFile withTools(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                  RepositoryDefinition repository,
                                                  List<RepositoryCatalogTypes.RepositoryIndexEntry> tools) {
-        return withReplaced(current, repository, tools, null, null, null);
+        return withReplaced(current, repository, tools, null, null, null, null);
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile withEventSources(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                                       RepositoryDefinition repository,
+                                                                       List<RepositoryCatalogTypes.RepositoryEventSourceIndexEntry> eventSources) {
+        return withReplaced(current, repository, null, eventSources, null, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withPlugins(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                    RepositoryDefinition repository,
                                                    List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins) {
-        return withReplaced(current, repository, null, plugins, null, null);
+        return withReplaced(current, repository, null, null, plugins, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withPackages(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                     RepositoryDefinition repository,
                                                     List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages) {
-        return withReplaced(current, repository, null, null, packages, null);
+        return withReplaced(current, repository, null, null, null, packages, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withSkills(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                   RepositoryDefinition repository,
                                                   List<RepositoryCatalogTypes.RepositorySkillIndexEntry> skills) {
-        return withReplaced(current, repository, null, null, null, skills);
+        return withReplaced(current, repository, null, null, null, null, skills);
     }
 
     @SuppressWarnings("unchecked")
     private static <T extends Record> RepositoryCatalogTypes.RepositoryIndexFile withReplaced(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                         RepositoryDefinition repository,
                                                                         List<RepositoryCatalogTypes.RepositoryIndexEntry> tools,
+                                                                        List<RepositoryCatalogTypes.RepositoryEventSourceIndexEntry> eventSources,
                                                                         List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins,
                                                                         List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages,
                                                                         List<RepositoryCatalogTypes.RepositorySkillIndexEntry> skills) {
@@ -59,6 +66,7 @@ final class RepositoryIndexUtils {
                 repository.getName(),
                 NormalizeUtils.normalizeNullable(repository.getDescription()),
                 tools != null ? tools : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.tools())),
+                eventSources != null ? eventSources : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.eventSources())),
                 plugins != null ? plugins : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.plugins())),
                 packages != null ? packages : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.packages())),
                 skills != null ? skills : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.skills()))

@@ -15,6 +15,9 @@ import org.team4u.actiondock.application.IncomingEventPayload;
 import org.team4u.actiondock.domain.model.EventRecord;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
+import org.team4u.actiondock.domain.model.EventSourceScope;
+import org.team4u.actiondock.repository.RepositoryCatalogTypes;
+import org.team4u.actiondock.repository.RepositoryEventSourceService;
 import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
@@ -24,11 +27,14 @@ import java.util.List;
 public class EventSourceController {
     private final EventSourceApplicationService eventSourceApplicationService;
     private final EventRecordApplicationService eventRecordApplicationService;
+    private final RepositoryEventSourceService repositoryEventSourceService;
 
     public EventSourceController(EventSourceApplicationService eventSourceApplicationService,
-                                 EventRecordApplicationService eventRecordApplicationService) {
+                                 EventRecordApplicationService eventRecordApplicationService,
+                                 RepositoryEventSourceService repositoryEventSourceService) {
         this.eventSourceApplicationService = eventSourceApplicationService;
         this.eventRecordApplicationService = eventRecordApplicationService;
+        this.repositoryEventSourceService = repositoryEventSourceService;
     }
 
     @GetMapping
@@ -43,6 +49,7 @@ public class EventSourceController {
 
     @PostMapping
     public ApiResponse<EventSourceDefinition> create(@RequestBody EventSourceDefinition request) {
+        request.setScope(request.getScope() == null ? EventSourceScope.PERSONAL : request.getScope());
         return ApiResponse.success(eventSourceApplicationService.save(request), "已创建");
     }
 
@@ -82,5 +89,16 @@ public class EventSourceController {
             records = records.stream().limit(limit).toList();
         }
         return ApiResponse.success(records);
+    }
+
+    @GetMapping("/{id}/development-status")
+    public ApiResponse<RepositoryCatalogTypes.DevelopmentStatus> developmentStatus(@PathVariable String id) {
+        return ApiResponse.success(repositoryEventSourceService.getDevelopmentStatus(id));
+    }
+
+    @PostMapping("/{id}/development-pull")
+    public ApiResponse<EventSourceDefinition> developmentPull(@PathVariable String id,
+                                                              @RequestParam(defaultValue = "false") boolean force) {
+        return ApiResponse.success(repositoryEventSourceService.pullDevelopmentEventSource(id, force), "开发事件源已拉取远端更新");
     }
 }

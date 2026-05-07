@@ -2,6 +2,7 @@ package org.team4u.actiondock.storage.jpa.adapter;
 
 import org.springframework.stereotype.Component;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
+import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.port.EventSourceRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.storage.jpa.entity.EventSourceEntity;
@@ -51,6 +52,16 @@ public class JpaEventSourceRepositoryAdapter implements EventSourceRepository {
         entity.setSourceKey(source.getKey());
         entity.setName(source.getName());
         entity.setDescription(source.getDescription());
+        entity.setScope(source.getScope() == null ? null : source.getScope().name());
+        entity.setRepositoryId(source.getRepositoryId());
+        entity.setRepositoryEventSourceId(source.getRepositoryEventSourceId());
+        entity.setRepositoryVersion(source.getRepositoryVersion());
+        entity.setSourcePath(source.getSourcePath());
+        entity.setSourceCommit(source.getSourceCommit());
+        entity.setSourceDigest(source.getSourceDigest());
+        entity.setSourceSyncedAt(source.getSourceSyncedAt());
+        entity.setDirty(source.isDirty());
+        entity.setEditable(source.isEditable());
         entity.setEnabled(source.isEnabled());
         entity.setTransportJson(jsonCodec.write(source.getTransport()));
         entity.setAuthJson(source.getAuth() == null ? null : jsonCodec.write(source.getAuth()));
@@ -70,6 +81,16 @@ public class JpaEventSourceRepositoryAdapter implements EventSourceRepository {
                 .setKey(entity.getSourceKey())
                 .setName(entity.getName())
                 .setDescription(entity.getDescription())
+                .setScope(entity.getScope() == null ? EventSourceScope.PERSONAL : EventSourceScope.valueOf(entity.getScope()))
+                .setRepositoryId(entity.getRepositoryId())
+                .setRepositoryEventSourceId(entity.getRepositoryEventSourceId())
+                .setRepositoryVersion(entity.getRepositoryVersion())
+                .setSourcePath(entity.getSourcePath())
+                .setSourceCommit(entity.getSourceCommit())
+                .setSourceDigest(entity.getSourceDigest())
+                .setSourceSyncedAt(entity.getSourceSyncedAt())
+                .setDirty(entity.isDirty())
+                .setEditable(entity.isEditable())
                 .setEnabled(entity.isEnabled())
                 .setTransport(read(entity.getTransportJson(), org.team4u.actiondock.domain.model.EventSourceTransport.class))
                 .setAuth(read(entity.getAuthJson(), org.team4u.actiondock.domain.model.EventSourceAuthConfig.class))

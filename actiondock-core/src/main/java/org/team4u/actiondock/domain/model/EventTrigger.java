@@ -9,6 +9,12 @@ public class EventTrigger {
     private String id;
     private String name;
     private String description;
+    private EventTriggerScope scope = EventTriggerScope.PERSONAL;
+    private String repositoryId;
+    private String repositoryEventSourceId;
+    private String repositoryVersion;
+    private String repositoryTriggerId;
+    private boolean editable = true;
     private boolean enabled = true;
     private String sourceId;
     private String targetScriptId;
@@ -48,6 +54,60 @@ public class EventTrigger {
 
     public EventTrigger setDescription(String description) {
         this.description = description;
+        return this;
+    }
+
+    public EventTriggerScope getScope() {
+        return scope;
+    }
+
+    public EventTrigger setScope(EventTriggerScope scope) {
+        this.scope = scope == null ? EventTriggerScope.PERSONAL : scope;
+        return this;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public EventTrigger setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+        return this;
+    }
+
+    public String getRepositoryEventSourceId() {
+        return repositoryEventSourceId;
+    }
+
+    public EventTrigger setRepositoryEventSourceId(String repositoryEventSourceId) {
+        this.repositoryEventSourceId = repositoryEventSourceId;
+        return this;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public EventTrigger setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
+        return this;
+    }
+
+    public String getRepositoryTriggerId() {
+        return repositoryTriggerId;
+    }
+
+    public EventTrigger setRepositoryTriggerId(String repositoryTriggerId) {
+        this.repositoryTriggerId = repositoryTriggerId;
+        return this;
+    }
+
+    public boolean isEditable() {
+        return editable;
+    }
+
+    public EventTrigger setEditable(boolean editable) {
+        this.editable = editable;
         return this;
     }
 

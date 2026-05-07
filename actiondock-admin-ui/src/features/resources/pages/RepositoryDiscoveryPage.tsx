@@ -27,19 +27,24 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   installRepositoryPlugin,
+  developRepositoryEventSource,
   developRepositoryTool,
+  getRepositoryEventSource,
   getCapabilityPackage,
   getRepositorySkill,
   getRepositoryTool,
   installCapabilityPackage,
+  installRepositoryEventSource,
   installRepositoryTool,
   listCapabilityPackages,
+  listRepositoryEventSources,
   listRepositories,
   listRepositoryPlugins,
   listRepositorySkills,
   listRepositoryTools,
   uninstallCapabilityPackage,
   updateCapabilityPackage,
+  updateRepositoryEventSource,
   updateRepositoryPlugin,
   updateRepositoryTool
 } from "../../resources/api";
@@ -58,6 +63,8 @@ import type {
   CapabilityPackageDescriptor,
   CapabilityPackageDetail,
   PluginDependency,
+  RepositoryEventSourceDescriptor,
+  RepositoryEventSourceDetail,
   RepositoryAiPackageDependency,
   RepositoryDefinition,
   RepositoryPluginConflict,
@@ -284,6 +291,7 @@ export function RepositoryDiscoveryPage() {
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [tools, setTools] = useState<RepositoryToolDescriptor[]>([]);
+  const [eventSources, setEventSources] = useState<RepositoryEventSourceDescriptor[]>([]);
   const [packages, setPackages] = useState<CapabilityPackageDescriptor[]>([]);
   const [skills, setSkills] = useState<RepositorySkillDescriptor[]>([]);
   const [plugins, setPlugins] = useState<RepositoryPluginDescriptor[]>([]);
@@ -292,6 +300,9 @@ export function RepositoryDiscoveryPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<RepositoryToolDetail | null>(null);
+  const [eventSourceDetailOpen, setEventSourceDetailOpen] = useState(false);
+  const [eventSourceDetailLoading, setEventSourceDetailLoading] = useState(false);
+  const [eventSourceDetail, setEventSourceDetail] = useState<RepositoryEventSourceDetail | null>(null);
   const [packageActionKey, setPackageActionKey] = useState<string | null>(null);
   const [packageDetailOpen, setPackageDetailOpen] = useState(false);
   const [packageDetailLoading, setPackageDetailLoading] = useState(false);
@@ -311,15 +322,17 @@ export function RepositoryDiscoveryPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [repositoryData, toolData, packageData, skillData] = await Promise.all([
+      const [repositoryData, toolData, eventSourceData, packageData, skillData] = await Promise.all([
         listRepositories(),
         listRepositoryTools(),
+        listRepositoryEventSources(),
         listCapabilityPackages(),
         listRepositorySkills()
       ]);
       const pluginData = await listRepositoryPlugins();
       setRepositories(repositoryData);
       setTools(toolData);
+      setEventSources(eventSourceData);
       setPackages(packageData);
       setSkills(skillData);
       setPlugins(pluginData);
@@ -405,6 +418,39 @@ export function RepositoryDiscoveryPage() {
     });
   }, [installFilter, packages, repositoryFilter, searchText, trustFilter]);
 
+  const filteredEventSources = useMemo(() => {
+    const keyword = searchText.trim().toLowerCase();
+    return eventSources.filter((item) => {
+      if (repositoryFilter !== "ALL" && item.repositoryId !== repositoryFilter) {
+        return false;
+      }
+      if (installFilter === "INSTALLED" && !item.installed) {
+        return false;
+      }
+      if (installFilter === "NOT_INSTALLED" && item.installed) {
+        return false;
+      }
+      if (trustFilter === "TRUSTED" && !item.trusted) {
+        return false;
+      }
+      if (trustFilter === "UNTRUSTED" && item.trusted) {
+        return false;
+      }
+      if (!keyword) {
+        return true;
+      }
+      const haystack = [
+        item.displayName,
+        item.eventSourceId,
+        item.installedSourceId,
+        item.description ?? "",
+        item.owner ?? "",
+        item.repositoryId
+      ].join(" ").toLowerCase();
+      return keyword.split(/\s+/).every((part) => haystack.includes(part));
+    });
+  }, [eventSources, installFilter, repositoryFilter, searchText, trustFilter]);
+
   const filteredSkills = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
     return skills.filter((item) => {
@@ -487,6 +533,19 @@ export function RepositoryDiscoveryPage() {
       messageApi.error(getErrorMessage(error, "加载能力包详情失败"));
     } finally {
       setPackageDetailLoading(false);
+    }
+  };
+
+  const openEventSourceDetail = async (descriptor: RepositoryEventSourceDescriptor) => {
+    setEventSourceDetailOpen(true);
+    setEventSourceDetailLoading(true);
+    try {
+      setEventSourceDetail(await getRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId));
+    } catch (error) {
+      setEventSourceDetail(null);
+      messageApi.error(getErrorMessage(error, "加载事件源详情失败"));
+    } finally {
+      setEventSourceDetailLoading(false);
     }
   };
 
@@ -653,6 +712,108 @@ export function RepositoryDiscoveryPage() {
         return;
       }
       messageApi.error(getErrorMessage(error, "同步开发脚本失败"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const confirmEventSourceInstallAction = async (descriptor: RepositoryEventSourceDescriptor, action: InstallAction) => {
+    let installScriptDependencies = descriptor.scriptDependencies.length > 0;
+    let detailForAction = eventSourceDetail?.descriptor.repositoryId === descriptor.repositoryId
+      && eventSourceDetail?.descriptor.eventSourceId === descriptor.eventSourceId
+      ? eventSourceDetail
+      : null;
+
+    if (!detailForAction) {
+      try {
+        detailForAction = await getRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId);
+      } catch (error) {
+        messageApi.error(getErrorMessage(error, "读取事件源模板失败"));
+        return;
+      }
+    }
+
+    await modal.confirm({
+      title: action === "install" ? "安装事件源资产" : "更新事件源资产",
+      okText: action === "install" ? "安装" : "更新",
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Text>
+            {descriptor.displayName} 将安装到本机事件源 ID <Text code>{descriptor.installedSourceId}</Text>。
+          </Text>
+          {descriptor.scriptDependencies.length > 0 ? (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Checkbox defaultChecked onChange={(event) => { installScriptDependencies = event.target.checked; }}>
+                同时安装或更新 {descriptor.scriptDependencies.length} 个脚本依赖
+              </Checkbox>
+              {renderScriptDependencies(descriptor.scriptDependencies)}
+            </Space>
+          ) : (
+            <Text type="secondary">该事件源没有声明脚本依赖。</Text>
+          )}
+          {detailForAction.triggerTemplate.length > 0 ? (
+            <Text type="secondary">本次将同步 {detailForAction.triggerTemplate.length} 个事件触发器模板。</Text>
+          ) : null}
+          {!descriptor.trusted ? (
+            <Text type="warning">当前来源仓库未标记为可信，安装前请先检查标准化 Processor、配置模板和触发器模板。</Text>
+          ) : null}
+        </Space>
+      )
+    });
+
+    setActionKey(`${action}:${descriptor.installedSourceId}`);
+    try {
+      if (action === "install") {
+        await installRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, {
+          installSchedules: false,
+          installScriptDependencies
+        });
+      } else {
+        await updateRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, {
+          installSchedules: false,
+          installScriptDependencies
+        });
+      }
+      messageApi.success(action === "install" ? "事件源资产已安装" : "事件源资产已更新");
+      await loadData();
+      if (eventSourceDetailOpen) {
+        await openEventSourceDetail(descriptor);
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, action === "install" ? "安装事件源失败" : "更新事件源失败"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const handleDevelopEventSource = async (descriptor: RepositoryEventSourceDescriptor, sourceId?: string) => {
+    setActionKey(`develop:${descriptor.repositoryId}:${descriptor.eventSourceId}`);
+    try {
+      const source = await developRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, { scriptId: sourceId });
+      messageApi.success("已同步为本地开发事件源");
+      await loadData();
+      navigate("/triggers");
+      return source;
+    } catch (error) {
+      if (error instanceof ApiError && !sourceId && error.message.includes("事件源 ID 已存在")) {
+        let customSourceId = descriptor.eventSourceId;
+        await modal.confirm({
+          title: "指定开发事件源 ID",
+          okText: "同步",
+          cancelText: "取消",
+          content: (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Text type="secondary">默认事件源 ID 已被占用，请输入一个本地开发事件源 ID。</Text>
+              <Input defaultValue={customSourceId} onChange={(event) => { customSourceId = event.target.value; }} />
+            </Space>
+          ),
+          onOk: () => handleDevelopEventSource(descriptor, customSourceId.trim())
+        });
+        return null;
+      }
+      messageApi.error(getErrorMessage(error, "同步开发事件源失败"));
+      return null;
     } finally {
       setActionKey(null);
     }
@@ -930,6 +1091,112 @@ export function RepositoryDiscoveryPage() {
     }
   ];
 
+  const eventSourceColumns: ColumnsType<RepositoryEventSourceDescriptor> = [
+    {
+      title: "事件源",
+      key: "eventSource",
+      render: (_value: unknown, record) => (
+        <Space direction="vertical" size={2}>
+          <TableLinkCell onClick={() => void openEventSourceDetail(record)}>{record.displayName}</TableLinkCell>
+          <Text code>{record.installedSourceId}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "来源",
+      key: "repositoryId",
+      width: 260,
+      render: (_value: unknown, record) => (
+        <Space size={[4, 4]}>
+          <Text>{record.repositoryId}</Text>
+          {record.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : null}
+          <TrustLevelTag level={record.trusted ? "TRUSTED" : "UNTRUSTED"} />
+        </Space>
+      )
+    },
+    {
+      title: "版本",
+      key: "version",
+      width: 150,
+      render: (_value: unknown, record) => (
+        <Space direction="vertical" size={2}>
+          <Text>{record.version}</Text>
+          {record.installedVersion ? <Text type="secondary">已装 {record.installedVersion}</Text> : null}
+        </Space>
+      )
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 180,
+      render: (_value: unknown, record) => (
+        <Space wrap size={[4, 4]}>
+          {record.installed ? (
+            record.repositoryUsage === "DEVELOPMENT" ? (
+              record.developmentSourceId ? (
+                <Button
+                  size="small"
+                  type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
+                  danger={record.developmentSyncState === "DIVERGED"}
+                  ghost={record.developmentSyncState === "REMOTE_CHANGES"}
+                  icon={<SyncOutlined />}
+                  onClick={() => navigate("/triggers")}
+                >
+                  {getDevelopmentActionLabel(record.developmentSyncState)}
+                </Button>
+              ) : null
+            ) : (
+              <Button
+                size="small"
+                type={record.updateAvailable ? "primary" : "default"}
+                ghost={record.updateAvailable}
+                icon={<SyncOutlined />}
+                disabled={!record.updateAvailable}
+                loading={actionKey === `update:${record.installedSourceId}`}
+                onClick={() => void confirmEventSourceInstallAction(record, "update")}
+              >
+                {record.updateAvailable ? "更新" : "已安装"}
+              </Button>
+            )
+          ) : record.repositoryUsage === "DEVELOPMENT" ? (
+            record.developmentSourceId ? (
+              <Button
+                size="small"
+                type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
+                danger={record.developmentSyncState === "DIVERGED"}
+                ghost={record.developmentSyncState === "REMOTE_CHANGES"}
+                icon={<SyncOutlined />}
+                onClick={() => navigate("/triggers")}
+              >
+                {getDevelopmentActionLabel(record.developmentSyncState)}
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                type="primary"
+                icon={<DownloadOutlined />}
+                loading={actionKey === `develop:${record.repositoryId}:${record.eventSourceId}`}
+                onClick={() => void handleDevelopEventSource(record)}
+              >
+                同步开发
+              </Button>
+            )
+          ) : (
+            <Button
+              size="small"
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={actionKey === `install:${record.installedSourceId}`}
+              onClick={() => void confirmEventSourceInstallAction(record, "install")}
+            >
+              安装
+            </Button>
+          )}
+        </Space>
+      )
+    }
+  ];
+
   const skillColumns: ColumnsType<RepositorySkillDescriptor> = [
     {
       title: "Skill",
@@ -1017,7 +1284,7 @@ export function RepositoryDiscoveryPage() {
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
           title="发现"
-          meta={<Text type="secondary">发现脚本和能力包，支持安装、升级与同步。</Text>}
+          meta={<Text type="secondary">发现脚本、事件源、能力包、插件和 Skill，支持安装、升级与同步。</Text>}
           actions={(
             <Space>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/packages/publish")}>
@@ -1101,6 +1368,28 @@ export function RepositoryDiscoveryPage() {
                         <Empty
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
                           description="当前没有可发现的脚本。先到仓库管理页添加并同步仓库。"
+                        />
+                      )
+                    }}
+                  />
+                )
+              },
+              {
+                key: "event-sources",
+                label: `事件源 (${filteredEventSources.length})`,
+                children: (
+                  <Table<RepositoryEventSourceDescriptor>
+                    rowKey={(item) => `${item.repositoryId}:${item.eventSourceId}`}
+                    loading={loading}
+                    columns={eventSourceColumns}
+                    dataSource={filteredEventSources}
+                    scroll={{ x: 980 }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="当前没有可发现的事件源。先到仓库管理页添加并同步仓库。"
                         />
                       )
                     }}
@@ -1333,6 +1622,212 @@ export function RepositoryDiscoveryPage() {
                     />
                   ) : (
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有定时任务模板" />
+                  )
+                }
+              ]}
+            />
+          </Space>
+        )}
+      </Drawer>
+
+      <Drawer
+        title={eventSourceDetail?.descriptor.displayName || "事件源资产详情"}
+        open={eventSourceDetailOpen}
+        onClose={() => setEventSourceDetailOpen(false)}
+        width={920}
+        destroyOnHidden
+      >
+        {eventSourceDetailLoading ? (
+          <div className="page-loading">
+            <Spin size="large" />
+          </div>
+        ) : !eventSourceDetail ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="事件源详情加载失败" />
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Descriptions
+              bordered
+              size="small"
+              column={2}
+              items={[
+                { key: "source", label: "事件源 ID", children: <Text code>{eventSourceDetail.descriptor.installedSourceId}</Text> },
+                { key: "repo", label: "来源仓库", children: eventSourceDetail.descriptor.repositoryId },
+                { key: "usage", label: "仓库用途", children: eventSourceDetail.descriptor.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag>分发仓库</Tag> },
+                { key: "version", label: "远端版本", children: eventSourceDetail.descriptor.version },
+                { key: "installedVersion", label: "本机版本", children: eventSourceDetail.descriptor.installedVersion || "-" },
+                { key: "owner", label: "维护人", children: eventSourceDetail.descriptor.owner || "-" },
+                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={eventSourceDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
+                { key: "sync", label: "开发同步", children: eventSourceDetail.descriptor.developmentSourceId ? <DevelopmentSyncTag state={eventSourceDetail.descriptor.developmentSyncState} /> : <Text type="secondary">-</Text> }
+              ]}
+            />
+
+            <Space wrap size={[8, 8]}>
+              {eventSourceDetail.descriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+              {eventSourceDetail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
+              {eventSourceDetail.descriptor.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
+            </Space>
+
+            <Space wrap size={[8, 8]}>
+              {eventSourceDetail.descriptor.installed ? (
+                eventSourceDetail.descriptor.repositoryUsage === "DEVELOPMENT" ? (
+                  eventSourceDetail.descriptor.developmentSourceId ? (
+                    <Button
+                      type={eventSourceDetail.descriptor.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
+                      danger={eventSourceDetail.descriptor.developmentSyncState === "DIVERGED"}
+                      ghost={eventSourceDetail.descriptor.developmentSyncState === "REMOTE_CHANGES"}
+                      onClick={() => navigate("/triggers")}
+                    >
+                      {getDevelopmentActionLabel(eventSourceDetail.descriptor.developmentSyncState)}
+                    </Button>
+                  ) : null
+                ) : (
+                  <Button
+                    type={eventSourceDetail.descriptor.updateAvailable ? "primary" : "default"}
+                    ghost={eventSourceDetail.descriptor.updateAvailable}
+                    disabled={!eventSourceDetail.descriptor.updateAvailable}
+                    loading={actionKey === `update:${eventSourceDetail.descriptor.installedSourceId}`}
+                    onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "update")}
+                  >
+                    {eventSourceDetail.descriptor.updateAvailable ? "更新事件源" : "已安装"}
+                  </Button>
+                )
+              ) : eventSourceDetail.descriptor.repositoryUsage === "DEVELOPMENT" ? (
+                eventSourceDetail.descriptor.developmentSourceId ? (
+                  <Button onClick={() => navigate("/triggers")}>
+                    {getDevelopmentActionLabel(eventSourceDetail.descriptor.developmentSyncState)}
+                  </Button>
+                ) : (
+                  <Button
+                    type="primary"
+                    loading={actionKey === `develop:${eventSourceDetail.descriptor.repositoryId}:${eventSourceDetail.descriptor.eventSourceId}`}
+                    onClick={() => void handleDevelopEventSource(eventSourceDetail.descriptor)}
+                  >
+                    同步开发
+                  </Button>
+                )
+              ) : (
+                <Button
+                  type="primary"
+                  loading={actionKey === `install:${eventSourceDetail.descriptor.installedSourceId}`}
+                  onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "install")}
+                >
+                  安装事件源
+                </Button>
+              )}
+            </Space>
+
+            <Tabs
+              items={[
+                {
+                  key: "description",
+                  label: "说明",
+                  children: (
+                    <MarkdownDescription
+                      value={eventSourceDetail.descriptor.description}
+                      emptyText="该事件源没有填写说明。"
+                      className="markdown-description--panel"
+                    />
+                  )
+                },
+                {
+                  key: "releaseNotes",
+                  label: "发布日志",
+                  children: (
+                    <MarkdownDescription
+                      value={eventSourceDetail.descriptor.releaseNotes}
+                      emptyText="该版本没有填写发布日志。"
+                      className="markdown-description--panel"
+                    />
+                  )
+                },
+                {
+                  key: "transport",
+                  label: "接入配置",
+                  children: (
+                    <Descriptions bordered size="small" column={2}>
+                      <Descriptions.Item label="Transport">{eventSourceDetail.eventSource.transport.type}</Descriptions.Item>
+                      <Descriptions.Item label="Content Types">{(eventSourceDetail.eventSource.transport.contentTypes ?? []).join(", ") || "-"}</Descriptions.Item>
+                      <Descriptions.Item label="Auth Mode">{eventSourceDetail.eventSource.auth?.mode || "NONE"}</Descriptions.Item>
+                      <Descriptions.Item label="Secret Config">{eventSourceDetail.eventSource.auth?.secretConfigKey ? <Text code>{eventSourceDetail.eventSource.auth.secretConfigKey}</Text> : "-"}</Descriptions.Item>
+                    </Descriptions>
+                  )
+                },
+                {
+                  key: "sample",
+                  label: "样例上下文",
+                  children: (
+                    <CodeEditor
+                      height="320px"
+                      language="json"
+                      value={JSON.stringify(eventSourceDetail.eventSource.sampleContext ?? {}, null, 2)}
+                      onChange={() => undefined}
+                      theme={editorTheme}
+                      readOnly={true}
+                    />
+                  )
+                },
+                {
+                  key: "config",
+                  label: `配置模板 (${eventSourceDetail.configTemplate.length})`,
+                  children: eventSourceDetail.configTemplate.length > 0 ? (
+                    <Table
+                      rowKey="key"
+                      size="small"
+                      pagination={false}
+                      dataSource={eventSourceDetail.configTemplate}
+                      columns={[
+                        { title: "配置键", dataIndex: "key", key: "key", render: (value: string) => <Text code>{value}</Text> },
+                        { title: "说明", dataIndex: "label", key: "label", render: (value?: string) => value || "-" },
+                        {
+                          title: "要求",
+                          key: "required",
+                          render: (_value: unknown, record) => (
+                            <Space wrap size={[6, 6]}>
+                              {record.required ? <Tag color="blue">必填</Tag> : <Tag>可选</Tag>}
+                              {record.secret ? <Tag color="gold">SECRET</Tag> : <Tag>{record.type}</Tag>}
+                            </Space>
+                          )
+                        }
+                      ]}
+                    />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该事件源没有配置模板" />
+                  )
+                },
+                {
+                  key: "dependencies",
+                  label: `脚本依赖 (${eventSourceDetail.descriptor.scriptDependencies.length})`,
+                  children: renderScriptDependencies(eventSourceDetail.descriptor.scriptDependencies)
+                },
+                {
+                  key: "triggers",
+                  label: `触发器模板 (${eventSourceDetail.triggerTemplate.length})`,
+                  children: eventSourceDetail.triggerTemplate.length > 0 ? (
+                    <Table
+                      rowKey="id"
+                      size="small"
+                      pagination={false}
+                      dataSource={eventSourceDetail.triggerTemplate}
+                      columns={[
+                        { title: "模板 ID", dataIndex: "id", key: "id", render: (value: string) => <Text code>{value}</Text> },
+                        { title: "名称", dataIndex: "name", key: "name" },
+                        {
+                          title: "目标脚本",
+                          key: "target",
+                          render: (_value: unknown, record) => (
+                            <Text code>{`${record.targetScriptDependency.repositoryId}/${record.targetScriptDependency.toolId}`}</Text>
+                          )
+                        },
+                        {
+                          title: "默认状态",
+                          dataIndex: "enabledByDefault",
+                          key: "enabledByDefault",
+                          render: (value: boolean) => value ? <Tag color="processing">默认启用</Tag> : <Tag>默认停用</Tag>
+                        }
+                      ]}
+                    />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该事件源没有触发器模板" />
                   )
                 }
               ]}

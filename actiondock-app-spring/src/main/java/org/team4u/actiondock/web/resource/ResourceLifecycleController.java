@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
+import org.team4u.actiondock.repository.RepositoryEventSourceService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositoryToolService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
@@ -28,6 +29,7 @@ import java.util.Locale;
 @RequestMapping("/api/resource-lifecycle")
 public class ResourceLifecycleController {
     private static final String RESOURCE_REPOSITORY_TOOL = "REPOSITORY_TOOL";
+    private static final String RESOURCE_REPOSITORY_EVENT_SOURCE = "REPOSITORY_EVENT_SOURCE";
     private static final String RESOURCE_REPOSITORY_PLUGIN = "REPOSITORY_PLUGIN";
     private static final String RESOURCE_CAPABILITY_PACKAGE = "CAPABILITY_PACKAGE";
 
@@ -40,17 +42,20 @@ public class ResourceLifecycleController {
 
     private final RepositoryCatalogService repositoryCatalogService;
     private final RepositoryToolService repositoryToolService;
+    private final RepositoryEventSourceService repositoryEventSourceService;
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final ObjectMapper objectMapper;
 
     public ResourceLifecycleController(RepositoryCatalogService repositoryCatalogService,
                                        RepositoryToolService repositoryToolService,
+                                       RepositoryEventSourceService repositoryEventSourceService,
                                        RepositoryPluginService repositoryPluginService,
                                        RepositoryCapabilityPackageService repositoryCapabilityPackageService,
                                        ObjectMapper objectMapper) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryToolService = repositoryToolService;
+        this.repositoryEventSourceService = repositoryEventSourceService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
         this.objectMapper = objectMapper;
@@ -63,6 +68,7 @@ public class ResourceLifecycleController {
         String operation = normalizeOperation(safeRequest.getOperation());
         Object result = switch (resourceType) {
             case RESOURCE_REPOSITORY_TOOL -> executeRepositoryTool(operation, safeRequest);
+            case RESOURCE_REPOSITORY_EVENT_SOURCE -> executeRepositoryEventSource(operation, safeRequest);
             case RESOURCE_REPOSITORY_PLUGIN -> executeRepositoryPlugin(operation, safeRequest);
             case RESOURCE_CAPABILITY_PACKAGE -> executeCapabilityPackage(operation, safeRequest);
             default -> throw new IllegalArgumentException("不支持的资源类型: " + resourceType);
@@ -111,6 +117,28 @@ public class ResourceLifecycleController {
             case OP_PUBLISH -> repositoryCatalogService.publishPlugin(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPluginPublishRequest.class));
             default -> throw unsupported(operation, RESOURCE_REPOSITORY_PLUGIN);
+        };
+    }
+
+    private Object executeRepositoryEventSource(String operation, ResourceLifecycleRequest request) {
+        return switch (operation) {
+            case OP_INSTALL -> repositoryEventSourceService.installEventSource(normalizeRepositoryId(request),
+                    normalizeResourceId(request, "eventSourceId 不能为空"), toolOptions(request.getPayload()));
+            case OP_UPDATE -> repositoryEventSourceService.updateEventSource(normalizeRepositoryId(request),
+                    normalizeResourceId(request, "eventSourceId 不能为空"), toolOptions(request.getPayload()));
+            case OP_DEVELOP -> repositoryEventSourceService.syncEventSourceForDevelopment(normalizeRepositoryId(request),
+                    normalizeResourceId(request, "eventSourceId 不能为空"),
+                    convertPayload(request.getPayload(), RepositoryCatalogTypes.DevelopmentSyncRequest.class));
+            case OP_PUBLISH -> repositoryEventSourceService.publishEventSource(normalizeRepositoryId(request),
+                    requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryEventSourcePublishRequest.class));
+            case OP_PREVIEW -> repositoryEventSourceService.previewPublish(
+                    requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryEventSourcePublishPreviewRequest.class));
+            case OP_UNINSTALL -> {
+                String installedResourceId = NormalizeUtils.normalize(request.getInstalledResourceId(), "installedResourceId 不能为空");
+                repositoryEventSourceService.uninstallEventSource(installedResourceId);
+                yield null;
+            }
+            default -> throw unsupported(operation, RESOURCE_REPOSITORY_EVENT_SOURCE);
         };
     }
 

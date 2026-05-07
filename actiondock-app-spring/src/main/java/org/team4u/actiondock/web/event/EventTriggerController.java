@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.EventTriggerApplicationService;
 import org.team4u.actiondock.domain.model.EventDispatchRecord;
 import org.team4u.actiondock.domain.model.EventTrigger;
+import org.team4u.actiondock.domain.model.EventTriggerScope;
 import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
@@ -36,6 +37,7 @@ public class EventTriggerController {
 
     @PostMapping
     public ApiResponse<EventTrigger> create(@RequestBody EventTrigger request) {
+        request.setScope(request.getScope() == null ? EventTriggerScope.PERSONAL : request.getScope());
         return ApiResponse.success(eventTriggerApplicationService.save(request), "已创建");
     }
 

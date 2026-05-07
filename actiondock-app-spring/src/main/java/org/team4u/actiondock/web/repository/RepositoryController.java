@@ -14,12 +14,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
 import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
+import org.team4u.actiondock.repository.RepositoryEventSourceService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositorySkillService;
 import org.team4u.actiondock.repository.RepositoryToolService;
@@ -40,17 +42,20 @@ public class RepositoryController {
     private final RepositoryCatalogService repositoryCatalogService;
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryToolService repositoryToolService;
+    private final RepositoryEventSourceService repositoryEventSourceService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final RepositorySkillService repositorySkillService;
 
     public RepositoryController(RepositoryCatalogService repositoryCatalogService,
                                 RepositoryPluginService repositoryPluginService,
                                 RepositoryToolService repositoryToolService,
+                                RepositoryEventSourceService repositoryEventSourceService,
                                 RepositoryCapabilityPackageService repositoryCapabilityPackageService,
                                 RepositorySkillService repositorySkillService) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryToolService = repositoryToolService;
+        this.repositoryEventSourceService = repositoryEventSourceService;
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
         this.repositorySkillService = repositorySkillService;
     }
@@ -131,6 +136,22 @@ public class RepositoryController {
     @GetMapping("/{id}/tools")
     public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listRepositoryTools(@PathVariable String id) {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
+    }
+
+    @GetMapping("/event-sources")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor>> listAllEventSources() {
+        return ApiResponse.success(repositoryCatalogService.listAllRepositoryEventSources());
+    }
+
+    @GetMapping("/{id}/event-sources")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor>> listRepositoryEventSources(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listRepositoryEventSources(id));
+    }
+
+    @GetMapping("/{id}/event-sources/{eventSourceId}")
+    public ApiResponse<RepositoryCatalogTypes.RepositoryEventSourceDetail> eventSourceDetail(@PathVariable String id,
+                                                                                             @PathVariable String eventSourceId) {
+        return ApiResponse.success(repositoryCatalogService.getRepositoryEventSource(id, eventSourceId));
     }
 
     @GetMapping("/packages")

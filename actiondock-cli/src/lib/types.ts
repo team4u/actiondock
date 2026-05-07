@@ -191,6 +191,16 @@ export interface EventSourceDefinition {
   key?: string;
   name?: string;
   description?: string;
+  scope?: string;
+  repositoryId?: string;
+  repositoryEventSourceId?: string;
+  repositoryVersion?: string;
+  sourcePath?: string;
+  sourceCommit?: string;
+  sourceDigest?: string;
+  sourceSyncedAt?: string;
+  dirty?: boolean;
+  editable?: boolean;
   enabled?: boolean;
   transport?: EventSourceTransport;
   auth?: EventSourceAuthConfig;
@@ -205,6 +215,12 @@ export interface EventTrigger {
   id: string;
   name?: string;
   description?: string;
+  scope?: string;
+  repositoryId?: string;
+  repositoryEventSourceId?: string;
+  repositoryVersion?: string;
+  repositoryTriggerId?: string;
+  editable?: boolean;
   enabled?: boolean;
   sourceId?: string;
   targetScriptId?: string;
@@ -252,6 +268,137 @@ export interface EventDispatchRecord {
   executionStatus?: string;
   errorMessage?: string;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScriptDependency {
+  scriptId: string;
+  repositoryId: string;
+  toolId: string;
+  versionRange?: string;
+}
+
+export interface RepositoryDefinition {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  branch?: string;
+  enabled: boolean;
+  trustLevel: string;
+  usage?: string;
+  description?: string;
+  lastSyncedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RepositoryInstallRequest {
+  installSchedules: boolean;
+  installScriptDependencies?: boolean;
+  installPluginDependencies?: boolean;
+  forcePluginUpgrade?: boolean;
+}
+
+export interface DevelopmentStatus {
+  scriptId: string;
+  repositoryId: string;
+  repositoryToolId: string;
+  repositoryVersion?: string;
+  localCommit?: string;
+  remoteCommit?: string;
+  baseDigest?: string;
+  localDigest?: string;
+  remoteDigest?: string;
+  dirty: boolean;
+  remoteChanged: boolean;
+  syncState: string;
+  remoteVersion?: string;
+  sourceSyncedAt?: string;
+}
+
+export interface RepositoryEventSourceDescriptor {
+  repositoryId: string;
+  eventSourceId: string;
+  installedSourceId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  eventSourcePath: string;
+  configTemplatePath?: string;
+  triggerTemplatePath?: string;
+  digest?: string;
+  scriptDependencies: ScriptDependency[];
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
+  trusted: boolean;
+  repositoryUsage?: string;
+  developmentSourceId?: string;
+  developmentDirty?: boolean;
+  developmentRemoteChanged?: boolean;
+  developmentSyncState?: string;
+}
+
+export interface RepositoryConfigTemplateItem {
+  key: string;
+  label?: string;
+  type: string;
+  required: boolean;
+  secret: boolean;
+  defaultValue?: string;
+}
+
+export interface RepositoryEventTriggerTemplateItem {
+  id: string;
+  name: string;
+  description?: string;
+  enabledByDefault: boolean;
+  targetScriptDependency: ScriptDependency;
+  filterProcessor?: ProcessorDefinition;
+  idempotencyProcessor?: ProcessorDefinition;
+  inputProcessor?: ProcessorDefinition;
+  submitMode?: string;
+  responseView?: string;
+}
+
+export interface RepositoryEventSourceDetail {
+  descriptor: RepositoryEventSourceDescriptor;
+  eventSource: {
+    schemaVersion: number;
+    eventSourceId: string;
+    displayName: string;
+    version: string;
+    description?: string;
+    releaseNotes?: string;
+    owner?: string;
+    tags: string[];
+    digest?: string;
+    transport?: EventSourceTransport;
+    auth?: EventSourceAuthConfig;
+    normalizationProcessor?: ProcessorDefinition;
+    sampleContext?: Record<string, unknown>;
+    scriptDependencies: ScriptDependency[];
+    configTemplatePath?: string;
+    triggerTemplatePath?: string;
+  };
+  configTemplate: RepositoryConfigTemplateItem[];
+  triggerTemplate: RepositoryEventTriggerTemplateItem[];
+}
+
+export interface RepositoryEventSourceInstallation {
+  sourceId: string;
+  repositoryId: string;
+  eventSourceId: string;
+  name: string;
+  version: string;
+  latestVersion?: string;
+  owner?: string;
+  description?: string;
+  installedAt?: string;
   updatedAt?: string;
 }
 

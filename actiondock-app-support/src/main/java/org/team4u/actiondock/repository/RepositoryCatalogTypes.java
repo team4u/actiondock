@@ -5,7 +5,11 @@ import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
 import org.team4u.actiondock.domain.model.AiDependency;
+import org.team4u.actiondock.domain.model.EventSourceAuthConfig;
+import org.team4u.actiondock.domain.model.EventSourceTransport;
 import org.team4u.actiondock.domain.model.PluginDependency;
+import org.team4u.actiondock.domain.model.ProcessorDefinition;
+import org.team4u.actiondock.domain.model.RepositoryEventTriggerBinding;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
@@ -33,8 +37,12 @@ public final class RepositoryCatalogTypes {
     public static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
     /** Tool 子目录名称。 */
     public static final String TOOLS_DIR = "tools";
+    /** Event Source 子目录名称。 */
+    public static final String EVENT_SOURCES_DIR = "event-sources";
     /** Tool 描述文件名。 */
     public static final String TOOL_DESCRIPTOR_FILE = "tool.json";
+    /** Event Source 描述文件名。 */
+    public static final String EVENT_SOURCE_DESCRIPTOR_FILE = "event-source.json";
     /** Plugin 子目录名称。 */
     public static final String PLUGINS_DIR = "plugins";
     /** Plugin 索引文件名。 */
@@ -50,7 +58,7 @@ public final class RepositoryCatalogTypes {
     /** 能力包子目录名称。 */
     public static final String CAPABILITY_PACKAGES_DIR = "packages";
     /** 仓库索引中的所有分节名称。 */
-    public static final List<String> REPO_INDEX_SECTIONS = List.of(TOOLS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
+    public static final List<String> REPO_INDEX_SECTIONS = List.of(TOOLS_DIR, EVENT_SOURCES_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
     /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
 
     /** 仓库类型：Git 仓库。 */
@@ -91,6 +99,8 @@ public final class RepositoryCatalogTypes {
     public static final String ENTRY_TYPE_SCRIPT = "SCRIPT";
     /** 资产类型：工具。 */
     public static final String ASSET_TYPE_TOOL = "TOOL";
+    /** 资产类型：事件源。 */
+    public static final String ASSET_TYPE_EVENT_SOURCE = "EVENT_SOURCE";
     /** 资产类型：插件。 */
     public static final String ASSET_TYPE_PLUGIN = "PLUGIN";
     /** 资产类型：能力包。 */
@@ -197,6 +207,52 @@ public final class RepositoryCatalogTypes {
     ) {
     }
 
+    public record RepositoryEventSourceDescriptor(
+            String repositoryId,
+            String eventSourceId,
+            String installedSourceId,
+            String displayName,
+            String version,
+            String description,
+            String releaseNotes,
+            String owner,
+            List<String> tags,
+            String eventSourcePath,
+            String configTemplatePath,
+            String triggerTemplatePath,
+            String digest,
+            List<ScriptDependency> scriptDependencies,
+            boolean installed,
+            String installedVersion,
+            boolean updateAvailable,
+            boolean trusted,
+            String repositoryUsage,
+            String developmentSourceId,
+            boolean developmentDirty,
+            boolean developmentRemoteChanged,
+            String developmentSyncState
+    ) {
+        public RepositoryEventSourceDescriptor withDevelopment(String sourceId,
+                                                               boolean dirty,
+                                                               boolean remoteChanged,
+                                                               String syncState) {
+            return new RepositoryEventSourceDescriptor(
+                    repositoryId, eventSourceId, installedSourceId, displayName, version,
+                    description, releaseNotes, owner, tags, eventSourcePath, configTemplatePath,
+                    triggerTemplatePath, digest, scriptDependencies, installed, installedVersion,
+                    updateAvailable, trusted, repositoryUsage, sourceId, dirty, remoteChanged, syncState
+            );
+        }
+    }
+
+    public record RepositoryEventSourceDetail(
+            RepositoryEventSourceDescriptor descriptor,
+            EventSourceFile eventSource,
+            List<ConfigTemplateItem> configTemplate,
+            List<EventTriggerTemplateItem> triggerTemplate
+    ) {
+    }
+
     public record RepositoryPublishRequest(
             String scriptId,
             String toolId,
@@ -222,6 +278,35 @@ public final class RepositoryCatalogTypes {
     public record RepositoryPublishConfigPreview(
             List<RepositoryPublishConfigCandidate> items,
             List<String> missingKeys
+    ) {
+    }
+
+    public record RepositoryEventSourcePublishRequest(
+            String sourceId,
+            String eventSourceId,
+            String displayName,
+            String version,
+            String owner,
+            String releaseNotes,
+            List<String> tags,
+            List<String> triggerIds,
+            List<RepositoryPublishConfigItem> configItems,
+            List<RepositoryEventTriggerBinding> triggerBindings,
+            boolean force
+    ) {
+    }
+
+    public record RepositoryEventSourcePublishPreviewRequest(
+            String sourceId,
+            List<String> triggerIds
+    ) {
+    }
+
+    public record RepositoryEventSourcePublishPreview(
+            List<RepositoryPublishConfigCandidate> items,
+            List<String> missingKeys,
+            List<EventTriggerTemplateItem> triggerTemplate,
+            List<ScriptDependency> scriptDependencies
     ) {
     }
 
@@ -476,6 +561,7 @@ public final class RepositoryCatalogTypes {
                                       String name,
                                       String description,
                                       List<RepositoryIndexEntry> tools,
+                                      List<RepositoryEventSourceIndexEntry> eventSources,
                                       List<RepositoryPluginIndexEntry> plugins,
                                       List<CapabilityPackageIndexEntry> packages,
                                       List<RepositorySkillIndexEntry> skills) {
@@ -485,11 +571,15 @@ public final class RepositoryCatalogTypes {
                                    List<RepositoryIndexEntry> tools,
                                    List<RepositoryPluginIndexEntry> plugins,
                                    List<CapabilityPackageIndexEntry> packages) {
-            this(repositoryVersion, name, description, tools, plugins, packages, List.of());
+            this(repositoryVersion, name, description, tools, List.of(), plugins, packages, List.of());
         }
 
         public List<RepositoryIndexEntry> safeTools() {
             return tools == null ? List.of() : tools;
+        }
+
+        public List<RepositoryEventSourceIndexEntry> safeEventSources() {
+            return eventSources == null ? List.of() : eventSources;
         }
 
         public List<RepositoryPluginIndexEntry> safePlugins() {
@@ -512,6 +602,14 @@ public final class RepositoryCatalogTypes {
                                        String description,
                                        String releaseNotes,
                                        String toolPath) {
+    }
+
+    public record RepositoryEventSourceIndexEntry(String id,
+                                                  String name,
+                                                  String version,
+                                                  String description,
+                                                  String releaseNotes,
+                                                  String eventSourcePath) {
     }
 
     public record RepositoryPluginIndexEntry(String id,
@@ -638,6 +736,36 @@ public final class RepositoryCatalogTypes {
                            String riskLevel,
                            List<ScriptDependency> scriptDependencies,
                            List<PluginDependency> pluginDependencies) {
+    }
+
+    public record EventSourceFile(int schemaVersion,
+                                  String eventSourceId,
+                                  String displayName,
+                                  String version,
+                                  String description,
+                                  String releaseNotes,
+                                  String owner,
+                                  List<String> tags,
+                                  String digest,
+                                  EventSourceTransport transport,
+                                  EventSourceAuthConfig auth,
+                                  ProcessorDefinition normalizationProcessor,
+                                  Map<String, Object> sampleContext,
+                                  List<ScriptDependency> scriptDependencies,
+                                  String configTemplatePath,
+                                  String triggerTemplatePath) {
+    }
+
+    public record EventTriggerTemplateItem(String id,
+                                           String name,
+                                           String description,
+                                           boolean enabledByDefault,
+                                           ScriptDependency targetScriptDependency,
+                                           ProcessorDefinition filterProcessor,
+                                           ProcessorDefinition idempotencyProcessor,
+                                           ProcessorDefinition inputProcessor,
+                                           String submitMode,
+                                           String responseView) {
     }
 
     public record PluginFile(int pluginFileVersion,
@@ -794,6 +922,13 @@ public final class RepositoryCatalogTypes {
                                             String skillId,
                                             String version) {
         assertVersionAvailable(ASSET_TYPE_SKILL, repositoryId, index == null ? null : index.skills(), skillId, version, RepositorySkillIndexEntry::id, RepositorySkillIndexEntry::version);
+    }
+
+    static void assertEventSourceVersionAvailable(String repositoryId,
+                                                  RepositoryIndexFile index,
+                                                  String eventSourceId,
+                                                  String version) {
+        assertVersionAvailable(ASSET_TYPE_EVENT_SOURCE, repositoryId, index == null ? null : index.eventSources(), eventSourceId, version, RepositoryEventSourceIndexEntry::id, RepositoryEventSourceIndexEntry::version);
     }
 
     private static <T> void assertVersionAvailable(String assetType,

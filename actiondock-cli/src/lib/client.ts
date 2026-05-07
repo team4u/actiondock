@@ -11,6 +11,7 @@ import type {
   EventDispatchRecord,
   EventIngestionView,
   EventRecord,
+  DevelopmentStatus,
   EventSourceDefinition,
   EventTrigger,
   EventTriggerTestRequest,
@@ -25,6 +26,11 @@ import type {
   ProcessorTestRequest,
   ProcessorTestResult,
   NormalizedEvent,
+  RepositoryDefinition,
+  RepositoryEventSourceDescriptor,
+  RepositoryEventSourceDetail,
+  RepositoryEventSourceInstallation,
+  RepositoryInstallRequest,
   ScriptScheduleUpsertRequest,
   ScriptScheduleView,
   ScriptDefinition,
@@ -235,6 +241,16 @@ export class ActionDockClient {
     return this.requestJson<EventSourceDefinition[]>("/api/event-sources");
   }
 
+  async getEventSourceDevelopmentStatus(sourceId: string): Promise<DevelopmentStatus> {
+    return this.requestJson<DevelopmentStatus>(`/api/event-sources/${sourceId}/development-status`);
+  }
+
+  async pullDevelopmentEventSource(sourceId: string, force = false): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/development-pull?force=${force}`, {
+      method: "POST"
+    });
+  }
+
   async getEventSource(sourceId: string): Promise<EventSourceDefinition> {
     return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}`);
   }
@@ -367,6 +383,73 @@ export class ActionDockClient {
 
   async listPlugins(): Promise<PluginView[]> {
     return this.requestJson<PluginView[]>("/api/plugins");
+  }
+
+  async listRepositories(): Promise<RepositoryDefinition[]> {
+    return this.requestJson<RepositoryDefinition[]>("/api/repositories");
+  }
+
+  async listRepositoryEventSources(): Promise<RepositoryEventSourceDescriptor[]> {
+    return this.requestJson<RepositoryEventSourceDescriptor[]>("/api/repositories/event-sources");
+  }
+
+  async listRepositoryEventSourcesByRepository(repositoryId: string): Promise<RepositoryEventSourceDescriptor[]> {
+    return this.requestJson<RepositoryEventSourceDescriptor[]>(`/api/repositories/${repositoryId}/event-sources`);
+  }
+
+  async getRepositoryEventSource(repositoryId: string, eventSourceId: string): Promise<RepositoryEventSourceDetail> {
+    return this.requestJson<RepositoryEventSourceDetail>(`/api/repositories/${repositoryId}/event-sources/${eventSourceId}`);
+  }
+
+  async installRepositoryEventSource(
+    repositoryId: string,
+    eventSourceId: string,
+    payload: RepositoryInstallRequest
+  ): Promise<RepositoryEventSourceInstallation> {
+    return this.requestJson<RepositoryEventSourceInstallation>("/api/resource-lifecycle/operations", {
+      method: "POST",
+      body: JSON.stringify({
+        resourceType: "REPOSITORY_EVENT_SOURCE",
+        operation: "install",
+        repositoryId,
+        resourceId: eventSourceId,
+        payload
+      })
+    });
+  }
+
+  async updateRepositoryEventSource(
+    repositoryId: string,
+    eventSourceId: string,
+    payload: RepositoryInstallRequest
+  ): Promise<RepositoryEventSourceInstallation> {
+    return this.requestJson<RepositoryEventSourceInstallation>("/api/resource-lifecycle/operations", {
+      method: "POST",
+      body: JSON.stringify({
+        resourceType: "REPOSITORY_EVENT_SOURCE",
+        operation: "update",
+        repositoryId,
+        resourceId: eventSourceId,
+        payload
+      })
+    });
+  }
+
+  async developRepositoryEventSource(
+    repositoryId: string,
+    eventSourceId: string,
+    sourceId?: string
+  ): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>("/api/resource-lifecycle/operations", {
+      method: "POST",
+      body: JSON.stringify({
+        resourceType: "REPOSITORY_EVENT_SOURCE",
+        operation: "develop",
+        repositoryId,
+        resourceId: eventSourceId,
+        payload: sourceId ? { scriptId: sourceId } : {}
+      })
+    });
   }
 
   async getPlugin(pluginId: string): Promise<PluginView> {

@@ -2,6 +2,7 @@ package org.team4u.actiondock.storage.jpa.adapter;
 
 import org.springframework.stereotype.Component;
 import org.team4u.actiondock.domain.model.EventTrigger;
+import org.team4u.actiondock.domain.model.EventTriggerScope;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.EventTriggerRepository;
@@ -48,6 +49,14 @@ public class JpaEventTriggerRepositoryAdapter implements EventTriggerRepository 
     }
 
     @Override
+    public List<EventTrigger> findByRepositoryIdAndRepositoryEventSourceId(String repositoryId, String repositoryEventSourceId) {
+        return repository.findByRepositoryIdAndRepositoryEventSourceIdOrderByCreatedAtDesc(repositoryId, repositoryEventSourceId)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public void deleteById(String id) {
         repository.deleteById(id);
     }
@@ -57,6 +66,12 @@ public class JpaEventTriggerRepositoryAdapter implements EventTriggerRepository 
         entity.setId(trigger.getId());
         entity.setName(trigger.getName());
         entity.setDescription(trigger.getDescription());
+        entity.setScope(trigger.getScope() == null ? null : trigger.getScope().name());
+        entity.setRepositoryId(trigger.getRepositoryId());
+        entity.setRepositoryEventSourceId(trigger.getRepositoryEventSourceId());
+        entity.setRepositoryVersion(trigger.getRepositoryVersion());
+        entity.setRepositoryTriggerId(trigger.getRepositoryTriggerId());
+        entity.setEditable(trigger.isEditable());
         entity.setEnabled(trigger.isEnabled());
         entity.setSourceId(trigger.getSourceId());
         entity.setTargetScriptId(trigger.getTargetScriptId());
@@ -79,6 +94,12 @@ public class JpaEventTriggerRepositoryAdapter implements EventTriggerRepository 
                 .setId(entity.getId())
                 .setName(entity.getName())
                 .setDescription(entity.getDescription())
+                .setScope(entity.getScope() == null ? EventTriggerScope.PERSONAL : EventTriggerScope.valueOf(entity.getScope()))
+                .setRepositoryId(entity.getRepositoryId())
+                .setRepositoryEventSourceId(entity.getRepositoryEventSourceId())
+                .setRepositoryVersion(entity.getRepositoryVersion())
+                .setRepositoryTriggerId(entity.getRepositoryTriggerId())
+                .setEditable(entity.isEditable())
                 .setEnabled(entity.isEnabled())
                 .setSourceId(entity.getSourceId())
                 .setTargetScriptId(entity.getTargetScriptId())

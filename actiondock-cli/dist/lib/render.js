@@ -246,6 +246,77 @@ export function renderEventSourceDetail(item) {
     }
     return lines.join("\n");
 }
+export function renderRepositoryEventSourceList(items) {
+    if (items.length === 0) {
+        return "没有仓库事件源。";
+    }
+    return items
+        .map((item) => {
+        const installed = item.installed ? ` installed=${item.installedVersion ?? item.version}` : " not-installed";
+        const usage = item.repositoryUsage ? ` usage=${item.repositoryUsage}` : "";
+        return `${item.repositoryId}/${item.eventSourceId} ${item.displayName}@${item.version}${installed}${usage}`;
+    })
+        .join("\n");
+}
+export function renderRepositoryEventSourceDetail(item) {
+    const descriptor = item.descriptor;
+    const lines = [
+        `RepositoryEventSource: ${descriptor.repositoryId}/${descriptor.eventSourceId}`,
+        `InstalledId: ${descriptor.installedSourceId}`,
+        `Name: ${descriptor.displayName}`,
+        `Version: ${descriptor.version}`,
+        `Installed: ${descriptor.installed ? `yes${descriptor.installedVersion ? ` (${descriptor.installedVersion})` : ""}` : "no"}`,
+        `Trusted: ${descriptor.trusted ? "yes" : "no"}`
+    ];
+    if (descriptor.repositoryUsage) {
+        lines.push(`RepositoryUsage: ${descriptor.repositoryUsage}`);
+    }
+    if (descriptor.owner) {
+        lines.push(`Owner: ${descriptor.owner}`);
+    }
+    if (descriptor.description) {
+        lines.push(`Description: ${descriptor.description}`);
+    }
+    if (item.eventSource.transport?.type) {
+        lines.push(`Transport: ${item.eventSource.transport.type}`);
+    }
+    if (item.eventSource.auth?.mode) {
+        lines.push(`Auth: ${item.eventSource.auth.mode}`);
+    }
+    if (descriptor.scriptDependencies.length > 0) {
+        lines.push("ScriptDependencies:");
+        for (const dependency of descriptor.scriptDependencies) {
+            lines.push(`  - ${dependency.scriptId} => ${dependency.repositoryId}/${dependency.toolId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`);
+        }
+    }
+    if (item.configTemplate.length > 0) {
+        lines.push(`ConfigTemplates: ${item.configTemplate.length}`);
+    }
+    if (item.triggerTemplate.length > 0) {
+        lines.push(`TriggerTemplates: ${item.triggerTemplate.length}`);
+    }
+    return lines.join("\n");
+}
+export function renderDevelopmentStatus(item) {
+    const lines = [
+        `ResourceId: ${item.scriptId}`,
+        `Repository: ${item.repositoryId}`,
+        `RepositoryAsset: ${item.repositoryToolId}`,
+        `SyncState: ${item.syncState}`,
+        `Dirty: ${item.dirty ? "yes" : "no"}`,
+        `RemoteChanged: ${item.remoteChanged ? "yes" : "no"}`
+    ];
+    if (item.repositoryVersion) {
+        lines.push(`RepositoryVersion: ${item.repositoryVersion}`);
+    }
+    if (item.remoteVersion) {
+        lines.push(`RemoteVersion: ${item.remoteVersion}`);
+    }
+    if (item.sourceSyncedAt) {
+        lines.push(`SourceSyncedAt: ${item.sourceSyncedAt}`);
+    }
+    return lines.join("\n");
+}
 export function renderEventTriggerList(items) {
     if (items.length === 0) {
         return "没有事件触发器。";

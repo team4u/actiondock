@@ -11,4 +11,6 @@ public interface SpringDataEventTriggerEntityRepository extends JpaRepository<Ev
     List<EventTriggerEntity> findBySourceIdOrderByCreatedAtDesc(String sourceId);
 
     List<EventTriggerEntity> findBySourceIdAndEnabledOrderByCreatedAtDesc(String sourceId, boolean enabled);
+
+    List<EventTriggerEntity> findByRepositoryIdAndRepositoryEventSourceIdOrderByCreatedAtDesc(String repositoryId, String repositoryEventSourceId);
 }

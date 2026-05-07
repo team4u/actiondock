@@ -1,5 +1,6 @@
 import {
   DeleteOutlined,
+  DownloadOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
@@ -9,10 +10,13 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
+  Descriptions,
   Drawer,
   Empty,
   Form,
   Input,
+  Modal,
   Select,
   Space,
   Switch,
@@ -28,17 +32,40 @@ import {
   deleteEventSource,
   disableEventSource,
   enableEventSource,
+  getEventSourceDevelopmentStatus,
   listEventSources,
+  pullDevelopmentEventSource,
   testEventSourceNormalization,
   updateEventSource
 } from "../../triggers/api";
+import {
+  developRepositoryEventSource,
+  getRepositoryEventSource,
+  installRepositoryEventSource,
+  listRepositories,
+  listRepositoryEventSources,
+  updateRepositoryEventSource
+} from "../../resources/api";
 import { listScripts } from "../../scripts/api";
 import { listConfigValues } from "../../settings/api";
+import { DevelopmentSyncTag, getDevelopmentActionLabel } from "../../../components/domain/DevelopmentSyncTag";
 import { InfoHint } from "../../../components/common/InfoHint";
 import { ProcessorEditor } from "../../../components/plugin/ProcessorEditor";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
-import type { ConfigValue, EventSourceAuthConfig, EventSourceDefinition, IncomingEventPayload, NormalizedEvent, ScriptDefinition } from "../../../shared/types";
+import { TrustLevelTag } from "../../../components/domain/TrustLevelTag";
+import type {
+  ConfigValue,
+  DevelopmentStatus,
+  EventSourceAuthConfig,
+  EventSourceDefinition,
+  IncomingEventPayload,
+  NormalizedEvent,
+  RepositoryDefinition,
+  RepositoryEventSourceDescriptor,
+  RepositoryEventSourceDetail,
+  ScriptDefinition
+} from "../../../shared/types";
 import { formatDateTime, getErrorMessage, parseJsonText, prettyJson } from "../../../services/utils";
 
 const { Text } = Typography;
@@ -103,10 +130,14 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const [items, setItems] = useState<EventSourceDefinition[]>([]);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
   const [configValues, setConfigValues] = useState<ConfigValue[]>([]);
+  const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
+  const [repositoryEventSources, setRepositoryEventSources] = useState<RepositoryEventSourceDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [actionKey, setActionKey] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [draft, setDraft] = useState<EventSourceDefinition>(createEmptyDraft());
+  const [developmentStatus, setDevelopmentStatus] = useState<DevelopmentStatus | null>(null);
   const [sampleContextText, setSampleContextText] = useState("{}");
   const [testHeadersText, setTestHeadersText] = useState("{}");
   const [testQueryText, setTestQueryText] = useState("{}");
@@ -115,18 +146,23 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const [testResult, setTestResult] = useState<NormalizedEvent | null>(null);
   const [testing, setTesting] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
+  const [modal, modalContextHolder] = Modal.useModal();
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [sourceItems, scriptItems, configItems] = await Promise.all([
+      const [sourceItems, scriptItems, configItems, repositoryItems, repositorySourceItems] = await Promise.all([
         listEventSources(),
         listScripts(),
-        listConfigValues()
+        listConfigValues(),
+        listRepositories(),
+        listRepositoryEventSources()
       ]);
       setItems(sourceItems);
       setScripts(scriptItems);
       setConfigValues(configItems);
+      setRepositories(repositoryItems);
+      setRepositoryEventSources(repositorySourceItems);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载事件源失败"));
     } finally {
@@ -143,13 +179,40 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     [configValues]
   );
 
+  const repositoryDescriptorByInstalledId = useMemo(
+    () => new Map(repositoryEventSources.map((item) => [item.installedSourceId, item])),
+    [repositoryEventSources]
+  );
+
+  const repositoryDescriptorByDevelopmentId = useMemo(
+    () => new Map(
+      repositoryEventSources
+        .filter((item) => item.developmentSourceId)
+        .map((item) => [item.developmentSourceId as string, item])
+    ),
+    [repositoryEventSources]
+  );
+
   const updateDraft = (patch: Partial<EventSourceDefinition>) => {
     setDraft((previous) => ({ ...previous, ...patch }));
+  };
+
+  const loadDevelopmentInfo = async (item: EventSourceDefinition) => {
+    if (item.scope !== "DEVELOPMENT") {
+      setDevelopmentStatus(null);
+      return;
+    }
+    try {
+      setDevelopmentStatus(await getEventSourceDevelopmentStatus(item.id));
+    } catch {
+      setDevelopmentStatus(null);
+    }
   };
 
   const openCreate = () => {
     const nextDraft = createEmptyDraft();
     setDraft(nextDraft);
+    setDevelopmentStatus(null);
     const sampleContext = createDefaultSampleContext();
     setSampleContextText(prettyJson(sampleContext));
     const testPayload = buildTestPayloadFromSampleContext(sampleContext);
@@ -164,6 +227,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const openEdit = (item: EventSourceDefinition) => {
     const nextDraft = cloneValue(item);
     setDraft(nextDraft);
+    void loadDevelopmentInfo(nextDraft);
     const sampleContext = (nextDraft.sampleContext && Object.keys(nextDraft.sampleContext).length > 0)
       ? nextDraft.sampleContext
       : createDefaultSampleContext();
@@ -196,6 +260,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
           : [saved, ...previous];
         return [...next].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
       });
+      await loadDevelopmentInfo(saved);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "保存事件源失败"));
     } finally {
@@ -250,6 +315,129 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     }
   };
 
+  const confirmRepositoryInstallAction = async (descriptor: RepositoryEventSourceDescriptor, action: "install" | "update") => {
+    let installScriptDependencies = descriptor.scriptDependencies.length > 0;
+    let detailForAction: RepositoryEventSourceDetail | null = null;
+    try {
+      detailForAction = await getRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "读取事件源模板失败"));
+      return;
+    }
+    await modal.confirm({
+      title: action === "install" ? "安装事件源资产" : "更新事件源资产",
+      okText: action === "install" ? "安装" : "更新",
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Text>
+            {descriptor.displayName} 将安装到本机事件源 ID <Text code>{descriptor.installedSourceId}</Text>。
+          </Text>
+          {descriptor.scriptDependencies.length > 0 ? (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Checkbox defaultChecked onChange={(event) => { installScriptDependencies = event.target.checked; }}>
+                同时安装或更新 {descriptor.scriptDependencies.length} 个脚本依赖
+              </Checkbox>
+              <Descriptions
+                bordered
+                size="small"
+                column={1}
+                items={descriptor.scriptDependencies.map((dependency) => ({
+                  key: `${dependency.scriptId}:${dependency.repositoryId}:${dependency.toolId}`,
+                  label: <Text code>{dependency.scriptId}</Text>,
+                  children: <Text code>{`${dependency.repositoryId}/${dependency.toolId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`}</Text>
+                }))}
+              />
+            </Space>
+          ) : (
+            <Text type="secondary">该事件源没有声明脚本依赖。</Text>
+          )}
+          {detailForAction.triggerTemplate.length > 0 ? (
+            <Text type="secondary">本次将同步 {detailForAction.triggerTemplate.length} 个事件触发器模板。</Text>
+          ) : null}
+          {!descriptor.trusted ? (
+            <Text type="warning">当前来源仓库未标记为可信，安装前请先检查标准化 Processor、触发器模板和配置模板。</Text>
+          ) : null}
+        </Space>
+      )
+    });
+    setActionKey(`${action}:${descriptor.installedSourceId}`);
+    try {
+      if (action === "install") {
+        await installRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, {
+          installSchedules: false,
+          installScriptDependencies
+        });
+      } else {
+        await updateRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, {
+          installSchedules: false,
+          installScriptDependencies
+        });
+      }
+      messageApi.success(action === "install" ? "事件源资产已安装" : "事件源资产已更新");
+      await loadData();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, action === "install" ? "安装事件源失败" : "更新事件源失败"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const handleDevelopRepositoryEventSource = async (descriptor: RepositoryEventSourceDescriptor, sourceId?: string) => {
+    setActionKey(`develop:${descriptor.repositoryId}:${descriptor.eventSourceId}`);
+    try {
+      const source = await developRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, { scriptId: sourceId });
+      await loadData();
+      openEdit(source);
+      messageApi.success("已同步为本地开发事件源");
+    } catch (error) {
+      const detail = getErrorMessage(error, "同步开发事件源失败");
+      if (!sourceId && detail.includes("事件源 ID 已存在")) {
+        let customSourceId = descriptor.eventSourceId;
+        await modal.confirm({
+          title: "指定开发事件源 ID",
+          okText: "同步",
+          cancelText: "取消",
+          content: (
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Text type="secondary">默认事件源 ID 已被占用，请输入一个本地开发事件源 ID。</Text>
+              <Input defaultValue={customSourceId} onChange={(event) => { customSourceId = event.target.value; }} />
+            </Space>
+          ),
+          onOk: () => handleDevelopRepositoryEventSource(descriptor, customSourceId.trim())
+        });
+        return;
+      }
+      messageApi.error(detail);
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const handlePullDevelopmentSource = async (item: EventSourceDefinition, force = false) => {
+    setActionKey(`pull:${item.id}`);
+    try {
+      const saved = await pullDevelopmentEventSource(item.id, force);
+      setDraft(saved);
+      await loadDevelopmentInfo(saved);
+      const sampleContext = (saved.sampleContext && Object.keys(saved.sampleContext).length > 0)
+        ? saved.sampleContext
+        : createDefaultSampleContext();
+      setSampleContextText(prettyJson(sampleContext));
+      const testPayload = buildTestPayloadFromSampleContext(sampleContext);
+      setTestHeadersText(testPayload.headers);
+      setTestQueryText(testPayload.query);
+      setTestBodyText(testPayload.body);
+      setTestRawBody(testPayload.rawBody);
+      await loadData();
+      messageApi.success("开发事件源已拉取远端更新");
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "拉取开发事件源失败"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
   const columns: ColumnsType<EventSourceDefinition> = [
     {
       title: "名称",
@@ -257,11 +445,31 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
       render: (_value, record) => (
         <TableLinkCell title={record.name} onClick={() => openEdit(record)}>
           <Space direction="vertical" size={0}>
-            <Text strong>{record.name}</Text>
+            <Space wrap size={[8, 8]}>
+              <Text strong>{record.name}</Text>
+              {record.scope === "REPOSITORY" ? <Tag color="blue">仓库安装</Tag> : null}
+              {record.scope === "DEVELOPMENT" ? <Tag color="purple">开发源</Tag> : null}
+            </Space>
             <Text type="secondary">{record.key}</Text>
           </Space>
         </TableLinkCell>
       )
+    },
+    {
+      title: "来源",
+      width: 220,
+      render: (_value, record) => {
+        const descriptor = repositoryDescriptorByInstalledId.get(record.id) ?? repositoryDescriptorByDevelopmentId.get(record.id);
+        if (!descriptor) {
+          return <Text type="secondary">本地创建</Text>;
+        }
+        return (
+          <Space direction="vertical" size={2}>
+            <Text>{descriptor.repositoryId}</Text>
+            <Text code>{descriptor.eventSourceId}</Text>
+          </Space>
+        );
+      }
     },
     {
       title: "鉴权",
@@ -275,9 +483,14 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     },
     {
       title: "状态",
-      width: 120,
+      width: 180,
       render: (_value, record) => (
-        <Tag color={record.enabled ? "green" : "default"}>{record.enabled ? "启用" : "停用"}</Tag>
+        <Space direction="vertical" size={2}>
+          <Tag color={record.enabled ? "green" : "default"}>{record.enabled ? "启用" : "停用"}</Tag>
+          {record.scope === "DEVELOPMENT" ? (
+            <DevelopmentSyncTag state={repositoryDescriptorByDevelopmentId.get(record.id)?.developmentSyncState} />
+          ) : null}
+        </Space>
       )
     },
     {
@@ -292,11 +505,22 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
       render: (_value, record) => (
         <Space wrap>
           <Button size="small" onClick={() => openEdit(record)}>
-            编辑
+            {record.editable === false ? "查看" : "编辑"}
           </Button>
+          {record.scope === "DEVELOPMENT" ? (
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              loading={actionKey === `pull:${record.id}`}
+              onClick={() => void handlePullDevelopmentSource(record)}
+            >
+              {getDevelopmentActionLabel(repositoryDescriptorByDevelopmentId.get(record.id)?.developmentSyncState)}
+            </Button>
+          ) : null}
           <Button
             size="small"
             icon={record.enabled ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+            disabled={record.editable === false}
             onClick={() => void toggleEnabled(record)}
           >
             {record.enabled ? "停用" : "启用"}
@@ -305,6 +529,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
             danger
             size="small"
             icon={<DeleteOutlined />}
+            disabled={record.editable === false}
             onClick={() => void removeItem(record)}
           >
             删除
@@ -315,10 +540,14 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   ];
 
   const currentAuth: EventSourceAuthConfig = draft.auth ?? { mode: "NONE" };
+  const currentRepositoryDescriptor =
+    (draft.scope === "REPOSITORY" ? repositoryDescriptorByInstalledId.get(draft.id) : undefined)
+    ?? (draft.scope === "DEVELOPMENT" ? repositoryDescriptorByDevelopmentId.get(draft.id) : undefined);
 
   return (
     <>
       {contextHolder}
+      {modalContextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         {!embedded ? (
           <PageHeader
@@ -350,7 +579,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
           type="info"
           showIcon
           message="先定义 sourceKey 和 Webhook 地址，再选鉴权方式，最后写标准化 Processor。"
-          description="保存后系统会生成事件入口地址；测试面板里的 JSON 就是发到这个入口的请求样例。"
+          description="仓库安装源和开发源是仓库资产，普通个人事件源才允许直接编辑；开发源支持拉取来源仓库更新。"
         />
 
         <Card>
@@ -377,26 +606,48 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
         extra={(
           <Space>
             <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            <Button type="primary" loading={saving} onClick={() => void saveDraft()}>
-              保存
-            </Button>
+            {draft.scope === "DEVELOPMENT" ? (
+              <Button loading={actionKey === `pull:${draft.id}`} onClick={() => void handlePullDevelopmentSource(draft)}>
+                拉取更新
+              </Button>
+            ) : null}
+            {draft.editable !== false ? (
+              <Button type="primary" loading={saving} onClick={() => void saveDraft()}>
+                保存
+              </Button>
+            ) : null}
           </Space>
         )}
       >
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          {draft.scope === "REPOSITORY" || draft.scope === "DEVELOPMENT" ? (
+            <Descriptions
+              bordered
+              size="small"
+              column={2}
+              items={[
+                { key: "scope", label: "来源类型", children: draft.scope === "DEVELOPMENT" ? "开发源" : "仓库安装" },
+                { key: "repository", label: "来源仓库", children: draft.repositoryId || currentRepositoryDescriptor?.repositoryId || "-" },
+                { key: "source", label: "仓库事件源", children: <Text code>{draft.repositoryEventSourceId || currentRepositoryDescriptor?.eventSourceId || "-"}</Text> },
+                { key: "version", label: "仓库版本", children: draft.repositoryVersion || currentRepositoryDescriptor?.version || "-" },
+                { key: "trust", label: "仓库信任", children: currentRepositoryDescriptor ? <TrustLevelTag level={currentRepositoryDescriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> : "-" },
+                { key: "sync", label: "开发同步", children: draft.scope === "DEVELOPMENT" ? <DevelopmentSyncTag state={developmentStatus?.syncState} /> : <Text type="secondary">-</Text> }
+              ]}
+            />
+          ) : null}
           <Card size="small" title="基础信息">
             <Form layout="vertical">
               <Form.Item label={fieldLabel("名称", "给事件源起一个便于识别的名字。")} required>
-                <Input value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} />
+                <Input value={draft.name} readOnly={draft.editable === false} onChange={(event) => updateDraft({ name: event.target.value })} />
               </Form.Item>
               <Form.Item label={fieldLabel("Key", "用户自定义唯一键，例如 github.issue 或 custom.crm。")} required>
-                <Input value={draft.key} onChange={(event) => updateDraft({ key: event.target.value })} />
+                <Input value={draft.key} readOnly={draft.editable === false} onChange={(event) => updateDraft({ key: event.target.value })} />
               </Form.Item>
               <Form.Item label={fieldLabel("描述", "补充这个事件源对应的外部系统和事件范围。")}>
-                <Input.TextArea rows={3} value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} />
+                <Input.TextArea rows={3} value={draft.description} readOnly={draft.editable === false} onChange={(event) => updateDraft({ description: event.target.value })} />
               </Form.Item>
               <Form.Item label={fieldLabel("启用", "停用后入口仍在，但不会继续接收和分发事件。")}>
-                <Switch checked={draft.enabled} onChange={(checked) => updateDraft({ enabled: checked })} />
+                <Switch checked={draft.enabled} disabled={draft.editable === false} onChange={(checked) => updateDraft({ enabled: checked })} />
               </Form.Item>
               <Form.Item label={fieldLabel("Webhook Endpoint", "保存后自动生成，外部系统调用这个地址。")}>
                 <Input value={draft.transport.endpointPath ?? (draft.id ? `/api/event-sources/${draft.id}/events` : "保存后生成")} readOnly />
@@ -409,6 +660,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
               <Form.Item label={fieldLabel("鉴权模式", "选择这条入口如何校验外部请求。")}>
                 <Select
                   value={currentAuth.mode}
+                  disabled={draft.editable === false}
                   options={[
                     { label: "无鉴权", value: "NONE" },
                     { label: "Header Token", value: "HEADER_TOKEN" },
@@ -420,25 +672,26 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
               </Form.Item>
               {currentAuth.mode === "HEADER_TOKEN" ? (
                 <Form.Item label={fieldLabel("Token Header", "从哪个请求头里读取 Token。")}>
-                  <Input value={currentAuth.tokenHeader} onChange={(event) => updateDraft({ auth: { ...currentAuth, tokenHeader: event.target.value } })} />
+                  <Input readOnly={draft.editable === false} value={currentAuth.tokenHeader} onChange={(event) => updateDraft({ auth: { ...currentAuth, tokenHeader: event.target.value } })} />
                 </Form.Item>
               ) : null}
               {currentAuth.mode === "QUERY_TOKEN" ? (
                 <Form.Item label={fieldLabel("Token Query Param", "从哪个查询参数里读取 Token。")}>
-                  <Input value={currentAuth.tokenQueryParam} onChange={(event) => updateDraft({ auth: { ...currentAuth, tokenQueryParam: event.target.value } })} />
+                  <Input readOnly={draft.editable === false} value={currentAuth.tokenQueryParam} onChange={(event) => updateDraft({ auth: { ...currentAuth, tokenQueryParam: event.target.value } })} />
                 </Form.Item>
               ) : null}
               {currentAuth.mode === "HMAC_SHA256" ? (
                 <>
                   <Form.Item label={fieldLabel("Signature Header", "签名所在请求头，例如 X-Hub-Signature-256。")}>
-                    <Input value={currentAuth.signatureHeader} onChange={(event) => updateDraft({ auth: { ...currentAuth, signatureHeader: event.target.value } })} />
+                    <Input readOnly={draft.editable === false} value={currentAuth.signatureHeader} onChange={(event) => updateDraft({ auth: { ...currentAuth, signatureHeader: event.target.value } })} />
                   </Form.Item>
                   <Form.Item label={fieldLabel("Signature Prefix", "签名前缀，例如 sha256=。")}>
-                    <Input value={currentAuth.signaturePrefix} onChange={(event) => updateDraft({ auth: { ...currentAuth, signaturePrefix: event.target.value } })} />
+                    <Input readOnly={draft.editable === false} value={currentAuth.signaturePrefix} onChange={(event) => updateDraft({ auth: { ...currentAuth, signaturePrefix: event.target.value } })} />
                   </Form.Item>
                   <Form.Item label={fieldLabel("Signature Payload", "计算签名时使用原始请求体或时间戳拼接体。")}>
                     <Select
                       value={currentAuth.signaturePayload ?? "RAW_BODY"}
+                      disabled={draft.editable === false}
                       options={[
                         { label: "RAW_BODY", value: "RAW_BODY" },
                         { label: "TIMESTAMP_DOT_RAW_BODY", value: "TIMESTAMP_DOT_RAW_BODY" }
@@ -447,13 +700,14 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
                     />
                   </Form.Item>
                   <Form.Item label={fieldLabel("Timestamp Header", "时间戳所在请求头，仅在需要防重放时使用。")}>
-                    <Input value={currentAuth.timestampHeader} onChange={(event) => updateDraft({ auth: { ...currentAuth, timestampHeader: event.target.value } })} />
+                    <Input readOnly={draft.editable === false} value={currentAuth.timestampHeader} onChange={(event) => updateDraft({ auth: { ...currentAuth, timestampHeader: event.target.value } })} />
                   </Form.Item>
                   <Form.Item label={fieldLabel("Secret Config Key", "从系统配置中读取签名密钥，不直接明文保存。")}>
                     <Select
                       showSearch
                       allowClear
                       value={currentAuth.secretConfigKey}
+                      disabled={draft.editable === false}
                       options={configOptions}
                       optionFilterProp="label"
                       onChange={(secretConfigKey) => updateDraft({ auth: { ...currentAuth, secretConfigKey } })}
@@ -470,6 +724,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
             value={draft.normalizationProcessor}
             scripts={scripts}
             description="把原始请求转成统一事件结构，供后续触发器使用。"
+            disabled={draft.editable === false}
             onChange={(normalizationProcessor) => updateDraft({ normalizationProcessor })}
           />
 
@@ -477,6 +732,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
             <Input.TextArea
               rows={8}
               value={sampleContextText}
+              readOnly={draft.editable === false}
               onChange={(event) => setSampleContextText(event.target.value)}
             />
           </Card>

@@ -4,6 +4,7 @@ import org.team4u.actiondock.domain.model.EventDispatchRecord;
 import org.team4u.actiondock.domain.model.EventDispatchStatus;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventTrigger;
+import org.team4u.actiondock.domain.model.EventTriggerScope;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionSubmissionMetadata;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
@@ -66,6 +67,9 @@ public class EventTriggerApplicationService {
         }
         LocalDateTime now = LocalDateTime.now();
         EventTrigger target = resolveOrCreateTarget(trigger, now);
+        if (target.getScope() == EventTriggerScope.REPOSITORY) {
+            throw new IllegalArgumentException("仓库事件触发器仅支持通过仓库更新");
+        }
 
         String name = ApplicationServiceSupport.normalize(trigger.getName(), "触发器名称不能为空");
         EventSourceDefinition source = eventSourceRepository.findById(
@@ -110,6 +114,7 @@ public class EventTriggerApplicationService {
                                             ScriptDefinition script, LocalDateTime now) {
         target.setName(name)
                 .setDescription(trigger.getDescription())
+                .setEditable(trigger.isEditable())
                 .setEnabled(trigger.isEnabled())
                 .setSourceId(source.getId())
                 .setTargetScriptId(script.getId())

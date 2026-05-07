@@ -7,10 +7,14 @@ import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.AiDependency;
+import org.team4u.actiondock.domain.model.EventSourceDefinition;
+import org.team4u.actiondock.domain.model.EventSourceScope;
+import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
+import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptScope;
@@ -36,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,12 +62,15 @@ public class RepositoryCatalogService {
     public record Repositories(
             RepositoryDefinitionRepository repositoryDefinitionRepository,
             RepositoryToolInstallationRepository repositoryToolInstallationRepository,
+            org.team4u.actiondock.domain.port.RepositoryEventSourceInstallationRepository repositoryEventSourceInstallationRepository,
             CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
             ManagedSkillRepository managedSkillRepository,
             ScriptRepository scriptRepository,
             ScriptScheduleRepository scriptScheduleRepository,
             ExecutionPresetRepository executionPresetRepository,
             ConfigValueRepository configValueRepository,
+            org.team4u.actiondock.domain.port.EventSourceRepository eventSourceRepository,
+            org.team4u.actiondock.domain.port.EventTriggerRepository eventTriggerRepository,
             AiModelProfileRepository aiModelProfileRepository,
             AiAgentProfileRepository aiAgentProfileRepository,
             AiToolsetRepository aiToolsetRepository
@@ -194,12 +202,27 @@ public class RepositoryCatalogService {
                 Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::installedScriptId));
     }
 
+    public List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor> listAllRepositoryEventSources() {
+        return listAllFromEnabledRepositories(
+                this::listRepositoryEventSources,
+                Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::installedSourceId));
+    }
+
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listRepositoryTools(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         return index.safeTools().stream()
                 .map(entry -> toDescriptor(repository, readToolFile(repository, entry.toolPath()), entry.toolPath()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::installedScriptId))
+                .toList();
+    }
+
+    public List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor> listRepositoryEventSources(String repositoryId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
+        return index.safeEventSources().stream()
+                .map(entry -> toEventSourceDescriptor(repository, readEventSourceFile(repository, entry.eventSourcePath()), entry.eventSourcePath()))
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::installedSourceId))
                 .toList();
     }
 
@@ -273,6 +296,30 @@ public class RepositoryCatalogService {
                 ? null
                 : readRepositoryFile(repository, parentDirectoryPath(entry.toolPath()).resolve(tool.pythonRequirementsPath()));
         return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
+    }
+
+    public RepositoryCatalogTypes.RepositoryEventSourceDetail getRepositoryEventSource(String repositoryId, String eventSourceId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
+        RepositoryCatalogTypes.RepositoryEventSourceIndexEntry entry = findEntryById(
+                index.safeEventSources(), eventSourceId, RepositoryCatalogTypes.RepositoryEventSourceIndexEntry::id, "仓库事件源");
+        RepositoryCatalogTypes.EventSourceFile eventSource = readEventSourceFile(repository, entry.eventSourcePath());
+        List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
+                repository,
+                parentDirectoryPath(entry.eventSourcePath()).resolveNullable(eventSource.configTemplatePath()),
+                RepositoryCatalogTypes.ConfigTemplateItem.class
+        );
+        List<RepositoryCatalogTypes.EventTriggerTemplateItem> triggerTemplate = readOptionalFile(
+                repository,
+                parentDirectoryPath(entry.eventSourcePath()).resolveNullable(eventSource.triggerTemplatePath()),
+                RepositoryCatalogTypes.EventTriggerTemplateItem.class
+        );
+        return new RepositoryCatalogTypes.RepositoryEventSourceDetail(
+                toEventSourceDescriptor(repository, eventSource, entry.eventSourcePath()),
+                eventSource,
+                configTemplate,
+                triggerTemplate
+        );
     }
 
     public RepositoryCatalogTypes.CapabilityPackageDetail getCapabilityPackage(String repositoryId, String packageId) {
@@ -377,52 +424,110 @@ public class RepositoryCatalogService {
         return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(toolPath).value(), commit, digest);
     }
 
+    RepositoryCatalogTypes.ToolSourceState resolveEventSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryEventSourceDetail detail) {
+        String eventSourceId = detail.descriptor().eventSourceId();
+        String eventSourcePath = readRepositoryIndex(repository).safeEventSources().stream()
+                .filter(item -> eventSourceId.equals(item.id()))
+                .findFirst()
+                .map(RepositoryCatalogTypes.RepositoryEventSourceIndexEntry::eventSourcePath)
+                .orElseThrow(() -> new IllegalArgumentException("仓库事件源不存在: " + eventSourceId));
+        String digest = computeEventSourceDigest(detail);
+        String commit = REPO_TYPE_GIT.equals(repository.getType()) ? gitOps.gitHead(resolveRepositoryRoot(repository)) : null;
+        return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(eventSourcePath).value(), commit, digest);
+    }
+
     private String computeToolDigest(RepositoryCatalogTypes.RepositoryToolDetail detail) {
         RepositoryCatalogTypes.RepositoryToolDescriptor d = detail.descriptor();
-        return computeDigest(
-                d.toolId(), d.displayName(), d.version(), d.type(), d.packaging(),
-                d.description(), d.owner(), d.tags(),
-                d.scriptDependencies(), d.pluginDependencies(),
-                detail.source(), detail.pythonRequirements(),
-                readSchema(d.repositoryId(), d.inputSchemaPath()),
-                readSchema(d.repositoryId(), d.outputSchemaPath())
-        );
+        LinkedHashMap<String, Object> values = new LinkedHashMap<>();
+        values.put("toolId", d.toolId());
+        values.put("displayName", d.displayName());
+        values.put("version", d.version());
+        values.put("type", d.type());
+        values.put("packaging", d.packaging());
+        values.put("description", d.description());
+        values.put("owner", d.owner());
+        values.put("tags", d.tags());
+        values.put("scriptDependencies", d.scriptDependencies());
+        values.put("pluginDependencies", d.pluginDependencies());
+        values.put("source", detail.source());
+        values.put("pythonRequirements", detail.pythonRequirements());
+        values.put("inputSchema", readSchema(d.repositoryId(), d.inputSchemaPath()));
+        values.put("outputSchema", readSchema(d.repositoryId(), d.outputSchemaPath()));
+        return computeDigest(values);
+    }
+
+    String computeEventSourceLocalDigest(EventSourceDefinition eventSource, List<EventTrigger> triggers) {
+        LinkedHashMap<String, Object> values = new LinkedHashMap<>();
+        values.put("eventSourceId", eventSource.getRepositoryEventSourceId());
+        values.put("displayName", eventSource.getName());
+        values.put("version", eventSource.getRepositoryVersion());
+        values.put("description", eventSource.getDescription());
+        values.put("owner", null);
+        values.put("transport", eventSource.getTransport());
+        values.put("auth", eventSource.getAuth());
+        values.put("normalizationProcessor", eventSource.getNormalizationProcessor());
+        values.put("sampleContext", eventSource.getSampleContext());
+        values.put("triggers", triggers.stream()
+                .sorted(Comparator.comparing(EventTrigger::getRepositoryTriggerId, Comparator.nullsLast(String::compareTo)))
+                .map(trigger -> {
+                    LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", trigger.getRepositoryTriggerId());
+                    item.put("name", trigger.getName());
+                    item.put("description", trigger.getDescription());
+                    item.put("enabled", trigger.isEnabled());
+                    item.put("targetScriptId", trigger.getTargetScriptId());
+                    item.put("filterProcessor", trigger.getFilterProcessor());
+                    item.put("idempotencyProcessor", trigger.getIdempotencyProcessor());
+                    item.put("inputProcessor", trigger.getInputProcessor());
+                    item.put("submitMode", trigger.getSubmitMode() == null ? null : trigger.getSubmitMode().name());
+                    item.put("responseView", trigger.getResponseView());
+                    return item;
+                })
+                .toList());
+        return computeDigest(values);
+    }
+
+    private String computeEventSourceDigest(RepositoryCatalogTypes.RepositoryEventSourceDetail detail) {
+        LinkedHashMap<String, Object> values = new LinkedHashMap<>();
+        values.put("eventSourceId", detail.descriptor().eventSourceId());
+        values.put("displayName", detail.descriptor().displayName());
+        values.put("version", detail.descriptor().version());
+        values.put("description", detail.descriptor().description());
+        values.put("owner", detail.descriptor().owner());
+        values.put("transport", detail.eventSource().transport());
+        values.put("auth", detail.eventSource().auth());
+        values.put("normalizationProcessor", detail.eventSource().normalizationProcessor());
+        values.put("sampleContext", detail.eventSource().sampleContext());
+        values.put("scriptDependencies", detail.descriptor().scriptDependencies());
+        values.put("triggerTemplate", detail.triggerTemplate());
+        return computeDigest(values);
     }
 
     String computeDevelopmentLocalDigest(ScriptDefinition script) {
-        return computeDigest(
-                script.getRepositoryToolId(), script.getName(), script.getRepositoryVersion(),
-                script.getType() == null ? null : script.getType().name(),
-                script.getPackaging() == null ? null : script.getPackaging().name(),
-                script.getDescription(), script.getOwner(), script.getTags(),
-                script.getScriptDependencies(), script.getPluginDependencies(),
-                script.getSource(), script.getPythonRequirements(),
-                script.getInputSchema(), script.getOutputSchema()
-        );
+        LinkedHashMap<String, Object> values = new LinkedHashMap<>();
+        values.put("toolId", script.getRepositoryToolId());
+        values.put("displayName", script.getName());
+        values.put("version", script.getRepositoryVersion());
+        values.put("type", script.getType() == null ? null : script.getType().name());
+        values.put("packaging", script.getPackaging() == null ? null : script.getPackaging().name());
+        values.put("description", script.getDescription());
+        values.put("owner", script.getOwner());
+        values.put("tags", script.getTags());
+        values.put("scriptDependencies", script.getScriptDependencies());
+        values.put("pluginDependencies", script.getPluginDependencies());
+        values.put("source", script.getSource());
+        values.put("pythonRequirements", script.getPythonRequirements());
+        values.put("inputSchema", script.getInputSchema());
+        values.put("outputSchema", script.getOutputSchema());
+        return computeDigest(values);
     }
 
-    private String computeDigest(String toolId, String displayName, String version,
-                                  String type, String packaging, String description,
-                                  String owner, List<String> tags,
-                                  List<?> scriptDependencies, List<?> pluginDependencies,
-                                  String source, String pythonRequirements,
-                                  Object inputSchema, Object outputSchema) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("toolId", toolId);
-        values.put("displayName", displayName);
-        values.put("version", version);
-        values.put("type", type);
-        values.put("packaging", packaging);
-        values.put("description", description);
-        values.put("owner", owner);
-        values.put("tags", tags);
-        values.put("scriptDependencies", scriptDependencies);
-        values.put("pluginDependencies", pluginDependencies);
-        values.put("source", source);
-        values.put("pythonRequirements", pythonRequirements);
-        values.put("inputSchema", inputSchema);
-        values.put("outputSchema", outputSchema);
+    private String computeDigest(Map<String, Object> values) {
         return RepositoryVersionUtils.sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String computeDigest(Object... values) {
+        return RepositoryVersionUtils.sha256(jsonCodec.write(Arrays.asList(values)).getBytes(StandardCharsets.UTF_8));
     }
 
     Optional<PluginRegistration> findPluginRegistration(String pluginId) {
@@ -548,6 +653,23 @@ public class RepositoryCatalogService {
         );
     }
 
+    private RepositoryCatalogTypes.RepositoryEventSourceDescriptor toEventSourceDescriptor(RepositoryDefinition repository,
+                                                                                           RepositoryCatalogTypes.EventSourceFile eventSource,
+                                                                                           String eventSourcePath) {
+        EventSourceDefinition developmentSource = findDevelopmentEventSource(repository.getId(), eventSource.eventSourceId());
+        RepositoryCatalogTypes.RepositoryEventSourceDescriptor base = toEventSourceDescriptorWithoutDevelopment(repository, eventSource, eventSourcePath);
+        if (developmentSource == null) {
+            return base;
+        }
+        DevelopmentInfo devInfo = resolveEventSourceDevelopmentInfo(repository, eventSource, eventSourcePath, developmentSource, base);
+        return base.withDevelopment(
+                developmentSource.getId(),
+                devInfo.dirty(),
+                devInfo.remoteChanged(),
+                devInfo.syncState()
+        );
+    }
+
     /**
      * 查找与仓库工具关联的开发脚本。
      */
@@ -556,6 +678,15 @@ public class RepositoryCatalogService {
                 .filter(script -> script.getScope() == ScriptScope.DEVELOPMENT
                         && repositoryId.equals(script.getRepositoryId())
                         && toolId.equals(script.getRepositoryToolId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private EventSourceDefinition findDevelopmentEventSource(String repositoryId, String eventSourceId) {
+        return repos.eventSourceRepository().findAll().stream()
+                .filter(source -> source.getScope() == EventSourceScope.DEVELOPMENT
+                        && repositoryId.equals(source.getRepositoryId())
+                        && eventSourceId.equals(source.getRepositoryEventSourceId()))
                 .findFirst()
                 .orElse(null);
     }
@@ -589,6 +720,32 @@ public class RepositoryCatalogService {
         );
     }
 
+    private DevelopmentInfo resolveEventSourceDevelopmentInfo(RepositoryDefinition repository,
+                                                              RepositoryCatalogTypes.EventSourceFile eventSource,
+                                                              String eventSourcePath,
+                                                              EventSourceDefinition developmentSource,
+                                                              RepositoryCatalogTypes.RepositoryEventSourceDescriptor base) {
+        RepositoryCatalogTypes.RepositoryEventSourceDetail detail = new RepositoryCatalogTypes.RepositoryEventSourceDetail(
+                base,
+                eventSource,
+                readOptionalFile(repository, parentDirectoryPath(eventSourcePath).resolveNullable(eventSource.configTemplatePath()), RepositoryCatalogTypes.ConfigTemplateItem.class),
+                readOptionalFile(repository, parentDirectoryPath(eventSourcePath).resolveNullable(eventSource.triggerTemplatePath()), RepositoryCatalogTypes.EventTriggerTemplateItem.class)
+        );
+        RepositoryCatalogTypes.ToolSourceState state = resolveEventSourceState(repository, detail);
+        List<EventTrigger> developmentTriggers = repos.eventTriggerRepository()
+                .findByRepositoryIdAndRepositoryEventSourceId(repository.getId(), eventSource.eventSourceId())
+                .stream()
+                .filter(trigger -> trigger.getScope() == org.team4u.actiondock.domain.model.EventTriggerScope.DEVELOPMENT)
+                .toList();
+        String localDigest = computeEventSourceLocalDigest(developmentSource, developmentTriggers);
+        RepositoryCatalogTypes.DevelopmentSyncState syncState = DevelopmentSyncService.resolveEventSourceSyncState(developmentSource, localDigest, state);
+        return new DevelopmentInfo(
+                DevelopmentSyncService.isLocalChanged(developmentSource.getSourceDigest(), localDigest),
+                DevelopmentSyncService.isRemoteChanged(developmentSource.getSourceCommit(), developmentSource.getSourceDigest(), state),
+                syncState.name()
+        );
+    }
+
     private RepositoryCatalogTypes.RepositoryToolDescriptor toDescriptorWithoutDevelopment(RepositoryDefinition repository, RepositoryCatalogTypes.ToolFile tool, String toolPath) {
         String installedScriptId = repository.getId() + "." + tool.id();
         RepositoryToolInstallation installation = repos.repositoryToolInstallationRepository().findByToolId(installedScriptId).orElse(null);
@@ -598,16 +755,46 @@ public class RepositoryCatalogService {
                 tool.name(), tool.version(), tool.description(), tool.releaseNotes(), tool.owner(),
                 NormalizeUtils.nullSafeList(tool.tags()),
                 tool.type(), ScriptPackaging.fromNullableName(tool.packaging()).name(), tool.sourcePath(),
-                resolveRelative(toolPath, tool.pythonRequirementsPath()),
-                resolveRelative(toolPath, tool.inputSchemaPath()),
-                resolveRelative(toolPath, tool.outputSchemaPath()),
-                resolveRelative(toolPath, tool.configTemplatePath()),
-                resolveRelative(toolPath, tool.scheduleTemplatePath()),
+                resolveRelativeValue(toolPath, tool.pythonRequirementsPath()),
+                resolveRelativeValue(toolPath, tool.inputSchemaPath()),
+                resolveRelativeValue(toolPath, tool.outputSchemaPath()),
+                resolveRelativeValue(toolPath, tool.configTemplatePath()),
+                resolveRelativeValue(toolPath, tool.scheduleTemplatePath()),
                 tool.digest(), tool.riskLevel(),
                 NormalizeUtils.nullSafeList(tool.scriptDependencies()), NormalizeUtils.nullSafeList(tool.pluginDependencies()),
                 installed,
                 installed ? installation.getVersion() : null,
                 installed && !Objects.equals(installation.getVersion(), tool.version()),
+                isTrusted(repository),
+                resolveUsage(repository),
+                null, false, false, null
+        );
+    }
+
+    private RepositoryCatalogTypes.RepositoryEventSourceDescriptor toEventSourceDescriptorWithoutDevelopment(RepositoryDefinition repository,
+                                                                                                              RepositoryCatalogTypes.EventSourceFile eventSource,
+                                                                                                              String eventSourcePath) {
+        String installedSourceId = repository.getId() + "." + eventSource.eventSourceId();
+        RepositoryEventSourceInstallation installation = repos.repositoryEventSourceInstallationRepository().findBySourceId(installedSourceId).orElse(null);
+        boolean installed = installation != null;
+        return new RepositoryCatalogTypes.RepositoryEventSourceDescriptor(
+                repository.getId(),
+                eventSource.eventSourceId(),
+                installedSourceId,
+                eventSource.displayName(),
+                eventSource.version(),
+                eventSource.description(),
+                eventSource.releaseNotes(),
+                eventSource.owner(),
+                NormalizeUtils.nullSafeList(eventSource.tags()),
+                eventSourcePath,
+                resolveRelativeValue(eventSourcePath, eventSource.configTemplatePath()),
+                resolveRelativeValue(eventSourcePath, eventSource.triggerTemplatePath()),
+                eventSource.digest(),
+                NormalizeUtils.nullSafeList(eventSource.scriptDependencies()),
+                installed,
+                installed ? installation.getVersion() : null,
+                installed && !Objects.equals(installation.getVersion(), eventSource.version()),
                 isTrusted(repository),
                 resolveUsage(repository),
                 null, false, false, null
@@ -716,6 +903,10 @@ public class RepositoryCatalogService {
         return readRepositoryJsonFile(repository, toolPath, RepositoryCatalogTypes.ToolFile.class);
     }
 
+    private RepositoryCatalogTypes.EventSourceFile readEventSourceFile(RepositoryDefinition repository, String eventSourcePath) {
+        return readRepositoryJsonFile(repository, eventSourcePath, RepositoryCatalogTypes.EventSourceFile.class);
+    }
+
     RepositoryCatalogTypes.PluginFile readPluginFile(RepositoryDefinition repository, String pluginPath) {
         return readRepositoryJsonFile(repository, pluginPath, RepositoryCatalogTypes.PluginFile.class);
     }
@@ -753,6 +944,22 @@ public class RepositoryCatalogService {
 
     private static String resolveUsage(RepositoryDefinition repository) {
         return NormalizeUtils.normalizeOrDefault(repository.getUsage(), REPO_USAGE_DISTRIBUTION);
+    }
+
+    private static boolean isTrusted(RepositoryDefinition repository) {
+        return REPO_TRUST_TRUSTED.equalsIgnoreCase(NormalizeUtils.normalizeOrDefault(repository.getTrustLevel(), REPO_TRUST_UNTRUSTED));
+    }
+
+    private RelativeRepositoryPath resolveRelative(String baseFilePath, String nestedPath) {
+        if (NormalizeUtils.isBlank(nestedPath)) {
+            return null;
+        }
+        return parentDirectoryPath(baseFilePath).resolveNullable(nestedPath);
+    }
+
+    private String resolveRelativeValue(String baseFilePath, String nestedPath) {
+        RelativeRepositoryPath resolved = resolveRelative(baseFilePath, nestedPath);
+        return resolved == null ? null : resolved.value();
     }
 
     /**

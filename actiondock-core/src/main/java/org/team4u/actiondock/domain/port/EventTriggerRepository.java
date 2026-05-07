@@ -16,5 +16,7 @@ public interface EventTriggerRepository {
 
     List<EventTrigger> findBySourceIdAndEnabled(String sourceId, boolean enabled);
 
+    List<EventTrigger> findByRepositoryIdAndRepositoryEventSourceId(String repositoryId, String repositoryEventSourceId);
+
     void deleteById(String id);
 }

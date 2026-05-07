@@ -74,6 +74,7 @@ final class RepositoryWorkspaceHelper {
                 new ArrayList<>(),
                 new ArrayList<>(),
                 new ArrayList<>(),
+                new ArrayList<>(),
                 new ArrayList<>()
         );
     }

@@ -27,6 +27,17 @@ public class EventSourceEntity {
     @Lob
     private String description;
 
+    private String scope;
+    private String repositoryId;
+    private String repositoryEventSourceId;
+    private String repositoryVersion;
+    private String sourcePath;
+    private String sourceCommit;
+    private String sourceDigest;
+    private LocalDateTime sourceSyncedAt;
+    private boolean dirty;
+    private boolean editable;
+
     @Column(nullable = false)
     private boolean enabled;
 
@@ -76,6 +87,86 @@ public class EventSourceEntity {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+
+    public String getRepositoryId() {
+        return repositoryId;
+    }
+
+    public void setRepositoryId(String repositoryId) {
+        this.repositoryId = repositoryId;
+    }
+
+    public String getRepositoryEventSourceId() {
+        return repositoryEventSourceId;
+    }
+
+    public void setRepositoryEventSourceId(String repositoryEventSourceId) {
+        this.repositoryEventSourceId = repositoryEventSourceId;
+    }
+
+    public String getRepositoryVersion() {
+        return repositoryVersion;
+    }
+
+    public void setRepositoryVersion(String repositoryVersion) {
+        this.repositoryVersion = repositoryVersion;
+    }
+
+    public String getSourcePath() {
+        return sourcePath;
+    }
+
+    public void setSourcePath(String sourcePath) {
+        this.sourcePath = sourcePath;
+    }
+
+    public String getSourceCommit() {
+        return sourceCommit;
+    }
+
+    public void setSourceCommit(String sourceCommit) {
+        this.sourceCommit = sourceCommit;
+    }
+
+    public String getSourceDigest() {
+        return sourceDigest;
+    }
+
+    public void setSourceDigest(String sourceDigest) {
+        this.sourceDigest = sourceDigest;
+    }
+
+    public LocalDateTime getSourceSyncedAt() {
+        return sourceSyncedAt;
+    }
+
+    public void setSourceSyncedAt(LocalDateTime sourceSyncedAt) {
+        this.sourceSyncedAt = sourceSyncedAt;
+    }
+
+    public boolean isDirty() {
+        return dirty;
+    }
+
+    public void setDirty(boolean dirty) {
+        this.dirty = dirty;
+    }
+
+    public boolean isEditable() {
+        return editable;
+    }
+
+    public void setEditable(boolean editable) {
+        this.editable = editable;
     }
 
     public boolean isEnabled() {

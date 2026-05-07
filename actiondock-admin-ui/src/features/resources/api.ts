@@ -7,7 +7,14 @@ import type {
   CapabilityPackagePublishPreviewRequest,
   CapabilityPackagePublishRequest,
   DevelopmentStatus,
+  EventSourceDefinition,
   RepositoryDefinition,
+  RepositoryEventSourceDescriptor,
+  RepositoryEventSourceDetail,
+  RepositoryEventSourceInstallation,
+  RepositoryEventSourcePublishPreview,
+  RepositoryEventSourcePublishPreviewRequest,
+  RepositoryEventSourcePublishRequest,
   RepositoryInstallRequest,
   RepositoryPluginDescriptor,
   RepositoryPluginInstallRequest,
@@ -61,6 +68,10 @@ export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
   return request<RepositoryToolDescriptor[]>("/api/repositories/tools");
 }
 
+export function listRepositoryEventSources(): Promise<RepositoryEventSourceDescriptor[]> {
+  return request<RepositoryEventSourceDescriptor[]>("/api/repositories/event-sources");
+}
+
 export function listCapabilityPackages(): Promise<CapabilityPackageDescriptor[]> {
   return request<CapabilityPackageDescriptor[]>("/api/repositories/packages");
 }
@@ -77,6 +88,10 @@ export function listToolsByRepository(id: string): Promise<RepositoryToolDescrip
   return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/tools`);
 }
 
+export function listEventSourcesByRepository(id: string): Promise<RepositoryEventSourceDescriptor[]> {
+  return request<RepositoryEventSourceDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/event-sources`);
+}
+
 export function listPluginsByRepository(id: string): Promise<RepositoryPluginDescriptor[]> {
   return request<RepositoryPluginDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/plugins`);
 }
@@ -91,6 +106,10 @@ export function listCapabilityPackagesByRepository(id: string): Promise<Capabili
 
 export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
   return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}`);
+}
+
+export function getRepositoryEventSource(repositoryId: string, eventSourceId: string): Promise<RepositoryEventSourceDetail> {
+  return request<RepositoryEventSourceDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/event-sources/${encodeURIComponent(eventSourceId)}`);
 }
 
 export function getCapabilityPackage(repositoryId: string, packageId: string): Promise<CapabilityPackageDetail> {
@@ -133,6 +152,48 @@ export function updateRepositoryTool(repositoryId: string, toolId: string, paylo
     resourceId: toolId,
     payload
   }).then(() => undefined);
+}
+
+export function installRepositoryEventSource(
+  repositoryId: string,
+  eventSourceId: string,
+  payload: RepositoryInstallRequest
+): Promise<RepositoryEventSourceInstallation> {
+  return runResourceLifecycleOperation<RepositoryEventSourceInstallation, RepositoryInstallRequest>({
+    resourceType: "REPOSITORY_EVENT_SOURCE",
+    operation: "install",
+    repositoryId,
+    resourceId: eventSourceId,
+    payload
+  }).then((operation) => operation.result);
+}
+
+export function updateRepositoryEventSource(
+  repositoryId: string,
+  eventSourceId: string,
+  payload: RepositoryInstallRequest
+): Promise<RepositoryEventSourceInstallation> {
+  return runResourceLifecycleOperation<RepositoryEventSourceInstallation, RepositoryInstallRequest>({
+    resourceType: "REPOSITORY_EVENT_SOURCE",
+    operation: "update",
+    repositoryId,
+    resourceId: eventSourceId,
+    payload
+  }).then((operation) => operation.result);
+}
+
+export function developRepositoryEventSource(
+  repositoryId: string,
+  eventSourceId: string,
+  payload: { scriptId?: string }
+): Promise<EventSourceDefinition> {
+  return runResourceLifecycleOperation<EventSourceDefinition, { scriptId?: string }>({
+    resourceType: "REPOSITORY_EVENT_SOURCE",
+    operation: "develop",
+    repositoryId,
+    resourceId: eventSourceId,
+    payload
+  }).then((operation) => operation.result);
 }
 
 export function developRepositoryTool(repositoryId: string, toolId: string, payload: { scriptId?: string }): Promise<ScriptDefinition> {
@@ -200,6 +261,28 @@ export function forkRepositoryTool(scriptId: string, payload: { id: string; name
 export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryToolDescriptor> {
   return runResourceLifecycleOperation<RepositoryToolDescriptor, RepositoryPublishRequest>({
     resourceType: "REPOSITORY_TOOL",
+    operation: "publish",
+    repositoryId,
+    payload
+  }).then((operation) => operation.result);
+}
+
+export function previewRepositoryEventSourcePublish(
+  payload: RepositoryEventSourcePublishPreviewRequest
+): Promise<RepositoryEventSourcePublishPreview> {
+  return runResourceLifecycleOperation<RepositoryEventSourcePublishPreview, RepositoryEventSourcePublishPreviewRequest>({
+    resourceType: "REPOSITORY_EVENT_SOURCE",
+    operation: "preview",
+    payload
+  }).then((operation) => operation.result);
+}
+
+export function publishRepositoryEventSource(
+  repositoryId: string,
+  payload: RepositoryEventSourcePublishRequest
+): Promise<RepositoryEventSourceDescriptor> {
+  return runResourceLifecycleOperation<RepositoryEventSourceDescriptor, RepositoryEventSourcePublishRequest>({
+    resourceType: "REPOSITORY_EVENT_SOURCE",
     operation: "publish",
     repositoryId,
     payload
