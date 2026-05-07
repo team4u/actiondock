@@ -7,7 +7,7 @@ interface MetadataDiffViewerProps {
 }
 
 function renderValue(value: unknown): string {
-  if (value === undefined) {
+  if (value === undefined || value === null || value === "") {
     return "-";
   }
   if (Array.isArray(value)) {

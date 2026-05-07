@@ -170,6 +170,10 @@ function normalizeString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function normalizeOptionalTextValue(value: unknown): string | undefined {
+  return normalizeString(value);
+}
+
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -461,28 +465,45 @@ function diffMetadata(
   const fields =
     context === "publish"
       ? [
-          { field: "name", label: "名称", risk: "LOW" as RiskLevel },
+          { field: "name", label: "名称", risk: "LOW" as RiskLevel, normalize: normalizeOptionalTextValue },
           { field: "type", label: "类型", risk: "HIGH" as RiskLevel },
           { field: "packaging", label: "打包属性", risk: "HIGH" as RiskLevel },
-          { field: "pythonRequirements", label: "Python 依赖", risk: "MEDIUM" as RiskLevel },
-          { field: "description", label: "说明", risk: "LOW" as RiskLevel },
-          { field: "owner", label: "Owner", risk: "LOW" as RiskLevel },
-          { field: "tags", label: "标签", risk: "LOW" as RiskLevel }
+          {
+            field: "pythonRequirements",
+            label: "Python 依赖",
+            risk: "MEDIUM" as RiskLevel,
+            normalize: normalizeOptionalTextValue,
+            include: shouldIncludePythonRequirementsField
+          },
+          { field: "description", label: "说明", risk: "LOW" as RiskLevel, normalize: normalizeOptionalTextValue },
+          { field: "owner", label: "Owner", risk: "LOW" as RiskLevel, normalize: normalizeOptionalTextValue },
+          { field: "tags", label: "标签", risk: "LOW" as RiskLevel, normalize: normalizeStringArray }
         ]
       : [
-          { field: "name", label: "名称", risk: "LOW" as RiskLevel },
+          { field: "name", label: "名称", risk: "LOW" as RiskLevel, normalize: normalizeOptionalTextValue },
           { field: "type", label: "类型", risk: "HIGH" as RiskLevel },
           { field: "packaging", label: "打包属性", risk: "HIGH" as RiskLevel },
-          { field: "pythonRequirements", label: "Python 依赖", risk: "MEDIUM" as RiskLevel },
-          { field: "description", label: "说明", risk: "LOW" as RiskLevel },
-          { field: "owner", label: "Owner", risk: "LOW" as RiskLevel },
-          { field: "tags", label: "标签", risk: "LOW" as RiskLevel }
+          {
+            field: "pythonRequirements",
+            label: "Python 依赖",
+            risk: "MEDIUM" as RiskLevel,
+            normalize: normalizeOptionalTextValue,
+            include: shouldIncludePythonRequirementsField
+          },
+          { field: "description", label: "说明", risk: "LOW" as RiskLevel, normalize: normalizeOptionalTextValue },
+          { field: "owner", label: "Owner", risk: "LOW" as RiskLevel, normalize: normalizeOptionalTextValue },
+          { field: "tags", label: "标签", risk: "LOW" as RiskLevel, normalize: normalizeStringArray }
         ];
 
   const changes = fields
     .map((item) => {
-      const before = base?.[item.field as keyof ScriptDiffTarget];
-      const after = target[item.field as keyof ScriptDiffTarget];
+      if (item.include && !item.include(base, target)) {
+        return null;
+      }
+      const beforeRaw = base?.[item.field as keyof ScriptDiffTarget];
+      const afterRaw = target[item.field as keyof ScriptDiffTarget];
+      const before = item.normalize ? item.normalize(beforeRaw) : beforeRaw;
+      const after = item.normalize ? item.normalize(afterRaw) : afterRaw;
       if (comparisonMode !== "INITIAL" && sameValue(before, after)) {
         return null;
       }
@@ -502,6 +523,16 @@ function diffMetadata(
     risk: maxRisk(...changes.map((change) => change.risk)),
     changes
   };
+}
+
+function shouldIncludePythonRequirementsField(
+  base: ScriptDiffTarget | undefined,
+  target: ScriptDiffTarget
+): boolean {
+  return base?.type === "PYTHON"
+    || target.type === "PYTHON"
+    || Boolean(normalizeOptionalTextValue(base?.pythonRequirements))
+    || Boolean(normalizeOptionalTextValue(target.pythonRequirements));
 }
 
 function normalizePluginDependencyKey(dependency: PluginDependency): string {
@@ -782,16 +813,16 @@ function toPublishBase(script: ScriptDefinition): ScriptDiffTarget | undefined {
 
 export function toDiffTarget(script: ScriptDefinition): ScriptDiffTarget {
   return {
-    name: script.name,
+    name: normalizeString(script.name),
     type: script.type,
     packaging: script.packaging,
     source: script.source,
-    pythonRequirements: script.pythonRequirements,
+    pythonRequirements: normalizeOptionalTextValue(script.pythonRequirements),
     inputSchema: script.inputSchema,
     outputSchema: script.outputSchema,
-    description: script.description,
-    owner: script.owner,
-    tags: script.tags,
+    description: normalizeString(script.description),
+    owner: normalizeString(script.owner),
+    tags: normalizeStringArray(script.tags),
     scriptDependencies: script.scriptDependencies,
     pluginDependencies: script.pluginDependencies,
     aiDependencies: normalizeAiDependencies(
@@ -825,7 +856,7 @@ export function buildPublishDiffTarget(
     type: script.type,
     packaging: script.packaging,
     source: script.source,
-    pythonRequirements: script.pythonRequirements,
+    pythonRequirements: normalizeOptionalTextValue(script.pythonRequirements),
     inputSchema: script.inputSchema,
     outputSchema: script.outputSchema,
     rawInputSchemaText: script.rawInputSchemaText,
@@ -845,7 +876,7 @@ export function buildRepositoryPublishDiffTarget(target: ScriptDiffTarget): Scri
     type: target.type,
     packaging: target.packaging,
     source: target.source,
-    pythonRequirements: target.pythonRequirements,
+    pythonRequirements: normalizeOptionalTextValue(target.pythonRequirements),
     description: normalizeString(target.description),
     owner: normalizeString(target.owner),
     tags: normalizeStringArray(target.tags),
@@ -861,7 +892,7 @@ export function toRepositoryToolDiffTarget(detail: RepositoryToolDetail): Script
     type: detail.descriptor.type,
     packaging: detail.descriptor.packaging,
     source: detail.source,
-    pythonRequirements: detail.pythonRequirements,
+    pythonRequirements: normalizeOptionalTextValue(detail.pythonRequirements),
     description: normalizeString(detail.descriptor.description),
     owner: normalizeString(detail.descriptor.owner),
     tags: normalizeStringArray(detail.descriptor.tags),

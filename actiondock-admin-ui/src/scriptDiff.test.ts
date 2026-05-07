@@ -1,3 +1,5 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   buildScriptDiff,
@@ -5,6 +7,7 @@ import {
   buildPublishDiffTarget,
   toDiffTarget
 } from "./scriptDiff";
+import { MetadataDiffViewer } from "./components/diff/MetadataDiffViewer";
 import type { ScriptDefinition } from "./types";
 
 function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
@@ -194,6 +197,42 @@ describe("buildScriptDiff", () => {
     expect(diff.dependencies.available).toBe(true);
   });
 
+  it("treats empty python requirements values as equivalent for groovy import diff", () => {
+    const diff = buildScriptDiff(
+      toDiffTarget(script({ pythonRequirements: undefined })),
+      toDiffTarget(script({ pythonRequirements: "   " })),
+      { context: "import" }
+    );
+
+    expect(diff.metadata.changed).toBe(false);
+    expect(diff.metadata.changes).toEqual([]);
+  });
+
+  it("keeps python requirements visible when script type changes to python", () => {
+    const diff = buildScriptDiff(
+      toDiffTarget(script({ type: "GROOVY", pythonRequirements: undefined })),
+      toDiffTarget(
+        script({
+          type: "PYTHON",
+          source: "return {'message': 'ok'}",
+          pythonRequirements: "requests==2.32.3"
+        })
+      ),
+      { context: "import" }
+    );
+
+    expect(diff.metadata.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "type" }),
+        expect.objectContaining({
+          field: "pythonRequirements",
+          before: undefined,
+          after: "requests==2.32.3"
+        })
+      ])
+    );
+  });
+
   it("treats script dependency ids with different installed prefixes as the same target", () => {
     const diff = buildScriptDiff(
       toDiffTarget(
@@ -360,13 +399,54 @@ describe("buildPublishScriptDiff", () => {
     expect(diff.metadata.changed).toBe(false);
   });
 
-  it("detects python requirements and ai dependency publish changes", () => {
+  it("treats empty metadata text values as equivalent when publishing", () => {
     const current = script({
+      description: "draft desc",
+      owner: "draft-owner",
+      tags: ["draft"],
       publishedSnapshot: {
         name: "User Query",
         type: "GROOVY",
         packaging: "TOOL",
         source: "return [message: 'ok']",
+        pythonRequirements: null as unknown as string,
+        description: null as unknown as string,
+        owner: "   " as unknown as string,
+        tags: [],
+        inputSchema: script().inputSchema,
+        outputSchema: script().outputSchema
+      }
+    });
+
+    const diff = buildPublishScriptDiff(
+      current,
+      buildPublishDiffTarget({
+        name: current.name,
+        type: current.type,
+        packaging: current.packaging,
+        source: current.source,
+        pythonRequirements: "   ",
+        inputSchema: current.inputSchema,
+        outputSchema: current.outputSchema,
+        description: "",
+        owner: undefined,
+        tags: []
+      })
+    );
+
+    expect(diff.metadata.changed).toBe(false);
+    expect(diff.metadata.changes).toEqual([]);
+  });
+
+  it("detects python requirements and ai dependency publish changes", () => {
+    const current = script({
+      type: "PYTHON",
+      source: "return {'message': 'ok'}",
+      publishedSnapshot: {
+        name: "User Query",
+        type: "PYTHON",
+        packaging: "TOOL",
+        source: "return {'message': 'ok'}",
         pythonRequirements: "requests==2.30.0",
         inputSchema: script().inputSchema,
         outputSchema: script().outputSchema,
@@ -399,5 +479,31 @@ describe("buildPublishScriptDiff", () => {
     expect(diff.dependencies.removed).toEqual(
       expect.arrayContaining([expect.objectContaining({ dependencyId: "AI:CHAT:::required" })])
     );
+  });
+});
+
+describe("MetadataDiffViewer", () => {
+  it("renders null metadata values as empty placeholders", () => {
+    const html = renderToStaticMarkup(
+      createElement(MetadataDiffViewer, {
+        diff: {
+          available: true,
+          changed: true,
+          risk: "LOW",
+          changes: [
+            {
+              field: "description",
+              label: "说明",
+              before: null,
+              after: undefined,
+              risk: "LOW"
+            }
+          ]
+        }
+      })
+    );
+
+    expect(html).not.toContain(">null<");
+    expect(html).toContain(">-<");
   });
 });
