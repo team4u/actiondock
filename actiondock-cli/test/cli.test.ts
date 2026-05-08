@@ -89,6 +89,65 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "DELETE" && req.url === "/api/scripts/published-tool") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/scripts/published-tool/fork") {
+      return json(res, {
+        status: 0,
+        msg: "forked",
+        data: {
+          id: body?.id,
+          name: body?.name,
+          type: "GROOVY",
+          status: "DRAFT",
+          version: 1,
+          publishedSnapshot: null
+        }
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/scripts/published-tool/development-status") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          scriptId: "published-tool",
+          repositoryId: "repo-1",
+          repositoryToolId: "tool-1",
+          repositoryVersion: "1.0.0",
+          dirty: false,
+          remoteChanged: true,
+          syncState: "REMOTE_CHANGES",
+          remoteVersion: "1.0.1",
+          sourceSyncedAt: "2026-05-01T00:00:00"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/scripts/published-tool/development-pull?force=true") {
+      return json(res, {
+        status: 0,
+        msg: "pulled",
+        data: {
+          id: "published-tool",
+          name: "Published Tool",
+          type: "GROOVY",
+          status: "DRAFT",
+          version: 8,
+          repositoryId: "repo-1",
+          repositoryToolId: "tool-1",
+          repositoryVersion: "1.0.1",
+          publishedSnapshot: null
+        }
+      });
+    }
+
     if (req.method === "POST" && req.url === "/api/scripts/published-tool/execute") {
       return json(res, {
         status: 0,
@@ -1238,6 +1297,14 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "DELETE" && req.url === "/api/installed-tools/published-tool") {
+      return json(res, {
+        status: 0,
+        msg: "uninstalled",
+        data: null
+      });
+    }
+
     if (req.method === "GET" && req.url === "/api/scripts/published-tool/presets") {
       return json(res, {
         status: 0,
@@ -1475,6 +1542,59 @@ describe("CLI integration", () => {
       })
     );
   });
+
+  it("manages script lifecycle gaps", async () => {
+    const fork = await runCli([
+      "script",
+      "fork",
+      "published-tool",
+      "--script-id",
+      "forked-tool",
+      "--name",
+      "Forked Tool",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(fork.status).toBe(0);
+    expect(JSON.parse(fork.stdout)).toEqual(
+      expect.objectContaining({
+        id: "forked-tool",
+        name: "Forked Tool"
+      })
+    );
+    const forkRequest = requests.find((item) => item.method === "POST" && item.url === "/api/scripts/published-tool/fork");
+    expect(forkRequest?.body).toEqual({
+      id: "forked-tool",
+      name: "Forked Tool"
+    });
+
+    const status = await runCli(["script", "development-status", "published-tool", "--server", baseUrl, "--json"]);
+    expect(status.status).toBe(0);
+    expect(JSON.parse(status.stdout)).toEqual(
+      expect.objectContaining({
+        scriptId: "published-tool",
+        syncState: "REMOTE_CHANGES"
+      })
+    );
+
+    const pull = await runCli(["script", "development-pull", "published-tool", "--force", "--server", baseUrl, "--json"]);
+    expect(pull.status).toBe(0);
+    expect(JSON.parse(pull.stdout)).toEqual(
+      expect.objectContaining({
+        id: "published-tool",
+        repositoryVersion: "1.0.1"
+      })
+    );
+    expect(requests.some((item) => item.method === "POST" && item.url === "/api/scripts/published-tool/development-pull?force=true")).toBe(true);
+
+    const deleted = await runCli(["script", "delete", "published-tool", "--server", baseUrl, "--json"]);
+    expect(deleted.status).toBe(0);
+    expect(JSON.parse(deleted.stdout)).toEqual({
+      deleted: true,
+      id: "published-tool"
+    });
+  }, 20_000);
 
   it("queries execution detail and list", async () => {
     const detail = await runCli(["execution", "get", "exec-1", "--server", baseUrl, "--json"]);
@@ -2297,6 +2417,14 @@ describe("CLI integration", () => {
         id: "tool-dev"
       })
     );
+
+    const uninstall = await runCli(["repository", "tool", "uninstall", "published-tool", "--server", baseUrl, "--json"]);
+    expect(uninstall.status).toBe(0);
+    expect(JSON.parse(uninstall.stdout)).toEqual({
+      uninstalled: true,
+      scriptId: "published-tool"
+    });
+    expect(requests.some((item) => item.method === "DELETE" && item.url === "/api/installed-tools/published-tool")).toBe(true);
   }, 20_000);
 
   it("manages script execution presets", async () => {

@@ -21,6 +21,17 @@ export class ActionDockClient {
             body: JSON.stringify(definition)
         });
     }
+    async deleteScript(scriptId) {
+        await this.requestJson(`/api/scripts/${scriptId}`, {
+            method: "DELETE"
+        });
+    }
+    async forkScript(sourceScriptId, payload) {
+        return this.requestJson(`/api/scripts/${sourceScriptId}/fork`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
     async patchScript(scriptId, patch) {
         return this.requestJson(`/api/scripts/${scriptId}`, {
             method: "PATCH",
@@ -39,6 +50,14 @@ export class ActionDockClient {
     }
     async discardDraft(scriptId) {
         return this.requestJson(`/api/scripts/${scriptId}/discard-draft`, {
+            method: "POST"
+        });
+    }
+    async getScriptDevelopmentStatus(scriptId) {
+        return this.requestJson(`/api/scripts/${scriptId}/development-status`);
+    }
+    async pullDevelopmentScript(scriptId, force = false) {
+        return this.requestJson(`/api/scripts/${scriptId}/development-pull?force=${force}`, {
             method: "POST"
         });
     }
@@ -305,6 +324,11 @@ export class ActionDockClient {
         return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/develop`, {
             method: "POST",
             body: JSON.stringify(scriptId ? { scriptId } : {})
+        });
+    }
+    async uninstallRepositoryTool(scriptId) {
+        await this.requestJson(`/api/installed-tools/${scriptId}`, {
+            method: "DELETE"
         });
     }
     async listRepositoryEventSources() {

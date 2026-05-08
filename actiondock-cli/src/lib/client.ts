@@ -91,6 +91,19 @@ export class ActionDockClient {
     });
   }
 
+  async deleteScript(scriptId: string): Promise<void> {
+    await this.requestJson<null>(`/api/scripts/${scriptId}`, {
+      method: "DELETE"
+    });
+  }
+
+  async forkScript(sourceScriptId: string, payload: { id: string; name: string }): Promise<ScriptDefinition> {
+    return this.requestJson<ScriptDefinition>(`/api/scripts/${sourceScriptId}/fork`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
   async patchScript(scriptId: string, patch: Record<string, unknown>): Promise<ScriptDefinition> {
     return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}`, {
       method: "PATCH",
@@ -112,6 +125,16 @@ export class ActionDockClient {
 
   async discardDraft(scriptId: string): Promise<ScriptDefinition> {
     return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}/discard-draft`, {
+      method: "POST"
+    });
+  }
+
+  async getScriptDevelopmentStatus(scriptId: string): Promise<DevelopmentStatus> {
+    return this.requestJson<DevelopmentStatus>(`/api/scripts/${scriptId}/development-status`);
+  }
+
+  async pullDevelopmentScript(scriptId: string, force = false): Promise<ScriptDefinition> {
+    return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}/development-pull?force=${force}`, {
       method: "POST"
     });
   }
@@ -438,6 +461,12 @@ export class ActionDockClient {
     return this.requestJson<ScriptDefinition>(`/api/repositories/${repositoryId}/tools/${toolId}/develop`, {
       method: "POST",
       body: JSON.stringify(scriptId ? { scriptId } : {})
+    });
+  }
+
+  async uninstallRepositoryTool(scriptId: string): Promise<void> {
+    await this.requestJson<null>(`/api/installed-tools/${scriptId}`, {
+      method: "DELETE"
     });
   }
 
