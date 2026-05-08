@@ -1,6 +1,6 @@
 # ActionDock 演讲稿
 
-> 一份面向研发团队的技术分享稿，重点介绍如何把本地脚本沉淀为可复用、可共享、可被 AI 调用的工具资产。
+> 一份面向研发团队的技术分享稿，重点介绍如何把本地脚本沉淀为可执行能力底座，并和 Skill / AI Agent 协同工作。
 
 ---
 
@@ -8,7 +8,7 @@
 
 # ActionDock
 
-### 把本地脚本升级为团队可复用的工具资产
+### 把本地脚本沉淀为可执行能力底座
 
 - 演讲人：jay.wu
 - 日期：2026-05-08
@@ -20,16 +20,16 @@
 ```
 ┌─────────────────────────────────────────────────┐
 │  每个人电脑一堆脚本    │  只有作者自己知道怎么跑   │
-│  README + 注释传参数   │  换个人接手就得重新问     │
-│  复制文件 / 发 Git 链接 │  分享容易，复用很难        │
-│  prompt 拼接 AI        │  能跑，但很难稳定沉淀      │
+│  README / Skill / 注释 │  能共享知识，难共享执行力   │
+│  复制文件 / 发 Git 链接 │  分享容易，稳定调用很难     │
+│  prompt 拼接 AI        │  能跑，但缺统一执行底座     │
 └─────────────────────────────────────────────────┘
 ```
 
 ### 我们日常真正遇到的问题
 
 1. **脚本能执行，但不能交接** — 参数、依赖、环境约定都在脑子里
-2. **脚本能分享，但不能复用** — 发给别人以后，对方还得自己包一层
+2. **知识能共享，能力难沉淀** — 文档、命令片段、Skill 可以传播，但稳定工具难复用
 3. **入口越来越多** — CLI、UI、AI、Webhook 各接一套
 4. **状态和日志分散** — 控制台、临时文件、本地目录各存一份
 5. **团队工具沉淀不下来** — 每个人都在重复造相似的小工具
@@ -38,7 +38,7 @@
 
 ## 为什么本地工具也会失控
 
-### 问题不在“脚本写不出来”，而在“脚本不能形成资产”
+### 问题不在“没有复用”，而在“复用经常停留在知识层”
 
 ```
 第一次写出来           第二次重复用           第三个人开始用
@@ -47,7 +47,7 @@
   个人脚本              常用工具雏形           团队共享成本开始上升
                                                   │
                                                   ▼
-                                       需要稳定参数、统一入口、可发现性
+                                  需要稳定参数、统一入口、可执行能力底座
 ```
 
 ### 本地脚本一旦满足下面任意一条，就值得治理
@@ -58,13 +58,18 @@
 - 需要接 AI、定时任务或事件
 - 需要保留共享状态或结果记录
 
+### 这里要区分两种复用
+
+- **Skill / Prompt / 文档** 复用的是知识、步骤和上下文
+- **ActionDock** 复用的是可执行能力、参数契约和运行时
+
 ---
 
 ## ActionDock 是什么
 
 ### 一句话定义
 
-> ActionDock 是一个可扩展的本地自动化工作台，用统一方式管理脚本、插件、仓库分发、AI 调用和运行上下文。
+> ActionDock 是一个可扩展的本地自动化工作台，也是把脚本沉淀为可执行工具的底座。
 
 ### 它统一的不是语言，而是脚本的外壳
 
@@ -83,6 +88,73 @@
 
 ---
 
+## Skill、脚本、ActionDock 分别解决什么
+
+### 这三者有关，但不在同一层
+
+| 层次 | 解决的问题 | 更像什么 |
+|------|-----------|---------|
+| Skill | 告诉 AI 或使用者“该做什么、按什么步骤做” | 知识包 / 操作约定 |
+| Script | 真正执行某个动作 | 能力单元 |
+| ActionDock | 把脚本变成可定义、可运行、可分发、可被 AI 调用的工具 | 执行底座 |
+
+### 更直接的理解
+
+- Skill 负责表达意图和上下文
+- 脚本负责完成具体动作
+- ActionDock 负责把脚本包装成稳定能力，让 UI、CLI、API、Agent、仓库都能复用
+
+### 一个例子
+
+```text
+Skill：当用户要生成日报时，调用日报工具，并按指定格式回复
+  │
+  ▼
+ActionDock Script：generate-report(inputSchema, outputSchema, state, log, plugins...)
+```
+
+没有 ActionDock，Skill 更像“说明怎么做”。
+有了 ActionDock，Skill 才能稳定调用一个已经定义好的工具。
+
+---
+
+## Skill + CLI：让大模型不只会说，还能直接做
+
+### Skill 给模型操作约定，CLI 给模型执行接口
+
+```text
+Skill
+  └── 告诉模型：该创建什么脚本、如何补 Schema、该走哪些命令
+       │
+       ▼
+ActionDock CLI
+  └── create -> patch -> validate -> publish -> run
+```
+
+### 这件事为什么重要
+
+- CLI 不是补充入口，而是完整自动化接口
+- 模型不只是生成一段代码，还能继续驱动后续校验、发布和执行
+- 人主要负责目标、边界和验收，机械性步骤可以交给模型
+
+### 一个最小闭环
+
+```bash
+actiondock script create ...
+actiondock script patch ...
+actiondock script validate ...
+actiondock script publish ...
+actiondock script run ...
+```
+
+### 当前产品已经具备的支撑
+
+- 脚本编辑器可生成 `Skill 示例`
+- Skill 示例可进一步发布成 Skill 包
+- CLI 已覆盖脚本从创建到发布的完整链路
+
+---
+
 ## 它不替代你写脚本，它只是给脚本一个统一外壳
 
 ### ActionDock 不做什么
@@ -98,6 +170,7 @@
 - 给脚本提供统一运行时：`scripts` / `plugins` / `state` / `config`
 - 把脚本变成 UI、CLI、API、Agent 都能调用的工具
 - 让本地工具可以被发布、共享、安装、更新
+- 让 Skill 或 Agent 有稳定能力可以调用，而不是只拿到说明文件
 
 ### 最低介入模型
 
@@ -106,7 +179,7 @@
    │
    ├── 补输入输出 Schema
    ├── 放进 ActionDock
-   └── 立即获得 UI / CLI / AI / 调度入口
+   └── 立即获得 UI / CLI / AI / 调度入口，并可被 Skill/Agent 消费
 ```
 
 ---
@@ -121,6 +194,7 @@
 | AI 接入 | prompt 拼接 | 额外封装工具层 | Toolset + Agent + 脚本桥接 |
 | 共享状态 | 文件 / Redis 自管 | 另接状态服务 | 内建 `namespace + key + CAS` |
 | 扩展能力 | 各写各的 SDK | 改服务 | PF4J 插件统一调用 |
+| 复用层级 | 复用代码片段 | 复用接口 | 复用可执行能力与运行时 |
 | 适用定位 | 个人可跑 | 系统对接 | 本地工具资产化与团队共享 |
 
 ---
@@ -243,10 +317,25 @@ Agent 推理 → 决定调用脚本工具 → plugins.invoke("actiondock-ai", "a
 5. 发布成稳定版本
 6. 展示它如何被其他脚本或 Agent 调用
 
+### 如果要讲“模型自动开发脚本”，可以用这个例子
+
+```text
+目标：做一个日报汇总脚本
+  │
+  ├── 模型根据 Skill 理解需要哪些 CLI 步骤
+  ├── 生成脚本源码和 Schema
+  ├── 调用 actiondock script create
+  ├── 调用 actiondock script validate
+  ├── 调用 actiondock script publish
+  └── 调用 actiondock script run 验证结果
+```
+
 ### Demo 的核心结论
 
 - 原本只是本地代码
 - 现在变成了别人也能直接调用的工具
+- 也变成了 Skill / Agent 可以稳定消费的能力
+- 在合适约束下，模型可以把从创建到发布的大部分步骤走完
 - 不需要重写业务逻辑，只是补齐了“工具外壳”
 
 ---
@@ -436,6 +525,12 @@ state.cas("ns", "key", [data: "new"], 3)   // version=3 时才成功
 
 所有已发布的 `TOOL` 类型脚本自动注册为 AI 可调用工具，Agent 可自主决定何时调用哪个脚本。
 
+### 这和 Skill 的关系
+
+- Skill 可以给 Agent 补上下文、规则、步骤
+- ActionDock 给 Agent 提供真正可调用的工具
+- 两者结合时，AI 既知道“该做什么”，也真的“有东西可做”
+
 ---
 
 ## 插件系统
@@ -569,11 +664,27 @@ npm install -g actiondock
 actiondock server     # 启动服务
 ```
 
+### CLI 不是补充入口，而是完整自动化接口
+
+- 覆盖脚本创建、修改、校验、发布、执行
+- 覆盖插件、仓库、事件、状态、配置、服务管理
+- 适合人工使用，也适合被 Skill / 大模型直接驱动
+
 ### Schema 驱动的 CLI 参数
 
 ```bash
 # inputSchema 自动展平为 flag
 actiondock script run my-script --name alice --age 30 --json
+```
+
+### 对脚本开发最关键的命令闭环
+
+```bash
+actiondock script create --script-id my-script --name "My Script" --source-file ./script.groovy
+actiondock script patch my-script --source-file ./script.groovy
+actiondock script validate my-script
+actiondock script publish my-script
+actiondock script run my-script --name alice --json
 ```
 
 ### 命令覆盖
@@ -643,13 +754,15 @@ Python 引擎通过 stdin/stderr 桥接协议实现与 Java 主进程的通信�
 ```
 ┌──────────────────────────────────────────────┐
 │                                              │
-│   本地脚本资产化  —  不再只是个人代码          │
+│   可执行能力底座  —  不再只是个人代码          │
 │                                              │
 │   一次定义多端复用  —  UI / CLI / API / Agent │
 │                                              │
 │   稳定快照机制  —  草稿与可复用版本分离        │
 │                                              │
-│   AI 原生集成  —  脚本可以直接变成工具         │
+│   AI 原生集成  —  Skill/Agent 有稳定工具可用   │
+│                                              │
+│   完整 CLI 模块  —  大模型可驱动脚本全流程     │
 │                                              │
 │   团队共享分发  —  仓库化发现、安装、更新      │
 │                                              │
@@ -663,6 +776,10 @@ Python 引擎通过 stdin/stderr 桥接协议实现与 Java 主进程的通信�
 ```bash
 npm install -g actiondock && actiondock server
 ```
+
+### 一句话收尾
+
+如果把 Skill 看成“告诉 AI 怎么做”，那 ActionDock 就是“把能做的事沉淀成稳定工具”的那一层。
 
 ---
 
