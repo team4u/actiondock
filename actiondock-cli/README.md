@@ -312,5 +312,4 @@ git push origin v0.3.5
 @actiondock/cli
 @actiondock/server
 actiondock-server
-actiondock capability *
 ```
