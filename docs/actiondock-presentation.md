@@ -94,15 +94,15 @@
 
 | 层次 | 解决的问题 | 更像什么 |
 |------|-----------|---------|
-| Skill | 告诉 AI 或使用者“该做什么、按什么步骤做” | 知识包 / 操作约定 |
+| Skill | 告诉 AI 或使用者“该做什么、按什么步骤做”；也可以带脚本或命令入口 | 知识包 / 操作约定 |
 | Script | 真正执行某个动作 | 能力单元 |
-| ActionDock | 把脚本变成可定义、可运行、可分发、可被 AI 调用的工具 | 执行底座 |
+| ActionDock | 把脚本变成可定义、可运行、可分发、可被 AI 调用的工具，也可作为 Skill 调用脚本的底座 | 执行底座 |
 
 ### 更直接的理解
 
-- Skill 负责表达意图和上下文
+- Skill 负责表达意图和上下文，也可以自带一段执行约定
 - 脚本负责完成具体动作
-- ActionDock 负责把脚本包装成稳定能力，让 UI、CLI、API、Agent、仓库都能复用
+- ActionDock 负责把脚本包装成可组合、可复用的稳定能力，让 UI、CLI、API、Agent、仓库都能复用，也让 Skill 有稳定底座可调用
 
 ### 一个例子
 
@@ -113,8 +113,8 @@ Skill：当用户要生成日报时，调用日报工具，并按指定格式回
 ActionDock Script：generate-report(inputSchema, outputSchema, state, log, plugins...)
 ```
 
-没有 ActionDock，Skill 更像“说明怎么做”。
-有了 ActionDock，Skill 才能稳定调用一个已经定义好的工具。
+没有 ActionDock，Skill 更像“说明怎么做”，或者只是在单个技能里带一段执行入口。
+有了 ActionDock，脚本才会变成能被其他脚本、插件和多入口稳定复用的工具，也能被 Skill 更稳定地包装成技能能力。
 
 ---
 
@@ -133,7 +133,7 @@ ActionDock Script：generate-report(inputSchema, outputSchema, state, log, plugi
 - 给脚本提供统一运行时：`scripts` / `plugins` / `state` / `config`
 - 把脚本变成 UI、CLI、API、Agent 都能调用的工具
 - 让本地工具可以被发布、共享、安装、更新
-- 让 Skill 或 Agent 有稳定能力可以调用，而不是只拿到说明文件
+- 让 Skill、Agent 或其他脚本有稳定能力可以调用，而不是只拿到说明文件
 
 ### 最低介入模型
 
