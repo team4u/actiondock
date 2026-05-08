@@ -345,7 +345,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
           type="info"
           showIcon
           message="创建顺序：先选事件源和已发布脚本，再配置过滤、幂等和入参生成，最后用测试面板验证。"
-          description="过滤 Processor 决定是否触发，幂等 Processor 生成唯一 key，Input Processor 决定脚本入参。"
+          description="处理器可留空跳过：过滤留空默认命中，幂等留空默认不去重，Input 留空默认把整条标准事件直接传给目标脚本。"
         />
 
         <Card>
@@ -480,7 +480,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
             purpose="filter"
             value={draft.filterProcessor}
             scripts={scripts}
-            description="返回匹配结果，推荐输出 { matched: true/false }。"
+            description="返回匹配结果，推荐输出 { matched: true/false }；留空默认直接放行。"
             onChange={(filterProcessor) => updateDraft({ filterProcessor })}
           />
           <ProcessorEditor
@@ -488,16 +488,15 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
             purpose="idempotency"
             value={draft.idempotencyProcessor}
             scripts={scripts}
-            description="返回唯一 key，用来避免重复触发。"
+            description="返回唯一 key，用来避免重复触发；留空默认不做去重。"
             onChange={(idempotencyProcessor) => updateDraft({ idempotencyProcessor })}
           />
           <ProcessorEditor
             title="Input Processor"
             purpose="input"
-            required
             value={draft.inputProcessor}
             scripts={scripts}
-            description="把标准事件转换成目标脚本入参。"
+            description="把标准事件转换成目标脚本入参；留空默认把整条标准事件直接作为脚本入参。"
             onChange={(inputProcessor) => updateDraft({ inputProcessor })}
           />
 

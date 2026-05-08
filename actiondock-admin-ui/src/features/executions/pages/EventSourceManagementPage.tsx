@@ -723,7 +723,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
             purpose="normalization"
             value={draft.normalizationProcessor}
             scripts={scripts}
-            description="把原始请求转成统一事件结构，供后续触发器使用。"
+            description="把原始请求转成统一事件结构，供后续触发器使用；留空默认直接使用基础事件字段。"
             disabled={draft.editable === false}
             onChange={(normalizationProcessor) => updateDraft({ normalizationProcessor })}
           />

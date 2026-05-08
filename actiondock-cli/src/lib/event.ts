@@ -159,6 +159,27 @@ export function mergeDefinitionPatch<T extends object>(base: T, patch: Partial<T
   return deepMerge(base, patch) as T;
 }
 
+export function applyProcessorFieldOverrides<T extends object>(
+  merged: T,
+  patch: Partial<T>,
+  processorFields: Array<keyof T>
+): T {
+  const next = cloneValue(merged) as Record<string, unknown>;
+  for (const field of processorFields) {
+    const key = String(field);
+    if (!(key in (patch as Record<string, unknown>))) {
+      continue;
+    }
+    const value = (patch as Record<string, unknown>)[key];
+    if (isProcessorLikeEmptyObject(value)) {
+      next[key] = {};
+      continue;
+    }
+    next[key] = cloneValue(value);
+  }
+  return next as T;
+}
+
 export function resolveEnabledFlag(params: {
   enabledFlag?: boolean;
   disabledFlag?: boolean;
@@ -196,6 +217,10 @@ function coerceRecord(value: unknown, label: string): Record<string, unknown> {
     throw new ActionDockCliError(`payload.${label} 必须是 JSON 对象。`, 2);
   }
   return value;
+}
+
+function isProcessorLikeEmptyObject(value: unknown): boolean {
+  return isRecord(value) && Object.keys(value).length === 0;
 }
 
 function deepMerge(target: unknown, source: unknown): unknown {

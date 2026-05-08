@@ -9,6 +9,7 @@ import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionSubmissionMetadata;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
+import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorResult;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.SubmitMode;
@@ -20,6 +21,7 @@ import org.team4u.actiondock.domain.port.ProcessorEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -103,10 +105,22 @@ public class EventTriggerApplicationService {
     private void validateProcessors(EventTrigger trigger, ProcessorContext sampleCtx) {
         ApplicationServiceSupport.validateProcessor(processorEngine, trigger.getFilterProcessor(), sampleCtx, "filterProcessor");
         ApplicationServiceSupport.validateProcessor(processorEngine, trigger.getIdempotencyProcessor(), sampleCtx, "idempotencyProcessor");
-        if (trigger.getInputProcessor() == null) {
-            throw new IllegalArgumentException("inputProcessor 不能为空");
-        }
         ApplicationServiceSupport.validateProcessor(processorEngine, trigger.getInputProcessor(), sampleCtx, "inputProcessor");
+        validateDefaultInputSchema(trigger, sampleCtx);
+    }
+
+    private void validateDefaultInputSchema(EventTrigger trigger, ProcessorContext sampleCtx) {
+        if (ApplicationServiceSupport.normalizeProcessor(trigger.getInputProcessor()) != null) {
+            return;
+        }
+        ScriptDefinition script = scriptRepository.findById(trigger.getTargetScriptId())
+                .orElseThrow(() -> new IllegalArgumentException("目标脚本不存在: " + trigger.getTargetScriptId()));
+        requirePublished(script);
+        ScriptSchemaSupport.validateInput(
+                script.getId(),
+                defaultMappedInput(sampleCtx),
+                script.getPublishedSnapshot().getInputSchema()
+        );
     }
 
     private static void applyTriggerFields(EventTrigger target, EventTrigger trigger,
@@ -118,9 +132,9 @@ public class EventTriggerApplicationService {
                 .setEnabled(trigger.isEnabled())
                 .setSourceId(source.getId())
                 .setTargetScriptId(script.getId())
-                .setFilterProcessor(trigger.getFilterProcessor())
-                .setIdempotencyProcessor(trigger.getIdempotencyProcessor())
-                .setInputProcessor(trigger.getInputProcessor())
+                .setFilterProcessor(ApplicationServiceSupport.normalizeProcessor(trigger.getFilterProcessor()))
+                .setIdempotencyProcessor(ApplicationServiceSupport.normalizeProcessor(trigger.getIdempotencyProcessor()))
+                .setInputProcessor(ApplicationServiceSupport.normalizeProcessor(trigger.getInputProcessor()))
                 .setSubmitMode(trigger.getSubmitMode() == null ? SubmitMode.ASYNC : trigger.getSubmitMode())
                 .setResponseView(trigger.getResponseView())
                 .setUpdatedAt(now);
@@ -184,12 +198,17 @@ public class EventTriggerApplicationService {
             idempotencyKey = EventProcessorUtils.extractIdempotencyKey(idempotencyResult);
         }
 
-        ProcessorResult inputResult = processorEngine.process(trigger.getInputProcessor(), context);
-        if (!inputResult.isSuccess()) {
-            return TestProcessorResult.early(event, filterResult, filterMatched, idempotencyResult, idempotencyKey, inputResult, Map.of());
+        ProcessorResult inputResult = null;
+        Map<String, Object> mappedInput;
+        if (ApplicationServiceSupport.normalizeProcessor(trigger.getInputProcessor()) == null) {
+            mappedInput = defaultMappedInput(context);
+        } else {
+            inputResult = processorEngine.process(trigger.getInputProcessor(), context);
+            if (!inputResult.isSuccess()) {
+                return TestProcessorResult.early(event, filterResult, filterMatched, idempotencyResult, idempotencyKey, inputResult, Map.of());
+            }
+            mappedInput = inputResult.getOutput();
         }
-
-        Map<String, Object> mappedInput = inputResult.getOutput();
         try {
             ScriptSchemaSupport.validateInput(script.getId(), mappedInput, script.getPublishedSnapshot().getInputSchema());
         } catch (InvalidExecutionInputException exception) {
@@ -264,7 +283,14 @@ public class EventTriggerApplicationService {
             return idempotencyResult;
         }
 
-        ProcessorResult input = processorEngine.process(trigger.getInputProcessor(), context);
+        ProcessorDefinition inputProcessor = ApplicationServiceSupport.normalizeProcessor(trigger.getInputProcessor());
+        if (inputProcessor == null) {
+            Map<String, Object> mappedInput = defaultMappedInput(context);
+            dispatch.setMappedInput(mappedInput);
+            return executeTargetScript(source, trigger, eventRecordId, dispatch, mappedInput);
+        }
+
+        ProcessorResult input = processorEngine.process(inputProcessor, context);
         if (!input.isSuccess()) {
             return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, input.getErrorMessage());
         }
@@ -273,11 +299,12 @@ public class EventTriggerApplicationService {
     }
 
     private EventDispatchRecord applyFilter(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
-        if (trigger.getFilterProcessor() == null) {
+        ProcessorDefinition filterProcessor = ApplicationServiceSupport.normalizeProcessor(trigger.getFilterProcessor());
+        if (filterProcessor == null) {
             dispatch.setFilterMatched(true);
             return null;
         }
-        ProcessorResult filter = processorEngine.process(trigger.getFilterProcessor(), context);
+        ProcessorResult filter = processorEngine.process(filterProcessor, context);
         if (!filter.isSuccess()) {
             return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, filter.getErrorMessage());
         }
@@ -287,10 +314,11 @@ public class EventTriggerApplicationService {
     }
 
     private EventDispatchRecord checkIdempotency(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
-        if (trigger.getIdempotencyProcessor() == null) {
+        ProcessorDefinition idempotencyProcessor = ApplicationServiceSupport.normalizeProcessor(trigger.getIdempotencyProcessor());
+        if (idempotencyProcessor == null) {
             return null;
         }
-        ProcessorResult idempotency = processorEngine.process(trigger.getIdempotencyProcessor(), context);
+        ProcessorResult idempotency = processorEngine.process(idempotencyProcessor, context);
         if (!idempotency.isSuccess()) {
             return failDispatch(dispatch, EventDispatchStatus.MAPPING_FAILED, idempotency.getErrorMessage());
         }
@@ -374,6 +402,10 @@ public class EventTriggerApplicationService {
                 .setEvent(ApplicationServiceSupport.toEventMap(event))
                 .setSource(ApplicationServiceSupport.toSourceMap(source))
                 .setTrigger(EventProcessorUtils.triggerMap(trigger));
+    }
+
+    private static Map<String, Object> defaultMappedInput(ProcessorContext context) {
+        return context == null ? Map.of() : new LinkedHashMap<>(context.getEvent());
     }
 
     private static void updateTriggerAfterDispatch(EventTrigger trigger, String eventRecordId, ExecutionRecord execution) {

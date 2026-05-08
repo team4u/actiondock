@@ -5,6 +5,7 @@ import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.EventTriggerScope;
+import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
@@ -378,9 +379,9 @@ class DevelopmentSyncService {
                     .setEnabled(existing == null ? template.enabledByDefault() : existing.isEnabled())
                     .setSourceId(source.getId())
                     .setTargetScriptId(targetScriptId)
-                    .setFilterProcessor(template.filterProcessor())
-                    .setIdempotencyProcessor(template.idempotencyProcessor())
-                    .setInputProcessor(template.inputProcessor())
+                    .setFilterProcessor(normalizeProcessor(template.filterProcessor()))
+                    .setIdempotencyProcessor(normalizeProcessor(template.idempotencyProcessor()))
+                    .setInputProcessor(normalizeProcessor(template.inputProcessor()))
                     .setSubmitMode(template.submitMode() == null ? null : org.team4u.actiondock.domain.model.SubmitMode.valueOf(template.submitMode()))
                     .setResponseView(template.responseView())
                     .setCreatedAt(existing == null ? now : existing.getCreatedAt())
@@ -408,5 +409,9 @@ class DevelopmentSyncService {
         return repos.scriptRepository().findInstalledByRepositorySource(repositoryId, dependency.getToolId())
                 .map(ScriptDefinition::getId)
                 .orElse(repositoryId + "." + dependency.getToolId());
+    }
+
+    private static ProcessorDefinition normalizeProcessor(ProcessorDefinition processor) {
+        return processor == null || processor.isEmpty() ? null : processor;
     }
 }

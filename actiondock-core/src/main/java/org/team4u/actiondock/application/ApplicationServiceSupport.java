@@ -93,13 +93,18 @@ final class ApplicationServiceSupport {
                                   ProcessorDefinition processor,
                                   ProcessorContext context,
                                   String fieldName) {
-        if (processor == null) {
+        ProcessorDefinition normalized = normalizeProcessor(processor);
+        if (normalized == null) {
             return;
         }
-        ProcessorResult result = processorEngine.process(processor, context);
+        ProcessorResult result = processorEngine.process(normalized, context);
         if (!result.isSuccess()) {
             throw new IllegalArgumentException(fieldName + " 不可执行: " + result.getErrorMessage());
         }
+    }
+
+    static ProcessorDefinition normalizeProcessor(ProcessorDefinition processor) {
+        return processor == null || processor.isEmpty() ? null : processor;
     }
 
     static ProcessorContext contextFromSample(Map<String, Object> sampleContext) {

@@ -8,6 +8,7 @@ import type { ProcessorPurpose } from "./processorScriptPresets";
 import { writePreset } from "./processorScriptPresets";
 
 const { Text } = Typography;
+type ProcessorEditorMode = ProcessorMode | "NONE";
 
 interface ProcessorEditorProps {
   title: string;
@@ -20,8 +21,8 @@ interface ProcessorEditorProps {
   purpose?: ProcessorPurpose;
 }
 
-function toMode(value?: ProcessorDefinition): ProcessorMode {
-  return value?.mode ?? "JSON_PATH";
+function toMode(value?: ProcessorDefinition): ProcessorEditorMode {
+  return value?.mode ?? "NONE";
 }
 
 export function ProcessorEditor({
@@ -35,7 +36,7 @@ export function ProcessorEditor({
   purpose
 }: ProcessorEditorProps) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<ProcessorMode>(toMode(value));
+  const [mode, setMode] = useState<ProcessorEditorMode>(toMode(value));
   const [jsonPathText, setJsonPathText] = useState(prettyJson(value?.jsonPath?.fields));
   const [templateText, setTemplateText] = useState(prettyJson(value?.template?.template));
   const [scriptId, setScriptId] = useState(value?.scriptRef?.scriptId ?? "");
@@ -108,9 +109,13 @@ export function ProcessorEditor({
       : undefined);
   };
 
-  const handleModeChange = (nextMode: ProcessorMode) => {
+  const handleModeChange = (nextMode: ProcessorEditorMode) => {
     setMode(nextMode);
     setErrorText(null);
+    if (nextMode === "NONE") {
+      onChange(undefined);
+      return;
+    }
     if (nextMode === "JSON_PATH") {
       emitJsonPath(jsonPathText || "{}");
       return;
@@ -122,7 +127,8 @@ export function ProcessorEditor({
     emitScriptRef(scriptId);
   };
 
-  const modeDescription: Record<ProcessorMode, string> = {
+  const modeDescription: Record<ProcessorEditorMode, string> = {
+    NONE: "留空表示跳过这个处理器。",
     JSON_PATH: "适合直接提取字段，输出一个对象。",
     TEMPLATE: "适合拼装固定结构、组合字符串和常量值。",
     SCRIPT_REF: "适合复杂逻辑，直接复用已发布脚本。",
@@ -146,6 +152,7 @@ export function ProcessorEditor({
           disabled={disabled}
           onChange={(event) => handleModeChange(event.target.value)}
           options={[
+            { label: "未配置", value: "NONE" },
             { label: "JSONPath 映射", value: "JSON_PATH" },
             { label: "模板生成", value: "TEMPLATE" },
             { label: "引用脚本", value: "SCRIPT_REF" }

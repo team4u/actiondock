@@ -64,4 +64,14 @@ public class ProcessorDefinition {
         this.description = description;
         return this;
     }
+
+    public boolean isEmpty() {
+        boolean emptyMode = mode == null;
+        boolean emptyJsonPath = jsonPath == null || jsonPath.getFields().isEmpty();
+        boolean emptyTemplate = template == null || template.getTemplate().isEmpty();
+        boolean emptyScriptRef = scriptRef == null || scriptRef.getScriptId() == null || scriptRef.getScriptId().isBlank();
+        boolean emptyOutputSchema = outputSchema == null || outputSchema.isEmpty();
+        boolean emptyDescription = description == null || description.isBlank();
+        return emptyMode && emptyJsonPath && emptyTemplate && emptyScriptRef && emptyOutputSchema && emptyDescription;
+    }
 }

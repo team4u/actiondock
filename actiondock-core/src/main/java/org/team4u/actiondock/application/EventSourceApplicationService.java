@@ -110,7 +110,7 @@ public class EventSourceApplicationService {
                 .setEnabled(definition.isEnabled())
                 .setTransport(transport)
                 .setAuth(definition.getAuth())
-                .setNormalizationProcessor(definition.getNormalizationProcessor())
+                .setNormalizationProcessor(ApplicationServiceSupport.normalizeProcessor(definition.getNormalizationProcessor()))
                 .setSampleContext(definition.getSampleContext())
                 .setUpdatedAt(now);
     }
@@ -146,7 +146,7 @@ public class EventSourceApplicationService {
 
     public NormalizedEvent normalize(EventSourceDefinition source, IncomingEventPayload payload, String eventRecordId) {
         NormalizedEvent event = buildInitialEvent(source, payload, eventRecordId);
-        ProcessorDefinition processor = source.getNormalizationProcessor();
+        ProcessorDefinition processor = ApplicationServiceSupport.normalizeProcessor(source.getNormalizationProcessor());
         if (processor == null) {
             return event;
         }
