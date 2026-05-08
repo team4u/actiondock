@@ -7,6 +7,12 @@ import { URL } from "node:url";
 import { ActionDockCliError, isRecord } from "./error.js";
 import type {
   ApiEnvelope,
+  AccessTokenView,
+  ConfigValueDetailView,
+  ConfigValueRequest,
+  ConfigValueView,
+  ExecutionPresetUpsertRequest,
+  ExecutionPresetView,
   EventDispatchRecord,
   EventIngestionView,
   EventRecord,
@@ -18,6 +24,7 @@ import type {
   ExecutionResponse,
   IncomingEventPayload,
   PluginConfigView,
+  PluginDownload,
   PluginInvokeRequest,
   PluginInvokeResponse,
   PluginReferenceView,
@@ -30,6 +37,9 @@ import type {
   RepositoryEventSourceDetail,
   RepositoryEventSourceInstallation,
   RepositoryInstallRequest,
+  RepositoryToolDescriptor,
+  RepositoryToolDetail,
+  RepositoryToolInstallation,
   ScriptScheduleUpsertRequest,
   ScriptScheduleView,
   ScriptDefinition,
@@ -56,6 +66,11 @@ interface RequestOptions {
   method?: string;
   headers?: HeadersInit;
   body?: Buffer | string;
+}
+
+interface BinaryResponse {
+  body: Buffer;
+  headers: http.IncomingHttpHeaders;
 }
 
 export class ActionDockClient {
@@ -180,6 +195,30 @@ export class ActionDockClient {
 
   async deleteSchedule(scheduleId: string): Promise<void> {
     await this.requestJson<null>(`/api/schedules/${scheduleId}`, {
+      method: "DELETE"
+    });
+  }
+
+  async listExecutionPresets(scriptId: string): Promise<ExecutionPresetView[]> {
+    return this.requestJson<ExecutionPresetView[]>(`/api/scripts/${scriptId}/presets`);
+  }
+
+  async createExecutionPreset(scriptId: string, payload: ExecutionPresetUpsertRequest): Promise<ExecutionPresetView> {
+    return this.requestJson<ExecutionPresetView>(`/api/scripts/${scriptId}/presets`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updateExecutionPreset(scriptId: string, presetId: string, payload: ExecutionPresetUpsertRequest): Promise<ExecutionPresetView> {
+    return this.requestJson<ExecutionPresetView>(`/api/scripts/${scriptId}/presets/${presetId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deleteExecutionPreset(scriptId: string, presetId: string): Promise<void> {
+    await this.requestJson<null>(`/api/scripts/${scriptId}/presets/${presetId}`, {
       method: "DELETE"
     });
   }
@@ -336,6 +375,72 @@ export class ActionDockClient {
     return this.requestJson<RepositoryDefinition[]>("/api/repositories");
   }
 
+  async createRepository(payload: RepositoryDefinition): Promise<RepositoryDefinition> {
+    return this.requestJson<RepositoryDefinition>("/api/repositories", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updateRepository(repositoryId: string, payload: RepositoryDefinition): Promise<RepositoryDefinition> {
+    return this.requestJson<RepositoryDefinition>(`/api/repositories/${repositoryId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deleteRepository(repositoryId: string): Promise<void> {
+    await this.requestJson<null>(`/api/repositories/${repositoryId}`, {
+      method: "DELETE"
+    });
+  }
+
+  async syncRepository(repositoryId: string): Promise<RepositoryDefinition> {
+    return this.requestJson<RepositoryDefinition>(`/api/repositories/${repositoryId}/sync`, {
+      method: "POST"
+    });
+  }
+
+  async listRepositoryTools(repositoryId?: string): Promise<RepositoryToolDescriptor[]> {
+    if (repositoryId) {
+      return this.requestJson<RepositoryToolDescriptor[]>(`/api/repositories/${repositoryId}/tools`);
+    }
+    return this.requestJson<RepositoryToolDescriptor[]>("/api/repositories/tools");
+  }
+
+  async getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
+    return this.requestJson<RepositoryToolDetail>(`/api/repositories/${repositoryId}/tools/${toolId}`);
+  }
+
+  async installRepositoryTool(
+    repositoryId: string,
+    toolId: string,
+    payload: RepositoryInstallRequest
+  ): Promise<RepositoryToolInstallation> {
+    return this.requestJson<RepositoryToolInstallation>(`/api/repositories/${repositoryId}/tools/${toolId}/install`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updateRepositoryTool(
+    repositoryId: string,
+    toolId: string,
+    payload: RepositoryInstallRequest
+  ): Promise<RepositoryToolInstallation> {
+    return this.requestJson<RepositoryToolInstallation>(`/api/repositories/${repositoryId}/tools/${toolId}/update`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async developRepositoryTool(repositoryId: string, toolId: string, scriptId?: string): Promise<ScriptDefinition> {
+    return this.requestJson<ScriptDefinition>(`/api/repositories/${repositoryId}/tools/${toolId}/develop`, {
+      method: "POST",
+      body: JSON.stringify(scriptId ? { scriptId } : {})
+    });
+  }
+
   async listRepositoryEventSources(): Promise<RepositoryEventSourceDescriptor[]> {
     return this.requestJson<RepositoryEventSourceDescriptor[]>("/api/repositories/event-sources");
   }
@@ -411,6 +516,13 @@ export class ActionDockClient {
     return this.requestJson<PluginConfigView>(`/api/plugins/${pluginId}/config`);
   }
 
+  async savePluginConfig(pluginId: string, config: Record<string, unknown>): Promise<PluginConfigView> {
+    return this.requestJson<PluginConfigView>(`/api/plugins/${pluginId}/config`, {
+      method: "PUT",
+      body: JSON.stringify({ config })
+    });
+  }
+
   async invokePlugin(
     pluginId: string,
     action: string,
@@ -423,27 +535,112 @@ export class ActionDockClient {
   }
 
   async installPlugin(jarPath: string): Promise<PluginView> {
-    const filename = path.basename(jarPath);
-    const fileBytes = fs.readFileSync(jarPath);
-    const boundary = `----actiondock-cli-${Date.now().toString(16)}`;
-    const body = Buffer.concat([
-      Buffer.from(
-        `--${boundary}\r\n`
-        + `Content-Disposition: form-data; name="file"; filename="${escapeMultipartFilename(filename)}"\r\n`
-        + "Content-Type: application/java-archive\r\n\r\n",
-        "utf8"
-      ),
-      fileBytes,
-      Buffer.from(`\r\n--${boundary}--\r\n`, "utf8")
-    ]);
+    return this.uploadPluginJar("/api/plugins/install", jarPath);
+  }
 
-    return this.requestJson<PluginView>("/api/plugins/install", {
+  async upgradePlugin(pluginId: string, jarPath: string): Promise<PluginView> {
+    return this.uploadPluginJar(`/api/plugins/${pluginId}/upgrade`, jarPath);
+  }
+
+  async startPlugin(pluginId: string): Promise<PluginView> {
+    return this.requestJson<PluginView>(`/api/plugins/${pluginId}/start`, {
+      method: "POST"
+    });
+  }
+
+  async stopPlugin(pluginId: string): Promise<PluginView> {
+    return this.requestJson<PluginView>(`/api/plugins/${pluginId}/stop`, {
+      method: "POST"
+    });
+  }
+
+  async uninstallPlugin(pluginId: string, force = false): Promise<void> {
+    await this.requestJson<null>(`/api/plugins/${pluginId}?${new URLSearchParams({ force: String(force) }).toString()}`, {
+      method: "DELETE"
+    });
+  }
+
+  async downloadPlugin(pluginId: string): Promise<PluginDownload> {
+    const response = await this.requestBinary(`/api/plugins/${pluginId}/download`);
+    return {
+      filename: parseContentDispositionFilename(response.headers["content-disposition"]) ?? `${pluginId}.jar`,
+      content: response.body
+    };
+  }
+
+  async listConfigValues(): Promise<ConfigValueView[]> {
+    return this.requestJson<ConfigValueView[]>("/api/config-values");
+  }
+
+  async getConfigValue(key: string): Promise<ConfigValueDetailView> {
+    return this.requestJson<ConfigValueDetailView>(`/api/config-values/${encodeURIComponent(key)}`);
+  }
+
+  async createConfigValue(payload: ConfigValueRequest): Promise<ConfigValueView> {
+    return this.requestJson<ConfigValueView>("/api/config-values", {
       method: "POST",
-      headers: {
-        "Content-Type": `multipart/form-data; boundary=${boundary}`,
-        "Content-Length": String(body.byteLength)
-      },
-      body
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updateConfigValue(key: string, payload: ConfigValueRequest): Promise<ConfigValueView> {
+    return this.requestJson<ConfigValueView>(`/api/config-values/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async copyConfigValueLocalOverride(key: string): Promise<ConfigValueDetailView> {
+    return this.requestJson<ConfigValueDetailView>(`/api/config-values/${encodeURIComponent(key)}/copy-local-override`, {
+      method: "POST"
+    });
+  }
+
+  async restoreConfigValueRepositoryDefault(key: string): Promise<ConfigValueDetailView> {
+    return this.requestJson<ConfigValueDetailView>(`/api/config-values/${encodeURIComponent(key)}/restore-repository-default`, {
+      method: "POST"
+    });
+  }
+
+  async deleteConfigValue(key: string): Promise<void> {
+    await this.requestJson<null>(`/api/config-values/${encodeURIComponent(key)}`, {
+      method: "DELETE"
+    });
+  }
+
+  async listAccessTokens(): Promise<AccessTokenView[]> {
+    return this.requestJson<AccessTokenView[]>("/api/access-tokens");
+  }
+
+  async createAccessToken(name?: string): Promise<AccessTokenView> {
+    return this.requestJson<AccessTokenView>("/api/access-tokens", {
+      method: "POST",
+      body: JSON.stringify({ name })
+    });
+  }
+
+  async renameAccessToken(tokenId: string, name?: string): Promise<AccessTokenView> {
+    return this.requestJson<AccessTokenView>(`/api/access-tokens/${tokenId}`, {
+      method: "PUT",
+      body: JSON.stringify({ name })
+    });
+  }
+
+  async enableAccessToken(tokenId: string): Promise<AccessTokenView> {
+    return this.requestJson<AccessTokenView>(`/api/access-tokens/${tokenId}/enable`, {
+      method: "POST"
+    });
+  }
+
+  async disableAccessToken(tokenId: string): Promise<AccessTokenView> {
+    return this.requestJson<AccessTokenView>(`/api/access-tokens/${tokenId}/disable`, {
+      method: "POST"
+    });
+  }
+
+  async deleteAccessToken(tokenId: string): Promise<void> {
+    await this.requestJson<null>(`/api/access-tokens/${tokenId}`, {
+      method: "DELETE"
     });
   }
 
@@ -542,6 +739,54 @@ export class ActionDockClient {
     return (parsed as unknown as ApiEnvelope<T>).data;
   }
 
+  private async requestBinary(pathname: string, init?: RequestOptions): Promise<BinaryResponse> {
+    const url = new URL(`${this.options.serverUrl}${pathname}`);
+    const method = init?.method ?? "GET";
+    const headers = this.buildHeaders(init?.headers, init?.body);
+    const body = init?.body;
+    const transport = url.protocol === "https:" ? https : http;
+    const payload = await new Promise<{ statusCode: number; body: Buffer; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
+      const request = transport.request(url, { method, headers }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on("end", () => {
+          resolve({
+            statusCode: response.statusCode ?? 500,
+            body: Buffer.concat(chunks),
+            headers: response.headers
+          });
+        });
+      });
+      request.on("error", (error) => {
+        reject(error);
+      });
+      if (body) {
+        request.write(body);
+      }
+      request.end();
+    }).catch((error: unknown) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new ActionDockCliError(`请求 ActionDock 服务失败: ${detail}`, 4);
+    });
+
+    if (payload.statusCode < 200 || payload.statusCode >= 300) {
+      const text = payload.body.toString("utf8");
+      const parsed = parseMaybeJson(text);
+      const message = isRecord(parsed) && typeof parsed.msg === "string"
+        ? parsed.msg
+        : `请求失败: HTTP ${payload.statusCode}`;
+      const exitCode = payload.statusCode === 401 || payload.statusCode === 403 ? 3 : 5;
+      throw new ActionDockCliError(message, exitCode, parsed ?? text);
+    }
+
+    return {
+      body: payload.body,
+      headers: payload.headers
+    };
+  }
+
   private buildHeaders(headers: HeadersInit | undefined, body: Buffer | string | undefined): Record<string, string> {
     const result = new Headers(headers);
     if (!result.has("Accept")) {
@@ -556,6 +801,43 @@ export class ActionDockClient {
     result.set("Connection", "close");
     return Object.fromEntries(result.entries());
   }
+
+  private uploadPluginJar(pathname: string, jarPath: string): Promise<PluginView> {
+    const { body, boundary } = buildMultipartFileBody(jarPath);
+    return this.requestJson<PluginView>(pathname, {
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": String(body.byteLength)
+      },
+      body
+    });
+  }
+}
+
+function parseContentDispositionFilename(header: string | string[] | undefined): string | undefined {
+  const value = Array.isArray(header) ? header[0] : header;
+  const match = value?.match(/filename="([^"]+)"/i) ?? value?.match(/filename=([^;]+)/i);
+  return match?.[1]?.trim();
+}
+
+function buildMultipartFileBody(jarPath: string): { body: Buffer; boundary: string } {
+  const filename = path.basename(jarPath);
+  const fileBytes = fs.readFileSync(jarPath);
+  const boundary = `----actiondock-cli-${Date.now().toString(16)}`;
+  return {
+    boundary,
+    body: Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\n`
+        + `Content-Disposition: form-data; name="file"; filename="${escapeMultipartFilename(filename)}"\r\n`
+        + "Content-Type: application/java-archive\r\n\r\n",
+        "utf8"
+      ),
+      fileBytes,
+      Buffer.from(`\r\n--${boundary}--\r\n`, "utf8")
+    ])
+  };
 }
 
 function parseMaybeJson(text: string): unknown {

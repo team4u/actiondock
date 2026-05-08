@@ -834,6 +834,17 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "PUT" && req.url === "/api/plugins/plugin-a/config") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: {
+          pluginId: "plugin-a",
+          config: body?.config ?? {}
+        }
+      });
+    }
+
     if (req.method === "POST" && req.url === "/api/plugins/plugin-a/actions/summarize/invoke") {
       return json(res, {
         status: 0,
@@ -855,6 +866,430 @@ beforeAll(async () => {
           version: "0.1.0",
           actions: []
         }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/plugins/plugin-a/upgrade") {
+      return json(res, {
+        status: 0,
+        msg: "upgraded",
+        data: {
+          pluginId: "plugin-a",
+          version: "1.2.4",
+          actions: []
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/plugins/plugin-a/start") {
+      return json(res, {
+        status: 0,
+        msg: "started",
+        data: {
+          pluginId: "plugin-a",
+          version: "1.2.3",
+          started: true,
+          actions: []
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/plugins/plugin-a/stop") {
+      return json(res, {
+        status: 0,
+        msg: "stopped",
+        data: {
+          pluginId: "plugin-a",
+          version: "1.2.3",
+          started: false,
+          actions: []
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/plugins/plugin-a?force=true") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/plugins/plugin-a/download") {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/java-archive");
+      res.setHeader("content-disposition", 'attachment; filename="plugin-a.jar"');
+      res.end("jar-content");
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/api/config-values") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            key: "github.token",
+            valueMasked: "********",
+            hasValue: true,
+            secret: true,
+            managed: false,
+            overridden: false
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/config-values/github.token") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          key: "github.token",
+          valueMasked: "********",
+          hasValue: true,
+          secret: true,
+          managed: false,
+          overridden: false,
+          impactedScripts: []
+        }
+      });
+    }
+
+    if (req.method === "PUT" && req.url === "/api/config-values/github.token") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: {
+          key: "github.token",
+          value: body?.secret ? null : body?.value,
+          valueMasked: body?.secret ? "********" : null,
+          hasValue: Boolean(body?.value),
+          description: body?.description,
+          secret: body?.secret ?? false,
+          managed: false,
+          overridden: false
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/config-values/github.token/copy-local-override") {
+      return json(res, {
+        status: 0,
+        msg: "copied",
+        data: {
+          key: "github.token",
+          valueMasked: "********",
+          hasValue: true,
+          secret: true,
+          overridden: true,
+          impactedScripts: []
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/config-values/github.token/restore-repository-default") {
+      return json(res, {
+        status: 0,
+        msg: "restored",
+        data: {
+          key: "github.token",
+          valueMasked: "********",
+          hasValue: true,
+          secret: true,
+          managed: true,
+          overridden: false,
+          impactedScripts: []
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/config-values/github.token") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/access-tokens") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "token-1",
+            name: "CI",
+            tokenPreview: "ad_****",
+            enabled: true
+          }
+        ]
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/access-tokens") {
+      return json(res, {
+        status: 0,
+        msg: "created",
+        data: {
+          id: "token-2",
+          name: body?.name,
+          tokenPreview: "ad_new****",
+          enabled: true,
+          tokenValue: "ad_secret_token"
+        }
+      });
+    }
+
+    if (req.method === "PUT" && req.url === "/api/access-tokens/token-1") {
+      return json(res, {
+        status: 0,
+        msg: "renamed",
+        data: {
+          id: "token-1",
+          name: body?.name,
+          tokenPreview: "ad_****",
+          enabled: true
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/access-tokens/token-1/enable") {
+      return json(res, {
+        status: 0,
+        msg: "enabled",
+        data: {
+          id: "token-1",
+          name: "CI",
+          enabled: true
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/access-tokens/token-1/disable") {
+      return json(res, {
+        status: 0,
+        msg: "disabled",
+        data: {
+          id: "token-1",
+          name: "CI",
+          enabled: false
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/access-tokens/token-1") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/repositories") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "repo-1",
+            name: "Repo 1",
+            type: "LOCAL_DIR",
+            url: "/tmp/repo",
+            enabled: true,
+            trustLevel: "TRUSTED",
+            usage: "DEVELOPMENT"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/repositories") {
+      return json(res, {
+        status: 0,
+        msg: "created",
+        data: body
+      });
+    }
+
+    if (req.method === "PUT" && req.url === "/api/repositories/repo-1") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: body
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/sync") {
+      return json(res, {
+        status: 0,
+        msg: "synced",
+        data: {
+          id: "repo-1",
+          name: "Repo 1",
+          type: "LOCAL_DIR",
+          url: "/tmp/repo",
+          enabled: true,
+          trustLevel: "TRUSTED",
+          usage: "DEVELOPMENT",
+          lastSyncedAt: "2026-05-01T00:00:00"
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/repositories/repo-1") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/repositories/tools") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            repositoryId: "repo-1",
+            toolId: "tool-1",
+            installedScriptId: "published-tool",
+            displayName: "Tool 1",
+            version: "1.0.0",
+            tags: [],
+            type: "GROOVY",
+            scriptDependencies: [],
+            pluginDependencies: [],
+            installed: true,
+            installedVersion: "1.0.0",
+            updateAvailable: false,
+            trusted: true
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/repositories/repo-1/tools/tool-1") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          descriptor: {
+            repositoryId: "repo-1",
+            toolId: "tool-1",
+            installedScriptId: "published-tool",
+            displayName: "Tool 1",
+            version: "1.0.0",
+            tags: [],
+            type: "GROOVY",
+            scriptDependencies: [],
+            pluginDependencies: [],
+            installed: true,
+            installedVersion: "1.0.0",
+            updateAvailable: false,
+            trusted: true
+          },
+          source: "return input",
+          configTemplate: [],
+          scheduleTemplate: []
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/install") {
+      return json(res, {
+        status: 0,
+        msg: "installed",
+        data: {
+          scriptId: "tool-1",
+          repositoryId: "repo-1",
+          toolId: "tool-1",
+          name: "Tool 1",
+          version: "1.0.0"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/update") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: {
+          scriptId: "tool-1",
+          repositoryId: "repo-1",
+          toolId: "tool-1",
+          name: "Tool 1",
+          version: "1.0.1"
+        }
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/develop") {
+      return json(res, {
+        status: 0,
+        msg: "developed",
+        data: {
+          id: body?.scriptId ?? "tool-1-dev",
+          name: "Tool 1",
+          type: "GROOVY",
+          status: "DRAFT",
+          publishedSnapshot: null
+        }
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/scripts/published-tool/presets") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "preset-1",
+            scriptId: "published-tool",
+            name: "Night input",
+            input: { name: "Alice" },
+            managed: false,
+            editable: true
+          }
+        ]
+      });
+    }
+
+    if (req.method === "POST" && req.url === "/api/scripts/published-tool/presets") {
+      return json(res, {
+        status: 0,
+        msg: "created",
+        data: {
+          id: "preset-2",
+          scriptId: "published-tool",
+          name: body?.name,
+          input: body?.input,
+          managed: false,
+          editable: true
+        }
+      });
+    }
+
+    if (req.method === "PUT" && req.url === "/api/scripts/published-tool/presets/preset-1") {
+      return json(res, {
+        status: 0,
+        msg: "updated",
+        data: {
+          id: "preset-1",
+          scriptId: "published-tool",
+          name: body?.name,
+          input: body?.input,
+          managed: false,
+          editable: true
+        }
+      });
+    }
+
+    if (req.method === "DELETE" && req.url === "/api/scripts/published-tool/presets/preset-1") {
+      return json(res, {
+        status: 0,
+        msg: "deleted",
+        data: null
       });
     }
 
@@ -1645,6 +2080,279 @@ describe("CLI integration", () => {
     expect(request?.bodyText).toContain('filename="plugin.jar"');
   });
 
+  it("manages plugin lifecycle, config, downloads, and upgrades", async () => {
+    const config = await runCli([
+      "plugin",
+      "config",
+      "set",
+      "plugin-a",
+      "--server",
+      baseUrl,
+      "--config-json",
+      '{"endpoint":"http://new-service"}',
+      "--json"
+    ]);
+    expect(config.status).toBe(0);
+    expect(JSON.parse(config.stdout)).toEqual(
+      expect.objectContaining({
+        pluginId: "plugin-a",
+        config: { endpoint: "http://new-service" }
+      })
+    );
+
+    const configRequest = requests.find((item) => item.method === "PUT" && item.url === "/api/plugins/plugin-a/config");
+    expect(configRequest?.body).toEqual({
+      config: { endpoint: "http://new-service" }
+    });
+
+    expect((await runCli(["plugin", "start", "plugin-a", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["plugin", "stop", "plugin-a", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["plugin", "uninstall", "plugin-a", "--force", "--server", baseUrl, "--json"])).status).toBe(0);
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "actiondock-cli-plugin-download-"));
+    const download = await runCli(["plugin", "download", "plugin-a", "--output", tempDir, "--server", baseUrl, "--json"]);
+    expect(download.status).toBe(0);
+    const downloaded = JSON.parse(download.stdout);
+    expect(fs.readFileSync(downloaded.output, "utf8")).toBe("jar-content");
+
+    const jarPath = path.join(tempDir, "plugin-upgrade.jar");
+    fs.writeFileSync(jarPath, Buffer.from("jar-content"));
+    const upgrade = await runCli(["plugin", "upgrade", "plugin-a", jarPath, "--server", baseUrl, "--json"]);
+    expect(upgrade.status).toBe(0);
+    expect(JSON.parse(upgrade.stdout)).toEqual(
+      expect.objectContaining({
+        pluginId: "plugin-a",
+        version: "1.2.4"
+      })
+    );
+    const upgradeRequest = requests.find((item) => item.url === "/api/plugins/plugin-a/upgrade");
+    expect(upgradeRequest?.headers["content-type"]).toContain("multipart/form-data; boundary=");
+  }, 20_000);
+
+  it("manages config values", async () => {
+    const list = await runCli(["config-value", "list", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        key: "github.token",
+        valueMasked: "********"
+      })
+    ]);
+
+    const detail = await runCli(["config-value", "get", "github.token", "--server", baseUrl, "--json"]);
+    expect(detail.status).toBe(0);
+    expect(JSON.parse(detail.stdout)).toEqual(
+      expect.objectContaining({
+        key: "github.token",
+        valueMasked: "********"
+      })
+    );
+
+    const set = await runCli([
+      "config-value",
+      "set",
+      "github.token",
+      "--value",
+      "gho_xxx",
+      "--description",
+      "GitHub token",
+      "--secret",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(set.status).toBe(0);
+    const setRequest = requests.find((item) => item.method === "PUT" && item.url === "/api/config-values/github.token");
+    expect(setRequest?.body).toEqual({
+      key: "github.token",
+      value: "gho_xxx",
+      description: "GitHub token",
+      secret: true,
+    });
+
+    expect((await runCli(["config-value", "copy-local-override", "github.token", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["config-value", "restore-repository-default", "github.token", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["config-value", "delete", "github.token", "--server", baseUrl, "--json"])).status).toBe(0);
+  }, 20_000);
+
+  it("manages access tokens", async () => {
+    const list = await runCli(["access-token", "list", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        id: "token-1",
+        tokenPreview: "ad_****"
+      })
+    ]);
+
+    const create = await runCli(["access-token", "create", "--name", "Deploy", "--server", baseUrl]);
+    expect(create.status).toBe(0);
+    expect(create.stdout).toContain("ad_secret_token");
+
+    const createJson = await runCli(["access-token", "create", "--name", "Deploy", "--server", baseUrl, "--json"]);
+    expect(createJson.status).toBe(0);
+    expect(JSON.parse(createJson.stdout)).toEqual(
+      expect.objectContaining({
+        id: "token-2",
+        tokenValue: "ad_secret_token"
+      })
+    );
+
+    const createRequest = requests.find((item) => item.method === "POST" && item.url === "/api/access-tokens");
+    expect(createRequest?.body).toEqual({ name: "Deploy" });
+
+    expect((await runCli(["access-token", "rename", "token-1", "--name", "CI renamed", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["access-token", "enable", "token-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["access-token", "disable", "token-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["access-token", "delete", "token-1", "--server", baseUrl, "--json"])).status).toBe(0);
+  }, 20_000);
+
+  it("manages repositories and repository tools", async () => {
+    const list = await runCli(["repository", "list", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        id: "repo-1",
+        type: "LOCAL_DIR"
+      })
+    ]);
+
+    const created = await runCli([
+      "repository",
+      "create",
+      "--repository-id",
+      "repo-2",
+      "--name",
+      "Repo 2",
+      "--type",
+      "local-dir",
+      "--url",
+      "/tmp/repo2",
+      "--usage",
+      "development",
+      "--trust-level",
+      "trusted",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(created.status).toBe(0);
+    const createRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories");
+    expect(createRequest?.body).toEqual({
+      id: "repo-2",
+      name: "Repo 2",
+      type: "LOCAL_DIR",
+      url: "/tmp/repo2",
+      usage: "DEVELOPMENT",
+      trustLevel: "TRUSTED",
+      enabled: true
+    });
+
+    expect((await runCli(["repository", "sync", "repo-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    expect((await runCli(["repository", "delete", "repo-1", "--server", baseUrl, "--json"])).status).toBe(0);
+
+    const toolList = await runCli(["repository", "tool", "list", "--server", baseUrl, "--json"]);
+    expect(toolList.status).toBe(0);
+    expect(JSON.parse(toolList.stdout)).toEqual([
+      expect.objectContaining({
+        repositoryId: "repo-1",
+        toolId: "tool-1"
+      })
+    ]);
+
+    const toolDetail = await runCli(["repository", "tool", "get", "repo-1", "tool-1", "--server", baseUrl, "--json"]);
+    expect(toolDetail.status).toBe(0);
+    expect(JSON.parse(toolDetail.stdout)).toEqual(
+      expect.objectContaining({
+        descriptor: expect.objectContaining({ toolId: "tool-1" })
+      })
+    );
+
+    const install = await runCli([
+      "repository",
+      "tool",
+      "install",
+      "repo-1",
+      "tool-1",
+      "--install-schedules",
+      "--install-plugin-dependencies",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(install.status).toBe(0);
+    const installRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/tools/tool-1/install");
+    expect(installRequest?.body).toEqual({
+      installSchedules: true,
+      installScriptDependencies: false,
+      installPluginDependencies: true,
+      forcePluginUpgrade: false
+    });
+
+    expect((await runCli(["repository", "tool", "update", "repo-1", "tool-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    const develop = await runCli(["repository", "tool", "develop", "repo-1", "tool-1", "--script-id", "tool-dev", "--server", baseUrl, "--json"]);
+    expect(develop.status).toBe(0);
+    expect(JSON.parse(develop.stdout)).toEqual(
+      expect.objectContaining({
+        id: "tool-dev"
+      })
+    );
+  }, 20_000);
+
+  it("manages script execution presets", async () => {
+    const list = await runCli(["script", "preset", "list", "published-tool", "--server", baseUrl, "--json"]);
+    expect(list.status).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual([
+      expect.objectContaining({
+        id: "preset-1",
+        scriptId: "published-tool"
+      })
+    ]);
+
+    const create = await runCli([
+      "script",
+      "preset",
+      "create",
+      "published-tool",
+      "--name",
+      "Day input",
+      "--input-json",
+      '{"name":"Bob"}',
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(create.status).toBe(0);
+    const createRequest = requests.find((item) => item.method === "POST" && item.url === "/api/scripts/published-tool/presets");
+    expect(createRequest?.body).toEqual({
+      name: "Day input",
+      input: { name: "Bob" }
+    });
+
+    const update = await runCli([
+      "script",
+      "preset",
+      "update",
+      "published-tool",
+      "preset-1",
+      "--name",
+      "Night input v2",
+      "--input-json",
+      '{"name":"Alice","count":2}',
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(update.status).toBe(0);
+    const updateRequest = requests.find((item) => item.method === "PUT" && item.url === "/api/scripts/published-tool/presets/preset-1");
+    expect(updateRequest?.body).toEqual({
+      name: "Night input v2",
+      input: { name: "Alice", count: 2 }
+    });
+
+    expect((await runCli(["script", "preset", "delete", "published-tool", "preset-1", "--server", baseUrl, "--json"])).status).toBe(0);
+  }, 20_000);
+
   it("writes shared state through the cli", async () => {
     const result = await runCli([
       "state",
@@ -1818,14 +2526,13 @@ async function runCli(args: string[], homeDir?: string, envOverrides?: NodeJS.Pr
   stderr: string;
 }> {
   return await new Promise((resolve, reject) => {
-    const child = spawn("node", ["./bin/dev.js", ...args], {
+    const child = spawn("node", ["./bin/run.js", ...args], {
       cwd: cliDir,
       env: {
         ...process.env,
         ...envOverrides,
         HOME: homeDir ?? process.env.HOME,
-        XDG_CONFIG_HOME: homeDir ? path.join(homeDir, ".config-root") : process.env.XDG_CONFIG_HOME,
-        NODE_OPTIONS: "--import tsx"
+        XDG_CONFIG_HOME: homeDir ? path.join(homeDir, ".config-root") : process.env.XDG_CONFIG_HOME
       },
       stdio: ["ignore", "pipe", "pipe"]
     });

@@ -86,6 +86,25 @@ export interface ScriptScheduleUpsertRequest {
   enabled: boolean;
 }
 
+export interface ExecutionPresetView {
+  id: string;
+  scriptId: string;
+  name: string;
+  input: Record<string, unknown>;
+  managed?: boolean;
+  editable?: boolean;
+  repositoryId?: string | null;
+  repositoryPackageId?: string | null;
+  repositoryVersion?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ExecutionPresetUpsertRequest {
+  name: string;
+  input: Record<string, unknown>;
+}
+
 export interface JsonPathProcessorConfig {
   fields?: Record<string, string>;
 }
@@ -278,6 +297,60 @@ export interface RepositoryInstallRequest {
   forcePluginUpgrade?: boolean;
 }
 
+export interface RepositoryToolDescriptor {
+  repositoryId: string;
+  toolId: string;
+  installedScriptId?: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  type?: string;
+  packaging?: string;
+  sourcePath?: string;
+  pythonRequirementsPath?: string;
+  inputSchemaPath?: string;
+  outputSchemaPath?: string;
+  configTemplatePath?: string;
+  scheduleTemplatePath?: string;
+  digest?: string;
+  riskLevel?: string;
+  scriptDependencies: ScriptDependency[];
+  pluginDependencies?: unknown[];
+  installed: boolean;
+  installedVersion?: string;
+  updateAvailable: boolean;
+  trusted: boolean;
+  repositoryUsage?: string;
+  developmentScriptId?: string;
+  developmentDirty?: boolean;
+  developmentRemoteChanged?: boolean;
+  developmentSyncState?: string;
+}
+
+export interface RepositoryToolDetail {
+  descriptor: RepositoryToolDescriptor;
+  source?: string;
+  pythonRequirements?: string;
+  configTemplate: RepositoryConfigTemplateItem[];
+  scheduleTemplate: unknown[];
+}
+
+export interface RepositoryToolInstallation {
+  scriptId?: string;
+  repositoryId: string;
+  toolId: string;
+  name?: string;
+  version: string;
+  latestVersion?: string;
+  owner?: string;
+  description?: string;
+  installedAt?: string;
+  updatedAt?: string;
+}
+
 export interface DevelopmentStatus {
   scriptId: string;
   repositoryId: string;
@@ -467,6 +540,11 @@ export interface PluginConfigView {
   config?: Record<string, unknown>;
 }
 
+export interface PluginDownload {
+  filename: string;
+  content: Buffer;
+}
+
 export interface PluginInvokeRequest {
   args: Record<string, unknown>;
   scriptInput: Record<string, unknown>;
@@ -524,6 +602,52 @@ export interface SharedStateCompareAndSetResult {
   updated: boolean;
   entry?: SharedStateDetail | null;
   current?: SharedStateDetail | null;
+}
+
+export interface ConfigValueView {
+  key: string;
+  value?: string | null;
+  valueMasked?: string | null;
+  hasValue?: boolean;
+  description?: string | null;
+  secret?: boolean;
+  repositoryId?: string | null;
+  repositoryToolId?: string | null;
+  repositoryVersion?: string | null;
+  publishMode?: string | null;
+  managed?: boolean;
+  overridden?: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ConfigValueDetailView extends ConfigValueView {
+  usage?: unknown;
+  impactedScripts?: unknown[];
+  origin?: unknown;
+  availableActions?: {
+    canCopyAsLocalOverride?: boolean;
+    canRestoreRepositoryDefault?: boolean;
+  };
+}
+
+export interface ConfigValueRequest {
+  key?: string;
+  value?: string;
+  description?: string;
+  secret?: boolean;
+  preserveValue?: boolean;
+}
+
+export interface AccessTokenView {
+  id: string;
+  name?: string;
+  tokenPreview?: string;
+  enabled?: boolean;
+  tokenValue?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  lastUsedAt?: string | null;
 }
 
 export interface SchemaFieldDescriptor {

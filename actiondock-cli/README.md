@@ -40,11 +40,6 @@ If your ActionDock service runs locally, CLI commands default to
 actiondock script list
 actiondock script schema hello-world
 actiondock script run hello-world --message hello --name alice --json
-actiondock event-source repository-list
-actiondock event-source repository-get demo-repo github-webhook
-actiondock event-source repository-install demo-repo github-webhook
-actiondock event-source repository-develop demo-repo github-webhook --source-id github-webhook-dev
-actiondock event-source development-status github-webhook-dev
 ```
 
 If the service requires auth, store a token:
@@ -52,6 +47,120 @@ If the service requires auth, store a token:
 ```bash
 actiondock config set token your-token
 actiondock config show
+```
+
+### Scripts, presets, executions, and schedules
+
+```bash
+actiondock script create --script-id hello-world --name "Hello World" --source-file hello.groovy
+actiondock script patch hello-world --patch-file patch.json
+actiondock script validate hello-world
+actiondock script publish hello-world
+actiondock script run hello-world --message hello --json
+
+actiondock script preset list hello-world
+actiondock script preset create hello-world --name "Alice" --input-json '{"name":"Alice"}'
+actiondock script preset update hello-world alice --name "Alice v2" --input-file input.json
+actiondock script preset delete hello-world alice
+
+actiondock execution list --script-id hello-world
+actiondock execution get exec-1
+actiondock execution delete exec-1
+actiondock execution clear --script-id hello-world
+
+actiondock schedule list --script-id hello-world
+actiondock schedule create --script-id hello-world --schedule-name nightly --schedule-cron "0 0 * * * *"
+actiondock schedule enable schedule-1
+actiondock schedule disable schedule-1
+actiondock schedule delete schedule-1
+```
+
+### Event automation
+
+```bash
+actiondock event-source list
+actiondock event-source create --definition-file event-source.json
+actiondock event-source update github-webhook --definition-file event-source.patch.json
+actiondock event-source enable github-webhook
+actiondock event-source test-normalization github-webhook --payload-file payload.json
+actiondock event-source ingest github-webhook --payload-file payload.json
+actiondock event-source events github-webhook --limit 20
+
+actiondock event-trigger list
+actiondock event-trigger create --definition-file trigger.json
+actiondock event-trigger update trigger-1 --definition-json '{"submitMode":"SYNC"}'
+actiondock event-trigger test trigger-1 --event-file event.json --execute
+actiondock event-trigger dispatches trigger-1
+
+actiondock event-record list --source-id github-webhook
+actiondock event-record get event-1
+actiondock event-record dispatches event-1
+```
+
+### Repositories and repository tools
+
+```bash
+actiondock repository list
+actiondock repository create --repository-id demo-repo --name "Demo Repo" --type local-dir --url /path/to/repo --trust-level trusted
+actiondock repository update demo-repo --name "Demo Repo" --type local-dir --url /path/to/repo --usage development
+actiondock repository sync demo-repo
+actiondock repository delete demo-repo
+
+actiondock repository tool list
+actiondock repository tool list --repository demo-repo
+actiondock repository tool get demo-repo hello-world
+actiondock repository tool install demo-repo hello-world --install-schedules --install-plugin-dependencies
+actiondock repository tool update demo-repo hello-world
+actiondock repository tool develop demo-repo hello-world --script-id hello-world-dev
+
+actiondock event-source repository-list
+actiondock event-source repository-get demo-repo github-webhook
+actiondock event-source repository-install demo-repo github-webhook
+actiondock event-source repository-develop demo-repo github-webhook --source-id github-webhook-dev
+actiondock event-source development-status github-webhook-dev
+```
+
+### Plugins
+
+```bash
+actiondock plugin list
+actiondock plugin references
+actiondock plugin get plugin-a
+actiondock plugin install plugin.jar
+actiondock plugin upgrade plugin-a plugin.jar
+actiondock plugin start plugin-a
+actiondock plugin stop plugin-a
+actiondock plugin download plugin-a --output ./plugins
+actiondock plugin uninstall plugin-a --force
+
+actiondock plugin config get plugin-a
+actiondock plugin config set plugin-a --config-json '{"endpoint":"http://service.internal"}'
+actiondock plugin invoke plugin-a summarize --topic ops --script-input-json '{"locale":"zh-CN"}'
+```
+
+### Config values, access tokens, and shared state
+
+```bash
+actiondock config-value list
+actiondock config-value get github.token
+actiondock config-value set github.token --value gho_xxx --secret --description "GitHub token"
+actiondock config-value copy-local-override github.token
+actiondock config-value restore-repository-default github.token
+actiondock config-value delete github.token
+
+actiondock access-token list
+actiondock access-token create --name "CI"
+actiondock access-token rename token-1 --name "Deploy"
+actiondock access-token enable token-1
+actiondock access-token disable token-1
+actiondock access-token delete token-1
+
+actiondock state namespaces
+actiondock state list oauth.github
+actiondock state put oauth.github access-token --secret --value-json '{"accessToken":"gho_xxx"}'
+actiondock state cas cursor.sync users --expected-version 3 --value-json '{"cursor":"next-page"}'
+actiondock state delete oauth.github access-token
+actiondock state purge-expired oauth.github
 ```
 
 Self-update uses the unified package name:
@@ -203,4 +312,5 @@ git push origin v0.3.5
 @actiondock/cli
 @actiondock/server
 actiondock-server
+actiondock capability *
 ```
