@@ -19,7 +19,6 @@ import {
 } from "../../../resources/api";
 import { listPluginReferences, listPlugins } from "../../../plugins/api";
 import { ApiError } from "../../../../shared/api/httpClient";
-import { capabilityToScriptDefinition } from "../../../../services/capabilities";
 import { readAndClearPreset } from "../../../../components/plugin/processorScriptPresets";
 import { buildDuplicatedScriptDefinition } from "../../../../services/scriptDuplication";
 import { createEmptySchemaEditorState, deserializeSchema, deserializeSchemaJsonText, serializeSchemaEditorState } from "../../../../services/schema";
@@ -169,7 +168,7 @@ export function useScriptEditor({
   const loadScriptReferences = async () => {
     setScriptsLoading(true);
     try {
-      setAvailableScripts((await listCapabilities()).map((item) => capabilityToScriptDefinition(item)));
+      setAvailableScripts(await listCapabilities());
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "加载脚本参考失败";
       messageApi.error(detail);
@@ -183,7 +182,7 @@ export function useScriptEditor({
     void (async () => {
       setScriptsLoading(true);
       try {
-        const result = (await listCapabilities()).map((item) => capabilityToScriptDefinition(item));
+        const result = await listCapabilities();
         if (cancelled) return;
         setAvailableScripts(result);
       } catch (error) {
@@ -252,10 +251,8 @@ export function useScriptEditor({
       setLoading(true);
 
       void Promise.all([getCapability(copyFromScriptId), listCapabilities()])
-        .then(([capability, capabilities]) => {
+        .then(([script, scripts]) => {
           if (cancelled) return;
-          const script = capabilityToScriptDefinition(capability);
-          const scripts = capabilities.map((item) => capabilityToScriptDefinition(item));
           setAvailableScripts(scripts);
           setCopiedFromScript({ id: script.id, name: script.name });
           applyCreateDraftToEditor(
@@ -287,8 +284,7 @@ export function useScriptEditor({
     if (mode === "create" || !id) return;
     setLoading(true);
     void getCapability(id)
-      .then((capability) => {
-        const script = capabilityToScriptDefinition(capability);
+      .then((script) => {
         applyScriptToEditor(script);
         void loadDevelopmentStatus(script);
       })
@@ -327,7 +323,7 @@ export function useScriptEditor({
 
   const ensureCreateScriptIdAvailable = async (scriptId: string) => {
     if (mode !== "create") return;
-    const scripts = (await listCapabilities()).map((item) => capabilityToScriptDefinition(item));
+    const scripts = await listCapabilities();
     setAvailableScripts(scripts);
     if (scripts.some((script) => script.id === scriptId)) {
       const errorMessage = "脚本 ID 已存在，请更换后再保存";
@@ -339,8 +335,7 @@ export function useScriptEditor({
   const persistCurrentScript = async (): Promise<ScriptDefinition> => {
     const payload = await buildPayload();
     await ensureCreateScriptIdAvailable(payload.id);
-    const savedCapability = mode === "create" ? await createCapability(payload) : await updateCapability(payload.id, payload);
-    const saved = capabilityToScriptDefinition(savedCapability);
+    const saved = mode === "create" ? await createCapability(payload) : await updateCapability(payload.id, payload);
     applyScriptToEditor(saved);
     return saved;
   };
@@ -354,7 +349,7 @@ export function useScriptEditor({
       stage = "validate";
       await validateCapability(savedScript.id);
       stage = "publish";
-      const published = capabilityToScriptDefinition(await publishCapability(savedScript.id));
+      const published = await publishCapability(savedScript.id);
       applyScriptToEditor(published);
       await loadScriptReferences();
       if (successMessage) messageApi.success(successMessage);
@@ -494,7 +489,7 @@ export function useScriptEditor({
     if (!currentScript?.id || !hasUnpublishedChanges) return;
     setDiscardingDraft(true);
     try {
-      const discarded = capabilityToScriptDefinition(await discardCapabilityDraft(currentScript.id));
+      const discarded = await discardCapabilityDraft(currentScript.id);
       applyScriptToEditor(discarded);
       await loadScriptReferences();
       messageApi.success("草稿已丢弃");

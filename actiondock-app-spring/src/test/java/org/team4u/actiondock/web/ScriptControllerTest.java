@@ -104,7 +104,7 @@ class ScriptControllerTest {
     }
 
     @Test
-    void capabilityDetailKeepsPublishedSnapshotSource() throws Exception {
+    void detailKeepsPublishedSnapshotSource() throws Exception {
         when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
                 .setId("script-1")
                 .setName("Live")
@@ -116,12 +116,10 @@ class ScriptControllerTest {
                         .setOutputSchema(Map.of("type", "object")))
                 .setStatus(ScriptStatus.PUBLISHED));
 
-        mockMvc.perform(get("/api/capabilities/script-1"))
+        mockMvc.perform(get("/api/scripts/script-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.source").value("return [message: 'draft']"))
-                .andExpect(jsonPath("$.data.publishedBinding.source").value("return [message: 'live']"))
-                .andExpect(jsonPath("$.data.draftBinding.source").value("return [message: 'draft']"))
-                .andExpect(jsonPath("$.data.publishedBinding.version").doesNotExist());
+                .andExpect(jsonPath("$.data.publishedSnapshot.source").value("return [message: 'live']"));
     }
 
     @Test
@@ -320,6 +318,62 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.data.scriptId").value("script-1"))
                 .andExpect(jsonPath("$.data.logs[0].message").value("published"))
                 .andExpect(jsonPath("$.data.output.message").value("live"));
+    }
+
+    @Test
+    void executeDefaultsToPublishedVersion() throws Exception {
+        when(executionApplicationService.executePublished(eq("script-1"), any(), eq(SubmitMode.SYNC)))
+                .thenReturn(new ExecutionRecord()
+                        .setId("exec-published")
+                        .setScriptId("script-1")
+                        .setStatus(ExecutionStatus.SUCCESS)
+                        .setSubmitMode(SubmitMode.SYNC)
+                        .setOutput(Map.of("message", "live")));
+        when(scriptApplicationService.getPublished("script-1"))
+                .thenReturn(new ScriptDefinition()
+                        .setId("script-1")
+                        .setOutputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of("message", Map.of("type", "string"))
+                        )));
+
+        mockMvc.perform(post("/api/scripts/script-1/execute")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scriptId":"other","input":{"name":"Alice"}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("exec-published"))
+                .andExpect(jsonPath("$.data.scriptId").value("script-1"))
+                .andExpect(jsonPath("$.data.output.message").value("live"));
+    }
+
+    @Test
+    void executeDraftUsesDraftDefinitionAndPathId() throws Exception {
+        when(executionApplicationService.execute(eq("script-1"), any(), eq(SubmitMode.ASYNC)))
+                .thenReturn(new ExecutionRecord()
+                        .setId("exec-draft")
+                        .setScriptId("script-1")
+                        .setStatus(ExecutionStatus.RUNNING)
+                        .setSubmitMode(SubmitMode.ASYNC));
+        when(scriptApplicationService.get("script-1"))
+                .thenReturn(new ScriptDefinition()
+                        .setId("script-1")
+                        .setOutputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of("debug", Map.of("type", "string"))
+                        )));
+
+        mockMvc.perform(post("/api/scripts/script-1/execute")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scriptId":"other","draft":true,"mode":"ASYNC","responseView":"DEBUG"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("exec-draft"))
+                .andExpect(jsonPath("$.data.scriptId").value("script-1"))
+                .andExpect(jsonPath("$.data.submitMode").value("ASYNC"))
+                .andExpect(jsonPath("$.data.status").value("RUNNING"));
     }
 
     @Test

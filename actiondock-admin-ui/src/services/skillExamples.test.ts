@@ -15,7 +15,7 @@ describe("skillExamples", () => {
   it("builds script skill content from current commands and masks the token", () => {
     const executePresets = [
       preset("CLI", "actiondock script run 'hello-groovy' --token 'secret-token' --mode 'async' --name 'Alice'"),
-      preset("HTTP", "curl -X POST \\\n  -H 'Content-Type: application/json' \\\n  -H 'Authorization: Bearer secret-token' \\\n  -d '{\"input\":{\"name\":\"Alice\"},\"mode\":\"ASYNC\"}' \\\n  'http://localhost:8080/api/scripts/hello-groovy/published/execute'")
+      preset("HTTP", "curl -X POST \\\n  -H 'Content-Type: application/json' \\\n  -H 'Authorization: Bearer secret-token' \\\n  -d '{\"input\":{\"name\":\"Alice\"},\"mode\":\"ASYNC\"}' \\\n  'http://localhost:8080/api/scripts/hello-groovy/execute'")
     ];
 
     const result = buildScriptSkillExample({
@@ -36,7 +36,7 @@ describe("skillExamples", () => {
     expect(result).toContain("\"name\": \"message\"");
     expect(result).toContain("--token '<token>'");
     expect(result).toContain("Authorization: Bearer <token>");
-    expect(result).toContain("http://localhost:8080/api/scripts/hello-groovy/published/execute");
+    expect(result).toContain("http://localhost:8080/api/scripts/hello-groovy/execute");
     expect(result).toContain('"name": "Alice"');
     expect(result).toContain("## 避免转义坑");
     expect(result).toContain("顶层 `string` / `number` / `integer` / `boolean` / `enum` 字段可以直接展开成 `--name value` 形式。");
@@ -58,7 +58,7 @@ describe("skillExamples", () => {
       inputSource: "empty",
       executeCommandPresets: [
         preset("CLI", "actiondock script run 'hello-groovy'"),
-        preset("HTTP", "curl -X POST 'http://localhost:8080/api/scripts/hello-groovy/published/execute'")
+        preset("HTTP", "curl -X POST 'http://localhost:8080/api/scripts/hello-groovy/execute'")
       ]
     });
 

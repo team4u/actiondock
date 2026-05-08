@@ -376,7 +376,7 @@ export function buildCapabilityDetailCurlCommand({
   if (apiKey) {
     lines.push(`  -H ${shellQuote(`Authorization: Bearer ${apiKey}`)}`);
   }
-  lines.push(`  ${shellQuote(`${origin}/api/capabilities/${capabilityId}`)}`);
+  lines.push(`  ${shellQuote(`${origin}/api/scripts/${capabilityId}`)}`);
   return joinCommandLines(lines);
 }
 
@@ -408,7 +408,7 @@ export function buildCapabilityDetailPowerShellCommand({
   return buildPowerShellJsonRequestSection({
     apiKey,
     method: "Get",
-    url: `${origin}/api/capabilities/${capabilityId}`
+    url: `${origin}/api/scripts/${capabilityId}`
   });
 }
 
@@ -443,7 +443,7 @@ export function buildCapabilityDetailCliCommand({
   draft?: boolean;
   environment: CliEnvironment;
 }): string {
-  return buildCliCommand("actiondock capability get", [
+  return buildCliCommand("actiondock script get", [
     quoteCliValue(capabilityId, environment),
     ...(draft ? ["--draft"] : []),
     ...buildCliCommonFlags({ apiKey, environment })
@@ -531,7 +531,7 @@ export function buildExecuteCurlCommand({
       })
     )}`
   );
-  lines.push(`  ${shellQuote(`${origin}/api/scripts/${scriptId}/published/execute`)}`);
+  lines.push(`  ${shellQuote(`${origin}/api/scripts/${scriptId}/execute`)}`);
   return joinCommandLines(lines);
 }
 
@@ -566,7 +566,7 @@ export function buildCapabilityExecuteCurlCommand({
       })
     )}`
   );
-  lines.push(`  ${shellQuote(`${origin}/api/capabilities/${capabilityId}/execute`)}`);
+  lines.push(`  ${shellQuote(`${origin}/api/scripts/${capabilityId}/execute`)}`);
   return joinCommandLines(lines);
 }
 
@@ -590,7 +590,7 @@ export function buildExecutePowerShellCommand({
       ...(mode === "SYNC" ? {} : { mode })
     },
     method: "Post",
-    url: `${origin}/api/scripts/${scriptId}/published/execute`
+    url: `${origin}/api/scripts/${scriptId}/execute`
   });
 }
 
@@ -617,7 +617,7 @@ export function buildCapabilityExecutePowerShellCommand({
       ...(mode === "SYNC" ? {} : { mode })
     },
     method: "Post",
-    url: `${origin}/api/capabilities/${capabilityId}/execute`
+    url: `${origin}/api/scripts/${capabilityId}/execute`
   });
 }
 
@@ -666,7 +666,7 @@ export function buildCapabilityExecuteCliCommand({
   input: Record<string, unknown>;
   mode: SubmitMode;
 }): string {
-  return buildCliCommand("actiondock capability run", [
+  return buildCliCommand("actiondock script run", [
     quoteCliValue(capabilityId, environment),
     ...(draft ? ["--draft"] : []),
     ...buildCliCommonFlags({ apiKey, environment }),

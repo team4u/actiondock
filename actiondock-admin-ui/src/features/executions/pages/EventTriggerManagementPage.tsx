@@ -89,6 +89,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
   const [sources, setSources] = useState<EventSourceDefinition[]>([]);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [draft, setDraft] = useState<EventTrigger>(createEmptyDraft());
@@ -139,15 +140,24 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
     setDraft((previous) => ({ ...previous, ...patch }));
   };
 
-  const openCreate = () => {
-    const nextDraft = createEmptyDraft();
-    const defaultSource = sources[0];
-    nextDraft.sourceId = defaultSource?.id ?? "";
-    nextDraft.targetScriptId = scriptOptions[0]?.value ?? "";
-    setDraft(nextDraft);
-    setTestEventText(buildDefaultEventJson(defaultSource));
-    setTestResult(null);
-    setDrawerOpen(true);
+  const openCreate = async () => {
+    setCreating(true);
+    try {
+      const freshSources = await listEventSources();
+      setSources(freshSources);
+      const nextDraft = createEmptyDraft();
+      const defaultSource = freshSources[0];
+      nextDraft.sourceId = defaultSource?.id ?? "";
+      nextDraft.targetScriptId = scriptOptions[0]?.value ?? "";
+      setDraft(nextDraft);
+      setTestEventText(buildDefaultEventJson(defaultSource));
+      setTestResult(null);
+      setDrawerOpen(true);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "刷新事件源失败"));
+    } finally {
+      setCreating(false);
+    }
   };
 
   const openEdit = (item: EventTrigger) => {
@@ -311,7 +321,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
             meta="把标准事件过滤、幂等、映射后转换成已发布脚本执行。"
             actions={(
               <>
-                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={() => void openCreate()}>
                   新建触发器
                 </Button>
                 <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
@@ -322,7 +332,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
           />
         ) : (
           <Space wrap>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={() => void openCreate()}>
               新建触发器
             </Button>
             <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>

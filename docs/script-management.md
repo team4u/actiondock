@@ -233,7 +233,7 @@ pandas>=2.0
 | 入口 | 路径/命令 |
 |------|-----------|
 | 管理台 | 脚本编辑器 → 「执行」标签页 |
-| REST API | `POST /api/scripts/{id}/published/execute` |
+| REST API | `POST /api/scripts/{id}/execute` |
 | CLI | `actiondock script run <id> --param value` |
 | 定时任务 | 触发中心 → 定时触发 |
 | 事件触发 | 触发中心 → 事件触发 |
@@ -281,7 +281,7 @@ pandas>=2.0
 
 ```bash
 # 同步执行
-curl -X POST http://localhost:5177/api/scripts/my-script/published/execute \
+curl -X POST http://localhost:5177/api/scripts/my-script/execute \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer <token>' \
   -d '{
@@ -297,8 +297,8 @@ curl -X POST ... \
     "responseView": "DEBUG"
   }'
 
-# 通过统一能力入口执行（支持草稿版本）
-curl -X POST http://localhost:5177/api/capabilities/my-script/execute \
+# 执行草稿版本
+curl -X POST http://localhost:5177/api/scripts/my-script/execute \
   -H 'Content-Type: application/json' \
   -d '{
     "input": {"name": "alice"},
@@ -398,7 +398,7 @@ Script ID 在同一个命名空间下必须唯一。换个 ID 重试。
 - 在 UI 编辑器中修改的是草稿
 - 点击「运行」时默认运行的是**已发布版本**
 - 在编辑器内点击「运行」运行的是**当前草稿**
-- 通过 API 的 `POST /api/capabilities/{id}/execute` 可以指定 `draft: true` 执行草稿
+- 通过 API 的 `POST /api/scripts/{id}/execute` 可以指定 `draft: true` 执行草稿
 
 ### Q: 执行结果与实际不符
 

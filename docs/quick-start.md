@@ -80,7 +80,7 @@ actiondock service status   # 查看状态
 ### 从 REST API 运行
 
 ```bash
-curl -X POST http://localhost:5177/api/scripts/hello-groovy/published/execute \
+curl -X POST http://localhost:5177/api/scripts/hello-groovy/execute \
   -H 'Content-Type: application/json' \
   -d '{
     "input": {"name": "alice"},

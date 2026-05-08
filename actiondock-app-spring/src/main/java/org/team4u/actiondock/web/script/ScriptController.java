@@ -216,6 +216,29 @@ public class ScriptController {
     }
 
     /**
+     * 执行脚本。默认执行已发布版本；请求体中 draft=true 时执行草稿。
+     *
+     * @param id 脚本 ID
+     * @param request 执行请求，包含输入参数、执行模式和草稿标记
+     * @return API 响应，包含执行结果
+     */
+    @PostMapping("/{id}/execute")
+    public ApiResponse<ExecutionResponse> execute(@PathVariable String id,
+                                                  @RequestBody(required = false) ExecuteRequest request) {
+        ExecuteRequest safeRequest = request == null ? new ExecuteRequest() : request;
+        ExecutionRecord record = safeRequest.isDraft()
+                ? executionApplicationService.execute(id, safeRequest.getInput(), safeRequest.getMode())
+                : executionApplicationService.executePublished(id, safeRequest.getInput(), safeRequest.getMode());
+        ScriptDefinition scriptDefinition = safeRequest.isDraft()
+                ? scriptApplicationService.get(id)
+                : scriptApplicationService.getPublished(id);
+        return ApiResponse.success(
+                executionResponseMapper.toResponse(record, scriptDefinition, safeRequest.getResponseView()),
+                "已受理"
+        );
+    }
+
+    /**
      * Fork 指定脚本到当前命名空间。
      *
      * @param id 原始脚本 ID

@@ -2,10 +2,15 @@ import { JSON_HEADERS, request } from "../../shared/api/httpClient";
 import type { ExecuteRequest, ExecutionRecord, ExecutionResponse } from "../../shared/types";
 
 export function executeScript(payload: ExecuteRequest): Promise<ExecutionResponse> {
-  return request<ExecutionResponse>("/api/executions", {
+  return request<ExecutionResponse>(`/api/scripts/${encodeURIComponent(payload.scriptId)}/execute`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      input: payload.input,
+      mode: payload.mode,
+      responseView: payload.responseView,
+      draft: payload.draft
+    })
   });
 }
 
@@ -13,7 +18,7 @@ export function executePublishedScript(
   id: string,
   payload: Omit<ExecuteRequest, "scriptId">
 ): Promise<ExecutionResponse> {
-  return request<ExecutionResponse>(`/api/scripts/${id}/published/execute`, {
+  return request<ExecutionResponse>(`/api/scripts/${id}/execute`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)

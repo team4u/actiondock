@@ -46,7 +46,6 @@ import {
 } from "../../resources/api";
 import { ScriptImportDiffModal, type ScriptImportDiffItem } from "../../../components/diff/ScriptImportDiffModal";
 import { ConfirmDangerAction } from "../../../components/common/ConfirmDangerAction";
-import { capabilityToScriptDefinition } from "../../../services/capabilities";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { ScopeTag, getScopeLabel } from "../../../components/common/ScopeTag";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
@@ -151,8 +150,7 @@ export function ScriptLibraryPage() {
         listRepositoryTools(),
         listPlugins().catch(() => [])
       ]);
-      const scriptData = capabilityData.map((item) => capabilityToScriptDefinition(item));
-      const sortedScripts = [...scriptData].sort((left, right) =>
+      const sortedScripts = [...capabilityData].sort((left, right) =>
         (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "")
       );
       setScripts(sortedScripts);

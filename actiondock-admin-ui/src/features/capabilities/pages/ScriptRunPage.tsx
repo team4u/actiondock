@@ -24,7 +24,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useColorMode } from "../../../shared/contexts/ColorModeContext";
-import { executeCapability, getCapability } from "../api";
+import { executeCapability, getPublishedCapability } from "../api";
 import { getExecution } from "../../executions/api";
 import { BatchRunPanel } from "../../../components/execution/BatchRunPanel";
 import { ExecutionPresetBar } from "../../../components/execution/ExecutionPresetBar";
@@ -47,10 +47,8 @@ import type {
   ExecutionResponse,
   ScriptDefinition,
   SubmitMode,
-  CapabilityView,
   ValidationErrorData
 } from "../../../shared/types";
-import { capabilityToScriptDefinition } from "../../../services/capabilities";
 import { ApiError } from "../../../shared/api/httpClient";
 import { getErrorMessage, isExecutionActive } from "../../../services/utils";
 
@@ -162,16 +160,7 @@ export function ScriptRunPage() {
       form.resetFields();
 
       try {
-        const capability = await getCapability(id);
-        const loadedScript = capabilityToScriptDefinition(capability, "published");
-        if (!capability.publishedBinding) {
-          setPageError({
-            title: "Capability 尚未发布",
-            description: "请先在管理台发布 capability。"
-          });
-          return;
-        }
-
+        const loadedScript = await getPublishedCapability(id);
         if (disposed) {
           return;
         }

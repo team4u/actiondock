@@ -4,42 +4,6 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
-export interface CapabilityBindingView {
-  version?: string | null;
-  name?: string | null;
-  source?: string | null;
-  runtime?: string | null;
-  inputSchema?: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
-  packaging?: string | null;
-  pythonRequirements?: string | null;
-  description?: string | null;
-  owner?: string | null;
-  tags?: string[] | null;
-  scriptDependencies?: unknown[];
-  pluginDependencies?: unknown[];
-  aiDependencies?: unknown[];
-}
-
-export interface CapabilityView {
-  id: string;
-  kind?: string;
-  name?: string;
-  runtime?: string;
-  source?: string;
-  status?: string;
-  version?: number;
-  scope?: string;
-  description?: string;
-  owner?: string;
-  tags?: string[];
-  hasUnpublishedChanges?: boolean;
-  draftBinding?: CapabilityBindingView | null;
-  publishedBinding?: CapabilityBindingView | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-}
-
 export interface ScriptDefinition {
   id: string;
   name?: string;

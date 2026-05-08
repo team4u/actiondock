@@ -76,42 +76,6 @@ export interface ScriptDefinition {
   updatedAt?: string;
 }
 
-export interface CapabilityBinding {
-  version?: string | null;
-  name?: string | null;
-  source?: string | null;
-  runtime?: ScriptType | string | null;
-  inputSchema?: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
-  packaging?: ScriptPackaging | string | null;
-  pythonRequirements?: string | null;
-  description?: string | null;
-  owner?: string | null;
-  tags?: string[] | null;
-  scriptDependencies?: ScriptDependency[] | null;
-  pluginDependencies?: PluginDependency[] | null;
-  aiDependencies?: AiDependency[] | null;
-}
-
-export interface CapabilityView {
-  id: string;
-  kind?: string;
-  name?: string;
-  runtime?: ScriptType | string;
-  source?: string;
-  status?: ScriptStatus | string;
-  version?: number;
-  scope?: ScriptScope | string;
-  description?: string;
-  owner?: string;
-  tags?: string[];
-  hasUnpublishedChanges?: boolean;
-  draftBinding?: CapabilityBinding | null;
-  publishedBinding?: CapabilityBinding | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 export interface PluginDependency {
   pluginId: string;
   versionRange?: string;
@@ -350,6 +314,7 @@ export interface ExecuteRequest {
   input: Record<string, unknown>;
   mode: SubmitMode;
   responseView?: ExecutionResponseView;
+  draft?: boolean;
 }
 
 export interface ScriptSchedule {

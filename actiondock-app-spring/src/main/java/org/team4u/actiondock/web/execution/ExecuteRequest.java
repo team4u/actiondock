@@ -14,6 +14,7 @@ public class ExecuteRequest {
     private Map<String, Object> input;
     private SubmitMode mode = SubmitMode.SYNC;
     private ExecutionResponseView responseView = ExecutionResponseView.RESULT;
+    private boolean draft;
 
     public String getScriptId() {
         return scriptId;
@@ -45,5 +46,13 @@ public class ExecuteRequest {
 
     public void setResponseView(ExecutionResponseView responseView) {
         this.responseView = responseView == null ? ExecutionResponseView.RESULT : responseView;
+    }
+
+    public boolean isDraft() {
+        return draft;
+    }
+
+    public void setDraft(boolean draft) {
+        this.draft = draft;
     }
 }

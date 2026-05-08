@@ -9,41 +9,6 @@ export class ActionDockClient {
     constructor(options) {
         this.options = options;
     }
-    async listCapabilities() {
-        return this.requestJson("/api/capabilities");
-    }
-    async getCapability(capabilityId) {
-        return this.requestJson(`/api/capabilities/${capabilityId}`);
-    }
-    async patchCapability(capabilityId, patch) {
-        return this.requestJson(`/api/capabilities/${capabilityId}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-                draftBinding: patch
-            })
-        });
-    }
-    async publishCapability(capabilityId) {
-        return this.requestJson(`/api/capabilities/${capabilityId}/publish`, {
-            method: "POST"
-        });
-    }
-    async discardCapabilityDraft(capabilityId) {
-        return this.requestJson(`/api/capabilities/${capabilityId}/discard-draft`, {
-            method: "POST"
-        });
-    }
-    async executeCapability(options, draft) {
-        return this.requestJson(`/api/capabilities/${options.scriptId}/execute`, {
-            method: "POST",
-            body: JSON.stringify({
-                input: options.input,
-                draft,
-                mode: options.mode,
-                responseView: options.responseView
-            })
-        });
-    }
     async listScripts() {
         return this.requestJson("/api/scripts");
     }
@@ -78,21 +43,11 @@ export class ActionDockClient {
         });
     }
     async executeScript(options, draft) {
-        if (draft) {
-            return this.requestJson("/api/executions", {
-                method: "POST",
-                body: JSON.stringify({
-                    scriptId: options.scriptId,
-                    input: options.input,
-                    mode: options.mode,
-                    responseView: options.responseView
-                })
-            });
-        }
-        return this.requestJson(`/api/scripts/${options.scriptId}/published/execute`, {
+        return this.requestJson(`/api/scripts/${options.scriptId}/execute`, {
             method: "POST",
             body: JSON.stringify({
                 input: options.input,
+                draft,
                 mode: options.mode,
                 responseView: options.responseView
             })

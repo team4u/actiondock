@@ -85,7 +85,7 @@ actiondock server     # 前台启动服务
 通过 REST API 运行：
 
 ```bash
-curl -X POST http://localhost:5177/api/scripts/hello-groovy/published/execute \
+curl -X POST http://localhost:5177/api/scripts/hello-groovy/execute \
   -H 'Content-Type: application/json' \
   -d '{"input": {"name": "alice"}, "mode": "SYNC"}'
 ```
@@ -1003,7 +1003,7 @@ actiondock script run my-script --name alice --age 30 --json
 | 类别 | 端点 | 说明 |
 |------|------|------|
 | 脚本 | `/api/scripts` | 脚本 CRUD、发布、执行 |
-| 能力 | `/api/capabilities` | 统一能力入口 |
+| 脚本执行 | `/api/scripts/{id}/execute` | 统一脚本执行入口，支持 `draft` |
 | 执行 | `/api/executions` | 执行记录管理 |
 | 插件 | `/api/plugins` | 插件生命周期管理 |
 | 仓库 | `/api/repositories` | 仓库 CRUD、同步、安装 |

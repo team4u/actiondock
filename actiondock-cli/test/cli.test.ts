@@ -89,7 +89,7 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "POST" && req.url === "/api/scripts/published-tool/published/execute") {
+    if (req.method === "POST" && req.url === "/api/scripts/published-tool/execute") {
       return json(res, {
         status: 0,
         msg: "ok",
@@ -1018,7 +1018,7 @@ describe("CLI integration", () => {
       })
     );
 
-    const executionRequest = requests.find((item) => item.url === "/api/scripts/published-tool/published/execute");
+    const executionRequest = requests.find((item) => item.url === "/api/scripts/published-tool/execute");
     expect(executionRequest?.body).toEqual({
       input: {
         payload: { source: "file" },

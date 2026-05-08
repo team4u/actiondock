@@ -1,24 +1,28 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { CapabilityView, ExecuteRequest, ExecutionResponse, ScriptDefinition } from "../../shared/types";
+import type { ExecuteRequest, ExecutionResponse, ScriptDefinition } from "../../shared/types";
 
-export function listCapabilities(): Promise<CapabilityView[]> {
-  return request<CapabilityView[]>("/api/capabilities?includeUiSchema=true");
+export function listCapabilities(): Promise<ScriptDefinition[]> {
+  return request<ScriptDefinition[]>("/api/scripts?includeUiSchema=true");
 }
 
-export function getCapability(id: string): Promise<CapabilityView> {
-  return request<CapabilityView>(`/api/capabilities/${id}?includeUiSchema=true`);
+export function getCapability(id: string): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${id}?includeUiSchema=true`);
 }
 
-export function createCapability(payload: ScriptDefinition): Promise<CapabilityView> {
-  return request<CapabilityView>("/api/capabilities?includeUiSchema=true", {
+export function getPublishedCapability(id: string): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${id}/published?includeUiSchema=true`);
+}
+
+export function createCapability(payload: ScriptDefinition): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>("/api/scripts?includeUiSchema=true", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
   });
 }
 
-export function updateCapability(id: string, payload: ScriptDefinition): Promise<CapabilityView> {
-  return request<CapabilityView>(`/api/capabilities/${id}?includeUiSchema=true`, {
+export function updateCapability(id: string, payload: ScriptDefinition): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${id}?includeUiSchema=true`, {
     method: "PUT",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
@@ -26,34 +30,34 @@ export function updateCapability(id: string, payload: ScriptDefinition): Promise
 }
 
 export function deleteCapability(id: string): Promise<void> {
-  return request<void>(`/api/capabilities/${id}`, {
+  return request<void>(`/api/scripts/${id}`, {
     method: "DELETE"
   });
 }
 
 export function validateCapability(id: string): Promise<void> {
-  return request<void>(`/api/capabilities/${id}/validate`, {
+  return request<void>(`/api/scripts/${id}/validate`, {
     method: "POST"
   });
 }
 
-export function publishCapability(id: string): Promise<CapabilityView> {
-  return request<CapabilityView>(`/api/capabilities/${id}/publish?includeUiSchema=true`, {
+export function publishCapability(id: string): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${id}/publish?includeUiSchema=true`, {
     method: "POST"
   });
 }
 
-export function discardCapabilityDraft(id: string): Promise<CapabilityView> {
-  return request<CapabilityView>(`/api/capabilities/${id}/discard-draft?includeUiSchema=true`, {
+export function discardCapabilityDraft(id: string): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${id}/discard-draft?includeUiSchema=true`, {
     method: "POST"
   });
 }
 
 export function executeCapability(
   id: string,
-  payload: Omit<ExecuteRequest, "scriptId"> & { draft?: boolean }
+  payload: Omit<ExecuteRequest, "scriptId">
 ): Promise<ExecutionResponse> {
-  return request<ExecutionResponse>(`/api/capabilities/${id}/execute`, {
+  return request<ExecutionResponse>(`/api/scripts/${id}/execute`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)

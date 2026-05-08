@@ -99,7 +99,7 @@ function buildScriptFileCliExample(context: ScriptSkillExampleContext, command?:
 
 function buildScriptFileHttpExample(context: ScriptSkillExampleContext, command?: string): string {
   const requestPath = `/tmp/${slugify(context.scriptId)}-request.json`;
-  const url = extractQuotedUrl(command) ?? `/api/scripts/${context.scriptId}/published/execute`;
+  const url = extractQuotedUrl(command) ?? `/api/scripts/${context.scriptId}/execute`;
   const sanitized = sanitizeCommandForSkill(command ?? "");
   const hasAuth = sanitized.includes("Authorization: Bearer <token>");
   const body = {

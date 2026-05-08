@@ -66,7 +66,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，使用 JSON 格式，通过 Beare
 | `POST` | `/api/scripts/{id}/validate` | 校验语法 | - |
 | `POST` | `/api/scripts/{id}/publish` | 发布草稿 | - |
 | `POST` | `/api/scripts/{id}/discard-draft` | 丢弃草稿 | - |
-| `POST` | `/api/scripts/{id}/published/execute` | 执行已发布脚本 | `ExecuteRequest` |
+| `POST` | `/api/scripts/{id}/execute` | 执行脚本，默认已发布；支持 `draft` | `ExecuteRequest` |
 | `POST` | `/api/scripts/{id}/fork` | Fork 脚本 | `RepositoryForkRequest` |
 
 ### ExecuteRequest
@@ -134,14 +134,13 @@ ActionDock 的 REST API 以 `/api` 为前缀，使用 JSON 格式，通过 Beare
 | `AI_TOOL` | AI Agent 调用 |
 | `EVENT` | 事件触发 |
 
-## 统一能力入口
+## 统一脚本执行入口
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/capabilities` | 能力列表 |
-| `POST` | `/api/capabilities/{id}/execute` | 执行能力（支持 draft 参数） |
+| `POST` | `/api/scripts/{id}/execute` | 执行脚本，默认已发布；支持 `draft` 参数 |
 
-通过能力入口执行时，可以在请求中添加 `"draft": true` 执行草稿版本。
+通过该入口执行时，可以在请求中添加 `"draft": true` 执行草稿版本。
 
 ## 执行记录 API
 
@@ -304,8 +303,8 @@ ActionDock 的 REST API 以 `/api` 为前缀，使用 JSON 格式，通过 Beare
 | 入口 | 执行版本 |
 |------|----------|
 | 编辑器「执行」标签页 | 草稿 |
-| API `POST /api/scripts/{id}/published/execute` | 已发布 |
-| API `POST /api/capabilities/{id}/execute` + `draft: true` | 草稿 |
+| API `POST /api/scripts/{id}/execute` | 已发布 |
+| API `POST /api/scripts/{id}/execute` + `draft: true` | 草稿 |
 | 定时任务 | 已发布 |
 | 事件触发 | 已发布 |
 | CLI `actiondock script run` | 已发布 |

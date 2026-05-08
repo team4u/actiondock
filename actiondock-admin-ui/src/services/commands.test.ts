@@ -55,7 +55,7 @@ describe("HTTP command helpers", () => {
   -H 'Content-Type: application/json' \\
   -H 'Authorization: Bearer secret-token' \\
   -d '{"input":{"name":"Alice"},"mode":"ASYNC"}' \\
-  'http://localhost:8080/api/scripts/hello-groovy/published/execute'`);
+  'http://localhost:8080/api/scripts/hello-groovy/execute'`);
   });
 
   it("omits sync mode in HTTP execute commands because it is the server default", () => {
@@ -69,7 +69,7 @@ describe("HTTP command helpers", () => {
     ).toBe(`curl -X POST \\
   -H 'Content-Type: application/json' \\
   -d '{"input":{"message":"hi"}}' \\
-  'http://localhost:8080/api/scripts/hello-groovy/published/execute'`);
+  'http://localhost:8080/api/scripts/hello-groovy/execute'`);
 
     expect(
       buildExecutePowerShellCommand({
@@ -87,7 +87,7 @@ describe("HTTP command helpers", () => {
 '@
 
 $response = Invoke-WebRequest \`
-  -Uri 'http://localhost:8080/api/scripts/hello-groovy/published/execute' \`
+  -Uri 'http://localhost:8080/api/scripts/hello-groovy/execute' \`
   -Method Post \`
   -UseBasicParsing \`
   -ContentType 'application/json; charset=utf-8' \`
@@ -224,7 +224,7 @@ $json | ConvertFrom-Json | ConvertTo-Json -Depth 100`);
 '@
 
 $response = Invoke-WebRequest \`
-  -Uri 'http://localhost:8080/api/scripts/hello-groovy/published/execute' \`
+  -Uri 'http://localhost:8080/api/scripts/hello-groovy/execute' \`
   -Method Post \`
   -UseBasicParsing \`
   -ContentType 'application/json; charset=utf-8' \`
