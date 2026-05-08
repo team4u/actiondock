@@ -27,6 +27,7 @@
     "clean:dist": "node ./scripts/clean-dist.mjs",
     "clean": "node ./scripts/clean.mjs",
     "dev": "NODE_OPTIONS='--import tsx' node ./bin/dev.js",
+    "pretest": "npm run build",
     "test": "vitest run",
     "build:runtime": "node ./scripts/build-runtime.mjs",
     "jdeploy:package": "jdeploy package && node ./scripts/patch-jdeploy-bundle.mjs",

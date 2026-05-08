@@ -113,6 +113,26 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
+    async listExecutionPresets(scriptId) {
+        return this.requestJson(`/api/scripts/${scriptId}/presets`);
+    }
+    async createExecutionPreset(scriptId, payload) {
+        return this.requestJson(`/api/scripts/${scriptId}/presets`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async updateExecutionPreset(scriptId, presetId, payload) {
+        return this.requestJson(`/api/scripts/${scriptId}/presets/${presetId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+        });
+    }
+    async deleteExecutionPreset(scriptId, presetId) {
+        await this.requestJson(`/api/scripts/${scriptId}/presets/${presetId}`, {
+            method: "DELETE"
+        });
+    }
     async listEventSources() {
         return this.requestJson("/api/event-sources");
     }
@@ -238,6 +258,55 @@ export class ActionDockClient {
     async listRepositories() {
         return this.requestJson("/api/repositories");
     }
+    async createRepository(payload) {
+        return this.requestJson("/api/repositories", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async updateRepository(repositoryId, payload) {
+        return this.requestJson(`/api/repositories/${repositoryId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+        });
+    }
+    async deleteRepository(repositoryId) {
+        await this.requestJson(`/api/repositories/${repositoryId}`, {
+            method: "DELETE"
+        });
+    }
+    async syncRepository(repositoryId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/sync`, {
+            method: "POST"
+        });
+    }
+    async listRepositoryTools(repositoryId) {
+        if (repositoryId) {
+            return this.requestJson(`/api/repositories/${repositoryId}/tools`);
+        }
+        return this.requestJson("/api/repositories/tools");
+    }
+    async getRepositoryTool(repositoryId, toolId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}`);
+    }
+    async installRepositoryTool(repositoryId, toolId, payload) {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/install`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async updateRepositoryTool(repositoryId, toolId, payload) {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/update`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async developRepositoryTool(repositoryId, toolId, scriptId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/develop`, {
+            method: "POST",
+            body: JSON.stringify(scriptId ? { scriptId } : {})
+        });
+    }
     async listRepositoryEventSources() {
         return this.requestJson("/api/repositories/event-sources");
     }
@@ -292,6 +361,12 @@ export class ActionDockClient {
     async getPluginConfig(pluginId) {
         return this.requestJson(`/api/plugins/${pluginId}/config`);
     }
+    async savePluginConfig(pluginId, config) {
+        return this.requestJson(`/api/plugins/${pluginId}/config`, {
+            method: "PUT",
+            body: JSON.stringify({ config })
+        });
+    }
     async invokePlugin(pluginId, action, payload) {
         return this.requestJson(`/api/plugins/${pluginId}/actions/${action}/invoke`, {
             method: "POST",
@@ -299,23 +374,94 @@ export class ActionDockClient {
         });
     }
     async installPlugin(jarPath) {
-        const filename = path.basename(jarPath);
-        const fileBytes = fs.readFileSync(jarPath);
-        const boundary = `----actiondock-cli-${Date.now().toString(16)}`;
-        const body = Buffer.concat([
-            Buffer.from(`--${boundary}\r\n`
-                + `Content-Disposition: form-data; name="file"; filename="${escapeMultipartFilename(filename)}"\r\n`
-                + "Content-Type: application/java-archive\r\n\r\n", "utf8"),
-            fileBytes,
-            Buffer.from(`\r\n--${boundary}--\r\n`, "utf8")
-        ]);
-        return this.requestJson("/api/plugins/install", {
+        return this.uploadPluginJar("/api/plugins/install", jarPath);
+    }
+    async upgradePlugin(pluginId, jarPath) {
+        return this.uploadPluginJar(`/api/plugins/${pluginId}/upgrade`, jarPath);
+    }
+    async startPlugin(pluginId) {
+        return this.requestJson(`/api/plugins/${pluginId}/start`, {
+            method: "POST"
+        });
+    }
+    async stopPlugin(pluginId) {
+        return this.requestJson(`/api/plugins/${pluginId}/stop`, {
+            method: "POST"
+        });
+    }
+    async uninstallPlugin(pluginId, force = false) {
+        await this.requestJson(`/api/plugins/${pluginId}?${new URLSearchParams({ force: String(force) }).toString()}`, {
+            method: "DELETE"
+        });
+    }
+    async downloadPlugin(pluginId) {
+        const response = await this.requestBinary(`/api/plugins/${pluginId}/download`);
+        return {
+            filename: parseContentDispositionFilename(response.headers["content-disposition"]) ?? `${pluginId}.jar`,
+            content: response.body
+        };
+    }
+    async listConfigValues() {
+        return this.requestJson("/api/config-values");
+    }
+    async getConfigValue(key) {
+        return this.requestJson(`/api/config-values/${encodeURIComponent(key)}`);
+    }
+    async createConfigValue(payload) {
+        return this.requestJson("/api/config-values", {
             method: "POST",
-            headers: {
-                "Content-Type": `multipart/form-data; boundary=${boundary}`,
-                "Content-Length": String(body.byteLength)
-            },
-            body
+            body: JSON.stringify(payload)
+        });
+    }
+    async updateConfigValue(key, payload) {
+        return this.requestJson(`/api/config-values/${encodeURIComponent(key)}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+        });
+    }
+    async copyConfigValueLocalOverride(key) {
+        return this.requestJson(`/api/config-values/${encodeURIComponent(key)}/copy-local-override`, {
+            method: "POST"
+        });
+    }
+    async restoreConfigValueRepositoryDefault(key) {
+        return this.requestJson(`/api/config-values/${encodeURIComponent(key)}/restore-repository-default`, {
+            method: "POST"
+        });
+    }
+    async deleteConfigValue(key) {
+        await this.requestJson(`/api/config-values/${encodeURIComponent(key)}`, {
+            method: "DELETE"
+        });
+    }
+    async listAccessTokens() {
+        return this.requestJson("/api/access-tokens");
+    }
+    async createAccessToken(name) {
+        return this.requestJson("/api/access-tokens", {
+            method: "POST",
+            body: JSON.stringify({ name })
+        });
+    }
+    async renameAccessToken(tokenId, name) {
+        return this.requestJson(`/api/access-tokens/${tokenId}`, {
+            method: "PUT",
+            body: JSON.stringify({ name })
+        });
+    }
+    async enableAccessToken(tokenId) {
+        return this.requestJson(`/api/access-tokens/${tokenId}/enable`, {
+            method: "POST"
+        });
+    }
+    async disableAccessToken(tokenId) {
+        return this.requestJson(`/api/access-tokens/${tokenId}/disable`, {
+            method: "POST"
+        });
+    }
+    async deleteAccessToken(tokenId) {
+        await this.requestJson(`/api/access-tokens/${tokenId}`, {
+            method: "DELETE"
         });
     }
     async putSharedState(payload) {
@@ -396,6 +542,51 @@ export class ActionDockClient {
         }
         return parsed.data;
     }
+    async requestBinary(pathname, init) {
+        const url = new URL(`${this.options.serverUrl}${pathname}`);
+        const method = init?.method ?? "GET";
+        const headers = this.buildHeaders(init?.headers, init?.body);
+        const body = init?.body;
+        const transport = url.protocol === "https:" ? https : http;
+        const payload = await new Promise((resolve, reject) => {
+            const request = transport.request(url, { method, headers }, (response) => {
+                const chunks = [];
+                response.on("data", (chunk) => {
+                    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                });
+                response.on("end", () => {
+                    resolve({
+                        statusCode: response.statusCode ?? 500,
+                        body: Buffer.concat(chunks),
+                        headers: response.headers
+                    });
+                });
+            });
+            request.on("error", (error) => {
+                reject(error);
+            });
+            if (body) {
+                request.write(body);
+            }
+            request.end();
+        }).catch((error) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            throw new ActionDockCliError(`请求 ActionDock 服务失败: ${detail}`, 4);
+        });
+        if (payload.statusCode < 200 || payload.statusCode >= 300) {
+            const text = payload.body.toString("utf8");
+            const parsed = parseMaybeJson(text);
+            const message = isRecord(parsed) && typeof parsed.msg === "string"
+                ? parsed.msg
+                : `请求失败: HTTP ${payload.statusCode}`;
+            const exitCode = payload.statusCode === 401 || payload.statusCode === 403 ? 3 : 5;
+            throw new ActionDockCliError(message, exitCode, parsed ?? text);
+        }
+        return {
+            body: payload.body,
+            headers: payload.headers
+        };
+    }
     buildHeaders(headers, body) {
         const result = new Headers(headers);
         if (!result.has("Accept")) {
@@ -410,6 +601,37 @@ export class ActionDockClient {
         result.set("Connection", "close");
         return Object.fromEntries(result.entries());
     }
+    uploadPluginJar(pathname, jarPath) {
+        const { body, boundary } = buildMultipartFileBody(jarPath);
+        return this.requestJson(pathname, {
+            method: "POST",
+            headers: {
+                "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                "Content-Length": String(body.byteLength)
+            },
+            body
+        });
+    }
+}
+function parseContentDispositionFilename(header) {
+    const value = Array.isArray(header) ? header[0] : header;
+    const match = value?.match(/filename="([^"]+)"/i) ?? value?.match(/filename=([^;]+)/i);
+    return match?.[1]?.trim();
+}
+function buildMultipartFileBody(jarPath) {
+    const filename = path.basename(jarPath);
+    const fileBytes = fs.readFileSync(jarPath);
+    const boundary = `----actiondock-cli-${Date.now().toString(16)}`;
+    return {
+        boundary,
+        body: Buffer.concat([
+            Buffer.from(`--${boundary}\r\n`
+                + `Content-Disposition: form-data; name="file"; filename="${escapeMultipartFilename(filename)}"\r\n`
+                + "Content-Type: application/java-archive\r\n\r\n", "utf8"),
+            fileBytes,
+            Buffer.from(`\r\n--${boundary}--\r\n`, "utf8")
+        ])
+    };
 }
 function parseMaybeJson(text) {
     if (!text.trim()) {

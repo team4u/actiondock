@@ -166,6 +166,36 @@ export function renderScheduleDetail(item) {
     }
     return lines.join("\n");
 }
+export function renderExecutionPresetList(items) {
+    if (items.length === 0) {
+        return "没有执行参数预设。";
+    }
+    return items
+        .map((item) => {
+        const name = item.name ? ` ${item.name}` : "";
+        const managed = item.managed ? " managed" : "";
+        return `${item.id}${name}${managed}`;
+    })
+        .join("\n");
+}
+export function renderExecutionPresetDetail(item) {
+    const lines = [
+        `Preset: ${item.id}`,
+        `Script: ${item.scriptId}`,
+        `Name: ${item.name}`,
+        `Managed: ${item.managed ? "yes" : "no"}`,
+        `Editable: ${item.editable === false ? "no" : "yes"}`,
+        "Input:",
+        indent(formatValue(item.input ?? {}))
+    ];
+    if (item.repositoryId) {
+        lines.push(`Repository: ${item.repositoryId}`);
+    }
+    if (item.repositoryPackageId) {
+        lines.push(`Package: ${item.repositoryPackageId}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
+    }
+    return lines.join("\n");
+}
 export function renderEventSourceList(items) {
     if (items.length === 0) {
         return "没有事件源。";
@@ -257,6 +287,96 @@ export function renderRepositoryEventSourceDetail(item) {
     }
     if (item.triggerTemplate.length > 0) {
         lines.push(`TriggerTemplates: ${item.triggerTemplate.length}`);
+    }
+    return lines.join("\n");
+}
+export function renderRepositoryList(items) {
+    if (items.length === 0) {
+        return "没有仓库。";
+    }
+    return items
+        .map((item) => {
+        const enabled = item.enabled ? " enabled" : " disabled";
+        const usage = item.usage ? ` ${item.usage}` : "";
+        return `${item.id} ${item.name}${enabled}${usage} ${item.type} ${item.url}`;
+    })
+        .join("\n");
+}
+export function renderRepositoryDetail(item) {
+    const lines = [
+        `Repository: ${item.id}`,
+        `Name: ${item.name}`,
+        `Type: ${item.type}`,
+        `Url: ${item.url}`,
+        `Enabled: ${item.enabled ? "yes" : "no"}`,
+        `TrustLevel: ${item.trustLevel ?? "-"}`,
+        `Usage: ${item.usage ?? "-"}`
+    ];
+    if (item.branch) {
+        lines.push(`Branch: ${item.branch}`);
+    }
+    if (item.description) {
+        lines.push(`Description: ${item.description}`);
+    }
+    if (item.lastSyncedAt) {
+        lines.push(`LastSyncedAt: ${item.lastSyncedAt}`);
+    }
+    return lines.join("\n");
+}
+export function renderRepositoryToolList(items) {
+    if (items.length === 0) {
+        return "没有仓库工具。";
+    }
+    return items
+        .map((item) => {
+        const installed = item.installed ? ` installed=${item.installedVersion ?? item.version}` : " not-installed";
+        const usage = item.repositoryUsage ? ` usage=${item.repositoryUsage}` : "";
+        const type = item.type ? ` ${item.type}` : "";
+        return `${item.repositoryId}/${item.toolId} ${item.displayName}@${item.version}${type}${installed}${usage}`;
+    })
+        .join("\n");
+}
+export function renderRepositoryToolDetail(item) {
+    const descriptor = item.descriptor;
+    const lines = [
+        `RepositoryTool: ${descriptor.repositoryId}/${descriptor.toolId}`,
+        `InstalledScript: ${descriptor.installedScriptId ?? "-"}`,
+        `Name: ${descriptor.displayName}`,
+        `Version: ${descriptor.version}`,
+        `Type: ${descriptor.type ?? "-"}`,
+        `Packaging: ${descriptor.packaging ?? "-"}`,
+        `Installed: ${descriptor.installed ? `yes${descriptor.installedVersion ? ` (${descriptor.installedVersion})` : ""}` : "no"}`,
+        `Trusted: ${descriptor.trusted ? "yes" : "no"}`
+    ];
+    if (descriptor.owner) {
+        lines.push(`Owner: ${descriptor.owner}`);
+    }
+    if (descriptor.description) {
+        lines.push(`Description: ${descriptor.description}`);
+    }
+    if (descriptor.scriptDependencies?.length > 0) {
+        lines.push(`ScriptDependencies: ${descriptor.scriptDependencies.length}`);
+    }
+    if (descriptor.pluginDependencies && descriptor.pluginDependencies.length > 0) {
+        lines.push(`PluginDependencies: ${descriptor.pluginDependencies.length}`);
+    }
+    if (item.configTemplate.length > 0) {
+        lines.push(`ConfigTemplates: ${item.configTemplate.length}`);
+    }
+    if (item.scheduleTemplate.length > 0) {
+        lines.push(`ScheduleTemplates: ${item.scheduleTemplate.length}`);
+    }
+    return lines.join("\n");
+}
+export function renderRepositoryToolInstallation(item) {
+    const lines = [
+        `RepositoryTool: ${item.repositoryId}/${item.toolId}`,
+        `Script: ${item.scriptId ?? "-"}`,
+        `Name: ${item.name ?? "-"}`,
+        `Version: ${item.version}`
+    ];
+    if (item.latestVersion) {
+        lines.push(`LatestVersion: ${item.latestVersion}`);
     }
     return lines.join("\n");
 }
@@ -533,6 +653,68 @@ export function renderPluginConfig(config) {
         "Config:",
         indent(formatValue(config.config ?? {}))
     ].join("\n");
+}
+export function renderConfigValueList(items) {
+    if (items.length === 0) {
+        return "没有配置值。";
+    }
+    return items
+        .map((item) => {
+        const secret = item.secret ? " secret" : "";
+        const managed = item.managed ? " managed" : "";
+        const overridden = item.overridden ? " overridden" : "";
+        const value = item.valueMasked ?? (item.hasValue ? "<set>" : "<empty>");
+        return `${item.key} ${value}${secret}${managed}${overridden}`;
+    })
+        .join("\n");
+}
+export function renderConfigValueDetail(item) {
+    const lines = [
+        `ConfigValue: ${item.key}`,
+        `Value: ${item.valueMasked ?? item.value ?? (item.hasValue ? "<set>" : "<empty>")}`,
+        `Secret: ${item.secret ? "yes" : "no"}`,
+        `Managed: ${item.managed ? "yes" : "no"}`,
+        `Overridden: ${item.overridden ? "yes" : "no"}`,
+        `PublishMode: ${item.publishMode ?? "-"}`
+    ];
+    if (item.description) {
+        lines.push(`Description: ${item.description}`);
+    }
+    if (item.repositoryId) {
+        lines.push(`Repository: ${item.repositoryId}${item.repositoryToolId ? `/${item.repositoryToolId}` : ""}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
+    }
+    if ("impactedScripts" in item && item.impactedScripts) {
+        lines.push(`ImpactedScripts: ${item.impactedScripts.length}`);
+    }
+    return lines.join("\n");
+}
+export function renderAccessTokenList(items) {
+    if (items.length === 0) {
+        return "没有访问令牌。";
+    }
+    return items
+        .map((item) => {
+        const name = item.name ? ` ${item.name}` : "";
+        const enabled = item.enabled ? " enabled" : " disabled";
+        const preview = item.tokenPreview ? ` ${item.tokenPreview}` : "";
+        return `${item.id}${name}${enabled}${preview}`;
+    })
+        .join("\n");
+}
+export function renderAccessTokenDetail(item) {
+    const lines = [
+        `AccessToken: ${item.id}`,
+        `Name: ${item.name ?? "-"}`,
+        `Enabled: ${item.enabled ? "yes" : "no"}`,
+        `Preview: ${item.tokenPreview ?? "-"}`
+    ];
+    if (item.tokenValue) {
+        lines.push(`TokenValue: ${item.tokenValue}`);
+    }
+    if (item.lastUsedAt) {
+        lines.push(`LastUsedAt: ${item.lastUsedAt}`);
+    }
+    return lines.join("\n");
 }
 export function renderSharedStateNamespaces(items) {
     if (items.length === 0) {
