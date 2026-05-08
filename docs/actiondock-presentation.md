@@ -118,43 +118,6 @@ ActionDock Script：generate-report(inputSchema, outputSchema, state, log, plugi
 
 ---
 
-## Skill + CLI：让大模型不只会说，还能直接做
-
-### Skill 给模型操作约定，CLI 给模型执行接口
-
-```text
-Skill
-  └── 告诉模型：该创建什么脚本、如何补 Schema、该走哪些命令
-       │
-       ▼
-ActionDock CLI
-  └── create -> patch -> validate -> publish -> run
-```
-
-### 这件事为什么重要
-
-- CLI 不是补充入口，而是完整自动化接口
-- 模型不只是生成一段代码，还能继续驱动后续校验、发布和执行
-- 人主要负责目标、边界和验收，机械性步骤可以交给模型
-
-### 一个最小闭环
-
-```bash
-actiondock script create ...
-actiondock script patch ...
-actiondock script validate ...
-actiondock script publish ...
-actiondock script run ...
-```
-
-### 当前产品已经具备的支撑
-
-- 脚本编辑器可生成 `Skill 示例`
-- Skill 示例可进一步发布成 Skill 包
-- CLI 已覆盖脚本从创建到发布的完整链路
-
----
-
 ## 它不替代你写脚本，它只是给脚本一个统一外壳
 
 ### ActionDock 不做什么
@@ -304,6 +267,42 @@ Agent 推理 → 决定调用脚本工具 → plugins.invoke("actiondock-ai", "a
 
 ---
 
+## 脚本能力快速提供给外部大模型
+
+### 过去的常见做法
+
+```text
+写脚本
+  └── 手动整理调用方式
+       └── 手写 Skill / Prompt
+            └── 反复调试给外部模型用
+```
+
+### ActionDock 里的更直接路径
+
+```text
+写脚本
+  └── 命令页自动生成 Skill 示例
+       └── 进入 Skill 发布 / 安装流程
+            └── 外部大模型直接复用
+```
+
+### `Skill 示例` 里实际带什么
+
+- `scriptId`、执行模式、当前输入来源
+- 当前页面对应的 CLI 调用命令
+- 可回退的 HTTP 调用命令
+- `inputSchema` / `outputSchema`
+- 当前输入示例和复杂参数传递约定
+
+### 这页要强调的结论
+
+- 脚本不只是平台内部 Agent 的工具
+- 脚本也可以很快包装成外部大模型可直接使用的 Skill
+- 重点不是多一份文档，而是少一轮手写 Skill 和手工对齐命令
+
+---
+
 ## Demo 应该证明什么
 
 ### 不演“大而全”，只演一个最小闭环
@@ -312,30 +311,16 @@ Agent 推理 → 决定调用脚本工具 → plugins.invoke("actiondock-ai", "a
 
 1. 选择一个真实的本地脚本
 2. 补一个简单 `inputSchema`
-3. 在管理台运行一次
-4. 用 CLI 再运行一次
-5. 发布成稳定版本
-6. 展示它如何被其他脚本或 Agent 调用
-
-### 如果要讲“模型自动开发脚本”，可以用这个例子
-
-```text
-目标：做一个日报汇总脚本
-  │
-  ├── 模型根据 Skill 理解需要哪些 CLI 步骤
-  ├── 生成脚本源码和 Schema
-  ├── 调用 actiondock script create
-  ├── 调用 actiondock script validate
-  ├── 调用 actiondock script publish
-  └── 调用 actiondock script run 验证结果
-```
+3. 在命令页展示执行命令
+4. 展示 `Skill 示例`
+5. 说明它已经能给外部大模型直接使用
+6. 可选展示进入 Skill 发布流程
 
 ### Demo 的核心结论
 
 - 原本只是本地代码
-- 现在变成了别人也能直接调用的工具
-- 也变成了 Skill / Agent 可以稳定消费的能力
-- 在合适约束下，模型可以把从创建到发布的大部分步骤走完
+- 现在变成了别人和外部大模型都能直接调用的工具
+- `Skill 示例` 复用了真实脚本命令、Schema 和输入上下文
 - 不需要重写业务逻辑，只是补齐了“工具外壳”
 
 ---
@@ -668,7 +653,7 @@ actiondock server     # 启动服务
 
 - 覆盖脚本创建、修改、校验、发布、执行
 - 覆盖插件、仓库、事件、状态、配置、服务管理
-- 适合人工使用，也适合被 Skill / 大模型直接驱动
+- 适合人工使用，也为后面的模型辅助开发提供接口面
 
 ### Schema 驱动的 CLI 参数
 
@@ -687,6 +672,12 @@ actiondock script publish my-script
 actiondock script run my-script --name alice --json
 ```
 
+### 这一页先讲到哪里为止
+
+- 先强调 CLI 模块完整，覆盖脚本生命周期
+- 先强调 Schema 会直接驱动命令参数
+- 先不要在这里展开“模型怎么写脚本”，把它留到下一页
+
 ### 命令覆盖
 
 | 类别 | 命令 |
@@ -698,6 +689,37 @@ actiondock script run my-script --name alice --json
 | 状态 | `state get/put/cas/list/delete` |
 | 配置 | `config set/show/clear` |
 | 服务 | `server` `desktop` `service install/start/stop` |
+
+---
+
+## 高级能力：让大模型辅助编写脚本
+
+### 这是进阶玩法，不是第一天必须使用
+
+- 前提是目标、边界、验收标准由人先给清楚
+- 模型负责补源码、补 Schema、跑 CLI 流程
+- 人负责审核结果，而不是把高风险动作全放开
+
+### 它依赖的不是“魔法”，而是现成接口
+
+```text
+目标描述
+  └── 模型生成脚本源码和 Schema
+       └── 通过 CLI 执行 create / patch / validate / publish / run
+            └── 人确认结果是否满足预期
+```
+
+### 这件事为什么成立
+
+- CLI 已覆盖脚本创建到发布的关键链路
+- Schema 可以让模型更稳定地补输入输出契约
+- Skill 可以补充步骤、约束和命令使用约定
+
+### 这页的定位
+
+- 这是高级自动化开发能力
+- 不是 adoption 主线的第一亮点
+- 它建立在前面已经讲过的 Schema、Skill 示例和 CLI 之上
 
 ---
 
@@ -760,9 +782,9 @@ Python 引擎通过 stdin/stderr 桥接协议实现与 Java 主进程的通信�
 │                                              │
 │   稳定快照机制  —  草稿与可复用版本分离        │
 │                                              │
-│   AI 原生集成  —  Skill/Agent 有稳定工具可用   │
+│   快速给模型使用  —  脚本自动生成 Skill 示例    │
 │                                              │
-│   完整 CLI 模块  —  大模型可驱动脚本全流程     │
+│   模型辅助开发  —  CLI 支撑创建、校验、发布     │
 │                                              │
 │   团队共享分发  —  仓库化发现、安装、更新      │
 │                                              │
