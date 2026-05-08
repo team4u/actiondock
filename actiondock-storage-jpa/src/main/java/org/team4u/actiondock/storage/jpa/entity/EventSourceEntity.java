@@ -51,6 +51,9 @@ public class EventSourceEntity {
     private String normalizationProcessorJson;
 
     @Lob
+    private String webhookResponseJson;
+
+    @Lob
     private String sampleContextJson;
 
     private LocalDateTime lastReceivedAt;
@@ -207,6 +210,14 @@ public class EventSourceEntity {
 
     public void setSampleContextJson(String sampleContextJson) {
         this.sampleContextJson = sampleContextJson;
+    }
+
+    public String getWebhookResponseJson() {
+        return webhookResponseJson;
+    }
+
+    public void setWebhookResponseJson(String webhookResponseJson) {
+        this.webhookResponseJson = webhookResponseJson;
     }
 
     public LocalDateTime getLastReceivedAt() {

@@ -342,6 +342,7 @@ class DevelopmentSyncService {
                 .setTransport(detail.eventSource().transport())
                 .setAuth(detail.eventSource().auth())
                 .setNormalizationProcessor(detail.eventSource().normalizationProcessor())
+                .setWebhookResponse(detail.eventSource().webhookResponse())
                 .setSampleContext(detail.eventSource().sampleContext())
                 .setEditable(true)
                 .setEnabled(existing == null ? true : existing.isEnabled())

@@ -3,17 +3,32 @@ package org.team4u.actiondock.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.ConfigValue;
+import org.team4u.actiondock.domain.model.EventDispatchRecord;
 import org.team4u.actiondock.domain.model.EventRecord;
 import org.team4u.actiondock.domain.model.EventRecordStatus;
 import org.team4u.actiondock.domain.model.EventSourceAuthConfig;
 import org.team4u.actiondock.domain.model.EventSourceAuthMode;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventSourceTransport;
+import org.team4u.actiondock.domain.model.EventSourceWebhookErrorResponse;
+import org.team4u.actiondock.domain.model.EventSourceWebhookResponse;
+import org.team4u.actiondock.domain.model.EventTriggerDispatchResult;
 import org.team4u.actiondock.domain.model.EventTrigger;
+import org.team4u.actiondock.domain.model.ExecutionLogEntry;
+import org.team4u.actiondock.domain.model.ExecutionRecord;
+import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
+import org.team4u.actiondock.domain.model.ProcessorDefinition;
+import org.team4u.actiondock.domain.model.ProcessorMode;
+import org.team4u.actiondock.domain.model.ProcessorResult;
+import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.TemplateProcessorConfig;
+import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.EventRecordRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.domain.port.ProcessorEngine;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -41,12 +56,14 @@ class EventIngestionApplicationServiceTest {
     private final ConfigValueApplicationService configValueApplicationService = new ConfigValueApplicationService(configValueRepository);
     private final EventSourceApplicationService eventSourceApplicationService = mock(EventSourceApplicationService.class);
     private final EventTriggerApplicationService eventTriggerApplicationService = mock(EventTriggerApplicationService.class);
+    private final ProcessorEngine processorEngine = mock(ProcessorEngine.class);
     private final EventIngestionApplicationService service = new EventIngestionApplicationService(
             eventSourceApplicationService,
             eventTriggerApplicationService,
             eventRecordRepository,
             configValueApplicationService,
-            new JacksonJsonCodec(new ObjectMapper())
+            new JacksonJsonCodec(new ObjectMapper()),
+            processorEngine
     );
 
     @Test
@@ -171,6 +188,100 @@ class EventIngestionApplicationServiceTest {
         assertThat(eventRecordRepository.savedRecords()).isEmpty();
     }
 
+    @Test
+    void webhookResponseUsesCustomPayloadWhenConfigured() {
+        EventSourceDefinition source = headerTokenSource()
+                .setWebhookResponse(new EventSourceWebhookResponse()
+                        .setSuccessStatus(202)
+                        .setSuccessHeaders(Map.of("X-Ack", "ok"))
+                        .setResponseProcessor(new ProcessorDefinition()
+                                .setMode(ProcessorMode.TEMPLATE)
+                                .setTemplate(new TemplateProcessorConfig().setTemplate(Map.of("accepted", true)))
+                                .setDescription("response"))
+                        .setErrorResponse(new EventSourceWebhookErrorResponse()
+                                .setHttpStatus(502)
+                                .setMsg("响应失败")
+                                .setData(Map.of("reason", "processor"))));
+        EventTrigger trigger = new EventTrigger()
+                .setId("trigger-1")
+                .setSourceId("source-1")
+                .setTargetScriptId("script-1")
+                .setSubmitMode(SubmitMode.SYNC);
+        when(eventSourceApplicationService.get("source-1")).thenReturn(source);
+        when(eventSourceApplicationService.normalize(eq(source), any(), anyString())).thenReturn(new NormalizedEvent()
+                .setSourceId("source-1")
+                .setSourceKey("source-key")
+                .setEventType("created")
+                .setEventId("evt-1")
+                .setBody(Map.of("hello", "world")));
+        when(eventTriggerApplicationService.list()).thenReturn(List.of(trigger));
+        when(eventTriggerApplicationService.dispatch(eq(source), eq(trigger), anyString(), any())).thenReturn(
+                new EventTriggerDispatchResult(
+                        new EventDispatchRecord()
+                                .setId("dispatch-1")
+                                .setEventId("event-1")
+                                .setSourceId("source-1")
+                                .setTriggerId("trigger-1")
+                                .setTargetScriptId("script-1")
+                                .setStatus(org.team4u.actiondock.domain.model.EventDispatchStatus.EXECUTION_CREATED),
+                        new ExecutionRecord()
+                                .setId("exec-1")
+                                .setScriptId("script-1")
+                                .setEventTriggerId("trigger-1")
+                                .setSubmitMode(SubmitMode.SYNC)
+                                .setStatus(ExecutionStatus.SUCCESS)
+                                .setOutput(Map.of("result", "ok"))
+                                .setLogs(List.of(new ExecutionLogEntry().setMessage("done"))),
+                        publishedScript("script-1")
+                )
+        );
+        when(processorEngine.process(any(), any())).thenReturn(new ProcessorResult()
+                .setSuccess(true)
+                .setOutput(Map.of("externalCode", "accepted")));
+
+        EventIngestionResult result = service.ingest("source-1", payload()
+                .setHeaders(Map.of("X-Webhook-Token", "topsecret"))
+                .setRawBody("{\"event\":\"created\"}")
+                .setContentType("application/json"));
+
+        assertThat(result.getWebhookResponse()).isNotNull();
+        assertThat(result.getWebhookResponse().getStatus()).isEqualTo(202);
+        assertThat(result.getWebhookResponse().getHeaders()).containsEntry("X-Ack", "ok");
+        assertThat(result.getWebhookResponse().getBody()).containsEntry("externalCode", "accepted");
+        assertThat(result.getSyncExecutions()).hasSize(1);
+    }
+
+    @Test
+    void webhookResponseFallsBackToConfiguredApiErrorWhenProcessorFails() {
+        EventSourceDefinition source = headerTokenSource()
+                .setWebhookResponse(new EventSourceWebhookResponse()
+                        .setResponseProcessor(new ProcessorDefinition()
+                                .setMode(ProcessorMode.TEMPLATE)
+                                .setTemplate(new TemplateProcessorConfig().setTemplate(Map.of("accepted", true))))
+                        .setErrorResponse(new EventSourceWebhookErrorResponse()
+                                .setHttpStatus(503)
+                                .setMsg("下游不可用")
+                                .setData(Map.of("code", "DOWNSTREAM_UNAVAILABLE"))));
+        when(eventSourceApplicationService.get("source-1")).thenReturn(source);
+        when(eventSourceApplicationService.normalize(eq(source), any(), anyString())).thenReturn(new NormalizedEvent()
+                .setSourceId("source-1")
+                .setSourceKey("source-key"));
+        when(eventTriggerApplicationService.list()).thenReturn(List.of());
+        when(processorEngine.process(any(), any())).thenReturn(new ProcessorResult()
+                .setSuccess(false)
+                .setErrorMessage("boom"));
+
+        EventIngestionResult result = service.ingest("source-1", payload()
+                .setHeaders(Map.of("X-Webhook-Token", "topsecret"))
+                .setRawBody("{\"event\":\"created\"}")
+                .setContentType("application/json"));
+
+        assertThat(result.getWebhookResponse()).isNotNull();
+        assertThat(result.getWebhookResponse().getStatus()).isEqualTo(503);
+        assertThat(result.getWebhookResponse().getBody()).containsEntry("status", 503);
+        assertThat(result.getWebhookResponse().getBody()).containsEntry("msg", "下游不可用");
+    }
+
     private EventSourceDefinition headerTokenSource() {
         configValueRepository.put("webhook.secret", "topsecret");
         return new EventSourceDefinition()
@@ -203,6 +314,16 @@ class EventIngestionApplicationServiceTest {
 
     private IncomingEventPayload payload() {
         return new IncomingEventPayload();
+    }
+
+    private ScriptDefinition publishedScript(String id) {
+        return new ScriptDefinition()
+                .setId(id)
+                .setName("script")
+                .setOutputSchema(Map.of("type", "object", "properties", Map.of("result", Map.of("type", "string"))))
+                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                        .setName("script")
+                        .setOutputSchema(Map.of("type", "object", "properties", Map.of("result", Map.of("type", "string")))));
     }
 
     private String sign(String payload, String secret) {

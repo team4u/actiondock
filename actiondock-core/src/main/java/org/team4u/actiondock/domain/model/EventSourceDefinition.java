@@ -19,6 +19,7 @@ public class EventSourceDefinition {
     private EventSourceTransport transport = new EventSourceTransport();
     private EventSourceAuthConfig auth;
     private ProcessorDefinition normalizationProcessor;
+    private EventSourceWebhookResponse webhookResponse;
     private Map<String, Object> sampleContext = new LinkedHashMap<>();
     private LocalDateTime lastReceivedAt;
     private LocalDateTime createdAt;
@@ -192,6 +193,15 @@ public class EventSourceDefinition {
 
     public EventSourceDefinition setNormalizationProcessor(ProcessorDefinition normalizationProcessor) {
         this.normalizationProcessor = normalizationProcessor;
+        return this;
+    }
+
+    public EventSourceWebhookResponse getWebhookResponse() {
+        return webhookResponse;
+    }
+
+    public EventSourceDefinition setWebhookResponse(EventSourceWebhookResponse webhookResponse) {
+        this.webhookResponse = webhookResponse;
         return this;
     }
 

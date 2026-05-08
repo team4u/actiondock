@@ -52,13 +52,15 @@ public class EventConfiguration {
                                                                              EventTriggerApplicationService eventTriggerApplicationService,
                                                                              EventRecordRepository eventRecordRepository,
                                                                              ConfigValueApplicationService configValueApplicationService,
-                                                                             JsonCodec jsonCodec) {
+                                                                             JsonCodec jsonCodec,
+                                                                             ProcessorEngine processorEngine) {
         return new EventIngestionApplicationService(
                 eventSourceApplicationService,
                 eventTriggerApplicationService,
                 eventRecordRepository,
                 configValueApplicationService,
-                jsonCodec
+                jsonCodec,
+                processorEngine
         );
     }
 

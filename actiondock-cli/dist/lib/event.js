@@ -103,6 +103,22 @@ export function mergeEventTriggerDefinition(base, overrides) {
 export function mergeDefinitionPatch(base, patch) {
     return deepMerge(base, patch);
 }
+export function applyProcessorFieldOverrides(merged, patch, processorFields) {
+    const next = cloneValue(merged);
+    for (const field of processorFields) {
+        const key = String(field);
+        if (!(key in patch)) {
+            continue;
+        }
+        const value = patch[key];
+        if (isProcessorLikeEmptyObject(value)) {
+            next[key] = {};
+            continue;
+        }
+        next[key] = cloneValue(value);
+    }
+    return next;
+}
 export function resolveEnabledFlag(params) {
     const { enabledFlag, disabledFlag, fallback } = params;
     if (enabledFlag && disabledFlag) {
@@ -130,6 +146,9 @@ function coerceRecord(value, label) {
         throw new ActionDockCliError(`payload.${label} 必须是 JSON 对象。`, 2);
     }
     return value;
+}
+function isProcessorLikeEmptyObject(value) {
+    return isRecord(value) && Object.keys(value).length === 0;
 }
 function deepMerge(target, source) {
     if (!isRecord(target) || !isRecord(source)) {

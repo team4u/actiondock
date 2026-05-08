@@ -61,6 +61,7 @@ actiondock script schema <target-script-id> --json
 - 第一版 transport 只支持 `HTTP_WEBHOOK`。
 - 鉴权模式包括：`NONE`、`HEADER_TOKEN`、`QUERY_TOKEN`、`HMAC_SHA256`。
 - `normalizationProcessor` 必须输出标准化事件对象。
+- `webhookResponse` 可选；如果填写，会覆盖默认 webhook 成功响应。
 
 ### Event Trigger
 
@@ -114,9 +115,73 @@ actiondock script schema <target-script-id> --json
         "subject": "$.body.issue.title"
       }
     }
+  },
+  "webhookResponse": {
+    "successStatus": 202,
+    "successHeaders": {
+      "X-Ack": "ok"
+    },
+    "responseProcessor": {
+      "mode": "TEMPLATE",
+      "template": {
+        "engine": "MUSTACHE",
+        "template": {
+          "accepted": true,
+          "eventId": "{{event.eventId}}"
+        }
+      }
+    },
+    "errorResponse": {
+      "httpStatus": 503,
+      "msg": "响应生成失败",
+      "data": {
+        "code": "WEBHOOK_RESPONSE_FAILED"
+      }
+    }
   }
 }
 ```
+
+说明：
+
+- 不写 `webhookResponse`：CLI 创建/更新后，服务端仍返回默认 `ApiResponse`
+- 写了 `webhookResponse`：CLI 会按定义文件原样透传给服务端
+- 如果 `responseProcessor` 要读取脚本输出，对应触发器必须是 `SYNC`
+
+### 事件源 webhookResponse 透传示例
+
+如果“投产触发器”本身已经是 `SYNC`，并且目标脚本输出就是外部想要的结果，那么可以在事件源里透传：
+
+```json
+{
+  "webhookResponse": {
+    "successStatus": 200,
+    "responseProcessor": {
+      "mode": "SCRIPT_REF",
+      "scriptRef": {
+        "scriptId": "webhook-response-pass-through",
+        "versionMode": "PUBLISHED"
+      }
+    }
+  }
+}
+```
+
+响应脚本示例：
+
+```groovy
+def executions = (input.variables?.executions ?: []) as List
+if (executions.isEmpty()) {
+  return [
+    success: false,
+    code: "NO_SYNC_RESULT"
+  ]
+}
+
+return (executions[0].output ?: [:]) as Map
+```
+
+也就是把第一个同步触发器输出原样回给外部系统。
 
 ### 事件触发器
 
@@ -242,6 +307,7 @@ actiondock execution get <execution-id> --json
 - 重复分发：看幂等 `key`
 - schema 校验失败：看 trigger 的 `inputProcessor` 输出和目标脚本 `inputSchema`
 - 没有事件进入：看 webhook 地址、鉴权配置、原始 body 格式
+- webhook 回包不对：看 `webhookResponse.responseProcessor`，以及 trigger 是否使用 `SYNC`
 
 ## 不要做什么
 

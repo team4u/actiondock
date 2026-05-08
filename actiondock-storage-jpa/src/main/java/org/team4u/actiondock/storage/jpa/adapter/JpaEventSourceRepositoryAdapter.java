@@ -68,6 +68,9 @@ public class JpaEventSourceRepositoryAdapter implements EventSourceRepository {
         entity.setNormalizationProcessorJson(source.getNormalizationProcessor() == null
                 ? null
                 : jsonCodec.write(source.getNormalizationProcessor()));
+        entity.setWebhookResponseJson(source.getWebhookResponse() == null
+                ? null
+                : jsonCodec.write(source.getWebhookResponse()));
         entity.setSampleContextJson(jsonCodec.write(source.getSampleContext()));
         entity.setLastReceivedAt(source.getLastReceivedAt());
         entity.setCreatedAt(source.getCreatedAt());
@@ -95,6 +98,7 @@ public class JpaEventSourceRepositoryAdapter implements EventSourceRepository {
                 .setTransport(read(entity.getTransportJson(), org.team4u.actiondock.domain.model.EventSourceTransport.class))
                 .setAuth(read(entity.getAuthJson(), org.team4u.actiondock.domain.model.EventSourceAuthConfig.class))
                 .setNormalizationProcessor(read(entity.getNormalizationProcessorJson(), org.team4u.actiondock.domain.model.ProcessorDefinition.class))
+                .setWebhookResponse(read(entity.getWebhookResponseJson(), org.team4u.actiondock.domain.model.EventSourceWebhookResponse.class))
                 .setSampleContext(jsonCodec.readMap(entity.getSampleContextJson()))
                 .setLastReceivedAt(entity.getLastReceivedAt())
                 .setCreatedAt(entity.getCreatedAt())

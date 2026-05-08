@@ -5,6 +5,7 @@ import org.team4u.actiondock.domain.model.EventDispatchStatus;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.EventTriggerScope;
+import org.team4u.actiondock.domain.model.EventTriggerDispatchResult;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionSubmissionMetadata;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
@@ -259,10 +260,10 @@ public class EventTriggerApplicationService {
         }
     }
 
-    public EventDispatchRecord dispatch(EventSourceDefinition source,
-                                        EventTrigger trigger,
-                                        String eventRecordId,
-                                        NormalizedEvent event) {
+    public EventTriggerDispatchResult dispatch(EventSourceDefinition source,
+                                               EventTrigger trigger,
+                                               String eventRecordId,
+                                               NormalizedEvent event) {
         ProcessorContext context = buildContext(source, trigger, event);
         EventDispatchRecord dispatch = new EventDispatchRecord()
                 .setId(UUID.randomUUID().toString())
@@ -273,12 +274,12 @@ public class EventTriggerApplicationService {
                 .setCreatedAt(LocalDateTime.now())
                 .setUpdatedAt(LocalDateTime.now());
 
-        EventDispatchRecord filterResult = applyFilter(trigger, context, dispatch);
+        EventTriggerDispatchResult filterResult = applyFilter(trigger, context, dispatch);
         if (filterResult != null) {
             return filterResult;
         }
 
-        EventDispatchRecord idempotencyResult = checkIdempotency(trigger, context, dispatch);
+        EventTriggerDispatchResult idempotencyResult = checkIdempotency(trigger, context, dispatch);
         if (idempotencyResult != null) {
             return idempotencyResult;
         }
@@ -298,7 +299,7 @@ public class EventTriggerApplicationService {
         return executeTargetScript(source, trigger, eventRecordId, dispatch, input.getOutput());
     }
 
-    private EventDispatchRecord applyFilter(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
+    private EventTriggerDispatchResult applyFilter(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
         ProcessorDefinition filterProcessor = ApplicationServiceSupport.normalizeProcessor(trigger.getFilterProcessor());
         if (filterProcessor == null) {
             dispatch.setFilterMatched(true);
@@ -313,7 +314,7 @@ public class EventTriggerApplicationService {
         return matched ? null : failDispatch(dispatch, EventDispatchStatus.FILTERED_OUT, null);
     }
 
-    private EventDispatchRecord checkIdempotency(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
+    private EventTriggerDispatchResult checkIdempotency(EventTrigger trigger, ProcessorContext context, EventDispatchRecord dispatch) {
         ProcessorDefinition idempotencyProcessor = ApplicationServiceSupport.normalizeProcessor(trigger.getIdempotencyProcessor());
         if (idempotencyProcessor == null) {
             return null;
@@ -330,11 +331,11 @@ public class EventTriggerApplicationService {
         return null;
     }
 
-    private EventDispatchRecord executeTargetScript(EventSourceDefinition source,
-                                                     EventTrigger trigger,
-                                                     String eventRecordId,
-                                                     EventDispatchRecord dispatch,
-                                                     Map<String, Object> mappedInput) {
+    private EventTriggerDispatchResult executeTargetScript(EventSourceDefinition source,
+                                                           EventTrigger trigger,
+                                                           String eventRecordId,
+                                                           EventDispatchRecord dispatch,
+                                                           Map<String, Object> mappedInput) {
         try {
             ScriptDefinition script = scriptRepository.findById(trigger.getTargetScriptId())
                     .orElseThrow(() -> new IllegalArgumentException("目标脚本不存在: " + trigger.getTargetScriptId()));
@@ -354,7 +355,7 @@ public class EventTriggerApplicationService {
                     .setUpdatedAt(LocalDateTime.now());
             updateTriggerAfterDispatch(trigger, eventRecordId, execution);
             eventTriggerRepository.save(trigger);
-            return eventDispatchRepository.save(dispatch);
+            return new EventTriggerDispatchResult(eventDispatchRepository.save(dispatch), execution, script);
         } catch (InvalidExecutionInputException exception) {
             return failDispatch(dispatch, EventDispatchStatus.VALIDATION_FAILED, exception.getMessage());
         } catch (RuntimeException exception) {
@@ -362,11 +363,11 @@ public class EventTriggerApplicationService {
         }
     }
 
-    private EventDispatchRecord failDispatch(EventDispatchRecord dispatch,
-                                              EventDispatchStatus status,
-                                              String errorMessage) {
+    private EventTriggerDispatchResult failDispatch(EventDispatchRecord dispatch,
+                                                    EventDispatchStatus status,
+                                                    String errorMessage) {
         dispatch.setStatus(status).setErrorMessage(errorMessage).setUpdatedAt(LocalDateTime.now());
-        return eventDispatchRepository.save(dispatch);
+        return new EventTriggerDispatchResult(eventDispatchRepository.save(dispatch), null, null);
     }
 
     private static ProcessorContext sampleContext(EventSourceDefinition source, EventTrigger trigger) {

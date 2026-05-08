@@ -750,6 +750,7 @@ public final class RepositoryCatalogTypes {
                                   EventSourceTransport transport,
                                   EventSourceAuthConfig auth,
                                   ProcessorDefinition normalizationProcessor,
+                                  org.team4u.actiondock.domain.model.EventSourceWebhookResponse webhookResponse,
                                   Map<String, Object> sampleContext,
                                   List<ScriptDependency> scriptDependencies,
                                   String configTemplatePath,

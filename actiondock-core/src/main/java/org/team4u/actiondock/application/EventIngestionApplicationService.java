@@ -6,10 +6,21 @@ import org.team4u.actiondock.domain.model.EventRecord;
 import org.team4u.actiondock.domain.model.EventRecordStatus;
 import org.team4u.actiondock.domain.model.EventSourceAuthConfig;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
+import org.team4u.actiondock.domain.model.EventSourceWebhookErrorResponse;
+import org.team4u.actiondock.domain.model.EventSourceWebhookResponse;
 import org.team4u.actiondock.domain.model.EventTrigger;
+import org.team4u.actiondock.domain.model.EventTriggerDispatchResult;
+import org.team4u.actiondock.domain.model.ExecutionRecord;
+import org.team4u.actiondock.domain.model.ProcessorContext;
+import org.team4u.actiondock.domain.model.ProcessorDefinition;
+import org.team4u.actiondock.domain.model.ProcessorResult;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
+import org.team4u.actiondock.domain.model.SchemaValueCopier;
+import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.EventWebhookResponsePayload;
 import org.team4u.actiondock.domain.port.EventRecordRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.domain.port.ProcessorEngine;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -18,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class EventIngestionApplicationService {
     private static final int MAX_HEADER_COUNT = 64;
@@ -30,17 +42,20 @@ public class EventIngestionApplicationService {
     private final EventRecordRepository eventRecordRepository;
     private final WebhookAuthenticator authenticator;
     private final JsonCodec jsonCodec;
+    private final ProcessorEngine processorEngine;
 
     public EventIngestionApplicationService(EventSourceApplicationService eventSourceApplicationService,
                                             EventTriggerApplicationService eventTriggerApplicationService,
                                             EventRecordRepository eventRecordRepository,
                                             ConfigValueApplicationService configValueApplicationService,
-                                            JsonCodec jsonCodec) {
+                                            JsonCodec jsonCodec,
+                                            ProcessorEngine processorEngine) {
         this.eventSourceApplicationService = eventSourceApplicationService;
         this.eventTriggerApplicationService = eventTriggerApplicationService;
         this.eventRecordRepository = eventRecordRepository;
         this.authenticator = new WebhookAuthenticator(configValueApplicationService);
         this.jsonCodec = jsonCodec;
+        this.processorEngine = processorEngine;
     }
 
     public EventIngestionResult ingest(String sourceId, IncomingEventPayload payload) {
@@ -95,20 +110,39 @@ public class EventIngestionApplicationService {
         if (triggers.isEmpty()) {
             record.setStatus(EventRecordStatus.IGNORED);
             record = eventRecordRepository.save(record);
-            return new EventIngestionResult().setEventRecord(record).setDispatches(List.of());
+            EventIngestionResult result = new EventIngestionResult()
+                    .setEventRecord(record)
+                    .setDispatches(List.of())
+                    .setSyncExecutions(List.of());
+            buildWebhookResponse(source, event, List.of(), List.of(), Map.of())
+                    .ifPresent(result::setWebhookResponse);
+            return result;
         }
 
         List<EventDispatchRecord> dispatches = new ArrayList<>();
+        List<ExecutionRecord> syncExecutions = new ArrayList<>();
+        Map<String, ScriptDefinition> scriptsByExecutionId = new LinkedHashMap<>();
         for (EventTrigger trigger : triggers) {
-            dispatches.add(eventTriggerApplicationService.dispatch(source, trigger, record.getId(), event));
+            EventTriggerDispatchResult result = eventTriggerApplicationService.dispatch(source, trigger, record.getId(), event);
+            dispatches.add(result.dispatch());
+            if (result.execution() != null && trigger.getSubmitMode() == org.team4u.actiondock.domain.model.SubmitMode.SYNC) {
+                syncExecutions.add(result.execution());
+                if (result.scriptDefinition() != null) {
+                    scriptsByExecutionId.put(result.execution().getId(), result.scriptDefinition());
+                }
+            }
         }
         record.setStatus(resolveRecordStatus(dispatches));
         record = eventRecordRepository.save(record);
 
         eventSourceApplicationService.markReceived(source.getId(), LocalDateTime.now());
-        return new EventIngestionResult()
+        EventIngestionResult result = new EventIngestionResult()
                 .setEventRecord(record)
-                .setDispatches(dispatches);
+                .setDispatches(dispatches)
+                .setSyncExecutions(syncExecutions);
+        buildWebhookResponse(source, event, dispatches, syncExecutions, scriptsByExecutionId)
+                .ifPresent(result::setWebhookResponse);
+        return result;
     }
 
     private static void validatePayloadShape(IncomingEventPayload payload) {
@@ -222,5 +256,124 @@ public class EventIngestionApplicationService {
             return EventRecordStatus.IGNORED;
         }
         return EventRecordStatus.FAILED;
+    }
+
+    private java.util.Optional<EventWebhookResponsePayload> buildWebhookResponse(EventSourceDefinition source,
+                                                                                 NormalizedEvent event,
+                                                                                 List<EventDispatchRecord> dispatches,
+                                                                                 List<ExecutionRecord> syncExecutions,
+                                                                                 Map<String, ScriptDefinition> scriptsByExecutionId) {
+        EventSourceWebhookResponse config = source.getWebhookResponse();
+        if (config == null || config.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        EventSourceWebhookErrorResponse errorResponse = config.getErrorResponse();
+        try {
+            ProcessorDefinition processor = ApplicationServiceSupport.normalizeProcessor(config.getResponseProcessor());
+            if (processor == null) {
+                return java.util.Optional.of(errorPayload(errorResponse));
+            }
+            ProcessorResult result = processorEngine.process(processor, buildResponseContext(source, event, dispatches, syncExecutions, scriptsByExecutionId));
+            Map<String, Object> output = result.getOutput();
+            if (!result.isSuccess() || output == null || output.isEmpty()) {
+                return java.util.Optional.of(errorPayload(errorResponse));
+            }
+            return java.util.Optional.of(new EventWebhookResponsePayload()
+                    .setStatus(config.getSuccessStatus())
+                    .setHeaders(toStringHeaders(config.getSuccessHeaders()))
+                    .setBody(output));
+        } catch (RuntimeException exception) {
+            return java.util.Optional.of(errorPayload(errorResponse));
+        }
+    }
+
+    private ProcessorContext buildResponseContext(EventSourceDefinition source,
+                                                  NormalizedEvent event,
+                                                  List<EventDispatchRecord> dispatches,
+                                                  List<ExecutionRecord> syncExecutions,
+                                                  Map<String, ScriptDefinition> scriptsByExecutionId) {
+        return new ProcessorContext()
+                .setEvent(ApplicationServiceSupport.toEventMap(event))
+                .setHeaders(event.getHeaders())
+                .setQuery(event.getQuery())
+                .setBody(event.getBody())
+                .setSource(ApplicationServiceSupport.toSourceMap(source))
+                .setVariables(Map.of(
+                        "dispatches", dispatches.stream().map(this::toDispatchValue).toList(),
+                        "executions", syncExecutions.stream()
+                .map(execution -> toExecutionValue(execution, scriptsByExecutionId.get(execution.getId())))
+                                .toList()
+                ));
+    }
+
+    private Map<String, Object> toDispatchValue(EventDispatchRecord dispatch) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("id", dispatch.getId());
+        value.put("eventId", dispatch.getEventId());
+        value.put("sourceId", dispatch.getSourceId());
+        value.put("triggerId", dispatch.getTriggerId());
+        value.put("targetScriptId", dispatch.getTargetScriptId());
+        value.put("status", dispatch.getStatus() == null ? null : dispatch.getStatus().name());
+        value.put("filterMatched", dispatch.getFilterMatched());
+        value.put("idempotencyKey", dispatch.getIdempotencyKey());
+        value.put("mappedInput", dispatch.getMappedInput());
+        value.put("executionId", dispatch.getExecutionId());
+        value.put("executionStatus", dispatch.getExecutionStatus() == null ? null : dispatch.getExecutionStatus().name());
+        value.put("errorMessage", dispatch.getErrorMessage());
+        value.put("createdAt", dispatch.getCreatedAt() == null ? null : dispatch.getCreatedAt().toString());
+        value.put("updatedAt", dispatch.getUpdatedAt() == null ? null : dispatch.getUpdatedAt().toString());
+        return value;
+    }
+
+    private Map<String, Object> toExecutionValue(ExecutionRecord execution, ScriptDefinition scriptDefinition) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("executionId", execution.getId());
+        value.put("triggerId", execution.getEventTriggerId());
+        value.put("scriptId", execution.getScriptId());
+        value.put("status", execution.getStatus() == null ? null : execution.getStatus().name());
+        value.put("submitMode", execution.getSubmitMode() == null ? null : execution.getSubmitMode().name());
+        value.put("input", execution.getInput());
+        value.put("output", scriptDefinition == null
+                ? new LinkedHashMap<>(execution.getOutput())
+                : ExecutionOutputProjector.project(execution.getOutput(), scriptDefinition.getOutputSchema()));
+        value.put("rawOutput", execution.getOutput());
+        value.put("errorMessage", execution.getErrorMessage());
+        value.put("logs", execution.getLogs().stream()
+                .map(log -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("level", log.getLevel() == null ? null : log.getLevel().name());
+                    item.put("message", log.getMessage());
+                    item.put("timestamp", log.getCreatedAt() == null ? null : log.getCreatedAt().toString());
+                    return item;
+                })
+                .collect(Collectors.toList()));
+        value.put("createdAt", execution.getCreatedAt() == null ? null : execution.getCreatedAt().toString());
+        value.put("startedAt", execution.getStartedAt() == null ? null : execution.getStartedAt().toString());
+        value.put("finishedAt", execution.getFinishedAt() == null ? null : execution.getFinishedAt().toString());
+        return value;
+    }
+
+    private static Map<String, String> toStringHeaders(Map<String, Object> headers) {
+        Map<String, String> values = new LinkedHashMap<>();
+        headers.forEach((name, value) -> {
+            String stringValue = ObjectValues.stringValue(value);
+            if (name != null && !name.isBlank() && stringValue != null) {
+                values.put(name, stringValue);
+            }
+        });
+        return values;
+    }
+
+    private static EventWebhookResponsePayload errorPayload(EventSourceWebhookErrorResponse errorResponse) {
+        EventSourceWebhookErrorResponse effective = errorResponse == null
+                ? new EventSourceWebhookErrorResponse()
+                : errorResponse;
+        return new EventWebhookResponsePayload()
+                .setStatus(effective.getHttpStatus())
+                .setBody(Map.of(
+                        "status", effective.getHttpStatus(),
+                        "msg", effective.getMsg(),
+                        "data", SchemaValueCopier.copyObject(effective.getData())
+                ));
     }
 }

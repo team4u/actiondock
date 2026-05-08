@@ -156,6 +156,7 @@ public class RepositoryEventSourceService {
                 .setTransport(detail.eventSource().transport())
                 .setAuth(detail.eventSource().auth())
                 .setNormalizationProcessor(detail.eventSource().normalizationProcessor())
+                .setWebhookResponse(detail.eventSource().webhookResponse())
                 .setSampleContext(detail.eventSource().sampleContext())
                 .setEditable(false)
                 .setEnabled(existing == null ? true : existing.isEnabled())

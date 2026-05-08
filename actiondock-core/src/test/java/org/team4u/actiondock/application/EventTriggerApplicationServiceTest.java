@@ -5,6 +5,7 @@ import org.team4u.actiondock.domain.model.EventDispatchRecord;
 import org.team4u.actiondock.domain.model.EventDispatchStatus;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventTrigger;
+import org.team4u.actiondock.domain.model.EventTriggerDispatchResult;
 import org.team4u.actiondock.domain.model.EventSourceTransport;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
@@ -133,7 +134,8 @@ class EventTriggerApplicationServiceTest {
         when(eventDispatchRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(eventTriggerRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        EventDispatchRecord dispatch = service.dispatch(source, trigger, "event-record-1", event);
+        EventTriggerDispatchResult result = service.dispatch(source, trigger, "event-record-1", event);
+        EventDispatchRecord dispatch = result.dispatch();
 
         assertThat(dispatch.getStatus()).isEqualTo(EventDispatchStatus.EXECUTION_CREATED);
         assertThat(dispatch.getMappedInput()).containsEntry("sourceId", "source-1");
@@ -145,6 +147,8 @@ class EventTriggerApplicationServiceTest {
         assertThat(dispatch.getMappedInput()).containsEntry("headers", Map.of("X-Test", "1"));
         assertThat(dispatch.getMappedInput()).containsEntry("query", Map.of("page", "1"));
         assertThat(dispatch.getMappedInput()).containsEntry("body", Map.of("hello", "world"));
+        assertThat(result.execution()).isNotNull();
+        assertThat(result.scriptDefinition()).isNotNull();
         verify(processorEngine, never()).process(any(), any());
     }
 

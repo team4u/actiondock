@@ -466,6 +466,7 @@ public class RepositoryCatalogService {
         values.put("transport", eventSource.getTransport());
         values.put("auth", eventSource.getAuth());
         values.put("normalizationProcessor", eventSource.getNormalizationProcessor());
+        values.put("webhookResponse", eventSource.getWebhookResponse());
         values.put("sampleContext", eventSource.getSampleContext());
         values.put("triggers", triggers.stream()
                 .sorted(Comparator.comparing(EventTrigger::getRepositoryTriggerId, Comparator.nullsLast(String::compareTo)))
@@ -497,6 +498,7 @@ public class RepositoryCatalogService {
         values.put("transport", detail.eventSource().transport());
         values.put("auth", detail.eventSource().auth());
         values.put("normalizationProcessor", detail.eventSource().normalizationProcessor());
+        values.put("webhookResponse", detail.eventSource().webhookResponse());
         values.put("sampleContext", detail.eventSource().sampleContext());
         values.put("scriptDependencies", detail.descriptor().scriptDependencies());
         values.put("triggerTemplate", detail.triggerTemplate());

@@ -2,7 +2,7 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
-import { mergeDefinitionPatch, mergeEventTriggerDefinition, parseOptionalObject, resolveEnabledFlag } from "../../lib/event.js";
+import { applyProcessorFieldOverrides, mergeDefinitionPatch, mergeEventTriggerDefinition, parseOptionalObject, resolveEnabledFlag } from "../../lib/event.js";
 import { renderEventTriggerDetail } from "../../lib/render.js";
 export default class EventTriggerUpdateCommand extends BaseCommand {
     static description = "Update an ActionDock event trigger";
@@ -63,7 +63,8 @@ export default class EventTriggerUpdateCommand extends BaseCommand {
                 jsonFlag: "`--definition-json`",
                 fileFlag: "`--definition-file`"
             }) ?? {};
-            const merged = mergeEventTriggerDefinition(mergeDefinitionPatch(existing, patch), {
+            const mergedPatch = applyProcessorFieldOverrides(mergeDefinitionPatch(existing, patch), patch, ["filterProcessor", "idempotencyProcessor", "inputProcessor"]);
+            const merged = mergeEventTriggerDefinition(mergedPatch, {
                 id: args.triggerId,
                 name: flags.name,
                 description: flags.description,

@@ -1,6 +1,7 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
+import org.team4u.actiondock.domain.model.EventSourceWebhookResponse;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
@@ -86,6 +87,8 @@ final class ApplicationServiceSupport {
         value.put("id", source.getId());
         value.put("key", source.getKey());
         value.put("name", source.getName());
+        EventSourceWebhookResponse webhookResponse = source.getWebhookResponse();
+        value.put("webhookResponseEnabled", webhookResponse != null && !webhookResponse.isEmpty());
         return value;
     }
 

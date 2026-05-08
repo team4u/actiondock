@@ -397,6 +397,19 @@ export interface EventSourceAuthConfig {
   secretConfigKey?: string;
 }
 
+export interface EventSourceWebhookErrorResponse {
+  httpStatus: number;
+  msg?: string;
+  data?: unknown;
+}
+
+export interface EventSourceWebhookResponse {
+  successStatus: number;
+  successHeaders?: Record<string, unknown>;
+  responseProcessor?: ProcessorDefinition;
+  errorResponse?: EventSourceWebhookErrorResponse;
+}
+
 export interface NormalizedEvent {
   id?: string;
   sourceId?: string;
@@ -431,6 +444,7 @@ export interface EventSourceDefinition {
   transport: EventSourceTransport;
   auth?: EventSourceAuthConfig;
   normalizationProcessor?: ProcessorDefinition;
+  webhookResponse?: EventSourceWebhookResponse;
   sampleContext?: Record<string, unknown>;
   lastReceivedAt?: string;
   createdAt?: string;

@@ -6,6 +6,7 @@ import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.model.EventSourceTransport;
 import org.team4u.actiondock.domain.model.EventSourceTransportType;
+import org.team4u.actiondock.domain.model.EventSourceWebhookResponse;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
@@ -59,6 +60,7 @@ public class EventSourceApplicationService {
                 definition.getNormalizationProcessor(),
                 ApplicationServiceSupport.contextFromSample(definition.getSampleContext()),
                 "normalizationProcessor");
+        validateWebhookResponse(definition.getWebhookResponse(), definition.getSampleContext());
 
         applyToTarget(target, definition, key, name, transport, now);
         return eventSourceRepository.save(target);
@@ -111,8 +113,55 @@ public class EventSourceApplicationService {
                 .setTransport(transport)
                 .setAuth(definition.getAuth())
                 .setNormalizationProcessor(ApplicationServiceSupport.normalizeProcessor(definition.getNormalizationProcessor()))
+                .setWebhookResponse(normalizeWebhookResponse(definition.getWebhookResponse()))
                 .setSampleContext(definition.getSampleContext())
                 .setUpdatedAt(now);
+    }
+
+    private void validateWebhookResponse(EventSourceWebhookResponse webhookResponse, Map<String, Object> sampleContext) {
+        EventSourceWebhookResponse normalized = normalizeWebhookResponse(webhookResponse);
+        if (normalized == null) {
+            return;
+        }
+        if (normalized.getSuccessStatus() < 100 || normalized.getSuccessStatus() > 999) {
+            throw new IllegalArgumentException("webhookResponse.successStatus 必须是合法 HTTP 状态码");
+        }
+        int errorStatus = normalized.getErrorResponse().getHttpStatus();
+        if (errorStatus < 100 || errorStatus > 999) {
+            throw new IllegalArgumentException("webhookResponse.errorResponse.httpStatus 必须是合法 HTTP 状态码");
+        }
+        normalized.getSuccessHeaders().forEach((name, value) -> {
+            String headerName = ApplicationServiceSupport.normalize(name, "webhookResponse.successHeaders 的 header 名称不能为空");
+            if (ObjectValues.stringValue(value) == null) {
+                throw new IllegalArgumentException("webhookResponse.successHeaders 的值必须可转为字符串: " + headerName);
+            }
+        });
+        ProcessorDefinition responseProcessor = ApplicationServiceSupport.normalizeProcessor(normalized.getResponseProcessor());
+        if (responseProcessor == null) {
+            throw new IllegalArgumentException("webhookResponse.responseProcessor 不能为空");
+        }
+        ProcessorContext context = ApplicationServiceSupport.contextFromSample(sampleContext);
+        context.setVariables(Map.of(
+                "dispatches", List.of(),
+                "executions", List.of()
+        ));
+        ApplicationServiceSupport.validateProcessor(
+                processorEngine,
+                responseProcessor,
+                context,
+                "webhookResponse.responseProcessor"
+        );
+    }
+
+    private static EventSourceWebhookResponse normalizeWebhookResponse(EventSourceWebhookResponse webhookResponse) {
+        if (webhookResponse == null || webhookResponse.isEmpty()) {
+            return null;
+        }
+        return webhookResponse
+                .setSuccessStatus(webhookResponse.getSuccessStatus())
+                .setSuccessHeaders(webhookResponse.getSuccessHeaders())
+                .setResponseProcessor(ApplicationServiceSupport.normalizeProcessor(webhookResponse.getResponseProcessor()))
+                .setErrorResponse(webhookResponse.getErrorResponse());
     }
 
     public EventSourceDefinition enable(String id) {

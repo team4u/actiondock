@@ -59,6 +59,7 @@ import type {
   DevelopmentStatus,
   EventSourceAuthConfig,
   EventSourceDefinition,
+  EventSourceWebhookResponse,
   IncomingEventPayload,
   NormalizedEvent,
   RepositoryDefinition,
@@ -92,9 +93,35 @@ function createEmptyDraft(): EventSourceDefinition {
     auth: {
       mode: "NONE"
     },
+    webhookResponse: undefined,
     sampleContext: {},
     normalizationProcessor: undefined
   };
+}
+
+function createDefaultWebhookResponse(): EventSourceWebhookResponse {
+  return {
+    successStatus: 200,
+    successHeaders: {},
+    responseProcessor: undefined,
+    errorResponse: {
+      httpStatus: 500,
+      msg: "响应生成失败",
+      data: null
+    }
+  };
+}
+
+function normalizeWebhookErrorResponse(response?: EventSourceWebhookResponse["errorResponse"]) {
+  return {
+    httpStatus: response?.httpStatus ?? 500,
+    msg: response?.msg ?? "响应生成失败",
+    data: response?.data ?? null
+  };
+}
+
+function prettyJsonValue(value: unknown): string {
+  return JSON.stringify(value ?? null, null, 2);
 }
 
 function createDefaultSampleContext(): Record<string, unknown> {
@@ -144,6 +171,8 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const [testBodyText, setTestBodyText] = useState("{}");
   const [testRawBody, setTestRawBody] = useState("{}");
   const [testResult, setTestResult] = useState<NormalizedEvent | null>(null);
+  const [webhookSuccessHeadersText, setWebhookSuccessHeadersText] = useState("{}");
+  const [webhookErrorDataText, setWebhookErrorDataText] = useState("null");
   const [testing, setTesting] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const [modal, modalContextHolder] = Modal.useModal();
@@ -220,6 +249,8 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     setTestQueryText(testPayload.query);
     setTestBodyText(testPayload.body);
     setTestRawBody(testPayload.rawBody);
+    setWebhookSuccessHeadersText(prettyJsonValue(createDefaultWebhookResponse().successHeaders));
+    setWebhookErrorDataText("null");
     setTestResult(null);
     setDrawerOpen(true);
   };
@@ -237,6 +268,13 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     setTestQueryText(testPayload.query);
     setTestBodyText(testPayload.body);
     setTestRawBody(testPayload.rawBody);
+    const webhookResponse = nextDraft.webhookResponse ?? createDefaultWebhookResponse();
+    setWebhookSuccessHeadersText(prettyJsonValue(webhookResponse.successHeaders ?? {}));
+    setWebhookErrorDataText(
+      webhookResponse.errorResponse?.data === undefined
+        ? "null"
+        : prettyJsonValue(webhookResponse.errorResponse.data)
+    );
     setTestResult(null);
     setDrawerOpen(true);
   };
@@ -244,8 +282,28 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const saveDraft = async () => {
     setSaving(true);
     try {
+      let webhookErrorData: unknown = null;
+      if (draft.webhookResponse) {
+        try {
+          webhookErrorData = webhookErrorDataText.trim() ? JSON.parse(webhookErrorDataText) : null;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "格式错误";
+          throw new Error(`失败数据 JSON 不是合法 JSON: ${reason}`);
+        }
+      }
+      const webhookResponse = draft.webhookResponse
+        ? {
+            ...draft.webhookResponse,
+            successHeaders: parseJsonText(webhookSuccessHeadersText, "成功响应头"),
+            errorResponse: {
+              ...normalizeWebhookErrorResponse(draft.webhookResponse.errorResponse),
+              data: webhookErrorData
+            }
+          }
+        : undefined;
       const payload: Partial<EventSourceDefinition> = {
         ...draft,
+        webhookResponse,
         sampleContext: parseJsonText(sampleContextText, "样例上下文")
       };
       const saved = draft.id
@@ -540,6 +598,8 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   ];
 
   const currentAuth: EventSourceAuthConfig = draft.auth ?? { mode: "NONE" };
+  const currentWebhookResponse = draft.webhookResponse ?? createDefaultWebhookResponse();
+  const webhookResponseEnabled = Boolean(draft.webhookResponse);
   const currentRepositoryDescriptor =
     (draft.scope === "REPOSITORY" ? repositoryDescriptorByInstalledId.get(draft.id) : undefined)
     ?? (draft.scope === "DEVELOPMENT" ? repositoryDescriptorByDevelopmentId.get(draft.id) : undefined);
@@ -727,6 +787,102 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
             disabled={draft.editable === false}
             onChange={(normalizationProcessor) => updateDraft({ normalizationProcessor })}
           />
+
+          <Card size="small" title="外部响应">
+            <Form layout="vertical">
+              <Form.Item label={fieldLabel("启用自定义响应", "关闭时保持当前默认 ApiResponse；开启后仅在鉴权与基础解析通过后接管 webhook HTTP 响应。")}>
+                <Switch
+                  checked={webhookResponseEnabled}
+                  disabled={draft.editable === false}
+                  onChange={(checked) => {
+                    updateDraft({ webhookResponse: checked ? createDefaultWebhookResponse() : undefined });
+                    if (checked) {
+                      setWebhookSuccessHeadersText("{}");
+                      setWebhookErrorDataText("null");
+                    }
+                  }}
+                />
+              </Form.Item>
+              {webhookResponseEnabled ? (
+                <>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="成功响应返回原始 HTTP body；失败兜底返回配置的 ApiResponse 错误包。若要使用脚本结果，请把相关触发器设为 SYNC。"
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Form.Item label={fieldLabel("成功状态码", "自定义响应成功时返回的 HTTP 状态码。")}>
+                    <Input
+                      type="number"
+                      value={String(currentWebhookResponse.successStatus ?? 200)}
+                      readOnly={draft.editable === false}
+                      onChange={(event) => updateDraft({
+                        webhookResponse: {
+                          ...currentWebhookResponse,
+                          successStatus: Number(event.target.value || 200)
+                        }
+                      })}
+                    />
+                  </Form.Item>
+                  <Form.Item label={fieldLabel("成功响应头 JSON", "Header 名和值，值会转成字符串。")}>
+                    <Input.TextArea
+                      rows={4}
+                      value={webhookSuccessHeadersText}
+                      readOnly={draft.editable === false}
+                      onChange={(event) => setWebhookSuccessHeadersText(event.target.value)}
+                    />
+                  </Form.Item>
+                  <ProcessorEditor
+                    title="响应 Processor"
+                    value={currentWebhookResponse.responseProcessor}
+                    scripts={scripts}
+                    description="基于标准化事件、触发器分发结果和同步执行结果生成返回给外部系统的 JSON body。"
+                    required
+                    disabled={draft.editable === false}
+                    onChange={(responseProcessor) => updateDraft({
+                      webhookResponse: {
+                        ...currentWebhookResponse,
+                        responseProcessor
+                      }
+                    })}
+                  />
+                  <Form.Item label={fieldLabel("失败状态码", "自定义响应链路未产出结果时返回的 HTTP 状态码。")} style={{ marginTop: 16 }}>
+                    <Input
+                      type="number"
+                      value={String(currentWebhookResponse.errorResponse?.httpStatus ?? 500)}
+                      readOnly={draft.editable === false}
+                      onChange={(event) => updateDraft({
+                        webhookResponse: {
+                          ...currentWebhookResponse,
+                          errorResponse: { ...normalizeWebhookErrorResponse(currentWebhookResponse.errorResponse), httpStatus: Number(event.target.value || 500) }
+                        }
+                      })}
+                    />
+                  </Form.Item>
+                  <Form.Item label={fieldLabel("失败消息", "写入 ApiResponse.msg。")}>
+                    <Input
+                      value={currentWebhookResponse.errorResponse?.msg}
+                      readOnly={draft.editable === false}
+                      onChange={(event) => updateDraft({
+                        webhookResponse: {
+                          ...currentWebhookResponse,
+                          errorResponse: { ...normalizeWebhookErrorResponse(currentWebhookResponse.errorResponse), msg: event.target.value }
+                        }
+                      })}
+                    />
+                  </Form.Item>
+                  <Form.Item label={fieldLabel("失败数据 JSON", "写入 ApiResponse.data。")}>
+                    <Input.TextArea
+                      rows={4}
+                      value={webhookErrorDataText}
+                      readOnly={draft.editable === false}
+                      onChange={(event) => setWebhookErrorDataText(event.target.value)}
+                    />
+                  </Form.Item>
+                </>
+              ) : null}
+            </Form>
+          </Card>
 
           <Card size="small" title="样例上下文">
             <Input.TextArea

@@ -33,6 +33,10 @@ public final class SchemaValueCopier {
         return result;
     }
 
+    public static Object copyObject(Object value) {
+        return copyValue(value);
+    }
+
     /**
      * 对列表元素逐一执行深拷贝。
      *

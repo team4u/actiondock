@@ -1,7 +1,9 @@
 package org.team4u.actiondock.web.event;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,15 +28,22 @@ public class EventIngestionController {
     }
 
     @PostMapping(path = "/{id}/events", consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.ALL_VALUE})
-    public ApiResponse<EventIngestionView> ingest(@PathVariable String id,
-                                                  HttpServletRequest request,
-                                                  @RequestBody(required = false) String rawBody) {
+    public ResponseEntity<?> ingest(@PathVariable String id,
+                                    HttpServletRequest request,
+                                    @RequestBody(required = false) String rawBody) {
         EventIngestionResult result = eventIngestionApplicationService.ingest(id, new IncomingEventPayload()
                 .setHeaders(readHeaders(request))
                 .setQuery(readQuery(request))
                 .setRawBody(rawBody)
                 .setContentType(request.getContentType()));
-        return ApiResponse.success(new EventIngestionView(result.getEventRecord(), result.getDispatches()), "已接收");
+        if (result.getWebhookResponse() != null) {
+            HttpHeaders headers = new HttpHeaders();
+            result.getWebhookResponse().getHeaders().forEach(headers::add);
+            return ResponseEntity.status(result.getWebhookResponse().getStatus())
+                    .headers(headers)
+                    .body(result.getWebhookResponse().getBody());
+        }
+        return ResponseEntity.ok(ApiResponse.success(new EventIngestionView(result.getEventRecord(), result.getDispatches()), "已接收"));
     }
 
     private static Map<String, Object> readHeaders(HttpServletRequest request) {

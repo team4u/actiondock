@@ -16,6 +16,7 @@ import org.team4u.actiondock.application.WebhookRequestHeadersTooLargeException;
 import org.team4u.actiondock.application.WebhookRequestPayloadTooLargeException;
 import org.team4u.actiondock.domain.model.EventRecord;
 import org.team4u.actiondock.domain.model.EventRecordStatus;
+import org.team4u.actiondock.domain.model.EventWebhookResponsePayload;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 
 import java.time.LocalDateTime;
@@ -102,5 +103,28 @@ class EventIngestionControllerTest {
                         .content("{\"hello\":\"world\"}"))
                 .andExpect(status().is(431))
                 .andExpect(jsonPath("$.status").value(431));
+    }
+
+    @Test
+    void webhookRouteReturnsCustomResponseWhenConfigured() throws Exception {
+        when(apiAccessTokenRepository.count()).thenReturn(1L);
+        when(eventIngestionApplicationService.ingest(eq("source-1"), any())).thenReturn(new EventIngestionResult()
+                .setEventRecord(new EventRecord()
+                        .setId("event-1")
+                        .setSourceId("source-1")
+                        .setSourceKey("source-key")
+                        .setStatus(EventRecordStatus.DISPATCHED)
+                        .setCreatedAt(LocalDateTime.now()))
+                .setWebhookResponse(new EventWebhookResponsePayload()
+                        .setStatus(202)
+                        .setHeaders(java.util.Map.of("X-Ack", "ok"))
+                        .setBody(java.util.Map.of("accepted", true))));
+
+        mockMvc.perform(post("/api/event-sources/source-1/events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"hello\":\"world\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.accepted").value(true))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("X-Ack", "ok"));
     }
 }

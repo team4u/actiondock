@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { applyProcessorFieldOverrides, mergeDefinitionPatch } from "./event.js";
+import type { EventSourceDefinition, EventTrigger } from "./types.js";
 
 describe("applyProcessorFieldOverrides", () => {
   it("clears event trigger processor fields when patch uses empty objects", () => {
-    const existing = {
+    const existing: Pick<EventTrigger, "filterProcessor" | "idempotencyProcessor" | "inputProcessor"> = {
       filterProcessor: {
         mode: "JSON_PATH",
         jsonPath: { fields: { matched: "$.eventType" } }
@@ -18,7 +19,7 @@ describe("applyProcessorFieldOverrides", () => {
         scriptRef: { scriptId: "processor-1", versionMode: "PUBLISHED" }
       }
     };
-    const patch = {
+    const patch: Partial<Pick<EventTrigger, "filterProcessor" | "idempotencyProcessor" | "inputProcessor">> = {
       filterProcessor: {},
       idempotencyProcessor: {},
       inputProcessor: {}
@@ -36,13 +37,13 @@ describe("applyProcessorFieldOverrides", () => {
   });
 
   it("preserves normal merge behavior for non-empty processor patches", () => {
-    const existing = {
+    const existing: Pick<EventSourceDefinition, "normalizationProcessor"> = {
       normalizationProcessor: {
         mode: "JSON_PATH",
         jsonPath: { fields: { eventType: "$.headers.X-Type" } }
       }
     };
-    const patch = {
+    const patch: Partial<Pick<EventSourceDefinition, "normalizationProcessor">> = {
       normalizationProcessor: {
         mode: "TEMPLATE",
         template: { engine: "MUSTACHE", template: { eventType: "{{headers.X-Type}}" } }
