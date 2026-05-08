@@ -58,4 +58,29 @@ describe("applyProcessorFieldOverrides", () => {
 
     expect(merged.normalizationProcessor).toEqual(patch.normalizationProcessor);
   });
+
+  it("preserves merged processor fields for partial non-empty processor patches", () => {
+    const existing: Pick<EventTrigger, "inputProcessor"> = {
+      inputProcessor: {
+        mode: "SCRIPT_REF",
+        scriptRef: { scriptId: "processor-1", versionMode: "DRAFT" }
+      }
+    };
+    const patch: Partial<Pick<EventTrigger, "inputProcessor">> = {
+      inputProcessor: {
+        scriptRef: { versionMode: "PUBLISHED" }
+      }
+    };
+
+    const merged = applyProcessorFieldOverrides(
+      mergeDefinitionPatch(existing, patch),
+      patch,
+      ["inputProcessor"]
+    );
+
+    expect(merged.inputProcessor).toEqual({
+      mode: "SCRIPT_REF",
+      scriptRef: { scriptId: "processor-1", versionMode: "PUBLISHED" }
+    });
+  });
 });

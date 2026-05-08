@@ -1,6 +1,6 @@
 {
   "name": "actiondock",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "ActionDock local automation runtime, CLI, server, admin UI, and desktop tray app",
   "license": "MIT",
   "type": "module",
@@ -23,7 +23,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run clean:dist && tsc -p tsconfig.json",
+    "clean:dist": "node ./scripts/clean-dist.mjs",
     "clean": "node ./scripts/clean.mjs",
     "dev": "NODE_OPTIONS='--import tsx' node ./bin/dev.js",
     "test": "vitest run",

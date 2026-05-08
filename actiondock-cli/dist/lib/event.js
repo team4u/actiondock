@@ -115,7 +115,9 @@ export function applyProcessorFieldOverrides(merged, patch, processorFields) {
             next[key] = {};
             continue;
         }
-        next[key] = cloneValue(value);
+        if (isRecord(value) && "mode" in value) {
+            next[key] = cloneValue(value);
+        }
     }
     return next;
 }

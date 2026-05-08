@@ -175,7 +175,9 @@ export function applyProcessorFieldOverrides<T extends object>(
       next[key] = {};
       continue;
     }
-    next[key] = cloneValue(value);
+    if (isRecord(value) && "mode" in value) {
+      next[key] = cloneValue(value);
+    }
   }
   return next as T;
 }
