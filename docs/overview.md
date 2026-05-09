@@ -34,28 +34,35 @@ ActionDock 的核心目标，就是把这些约定沉淀到平台里。
 
 一个简化示例：
 
-```java
-ScriptDefinition script = new ScriptDefinition()
-    .setId("hello-groovy")
-    .setName("Hello Groovy")
-    .setType(ScriptType.GROOVY)
-    .setSource("""
-        def name = input.name ?: "World"
-        return [message: "Hello, " + name + "!", upperName: name.toUpperCase()]
-        """)
-    .setInputSchema(Map.of(
-        "type", "object",
-        "properties", Map.of(
-            "name", Map.of("type", "string", "title", "Name")
-        )
-    ))
-    .setOutputSchema(Map.of(
-        "type", "object",
-        "properties", Map.of(
-            "message", Map.of("type", "string", "title", "Message"),
-            "upperName", Map.of("type", "string", "title", "Upper Name")
-        )
-    ));
+```json
+{
+  "id": "hello-groovy",
+  "name": "Hello Groovy",
+  "type": "GROOVY",
+  "source": "def name = input.name ?: \"World\"\\nreturn [message: \"Hello, \" + name + \"!\", upperName: name.toUpperCase()]",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "title": "Name"
+      }
+    }
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "string",
+        "title": "Message"
+      },
+      "upperName": {
+        "type": "string",
+        "title": "Upper Name"
+      }
+    }
+  }
+}
 ```
 
 这里最重要的是 `inputSchema` 和 `outputSchema`。它们不是只给人看的文档，而是平台运行时会使用的结构化契约。
