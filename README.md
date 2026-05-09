@@ -89,6 +89,7 @@ docker compose up -d
 
 | 文档 | 说明 |
 |------|------|
+| [技术概览](docs/overview.md) | 项目理念与核心能力介绍 |
 | [用户手册](docs/user-manual.md) | 完整文档入口 |
 | [快速开始](docs/quick-start.md) | 安装、启动、第一个脚本 |
 | [脚本编写指南](docs/script-writing-guide.md) | Schema、运行时 API、示例 |
