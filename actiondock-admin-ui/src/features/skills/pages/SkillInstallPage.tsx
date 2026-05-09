@@ -18,26 +18,25 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import JSZip from "jszip";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   importSkill,
   installSkillDirectory,
-  listSkillTargets,
   scanGithubSkillCollection,
   validateSkillArchive,
   installGithubSkillCollection
 } from "../../skills/api";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { SkillTargetSelector, useSkillTargets } from "../../../components/skill/SkillTargetSelector";
-import type { GithubSkillInstallResponse, GithubSkillScanItem, GithubSkillScanResponse, SkillTarget } from "../../../shared/types";
+import type { GithubSkillInstallResponse, GithubSkillScanItem, GithubSkillScanResponse } from "../../../shared/types";
 import { getErrorMessage } from "../../../services/utils";
 
 const { Paragraph, Text } = Typography;
 
 export function SkillInstallPage() {
   const navigate = useNavigate();
-  const { targets, targetIds, setTargetIds, loading, ensureTargets, contextHolder } = useSkillTargets();
+  const { targets, targetIds, setTargetIds, loading, loadTargets, ensureTargets, contextHolder } = useSkillTargets();
   const [directory, setDirectory] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const [githubScan, setGithubScan] = useState<GithubSkillScanResponse | null>(null);
@@ -49,6 +48,10 @@ export function SkillInstallPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputAttributes = { webkitdirectory: "", directory: "" } as Record<string, string>;
+
+  useEffect(() => {
+    void loadTargets();
+  }, [loadTargets]);
 
   const githubSkillColumns: ColumnsType<GithubSkillScanItem> = useMemo(
     () => [

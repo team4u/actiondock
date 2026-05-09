@@ -1,5 +1,5 @@
 import { Alert, Empty, Select, Space, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { message } from "antd";
 import { listSkillTargets } from "../../features/skills/api";
 import type { SkillTarget } from "../../shared/types";
@@ -13,21 +13,25 @@ export function useSkillTargets() {
   const [loading, setLoading] = useState(true);
   const [messageApi, contextHolder] = message.useMessage();
 
-  useEffect(() => {
-    void (async () => {
-      setLoading(true);
-      try {
-        const data = await listSkillTargets();
-        const available = data.filter((t) => t.enabled && t.writable);
-        setTargets(available);
-        setTargetIds(available.map((t) => t.id));
-      } catch (error) {
-        messageApi.error(getErrorMessage(error, "加载 SkillTarget 失败"));
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadTargets = useCallback(async (): Promise<SkillTarget[]> => {
+    setLoading(true);
+    try {
+      const data = await listSkillTargets();
+      const available = data.filter((t) => t.enabled && t.writable);
+      setTargets(available);
+      setTargetIds(available.map((t) => t.id));
+      return available;
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载 SkillTarget 失败"));
+      return [];
+    } finally {
+      setLoading(false);
+    }
   }, [messageApi]);
+
+  useEffect(() => {
+    void loadTargets();
+  }, [loadTargets]);
 
   const ensureTargets = (): string[] | null => {
     if (targetIds.length === 0) {
@@ -37,7 +41,7 @@ export function useSkillTargets() {
     return targetIds;
   };
 
-  return { targets, targetIds, setTargetIds, loading, ensureTargets, contextHolder };
+  return { targets, targetIds, setTargetIds, loading, loadTargets, ensureTargets, contextHolder };
 }
 
 interface SkillTargetSelectorProps {

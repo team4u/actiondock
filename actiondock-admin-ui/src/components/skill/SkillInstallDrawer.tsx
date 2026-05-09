@@ -18,7 +18,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import JSZip from "jszip";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   importSkill,
   installSkillDirectory,
@@ -39,7 +39,7 @@ interface SkillInstallDrawerProps {
 }
 
 export function SkillInstallDrawer({ open, onClose, onSuccess }: SkillInstallDrawerProps) {
-  const { targets, targetIds, setTargetIds, loading, ensureTargets, contextHolder } = useSkillTargets();
+  const { targets, targetIds, setTargetIds, loading, loadTargets, ensureTargets, contextHolder } = useSkillTargets();
   const [directory, setDirectory] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const [githubScan, setGithubScan] = useState<GithubSkillScanResponse | null>(null);
@@ -51,6 +51,12 @@ export function SkillInstallDrawer({ open, onClose, onSuccess }: SkillInstallDra
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputAttributes = { webkitdirectory: "", directory: "" } as Record<string, string>;
+
+  useEffect(() => {
+    if (open) {
+      void loadTargets();
+    }
+  }, [loadTargets, open]);
 
   const githubSkillColumns: ColumnsType<GithubSkillScanItem> = useMemo(
     () => [

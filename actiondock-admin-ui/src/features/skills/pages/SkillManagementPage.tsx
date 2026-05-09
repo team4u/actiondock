@@ -102,7 +102,7 @@ export function SkillManagementPage() {
     });
   };
 
-  const loadData = async () => {
+  const loadData = async (): Promise<{ skillData: Skill[]; targetData: SkillTarget[] } | null> => {
     setLoading(true);
     try {
       const [skillData, targetData, repositories] = await Promise.all([listSkills(), listSkillTargets(), listRepositories()]);
@@ -120,8 +120,10 @@ export function SkillManagementPage() {
         }
       }
       setRepositorySkillMap(nextRepositorySkillMap);
+      return { skillData, targetData };
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载 Skill 管理数据失败"));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -167,7 +169,7 @@ export function SkillManagementPage() {
       render: (_value, record) => (
         <Space wrap>
           <Button size="small" onClick={() => openEditTarget(record)}>编辑</Button>
-          <Button size="small" icon={<SyncOutlined />} onClick={() => openSyncTarget(record)}>
+          <Button size="small" icon={<SyncOutlined />} onClick={() => void openSyncTarget(record)}>
             添加 Skill
           </Button>
           <Button size="small" icon={<ScanOutlined />} onClick={() => navigate(`/skills/scan/${encodeURIComponent(record.id)}`)}>
@@ -273,9 +275,13 @@ export function SkillManagementPage() {
     setTargetDrawerOpen(true);
   };
 
-  const openSyncTarget = (target: SkillTarget) => {
-    setSyncTarget(target);
+  const openSyncTarget = async (target: SkillTarget) => {
     setSelectedSyncSkillIds([]);
+    const data = await loadData();
+    if (!data) {
+      return;
+    }
+    setSyncTarget(data.targetData.find((item) => item.id === target.id) ?? target);
   };
 
   const handleSaveTarget = async () => {

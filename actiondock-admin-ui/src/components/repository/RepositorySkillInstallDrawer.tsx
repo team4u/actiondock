@@ -16,7 +16,7 @@ interface RepositorySkillInstallDrawerProps {
 }
 
 export function RepositorySkillInstallDrawer({ open, descriptor, onClose, onSuccess }: RepositorySkillInstallDrawerProps) {
-  const { targets, targetIds, setTargetIds, loading: targetsLoading, ensureTargets, contextHolder } = useSkillTargets();
+  const { targets, targetIds, setTargetIds, loading: targetsLoading, loadTargets, ensureTargets, contextHolder } = useSkillTargets();
   const [archive, setArchive] = useState<File | null>(null);
   const [skillName, setSkillName] = useState("");
   const [installing, setInstalling] = useState(false);
@@ -32,7 +32,8 @@ export function RepositorySkillInstallDrawer({ open, descriptor, onClose, onSucc
     void (async () => {
       setLoadingArchive(true);
       try {
-        const [detail, archiveData] = await Promise.all([
+        const [, detail, archiveData] = await Promise.all([
+          loadTargets(),
           getRepositorySkill(descriptor.repositoryId, descriptor.skillId),
           downloadRepositorySkillArchive(descriptor.repositoryId, descriptor.skillId)
         ]);
@@ -45,7 +46,7 @@ export function RepositorySkillInstallDrawer({ open, descriptor, onClose, onSucc
         setLoadingArchive(false);
       }
     })();
-  }, [open, descriptor, messageApi]);
+  }, [open, descriptor, loadTargets, messageApi]);
 
   const handleInstall = async () => {
     const selectedTargetIds = ensureTargets();
