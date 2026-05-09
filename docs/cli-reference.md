@@ -17,19 +17,18 @@ actiondock --version
 # 输出: actiondock/<version>
 ```
 
-## 配置
+## 连接目标
 
-### 配置服务器 Profile
+默认情况下，CLI 会连接本机服务：`http://127.0.0.1:5177`。本地开发或本机运行 `actiondock server` 时不需要先配置连接。
+
+只有需要连接其他服务器、保存认证 Token，或频繁切换多个服务器时，才需要配置 profile。
 
 ```bash
-# 创建或更新服务器 profile
-actiondock config add local --server http://localhost:5177
-
 # 创建带访问令牌的 profile（如果 API 启用了认证）
 actiondock config add prod --server https://actiondock.example.com --token your-token-here
 
 # 切换默认 profile
-actiondock config use local
+actiondock config use prod
 
 # 查看当前 profile 配置
 actiondock config show
@@ -40,7 +39,7 @@ actiondock script list --profile prod
 
 ### 环境变量方式
 
-也可以通过环境变量配置连接目标：
+也可以通过环境变量临时指定连接目标：
 
 ```bash
 export ACTIONDOCK_BASE_URL=http://localhost:5177
@@ -48,7 +47,7 @@ export ACTIONDOCK_TOKEN=your-token-here
 export ACTIONDOCK_PROFILE=local
 ```
 
-连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认本地地址。
+连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认 `http://127.0.0.1:5177`。
 
 ## 脚本命令
 
@@ -194,19 +193,16 @@ actiondock config remove <name>                                # 删除 profile
 # 1. 安装 CLI
 npm install -g actiondock
 
-# 2. 配置服务器
-actiondock config add local --server http://localhost:5177
-
-# 3. 查看可用脚本
+# 2. 查看可用脚本（默认连接 http://127.0.0.1:5177）
 actiondock script list
 
-# 4. 查看脚本 Schema
+# 3. 查看脚本 Schema
 actiondock script schema hello-groovy
 
-# 5. 执行脚本
+# 4. 执行脚本
 actiondock script run hello-groovy --name alice --json
 
-# 6. 创建新脚本
+# 5. 创建新脚本
 cat > my-script.groovy << 'EOF'
 return [greeting: "Hello, ${input.name}!", timestamp: System.currentTimeMillis()]
 EOF
@@ -217,10 +213,10 @@ actiondock script create \
   --type groovy \
   --source-file my-script.groovy
 
-# 7. 发布
+# 6. 发布
 actiondock script publish my-script
 
-# 8. 执行验证
+# 7. 执行验证
 actiondock script run my-script --name alice --json
 ```
 

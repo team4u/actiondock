@@ -10,14 +10,18 @@
 
 ---
 
-## 首次使用：配置连接
+## 连接目标
+
+默认情况下，CLI 会连接本机服务：`http://127.0.0.1:5177`。本地开发或本机运行 `actiondock server` 时，不需要先配置连接。
+
+只有需要连接其他服务器、保存认证 Token，或频繁切换多个服务器时，才创建 profile：
 
 ```bash
 actiondock config add prod --server https://your-server.example.com --token your-bearer-token
 actiondock config use prod
 ```
 
-查看当前配置：
+查看当前 profile 配置：
 
 ```bash
 actiondock config show
@@ -26,13 +30,12 @@ actiondock config show
 如果需要频繁访问多个服务端，为每个服务端创建一个 profile：
 
 ```bash
-actiondock config add local --server http://localhost:5177
 actiondock config add staging --server https://staging.example.com --token staging-token
 actiondock config list
 actiondock script list --profile staging
 ```
 
-连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认本地地址。
+连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认 `http://127.0.0.1:5177`。
 
 | 环境变量 | 说明 |
 |----------|------|

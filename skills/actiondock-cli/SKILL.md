@@ -82,7 +82,7 @@ npm i -g actiondock
 ## 通用原则
 
 - 默认使用 `--json`，让输出稳定可机读。
-- 连接多个 ActionDock Server 时，优先使用 `actiondock config add/use/list` 管理 profile；临时切换用 `--profile <name>`，不要再推荐单一 `config set server` 作为首次配置方式。
+- 默认连接本机服务 `http://127.0.0.1:5177`，本地使用不要要求用户先配置连接；只有连接其他 Server、保存 Token 或频繁切换多个 Server 时，才使用 `actiondock config add/use/list` 管理 profile，临时切换用 `--profile <name>`。
 - 第一次执行已发布脚本前，通过 `script schema <id>` 获取入参，避免用 `get` 查看脚本细节。
 - 事件框架相关对象优先使用 `--definition-file`、`--payload-file`、`--event-file`，不要把大段 JSON 直接内联到命令里。
 - `event-source update` / `event-trigger update` 默认按 CLI 侧“先读取当前对象，再深度合并 patch，再 PUT”的方式理解，不要假设局部 patch 会由服务端自动合并。

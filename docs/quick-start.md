@@ -107,11 +107,7 @@ curl -X POST http://localhost:5177/api/scripts/hello-groovy/execute \
 ### 从 CLI 运行
 
 ```bash
-# 先配置服务器 profile
-actiondock config add local --server http://localhost:5177
-actiondock config use local
-
-# 运行脚本（Schema 字段自动展平为 flag）
+# 默认连接本机服务 http://127.0.0.1:5177
 actiondock script run hello-groovy --name alice --json
 ```
 
