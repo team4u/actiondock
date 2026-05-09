@@ -171,13 +171,13 @@ ActionDock 里的 Agent Profile 不是单纯的一段 Prompt，而是由模型�
 
 Skill 是另一层。平台里的 Skill 管理模块负责安装和维护 Skill，Agent Profile 可以选择已经安装且启用的 Skill 作为自己的技能。Skill 本身不是执行入口，它更像 Agent 的知识包：告诉 Agent 某类任务的背景、流程、边界、示例和工具使用方式。
 
-例如团队有一个统一的 `send-email` 脚本：
+例如团队要做一个告警分诊 Agent：
 
-- 脚本发布后，作为工具加入 `notification-tools` Toolset。
-- 团队再维护一个 `incident-notification` Skill，描述告警通知的模板、审批规则、字段映射和注意事项。
+- `send-message`、`query-oncall`、`create-ticket` 这类脚本发布后，作为工具加入 `incident-tools` Toolset。
+- 团队再维护一个 `incident-triage` Skill，描述告警等级判断、升级规则、信息整理口径和处理边界。
 - Agent Profile 同时绑定这个 Toolset 和 Skill。
 
-这样 Agent 在处理告警任务时，Skill 提供“怎么做”的上下文，工具脚本提供“实际执行”的能力，执行过程仍然进入 ActionDock 的记录和审计体系。
+这样 Agent 在处理告警任务时，Skill 负责判断和流程上下文，工具脚本负责实际动作。两者分工不同，但执行过程仍然进入 ActionDock 的记录和审计体系。
 
 平台也可以基于脚本生成 Skill 示例，包含 `scriptId`、输入输出 Schema、CLI 调用命令和 HTTP 回退命令。这个生成结果的价值不是把脚本注册成工具，而是快速生成一份可复用的技能说明；团队可以把它纳入 Skill 管理，再按需绑定到 Agent 或同步给外部 AI 编码助手。
 
