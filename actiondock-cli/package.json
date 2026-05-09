@@ -1,6 +1,6 @@
 {
   "name": "actiondock",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "ActionDock local automation runtime, CLI, server, admin UI, and desktop tray app",
   "license": "MIT",
   "type": "module",
