@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  SELF_UPDATE_COMMAND,
   SKIP_NEW_VERSION_CHECK_ENV,
   applyNewVersionCheckEnvironment,
   hasExplicitSkipNewVersionCheck,
-  shouldSkipNewVersionCheckForArgv,
   shouldSkipNewVersionCheckByDefault,
 } from "../bin/update-env.js";
 
@@ -75,18 +73,4 @@ describe("update check environment", () => {
     expect(env[SKIP_NEW_VERSION_CHECK_ENV]).toBe("1");
   });
 
-  it("skips checks while running self-update", () => {
-    expect(shouldSkipNewVersionCheckForArgv(["node", "./bin/run.js", SELF_UPDATE_COMMAND])).toBe(true);
-
-    const env = {};
-    applyNewVersionCheckEnvironment({
-      env,
-      argv: ["node", "./bin/run.js", SELF_UPDATE_COMMAND],
-      stdinIsTTY: true,
-      stdoutIsTTY: true,
-      stderrIsTTY: true,
-    });
-
-    expect(env[SKIP_NEW_VERSION_CHECK_ENV]).toBe("1");
-  });
 });

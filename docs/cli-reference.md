@@ -161,30 +161,11 @@ actiondock script publish <id>
 
 ## 服务管理
 
-### 桌面模式
-
-```bash
-actiondock desktop
-# 启动服务并打开管理台浏览器窗口
-# 系统托盘图标显示运行状态
-```
-
 ### 服务器命令
 
 ```bash
 actiondock server        # 前台启动服务
 actiondock server -p 8080  # 指定端口启动
-```
-
-### 系统服务管理（Windows/Linux）
-
-```bash
-actiondock service install   # 安装为系统服务（开机自启）
-actiondock service start     # 启动服务
-actiondock service status    # 查看服务状态
-actiondock service stop      # 停止服务
-actiondock service restart   # 重启服务
-actiondock service uninstall # 卸载系统服务
 ```
 
 ## 配置命令参考
@@ -245,7 +226,7 @@ npm list -g actiondock
 
 ### Q: 连接失败
 
-1. 检查 ActionDock 服务是否在运行：`actiondock service status`
+1. 检查 ActionDock 服务是否在运行：`actiondock script list`
 2. 检查服务器地址配置：`actiondock config show`
 3. 检查是否有网络防火墙拦截
 

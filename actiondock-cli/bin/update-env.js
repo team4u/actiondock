@@ -1,5 +1,4 @@
 export const SKIP_NEW_VERSION_CHECK_ENV = "ACTIONDOCK_SKIP_NEW_VERSION_CHECK";
-export const SELF_UPDATE_COMMAND = "self-update";
 
 function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
@@ -16,10 +15,6 @@ function isTruthyEnvValue(value) {
 
 export function hasExplicitSkipNewVersionCheck(env = process.env) {
   return hasOwn(env, SKIP_NEW_VERSION_CHECK_ENV);
-}
-
-export function shouldSkipNewVersionCheckForArgv(argv = process.argv) {
-  return argv[2] === SELF_UPDATE_COMMAND;
 }
 
 export function shouldSkipNewVersionCheckByDefault({
@@ -45,7 +40,6 @@ export function applyNewVersionCheckEnvironment({
 
   if (
     forceSkip
-    || shouldSkipNewVersionCheckForArgv(argv)
     || shouldSkipNewVersionCheckByDefault({ env, stdinIsTTY, stdoutIsTTY, stderrIsTTY })
   ) {
     env[SKIP_NEW_VERSION_CHECK_ENV] = "1";

@@ -40,21 +40,6 @@ mvn -pl actiondock-app-spring -am -DskipTests compile
 mvn -pl actiondock-app-spring -am -DskipTests spring-boot:run
 ```
 
-### 方式三：桌面模式
-
-```bash
-actiondock desktop
-# 会自动打开管理台浏览器窗口，并在系统托盘运行
-```
-
-### 方式四：安装为系统服务
-
-```bash
-actiondock service install
-actiondock service start
-actiondock service status   # 查看状态
-```
-
 ## 启动后验证
 
 启动成功后，访问以下地址：

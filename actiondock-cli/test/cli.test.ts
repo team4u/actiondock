@@ -2600,33 +2600,6 @@ describe("CLI integration", () => {
     );
   });
 
-  it("shows the self-update command in dry-run mode", async () => {
-    const result = await runCli(["self-update", "--dry-run", "--json"]);
-
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      packageName: "actiondock",
-      currentVersion: packageVersion,
-      target: "latest",
-      command: "npm install -g actiondock@latest",
-      executable: "npm",
-      args: ["install", "-g", "actiondock@latest"],
-      dryRun: true,
-    });
-  });
-
-  it("supports self-update to a specific version in dry-run mode", async () => {
-    const result = await runCli(["self-update", "0.1.4", "--dry-run", "--json"]);
-
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual(
-      expect.objectContaining({
-        target: "0.1.4",
-        command: "npm install -g actiondock@0.1.4",
-      }),
-    );
-  });
-
   it("keeps command output stable when version checks are disabled explicitly", async () => {
     const result = await runCli(
       ["script", "list", "--server", baseUrl, "--json"],

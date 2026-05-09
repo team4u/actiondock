@@ -1,14 +1,13 @@
 {
   "name": "actiondock",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "ActionDock local automation runtime, CLI, server, admin UI, and desktop tray app",
   "license": "MIT",
   "type": "module",
   "preferGlobal": true,
   "bin": {
     "actiondock": "./bin/run.js",
-    "actiondock-runtime": "./bin/actiondock-runtime.cjs",
-    "actiondock-desktop-runtime": "./bin/actiondock-desktop-runtime.cjs"
+    "actiondock-runtime": "./bin/actiondock-runtime.cjs"
   },
   "files": [
     "bin",
@@ -86,15 +85,6 @@
           "uninstaller"
         ],
         "embedPlist": true
-      },
-      "actiondock-desktop-runtime": {
-        "description": "ActionDock desktop tray runtime",
-        "args": [
-          "--actiondock-desktop"
-        ],
-        "implements": [
-          "launcher"
-        ]
       }
     },
     "helper": {

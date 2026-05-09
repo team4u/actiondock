@@ -2,9 +2,7 @@ import { spawn } from "node:child_process";
 
 import { ActionDockCliError } from "./error.js";
 
-export type RuntimeCommand =
-  | "actiondock-runtime"
-  | "actiondock-desktop-runtime";
+export type RuntimeCommand = "actiondock-runtime";
 
 export async function runRuntimeCommand(
   command: RuntimeCommand,
