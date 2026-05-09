@@ -1,6 +1,6 @@
 {
   "name": "actiondock",
-  "version": "0.1.13",
+  "version": "0.1.15",
   "description": "ActionDock local automation runtime, CLI, server, admin UI, and desktop tray app",
   "license": "MIT",
   "type": "module",
@@ -39,6 +39,8 @@
     "@oclif/plugin-warn-if-update-available": "^3.1.61",
     "command-exists-promise": "^2.0.2",
     "node-fetch": "2.6.7",
+    "shelljs": "^0.10.0",
+    "tar": "^7.5.15",
     "yauzl": "^2.10.0"
   },
   "devDependencies": {
