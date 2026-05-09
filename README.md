@@ -82,6 +82,31 @@ mvn -pl actiondock-app-spring -am -DskipTests spring-boot:run
 
 > 完整安装方式和第一个脚本教程请阅读 [快速开始](docs/quick-start.md)。
 
+## 开发指引
+
+### 后端开发
+
+```bash
+# 启动后端服务
+mvn -pl actiondock-app-spring -am spring-boot:run
+
+# 编译检查
+mvn -pl actiondock-app-spring -am -DskipTests compile
+
+# 运行测试
+mvn test
+```
+
+### 前端开发
+
+```bash
+cd actiondock-admin-ui
+npm ci
+npm run dev       # 开发模式
+npx tsc --noEmit  # 类型检查
+npm run build     # 构建
+```
+
 ## 文档
 
 | 文档 | 说明 |
