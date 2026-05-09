@@ -36,6 +36,9 @@ export default class EventSourceCreateCommand extends BaseCommand {
         disabled: Flags.boolean({
             description: "Create the event source as disabled"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -48,8 +51,8 @@ export default class EventSourceCreateCommand extends BaseCommand {
         const { flags } = await this.parse(EventSourceCreateCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const definition = mergeEventSourceDefinition(parseDefinitionInput(flags["definition-json"], flags["definition-file"], {
                 jsonFlag: "`--definition-json`",

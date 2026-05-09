@@ -662,7 +662,12 @@ export interface SchemaFieldDescriptor {
   supportsFlag: boolean;
 }
 
-export interface ConfigFile {
+export interface ConfigProfile {
   serverUrl?: string;
   token?: string;
+}
+
+export interface ConfigFile {
+  currentProfile?: string;
+  profiles?: Record<string, ConfigProfile>;
 }

@@ -7,6 +7,9 @@ export default class PluginReferencesCommand extends BaseCommand {
     static description = "List plugin references available to scripts";
     static flags = {
         ...BaseCommand.baseFlags,
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -19,8 +22,8 @@ export default class PluginReferencesCommand extends BaseCommand {
         const { flags } = await this.parse(PluginReferencesCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const items = await client.listPluginReferences();
             if (flags.json) {

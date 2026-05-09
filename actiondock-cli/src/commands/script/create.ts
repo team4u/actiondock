@@ -58,6 +58,9 @@ export default class ScriptCreateCommand extends BaseCommand {
     "output-schema-file": Flags.string({
       description: "Path to a JSON file containing outputSchema"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -72,8 +75,8 @@ export default class ScriptCreateCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const script = await client.createScript({
         id: flags["script-id"],

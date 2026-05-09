@@ -27,6 +27,9 @@ export default class ProcessorTestCommand extends BaseCommand {
         "expected-output-schema-file": Flags.string({
             description: "Path to a JSON file containing expected output schema"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -39,8 +42,8 @@ export default class ProcessorTestCommand extends BaseCommand {
         const { flags } = await this.parse(ProcessorTestCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const result = await client.testProcessor({
                 processor: parseProcessorDefinition(flags["processor-json"], flags["processor-file"]),

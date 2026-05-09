@@ -17,6 +17,9 @@ export default class ScriptGetCommand extends BaseCommand {
     draft: Flags.boolean({
       description: "Read the draft script instead of the published snapshot"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -31,8 +34,8 @@ export default class ScriptGetCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const script = await client.getScript(args.scriptId, flags.draft);
 

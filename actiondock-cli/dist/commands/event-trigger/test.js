@@ -21,6 +21,9 @@ export default class EventTriggerTestCommand extends BaseCommand {
         execute: Flags.boolean({
             description: "Execute the target script after mapping"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -33,8 +36,8 @@ export default class EventTriggerTestCommand extends BaseCommand {
         const { args, flags } = await this.parse(EventTriggerTestCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const result = await client.testEventTrigger(args.triggerId, {
                 event: parseNormalizedEvent(flags["event-json"], flags["event-file"]),

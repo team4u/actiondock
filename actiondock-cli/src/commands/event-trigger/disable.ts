@@ -14,6 +14,9 @@ export default class EventTriggerDisableCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -28,8 +31,8 @@ export default class EventTriggerDisableCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const item = await client.disableEventTrigger(args.triggerId);
 

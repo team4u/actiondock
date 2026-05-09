@@ -11,6 +11,9 @@ export default class StateGetCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -23,8 +26,8 @@ export default class StateGetCommand extends BaseCommand {
         const { args, flags } = await this.parse(StateGetCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const item = await client.getSharedState(args.namespace, args.key);
             if (flags.json) {

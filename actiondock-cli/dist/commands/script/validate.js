@@ -9,6 +9,9 @@ export default class ScriptValidateCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -21,8 +24,8 @@ export default class ScriptValidateCommand extends BaseCommand {
         const { args, flags } = await this.parse(ScriptValidateCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             await client.validateScript(args.scriptId);
             if (flags.json) {

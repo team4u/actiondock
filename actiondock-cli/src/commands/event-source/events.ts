@@ -17,6 +17,9 @@ export default class EventSourceEventsCommand extends BaseCommand {
     limit: Flags.integer({
       description: "Maximum number of records to return"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -31,8 +34,8 @@ export default class EventSourceEventsCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const items = await client.listEventSourceEvents(args.sourceId, flags.limit);
 

@@ -14,6 +14,9 @@ export default class EventSourceRepositoryDevelopCommand extends BaseCommand {
         sourceId: Flags.string({
             description: "Override the local development event source ID"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -26,8 +29,8 @@ export default class EventSourceRepositoryDevelopCommand extends BaseCommand {
         const { args, flags } = await this.parse(EventSourceRepositoryDevelopCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const item = await client.developRepositoryEventSource(args.repositoryId, args.eventSourceId, flags.sourceId);
             if (flags.json) {

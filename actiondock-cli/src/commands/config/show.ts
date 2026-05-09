@@ -8,12 +8,15 @@ export default class ConfigShowCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
+    profile: Flags.string({
+      description: "Profile to show"
+    }),
     help: Flags.help({ char: "h" })
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(ConfigShowCommand);
-    const view = buildConfigView(readConfig());
+    const view = buildConfigView(readConfig(), flags.profile);
 
     if (flags.json) {
       this.printJson(view);
@@ -22,6 +25,8 @@ export default class ConfigShowCommand extends BaseCommand {
 
     this.log([
       `Config file: ${view.path}`,
+      `Current profile: ${view.currentProfile ?? "<not set>"}`,
+      `Profile: ${view.profile ?? "<not set>"}`,
       `Server: ${view.serverUrl ?? "<not set>"}`,
       `Token: ${view.tokenConfigured ? "configured" : "<not set>"}`
     ].join("\n"));

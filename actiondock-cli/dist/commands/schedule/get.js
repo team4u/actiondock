@@ -10,6 +10,9 @@ export default class ScheduleGetCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -22,8 +25,8 @@ export default class ScheduleGetCommand extends BaseCommand {
         const { args, flags } = await this.parse(ScheduleGetCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const schedule = await client.getSchedule(args.scheduleId);
             if (flags.json) {

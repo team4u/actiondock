@@ -1,7 +1,7 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { buildConfigView, normalizeServerUrl, readConfig, setConfigValue } from "../../lib/config.js";
+import { buildConfigView, readConfig, setConfigValue } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 
 export default class ConfigSetCommand extends BaseCommand {
@@ -14,6 +14,9 @@ export default class ConfigSetCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
+    profile: Flags.string({
+      description: "Profile to update"
+    }),
     help: Flags.help({ char: "h" })
   };
 
@@ -25,19 +28,14 @@ export default class ConfigSetCommand extends BaseCommand {
         throw new ActionDockCliError("`config set` 只支持 `server` 或 `token`。", 2);
       }
 
-      const value = args.key === "server" ? normalizeServerUrl(args.value) : args.value.trim();
-      if (!value) {
-        throw new ActionDockCliError(`配置项 ${args.key} 不能为空。`, 2);
-      }
-
-      const next = setConfigValue(args.key === "server" ? "serverUrl" : "token", value);
-      const view = buildConfigView(next);
+      const next = setConfigValue(args.key === "server" ? "serverUrl" : "token", args.value, flags.profile);
+      const view = buildConfigView(next, flags.profile);
       if (flags.json) {
         this.printJson(view);
         return;
       }
 
-      this.log(`${args.key} 已保存。`);
+      this.log(`${args.key} 已保存到 profile ${view.profile}。`);
       this.log(`Config file: ${buildConfigView(readConfig()).path}`);
     } catch (error) {
       this.handleError(error, flags.json);

@@ -13,6 +13,9 @@ export default class ConfigClearCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
+    profile: Flags.string({
+      description: "Profile to update"
+    }),
     help: Flags.help({ char: "h" })
   };
 
@@ -24,14 +27,14 @@ export default class ConfigClearCommand extends BaseCommand {
         throw new ActionDockCliError("`config clear` 只支持 `server` 或 `token`。", 2);
       }
 
-      const next = clearConfigValue(args.key === "server" ? "serverUrl" : "token");
-      const view = buildConfigView(next);
+      const next = clearConfigValue(args.key === "server" ? "serverUrl" : "token", flags.profile);
+      const view = buildConfigView(next, flags.profile);
       if (flags.json) {
         this.printJson(view);
         return;
       }
 
-      this.log(`${args.key} 已清除。`);
+      this.log(`${args.key} 已从 profile ${view.profile} 清除。`);
     } catch (error) {
       this.handleError(error, flags.json);
     }

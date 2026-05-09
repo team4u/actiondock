@@ -34,6 +34,9 @@ export default class PluginInvokeCommand extends BaseCommand {
       options: ["result", "debug"],
       default: "result"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -51,8 +54,8 @@ export default class PluginInvokeCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const plugin = await client.getPlugin(args.pluginId);
       const action = plugin.actions.find((item) => item.action === args.action);

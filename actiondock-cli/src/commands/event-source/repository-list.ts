@@ -13,6 +13,9 @@ export default class EventSourceRepositoryListCommand extends BaseCommand {
     repository: Flags.string({
       description: "Only show event sources from one repository"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -27,8 +30,8 @@ export default class EventSourceRepositoryListCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const items = flags.repository
         ? await client.listRepositoryEventSourcesByRepository(flags.repository)

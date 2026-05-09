@@ -46,6 +46,9 @@ export default class ScriptPatchCommand extends BaseCommand {
     "output-schema-file": Flags.string({
       description: "Merge-patch outputSchema using a JSON file"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -93,8 +96,8 @@ export default class ScriptPatchCommand extends BaseCommand {
       }
 
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const script = await client.patchScript(args.scriptId, patch);
 

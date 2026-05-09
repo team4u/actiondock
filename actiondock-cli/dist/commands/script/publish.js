@@ -10,6 +10,9 @@ export default class ScriptPublishCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -22,8 +25,8 @@ export default class ScriptPublishCommand extends BaseCommand {
         const { args, flags } = await this.parse(ScriptPublishCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const script = await client.publishScript(args.scriptId);
             if (flags.json) {

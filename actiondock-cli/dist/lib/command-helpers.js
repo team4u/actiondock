@@ -7,11 +7,14 @@ import { ActionDockCliError } from "./error.js";
 import { parseInputObject } from "./input.js";
 export function createClient(flags) {
     return new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
     });
 }
 export const serverTokenFlags = {
+    profile: Flags.string({
+        description: "Use a configured server profile"
+    }),
     server: Flags.string({
         description: "Override ActionDock server URL"
     }),

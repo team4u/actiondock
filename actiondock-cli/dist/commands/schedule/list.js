@@ -10,6 +10,9 @@ export default class ScheduleListCommand extends BaseCommand {
         "script-id": Flags.string({
             description: "Only list schedules for the given script ID"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -22,8 +25,8 @@ export default class ScheduleListCommand extends BaseCommand {
         const { flags } = await this.parse(ScheduleListCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const items = await client.listSchedules(flags["script-id"]);
             if (flags.json) {

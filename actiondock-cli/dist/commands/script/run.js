@@ -31,6 +31,9 @@ export default class ScriptRunCommand extends BaseCommand {
         "input-file": Flags.string({
             description: "Path to a JSON file containing the base script input object"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -45,8 +48,8 @@ export default class ScriptRunCommand extends BaseCommand {
         const { args, flags } = await this.parse(ScriptRunCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const script = await client.getScript(args.scriptId, flags.draft);
             const schema = flags.draft ? script.inputSchema : script.publishedSnapshot?.inputSchema ?? script.inputSchema;

@@ -24,6 +24,9 @@ export default class StatePutCommand extends BaseCommand {
         "expires-at": Flags.string({
             description: "Optional expiry time in local ISO format, for example 2026-04-28T12:00:00"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -36,8 +39,8 @@ export default class StatePutCommand extends BaseCommand {
         const { args, flags } = await this.parse(StatePutCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const value = parseJsonValueInput(flags["value-json"], flags["value-file"], {
                 jsonFlag: "`--value-json`",

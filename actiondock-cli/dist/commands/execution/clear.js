@@ -9,6 +9,9 @@ export default class ExecutionClearCommand extends BaseCommand {
         "script-id": Flags.string({
             description: "Only clear records for the given script ID"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -21,8 +24,8 @@ export default class ExecutionClearCommand extends BaseCommand {
         const { flags } = await this.parse(ExecutionClearCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             await client.clearExecutions(flags["script-id"]);
             if (flags.json) {

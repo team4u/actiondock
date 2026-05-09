@@ -10,6 +10,9 @@ export default class ScriptListCommand extends BaseCommand {
         all: Flags.boolean({
             description: "Include draft-only scripts"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -22,8 +25,8 @@ export default class ScriptListCommand extends BaseCommand {
         const { flags } = await this.parse(ScriptListCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const scripts = await client.listScripts();
             const filtered = flags.all ? scripts : scripts.filter((item) => Boolean(item.publishedSnapshot));

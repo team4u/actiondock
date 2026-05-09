@@ -19,29 +19,36 @@ actiondock --version
 
 ## 配置
 
-### 配置服务器地址
+### 配置服务器 Profile
 
 ```bash
-# 设置服务器地址
-actiondock config set server http://localhost:5177
+# 创建或更新服务器 profile
+actiondock config add local --server http://localhost:5177
 
-# 设置访问令牌（如果 API 启用了认证）
-actiondock config set token your-token-here
+# 创建带访问令牌的 profile（如果 API 启用了认证）
+actiondock config add prod --server https://actiondock.example.com --token your-token-here
 
-# 查看当前配置
+# 切换默认 profile
+actiondock config use local
+
+# 查看当前 profile 配置
 actiondock config show
+
+# 临时使用其他 profile
+actiondock script list --profile prod
 ```
 
 ### 环境变量方式
 
-除了 `config set`，也可以通过环境变量配置：
+也可以通过环境变量配置连接目标：
 
 ```bash
 export ACTIONDOCK_BASE_URL=http://localhost:5177
 export ACTIONDOCK_TOKEN=your-token-here
+export ACTIONDOCK_PROFILE=local
 ```
 
-环境变量优先级高于配置文件设置。
+连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认本地地址。
 
 ## 脚本命令
 
@@ -171,10 +178,14 @@ actiondock server -p 8080  # 指定端口启动
 ## 配置命令参考
 
 ```bash
-actiondock config set server <url>       # 设置服务器地址
-actiondock config set token <token>     # 设置访问令牌
-actiondock config show                  # 查看当前配置
-actiondock config reset                 # 重置配置
+actiondock config add <name> --server <url> [--token <token>]  # 创建或更新 profile
+actiondock config use <name>                                   # 设置当前 profile
+actiondock config list                                         # 列出 profiles
+actiondock config show [--profile <name>]                      # 查看 profile 配置
+actiondock config set server <url> [--profile <name>]          # 更新服务器地址
+actiondock config set token <token> [--profile <name>]         # 更新访问令牌
+actiondock config clear token [--profile <name>]               # 清除访问令牌
+actiondock config remove <name>                                # 删除 profile
 ```
 
 ## 完整示例流程
@@ -184,7 +195,7 @@ actiondock config reset                 # 重置配置
 npm install -g actiondock
 
 # 2. 配置服务器
-actiondock config set server http://localhost:5177
+actiondock config add local --server http://localhost:5177
 
 # 3. 查看可用脚本
 actiondock script list
@@ -228,12 +239,14 @@ npm list -g actiondock
 
 1. 检查 ActionDock 服务是否在运行：`actiondock script list`
 2. 检查服务器地址配置：`actiondock config show`
-3. 检查是否有网络防火墙拦截
+3. 多 server 场景确认当前 profile：`actiondock config list`
+4. 检查是否有网络防火墙拦截
 
 ### Q: Token 认证失败
 
 1. 确认 Token 是否有效（在管理台检查令牌状态）
-2. 确认 Token 设置正确：`actiondock config set token <正确的 Token>`
+2. 确认当前 profile 的 Token 设置正确：`actiondock config set token <正确的 Token>`
+3. 临时连接其他服务端时确认是否传了正确的 `--profile <name>`
 
 ---
 

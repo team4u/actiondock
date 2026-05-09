@@ -32,6 +32,9 @@ export default class ScheduleUpdateCommand extends BaseCommand {
         "input-file": Flags.string({
             description: "Path to a JSON file containing the base schedule input object"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -46,8 +49,8 @@ export default class ScheduleUpdateCommand extends BaseCommand {
         const { args, flags } = await this.parse(ScheduleUpdateCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const existing = await client.getSchedule(args.scheduleId);
             const input = await buildScheduleInput({

@@ -17,6 +17,9 @@ export default class EventSourceIngestCommand extends BaseCommand {
         "payload-file": Flags.string({
             description: "Path to a JSON file containing the incoming event payload"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -29,8 +32,8 @@ export default class EventSourceIngestCommand extends BaseCommand {
         const { args, flags } = await this.parse(EventSourceIngestCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const result = await client.ingestEventSource(args.sourceId, parseIncomingEventPayload(flags["payload-json"], flags["payload-file"]));
             if (flags.json) {

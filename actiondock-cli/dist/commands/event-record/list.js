@@ -10,6 +10,9 @@ export default class EventRecordListCommand extends BaseCommand {
         "source-id": Flags.string({
             description: "Filter by event source ID"
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -22,8 +25,8 @@ export default class EventRecordListCommand extends BaseCommand {
         const { flags } = await this.parse(EventRecordListCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const items = await client.listEventRecords(flags["source-id"]);
             if (flags.json) {

@@ -54,6 +54,9 @@ export default class EventTriggerUpdateCommand extends BaseCommand {
     disabled: Flags.boolean({
       description: "Mark the event trigger as disabled"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -68,8 +71,8 @@ export default class EventTriggerUpdateCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const existing = await client.getEventTrigger(args.triggerId);
       const patch = parseOptionalObject<EventTrigger>(flags["definition-json"], flags["definition-file"], {

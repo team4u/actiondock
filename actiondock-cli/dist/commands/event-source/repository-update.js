@@ -14,6 +14,9 @@ export default class EventSourceRepositoryUpdateCommand extends BaseCommand {
             description: "Install or update referenced script dependencies",
             default: true
         }),
+        profile: Flags.string({
+            description: "Use a configured server profile"
+        }),
         server: Flags.string({
             description: "Override ActionDock server URL"
         }),
@@ -26,8 +29,8 @@ export default class EventSourceRepositoryUpdateCommand extends BaseCommand {
         const { args, flags } = await this.parse(EventSourceRepositoryUpdateCommand);
         try {
             const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags.server),
-                token: resolveToken(flags.token)
+                serverUrl: resolveServerUrl(flags),
+                token: resolveToken(flags)
             });
             const result = await client.updateRepositoryEventSource(args.repositoryId, args.eventSourceId, {
                 installSchedules: false,

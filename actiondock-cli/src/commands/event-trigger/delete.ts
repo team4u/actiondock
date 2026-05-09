@@ -13,6 +13,9 @@ export default class EventTriggerDeleteCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -27,8 +30,8 @@ export default class EventTriggerDeleteCommand extends BaseCommand {
 
     try {
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       await client.deleteEventTrigger(args.triggerId);
 

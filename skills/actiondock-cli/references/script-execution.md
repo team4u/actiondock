@@ -13,8 +13,8 @@
 ## 首次使用：配置连接
 
 ```bash
-actiondock config set server https://your-server.example.com
-actiondock config set token your-bearer-token
+actiondock config add prod --server https://your-server.example.com --token your-bearer-token
+actiondock config use prod
 ```
 
 查看当前配置：
@@ -23,25 +23,38 @@ actiondock config set token your-bearer-token
 actiondock config show
 ```
 
-配置也可通过环境变量覆盖，优先级：命令行 flag > 环境变量 > 本地配置文件。
+如果需要频繁访问多个服务端，为每个服务端创建一个 profile：
+
+```bash
+actiondock config add local --server http://localhost:5177
+actiondock config add staging --server https://staging.example.com --token staging-token
+actiondock config list
+actiondock script list --profile staging
+```
+
+连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认本地地址。
 
 | 环境变量 | 说明 |
 |----------|------|
 | `ACTIONDOCK_BASE_URL` | 服务地址 |
 | `ACTIONDOCK_TOKEN` | Bearer Token |
+| `ACTIONDOCK_PROFILE` | 默认使用的 profile 名称 |
 
 配置文件位置：
-- Windows: `%APPDATA%\actiondock-cli\config.json`
-- macOS: `~/Library/Application Support/actiondock-cli/config.json`
-- Linux: `~/.config/actiondock-cli/config.json`
+- Windows: `%APPDATA%\actiondock\config.json`
+- macOS: `~/Library/Application Support/actiondock/config.json`
+- Linux: `~/.config/actiondock/config.json`
 
 | 命令 | 说明 |
 |------|------|
-| `actiondock config set server <url>` | 保存服务地址 |
-| `actiondock config set token <token>` | 保存认证 Token |
-| `actiondock config show` | 查看当前配置 |
-| `actiondock config clear server` | 清除服务地址 |
-| `actiondock config clear token` | 清除 Token |
+| `actiondock config add <name> --server <url> [--token <token>]` | 创建或更新 profile |
+| `actiondock config use <name>` | 设置当前 profile |
+| `actiondock config list` | 列出 profiles |
+| `actiondock config show [--profile <name>]` | 查看当前或指定 profile |
+| `actiondock config set server <url> [--profile <name>]` | 更新 profile 服务地址 |
+| `actiondock config set token <token> [--profile <name>]` | 更新 profile 认证 Token |
+| `actiondock config clear token [--profile <name>]` | 清除 profile Token |
+| `actiondock config remove <name>` | 删除 profile |
 
 ---
 

@@ -17,6 +17,9 @@ export default class ExecutionListCommand extends BaseCommand {
     "schedule-id": Flags.string({
       description: "Filter by schedule ID"
     }),
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
     server: Flags.string({
       description: "Override ActionDock server URL"
     }),
@@ -35,8 +38,8 @@ export default class ExecutionListCommand extends BaseCommand {
       }
 
       const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags.server),
-        token: resolveToken(flags.token)
+        serverUrl: resolveServerUrl(flags),
+        token: resolveToken(flags)
       });
       const items = await client.listExecutions({
         scriptId: flags["script-id"],

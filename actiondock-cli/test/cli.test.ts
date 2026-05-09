@@ -1464,7 +1464,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  await closeServer(server);
 });
 
 describe("CLI integration", () => {
@@ -2587,17 +2587,83 @@ describe("CLI integration", () => {
     });
   });
 
-  it("persists config values", async () => {
+  it("persists and uses server profiles", async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "actiondock-cli-home-"));
-    expect((await runCli(["config", "set", "server", baseUrl], home)).status).toBe(0);
+    expect((await runCli(["config", "add", "local", "--server", baseUrl, "--token", "profile-token"], home)).status).toBe(0);
     const show = await runCli(["config", "show", "--json"], home);
     expect(show.status).toBe(0);
     expect(JSON.parse(show.stdout)).toEqual(
       expect.objectContaining({
+        currentProfile: "local",
+        profile: "local",
         serverUrl: baseUrl,
-        tokenConfigured: false
+        tokenConfigured: true
       })
     );
+
+    requests.length = 0;
+    const list = await runCli(["script", "list", "--json"], home);
+    expect(list.status).toBe(0);
+    expect(requests.at(-1)?.url).toBe("/api/scripts");
+    expect(requests.at(-1)?.headers.authorization).toBe("Bearer profile-token");
+  });
+
+  it("switches profiles and supports explicit overrides", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "actiondock-cli-home-"));
+    const otherServer = http.createServer((req, res) => {
+      requests.push({ method: req.method, url: req.url ?? "", headers: req.headers });
+      json(res, { status: 0, msg: "ok", data: [] });
+    });
+    const otherUrl = await listen(otherServer);
+
+    try {
+      expect((await runCli(["config", "add", "local", "--server", baseUrl], home)).status).toBe(0);
+      expect((await runCli(["config", "add", "other", "--server", otherUrl, "--token", "other-token"], home)).status).toBe(0);
+      expect((await runCli(["config", "use", "other"], home)).status).toBe(0);
+
+      const profileList = await runCli(["config", "list", "--json"], home);
+      expect(profileList.status).toBe(0);
+      expect(JSON.parse(profileList.stdout)).toEqual(expect.objectContaining({
+        currentProfile: "other",
+        profiles: expect.arrayContaining([
+          expect.objectContaining({ name: "local", current: false }),
+          expect.objectContaining({ name: "other", current: true, tokenConfigured: true })
+        ])
+      }));
+
+      requests.length = 0;
+      expect((await runCli(["script", "list", "--json"], home)).status).toBe(0);
+      expect(requests.at(-1)?.headers.authorization).toBe("Bearer other-token");
+
+      requests.length = 0;
+      expect((await runCli(["script", "list", "--profile", "local", "--json"], home)).status).toBe(0);
+      expect(requests.at(-1)?.headers.authorization).toBeUndefined();
+
+      requests.length = 0;
+      expect(
+        (await runCli(["script", "list", "--profile", "other", "--json"], home, {
+          ACTIONDOCK_BASE_URL: baseUrl,
+          ACTIONDOCK_TOKEN: "env-token"
+        })).status
+      ).toBe(0);
+      expect(requests.at(-1)?.headers.authorization).toBe("Bearer other-token");
+
+      requests.length = 0;
+      expect((await runCli(["script", "list", "--server", baseUrl, "--token", "flag-token", "--json"], home)).status).toBe(0);
+      expect(requests.at(-1)?.headers.authorization).toBe("Bearer flag-token");
+    } finally {
+      await closeServer(otherServer);
+    }
+  }, 20000);
+
+  it("supports ACTIONDOCK_PROFILE", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "actiondock-cli-home-"));
+    expect((await runCli(["config", "add", "local", "--server", baseUrl, "--token", "env-profile-token"], home)).status).toBe(0);
+
+    requests.length = 0;
+    const result = await runCli(["script", "list", "--json"], home, { ACTIONDOCK_PROFILE: "local" });
+    expect(result.status).toBe(0);
+    expect(requests.at(-1)?.headers.authorization).toBe("Bearer env-profile-token");
   });
 
   it("keeps command output stable when version checks are disabled explicitly", async () => {
@@ -2658,6 +2724,22 @@ async function runCli(args: string[], homeDir?: string, envOverrides?: NodeJS.Pr
       resolve({ status, signal, stdout, stderr });
     });
   });
+}
+
+async function listen(serverToStart: http.Server): Promise<string> {
+  return await new Promise((resolve) => {
+    serverToStart.listen(0, "127.0.0.1", () => {
+      const address = serverToStart.address();
+      if (!address || typeof address === "string") {
+        throw new Error("failed to start test server");
+      }
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
+}
+
+async function closeServer(serverToClose: http.Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => serverToClose.close((error) => (error ? reject(error) : resolve())));
 }
 
 function json(response: http.ServerResponse, payload: unknown): void {
