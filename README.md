@@ -71,7 +71,7 @@ npm install -g actiondock
 actiondock server
 
 # 或从源码构建
-git clone <repository-url>
+git clone https://github.com/team4u/actiondock.git
 cd action-dock
 mvn -pl actiondock-app-spring -am -DskipTests spring-boot:run
 ```
