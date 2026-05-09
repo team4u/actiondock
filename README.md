@@ -111,7 +111,7 @@ npm run build     # 构建
 
 | 文档 | 说明 |
 |------|------|
-| [技术概览](docs/overview.md) | 项目理念与核心能力介绍 |
+| [让脚本真正可复用](docs/script-platform.md) | 项目理念与核心能力介绍 |
 | [用户手册](docs/user-manual.md) | 完整文档入口 |
 
 ## 技术栈
