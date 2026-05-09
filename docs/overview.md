@@ -1,8 +1,10 @@
 # ActionDock 技术概览
 
-ActionDock 是一个面向团队内部的自动化工具平台。它把散落在个人电脑、服务器和项目目录里的脚本，整理成可管理、可调用、可分发、可审计的工具资产。
+ActionDock 是一个面向团队内部的自动化工具平台。它把散落在个人电脑、服务器和项目目录里的脚本，整理成可管理、可调用、可分发、可审计的团队能力。
 
-一份脚本定义可以同时被 CLI、管理台、REST API、定时任务、Webhook 和 AI Agent 使用。团队不需要为每种入口维护一套参数说明，也不需要在多个 Skill、多个节点或多个项目里复制同一段脚本。
+一份脚本定义可以同时被 CLI、管理台、REST API、定时任务、Webhook 和 AI Agent 使用。团队不需要为每种入口维护一套参数说明，也不需要在多个 Skill、多个节点或多个项目里复制同一段实现。
+
+它最有价值的地方不是“能跑脚本”，而是把脚本从个人习惯，变成团队可以复用、治理和持续演进的能力。
 
 
 ## 为什么需要它
@@ -210,7 +212,11 @@ actiondock script run cleanup-temp-files --profile prod --dryRun true --json
 同一个 CLI 可以管理脚本、配置值、共享状态、定时任务、事件源、插件、仓库和执行记录。对运维和平台同学来说，这比登录每台机器手动找脚本更稳定，也更容易审计。
 
 
-## 脚本运行时
+## 跨语言调用：Groovy 调 Python，不必再拆额外服务
+
+很多团队的实际情况是：流程编排更适合用 Groovy 写，数据处理、爬取、文本处理又更想直接用 Python 生态。没有统一运行时的时候，往往只能把 Python 逻辑单独拆成一个服务，再在脚本里写 HTTP 调用。
+
+ActionDock 把这件事收回到脚本运行时里。Groovy 可以直接调 Python，Python 也可以继续调平台里的脚本、插件和配置，不需要额外再起一层微服务。
 
 脚本执行时，ActionDock 会注入一组运行时对象。Groovy 和 Python 都可以使用这些能力：
 
@@ -218,7 +224,7 @@ actiondock script run cleanup-temp-files --profile prod --dryRun true --json
 |------|------|
 | `scripts` | 调用其他已发布脚本 |
 | `plugins` | 调用 Java 插件动作 |
-| `state` | 读写共享状态，支持 CAS |
+| `state` | 读写共享状态 |
 | `config` | 读取全局配置值 |
 | `log` | 写入执行日志 |
 
@@ -228,23 +234,23 @@ actiondock script run cleanup-temp-files --profile prod --dryRun true --json
 def result = scripts.invoke("python-data-processor", [input: rawData])
 ```
 
-在 Python 中调用插件：
+在 Python 中也可以继续调用平台内能力：
 
 ```python
-result = plugins.invoke("actiondock-ai", "chat", {
-    "modelProfile": "default-chat",
-    "messages": [{"role": "user", "content": "总结这段日志"}]
-})
+report = scripts.invoke("groovy-report-generator", {"data": processed})
+message = plugins.invoke("notification-plugin", "send", {"channel": "email"})
 ```
 
-Groovy 脚本在 JVM 内执行，并缓存编译结果。Python 脚本通过子进程执行，使用 JSON 作为输入输出格式；日志、脚本互调、插件调用和状态操作通过运行时桥接完成。脚本作者不需要自己部署额外的微服务来完成跨语言调用。
+这样写的直接收益很实际：团队可以继续把流程放在脚本里编排，把真正适合 Python 的部分留在 Python，不需要为了跨语言调用再单独维护 Flask、FastAPI 之类的中间层。
+
+Groovy 脚本在 JVM 内执行，并缓存编译结果。Python 脚本通过子进程执行，使用 JSON 作为输入输出格式；日志、脚本互调、插件调用和状态操作通过运行时桥接完成。
 
 Python 桥接的实现也保持简单：stdin 传入脚本输入，stdout 返回脚本结果，stderr 承载带前缀的控制消息，例如日志、`scripts.invoke()`、`plugins.invoke()` 和 `state` 操作。这样 Python 可以使用自己的生态库，同时仍然接入 ActionDock 的执行记录、配置、状态和插件体系。
 
 
-## 插件扩展
+## 插件扩展：脚本侧一行调用内部 Java 能力
 
-脚本适合轻量逻辑。对于需要复用内部 SDK、连接专有系统或封装复杂 Java 能力的场景，可以使用插件。
+脚本适合做编排，但团队里总会有一些能力不适合长期写在脚本里，比如内部 SDK、专有系统接入、统一鉴权、复杂协议适配。这类能力可以沉淀成插件，然后继续被脚本用同一种方式调用。
 
 插件基于 PF4J，打包成 JAR 后安装到 ActionDock。脚本侧通过 `plugins.invoke()` 调用：
 
@@ -252,34 +258,27 @@ Python 桥接的实现也保持简单：stdin 传入脚本输入，stdout 返回
 def result = plugins.invoke("my-plugin", "hello", [name: "world"])
 ```
 
-插件通过清单文件声明自己的动作、配置 Schema、输入 Schema 和输出 Schema。平台支持安装、启动、停止、升级和卸载插件。升级失败时会回滚到旧版本，避免一次插件升级影响已有流程。
-
-这让团队可以把“短平快脚本”和“稳定 Java 扩展”放在同一个调用模型里：脚本负责流程编排，插件负责复用内部 SDK、鉴权封装、复杂协议和长周期维护的能力。
-
-
-## 共享状态和配置
-
-很多脚本需要共享运行状态，例如同步游标、临时令牌、上次处理时间或分布式任务进度。ActionDock 提供共享状态存储：
-
-```groovy
-def current = state.get("cursor.sync", "users")
-def result = state.cas("cursor.sync", "users", current?.version, [cursor: "next-token"])
-
-if (!result.updated) {
-    throw new IllegalStateException("shared state version conflict")
-}
+```python
+result = plugins.invoke("my-plugin", "hello", {"name": "world"})
 ```
 
-CAS 可以避免多个任务同时写入时互相覆盖。
+插件通过清单文件声明自己的动作、配置 Schema、输入 Schema 和输出 Schema。平台支持安装、启动、停止、升级和卸载插件。升级失败时会回滚到旧版本，避免一次插件升级影响已有流程。
 
-配置值用于保存 API Key、连接字符串、SMTP 密码等信息。脚本和插件可以通过 `config.get()` 或 `${config.some-key}` 引用配置。敏感值可以标记为 Secret，在管理台和接口中脱敏展示。
+这件事的价值在于，脚本作者不需要关心底层到底是 Groovy、Python 还是 Java 插件。对使用方来说，平台里沉淀下来的能力都能按同一种方式调用。
+
+
+## 配置和环境隔离
+
+团队把脚本放到共享平台以后，真正容易失控的通常不是脚本代码本身，而是环境差异：谁在用哪套密钥、哪个节点连哪个地址、仓库更新后本地覆盖还能不能保住。
+
+ActionDock 把这些环境信息集中到配置层里。脚本和插件可以通过 `config.get()` 或 `${config.some-key}` 引用配置，敏感值可以标记为 Secret，在管理台和接口中脱敏展示。
 
 仓库分发的工具也可以携带配置模板。安装后，模板会同步成受管配置值；本地环境可以复制为本地覆盖值，后续仓库更新时仍保留本地差异。这对 dev、test、prod 使用不同密钥和地址的场景很关键。
 
 
-## AI 能力
+## AI 能力：不是外挂，而是平台原生能力
 
-ActionDock 的 AI 能力不是单独的旁路系统，而是接入了同一套脚本、插件、配置和审计体系。
+ActionDock 的 AI 能力不是单独挂在外面的旁路系统，而是接进了同一套脚本、插件、配置和审计体系。脚本注册成工具只是入口，后面还有模型配置、结构化输出、向量化、Agent Run 和执行记录。
 
 主要概念：
 
@@ -306,14 +305,14 @@ def result = plugins.invoke("actiondock-ai", "structured", [
 ])
 ```
 
-Agent 也可以把已发布的 `TOOL` 类型脚本当成工具调用。这样团队可以把稳定的内部能力放在 ActionDock 中，再让 AI 在受控的 Toolset 范围内使用这些能力。
+Agent 也可以把已发布的 `TOOL` 类型脚本当成工具调用。这样团队可以先把稳定的内部能力沉淀到 ActionDock，再让 AI 在受控的 Toolset 范围内使用这些能力。
 
 这里的重点不是“让 AI 什么都能做”，而是把 AI 能做的事收敛到平台已经定义好的工具、权限和审计里。脚本工具的 Schema 限定输入，Toolset 限定可用范围，Agent Run 留下执行过程。
 
 
-## 仓库分发
+## 仓库分发：像内部软件源一样管理工具
 
-团队内部工具一旦变多，就需要分发和更新机制。ActionDock 的 Repository 机制用于管理可安装资产：
+团队内部工具一旦变多，真正麻烦的不是“有没有脚本”，而是“别人怎么发现、怎么安装、怎么更新、怎么知道自己装的是不是同一版”。ActionDock 的 Repository 机制就是为这个问题准备的：
 
 - 脚本工具。
 - 插件。
@@ -331,16 +330,16 @@ actiondock repository tool install internal-tools cleanup-temp-files \
   --install-plugin-dependencies
 ```
 
-这让团队可以把常用能力沉淀成内部工具库，而不是靠复制脚本、发压缩包或在聊天里贴命令。
+这让团队可以把常用能力沉淀成内部工具库，而不是靠复制脚本、发压缩包或在聊天里贴命令。对使用方来说，更接近“发现一个工具，然后安装它”，而不是“拿到一段脚本，再自己补齐环境”。
 
 仓库资产不只包含源码本身，还可以带上脚本依赖、插件依赖、调度模板和配置模板。安装时可以选择是否连同依赖一起安装，减少“脚本装好了，但环境还缺一堆东西”的落地成本。
 
 仓库还支持开发同步场景。开发仓库里的工具可以拉取成本地开发脚本，平台会记录来源仓库、工具 ID、版本、提交和摘要，并判断本地改动、远端改动或两边同时改动。这样团队可以在平台里调试脚本，同时保留从内部仓库更新的通道。
 
 
-## Skill 管理
+## Skill 管理：平台内给 Agent，用平台外给 IDE
 
-Skill 管理模块负责把 Skill 作为平台资产统一维护。Skill 可以从仓库、GitHub 集合、本地目录或 ZIP 安装，也可以同步到不同目标目录。
+Skill 管理模块负责把 Skill 作为平台资产统一维护。Skill 可以从仓库、GitHub 集合、本地目录或 ZIP 安装，也可以同步到不同目标目录。这样团队里的知识、流程和工具说明不必散落在聊天记录、Prompt 模板和个人目录里。
 
 支持的目标包括 Claude、Codex、Gemini、CodeBuddy、ActionDock 和自定义目录。
 
@@ -362,13 +361,13 @@ Skill 管理模块负责把 Skill 作为平台资产统一维护。Skill 可以�
 - 事件记录：保存外部事件、标准化结果和触发器派发结果。
 - 访问令牌：为 CLI、CI 或外部系统创建 Bearer Token，可启用、禁用和吊销。
 - 配置值：集中管理普通配置和 Secret。
-- 共享状态：支持版本号、过期时间和敏感值标记。
+- 共享状态：集中保存跨脚本共享数据，支持过期时间和敏感值标记。
 - 数据备份：管理台支持导出和恢复系统数据包，可用于升级前备份、环境迁移和故障恢复；导出时也可以按需要处理 Skill、Secret 等内容。
 
 这些能力不会让脚本本身更复杂，但能让团队更放心地把脚本放到共享环境里运行。
 
 
-## 技术架构
+## 技术架构：一套底层能力，多个入口复用
 
 ActionDock 采用分层和端口适配器思路。核心领域层定义脚本、执行、事件、仓库、配置、共享状态等模型；Spring Boot、JPA、CLI、管理台、插件和 AI 模块作为外部适配。
 
