@@ -81,6 +81,8 @@ actiondock plugin invoke my-plugin hello --name world --json
 actiondock plugin invoke my-plugin summarize --topic ops --priority 3 --json
 ```
 
+`--server`、`--token`、`--profile` 是连接参数保留字，不会作为 action 动态参数传入；如果 action 参数同名，使用 `--args-json` / `--args-file`。
+
 ### 复杂参数：优先使用 `--args-json` 或 `--args-file`
 
 对象或数组字段不要硬拆成动态 flag，直接传 JSON：

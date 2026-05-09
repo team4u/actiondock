@@ -126,6 +126,8 @@ actiondock script run my-script --name alice --age 30 --enabled --json
 actiondock script run my-script --input-json '{"name": "alice", "metadata": {"source": "web"}}'
 ```
 
+`--server`、`--token`、`--profile` 是 CLI 连接参数保留字，不会作为 Schema 动态字段传入；如果脚本输入字段同名，请使用 `--input-json` 或 `--input-file`。
+
 ### 创建脚本
 
 ```bash

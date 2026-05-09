@@ -56,6 +56,17 @@ describe("collectDynamicFlags", () => {
       ["count", "3"]
     ]);
   });
+
+  it("skips reserved connection profile flags", () => {
+    const result = collectDynamicFlags(
+      ["script-a", "--profile", "local", "--server=http://127.0.0.1:5177", "--token", "secret", "--name", "Alice"],
+      { positionals: ["script-a"] }
+    );
+
+    expect([...result.entries()]).toEqual([
+      ["name", "Alice"]
+    ]);
+  });
 });
 
 describe("parseInputObject", () => {

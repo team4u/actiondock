@@ -2608,6 +2608,41 @@ describe("CLI integration", () => {
     expect(requests.at(-1)?.headers.authorization).toBe("Bearer profile-token");
   });
 
+  it("uses profiles for script run without treating profile as script input", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "actiondock-cli-home-"));
+    expect((await runCli(["config", "add", "local", "--server", baseUrl, "--token", "profile-token"], home)).status).toBe(0);
+
+    requests.length = 0;
+    const result = await runCli([
+      "script",
+      "run",
+      "published-tool",
+      "--profile",
+      "local",
+      "--name",
+      "Alice",
+      "--json"
+    ], home);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(
+      expect.objectContaining({
+        id: "exec-1",
+        status: "SUCCESS"
+      })
+    );
+
+    const executionRequest = requests.find((item) => item.url === "/api/scripts/published-tool/execute");
+    expect(executionRequest?.headers.authorization).toBe("Bearer profile-token");
+    expect(executionRequest?.body).toEqual({
+      input: {
+        name: "Alice"
+      },
+      mode: "SYNC",
+      responseView: "RESULT"
+    });
+  });
+
   it("switches profiles and supports explicit overrides", async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "actiondock-cli-home-"));
     const otherServer = http.createServer((req, res) => {

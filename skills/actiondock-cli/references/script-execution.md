@@ -115,6 +115,8 @@ actiondock script run <script-id> --input-file /tmp/my-script-input.json
 actiondock script run <script-id> --name alice --count 3
 ```
 
+`--server`、`--token`、`--profile` 是连接参数保留字，不会作为动态输入字段传入；如果脚本输入字段同名，使用 `--input-json` / `--input-file`。
+
 ### 混合传参
 
 `--input-file` 提供基础输入对象，动态 flag 会合并进去并覆盖同名字段：

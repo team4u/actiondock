@@ -4,6 +4,7 @@ const DEFAULT_BOOLEAN_FLAGS = new Set(["draft", "json"]);
 const DEFAULT_VALUE_FLAGS = new Set([
     "server",
     "token",
+    "profile",
     "mode",
     "response-view",
     "input-json",
