@@ -58,6 +58,8 @@ ScriptDefinition script = new ScriptDefinition()
 
 这里最重要的是 `inputSchema` 和 `outputSchema`。它们不是只给人看的文档，而是平台运行时会使用的结构化契约。
 
+示例里没有展开依赖字段。实际脚本还可以声明脚本依赖、插件依赖和 Python requirements，这些信息会跟随发布快照和仓库分发一起流转。
+
 
 ## 一份 Schema，多种入口
 
@@ -159,11 +161,25 @@ curl -X POST http://localhost:5177/api/scripts/hello-groovy/execute \
 
 ### AI Agent
 
-已发布的工具脚本可以注册为 AI 工具。Agent 不需要靠长 Prompt 猜参数，而是根据脚本 Schema 看到明确的工具输入结构。
+ActionDock 里的 Agent Profile 不是单纯的一段 Prompt，而是由模型、工具和 Skill 共同组成：
 
-这对团队内部的 AI Skill 很有用。例如多个 Skill 都需要发邮件、查库存或生成报表时，不需要每个 Skill 复制一份实现，只要调用同一个 ActionDock 工具即可。
+- Model Profile：决定用哪个模型、供应商和 API Key。
+- Toolset / Direct Tools：决定 Agent 能实际调用哪些工具。
+- Skills：决定 Agent 具备哪些任务知识、流程约束和使用说明。
 
-平台还可以基于脚本生成 Skill 示例，包含 `scriptId`、执行模式、输入输出 Schema、CLI 调用命令和 HTTP 回退命令。这样团队把一个脚本发布成工具以后，可以直接把可用的调用说明交给 AI 编码助手，而不是每次手写一份说明。
+已发布的 `TOOL` 类型脚本会暴露为 ActionDock AI 工具，工具名形如 `script.<scriptId>`，并可以通过 Toolset 或 Direct Tools 授权给 Agent 使用。脚本的 `inputSchema` 会变成工具输入结构，Agent 不需要靠 Prompt 猜参数；Toolset 的权限级别也能限制 Agent 能调用哪些类型的工具。
+
+Skill 是另一层。平台里的 Skill 管理模块负责安装和维护 Skill，Agent Profile 可以选择已经安装且启用的 Skill 作为自己的技能。Skill 本身不是执行入口，它更像 Agent 的知识包：告诉 Agent 某类任务的背景、流程、边界、示例和工具使用方式。
+
+例如团队有一个统一的 `send-email` 脚本：
+
+- 脚本发布后，作为工具加入 `notification-tools` Toolset。
+- 团队再维护一个 `incident-notification` Skill，描述告警通知的模板、审批规则、字段映射和注意事项。
+- Agent Profile 同时绑定这个 Toolset 和 Skill。
+
+这样 Agent 在处理告警任务时，Skill 提供“怎么做”的上下文，工具脚本提供“实际执行”的能力，执行过程仍然进入 ActionDock 的记录和审计体系。
+
+平台也可以基于脚本生成 Skill 示例，包含 `scriptId`、输入输出 Schema、CLI 调用命令和 HTTP 回退命令。这个生成结果的价值不是把脚本注册成工具，而是快速生成一份可复用的技能说明；团队可以把它纳入 Skill 管理，再按需绑定到 Agent 或同步给外部 AI 编码助手。
 
 
 ## CLI 可以控制多个节点
@@ -244,7 +260,7 @@ def result = plugins.invoke("my-plugin", "hello", [name: "world"])
 
 ```groovy
 def current = state.get("cursor.sync", "users")
-def result = state.cas("cursor.sync", "users", current.version, [cursor: "next-token"])
+def result = state.cas("cursor.sync", "users", current?.version, [cursor: "next-token"])
 
 if (!result.updated) {
     throw new IllegalStateException("shared state version conflict")
@@ -287,7 +303,7 @@ def result = plugins.invoke("actiondock-ai", "structured", [
 ])
 ```
 
-Agent 也可以把已发布脚本当成工具调用。这样团队可以把稳定的内部能力放在 ActionDock 中，再让 AI 在受控的 Toolset 范围内使用这些能力。
+Agent 也可以把已发布的 `TOOL` 类型脚本当成工具调用。这样团队可以把稳定的内部能力放在 ActionDock 中，再让 AI 在受控的 Toolset 范围内使用这些能力。
 
 这里的重点不是“让 AI 什么都能做”，而是把 AI 能做的事收敛到平台已经定义好的工具、权限和审计里。脚本工具的 Schema 限定输入，Toolset 限定可用范围，Agent Run 留下执行过程。
 
@@ -316,16 +332,23 @@ actiondock repository tool install internal-tools cleanup-temp-files \
 
 仓库资产不只包含源码本身，还可以带上脚本依赖、插件依赖、调度模板和配置模板。安装时可以选择是否连同依赖一起安装，减少“脚本装好了，但环境还缺一堆东西”的落地成本。
 
+仓库还支持开发同步场景。开发仓库里的工具可以拉取成本地开发脚本，平台会记录来源仓库、工具 ID、版本、提交和摘要，并判断本地改动、远端改动或两边同时改动。这样团队可以在平台里调试脚本，同时保留从内部仓库更新的通道。
+
 
 ## Skill 管理
 
-ActionDock 也可以管理 AI 编码助手使用的 Skill。它支持从仓库、GitHub 集合、本地目录或 ZIP 安装 Skill，并同步到不同目标目录。
+Skill 管理模块负责把 Skill 作为平台资产统一维护。Skill 可以从仓库、GitHub 集合、本地目录或 ZIP 安装，也可以同步到不同目标目录。
 
 支持的目标包括 Claude、Codex、Gemini、CodeBuddy、ActionDock 和自定义目录。
 
-这对团队内部很实用：当 ActionDock 里的 CLI 用法、脚本规范和工具说明更新后，可以通过 Skill 分发给团队里的 AI 编码助手，而不是让每个人手动维护提示词和文档片段。
+在 ActionDock 内部，已安装且启用的 Skill 可以被 Agent Profile 选择，作为 Agent 运行时加载的技能上下文。它适合沉淀团队流程、工具使用规范、业务边界和示例。
 
-配合脚本生成的 Skill 示例，团队可以形成一条比较清晰的链路：脚本发布成工具，工具生成可执行的调用说明，Skill 同步到 AI 编码助手，AI 再通过 CLI 或 HTTP 使用这个工具。
+对外部 AI 编码助手，Skill 也可以同步到对应目标目录，让团队成员在 IDE 或 AI 客户端里复用同一套工具说明。
+
+因此 Skill 管理连接了两类场景：
+
+- 平台内：Agent 绑定 Skill，把团队知识加载到 Agent 上下文。
+- 平台外：把同一份 Skill 同步给外部 AI 编码助手使用。
 
 
 ## 执行审计和治理
@@ -337,7 +360,7 @@ ActionDock 也可以管理 AI 编码助手使用的 Skill。它支持从仓库�
 - 访问令牌：为 CLI、CI 或外部系统创建 Bearer Token，可启用、禁用和吊销。
 - 配置值：集中管理普通配置和 Secret。
 - 共享状态：支持版本号、过期时间和敏感值标记。
-- 数据备份：管理台支持导出和恢复系统数据包。
+- 数据备份：管理台支持导出和恢复系统数据包，可用于升级前备份、环境迁移和故障恢复；导出时也可以按需要处理 Skill、Secret 等内容。
 
 这些能力不会让脚本本身更复杂，但能让团队更放心地把脚本放到共享环境里运行。
 
@@ -402,6 +425,19 @@ actiondock script run hello-groovy --name alice --json
 - 发布后添加一个定时任务。
 - 为不同环境配置 CLI profile。
 - 把脚本发布到内部仓库，给其他节点安装。
+
+
+## 团队落地建议
+
+内部团队可以按这个顺序推进：
+
+1. 先选 2 到 3 个高频脚本接入，例如通知、报表、数据同步或巡检。
+2. 给这些脚本补齐输入输出 Schema，不急着一次性迁移所有脚本。
+3. 用 CLI profile 区分 local、dev、prod，先把多节点执行和审计链路跑通。
+4. 稳定后再补充定时任务、Webhook、配置模板和仓库分发。
+5. 对适合 AI 使用的能力，再把 `TOOL` 类型脚本加入 Toolset，并为 Agent 绑定对应 Skill。
+
+这个顺序的好处是，团队可以先解决脚本复用、参数一致和执行记录的问题，再逐步把仓库分发、Agent 和 Skill 管理接进来。
 
 
 ## 总结
