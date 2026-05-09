@@ -187,13 +187,16 @@ Skill 是另一层。平台里的 Skill 管理模块负责安装和维护 Skill�
 ActionDock CLI 不只是本机脚本运行入口。它可以通过 profile、`--server`、`--token` 和环境变量连接不同的 ActionDock 服务端。
 
 ```bash
+# 为不同 ActionDock 服务端保存连接配置
 actiondock config add local --server http://127.0.0.1:5177
 actiondock config add dev --server http://dev-actiondock:5177 --token dev-token
 actiondock config add prod --server https://actiondock.example.com --token prod-token
 
+# 切换默认连接到 dev 节点
 actiondock config use dev
 actiondock script list
 
+# 临时指定 prod 节点执行脚本，不影响当前默认 profile
 actiondock script run cleanup-temp-files --profile prod --dryRun true --json
 ```
 
