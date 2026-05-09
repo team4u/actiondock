@@ -5,6 +5,8 @@ description: 使用 ActionDock CLI 完成脚本的作者态闭环、已发布脚
 
 # ActionDock CLI
 
+仓库地址：https://github.com/team4u/actiondock
+
 ## 环境检查
 
 如果在执行actiondock过程中失败，请先检查环境是否就绪
