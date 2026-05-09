@@ -31,7 +31,7 @@ actiondock server
 ```bash
 # 克隆项目
 git clone <repository-url>
-cd script-flow
+cd action-dock
 
 # 编译所有模块（-am 自动构建依赖模块）
 mvn -pl actiondock-app-spring -am -DskipTests compile

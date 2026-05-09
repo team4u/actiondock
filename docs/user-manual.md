@@ -55,7 +55,7 @@ ActionDock 做的核心事情是：
    ExecutionRecord (执行记录，全链路审计)
 ```
 
-> 快速上手请阅读 [快速开始](quick-start.md)。
+> 快速上手请阅读 [快速开始](quick-start.md)，或查看 [项目首页](../README.md) 了解项目概览。
 
 ---
 
@@ -89,3 +89,7 @@ ActionDock 做的核心事情是：
 - [脚本编写指南](script-writing-guide.md) — 脚本结构、Schema、运行时 API 完整参考
 - [CLI 参考](cli-reference.md) — 安装、配置、脚本命令、服务管理
 - [API 参考与 FAQ](api-reference.md) — 全部端点分类、常见问题、术语表
+
+---
+
+> [回到项目首页](../README.md)

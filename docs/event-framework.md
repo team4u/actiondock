@@ -12,7 +12,7 @@
 
 ## 入口
 
-- 主文档入口： [ActionDock README](../README.md)
+- 主文档入口： [用户手册](user-manual.md)
 - 管理台入口：`触发器`
 - 相关页面：
   - 事件源
