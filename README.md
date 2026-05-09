@@ -116,12 +116,12 @@ npm run build     # 构建
 
 ## 技术栈
 
-后端：Java 21 · Spring Boot 3.3 · Groovy 4.0 · Python 3
-前端：React 18 · Ant Design 5 · Monaco Editor
-插件：PF4J 3.13
-CLI：Node.js (oclif)
-存储：JPA / H2
-AI：OpenAI · Anthropic · Gemini · DashScope · Ollama
+- 后端：Java 21 · Spring Boot 3.3 · Groovy 4.0 · Python 3
+- 前端：React 18 · Ant Design 5 · Monaco Editor
+- 插件：PF4J 3.13
+- CLI：Node.js (oclif)
+- 存储：JPA / H2
+- AI：OpenAI · Anthropic · Gemini · DashScope · Ollama
 
 ## License
 
