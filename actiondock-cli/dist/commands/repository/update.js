@@ -13,7 +13,6 @@ export default class RepositoryUpdateCommand extends BaseCommand {
         type: Flags.string({ description: "Repository type", options: ["git", "http", "local-dir"], required: true }),
         url: Flags.string({ description: "Repository URL or local path", required: true }),
         branch: Flags.string({ description: "Git branch" }),
-        usage: Flags.string({ description: "Repository usage", options: ["development", "distribution"] }),
         "trust-level": Flags.string({ description: "Repository trust level", options: ["trusted", "untrusted"], default: "untrusted" }),
         description: Flags.string({ description: "Repository description" }),
         enabled: Flags.boolean({ description: "Mark repository as enabled" }),
@@ -30,7 +29,6 @@ export default class RepositoryUpdateCommand extends BaseCommand {
                 type: flags.type.toUpperCase().replace("-", "_"),
                 url: flags.url,
                 branch: flags.branch,
-                usage: flags.usage?.toUpperCase(),
                 trustLevel: flags["trust-level"].toUpperCase().replace("-", "_"),
                 description: flags.description,
                 enabled: flags.disabled ? false : true

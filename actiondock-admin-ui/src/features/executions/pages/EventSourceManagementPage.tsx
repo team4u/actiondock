@@ -32,14 +32,14 @@ import {
   deleteEventSource,
   disableEventSource,
   enableEventSource,
-  getEventSourceDevelopmentStatus,
+  getEventSourceUpstreamStatus,
   listEventSources,
-  pullDevelopmentEventSource,
+  pullUpstreamEventSource,
   testEventSourceNormalization,
   updateEventSource
 } from "../../triggers/api";
 import {
-  developRepositoryEventSource,
+  createRepositoryEventSourceWorkingCopy,
   getRepositoryEventSource,
   installRepositoryEventSource,
   listRepositories,
@@ -48,7 +48,7 @@ import {
 } from "../../resources/api";
 import { listScripts } from "../../scripts/api";
 import { listConfigValues } from "../../settings/api";
-import { DevelopmentSyncTag, getDevelopmentActionLabel } from "../../../components/domain/DevelopmentSyncTag";
+import { UpstreamSyncTag, getUpstreamActionLabel } from "../../../components/domain/UpstreamSyncTag";
 import { InfoHint } from "../../../components/common/InfoHint";
 import { ProcessorEditor } from "../../../components/plugin/ProcessorEditor";
 import { PageHeader } from "../../../components/common/PageHeader";
@@ -56,7 +56,7 @@ import { TableLinkCell } from "../../../components/common/TableLinkCell";
 import { TrustLevelTag } from "../../../components/domain/TrustLevelTag";
 import type {
   ConfigValue,
-  DevelopmentStatus,
+  UpstreamStatus,
   EventSourceAuthConfig,
   EventSourceDefinition,
   EventSourceWebhookResponse,
@@ -164,7 +164,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [draft, setDraft] = useState<EventSourceDefinition>(createEmptyDraft());
-  const [developmentStatus, setDevelopmentStatus] = useState<DevelopmentStatus | null>(null);
+  const [developmentStatus, setUpstreamStatus] = useState<UpstreamStatus | null>(null);
   const [sampleContextText, setSampleContextText] = useState("{}");
   const [testHeadersText, setTestHeadersText] = useState("{}");
   const [testQueryText, setTestQueryText] = useState("{}");
@@ -213,11 +213,11 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     [repositoryEventSources]
   );
 
-  const repositoryDescriptorByDevelopmentId = useMemo(
+  const repositoryDescriptorByWorkingCopyId = useMemo(
     () => new Map(
       repositoryEventSources
-        .filter((item) => item.developmentSourceId)
-        .map((item) => [item.developmentSourceId as string, item])
+        .filter((item) => item.workingCopyId)
+        .map((item) => [item.workingCopyId as string, item])
     ),
     [repositoryEventSources]
   );
@@ -226,22 +226,22 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     setDraft((previous) => ({ ...previous, ...patch }));
   };
 
-  const loadDevelopmentInfo = async (item: EventSourceDefinition) => {
-    if (item.scope !== "DEVELOPMENT") {
-      setDevelopmentStatus(null);
+  const loadUpstreamInfo = async (item: EventSourceDefinition) => {
+    if (!repositoryDescriptorByWorkingCopyId.has(item.id)) {
+      setUpstreamStatus(null);
       return;
     }
     try {
-      setDevelopmentStatus(await getEventSourceDevelopmentStatus(item.id));
+      setUpstreamStatus(await getEventSourceUpstreamStatus(item.id));
     } catch {
-      setDevelopmentStatus(null);
+      setUpstreamStatus(null);
     }
   };
 
   const openCreate = () => {
     const nextDraft = createEmptyDraft();
     setDraft(nextDraft);
-    setDevelopmentStatus(null);
+    setUpstreamStatus(null);
     const sampleContext = createDefaultSampleContext();
     setSampleContextText(prettyJson(sampleContext));
     const testPayload = buildTestPayloadFromSampleContext(sampleContext);
@@ -258,7 +258,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const openEdit = (item: EventSourceDefinition) => {
     const nextDraft = cloneValue(item);
     setDraft(nextDraft);
-    void loadDevelopmentInfo(nextDraft);
+    void loadUpstreamInfo(nextDraft);
     const sampleContext = (nextDraft.sampleContext && Object.keys(nextDraft.sampleContext).length > 0)
       ? nextDraft.sampleContext
       : createDefaultSampleContext();
@@ -318,7 +318,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
           : [saved, ...previous];
         return [...next].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
       });
-      await loadDevelopmentInfo(saved);
+      await loadUpstreamInfo(saved);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "保存事件源失败"));
     } finally {
@@ -444,21 +444,21 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const handleDevelopRepositoryEventSource = async (descriptor: RepositoryEventSourceDescriptor, sourceId?: string) => {
     setActionKey(`develop:${descriptor.repositoryId}:${descriptor.eventSourceId}`);
     try {
-      const source = await developRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, { scriptId: sourceId });
+      const source = await createRepositoryEventSourceWorkingCopy(descriptor.repositoryId, descriptor.eventSourceId, { id: sourceId });
       await loadData();
       openEdit(source);
-      messageApi.success("已同步为本地开发事件源");
+      messageApi.success("已创建事件源工作副本");
     } catch (error) {
-      const detail = getErrorMessage(error, "同步开发事件源失败");
+      const detail = getErrorMessage(error, "创建事件源工作副本失败");
       if (!sourceId && detail.includes("事件源 ID 已存在")) {
         let customSourceId = descriptor.eventSourceId;
         await modal.confirm({
-          title: "指定开发事件源 ID",
-          okText: "同步",
+          title: "指定工作副本事件源 ID",
+          okText: "创建",
           cancelText: "取消",
           content: (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <Text type="secondary">默认事件源 ID 已被占用，请输入一个本地开发事件源 ID。</Text>
+              <Text type="secondary">默认事件源 ID 已被占用，请输入一个本地工作副本 ID。</Text>
               <Input defaultValue={customSourceId} onChange={(event) => { customSourceId = event.target.value; }} />
             </Space>
           ),
@@ -475,9 +475,9 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const handlePullDevelopmentSource = async (item: EventSourceDefinition, force = false) => {
     setActionKey(`pull:${item.id}`);
     try {
-      const saved = await pullDevelopmentEventSource(item.id, force);
+      const saved = await pullUpstreamEventSource(item.id, force);
       setDraft(saved);
-      await loadDevelopmentInfo(saved);
+      await loadUpstreamInfo(saved);
       const sampleContext = (saved.sampleContext && Object.keys(saved.sampleContext).length > 0)
         ? saved.sampleContext
         : createDefaultSampleContext();
@@ -488,9 +488,9 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
       setTestBodyText(testPayload.body);
       setTestRawBody(testPayload.rawBody);
       await loadData();
-      messageApi.success("开发事件源已拉取远端更新");
+      messageApi.success("工作副本事件源已拉取上游更新");
     } catch (error) {
-      messageApi.error(getErrorMessage(error, "拉取开发事件源失败"));
+      messageApi.error(getErrorMessage(error, "拉取工作副本事件源失败"));
     } finally {
       setActionKey(null);
     }
@@ -506,7 +506,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
             <Space wrap size={[8, 8]}>
               <Text strong>{record.name}</Text>
               {record.scope === "REPOSITORY" ? <Tag color="blue">仓库安装</Tag> : null}
-              {record.scope === "DEVELOPMENT" ? <Tag color="purple">开发源</Tag> : null}
+              {repositoryDescriptorByWorkingCopyId.has(record.id) ? <Tag color="purple">工作副本</Tag> : null}
             </Space>
             <Text type="secondary">{record.key}</Text>
           </Space>
@@ -517,7 +517,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
       title: "来源",
       width: 220,
       render: (_value, record) => {
-        const descriptor = repositoryDescriptorByInstalledId.get(record.id) ?? repositoryDescriptorByDevelopmentId.get(record.id);
+        const descriptor = repositoryDescriptorByInstalledId.get(record.id) ?? repositoryDescriptorByWorkingCopyId.get(record.id);
         if (!descriptor) {
           return <Text type="secondary">本地创建</Text>;
         }
@@ -545,8 +545,8 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
       render: (_value, record) => (
         <Space direction="vertical" size={2}>
           <Tag color={record.enabled ? "green" : "default"}>{record.enabled ? "启用" : "停用"}</Tag>
-          {record.scope === "DEVELOPMENT" ? (
-            <DevelopmentSyncTag state={repositoryDescriptorByDevelopmentId.get(record.id)?.developmentSyncState} />
+          {repositoryDescriptorByWorkingCopyId.has(record.id) ? (
+            <UpstreamSyncTag state={repositoryDescriptorByWorkingCopyId.get(record.id)?.upstreamSyncState} />
           ) : null}
         </Space>
       )
@@ -565,14 +565,14 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
           <Button size="small" onClick={() => openEdit(record)}>
             {record.editable === false ? "查看" : "编辑"}
           </Button>
-          {record.scope === "DEVELOPMENT" ? (
+          {repositoryDescriptorByWorkingCopyId.has(record.id) ? (
             <Button
               size="small"
               icon={<ReloadOutlined />}
               loading={actionKey === `pull:${record.id}`}
               onClick={() => void handlePullDevelopmentSource(record)}
             >
-              {getDevelopmentActionLabel(repositoryDescriptorByDevelopmentId.get(record.id)?.developmentSyncState)}
+              {getUpstreamActionLabel(repositoryDescriptorByWorkingCopyId.get(record.id)?.upstreamSyncState)}
             </Button>
           ) : null}
           <Button
@@ -602,7 +602,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
   const webhookResponseEnabled = Boolean(draft.webhookResponse);
   const currentRepositoryDescriptor =
     (draft.scope === "REPOSITORY" ? repositoryDescriptorByInstalledId.get(draft.id) : undefined)
-    ?? (draft.scope === "DEVELOPMENT" ? repositoryDescriptorByDevelopmentId.get(draft.id) : undefined);
+    ?? repositoryDescriptorByWorkingCopyId.get(draft.id);
 
   return (
     <>
@@ -639,7 +639,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
           type="info"
           showIcon
           message="先定义 sourceKey 和 Webhook 地址，再选鉴权方式，最后写标准化 Processor。"
-          description="仓库安装源和开发源是仓库资产，普通个人事件源才允许直接编辑；开发源支持拉取来源仓库更新。"
+          description="仓库安装源是只读资产；工作副本可编辑，并支持拉取来源仓库更新。"
         />
 
         <Card>
@@ -666,7 +666,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
         extra={(
           <Space>
             <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            {draft.scope === "DEVELOPMENT" ? (
+            {repositoryDescriptorByWorkingCopyId.has(draft.id) ? (
               <Button loading={actionKey === `pull:${draft.id}`} onClick={() => void handlePullDevelopmentSource(draft)}>
                 拉取更新
               </Button>
@@ -680,18 +680,18 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
         )}
       >
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          {draft.scope === "REPOSITORY" || draft.scope === "DEVELOPMENT" ? (
+          {draft.scope === "REPOSITORY" || repositoryDescriptorByWorkingCopyId.has(draft.id) ? (
             <Descriptions
               bordered
               size="small"
               column={2}
               items={[
-                { key: "scope", label: "来源类型", children: draft.scope === "DEVELOPMENT" ? "开发源" : "仓库安装" },
+                { key: "scope", label: "来源类型", children: repositoryDescriptorByWorkingCopyId.has(draft.id) ? "工作副本" : "仓库安装" },
                 { key: "repository", label: "来源仓库", children: draft.repositoryId || currentRepositoryDescriptor?.repositoryId || "-" },
                 { key: "source", label: "仓库事件源", children: <Text code>{draft.repositoryEventSourceId || currentRepositoryDescriptor?.eventSourceId || "-"}</Text> },
                 { key: "version", label: "仓库版本", children: draft.repositoryVersion || currentRepositoryDescriptor?.version || "-" },
                 { key: "trust", label: "仓库信任", children: currentRepositoryDescriptor ? <TrustLevelTag level={currentRepositoryDescriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> : "-" },
-                { key: "sync", label: "开发同步", children: draft.scope === "DEVELOPMENT" ? <DevelopmentSyncTag state={developmentStatus?.syncState} /> : <Text type="secondary">-</Text> }
+                { key: "sync", label: "上游同步", children: repositoryDescriptorByWorkingCopyId.has(draft.id) ? <UpstreamSyncTag state={developmentStatus?.syncState} /> : <Text type="secondary">-</Text> }
               ]}
             />
           ) : null}

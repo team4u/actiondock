@@ -14,8 +14,8 @@ import {
 } from "../../api";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  getDevelopmentStatus,
-  pullDevelopmentScript,
+  getUpstreamStatus,
+  pullUpstreamScript,
 } from "../../../resources/api";
 import { listPluginReferences, listPlugins } from "../../../plugins/api";
 import { ApiError } from "../../../../shared/api/httpClient";
@@ -26,7 +26,7 @@ import { extractPluginDependenciesFromSource } from "../../../../services/plugin
 import { extractAiDependenciesFromSource } from "../../../../services/aiDependencies";
 import { parseGeneratedScriptText } from "../../../../services/generatedScript";
 import { buildScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
-import type { DevelopmentStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../../../shared/types";
+import type { UpstreamStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../../../shared/types";
 import type { SchemaEditorState } from "../../../../services/schema";
 import {
   type ScriptEditorFormValues,
@@ -72,7 +72,7 @@ export function useScriptEditor({
   const [availablePlugins, setAvailablePlugins] = useState<PluginView[]>([]);
   const [availablePluginReferences, setAvailablePluginReferences] = useState<PluginReferenceView[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(false);
-  const [developmentStatus, setDevelopmentStatus] = useState<DevelopmentStatus | null>(null);
+  const [developmentStatus, setUpstreamStatus] = useState<UpstreamStatus | null>(null);
   const [developmentPulling, setDevelopmentPulling] = useState(false);
 
   const selectedScriptType = (form.getFieldValue("type") as ScriptType | undefined) ?? "GROOVY";
@@ -121,15 +121,15 @@ export function useScriptEditor({
     setOutputSchemaState(deserializeSchema(script.outputSchema));
   };
 
-  const loadDevelopmentStatus = async (script: ScriptDefinition | null = currentScript) => {
-    if (!script || script.scope !== "DEVELOPMENT") {
-      setDevelopmentStatus(null);
+  const loadUpstreamStatus = async (script: ScriptDefinition | null = currentScript) => {
+    if (!script?.id) {
+      setUpstreamStatus(null);
       return;
     }
     try {
-      setDevelopmentStatus(await getDevelopmentStatus(script.id));
+      setUpstreamStatus(await getUpstreamStatus(script.id));
     } catch {
-      setDevelopmentStatus(null);
+      setUpstreamStatus(null);
     }
   };
 
@@ -286,7 +286,7 @@ export function useScriptEditor({
     void getCapability(id)
       .then((script) => {
         applyScriptToEditor(script);
-        void loadDevelopmentStatus(script);
+        void loadUpstreamStatus(script);
       })
       .catch((error) => {
         const detail = error instanceof ApiError ? error.message : "加载脚本失败";
@@ -382,7 +382,7 @@ export function useScriptEditor({
     setSaving(true);
     try {
       const saved = await persistCurrentScript();
-      await loadDevelopmentStatus(saved);
+      await loadUpstreamStatus(saved);
       await loadScriptReferences();
       messageApi.success("保存成功");
       if (mode === "create") {
@@ -441,15 +441,15 @@ export function useScriptEditor({
   };
 
   const handlePullDevelopment = async () => {
-    if (!currentScript?.id || currentScript.scope !== "DEVELOPMENT") {
+    if (!currentScript?.id || !developmentStatus) {
       return;
     }
     setDevelopmentPulling(true);
     try {
-      const pulled = await pullDevelopmentScript(currentScript.id);
+      const pulled = await pullUpstreamScript(currentScript.id);
       applyScriptToEditor(pulled);
       await loadScriptReferences();
-      await loadDevelopmentStatus(pulled);
+      await loadUpstreamStatus(pulled);
       if (developmentStatus?.syncState === "REMOTE_CHANGES") {
         messageApi.success("已拉取远端更新");
       } else if (developmentStatus?.syncState === "LOCAL_CHANGES") {
@@ -461,19 +461,19 @@ export function useScriptEditor({
       const conflict = error instanceof ApiError
         && typeof error.data === "object"
         && error.data !== null
-        && (error.data as { code?: string }).code === "DEVELOPMENT_CONFLICT";
+        && (error.data as { code?: string }).code === "UPSTREAM_CONFLICT";
       if (conflict) {
         void modal.confirm({
           title: "远端已更新，本地也有修改",
-          content: "确认后将放弃本地未发布修改，并使用远端版本覆盖当前开发脚本。",
+          content: "确认后将放弃本地未发布修改，并使用上游版本覆盖当前工作副本。",
           okText: "放弃本地并拉取",
           cancelText: "取消",
           okButtonProps: { danger: true },
           onOk: async () => {
-            const pulled = await pullDevelopmentScript(currentScript.id, true);
+            const pulled = await pullUpstreamScript(currentScript.id, true);
             applyScriptToEditor(pulled);
-            await loadDevelopmentStatus(pulled);
-            messageApi.success("已使用远端版本覆盖本地开发脚本");
+            await loadUpstreamStatus(pulled);
+            messageApi.success("已使用上游版本覆盖本地工作副本");
           }
         });
         return;

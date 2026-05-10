@@ -357,8 +357,8 @@ ActionDock 的 REST API 以 `/api` 为前缀，使用 JSON 格式，通过 Beare
 **Q: 同步失败**
 检查网络连接、Git 认证、分支名。
 
-**Q: 开发脚本冲突 (`DIVERGED`)**
-本地和远程都有修改。使用 `?force=true` 强制拉取或手动合并。
+**Q: 工作副本冲突 (`DIVERGED`)**
+本地和上游都有修改。使用 `?force=true` 强制拉取，或先手工备份再重新整理本地改动。
 
 ## 术语表
 
@@ -367,7 +367,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，使用 JSON 格式，通过 Beare
 | Script Definition | 脚本定义，包含源码、Schema、依赖等完整元数据 |
 | Published Snapshot | 发布快照，脚本发布时产生的不可变版本 |
 | Draft | 草稿，可自由编辑的脚本版本 |
-| Scope（作用域） | `PERSONAL`（个人）/ `REPOSITORY`（仓库）/ `FORK`（Fork）/ `DEVELOPMENT`（开发）/ `SAMPLE`（示例） |
+| Scope（作用域） | `PERSONAL`（个人，含工作副本和 Fork 副本）/ `REPOSITORY`（仓库安装，只读）/ `SAMPLE`（示例） |
 | Packaging（打包类型） | `TOOL`（工具型，单次调用）/ `FLOW`（流程型，可能包含多步骤） |
 | Plugin | 插件，基于 PF4J 的扩展模块 |
 | Repository | 仓库，脚本/插件/Skills 的分发来源 |

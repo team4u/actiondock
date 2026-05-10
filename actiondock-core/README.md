@@ -26,10 +26,8 @@
 
 ### 脚本作用域
 
-- `PERSONAL`：个人脚本
+- `PERSONAL`：个人脚本，也用于仓库工具创建出来的工作副本和 Fork 副本
 - `REPOSITORY`：从仓库安装到本地的脚本，只读可更新
-- `FORK`：从仓库脚本 Fork 的个人副本
-- `DEVELOPMENT`：从开发仓库同步来的本地可编辑脚本
 - `SAMPLE`：系统内置示例
 
 ### 执行模型
@@ -56,6 +54,7 @@
 
 - `RepositoryDefinition`：仓库定义
 - `RepositoryToolInstallation`：已安装仓库工具记录
+- `UpstreamBinding`：工作副本与上游仓库资产的绑定关系
 - `PluginRegistration`：插件注册信息
 
 仓库类型：
@@ -64,16 +63,11 @@
 - `GIT`
 - `HTTP`
 
-仓库用途：
-
-- `DISTRIBUTION`
-- `DEVELOPMENT`
-
 ## 你会在这里找到什么
 
-- 脚本保存、发布、Fork、开发同步等应用服务
+- 脚本保存、发布、Fork、工作副本同步等应用服务
 - 执行输入 Schema 校验和输出投影逻辑
-- 仓库工具、插件依赖和配置值的核心规则
+- 仓库工具、上游绑定、插件依赖和配置值的核心规则
 - 不依赖基础设施的纯领域接口，方便被 JPA、Web、CLI 复用
 
 ## 相关模块

@@ -37,7 +37,6 @@ public class JpaRepositoryDefinitionRepositoryAdapter
         entity.setBranch(definition.getBranch());
         entity.setEnabled(definition.isEnabled());
         entity.setTrustLevel(definition.getTrustLevel());
-        entity.setUsage(definition.getUsage());
         entity.setDescription(definition.getDescription());
         entity.setLastSyncedAt(definition.getLastSyncedAt());
         entity.setCreatedAt(definition.getCreatedAt());
@@ -61,7 +60,6 @@ public class JpaRepositoryDefinitionRepositoryAdapter
                 .setBranch(entity.getBranch())
                 .setEnabled(entity.isEnabled())
                 .setTrustLevel(entity.getTrustLevel())
-                .setUsage(entity.getUsage())
                 .setDescription(entity.getDescription())
                 .setLastSyncedAt(entity.getLastSyncedAt())
                 .setCreatedAt(entity.getCreatedAt())

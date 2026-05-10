@@ -89,7 +89,7 @@ class ScriptApplicationServiceTest {
     }
 
     @Test
-    void saveMarksDevelopmentScriptDirtyWhenDefinitionChanges() {
+    void saveMarksWorkingCopyDirtyWhenDefinitionChanges() {
         when(scriptRepository.findById("dev-tool")).thenReturn(Optional.of(new ScriptDefinition()
                 .setId("dev-tool")
                 .setName("Dev Tool")
@@ -97,7 +97,7 @@ class ScriptApplicationServiceTest {
                 .setSource("return [message: 'remote']")
                 .setInputSchema(Map.of("type", "object"))
                 .setOutputSchema(Map.of("type", "object"))
-                .setScope(ScriptScope.DEVELOPMENT)
+                .setScope(ScriptScope.PERSONAL)
                 .setRepositoryId("repo")
                 .setRepositoryToolId("tool")
                 .setRepositoryVersion("1.0.0")
@@ -116,7 +116,7 @@ class ScriptApplicationServiceTest {
                 .setSource("return [message: 'local']")
                 .setInputSchema(Map.of("type", "object"))
                 .setOutputSchema(Map.of("type", "object"))
-                .setScope(ScriptScope.DEVELOPMENT));
+                .setScope(ScriptScope.PERSONAL));
 
         assertThat(saved.isDirty()).isTrue();
         assertThat(saved.getRepositoryId()).isEqualTo("repo");
@@ -364,7 +364,7 @@ class ScriptApplicationServiceTest {
 
         assertThat(fork.getId()).isEqualTo("tool-fork");
         assertThat(fork.getName()).isEqualTo("Tool Fork");
-        assertThat(fork.getScope()).isEqualTo(ScriptScope.FORK);
+        assertThat(fork.getScope()).isEqualTo(ScriptScope.PERSONAL);
         assertThat(fork.isEditable()).isTrue();
         assertThat(fork.getRepositoryId()).isEqualTo("repo");
         assertThat(fork.getRepositoryToolId()).isEqualTo("tool");

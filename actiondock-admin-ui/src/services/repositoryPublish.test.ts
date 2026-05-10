@@ -11,7 +11,6 @@ function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinit
     branch: "main",
     enabled: true,
     trustLevel: "UNTRUSTED",
-    usage: "DISTRIBUTION",
     ...overrides
   };
 }
@@ -38,12 +37,12 @@ describe("repositoryPublish", () => {
     expect(repositories.map((item) => item.id)).toEqual(["a", "b"]);
   });
 
-  it("prefers non-development repositories as publish default", () => {
+  it("uses the first publishable repository as publish default", () => {
     const repositories = [
-      repository({ id: "dev", usage: "DEVELOPMENT" }),
-      repository({ id: "dist", usage: "DISTRIBUTION" })
+      repository({ id: "alpha" }),
+      repository({ id: "beta" })
     ];
 
-    expect(pickDefaultPublishRepository(repositories)?.id).toBe("dist");
+    expect(pickDefaultPublishRepository(repositories)?.id).toBe("alpha");
   });
 });

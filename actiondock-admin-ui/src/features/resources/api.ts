@@ -6,7 +6,7 @@ import type {
   CapabilityPackagePublishPreview,
   CapabilityPackagePublishPreviewRequest,
   CapabilityPackagePublishRequest,
-  DevelopmentStatus,
+  UpstreamStatus,
   EventSourceDefinition,
   RepositoryDefinition,
   RepositoryEventSourceDescriptor,
@@ -182,36 +182,36 @@ export function updateRepositoryEventSource(
   }).then((operation) => operation.result);
 }
 
-export function developRepositoryEventSource(
+export function createRepositoryEventSourceWorkingCopy(
   repositoryId: string,
   eventSourceId: string,
-  payload: { scriptId?: string }
+  payload: { id?: string }
 ): Promise<EventSourceDefinition> {
-  return runResourceLifecycleOperation<EventSourceDefinition, { scriptId?: string }>({
+  return runResourceLifecycleOperation<EventSourceDefinition, { id?: string }>({
     resourceType: "REPOSITORY_EVENT_SOURCE",
-    operation: "develop",
+    operation: "working-copy",
     repositoryId,
     resourceId: eventSourceId,
     payload
   }).then((operation) => operation.result);
 }
 
-export function developRepositoryTool(repositoryId: string, toolId: string, payload: { scriptId?: string }): Promise<ScriptDefinition> {
-  return runResourceLifecycleOperation<ScriptDefinition, { scriptId?: string }>({
+export function createRepositoryToolWorkingCopy(repositoryId: string, toolId: string, payload: { id?: string }): Promise<ScriptDefinition> {
+  return runResourceLifecycleOperation<ScriptDefinition, { id?: string }>({
     resourceType: "REPOSITORY_TOOL",
-    operation: "develop",
+    operation: "working-copy",
     repositoryId,
     resourceId: toolId,
     payload
   }).then((operation) => operation.result);
 }
 
-export function getDevelopmentStatus(scriptId: string): Promise<DevelopmentStatus> {
-  return request<DevelopmentStatus>(`/api/scripts/${encodeURIComponent(scriptId)}/development-status`);
+export function getUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {
+  return request<UpstreamStatus>(`/api/scripts/${encodeURIComponent(scriptId)}/upstream`);
 }
 
-export function pullDevelopmentScript(scriptId: string, force = false): Promise<ScriptDefinition> {
-  return request<ScriptDefinition>(`/api/scripts/${encodeURIComponent(scriptId)}/development-pull?includeUiSchema=true&force=${force}`, {
+export function pullUpstreamScript(scriptId: string, force = false): Promise<ScriptDefinition> {
+  return request<ScriptDefinition>(`/api/scripts/${encodeURIComponent(scriptId)}/upstream/pull?includeUiSchema=true&force=${force}`, {
     method: "POST"
   });
 }

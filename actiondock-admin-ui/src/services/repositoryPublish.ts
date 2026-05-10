@@ -12,5 +12,5 @@ export function getPublishableRepositories(repositories: RepositoryDefinition[])
 }
 
 export function pickDefaultPublishRepository(repositories: RepositoryDefinition[]): RepositoryDefinition | undefined {
-  return repositories.find((repository) => repository.usage !== "DEVELOPMENT") ?? repositories[0];
+  return repositories[0];
 }

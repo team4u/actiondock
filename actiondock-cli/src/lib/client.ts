@@ -16,7 +16,6 @@ import type {
   EventDispatchRecord,
   EventIngestionView,
   EventRecord,
-  DevelopmentStatus,
   EventSourceDefinition,
   EventTrigger,
   EventTriggerTestRequest,
@@ -47,7 +46,8 @@ import type {
   SharedStateCompareAndSetResult,
   SharedStateDetail,
   SharedStateSummary,
-  SharedStateRequest
+  SharedStateRequest,
+  UpstreamStatus
 } from "./types.js";
 
 export interface ClientOptions {
@@ -129,12 +129,12 @@ export class ActionDockClient {
     });
   }
 
-  async getScriptDevelopmentStatus(scriptId: string): Promise<DevelopmentStatus> {
-    return this.requestJson<DevelopmentStatus>(`/api/scripts/${scriptId}/development-status`);
+  async getScriptUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {
+    return this.requestJson<UpstreamStatus>(`/api/scripts/${scriptId}/upstream`);
   }
 
-  async pullDevelopmentScript(scriptId: string, force = false): Promise<ScriptDefinition> {
-    return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}/development-pull?force=${force}`, {
+  async pullUpstreamScript(scriptId: string, force = false): Promise<ScriptDefinition> {
+    return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}/upstream/pull?force=${force}`, {
       method: "POST"
     });
   }
@@ -250,12 +250,12 @@ export class ActionDockClient {
     return this.requestJson<EventSourceDefinition[]>("/api/event-sources");
   }
 
-  async getEventSourceDevelopmentStatus(sourceId: string): Promise<DevelopmentStatus> {
-    return this.requestJson<DevelopmentStatus>(`/api/event-sources/${sourceId}/development-status`);
+  async getEventSourceUpstreamStatus(sourceId: string): Promise<UpstreamStatus> {
+    return this.requestJson<UpstreamStatus>(`/api/event-sources/${sourceId}/upstream`);
   }
 
-  async pullDevelopmentEventSource(sourceId: string, force = false): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/development-pull?force=${force}`, {
+  async pullUpstreamEventSource(sourceId: string, force = false): Promise<EventSourceDefinition> {
+    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/upstream/pull?force=${force}`, {
       method: "POST"
     });
   }
@@ -457,10 +457,10 @@ export class ActionDockClient {
     });
   }
 
-  async developRepositoryTool(repositoryId: string, toolId: string, scriptId?: string): Promise<ScriptDefinition> {
-    return this.requestJson<ScriptDefinition>(`/api/repositories/${repositoryId}/tools/${toolId}/develop`, {
+  async createRepositoryToolWorkingCopy(repositoryId: string, toolId: string, scriptId?: string): Promise<ScriptDefinition> {
+    return this.requestJson<ScriptDefinition>(`/api/repositories/${repositoryId}/tools/${toolId}/working-copy`, {
       method: "POST",
-      body: JSON.stringify(scriptId ? { scriptId } : {})
+      body: JSON.stringify(scriptId ? { id: scriptId } : {})
     });
   }
 
@@ -516,7 +516,7 @@ export class ActionDockClient {
     });
   }
 
-  async developRepositoryEventSource(
+  async createRepositoryEventSourceWorkingCopy(
     repositoryId: string,
     eventSourceId: string,
     sourceId?: string
@@ -525,10 +525,10 @@ export class ActionDockClient {
       method: "POST",
       body: JSON.stringify({
         resourceType: "REPOSITORY_EVENT_SOURCE",
-        operation: "develop",
+        operation: "working-copy",
         repositoryId,
         resourceId: eventSourceId,
-        payload: sourceId ? { scriptId: sourceId } : {}
+        payload: sourceId ? { id: sourceId } : {}
       })
     });
   }

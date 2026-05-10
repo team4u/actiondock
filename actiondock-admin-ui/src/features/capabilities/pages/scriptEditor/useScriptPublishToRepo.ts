@@ -260,7 +260,7 @@ export function useScriptPublishToRepo({
         .filter((item) => item.scriptId === script.id)
         .sort((left, right) => left.name.localeCompare(right.name));
       const initialRepositoryId = initialValues?.repositoryId
-        ?? (script.scope === "DEVELOPMENT" && script.repositoryId
+        ?? (script.repositoryId
           ? script.repositoryId
           : publishableRepositories[0]?.id);
 
@@ -608,7 +608,7 @@ export function useScriptPublishToRepo({
       const conflict = error instanceof Error
         && "data" in error
         && typeof (error as { data?: unknown }).data === "object"
-        && (error as { data?: { code?: string } }).data?.code === "DEVELOPMENT_CONFLICT";
+        && (error as { data?: { code?: string } }).data?.code === "UPSTREAM_CONFLICT";
       if (conflict) {
         if (!retry) {
           messageApi.error("远端脚本已更新。请先拉取远端，或确认后再强制发布。");

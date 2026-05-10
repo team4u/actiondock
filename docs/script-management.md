@@ -21,8 +21,8 @@ public class ScriptDefinition {
     private ScriptStatus status;          // DRAFT / PUBLISHED / ARCHIVED
     private Integer version;              // 发布版本号，每次发布 +1
     private PublishedScriptSnapshot publishedSnapshot;  // 发布快照
-    private ScriptScope scope;            // PERSONAL / REPOSITORY / FORK / DEVELOPMENT / SAMPLE
-    private String repositoryId;          // 来源仓库（REPOSITORY 作用域时）
+    private ScriptScope scope;            // PERSONAL / REPOSITORY / SAMPLE
+    private String repositoryId;          // 来源仓库（仓库安装脚本或工作副本）
     private String repositoryToolId;
     private String repositoryVersion;
     private boolean editable;
@@ -82,7 +82,7 @@ public class ScriptDefinition {
 
 | 筛选维度 | 可选值 |
 |----------|--------|
-| **来源** | 全部 / 个人 (PERSONAL) / 仓库 (REPOSITORY) / Fork / 开发 (DEVELOPMENT) / 示例 (SAMPLE) |
+| **来源** | 全部 / 个人 (PERSONAL，含工作副本与 Fork 副本) / 仓库 (REPOSITORY) / 示例 (SAMPLE) |
 | **状态** | 全部 / 已发布 (PUBLISHED) / 草稿 (DRAFT) / 可更新 (UPDATE_AVAILABLE) / 远程有变更 (REMOTE_CHANGES) / 已分叉 (DIVERGED) / 只读 (READ_ONLY) |
 | **类型** | 全部 / Python / Groovy |
 
@@ -213,18 +213,20 @@ pandas>=2.0
 
 ### 编辑模式
 
-- **个人脚本（PERSONAL）**：完全可编辑
-- **仓库脚本（REPOSITORY）**：只读，需要 Fork 后才能编辑
-- **开发同步脚本（DEVELOPMENT）**：显示同步状态标签
+- **个人脚本（PERSONAL）**：完全可编辑，也包括仓库工具创建出来的工作副本和 Fork 副本
+- **仓库脚本（REPOSITORY）**：只读，需要先创建工作副本或 Fork 后才能编辑
+- **示例脚本（SAMPLE）**：系统内置样例，通常用于参考
 
-### 同步状态标签
+### 工作副本同步状态标签
+
+对带有上游绑定的 `PERSONAL` 脚本（即工作副本），会显示同步状态标签：
 
 | 标签 | 含义 |
 |------|------|
 | `SYNCED` | 本地与远程一致 |
 | `LOCAL_CHANGES` | 有本地未同步修改 |
-| `REMOTE_CHANGES` | 远程有新版本 |
-| `DIVERGED` | 本地和远程都有修改，需要手动处理 |
+| `REMOTE_CHANGES` | 上游有新版本 |
+| `DIVERGED` | 本地和上游都有修改，需要手动处理 |
 
 ## 执行脚本
 
@@ -362,9 +364,9 @@ curl -X DELETE "http://localhost:5177/api/executions"
 1. 在脚本库中找到 REPOSITORY 作用域的脚本
 2. 点击「Fork」按钮
 3. 输入新的 Script ID 和名称
-4. Fork 后产生 FORK 作用域的可编辑副本，独立维护
+4. Fork 后产生 `PERSONAL` 作用域的可编辑副本，独立维护
 
-Fork 后的脚本与原始仓库脚本不再关联。
+Fork 后的脚本与原始仓库脚本不再保持上游同步关系。
 
 ## 发布脚本到仓库
 

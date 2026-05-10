@@ -1,6 +1,6 @@
 package org.team4u.actiondock.repository;
 
-import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
+import org.team4u.actiondock.domain.exception.UpstreamConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
@@ -10,6 +10,8 @@ import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
+import org.team4u.actiondock.domain.model.UpstreamBinding;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
@@ -33,7 +35,7 @@ import java.util.regex.Pattern;
  * 仓库工具发布处理器。
  * <p>
  * 负责将本地脚本发布为仓库工具的全部逻辑，包括：
- * 文件写入、依赖解析、索引更新、开发安全检查、版本冲突检测。
+ * 文件写入、依赖解析、索引更新、上游安全检查、版本冲突检测。
  *
  * @author jay.wu
  */
@@ -69,10 +71,11 @@ final class ToolRepositoryPublisher {
         RepositoryDefinition repository = session.repository();
 
         ScriptDefinition sourceScript = catalog.scriptApplicationService().get(NormalizeUtils.normalize(request.scriptId(), "scriptId 不能为空"));
-        if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
-                && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
-                && !request.force()) {
-            assertDevelopmentPublishSafe(sourceScript, repository);
+        UpstreamBinding upstreamBinding = repos.upstreamBindingRepository()
+                .findByLocalAsset(UpstreamAssetType.SCRIPT, sourceScript.getId())
+                .orElse(null);
+        if (upstreamBinding != null && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId) && !request.force()) {
+            assertUpstreamPublishSafe(sourceScript, repository, upstreamBinding);
         }
 
         ScriptDefinition script = catalog.scriptApplicationService().getPublished(sourceScript.getId());
@@ -98,35 +101,32 @@ final class ToolRepositoryPublisher {
         session.commitPublishedAsset(toolId, version, request.releaseNotes());
 
         RepositoryToolDetail publishedDetail = catalog.getRepositoryTool(repositoryId, toolId);
-        if (sourceScript.getScope() == ScriptScope.DEVELOPMENT
-                && Objects.equals(sourceScript.getRepositoryId(), repositoryId)
-                && Objects.equals(sourceScript.getRepositoryToolId(), toolId)) {
-            updateDevelopmentSourceMetadata(sourceScript, repository, publishedDetail);
+        if (upstreamBinding != null
+                && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId)
+                && Objects.equals(upstreamBinding.getUpstreamAssetId(), toolId)) {
+            updateUpstreamBinding(upstreamBinding, publishedDetail);
         }
         return publishedDetail.descriptor();
     }
 
-    private void assertDevelopmentPublishSafe(ScriptDefinition script, RepositoryDefinition repository) {
-        RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), script.getRepositoryToolId());
+    private void assertUpstreamPublishSafe(ScriptDefinition script, RepositoryDefinition repository, UpstreamBinding binding) {
+        RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
-        DevelopmentSyncState syncState = DevelopmentSyncService.resolveDevelopmentSyncState(script, catalog.computeDevelopmentLocalDigest(script), state);
-        if (syncState == DevelopmentSyncState.REMOTE_CHANGES || syncState == DevelopmentSyncState.DIVERGED) {
-            throw new DevelopmentConflictException(script.getId(), script.getRepositoryId(), script.getRepositoryToolId());
+        UpstreamSyncState syncState = UpstreamSyncService.resolveSyncState(binding, catalog.computeWorkingCopyLocalDigest(script), state);
+        if (syncState == UpstreamSyncState.REMOTE_CHANGES || syncState == UpstreamSyncState.DIVERGED) {
+            throw new UpstreamConflictException(script.getId(), binding.getRepositoryId(), binding.getUpstreamAssetId());
         }
     }
 
-    private void updateDevelopmentSourceMetadata(ScriptDefinition sourceScript,
-                                                 RepositoryDefinition repository,
-                                                 RepositoryToolDetail detail) {
-        ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
-        ScriptDefinition updated = services.scriptApplicationService().get(sourceScript.getId())
-                .setRepositoryVersion(detail.descriptor().version())
+    private void updateUpstreamBinding(UpstreamBinding binding, RepositoryToolDetail detail) {
+        ToolSourceState state = catalog.resolveToolSourceState(catalog.getRepository(binding.getRepositoryId()), detail);
+        repos.upstreamBindingRepository().save(binding
+                .setUpstreamVersion(detail.descriptor().version())
                 .setSourcePath(state.path())
-                .setSourceCommit(state.commit())
-                .setSourceDigest(state.digest())
-                .setSourceSyncedAt(LocalDateTime.now())
-                .setDirty(false);
-        repos.scriptRepository().save(updated);
+                .setBaseCommit(state.commit())
+                .setBaseDigest(state.digest())
+                .setLastSyncedAt(LocalDateTime.now())
+                .setUpdatedAt(LocalDateTime.now()));
     }
 
     private void writeToolFiles(Path toolDir,

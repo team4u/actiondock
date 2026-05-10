@@ -1,6 +1,6 @@
 package org.team4u.actiondock.repository;
 
-import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
+import org.team4u.actiondock.domain.exception.UpstreamConflictException;
 import org.team4u.actiondock.domain.model.EventSourceAuthConfig;
 import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventSourceScope;
@@ -11,6 +11,8 @@ import org.team4u.actiondock.domain.model.RepositoryEventTriggerBinding;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptScope;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
+import org.team4u.actiondock.domain.model.UpstreamBinding;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.nio.file.Path;
@@ -42,10 +44,11 @@ final class EventSourceRepositoryPublisher {
         WritableRepositorySession session = catalog.openWritableRepositorySession(repositoryId);
         RepositoryDefinition repository = session.repository();
         EventSourceDefinition source = requireSource(request.sourceId());
-        if (source.getScope() == EventSourceScope.DEVELOPMENT
-                && Objects.equals(source.getRepositoryId(), repositoryId)
-                && !request.force()) {
-            assertDevelopmentPublishSafe(source, repository);
+        UpstreamBinding upstreamBinding = repos.upstreamBindingRepository()
+                .findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, source.getId())
+                .orElse(null);
+        if (upstreamBinding != null && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId) && !request.force()) {
+            assertUpstreamPublishSafe(source, repository, upstreamBinding);
         }
 
         String eventSourceId = NormalizeUtils.normalize(request.eventSourceId(), "eventSourceId 不能为空");
@@ -69,10 +72,10 @@ final class EventSourceRepositoryPublisher {
         session.commitPublishedAsset(eventSourceId, version, request.releaseNotes());
 
         RepositoryEventSourceDetail publishedDetail = catalog.getRepositoryEventSource(repositoryId, eventSourceId);
-        if (source.getScope() == EventSourceScope.DEVELOPMENT
-                && Objects.equals(source.getRepositoryId(), repositoryId)
-                && Objects.equals(source.getRepositoryEventSourceId(), eventSourceId)) {
-            updateDevelopmentSourceMetadata(source, repository, publishedDetail);
+        if (upstreamBinding != null
+                && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId)
+                && Objects.equals(upstreamBinding.getUpstreamAssetId(), eventSourceId)) {
+            updateUpstreamBinding(upstreamBinding, publishedDetail);
         }
         return publishedDetail.descriptor();
     }
@@ -102,16 +105,28 @@ final class EventSourceRepositoryPublisher {
                 .orElseThrow(() -> new IllegalArgumentException("事件源不存在: " + sourceId));
     }
 
-    private void assertDevelopmentPublishSafe(EventSourceDefinition source,
-                                              RepositoryDefinition repository) {
-        RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repository.getId(), source.getRepositoryEventSourceId());
+    private void assertUpstreamPublishSafe(EventSourceDefinition source,
+                                           RepositoryDefinition repository,
+                                           UpstreamBinding binding) {
+        RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveEventSourceState(repository, detail);
         List<EventTrigger> triggers = repos.eventTriggerRepository().findBySourceId(source.getId());
         String localDigest = catalog.computeEventSourceLocalDigest(source, triggers);
-        DevelopmentSyncState syncState = DevelopmentSyncService.resolveEventSourceSyncState(source, localDigest, state);
-        if (syncState == DevelopmentSyncState.REMOTE_CHANGES || syncState == DevelopmentSyncState.DIVERGED) {
-            throw new DevelopmentConflictException(source.getId(), source.getRepositoryId(), source.getRepositoryEventSourceId());
+        UpstreamSyncState syncState = UpstreamSyncService.resolveSyncState(binding, localDigest, state);
+        if (syncState == UpstreamSyncState.REMOTE_CHANGES || syncState == UpstreamSyncState.DIVERGED) {
+            throw new UpstreamConflictException(source.getId(), binding.getRepositoryId(), binding.getUpstreamAssetId());
         }
+    }
+
+    private void updateUpstreamBinding(UpstreamBinding binding, RepositoryEventSourceDetail detail) {
+        ToolSourceState state = catalog.resolveEventSourceState(catalog.getRepository(binding.getRepositoryId()), detail);
+        repos.upstreamBindingRepository().save(binding
+                .setUpstreamVersion(detail.descriptor().version())
+                .setSourcePath(state.path())
+                .setBaseCommit(state.commit())
+                .setBaseDigest(state.digest())
+                .setLastSyncedAt(LocalDateTime.now())
+                .setUpdatedAt(LocalDateTime.now()));
     }
 
     private List<EventTrigger> resolveSelectedTriggers(String sourceId, List<String> requestedIds) {
@@ -134,7 +149,7 @@ final class EventSourceRepositoryPublisher {
             ScriptDefinition target = repos.scriptRepository().findById(
                     NormalizeUtils.normalize(trigger.getTargetScriptId(), "事件触发器 targetScriptId 不能为空: " + trigger.getId()))
                     .orElseThrow(() -> new IllegalArgumentException("事件触发器目标脚本不存在: " + trigger.getTargetScriptId()));
-            if (target.getPublishedSnapshot() == null && target.getScope() != ScriptScope.REPOSITORY && target.getScope() != ScriptScope.DEVELOPMENT) {
+            if (target.getPublishedSnapshot() == null && target.getScope() != ScriptScope.REPOSITORY && NormalizeUtils.isBlank(target.getRepositoryId())) {
                 throw new IllegalArgumentException("事件触发器目标脚本尚未发布: " + trigger.getTargetScriptId());
             }
             ScriptDependency dependency = new ScriptDependency()
@@ -335,7 +350,7 @@ final class EventSourceRepositoryPublisher {
         catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withEventSources(current, repository, entries));
     }
 
-    private void updateDevelopmentSourceMetadata(EventSourceDefinition source,
+    private void updateWorkingCopySourceMetadata(EventSourceDefinition source,
                                                  RepositoryDefinition repository,
                                                  RepositoryEventSourceDetail detail) {
         ToolSourceState state = catalog.resolveEventSourceState(repository, detail);

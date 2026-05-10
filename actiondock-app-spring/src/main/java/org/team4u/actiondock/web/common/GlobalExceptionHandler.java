@@ -6,7 +6,7 @@ import org.team4u.actiondock.application.EventAuthenticationException;
 import org.team4u.actiondock.application.InvalidPythonRequirementsException;
 import org.team4u.actiondock.application.WebhookRequestHeadersTooLargeException;
 import org.team4u.actiondock.application.WebhookRequestPayloadTooLargeException;
-import org.team4u.actiondock.domain.exception.DevelopmentConflictException;
+import org.team4u.actiondock.domain.exception.UpstreamConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.ErrorDetail;
@@ -116,16 +116,16 @@ public class GlobalExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(DevelopmentConflictException.class)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> handleDevelopmentConflict(DevelopmentConflictException exception) {
+    @ExceptionHandler(UpstreamConflictException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleUpstreamConflict(UpstreamConflictException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.error(
                 exception.getMessage(),
                 400,
                 Map.of(
-                        "code", "DEVELOPMENT_CONFLICT",
-                        "scriptId", exception.getScriptId(),
+                        "code", "UPSTREAM_CONFLICT",
+                        "localAssetId", exception.getLocalAssetId(),
                         "repositoryId", exception.getRepositoryId(),
-                        "toolId", exception.getToolId()
+                        "upstreamAssetId", exception.getUpstreamAssetId()
                 )
         ));
     }

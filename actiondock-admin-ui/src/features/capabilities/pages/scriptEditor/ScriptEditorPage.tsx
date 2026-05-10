@@ -60,7 +60,7 @@ import { formatDateTime, parseJsonText } from "../../../../services/utils";
 import { useCopyMessage } from "../../../../shared/hooks/useCopyMessage";
 import { buildScriptSkillExample } from "../../../../services/skillExamples";
 import { writeInlineSkillPublishSession } from "../../../../services/skillPublishSession";
-import { DevelopmentSyncTag } from "../../../../components/domain/DevelopmentSyncTag";
+import { UpstreamSyncTag } from "../../../../components/domain/UpstreamSyncTag";
 import { ScriptDiffDrawer } from "../../../../components/diff/ScriptDiffDrawer";
 import { ScriptDiffSummary } from "../../../../components/diff/ScriptDiffSummary";
 import { formatSchemaEditorState } from "../../../../services/schema";
@@ -417,11 +417,11 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
 
   const dangerousMoreActionKeys = new Set(["discard-draft", "delete"]);
   const moreMenuItems: MenuProps["items"] = [
-    ...(editor.currentScript?.scope === "DEVELOPMENT"
+    ...(editor.developmentStatus
       ? [{
-          key: "pull-development",
+          key: "pull-upstream",
           icon: <SyncOutlined />,
-          label: "拉取远端",
+          label: "拉取上游",
           disabled: editor.developmentPulling,
           onClick: () => void editor.handlePullDevelopment()
         }]
@@ -739,24 +739,23 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                   </Space>
                 </Descriptions.Item>
               ) : null}
-              {editor.currentScript.scope === "DEVELOPMENT" ? (
+              {editor.developmentStatus ? (
                 <Descriptions.Item label="本地发布号">{editor.currentScript.version}</Descriptions.Item>
               ) : (
                 <Descriptions.Item label="版本">{editor.currentScript.version}</Descriptions.Item>
               )}
               <Descriptions.Item label="来源仓库">{editor.currentScript.repositoryId || "-"}</Descriptions.Item>
               <Descriptions.Item label="来源脚本">{editor.currentScript.repositoryToolId || "-"}</Descriptions.Item>
-              <Descriptions.Item label={editor.currentScript.scope === "DEVELOPMENT" ? "上次同步仓库版本" : "仓库版本"}>
+              <Descriptions.Item label={editor.developmentStatus ? "上次同步仓库版本" : "仓库版本"}>
                 {editor.currentScript.repositoryVersion || "-"}
               </Descriptions.Item>
-              {editor.currentScript.scope === "DEVELOPMENT" ? (
+              {editor.developmentStatus ? (
                 <>
                   <Descriptions.Item label="当前仓库版本">{editor.developmentStatus?.remoteVersion || "-"}</Descriptions.Item>
-                  <Descriptions.Item label="开发路径">{editor.currentScript.sourcePath || "-"}</Descriptions.Item>
                   <Descriptions.Item label="同步状态">
                     <Space size={8} wrap>
-                      <DevelopmentSyncTag state={editor.developmentStatus?.syncState} defaultLabel="未检查" defaultColor="default" divergedLabel="双方都有修改" />
-                      {editor.currentScript.sourceSyncedAt ? <Text type="secondary">{formatDateTime(editor.currentScript.sourceSyncedAt)}</Text> : null}
+                      <UpstreamSyncTag state={editor.developmentStatus?.syncState} defaultLabel="未检查" defaultColor="default" divergedLabel="双方都有修改" />
+                      {editor.developmentStatus?.lastSyncedAt ? <Text type="secondary">{formatDateTime(editor.developmentStatus.lastSyncedAt)}</Text> : null}
                     </Space>
                   </Descriptions.Item>
                 </>

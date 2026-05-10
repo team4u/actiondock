@@ -256,8 +256,7 @@ public class RepositorySkillService {
                 installed,
                 installedVersion,
                 installed && !java.util.Objects.equals(installedVersion, version),
-                RepositoryCatalogTypes.isTrusted(repository),
-                repository.getUsage()
+                RepositoryCatalogTypes.isTrusted(repository)
         );
     }
 }

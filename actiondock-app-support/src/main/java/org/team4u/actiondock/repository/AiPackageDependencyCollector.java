@@ -174,7 +174,7 @@ class AiPackageDependencyCollector {
     }
 
     private boolean tryAddExternalToolDependency(AiPackageBundleBuilder builder, ScriptDefinition script) {
-        if (script.getScope() != ScriptScope.REPOSITORY && script.getScope() != ScriptScope.DEVELOPMENT) {
+        if (script.getScope() != ScriptScope.REPOSITORY && NormalizeUtils.isBlank(script.getRepositoryId())) {
             return false;
         }
         String sourceRepositoryId = NormalizeUtils.normalizeNullable(script.getRepositoryId());

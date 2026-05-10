@@ -2,8 +2,12 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
 import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderScriptDetail } from "../../lib/render.js";
-export default class ScriptDevelopmentPullCommand extends BaseCommand {
-    static description = "Pull repository updates into a development script";
+export default class ScriptUpstreamPullCommand extends BaseCommand {
+    static description = "Pull upstream updates into a script working copy";
+    static examples = [
+        "<%= config.bin %> <%= command.id %> hello-groovy-copy",
+        "<%= config.bin %> <%= command.id %> hello-groovy-copy --force"
+    ];
     static args = {
         scriptId: Args.string({ required: true })
     };
@@ -16,9 +20,9 @@ export default class ScriptDevelopmentPullCommand extends BaseCommand {
         help: Flags.help({ char: "h" })
     };
     async run() {
-        const { args, flags } = await this.parse(ScriptDevelopmentPullCommand);
+        const { args, flags } = await this.parse(ScriptUpstreamPullCommand);
         try {
-            const script = await createClient(flags).pullDevelopmentScript(args.scriptId, flags.force);
+            const script = await createClient(flags).pullUpstreamScript(args.scriptId, flags.force);
             flags.json ? this.printJson(script) : this.log(renderScriptDetail(script, "draft"));
         }
         catch (error) {

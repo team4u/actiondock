@@ -48,12 +48,11 @@ class RepositoryDefinitionService {
         String id = NormalizeUtils.normalize(target.getId(), "仓库 ID 不能为空");
         String type = validateRepositoryType(target);
         String trustLevel = validateTrustLevel(target);
-        String usage = validateRepositoryUsage(target, type);
 
         LocalDateTime now = LocalDateTime.now();
         RepositoryDefinition existing = repositoryDefinitionRepository.findById(id).orElse(null);
         RepositoryDefinition saved = repositoryDefinitionRepository.save(
-                buildRepositoryDefinition(id, target, type, trustLevel, usage, existing, now)
+                buildRepositoryDefinition(id, target, type, trustLevel, existing, now)
         );
         if (REPO_TYPE_LOCAL_DIR.equals(type)) {
             ensureLocalDirRepository(saved);
@@ -100,22 +99,10 @@ class RepositoryDefinitionService {
         return trustLevel;
     }
 
-    private String validateRepositoryUsage(RepositoryDefinition target, String type) {
-        String usage = NormalizeUtils.normalizeOrDefault(target.getUsage(), REPO_USAGE_DISTRIBUTION).toUpperCase(Locale.ROOT);
-        if (!List.of(REPO_USAGE_DISTRIBUTION, REPO_USAGE_DEVELOPMENT).contains(usage)) {
-            throw new IllegalArgumentException("usage 仅支持 DISTRIBUTION / DEVELOPMENT");
-        }
-        if (REPO_TYPE_HTTP.equals(type) && REPO_USAGE_DEVELOPMENT.equals(usage)) {
-            throw new IllegalArgumentException("HTTP 仓库不支持作为开发仓库");
-        }
-        return usage;
-    }
-
     private RepositoryDefinition buildRepositoryDefinition(String id,
                                                            RepositoryDefinition target,
                                                            String type,
                                                            String trustLevel,
-                                                           String usage,
                                                            RepositoryDefinition existing,
                                                            LocalDateTime now) {
         return new RepositoryDefinition()
@@ -126,7 +113,6 @@ class RepositoryDefinitionService {
                 .setBranch(REPO_TYPE_GIT.equals(type) ? NormalizeUtils.normalizeOrDefault(target.getBranch(), DEFAULT_GIT_BRANCH) : null)
                 .setEnabled(target.isEnabled())
                 .setTrustLevel(trustLevel)
-                .setUsage(usage)
                 .setDescription(NormalizeUtils.normalizeNullable(target.getDescription()))
                 .setLastSyncedAt(existing == null ? null : existing.getLastSyncedAt())
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())

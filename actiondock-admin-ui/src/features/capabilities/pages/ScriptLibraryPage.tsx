@@ -39,7 +39,7 @@ import {
   listRepositories,
   listRepositoryTools,
   listToolsByRepository,
-  pullDevelopmentScript,
+  pullUpstreamScript,
   syncRepository,
   uninstallInstalledTool,
   updateRepositoryTool
@@ -60,7 +60,7 @@ import { buildScriptDiff, toDiffTarget } from "../../../services/scriptDiff";
 import { ApiError } from "../../../shared/api/httpClient";
 import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptStatus, ScriptType } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
-import { DevelopmentSyncTag } from "../../../components/domain/DevelopmentSyncTag";
+import { UpstreamSyncTag } from "../../../components/domain/UpstreamSyncTag";
 import { ForkScriptModal } from "../../../components/common/ForkScriptModal";
 import { useForkScript } from "../../../shared/hooks/useForkScript";
 
@@ -176,8 +176,8 @@ export function ScriptLibraryPage() {
     const next = new Map<string, RepositoryToolDescriptor>();
     toolDescriptors.forEach((item) => {
       next.set(item.installedScriptId, item);
-      if (item.developmentScriptId) {
-        next.set(item.developmentScriptId, item);
+      if (item.workingCopyId) {
+        next.set(item.workingCopyId, item);
       }
     });
     return next;
@@ -204,10 +204,10 @@ export function ScriptLibraryPage() {
       if (statusFilter === "UPDATE_AVAILABLE" && !descriptor?.updateAvailable) {
         return false;
       }
-      if (statusFilter === "REMOTE_CHANGES" && descriptor?.developmentSyncState !== "REMOTE_CHANGES") {
+      if (statusFilter === "REMOTE_CHANGES" && descriptor?.upstreamSyncState !== "REMOTE_CHANGES") {
         return false;
       }
-      if (statusFilter === "DIVERGED" && descriptor?.developmentSyncState !== "DIVERGED") {
+      if (statusFilter === "DIVERGED" && descriptor?.upstreamSyncState !== "DIVERGED") {
         return false;
       }
       if (statusFilter === "READ_ONLY" && script.scope !== "REPOSITORY") {
@@ -483,18 +483,17 @@ export function ScriptLibraryPage() {
       }
 
       const updateTargets: RepositoryToolDescriptor[] = [];
-      const developmentPullTargets: RepositoryToolDescriptor[] = [];
+      const upstreamPullTargets: RepositoryToolDescriptor[] = [];
       for (const repositoryId of syncedRepositoryIds) {
         try {
           const repositoryTools = await listToolsByRepository(repositoryId);
           updateTargets.push(
             ...repositoryTools.filter((tool) => tool.installed && tool.updateAvailable)
           );
-          developmentPullTargets.push(
+          upstreamPullTargets.push(
             ...repositoryTools.filter((tool) =>
-              tool.repositoryUsage === "DEVELOPMENT"
-              && Boolean(tool.developmentScriptId)
-              && tool.developmentSyncState === "REMOTE_CHANGES"
+              Boolean(tool.workingCopyId)
+              && tool.upstreamSyncState === "REMOTE_CHANGES"
             )
           );
         } catch (error) {
@@ -516,18 +515,18 @@ export function ScriptLibraryPage() {
       }
 
       let pulledCount = 0;
-      for (const tool of developmentPullTargets) {
+      for (const tool of upstreamPullTargets) {
         try {
-          await pullDevelopmentScript(tool.developmentScriptId!);
+          await pullUpstreamScript(tool.workingCopyId!);
           pulledCount += 1;
         } catch (error) {
-          toolFailures.push(`${tool.developmentScriptId}: ${getErrorMessage(error, "拉取失败")}`);
+          toolFailures.push(`${tool.workingCopyId}: ${getErrorMessage(error, "拉取失败")}`);
         }
       }
 
       await loadData();
 
-      if (updateTargets.length === 0 && developmentPullTargets.length === 0 && repositoryFailures.length === 0) {
+      if (updateTargets.length === 0 && upstreamPullTargets.length === 0 && repositoryFailures.length === 0) {
         messageApi.success("已是最新");
         return;
       }
@@ -539,7 +538,7 @@ export function ScriptLibraryPage() {
         return;
       }
 
-      messageApi.success(`已更新 ${updatedCount} 个脚本，拉取 ${pulledCount} 个开发脚本`);
+      messageApi.success(`已更新 ${updatedCount} 个脚本，拉取 ${pulledCount} 个工作副本`);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "一键更新失败"));
     } finally {
@@ -585,7 +584,7 @@ export function ScriptLibraryPage() {
               </Tag>
             )}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-            {record.scope === "DEVELOPMENT" ? <DevelopmentSyncTag state={descriptor?.developmentSyncState} /> : null}
+            {descriptor?.workingCopyId === record.id ? <UpstreamSyncTag state={descriptor?.upstreamSyncState} /> : null}
             {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
@@ -721,9 +720,7 @@ export function ScriptLibraryPage() {
               options={[
                 { value: "ALL", label: "全部来源" },
                 { value: "PERSONAL", label: "本机" },
-                { value: "FORK", label: "Fork" },
                 { value: "REPOSITORY", label: "仓库" },
-                { value: "DEVELOPMENT", label: "开发" },
                 { value: "SAMPLE", label: "示例" }
               ]}
             />

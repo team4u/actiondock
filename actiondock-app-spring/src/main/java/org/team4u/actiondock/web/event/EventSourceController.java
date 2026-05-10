@@ -91,14 +91,20 @@ public class EventSourceController {
         return ApiResponse.success(records);
     }
 
-    @GetMapping("/{id}/development-status")
-    public ApiResponse<RepositoryCatalogTypes.DevelopmentStatus> developmentStatus(@PathVariable String id) {
-        return ApiResponse.success(repositoryEventSourceService.getDevelopmentStatus(id));
+    @GetMapping("/{id}/upstream")
+    public ApiResponse<RepositoryCatalogTypes.UpstreamStatus> upstreamStatus(@PathVariable String id) {
+        return ApiResponse.success(repositoryEventSourceService.getUpstreamStatus(id));
     }
 
-    @PostMapping("/{id}/development-pull")
-    public ApiResponse<EventSourceDefinition> developmentPull(@PathVariable String id,
-                                                              @RequestParam(defaultValue = "false") boolean force) {
-        return ApiResponse.success(repositoryEventSourceService.pullDevelopmentEventSource(id, force), "开发事件源已拉取远端更新");
+    @PostMapping("/{id}/upstream/pull")
+    public ApiResponse<EventSourceDefinition> upstreamPull(@PathVariable String id,
+                                                           @RequestParam(defaultValue = "false") boolean force) {
+        return ApiResponse.success(repositoryEventSourceService.pullUpstreamEventSource(id, force), "事件源工作副本已拉取上游更新");
+    }
+
+    @DeleteMapping("/{id}/upstream")
+    public ApiResponse<Void> detachUpstream(@PathVariable String id) {
+        repositoryEventSourceService.detachUpstream(id);
+        return ApiResponse.success(null, "已断开上游跟踪");
     }
 }

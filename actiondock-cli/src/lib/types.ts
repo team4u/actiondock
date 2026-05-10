@@ -283,7 +283,6 @@ export interface RepositoryDefinition {
   branch?: string;
   enabled: boolean;
   trustLevel: string;
-  usage?: string;
   description?: string;
   lastSyncedAt?: string;
   createdAt?: string;
@@ -323,11 +322,10 @@ export interface RepositoryToolDescriptor {
   installedVersion?: string;
   updateAvailable: boolean;
   trusted: boolean;
-  repositoryUsage?: string;
-  developmentScriptId?: string;
-  developmentDirty?: boolean;
-  developmentRemoteChanged?: boolean;
-  developmentSyncState?: string;
+  workingCopyId?: string;
+  upstreamDirty?: boolean;
+  upstreamRemoteChanged?: boolean;
+  upstreamSyncState?: string;
 }
 
 export interface RepositoryToolDetail {
@@ -351,11 +349,11 @@ export interface RepositoryToolInstallation {
   updatedAt?: string;
 }
 
-export interface DevelopmentStatus {
-  scriptId: string;
+export interface UpstreamStatus {
+  localAssetId: string;
   repositoryId: string;
-  repositoryToolId: string;
-  repositoryVersion?: string;
+  upstreamAssetId: string;
+  upstreamVersion?: string;
   localCommit?: string;
   remoteCommit?: string;
   baseDigest?: string;
@@ -365,7 +363,7 @@ export interface DevelopmentStatus {
   remoteChanged: boolean;
   syncState: string;
   remoteVersion?: string;
-  sourceSyncedAt?: string;
+  lastSyncedAt?: string;
 }
 
 export interface RepositoryEventSourceDescriptor {
@@ -387,11 +385,10 @@ export interface RepositoryEventSourceDescriptor {
   installedVersion?: string;
   updateAvailable: boolean;
   trusted: boolean;
-  repositoryUsage?: string;
-  developmentSourceId?: string;
-  developmentDirty?: boolean;
-  developmentRemoteChanged?: boolean;
-  developmentSyncState?: string;
+  workingCopyId?: string;
+  upstreamDirty?: boolean;
+  upstreamRemoteChanged?: boolean;
+  upstreamSyncState?: string;
 }
 
 export interface RepositoryConfigTemplateItem {

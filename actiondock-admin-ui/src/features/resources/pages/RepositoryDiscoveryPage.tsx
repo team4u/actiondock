@@ -27,8 +27,8 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   installRepositoryPlugin,
-  developRepositoryEventSource,
-  developRepositoryTool,
+  createRepositoryEventSourceWorkingCopy,
+  createRepositoryToolWorkingCopy,
   getRepositoryEventSource,
   getCapabilityPackage,
   getRepositorySkill,
@@ -49,7 +49,7 @@ import {
   updateRepositoryTool
 } from "../../resources/api";
 import { CodeEditor } from "../../../components/common/CodeEditor";
-import { DevelopmentSyncTag, getDevelopmentActionLabel } from "../../../components/domain/DevelopmentSyncTag";
+import { UpstreamSyncTag, getUpstreamActionLabel } from "../../../components/domain/UpstreamSyncTag";
 import { RiskLevelTag } from "../../../components/domain/RiskLevelTag";
 import { TrustLevelTag } from "../../../components/domain/TrustLevelTag";
 import { getScriptTypeLabel } from "../../../components/domain/typeLabels";
@@ -690,20 +690,20 @@ export function RepositoryDiscoveryPage() {
   const handleDevelopTool = async (descriptor: RepositoryToolDescriptor, scriptId?: string) => {
     setActionKey(`develop:${descriptor.repositoryId}:${descriptor.toolId}`);
     try {
-      const script = await developRepositoryTool(descriptor.repositoryId, descriptor.toolId, { scriptId });
-      messageApi.success("已同步为本地开发脚本");
+      const script = await createRepositoryToolWorkingCopy(descriptor.repositoryId, descriptor.toolId, { id: scriptId });
+      messageApi.success("已创建脚本工作副本");
       await loadData();
       navigate(`/scripts/${encodeURIComponent(script.id)}`);
     } catch (error) {
       if (error instanceof ApiError && !scriptId && error.message.includes("脚本 ID 已存在")) {
         let customScriptId = descriptor.toolId;
         await modal.confirm({
-          title: "指定开发脚本 ID",
-          okText: "同步",
+          title: "指定工作副本脚本 ID",
+          okText: "创建",
           cancelText: "取消",
           content: (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <Text type="secondary">默认脚本 ID 已被占用，请输入一个本地开发脚本 ID。</Text>
+              <Text type="secondary">默认脚本 ID 已被占用，请输入一个本地工作副本 ID。</Text>
               <Input defaultValue={customScriptId} onChange={(event) => { customScriptId = event.target.value; }} />
             </Space>
           ),
@@ -711,7 +711,7 @@ export function RepositoryDiscoveryPage() {
         });
         return;
       }
-      messageApi.error(getErrorMessage(error, "同步开发脚本失败"));
+      messageApi.error(getErrorMessage(error, "创建脚本工作副本失败"));
     } finally {
       setActionKey(null);
     }
@@ -790,8 +790,8 @@ export function RepositoryDiscoveryPage() {
   const handleDevelopEventSource = async (descriptor: RepositoryEventSourceDescriptor, sourceId?: string) => {
     setActionKey(`develop:${descriptor.repositoryId}:${descriptor.eventSourceId}`);
     try {
-      const source = await developRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, { scriptId: sourceId });
-      messageApi.success("已同步为本地开发事件源");
+      const source = await createRepositoryEventSourceWorkingCopy(descriptor.repositoryId, descriptor.eventSourceId, { id: sourceId });
+      messageApi.success("已创建事件源工作副本");
       await loadData();
       navigate("/triggers");
       return source;
@@ -799,12 +799,12 @@ export function RepositoryDiscoveryPage() {
       if (error instanceof ApiError && !sourceId && error.message.includes("事件源 ID 已存在")) {
         let customSourceId = descriptor.eventSourceId;
         await modal.confirm({
-          title: "指定开发事件源 ID",
-          okText: "同步",
+          title: "指定工作副本事件源 ID",
+          okText: "创建",
           cancelText: "取消",
           content: (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <Text type="secondary">默认事件源 ID 已被占用，请输入一个本地开发事件源 ID。</Text>
+              <Text type="secondary">默认事件源 ID 已被占用，请输入一个本地工作副本 ID。</Text>
               <Input defaultValue={customSourceId} onChange={(event) => { customSourceId = event.target.value; }} />
             </Space>
           ),
@@ -812,7 +812,7 @@ export function RepositoryDiscoveryPage() {
         });
         return null;
       }
-      messageApi.error(getErrorMessage(error, "同步开发事件源失败"));
+      messageApi.error(getErrorMessage(error, "创建事件源工作副本失败"));
       return null;
     } finally {
       setActionKey(null);
@@ -921,7 +921,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space size={[4, 4]}>
           <Text>{record.repositoryId}</Text>
-          {record.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : null}
+          {record.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
           <TrustLevelTag level={record.trusted ? "TRUSTED" : "UNTRUSTED"} />
         </Space>
       )
@@ -943,56 +943,29 @@ export function RepositoryDiscoveryPage() {
       width: 180,
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
-          {record.installed ? (
-            record.repositoryUsage === "DEVELOPMENT" ? (
-              record.developmentScriptId ? (
-                <Button
-                  size="small"
-                  type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
-                  danger={record.developmentSyncState === "DIVERGED"}
-                  ghost={record.developmentSyncState === "REMOTE_CHANGES"}
-                  icon={<SyncOutlined />}
-                  onClick={() => navigate(`/scripts/${record.developmentScriptId}`)}
-                >
-                  {getDevelopmentActionLabel(record.developmentSyncState)}
-                </Button>
-              ) : null
-            ) : (
-              <Button
-                size="small"
-                type={record.updateAvailable ? "primary" : "default"}
-                ghost={record.updateAvailable}
-                icon={<SyncOutlined />}
-                disabled={!record.updateAvailable}
-                loading={actionKey === `update:${record.installedScriptId}`}
-                onClick={() => void confirmInstallAction(record, "update")}
-              >
-                {record.updateAvailable ? "更新" : "已安装"}
-              </Button>
-            )
-          ) : record.repositoryUsage === "DEVELOPMENT" ? (
-            record.developmentScriptId ? (
-              <Button
-                size="small"
-                type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
-                danger={record.developmentSyncState === "DIVERGED"}
-                ghost={record.developmentSyncState === "REMOTE_CHANGES"}
-                icon={<SyncOutlined />}
-                onClick={() => navigate(`/scripts/${record.developmentScriptId}`)}
-              >
-                {getDevelopmentActionLabel(record.developmentSyncState)}
-              </Button>
-            ) : (
-              <Button
-                size="small"
-                type="primary"
-                icon={<DownloadOutlined />}
-                loading={actionKey === `develop:${record.repositoryId}:${record.toolId}`}
-                onClick={() => void handleDevelopTool(record)}
-              >
-                同步开发
-              </Button>
-            )
+          {record.workingCopyId ? (
+            <Button
+              size="small"
+              type={record.upstreamSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
+              danger={record.upstreamSyncState === "DIVERGED"}
+              ghost={record.upstreamSyncState === "REMOTE_CHANGES"}
+              icon={<SyncOutlined />}
+              onClick={() => navigate(`/scripts/${record.workingCopyId}`)}
+            >
+              {getUpstreamActionLabel(record.upstreamSyncState)}
+            </Button>
+          ) : record.installed ? (
+            <Button
+              size="small"
+              type={record.updateAvailable ? "primary" : "default"}
+              ghost={record.updateAvailable}
+              icon={<SyncOutlined />}
+              disabled={!record.updateAvailable}
+              loading={actionKey === `update:${record.installedScriptId}`}
+              onClick={() => void confirmInstallAction(record, "update")}
+            >
+              {record.updateAvailable ? "更新" : "已安装"}
+            </Button>
           ) : (
             <Button
               size="small"
@@ -1004,6 +977,16 @@ export function RepositoryDiscoveryPage() {
               安装
             </Button>
           )}
+          {!record.workingCopyId && !record.installed ? (
+            <Button
+              size="small"
+              icon={<SyncOutlined />}
+              loading={actionKey === `develop:${record.repositoryId}:${record.toolId}`}
+              onClick={() => void handleDevelopTool(record)}
+            >
+              创建工作副本
+            </Button>
+          ) : null}
         </Space>
       )
     }
@@ -1109,7 +1092,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space size={[4, 4]}>
           <Text>{record.repositoryId}</Text>
-          {record.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : null}
+          {record.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
           <TrustLevelTag level={record.trusted ? "TRUSTED" : "UNTRUSTED"} />
         </Space>
       )
@@ -1131,56 +1114,29 @@ export function RepositoryDiscoveryPage() {
       width: 180,
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
-          {record.installed ? (
-            record.repositoryUsage === "DEVELOPMENT" ? (
-              record.developmentSourceId ? (
-                <Button
-                  size="small"
-                  type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
-                  danger={record.developmentSyncState === "DIVERGED"}
-                  ghost={record.developmentSyncState === "REMOTE_CHANGES"}
-                  icon={<SyncOutlined />}
-                  onClick={() => navigate("/triggers")}
-                >
-                  {getDevelopmentActionLabel(record.developmentSyncState)}
-                </Button>
-              ) : null
-            ) : (
-              <Button
-                size="small"
-                type={record.updateAvailable ? "primary" : "default"}
-                ghost={record.updateAvailable}
-                icon={<SyncOutlined />}
-                disabled={!record.updateAvailable}
-                loading={actionKey === `update:${record.installedSourceId}`}
-                onClick={() => void confirmEventSourceInstallAction(record, "update")}
-              >
-                {record.updateAvailable ? "更新" : "已安装"}
-              </Button>
-            )
-          ) : record.repositoryUsage === "DEVELOPMENT" ? (
-            record.developmentSourceId ? (
-              <Button
-                size="small"
-                type={record.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
-                danger={record.developmentSyncState === "DIVERGED"}
-                ghost={record.developmentSyncState === "REMOTE_CHANGES"}
-                icon={<SyncOutlined />}
-                onClick={() => navigate("/triggers")}
-              >
-                {getDevelopmentActionLabel(record.developmentSyncState)}
-              </Button>
-            ) : (
-              <Button
-                size="small"
-                type="primary"
-                icon={<DownloadOutlined />}
-                loading={actionKey === `develop:${record.repositoryId}:${record.eventSourceId}`}
-                onClick={() => void handleDevelopEventSource(record)}
-              >
-                同步开发
-              </Button>
-            )
+          {record.workingCopyId ? (
+            <Button
+              size="small"
+              type={record.upstreamSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
+              danger={record.upstreamSyncState === "DIVERGED"}
+              ghost={record.upstreamSyncState === "REMOTE_CHANGES"}
+              icon={<SyncOutlined />}
+              onClick={() => navigate("/triggers")}
+            >
+              {getUpstreamActionLabel(record.upstreamSyncState)}
+            </Button>
+          ) : record.installed ? (
+            <Button
+              size="small"
+              type={record.updateAvailable ? "primary" : "default"}
+              ghost={record.updateAvailable}
+              icon={<SyncOutlined />}
+              disabled={!record.updateAvailable}
+              loading={actionKey === `update:${record.installedSourceId}`}
+              onClick={() => void confirmEventSourceInstallAction(record, "update")}
+            >
+              {record.updateAvailable ? "更新" : "已安装"}
+            </Button>
           ) : (
             <Button
               size="small"
@@ -1192,6 +1148,16 @@ export function RepositoryDiscoveryPage() {
               安装
             </Button>
           )}
+          {!record.workingCopyId && !record.installed ? (
+            <Button
+              size="small"
+              icon={<SyncOutlined />}
+              loading={actionKey === `develop:${record.repositoryId}:${record.eventSourceId}`}
+              onClick={() => void handleDevelopEventSource(record)}
+            >
+              创建工作副本
+            </Button>
+          ) : null}
         </Space>
       )
     }
@@ -1472,14 +1438,13 @@ export function RepositoryDiscoveryPage() {
               items={[
                 { key: "tool", label: "脚本 ID", children: <Text code>{detail.descriptor.installedScriptId}</Text> },
                 { key: "repo", label: "来源仓库", children: detail.descriptor.repositoryId },
-                { key: "usage", label: "仓库用途", children: detail.descriptor.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag>分发仓库</Tag> },
                 { key: "type", label: "类型", children: getScriptTypeLabel(detail.descriptor.type) },
                 { key: "version", label: "远端版本", children: detail.descriptor.version },
                 { key: "installedVersion", label: "本机版本", children: detail.descriptor.installedVersion || "-" },
                 { key: "owner", label: "维护人", children: detail.descriptor.owner || "-" },
                 { key: "risk", label: "风险等级", children: <RiskLevelTag level={detail.descriptor.riskLevel} /> },
                 { key: "trust", label: "仓库信任", children: <TrustLevelTag level={detail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
-                { key: "syncState", label: "开发同步", children: detail.descriptor.developmentScriptId ? <DevelopmentSyncTag state={detail.descriptor.developmentSyncState} /> : <Text type="secondary">-</Text> }
+                { key: "syncState", label: "上游同步", children: detail.descriptor.workingCopyId ? <UpstreamSyncTag state={detail.descriptor.upstreamSyncState} /> : <Text type="secondary">-</Text> }
               ]}
             />
 
@@ -1488,7 +1453,42 @@ export function RepositoryDiscoveryPage() {
                 <Tag key={tag}>{tag}</Tag>
               ))}
               {detail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
+              {detail.descriptor.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
               {detail.descriptor.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
+            </Space>
+
+            <Space wrap size={[8, 8]}>
+              {detail.descriptor.workingCopyId ? (
+                <Button onClick={() => navigate(`/scripts/${detail.descriptor.workingCopyId}`)}>
+                  {getUpstreamActionLabel(detail.descriptor.upstreamSyncState)}
+                </Button>
+              ) : detail.descriptor.installed ? (
+                <Button
+                  type={detail.descriptor.updateAvailable ? "primary" : "default"}
+                  ghost={detail.descriptor.updateAvailable}
+                  disabled={!detail.descriptor.updateAvailable}
+                  loading={actionKey === `update:${detail.descriptor.installedScriptId}`}
+                  onClick={() => void confirmInstallAction(detail.descriptor, "update")}
+                >
+                  {detail.descriptor.updateAvailable ? "更新脚本" : "已安装"}
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    type="primary"
+                    loading={actionKey === `install:${detail.descriptor.installedScriptId}`}
+                    onClick={() => void confirmInstallAction(detail.descriptor, "install")}
+                  >
+                    安装脚本
+                  </Button>
+                  <Button
+                    loading={actionKey === `develop:${detail.descriptor.repositoryId}:${detail.descriptor.toolId}`}
+                    onClick={() => void handleDevelopTool(detail.descriptor)}
+                  >
+                    创建工作副本
+                  </Button>
+                </>
+              )}
             </Space>
 
             <Tabs
@@ -1652,67 +1652,52 @@ export function RepositoryDiscoveryPage() {
               items={[
                 { key: "source", label: "事件源 ID", children: <Text code>{eventSourceDetail.descriptor.installedSourceId}</Text> },
                 { key: "repo", label: "来源仓库", children: eventSourceDetail.descriptor.repositoryId },
-                { key: "usage", label: "仓库用途", children: eventSourceDetail.descriptor.repositoryUsage === "DEVELOPMENT" ? <Tag color="purple">开发仓库</Tag> : <Tag>分发仓库</Tag> },
                 { key: "version", label: "远端版本", children: eventSourceDetail.descriptor.version },
                 { key: "installedVersion", label: "本机版本", children: eventSourceDetail.descriptor.installedVersion || "-" },
                 { key: "owner", label: "维护人", children: eventSourceDetail.descriptor.owner || "-" },
                 { key: "trust", label: "仓库信任", children: <TrustLevelTag level={eventSourceDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
-                { key: "sync", label: "开发同步", children: eventSourceDetail.descriptor.developmentSourceId ? <DevelopmentSyncTag state={eventSourceDetail.descriptor.developmentSyncState} /> : <Text type="secondary">-</Text> }
+                { key: "sync", label: "上游同步", children: eventSourceDetail.descriptor.workingCopyId ? <UpstreamSyncTag state={eventSourceDetail.descriptor.upstreamSyncState} /> : <Text type="secondary">-</Text> }
               ]}
             />
 
             <Space wrap size={[8, 8]}>
               {eventSourceDetail.descriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
               {eventSourceDetail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
+              {eventSourceDetail.descriptor.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
               {eventSourceDetail.descriptor.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
             </Space>
 
             <Space wrap size={[8, 8]}>
-              {eventSourceDetail.descriptor.installed ? (
-                eventSourceDetail.descriptor.repositoryUsage === "DEVELOPMENT" ? (
-                  eventSourceDetail.descriptor.developmentSourceId ? (
-                    <Button
-                      type={eventSourceDetail.descriptor.developmentSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
-                      danger={eventSourceDetail.descriptor.developmentSyncState === "DIVERGED"}
-                      ghost={eventSourceDetail.descriptor.developmentSyncState === "REMOTE_CHANGES"}
-                      onClick={() => navigate("/triggers")}
-                    >
-                      {getDevelopmentActionLabel(eventSourceDetail.descriptor.developmentSyncState)}
-                    </Button>
-                  ) : null
-                ) : (
-                  <Button
-                    type={eventSourceDetail.descriptor.updateAvailable ? "primary" : "default"}
-                    ghost={eventSourceDetail.descriptor.updateAvailable}
-                    disabled={!eventSourceDetail.descriptor.updateAvailable}
-                    loading={actionKey === `update:${eventSourceDetail.descriptor.installedSourceId}`}
-                    onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "update")}
-                  >
-                    {eventSourceDetail.descriptor.updateAvailable ? "更新事件源" : "已安装"}
-                  </Button>
-                )
-              ) : eventSourceDetail.descriptor.repositoryUsage === "DEVELOPMENT" ? (
-                eventSourceDetail.descriptor.developmentSourceId ? (
-                  <Button onClick={() => navigate("/triggers")}>
-                    {getDevelopmentActionLabel(eventSourceDetail.descriptor.developmentSyncState)}
-                  </Button>
-                ) : (
+              {eventSourceDetail.descriptor.workingCopyId ? (
+                <Button onClick={() => navigate("/triggers")}>
+                  {getUpstreamActionLabel(eventSourceDetail.descriptor.upstreamSyncState)}
+                </Button>
+              ) : eventSourceDetail.descriptor.installed ? (
+                <Button
+                  type={eventSourceDetail.descriptor.updateAvailable ? "primary" : "default"}
+                  ghost={eventSourceDetail.descriptor.updateAvailable}
+                  disabled={!eventSourceDetail.descriptor.updateAvailable}
+                  loading={actionKey === `update:${eventSourceDetail.descriptor.installedSourceId}`}
+                  onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "update")}
+                >
+                  {eventSourceDetail.descriptor.updateAvailable ? "更新事件源" : "已安装"}
+                </Button>
+              ) : (
+                <>
                   <Button
                     type="primary"
+                    loading={actionKey === `install:${eventSourceDetail.descriptor.installedSourceId}`}
+                    onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "install")}
+                  >
+                    安装事件源
+                  </Button>
+                  <Button
                     loading={actionKey === `develop:${eventSourceDetail.descriptor.repositoryId}:${eventSourceDetail.descriptor.eventSourceId}`}
                     onClick={() => void handleDevelopEventSource(eventSourceDetail.descriptor)}
                   >
-                    同步开发
+                    创建工作副本
                   </Button>
-                )
-              ) : (
-                <Button
-                  type="primary"
-                  loading={actionKey === `install:${eventSourceDetail.descriptor.installedSourceId}`}
-                  onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "install")}
-                >
-                  安装事件源
-                </Button>
+                </>
               )}
             </Space>
 

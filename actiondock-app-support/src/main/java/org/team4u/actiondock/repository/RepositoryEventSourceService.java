@@ -8,6 +8,7 @@ import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.time.LocalDateTime;
@@ -22,7 +23,7 @@ public class RepositoryEventSourceService {
 
     private final RepositoryCatalogService catalog;
     private final RepositoryCatalogService.Repositories repos;
-    private final DevelopmentSyncService developmentSync;
+    private final UpstreamSyncService upstreamSync;
     private final EventSourceRepositoryPublisher publisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
     private final RepositoryToolService repositoryToolService;
@@ -35,7 +36,7 @@ public class RepositoryEventSourceService {
         this.repos = repos;
         this.configTemplateSyncService = configTemplateSyncService;
         this.repositoryToolService = repositoryToolService;
-        this.developmentSync = new DevelopmentSyncService(catalog, repos, catalog.getServices());
+        this.upstreamSync = new UpstreamSyncService(catalog, repos, catalog.getServices());
         this.publisher = new EventSourceRepositoryPublisher(catalog, repos);
     }
 
@@ -59,18 +60,22 @@ public class RepositoryEventSourceService {
         return installOrUpdate(repositoryId, eventSourceId, options, true, new LinkedHashSet<>());
     }
 
-    public EventSourceDefinition syncEventSourceForDevelopment(String repositoryId,
-                                                               String eventSourceId,
-                                                               DevelopmentSyncRequest request) {
-        return developmentSync.syncEventSourceForDevelopment(repositoryId, eventSourceId, request);
+    public EventSourceDefinition createEventSourceWorkingCopy(String repositoryId,
+                                                              String eventSourceId,
+                                                              WorkingCopyRequest request) {
+        return upstreamSync.createEventSourceWorkingCopy(repositoryId, eventSourceId, request);
     }
 
-    public DevelopmentStatus getDevelopmentStatus(String eventSourceId) {
-        return developmentSync.getEventSourceDevelopmentStatus(eventSourceId);
+    public UpstreamStatus getUpstreamStatus(String eventSourceId) {
+        return upstreamSync.getEventSourceUpstreamStatus(eventSourceId);
     }
 
-    public EventSourceDefinition pullDevelopmentEventSource(String eventSourceId, boolean force) {
-        return developmentSync.pullDevelopmentEventSource(eventSourceId, force);
+    public EventSourceDefinition pullUpstreamEventSource(String eventSourceId, boolean force) {
+        return upstreamSync.pullEventSource(eventSourceId, force);
+    }
+
+    public void detachUpstream(String eventSourceId) {
+        upstreamSync.detachEventSource(eventSourceId);
     }
 
     public void uninstallEventSource(String installedSourceId) {
@@ -96,6 +101,7 @@ public class RepositoryEventSourceService {
         try {
             RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repositoryId, eventSourceId);
             String installedSourceId = detail.descriptor().installedSourceId();
+            ensureNoWorkingCopy(repositoryId, eventSourceId);
             EventSourceDefinition existing = repos.eventSourceRepository().findById(installedSourceId).orElse(null);
             if (updateOnly && existing == null) {
                 throw new IllegalArgumentException("事件源尚未安装: " + installedSourceId);
@@ -128,6 +134,14 @@ public class RepositoryEventSourceService {
                     new ToolInstallationOptions(false, true, options.installPluginDependencies(), options.forcePluginUpgrade())
             );
         }
+    }
+
+    private void ensureNoWorkingCopy(String repositoryId, String eventSourceId) {
+        repos.upstreamBindingRepository()
+                .findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repositoryId, eventSourceId)
+                .ifPresent(binding -> {
+                    throw new IllegalArgumentException("上游事件源已有工作副本，不能同时安装只读资产: " + binding.getLocalAssetId());
+                });
     }
 
     private RepositoryEventSourceInstallation persistInstallation(String repositoryId,

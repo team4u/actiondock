@@ -256,19 +256,25 @@ public class ScriptController {
         );
     }
 
-    @GetMapping("/{id}/development-status")
-    public ApiResponse<RepositoryCatalogTypes.DevelopmentStatus> developmentStatus(@PathVariable String id) {
-        return ApiResponse.success(repositoryToolService.getDevelopmentStatus(id));
+    @GetMapping("/{id}/upstream")
+    public ApiResponse<RepositoryCatalogTypes.UpstreamStatus> upstreamStatus(@PathVariable String id) {
+        return ApiResponse.success(repositoryToolService.getUpstreamStatus(id));
     }
 
-    @PostMapping("/{id}/development-pull")
-    public ApiResponse<ScriptDefinition> developmentPull(@PathVariable String id,
-                                                         @RequestParam(defaultValue = "false") boolean force,
-                                                         @RequestParam(defaultValue = "false") boolean includeUiSchema) {
+    @PostMapping("/{id}/upstream/pull")
+    public ApiResponse<ScriptDefinition> upstreamPull(@PathVariable String id,
+                                                      @RequestParam(defaultValue = "false") boolean force,
+                                                      @RequestParam(defaultValue = "false") boolean includeUiSchema) {
         return ApiResponse.success(
-                toResponse(repositoryToolService.pullDevelopmentScript(id, force), includeUiSchema),
-                "开发脚本已拉取远端更新"
+                toResponse(repositoryToolService.pullUpstreamScript(id, force), includeUiSchema),
+                "脚本工作副本已拉取上游更新"
         );
+    }
+
+    @DeleteMapping("/{id}/upstream")
+    public ApiResponse<Void> detachUpstream(@PathVariable String id) {
+        repositoryToolService.detachUpstream(id);
+        return ApiResponse.success(null, "已断开上游跟踪");
     }
 
     private ScriptDefinition toResponse(ScriptDefinition definition, boolean includeUiSchema) {

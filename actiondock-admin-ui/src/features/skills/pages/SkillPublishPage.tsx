@@ -347,7 +347,7 @@ export function SkillPublishPage() {
         const repositoryData = await listRepositories();
         setRepositories(repositoryData.filter((item) => item.enabled));
         form.setFieldsValue({
-          repositoryId: repositoryData.find((item) => item.enabled && item.usage !== "DEVELOPMENT")?.id ?? repositoryData[0]?.id
+          repositoryId: repositoryData.find((item) => item.enabled)?.id ?? repositoryData[0]?.id
         });
       } catch (error) {
         messageApi.error(getErrorMessage(error, "加载 Skill 发布元数据失败"));

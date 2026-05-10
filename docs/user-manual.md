@@ -21,7 +21,7 @@ ActionDock 做的核心事情是：
 |------|------------------|------------------------|------------|
 | 工具输入输出契约 | 通常没有 | 需要手写 DTO / 文档 | 内建 `inputSchema` / `outputSchema` |
 | 草稿与发布 | 通常没有 | 依赖额外发布流程 | 内建草稿、发布快照、丢弃草稿 |
-| 团队分发 | 拷文件 / Git 约定 | 重新部署服务 | 仓库发现、安装、更新、开发同步 |
+| 团队分发 | 拷文件 / Git 约定 | 重新部署服务 | 仓库发现、安装、更新、工作副本同步 |
 | 插件扩展 | 零散 SDK | 常需改主服务 | PF4J 插件机制，脚本侧统一调用 |
 | AI 接入 | prompt 拼接 | 需额外接工具层 | AI Toolset、Agent、脚本桥接 |
 | 共享状态治理 | 落文件 / Redis 自管 | 另接状态服务 | 内建共享状态 `namespace + key + JSON + version + CAS` |
@@ -67,7 +67,7 @@ ActionDock 做的核心事情是：
 
 ### ⚡ 能力
 
-- [脚本管理](script-management.md) — 脚本库、编辑、发布、导入导出、Fork
+- [脚本管理](script-management.md) — 脚本库、编辑、发布、导入导出、Fork、工作副本
 - [插件管理](plugin-management.md) — 插件安装、生命周期、在脚本中调用 Action
 - [Skills 管理](skills-management.md) — Skills 安装目标、安装、发布、详情
 - [AI 能力](ai-capabilities.md) — 模型配置、Agent 配置、Toolset、运行记录

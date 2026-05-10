@@ -11,7 +11,6 @@ export default class RepositoryCreateCommand extends BaseCommand {
         type: Flags.string({ description: "Repository type", options: ["git", "http", "local-dir"], required: true }),
         url: Flags.string({ description: "Repository URL or local path", required: true }),
         branch: Flags.string({ description: "Git branch" }),
-        usage: Flags.string({ description: "Repository usage", options: ["development", "distribution"] }),
         "trust-level": Flags.string({ description: "Repository trust level", options: ["trusted", "untrusted"], default: "untrusted" }),
         description: Flags.string({ description: "Repository description" }),
         disabled: Flags.boolean({ description: "Create repository as disabled" }),
@@ -27,7 +26,6 @@ export default class RepositoryCreateCommand extends BaseCommand {
                 type: flags.type.toUpperCase().replace("-", "_"),
                 url: flags.url,
                 branch: flags.branch,
-                usage: flags.usage?.toUpperCase(),
                 trustLevel: flags["trust-level"].toUpperCase().replace("-", "_"),
                 description: flags.description,
                 enabled: !flags.disabled

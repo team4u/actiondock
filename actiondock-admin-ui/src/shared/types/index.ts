@@ -1,9 +1,9 @@
 export type ScriptStatus = "DRAFT" | "PUBLISHED";
 export type ScriptType = "GROOVY" | "PYTHON";
 export type ScriptPackaging = "TOOL" | "FLOW";
-export type ScriptScope = "PERSONAL" | "REPOSITORY" | "FORK" | "DEVELOPMENT" | "SAMPLE";
-export type EventSourceScope = "PERSONAL" | "REPOSITORY" | "DEVELOPMENT";
-export type EventTriggerScope = "PERSONAL" | "REPOSITORY" | "DEVELOPMENT";
+export type ScriptScope = "PERSONAL" | "REPOSITORY" | "SAMPLE";
+export type EventSourceScope = "PERSONAL" | "REPOSITORY";
+export type EventTriggerScope = "PERSONAL" | "REPOSITORY";
 export type ExecutionStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
 export type SubmitMode = "SYNC" | "ASYNC";
 export type ExecutionResponseView = "RESULT" | "DEBUG";
@@ -19,8 +19,7 @@ export type AiCallerType = "SCRIPT" | "PLUGIN" | "ADMIN_TEST" | "AGENT";
 export type AiStepType = "MODEL_REASONING" | "TOOL_CALL" | "TOOL_RESULT" | "APPROVAL" | "INTERRUPT";
 export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
-export type RepositoryUsage = "DISTRIBUTION" | "DEVELOPMENT";
-export type DevelopmentSyncState = "SYNCED" | "LOCAL_CHANGES" | "REMOTE_CHANGES" | "DIVERGED";
+export type UpstreamSyncState = "SYNCED" | "LOCAL_CHANGES" | "REMOTE_CHANGES" | "DIVERGED";
 
 export interface ForkFormValues {
   id: string;
@@ -829,7 +828,6 @@ export interface RepositoryDefinition {
   branch?: string;
   enabled: boolean;
   trustLevel: RepositoryTrustLevel;
-  usage?: RepositoryUsage;
   description?: string;
   lastSyncedAt?: string;
   createdAt?: string;
@@ -863,11 +861,10 @@ export interface RepositoryToolDescriptor {
   installedVersion?: string;
   updateAvailable: boolean;
   trusted: boolean;
-  repositoryUsage?: RepositoryUsage;
-  developmentScriptId?: string;
-  developmentDirty?: boolean;
-  developmentRemoteChanged?: boolean;
-  developmentSyncState?: DevelopmentSyncState;
+  workingCopyId?: string;
+  upstreamDirty?: boolean;
+  upstreamRemoteChanged?: boolean;
+  upstreamSyncState?: UpstreamSyncState;
 }
 
 export interface RepositoryConfigTemplateItem {
@@ -936,11 +933,10 @@ export interface RepositoryEventSourceDescriptor {
   installedVersion?: string;
   updateAvailable: boolean;
   trusted: boolean;
-  repositoryUsage?: RepositoryUsage;
-  developmentSourceId?: string;
-  developmentDirty?: boolean;
-  developmentRemoteChanged?: boolean;
-  developmentSyncState?: DevelopmentSyncState;
+  workingCopyId?: string;
+  upstreamDirty?: boolean;
+  upstreamRemoteChanged?: boolean;
+  upstreamSyncState?: UpstreamSyncState;
 }
 
 export interface RepositoryEventSourceDetail {
@@ -1078,7 +1074,6 @@ export interface CapabilityPackageDescriptor {
   installedVersion?: string;
   updateAvailable: boolean;
   trusted: boolean;
-  repositoryUsage?: RepositoryUsage;
 }
 
 export interface CapabilityPackageReleaseFile {
@@ -1196,7 +1191,7 @@ export interface RepositoryInstallRequest {
 }
 
 export type ResourceLifecycleResourceType = "REPOSITORY_TOOL" | "REPOSITORY_EVENT_SOURCE" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
-export type ResourceLifecycleOperation = "install" | "update" | "develop" | "publish" | "preview" | "uninstall";
+export type ResourceLifecycleOperation = "install" | "update" | "working-copy" | "publish" | "preview" | "uninstall";
 
 export interface ResourceLifecycleRequest<TPayload = Record<string, unknown>> {
   resourceType: ResourceLifecycleResourceType;
@@ -1256,7 +1251,6 @@ export interface RepositorySkillDescriptor {
   installedVersion?: string;
   updateAvailable: boolean;
   trusted: boolean;
-  repositoryUsage?: RepositoryUsage;
 }
 
 export interface RepositorySkillDetail {
@@ -1521,11 +1515,11 @@ export interface RepositoryPublishRequest {
   force?: boolean;
 }
 
-export interface DevelopmentStatus {
-  scriptId: string;
+export interface UpstreamStatus {
+  localAssetId: string;
   repositoryId: string;
-  repositoryToolId: string;
-  repositoryVersion?: string;
+  upstreamAssetId: string;
+  upstreamVersion?: string;
   localCommit?: string;
   remoteCommit?: string;
   baseDigest?: string;
@@ -1533,9 +1527,9 @@ export interface DevelopmentStatus {
   remoteDigest?: string;
   dirty: boolean;
   remoteChanged: boolean;
-  syncState: DevelopmentSyncState;
+  syncState: UpstreamSyncState;
   remoteVersion?: string;
-  sourceSyncedAt?: string;
+  lastSyncedAt?: string;
 }
 
 export interface ExecutionPreset {

@@ -481,11 +481,7 @@ public class ScriptDefinition {
      */
     public ScriptDefinition mergeFrom(ScriptDefinition existing) {
         mergeNullFieldsFrom(existing);
-        if (scope == ScriptScope.DEVELOPMENT) {
-            setDirty(existing.isDirty() || !snapshotCurrent().equals(existing.snapshotCurrent()));
-        } else {
-            setDirty(existing.isDirty());
-        }
+        setDirty(isEditable() ? existing.isDirty() || !snapshotCurrent().equals(existing.snapshotCurrent()) : existing.isDirty());
         setEditable(existing.isEditable());
         return this;
     }

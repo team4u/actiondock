@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
+import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
@@ -154,6 +155,13 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.getRepositoryEventSource(id, eventSourceId));
     }
 
+    @PostMapping("/{id}/event-sources/{eventSourceId}/working-copy")
+    public ApiResponse<EventSourceDefinition> createEventSourceWorkingCopy(@PathVariable String id,
+                                                                           @PathVariable String eventSourceId,
+                                                                           @RequestBody(required = false) RepositoryCatalogTypes.WorkingCopyRequest request) {
+        return ApiResponse.success(repositoryEventSourceService.createEventSourceWorkingCopy(id, eventSourceId, request), "已创建事件源工作副本");
+    }
+
     @GetMapping("/packages")
     public ApiResponse<List<RepositoryCatalogTypes.CapabilityPackageDescriptor>> listAllPackages() {
         return ApiResponse.success(repositoryCatalogService.listAllCapabilityPackages());
@@ -271,11 +279,11 @@ public class RepositoryController {
                 options -> repositoryToolService.updateTool(id, toolId, options), "更新完成");
     }
 
-    @PostMapping("/{id}/tools/{toolId}/develop")
-    public ApiResponse<ScriptDefinition> develop(@PathVariable String id,
-                                                 @PathVariable String toolId,
-                                                 @RequestBody(required = false) RepositoryCatalogTypes.DevelopmentSyncRequest request) {
-        return ApiResponse.success(repositoryToolService.syncToolForDevelopment(id, toolId, request), "已同步为开发脚本");
+    @PostMapping("/{id}/tools/{toolId}/working-copy")
+    public ApiResponse<ScriptDefinition> createToolWorkingCopy(@PathVariable String id,
+                                                               @PathVariable String toolId,
+                                                               @RequestBody(required = false) RepositoryCatalogTypes.WorkingCopyRequest request) {
+        return ApiResponse.success(repositoryToolService.createToolWorkingCopy(id, toolId, request), "已创建脚本工作副本");
     }
 
     /**

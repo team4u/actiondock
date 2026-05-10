@@ -8,7 +8,5 @@ package org.team4u.actiondock.domain.model;
 public enum ScriptScope {
     PERSONAL,
     REPOSITORY,
-    FORK,
-    DEVELOPMENT,
     SAMPLE
 }

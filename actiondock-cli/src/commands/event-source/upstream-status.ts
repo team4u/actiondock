@@ -3,21 +3,22 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
-import { renderEventSourceDetail } from "../../lib/render.js";
+import { renderUpstreamStatus } from "../../lib/render.js";
 
-export default class EventSourceRepositoryDevelopCommand extends BaseCommand {
-  static description = "Sync a repository event source into a local development event source";
+export default class EventSourceUpstreamStatusCommand extends BaseCommand {
+  static description = "Show upstream sync status for an event source working copy";
+
+  static examples = [
+    "<%= config.bin %> <%= command.id %> webhook-source-copy",
+    "<%= config.bin %> <%= command.id %> webhook-source-copy --json"
+  ];
 
   static args = {
-    repositoryId: Args.string({ required: true }),
-    eventSourceId: Args.string({ required: true })
+    sourceId: Args.string({ required: true })
   };
 
   static flags = {
     ...BaseCommand.baseFlags,
-    sourceId: Flags.string({
-      description: "Override the local development event source ID"
-    }),
     profile: Flags.string({
       description: "Use a configured server profile"
     }),
@@ -31,21 +32,21 @@ export default class EventSourceRepositoryDevelopCommand extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(EventSourceRepositoryDevelopCommand);
+    const { args, flags } = await this.parse(EventSourceUpstreamStatusCommand);
 
     try {
       const client = new ActionDockClient({
         serverUrl: resolveServerUrl(flags),
         token: resolveToken(flags)
       });
-      const item = await client.developRepositoryEventSource(args.repositoryId, args.eventSourceId, flags.sourceId);
+      const item = await client.getEventSourceUpstreamStatus(args.sourceId);
 
       if (flags.json) {
         this.printJson(item);
         return;
       }
 
-      this.log(renderEventSourceDetail(item));
+      this.log(renderUpstreamStatus(item));
     } catch (error) {
       this.handleError(error, flags.json);
     }

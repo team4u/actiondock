@@ -3,16 +3,20 @@ import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderEventSourceDetail } from "../../lib/render.js";
-export default class EventSourceDevelopmentPullCommand extends BaseCommand {
-    static description = "Pull remote updates into a development event source";
+export default class EventSourceRepositoryWorkingCopyCommand extends BaseCommand {
+    static description = "Create an event source working copy from a repository event source";
+    static examples = [
+        "<%= config.bin %> <%= command.id %> demo-repo webhook-source",
+        "<%= config.bin %> <%= command.id %> demo-repo webhook-source --sourceId webhook-source-copy"
+    ];
     static args = {
-        sourceId: Args.string({ required: true })
+        repositoryId: Args.string({ required: true }),
+        eventSourceId: Args.string({ required: true })
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        force: Flags.boolean({
-            description: "Overwrite local changes when pulling",
-            default: false
+        sourceId: Flags.string({
+            description: "Override the local working copy event source ID"
         }),
         profile: Flags.string({
             description: "Use a configured server profile"
@@ -26,13 +30,13 @@ export default class EventSourceDevelopmentPullCommand extends BaseCommand {
         help: Flags.help({ char: "h" })
     };
     async run() {
-        const { args, flags } = await this.parse(EventSourceDevelopmentPullCommand);
+        const { args, flags } = await this.parse(EventSourceRepositoryWorkingCopyCommand);
         try {
             const client = new ActionDockClient({
                 serverUrl: resolveServerUrl(flags),
                 token: resolveToken(flags)
             });
-            const item = await client.pullDevelopmentEventSource(args.sourceId, flags.force);
+            const item = await client.createRepositoryEventSourceWorkingCopy(args.repositoryId, args.eventSourceId, flags.sourceId);
             if (flags.json) {
                 this.printJson(item);
                 return;

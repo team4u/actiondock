@@ -190,7 +190,7 @@ public class ScriptApplicationService {
                 .setStatus(ScriptStatus.DRAFT)
                 .setPublishedSnapshot(sourceSnapshot)
                 .setVersion(1)
-                .setScope(ScriptScope.FORK)
+                .setScope(ScriptScope.PERSONAL)
                 .setRepositoryId(source.getRepositoryId())
                 .setRepositoryToolId(source.getRepositoryToolId())
                 .setRepositoryVersion(source.getRepositoryVersion())

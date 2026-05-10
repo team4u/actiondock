@@ -1,5 +1,60 @@
 # actiondock-cli
 
+## 常用命令
+
+以下命令对应当前“工作副本 + 上游绑定”模型，不再使用旧的 `development-*` 命名。
+
+### 从仓库资源创建工作副本
+
+仓库工具 -> 脚本工作副本：
+
+```bash
+actiondock repository tool working-copy <repositoryId> <toolId>
+actiondock repository tool working-copy <repositoryId> <toolId> --script-id <localScriptId>
+```
+
+仓库事件源 -> 事件源工作副本：
+
+```bash
+actiondock event-source repository-working-copy <repositoryId> <eventSourceId>
+actiondock event-source repository-working-copy <repositoryId> <eventSourceId> --sourceId <localSourceId>
+```
+
+### 查看上游同步状态
+
+脚本工作副本：
+
+```bash
+actiondock script upstream-status <scriptId>
+```
+
+事件源工作副本：
+
+```bash
+actiondock event-source upstream-status <sourceId>
+```
+
+### 从上游拉取更新
+
+脚本工作副本：
+
+```bash
+actiondock script upstream-pull <scriptId>
+actiondock script upstream-pull <scriptId> --force
+```
+
+事件源工作副本：
+
+```bash
+actiondock event-source upstream-pull <sourceId>
+actiondock event-source upstream-pull <sourceId> --force
+```
+
+### 说明
+
+- 工作副本在本地以普通可编辑资源存在。
+- 上游同步关系由 `upstream binding` 维护。
+- `--force` 会在存在本地改动时强制用上游内容覆盖当前工作副本。
 
 ## 打包与发布流程
 

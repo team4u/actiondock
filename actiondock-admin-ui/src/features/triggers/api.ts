@@ -1,6 +1,6 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
 import type {
-  DevelopmentStatus,
+  UpstreamStatus,
   EventDispatchRecord,
   EventRecord,
   EventSourceDefinition,
@@ -111,12 +111,12 @@ export function listEventSourceEvents(id: string): Promise<EventRecord[]> {
   return request<EventRecord[]>(`/api/event-sources/${id}/events`);
 }
 
-export function getEventSourceDevelopmentStatus(id: string): Promise<DevelopmentStatus> {
-  return request<DevelopmentStatus>(`/api/event-sources/${id}/development-status`);
+export function getEventSourceUpstreamStatus(id: string): Promise<UpstreamStatus> {
+  return request<UpstreamStatus>(`/api/event-sources/${id}/upstream`);
 }
 
-export function pullDevelopmentEventSource(id: string, force = false): Promise<EventSourceDefinition> {
-  return request<EventSourceDefinition>(`/api/event-sources/${id}/development-pull?force=${force}`, {
+export function pullUpstreamEventSource(id: string, force = false): Promise<EventSourceDefinition> {
+  return request<EventSourceDefinition>(`/api/event-sources/${id}/upstream/pull?force=${force}`, {
     method: "POST"
   });
 }

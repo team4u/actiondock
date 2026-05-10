@@ -53,11 +53,11 @@ export class ActionDockClient {
             method: "POST"
         });
     }
-    async getScriptDevelopmentStatus(scriptId) {
-        return this.requestJson(`/api/scripts/${scriptId}/development-status`);
+    async getScriptUpstreamStatus(scriptId) {
+        return this.requestJson(`/api/scripts/${scriptId}/upstream`);
     }
-    async pullDevelopmentScript(scriptId, force = false) {
-        return this.requestJson(`/api/scripts/${scriptId}/development-pull?force=${force}`, {
+    async pullUpstreamScript(scriptId, force = false) {
+        return this.requestJson(`/api/scripts/${scriptId}/upstream/pull?force=${force}`, {
             method: "POST"
         });
     }
@@ -155,11 +155,11 @@ export class ActionDockClient {
     async listEventSources() {
         return this.requestJson("/api/event-sources");
     }
-    async getEventSourceDevelopmentStatus(sourceId) {
-        return this.requestJson(`/api/event-sources/${sourceId}/development-status`);
+    async getEventSourceUpstreamStatus(sourceId) {
+        return this.requestJson(`/api/event-sources/${sourceId}/upstream`);
     }
-    async pullDevelopmentEventSource(sourceId, force = false) {
-        return this.requestJson(`/api/event-sources/${sourceId}/development-pull?force=${force}`, {
+    async pullUpstreamEventSource(sourceId, force = false) {
+        return this.requestJson(`/api/event-sources/${sourceId}/upstream/pull?force=${force}`, {
             method: "POST"
         });
     }
@@ -320,10 +320,10 @@ export class ActionDockClient {
             body: JSON.stringify(payload)
         });
     }
-    async developRepositoryTool(repositoryId, toolId, scriptId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/develop`, {
+    async createRepositoryToolWorkingCopy(repositoryId, toolId, scriptId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/working-copy`, {
             method: "POST",
-            body: JSON.stringify(scriptId ? { scriptId } : {})
+            body: JSON.stringify(scriptId ? { id: scriptId } : {})
         });
     }
     async uninstallRepositoryTool(scriptId) {
@@ -364,15 +364,15 @@ export class ActionDockClient {
             })
         });
     }
-    async developRepositoryEventSource(repositoryId, eventSourceId, sourceId) {
+    async createRepositoryEventSourceWorkingCopy(repositoryId, eventSourceId, sourceId) {
         return this.requestJson("/api/resource-lifecycle/operations", {
             method: "POST",
             body: JSON.stringify({
                 resourceType: "REPOSITORY_EVENT_SOURCE",
-                operation: "develop",
+                operation: "working-copy",
                 repositoryId,
                 resourceId: eventSourceId,
-                payload: sourceId ? { scriptId: sourceId } : {}
+                payload: sourceId ? { id: sourceId } : {}
             })
         });
     }

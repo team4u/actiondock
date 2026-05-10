@@ -2,7 +2,7 @@
 
 ## 一句话理解
 
-仓库系统是 ActionDock 的"包管理器"。你可以把脚本、插件和 Skills 发布到仓库（Git 仓库、HTTP 服务器或本地目录），团队成员通过仓库发现、一键安装、自动更新。仓库还支持 `DEVELOPMENT` 模式——直接从仓库源码目录同步开发中的脚本。
+仓库系统是 ActionDock 的"包管理器"。你可以把脚本、插件和 Skills 发布到仓库（Git 仓库、HTTP 服务器或本地目录），团队成员通过仓库发现、一键安装、自动更新。对于需要本地修改的仓库脚本或事件源，可以从仓库资产创建工作副本，再通过上游绑定拉取更新。
 
 ## 仓库数据模型
 
@@ -11,7 +11,6 @@ public class RepositoryDefinition {
     private String id;               // 仓库唯一标识
     private String name;             // 人类可读名称
     private RepositoryType type;     // GIT / HTTP / LOCAL_DIR
-    private RepositoryPurpose purpose; // DISTRIBUTION / DEVELOPMENT
     private String url;              // Git URL / HTTP URL / 本地路径
     private String branch;           // Git 分支（可选）
     private boolean enabled;         // 是否启用
@@ -28,12 +27,12 @@ public class RepositoryDefinition {
 | `HTTP` | `https://tools.example.com/repo.json` | 从 HTTP 端点下载索引 |
 | `LOCAL_DIR` | `C:\shared-tools` | 从本地目录加载 |
 
-## 仓库用途
+## 安装模型
 
-| 用途 | 说明 | 脚本编辑状态 |
-|------|------|--------------|
-| `DISTRIBUTION`（分发） | 只读分发，安装的脚本不可编辑 | 只读 |
-| `DEVELOPMENT`（开发同步） | 可从仓库拉取更新，本地可编辑 | 可编辑，显示同步状态 |
+| 形态 | 说明 | 编辑状态 |
+|------|------|----------|
+| 仓库安装 | 直接把仓库中的工具安装到本地，作用域为 `REPOSITORY` | 只读 |
+| 工作副本 | 基于仓库工具或事件源创建本地可编辑副本，并建立 `upstream_binding` | 可编辑，可拉取上游更新 |
 
 ## 仓库发现
 
@@ -67,6 +66,7 @@ public class RepositoryDefinition {
 3. 可选择是否安装关联的依赖项
 4. 确认后安装
 5. 安装后的脚本出现在脚本库中，作用域为 `REPOSITORY`（只读）
+6. 如果需要本地修改，改为从详情页或 CLI 创建工作副本
 
 ## 仓库管理
 
@@ -79,7 +79,6 @@ public class RepositoryDefinition {
 | ID | 仓库标识（点击进入详情） |
 | 名称 | 人类可读名称 |
 | 类型 | `GIT` / `HTTP` / `LOCAL_DIR` |
-| 用途 | `DISTRIBUTION` / `DEVELOPMENT` |
 | 信任级别 | `TRUSTED` / `UNTRUSTED` |
 | 状态 | 上次同步状态 |
 | 操作 | 同步、编辑、删除 |
@@ -95,28 +94,27 @@ public class RepositoryDefinition {
 | Branch | Git 分支（可选） | `main` 或 `develop` |
 | 启用 | 是否启用 | 是 |
 | 信任级别 | `TRUSTED` / `UNTRUSTED` | 建议用 `UNTRUSTED` 先检查 |
-| 用途 | `DISTRIBUTION` / `DEVELOPMENT` | 见下方选择建议 |
 | 描述 | 仓库用途说明 | |
 
-### DISTRIBUTION vs DEVELOPMENT 选择建议
+### 只读安装 vs 工作副本 选择建议
 
-**DISTRIBUTION（分发模式）：**
+**只读安装：**
 
 适用场景：
 - 官方发布的稳定脚本
 - 团队成员只需要使用，不需要修改
 - 版本化管理
 
-安装后的脚本只读，如果用户需要修改必须先 Fork。
+安装后的脚本只读，如果用户需要修改，可以创建工作副本；如果只是想做一次性个性化改造，也可以 Fork 成独立个人脚本。
 
-**DEVELOPMENT（开发同步模式）：**
+**工作副本：**
 
 适用场景：
-- 你的开发环境，脚本源码存放在 Git 仓库中
-- 你想在 ActionDock 中编辑运行，同时保持与 Git 同步
-- 团队协作开发
+- 你想在 ActionDock 中直接修改仓库里的某个工具或事件源
+- 你仍然希望保留与上游仓库资产的对应关系
+- 你需要随时比较本地改动和上游新版本
 
-该仓库的脚本出现在脚本库中为 `DEVELOPMENT` 作用域，本地可编辑。
+创建后，本地副本仍然是脚本库里的 `PERSONAL` 脚本，但会额外带有上游绑定和同步状态。
 
 ## 安装仓库工具
 
@@ -161,31 +159,34 @@ curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/inst
 2. 确认更新
 3. 更新后脚本内容变更为仓库最新版本
 
-### 开发脚本同步（DEVELOPMENT 模式）
+### 工作副本上游同步
 
-DEVELOPMENT 作用域的脚本显示同步状态标签：
+带上游绑定的工作副本显示同步状态标签：
 
 | 标签 | 含义 | 可做的操作 |
 |------|------|-----------|
 | `SYNCED` | 本地与远程一致 | 无需操作 |
 | `LOCAL_CHANGES` | 本地有未同步修改 | 发布到仓库 |
-| `REMOTE_CHANGES` | 远程有新版本 | `development-pull` 拉取更新 |
-| `DIVERGED` | 本地和远程都有修改 | `development-pull ?force=true` 覆盖 |
+| `REMOTE_CHANGES` | 上游有新版本 | `upstream/pull` 拉取更新 |
+| `DIVERGED` | 本地和上游都有修改 | `upstream/pull?force=true` 覆盖 |
 
-通过 REST API 查看/拉取同步状态：
+通过 REST API 创建工作副本、查看状态和拉取更新：
 
 ```bash
-# 查看开发同步状态
-curl http://localhost:5177/api/scripts/{id}/development-status
+# 从仓库工具创建脚本工作副本
+curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/working-copy
+
+# 查看脚本工作副本的上游状态
+curl http://localhost:5177/api/scripts/{id}/upstream
 
 # 返回：
 # { "status": "REMOTE_CHANGES" }
 
-# 拉取远程更新
-curl -X POST http://localhost:5177/api/scripts/{id}/development-pull
+# 拉取上游更新
+curl -X POST http://localhost:5177/api/scripts/{id}/upstream/pull
 
 # 强制拉取（放弃本地修改）
-curl -X POST "http://localhost:5177/api/scripts/{id}/development-pull?force=true"
+curl -X POST "http://localhost:5177/api/scripts/{id}/upstream/pull?force=true"
 ```
 
 ## 发布脚本到仓库
@@ -263,7 +264,7 @@ POST   /api/repositories/{id}/tools/{toolId}/install  # 安装工具
 3. 分支名是否正确
 4. URL 是否可访问
 
-### Q: 开发脚本冲突（DIVERGED）
+### Q: 工作副本冲突（DIVERGED）
 
 本地和远程都有修改时：
 - 如果本地修改不重要：使用 `?force=true` 强制拉取远程版本覆盖本地
@@ -282,11 +283,11 @@ POST   /api/repositories/{id}/tools/{toolId}/install  # 安装工具
 
 ## 最佳实践
 
-- **区分分发和开发**：正式发布的脚本用 `DISTRIBUTION`，个人开发用 `DEVELOPMENT`
+- **默认先安装**：仓库安装适合消费稳定版本，只有需要本地改时再创建工作副本
 - **信任级别**：对外部仓库先用 `UNTRUSTED`，审查后再提升
 - **定期同步**：养成定期一键更新的习惯，获取最新的工具和修复
 - **版本管理**：发布到仓库前确保脚本已发布（创建快照），避免半成品分发
-- **开发同步**：DEVELOPMENT 模式下，在 Git 中修改源码后触发仓库同步，然后通过 `development-pull` 拉取到 ActionDock
+- **工作副本同步**：本地有改动时先确认是否要保留，再决定直接拉取上游还是强制覆盖
 
 ---
 

@@ -5,7 +5,7 @@ import type {
   AiDependency,
   PluginReferenceView,
   PluginView,
-  DevelopmentStatus,
+  UpstreamStatus,
   RepositoryToolDescriptor,
   ScriptDefinition,
   ScriptPackaging,
@@ -178,7 +178,7 @@ export interface ScriptEditorContext {
   validating: boolean;
   detectedPluginDependencies: PluginDependency[];
   detectedAiDependencies: AiDependency[];
-  developmentStatus: DevelopmentStatus | null;
+  developmentStatus: UpstreamStatus | null;
   developmentPulling: boolean;
   handlePullDevelopment: () => Promise<void>;
   modalContextHolder: React.ReactNode;

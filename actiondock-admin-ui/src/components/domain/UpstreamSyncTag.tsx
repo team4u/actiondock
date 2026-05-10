@@ -1,19 +1,19 @@
 import { Tag } from "antd";
-import type { DevelopmentSyncState } from "../../shared/types";
+import type { UpstreamSyncState } from "../../shared/types";
 
-interface DevelopmentSyncTagProps {
-  state?: DevelopmentSyncState;
+interface UpstreamSyncTagProps {
+  state?: UpstreamSyncState;
   defaultLabel?: string;
   defaultColor?: string;
   divergedLabel?: string;
 }
 
-export function DevelopmentSyncTag({
+export function UpstreamSyncTag({
   state,
-  defaultLabel = "开发同步",
+  defaultLabel = "上游同步",
   defaultColor = "purple",
   divergedLabel = "有冲突"
-}: DevelopmentSyncTagProps) {
+}: UpstreamSyncTagProps) {
   switch (state) {
     case "LOCAL_CHANGES":
       return <Tag color="orange">本地有修改</Tag>;
@@ -28,7 +28,7 @@ export function DevelopmentSyncTag({
   }
 }
 
-export function getDevelopmentActionLabel(state?: DevelopmentSyncState): string {
+export function getUpstreamActionLabel(state?: UpstreamSyncState): string {
   switch (state) {
     case "LOCAL_CHANGES":
       return "本地有修改";
@@ -39,6 +39,6 @@ export function getDevelopmentActionLabel(state?: DevelopmentSyncState): string 
     case "SYNCED":
       return "已同步";
     default:
-      return "打开开发脚本";
+      return "打开工作副本";
   }
 }

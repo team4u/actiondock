@@ -51,6 +51,7 @@ public class RepositoryConfiguration {
                                                              ConfigValueRepository configValueRepository,
                                                              EventSourceRepository eventSourceRepository,
                                                              EventTriggerRepository eventTriggerRepository,
+                                                             UpstreamBindingRepository upstreamBindingRepository,
                                                              AiModelProfileRepository aiModelProfileRepository,
                                                              AiAgentProfileRepository aiAgentProfileRepository,
                                                              AiToolsetRepository aiToolsetRepository,
@@ -73,6 +74,7 @@ public class RepositoryConfiguration {
                         configValueRepository,
                         eventSourceRepository,
                         eventTriggerRepository,
+                        upstreamBindingRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository
@@ -121,6 +123,7 @@ public class RepositoryConfiguration {
             ConfigValueRepository configValueRepository,
             EventSourceRepository eventSourceRepository,
             EventTriggerRepository eventTriggerRepository,
+            UpstreamBindingRepository upstreamBindingRepository,
             RepositoryDefinitionRepository repositoryDefinitionRepository,
             RepositoryToolInstallationRepository repositoryToolInstallationRepository,
             RepositoryEventSourceInstallationRepository repositoryEventSourceInstallationRepository,
@@ -144,6 +147,7 @@ public class RepositoryConfiguration {
                         configValueRepository,
                         eventSourceRepository,
                         eventTriggerRepository,
+                        upstreamBindingRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository

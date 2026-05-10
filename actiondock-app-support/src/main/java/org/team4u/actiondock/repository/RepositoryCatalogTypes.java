@@ -77,11 +77,6 @@ public final class RepositoryCatalogTypes {
     /** Windows 绝对路径正则。 */
     public static final String WINDOWS_ABSOLUTE_PATH_REGEX = "^[A-Za-z]:[\\\\/].*";
 
-    /** 仓库用途：开发仓库。 */
-    public static final String REPO_USAGE_DEVELOPMENT = "DEVELOPMENT";
-    /** 仓库用途：分发仓库。 */
-    public static final String REPO_USAGE_DISTRIBUTION = "DISTRIBUTION";
-
     /** 仓库信任级别：受信任。 */
     public static final String REPO_TRUST_TRUSTED = "TRUSTED";
     /** 仓库信任级别：不受信任。 */
@@ -176,24 +171,22 @@ public final class RepositoryCatalogTypes {
             String installedVersion,
             boolean updateAvailable,
             boolean trusted,
-            String repositoryUsage,
-            String developmentScriptId,
-            boolean developmentDirty,
-            boolean developmentRemoteChanged,
-            String developmentSyncState
+            String workingCopyId,
+            boolean upstreamDirty,
+            boolean upstreamRemoteChanged,
+            String upstreamSyncState
     ) {
-        public RepositoryToolDescriptor withDevelopment(String devScriptId,
-                                                         boolean dirty,
-                                                         boolean remoteChanged,
-                                                         String syncState) {
+        public RepositoryToolDescriptor withUpstream(String workingCopyId,
+                                                      boolean dirty,
+                                                      boolean remoteChanged,
+                                                      String syncState) {
             return new RepositoryToolDescriptor(
                     repositoryId, toolId, installedScriptId, displayName, version,
                     description, releaseNotes, owner, tags, type, packaging,
                     sourcePath, pythonRequirementsPath, inputSchemaPath, outputSchemaPath,
                     configTemplatePath, scheduleTemplatePath, digest, riskLevel,
                     scriptDependencies, pluginDependencies, installed, installedVersion,
-                    updateAvailable, trusted, repositoryUsage,
-                    devScriptId, dirty, remoteChanged, syncState
+                    updateAvailable, trusted, workingCopyId, dirty, remoteChanged, syncState
             );
         }
     }
@@ -226,21 +219,20 @@ public final class RepositoryCatalogTypes {
             String installedVersion,
             boolean updateAvailable,
             boolean trusted,
-            String repositoryUsage,
-            String developmentSourceId,
-            boolean developmentDirty,
-            boolean developmentRemoteChanged,
-            String developmentSyncState
+            String workingCopyId,
+            boolean upstreamDirty,
+            boolean upstreamRemoteChanged,
+            String upstreamSyncState
     ) {
-        public RepositoryEventSourceDescriptor withDevelopment(String sourceId,
-                                                               boolean dirty,
-                                                               boolean remoteChanged,
-                                                               String syncState) {
+        public RepositoryEventSourceDescriptor withUpstream(String sourceId,
+                                                            boolean dirty,
+                                                            boolean remoteChanged,
+                                                            String syncState) {
             return new RepositoryEventSourceDescriptor(
                     repositoryId, eventSourceId, installedSourceId, displayName, version,
                     description, releaseNotes, owner, tags, eventSourcePath, configTemplatePath,
                     triggerTemplatePath, digest, scriptDependencies, installed, installedVersion,
-                    updateAvailable, trusted, repositoryUsage, sourceId, dirty, remoteChanged, syncState
+                    updateAvailable, trusted, sourceId, dirty, remoteChanged, syncState
             );
         }
     }
@@ -342,8 +334,7 @@ public final class RepositoryCatalogTypes {
             boolean installed,
             String installedVersion,
             boolean updateAvailable,
-            boolean trusted,
-            String repositoryUsage
+            boolean trusted
     ) {
     }
 
@@ -433,7 +424,7 @@ public final class RepositoryCatalogTypes {
         MANUAL
     }
 
-    public enum DevelopmentSyncState {
+    public enum UpstreamSyncState {
         SYNCED,
         LOCAL_CHANGES,
         REMOTE_CHANGES,
@@ -458,23 +449,23 @@ public final class RepositoryCatalogTypes {
         }
     }
 
-    public record DevelopmentSyncRequest(String scriptId) {
+    public record WorkingCopyRequest(String id) {
     }
 
-    public record DevelopmentStatus(String scriptId,
-                                    String repositoryId,
-                                    String repositoryToolId,
-                                    String repositoryVersion,
-                                    String localCommit,
-                                    String remoteCommit,
-                                    String baseDigest,
-                                    String localDigest,
-                                    String remoteDigest,
-                                    boolean dirty,
-                                    boolean remoteChanged,
-                                    String syncState,
-                                    String remoteVersion,
-                                    LocalDateTime sourceSyncedAt) {
+    public record UpstreamStatus(String localAssetId,
+                                 String repositoryId,
+                                 String upstreamAssetId,
+                                 String upstreamVersion,
+                                 String localCommit,
+                                 String remoteCommit,
+                                 String baseDigest,
+                                 String localDigest,
+                                 String remoteDigest,
+                                 boolean dirty,
+                                 boolean remoteChanged,
+                                 String syncState,
+                                 String remoteVersion,
+                                 LocalDateTime lastSyncedAt) {
     }
 
     public record RepositoryPluginDescriptor(
@@ -518,8 +509,7 @@ public final class RepositoryCatalogTypes {
             boolean installed,
             String installedVersion,
             boolean updateAvailable,
-            boolean trusted,
-            String repositoryUsage
+            boolean trusted
     ) {
     }
 

@@ -5,6 +5,7 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
@@ -19,7 +20,7 @@ import java.util.UUID;
  * 仓库工具安装、更新、卸载和发布服务。
  * <p>
  * 负责工具从仓库的安装、升级、卸载和发布配置预览。
- * 开发同步逻辑由 {@link DevelopmentSyncService} 处理，
+ * 上游工作副本同步逻辑由 {@link UpstreamSyncService} 处理，
  * 工具发布逻辑由 {@link ToolRepositoryPublisher} 处理。
  *
  * @author jay.wu
@@ -30,7 +31,7 @@ public class RepositoryToolService {
     private final RepositoryPluginService pluginService;
     private final RepositoryCatalogService.Repositories repos;
     private final RepositoryCatalogService.ApplicationServices services;
-    private final DevelopmentSyncService developmentSync;
+    private final UpstreamSyncService upstreamSync;
     private final ToolRepositoryPublisher toolRepositoryPublisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
 
@@ -43,7 +44,7 @@ public class RepositoryToolService {
         this.pluginService = pluginService;
         this.repos = repos;
         this.services = services;
-        this.developmentSync = new DevelopmentSyncService(catalog, repos, services);
+        this.upstreamSync = new UpstreamSyncService(catalog, repos, services);
         this.configTemplateSyncService = configTemplateSyncService;
         this.toolRepositoryPublisher = new ToolRepositoryPublisher(catalog, repos, services);
     }
@@ -60,16 +61,20 @@ public class RepositoryToolService {
         return installOrUpdateTool(repositoryId, toolId, options, true, new LinkedHashSet<>());
     }
 
-    public ScriptDefinition syncToolForDevelopment(String repositoryId, String toolId, DevelopmentSyncRequest request) {
-        return developmentSync.syncToolForDevelopment(repositoryId, toolId, request);
+    public ScriptDefinition createToolWorkingCopy(String repositoryId, String toolId, WorkingCopyRequest request) {
+        return upstreamSync.createToolWorkingCopy(repositoryId, toolId, request);
     }
 
-    public DevelopmentStatus getDevelopmentStatus(String scriptId) {
-        return developmentSync.getDevelopmentStatus(scriptId);
+    public UpstreamStatus getUpstreamStatus(String scriptId) {
+        return upstreamSync.getScriptUpstreamStatus(scriptId);
     }
 
-    public ScriptDefinition pullDevelopmentScript(String scriptId, boolean force) {
-        return developmentSync.pullDevelopmentScript(scriptId, force);
+    public ScriptDefinition pullUpstreamScript(String scriptId, boolean force) {
+        return upstreamSync.pullScript(scriptId, force);
+    }
+
+    public void detachUpstream(String scriptId) {
+        upstreamSync.detachScript(scriptId);
     }
 
     public void uninstallTool(String installedScriptId) {
@@ -119,6 +124,7 @@ public class RepositoryToolService {
         try {
             RepositoryToolDetail detail = catalog.getRepositoryTool(repositoryId, toolId);
             String installedScriptId = detail.descriptor().installedScriptId();
+            ensureNoWorkingCopy(repositoryId, toolId);
             ScriptDefinition existing = repos.scriptRepository().findById(installedScriptId).orElse(null);
             if (updateOnly && existing == null) {
                 throw new IllegalArgumentException("工具尚未安装: " + installedScriptId);
@@ -162,8 +168,8 @@ public class RepositoryToolService {
                                                              RepositoryToolDetail detail,
                                                              ScriptDefinition existing,
                                                              LocalDateTime now) {
-        return DevelopmentSyncService.applyLifecycle(
-                developmentSync.buildBaseScriptDefinition(detail.descriptor().installedScriptId(), detail, repositoryId),
+        return UpstreamSyncService.applyLifecycle(
+                upstreamSync.buildBaseScriptDefinition(detail.descriptor().installedScriptId(), detail, repositoryId),
                 existing, ScriptScope.REPOSITORY, false, now)
                 .setVersion(existing == null ? 1 : (existing.getVersion() == null ? 1 : existing.getVersion() + 1));
     }
@@ -226,6 +232,14 @@ public class RepositoryToolService {
                             + versionRange
             );
         }
+    }
+
+    private void ensureNoWorkingCopy(String repositoryId, String toolId) {
+        repos.upstreamBindingRepository()
+                .findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, toolId)
+                .ifPresent(binding -> {
+                    throw new IllegalArgumentException("上游脚本已有工作副本，不能同时安装只读资产: " + binding.getLocalAssetId());
+                });
     }
 
     private void syncScheduleTemplates(ScriptDefinition definition, List<ScheduleTemplateItem> templates, LocalDateTime now) {

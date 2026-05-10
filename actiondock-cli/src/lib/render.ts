@@ -4,7 +4,6 @@ import type {
   AccessTokenView,
   ConfigValueDetailView,
   ConfigValueView,
-  DevelopmentStatus,
   EventDispatchRecord,
   EventIngestionView,
   EventRecord,
@@ -28,7 +27,8 @@ import type {
   ScriptScheduleView,
   ScriptDefinition,
   SharedStateDetail,
-  SharedStateSummary
+  SharedStateSummary,
+  UpstreamStatus
 } from "./types.js";
 
 export function renderScriptList(items: ScriptDefinition[]): string {
@@ -300,8 +300,8 @@ export function renderRepositoryEventSourceList(items: RepositoryEventSourceDesc
   return items
     .map((item) => {
       const installed = item.installed ? ` installed=${item.installedVersion ?? item.version}` : " not-installed";
-      const usage = item.repositoryUsage ? ` usage=${item.repositoryUsage}` : "";
-      return `${item.repositoryId}/${item.eventSourceId} ${item.displayName}@${item.version}${installed}${usage}`;
+      const workingCopy = item.workingCopyId ? ` working-copy=${item.workingCopyId}` : "";
+      return `${item.repositoryId}/${item.eventSourceId} ${item.displayName}@${item.version}${installed}${workingCopy}`;
     })
     .join("\n");
 }
@@ -316,8 +316,8 @@ export function renderRepositoryEventSourceDetail(item: RepositoryEventSourceDet
     `Installed: ${descriptor.installed ? `yes${descriptor.installedVersion ? ` (${descriptor.installedVersion})` : ""}` : "no"}`,
     `Trusted: ${descriptor.trusted ? "yes" : "no"}`
   ];
-  if (descriptor.repositoryUsage) {
-    lines.push(`RepositoryUsage: ${descriptor.repositoryUsage}`);
+  if (descriptor.workingCopyId) {
+    lines.push(`WorkingCopy: ${descriptor.workingCopyId}`);
   }
   if (descriptor.owner) {
     lines.push(`Owner: ${descriptor.owner}`);
@@ -354,8 +354,7 @@ export function renderRepositoryList(items: RepositoryDefinition[]): string {
   return items
     .map((item) => {
       const enabled = item.enabled ? " enabled" : " disabled";
-      const usage = item.usage ? ` ${item.usage}` : "";
-      return `${item.id} ${item.name}${enabled}${usage} ${item.type} ${item.url}`;
+      return `${item.id} ${item.name}${enabled} ${item.type} ${item.url}`;
     })
     .join("\n");
 }
@@ -367,8 +366,7 @@ export function renderRepositoryDetail(item: RepositoryDefinition): string {
     `Type: ${item.type}`,
     `Url: ${item.url}`,
     `Enabled: ${item.enabled ? "yes" : "no"}`,
-    `TrustLevel: ${item.trustLevel ?? "-"}`,
-    `Usage: ${item.usage ?? "-"}`
+    `TrustLevel: ${item.trustLevel ?? "-"}`
   ];
   if (item.branch) {
     lines.push(`Branch: ${item.branch}`);
@@ -389,9 +387,9 @@ export function renderRepositoryToolList(items: RepositoryToolDescriptor[]): str
   return items
     .map((item) => {
       const installed = item.installed ? ` installed=${item.installedVersion ?? item.version}` : " not-installed";
-      const usage = item.repositoryUsage ? ` usage=${item.repositoryUsage}` : "";
+      const workingCopy = item.workingCopyId ? ` working-copy=${item.workingCopyId}` : "";
       const type = item.type ? ` ${item.type}` : "";
-      return `${item.repositoryId}/${item.toolId} ${item.displayName}@${item.version}${type}${installed}${usage}`;
+      return `${item.repositoryId}/${item.toolId} ${item.displayName}@${item.version}${type}${installed}${workingCopy}`;
     })
     .join("\n");
 }
@@ -423,6 +421,9 @@ export function renderRepositoryToolDetail(item: RepositoryToolDetail): string {
   if (item.configTemplate.length > 0) {
     lines.push(`ConfigTemplates: ${item.configTemplate.length}`);
   }
+  if (descriptor.workingCopyId) {
+    lines.push(`WorkingCopy: ${descriptor.workingCopyId}`);
+  }
   if (item.scheduleTemplate.length > 0) {
     lines.push(`ScheduleTemplates: ${item.scheduleTemplate.length}`);
   }
@@ -442,23 +443,23 @@ export function renderRepositoryToolInstallation(item: RepositoryToolInstallatio
   return lines.join("\n");
 }
 
-export function renderDevelopmentStatus(item: DevelopmentStatus): string {
+export function renderUpstreamStatus(item: UpstreamStatus): string {
   const lines = [
-    `ResourceId: ${item.scriptId}`,
+    `ResourceId: ${item.localAssetId}`,
     `Repository: ${item.repositoryId}`,
-    `RepositoryAsset: ${item.repositoryToolId}`,
+    `RepositoryAsset: ${item.upstreamAssetId}`,
     `SyncState: ${item.syncState}`,
     `Dirty: ${item.dirty ? "yes" : "no"}`,
     `RemoteChanged: ${item.remoteChanged ? "yes" : "no"}`
   ];
-  if (item.repositoryVersion) {
-    lines.push(`RepositoryVersion: ${item.repositoryVersion}`);
+  if (item.upstreamVersion) {
+    lines.push(`RepositoryVersion: ${item.upstreamVersion}`);
   }
   if (item.remoteVersion) {
     lines.push(`RemoteVersion: ${item.remoteVersion}`);
   }
-  if (item.sourceSyncedAt) {
-    lines.push(`SourceSyncedAt: ${item.sourceSyncedAt}`);
+  if (item.lastSyncedAt) {
+    lines.push(`LastSyncedAt: ${item.lastSyncedAt}`);
   }
   return lines.join("\n");
 }

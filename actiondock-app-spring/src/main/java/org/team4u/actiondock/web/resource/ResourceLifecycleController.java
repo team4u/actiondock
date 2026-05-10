@@ -35,7 +35,7 @@ public class ResourceLifecycleController {
 
     private static final String OP_INSTALL = "install";
     private static final String OP_UPDATE = "update";
-    private static final String OP_DEVELOP = "develop";
+    private static final String OP_WORKING_COPY = "working-copy";
     private static final String OP_PUBLISH = "publish";
     private static final String OP_PREVIEW = "preview";
     private static final String OP_UNINSTALL = "uninstall";
@@ -92,9 +92,9 @@ public class ResourceLifecycleController {
                     normalizeResourceId(request, "toolId 不能为空"), toolOptions(request.getPayload()));
             case OP_UPDATE -> repositoryToolService.updateTool(normalizeRepositoryId(request),
                     normalizeResourceId(request, "toolId 不能为空"), toolOptions(request.getPayload()));
-            case OP_DEVELOP -> repositoryToolService.syncToolForDevelopment(normalizeRepositoryId(request),
+            case OP_WORKING_COPY -> repositoryToolService.createToolWorkingCopy(normalizeRepositoryId(request),
                     normalizeResourceId(request, "toolId 不能为空"),
-                    convertPayload(request.getPayload(), RepositoryCatalogTypes.DevelopmentSyncRequest.class));
+                    convertPayload(request.getPayload(), RepositoryCatalogTypes.WorkingCopyRequest.class));
             case OP_PUBLISH -> repositoryToolService.publishTool(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPublishRequest.class));
             case OP_PREVIEW -> repositoryToolService.previewPublishConfig(
@@ -126,9 +126,9 @@ public class ResourceLifecycleController {
                     normalizeResourceId(request, "eventSourceId 不能为空"), toolOptions(request.getPayload()));
             case OP_UPDATE -> repositoryEventSourceService.updateEventSource(normalizeRepositoryId(request),
                     normalizeResourceId(request, "eventSourceId 不能为空"), toolOptions(request.getPayload()));
-            case OP_DEVELOP -> repositoryEventSourceService.syncEventSourceForDevelopment(normalizeRepositoryId(request),
+            case OP_WORKING_COPY -> repositoryEventSourceService.createEventSourceWorkingCopy(normalizeRepositoryId(request),
                     normalizeResourceId(request, "eventSourceId 不能为空"),
-                    convertPayload(request.getPayload(), RepositoryCatalogTypes.DevelopmentSyncRequest.class));
+                    convertPayload(request.getPayload(), RepositoryCatalogTypes.WorkingCopyRequest.class));
             case OP_PUBLISH -> repositoryEventSourceService.publishEventSource(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryEventSourcePublishRequest.class));
             case OP_PREVIEW -> repositoryEventSourceService.previewPublish(
