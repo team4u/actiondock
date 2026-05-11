@@ -60,6 +60,33 @@ public class ExecutionResponseMapper {
         );
     }
 
+    public ExecutionRecordResponse toRecordResponse(ExecutionRecord record,
+                                                    ScriptDefinition scriptDefinition) {
+        Map<String, Object> rawOutput = copy(record.getOutput());
+        return new ExecutionRecordResponse(
+                record.getId(),
+                record.getScriptId(),
+                record.getStatus(),
+                record.getSubmitMode(),
+                record.getTriggerSource(),
+                record.getScheduleId(),
+                record.getAgentRunId(),
+                record.getAgentStepId(),
+                record.getEventSourceId(),
+                record.getEventTriggerId(),
+                record.getEventRecordId(),
+                record.getEventDispatchId(),
+                copy(record.getInput()),
+                ExecutionOutputProjector.project(rawOutput, scriptDefinition.getOutputSchema()),
+                copyLogs(record.getLogs()),
+                record.getErrorMessage(),
+                record.getErrorDetail(),
+                record.getCreatedAt(),
+                record.getStartedAt(),
+                record.getFinishedAt()
+        );
+    }
+
     private static Map<String, Object> copy(Map<String, Object> value) {
         return value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
     }

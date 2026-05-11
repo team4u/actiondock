@@ -170,11 +170,89 @@ class ExecutionControllerTest {
 
     @Test
     void listPassesScriptIdFilterThrough() throws Exception {
-        when(executionApplicationService.list("script-1")).thenReturn(List.of(new ExecutionRecord().setId("exec-1")));
+        when(executionApplicationService.list("script-1")).thenReturn(List.of(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("script-1")
+                .setStatus(ExecutionStatus.SUCCESS)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setInput(Map.of("name", "Alice"))
+                .setOutput(Map.of("message", "Hello", "secret", "token"))));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setOutputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of("message", Map.of("type", "string"))
+                )));
 
         mockMvc.perform(get("/api/executions").queryParam("scriptId", "script-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].id").value("exec-1"));
+                .andExpect(jsonPath("$.data[0].id").value("exec-1"))
+                .andExpect(jsonPath("$.data[0].input.name").value("Alice"))
+                .andExpect(jsonPath("$.data[0].output.message").value("Hello"))
+                .andExpect(jsonPath("$.data[0].output.secret").doesNotExist());
+    }
+
+    @Test
+    void listByScheduleProjectsOutputUsingEachExecutionScriptSchema() throws Exception {
+        when(executionApplicationService.listByScheduleId("schedule-1")).thenReturn(List.of(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("script-1")
+                .setStatus(ExecutionStatus.SUCCESS)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setOutput(Map.of("message", "Hello", "secret", "token"))));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setOutputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of("message", Map.of("type", "string"))
+                )));
+
+        mockMvc.perform(get("/api/executions").queryParam("scheduleId", "schedule-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].output.message").value("Hello"))
+                .andExpect(jsonPath("$.data[0].output.secret").doesNotExist());
+    }
+
+    @Test
+    void detailProjectsOutputButKeepsInputForHistoryRefill() throws Exception {
+        when(executionApplicationService.get("exec-1")).thenReturn(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("script-1")
+                .setStatus(ExecutionStatus.SUCCESS)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setInput(Map.of("name", "Alice"))
+                .setOutput(Map.of("message", "Hello", "secret", "token")));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setOutputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of("message", Map.of("type", "string"))
+                )));
+
+        mockMvc.perform(get("/api/executions/exec-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("exec-1"))
+                .andExpect(jsonPath("$.data.input.name").value("Alice"))
+                .andExpect(jsonPath("$.data.output.message").value("Hello"))
+                .andExpect(jsonPath("$.data.output.secret").doesNotExist())
+                .andExpect(jsonPath("$.data.debug").doesNotExist());
+    }
+
+    @Test
+    void detailFallsBackToRawOutputWhenScriptDefinitionIsMissing() throws Exception {
+        when(executionApplicationService.get("exec-1")).thenReturn(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("deleted-script")
+                .setStatus(ExecutionStatus.SUCCESS)
+                .setSubmitMode(SubmitMode.SYNC)
+                .setOutput(Map.of("message", "Hello", "secret", "token")));
+        when(scriptApplicationService.get("deleted-script"))
+                .thenThrow(new IllegalArgumentException("脚本不存在: deleted-script"));
+
+        mockMvc.perform(get("/api/executions/exec-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.output.message").value("Hello"))
+                .andExpect(jsonPath("$.data.output.secret").value("token"));
     }
 
     @Test

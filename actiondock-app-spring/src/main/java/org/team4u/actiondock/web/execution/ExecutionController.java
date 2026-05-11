@@ -58,8 +58,10 @@ public class ExecutionController {
      * @return API 响应，包含执行记录
      */
     @GetMapping("/{id}")
-    public ApiResponse<ExecutionRecord> detail(@PathVariable String id) {
-        return ApiResponse.success(executionApplicationService.get(id));
+    public ApiResponse<ExecutionRecordResponse> detail(@PathVariable String id) {
+        ExecutionRecord record = executionApplicationService.get(id);
+        ScriptDefinition scriptDefinition = resolveScriptDefinition(record.getScriptId());
+        return ApiResponse.success(executionResponseMapper.toRecordResponse(record, scriptDefinition));
     }
 
     /**
@@ -72,16 +74,21 @@ public class ExecutionController {
      * @return API 响应，包含执行记录列表
      */
     @GetMapping
-    public ApiResponse<List<ExecutionRecord>> list(
+    public ApiResponse<List<ExecutionRecordResponse>> list(
             @RequestParam(required = false) String scriptId,
             @RequestParam(required = false) String scheduleId) {
         if (scheduleId != null && !scheduleId.isBlank()) {
-            return ApiResponse.success(executionApplicationService.listByScheduleId(scheduleId));
+            return ApiResponse.success(executionApplicationService.listByScheduleId(scheduleId).stream()
+                    .map(this::toRecordResponse)
+                    .toList());
         }
         if (scriptId == null || scriptId.isBlank()) {
             throw new IllegalArgumentException("scriptId 或 scheduleId 必须提供其一");
         }
-        return ApiResponse.success(executionApplicationService.list(scriptId));
+        ScriptDefinition scriptDefinition = resolveScriptDefinition(scriptId);
+        return ApiResponse.success(executionApplicationService.list(scriptId).stream()
+                .map(record -> executionResponseMapper.toRecordResponse(record, scriptDefinition))
+                .toList());
     }
 
     /**
@@ -108,5 +115,18 @@ public class ExecutionController {
     public ApiResponse<Void> clear(@RequestParam(required = false) String scriptId) {
         executionApplicationService.clear(scriptId);
         return ApiResponse.success(null, "已清空");
+    }
+
+    private ExecutionRecordResponse toRecordResponse(ExecutionRecord record) {
+        ScriptDefinition scriptDefinition = resolveScriptDefinition(record.getScriptId());
+        return executionResponseMapper.toRecordResponse(record, scriptDefinition);
+    }
+
+    private ScriptDefinition resolveScriptDefinition(String scriptId) {
+        try {
+            return scriptApplicationService.get(scriptId);
+        } catch (IllegalArgumentException ex) {
+            return new ScriptDefinition().setId(scriptId);
+        }
     }
 }

@@ -1,5 +1,6 @@
 import {
   CheckCircleOutlined,
+  ClearOutlined,
   FolderOpenOutlined,
   GithubOutlined,
   UploadOutlined
@@ -8,8 +9,11 @@ import {
   Alert,
   Button,
   Card,
+  Descriptions,
   Empty,
+  Form,
   Input,
+  Select,
   Space,
   Table,
   Tag,
@@ -20,38 +24,130 @@ import type { ColumnsType } from "antd/es/table";
 import JSZip from "jszip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { CodeEditor } from "../../../components/common/CodeEditor";
+import { PageHeader } from "../../../components/common/PageHeader";
+import { SkillTargetSelector, useSkillTargets } from "../../../components/skill/SkillTargetSelector";
 import {
   importSkill,
   installSkillDirectory,
-  scanGithubSkillCollection,
+  installGithubSkillCollection,
   validateSkillArchive,
-  installGithubSkillCollection
+  scanGithubSkillCollection
 } from "../../skills/api";
-import { PageHeader } from "../../../components/common/PageHeader";
-import { SkillTargetSelector, useSkillTargets } from "../../../components/skill/SkillTargetSelector";
+import { useColorMode } from "../../../shared/contexts/ColorModeContext";
 import type { GithubSkillInstallResponse, GithubSkillScanItem, GithubSkillScanResponse } from "../../../shared/types";
+import {
+  buildEditableSkillArchive,
+  parseSkillArchive,
+  type ParsedSkillArchive
+} from "../../../services/skillArchive";
+import {
+  clearSkillInstallSession,
+  readInlineSkillInstallArchive,
+  readSkillInstallSession
+} from "../../../services/skillInstallSession";
 import { getErrorMessage } from "../../../services/utils";
 
 const { Paragraph, Text } = Typography;
 
+interface DraftFormValues {
+  skillId: string;
+  displayName: string;
+  version: string;
+  description: string;
+}
+
+function getPreviewFileOptions(parsedArchive: ParsedSkillArchive | null): Array<{ label: string; value: string }> {
+  if (!parsedArchive) {
+    return [];
+  }
+  const filePaths = new Set(parsedArchive.files.filter((item) => !item.directory).map((item) => item.path));
+  filePaths.add("skill.json");
+  return [...filePaths].sort((left, right) => left.localeCompare(right)).map((path) => ({
+    label: path,
+    value: path
+  }));
+}
+
+function buildGeneratedManifest(values: DraftFormValues, parsedArchive: ParsedSkillArchive): string {
+  return JSON.stringify(
+    {
+      schemaVersion: 1,
+      skillId: values.skillId,
+      displayName: values.displayName,
+      version: values.version,
+      description: values.description,
+      owner: parsedArchive.validation.owner,
+      tags: parsedArchive.validation.tags,
+      riskLevel: parsedArchive.validation.riskLevel,
+      entrypointPath: "SKILL.md"
+    },
+    null,
+    2
+  );
+}
+
 export function SkillInstallPage() {
   const navigate = useNavigate();
+  const colorMode = useColorMode();
+  const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const { targets, targetIds, setTargetIds, loading, loadTargets, ensureTargets, contextHolder } = useSkillTargets();
+  const [form] = Form.useForm<DraftFormValues>();
   const [directory, setDirectory] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const [githubScan, setGithubScan] = useState<GithubSkillScanResponse | null>(null);
   const [selectedGithubSkillPaths, setSelectedGithubSkillPaths] = useState<string[]>([]);
   const [githubInstallResult, setGithubInstallResult] = useState<GithubSkillInstallResponse | null>(null);
+  const [parsedArchive, setParsedArchive] = useState<ParsedSkillArchive | null>(null);
+  const [skillMarkdown, setSkillMarkdown] = useState("");
+  const [selectedPreviewPath, setSelectedPreviewPath] = useState("SKILL.md");
   const [installing, setInstalling] = useState(false);
   const [githubScanning, setGithubScanning] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(true);
   const [messageApi, messageContextHolder] = message.useMessage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputAttributes = { webkitdirectory: "", directory: "" } as Record<string, string>;
 
+  const watchedDraftValues = Form.useWatch([], form) as DraftFormValues | undefined;
+  const previewFileOptions = useMemo(() => getPreviewFileOptions(parsedArchive), [parsedArchive]);
+
   useEffect(() => {
     void loadTargets();
   }, [loadTargets]);
+
+  useEffect(() => {
+    void (async () => {
+      setArchiveLoading(true);
+      try {
+        const session = readSkillInstallSession();
+        if (!session) {
+          setParsedArchive(null);
+          return;
+        }
+        const archive = readInlineSkillInstallArchive(session);
+        clearSkillInstallSession();
+        if (!archive) {
+          throw new Error("Skill 安装草稿损坏");
+        }
+        const parsed = await parseSkillArchive(archive);
+        setParsedArchive(parsed);
+        setSkillMarkdown(parsed.textFiles[parsed.validation.entrypointPath] ?? parsed.textFiles["SKILL.md"] ?? "");
+        form.setFieldsValue({
+          skillId: parsed.validation.skillId,
+          displayName: parsed.validation.displayName,
+          version: parsed.validation.version,
+          description: parsed.validation.description
+        });
+        setSelectedPreviewPath("SKILL.md");
+      } catch (error) {
+        setParsedArchive(null);
+        messageApi.error(getErrorMessage(error, "加载 Skill 安装草稿失败"));
+      } finally {
+        setArchiveLoading(false);
+      }
+    })();
+  }, [form, messageApi]);
 
   const githubSkillColumns: ColumnsType<GithubSkillScanItem> = useMemo(
     () => [
@@ -91,32 +187,35 @@ export function SkillInstallPage() {
     []
   );
 
-  const handleUploadFile = async (file?: File) => {
-    if (!file) {
-      return;
-    }
-    const selectedTargetIds = ensureTargets();
-    if (!selectedTargetIds) {
-      return;
-    }
+  const loadDraftArchive = async (archive: File) => {
     setInstalling(true);
     try {
-      const validation = await validateSkillArchive(file);
-      await importSkill(selectedTargetIds, file);
-      messageApi.success(`Skill 已安装：${validation.displayName}，共 ${selectedTargetIds.length} 个目标`);
-      navigate("/skills");
+      const parsed = await parseSkillArchive(archive);
+      setParsedArchive(parsed);
+      setSkillMarkdown(parsed.textFiles[parsed.validation.entrypointPath] ?? parsed.textFiles["SKILL.md"] ?? "");
+      form.setFieldsValue({
+        skillId: parsed.validation.skillId,
+        displayName: parsed.validation.displayName,
+        version: parsed.validation.version,
+        description: parsed.validation.description
+      });
+      setSelectedPreviewPath("SKILL.md");
+      messageApi.success(`已载入 Skill 草稿：${parsed.validation.displayName}`);
     } catch (error) {
-      messageApi.error(getErrorMessage(error, "导入 Skill 失败"));
+      messageApi.error(getErrorMessage(error, "读取 Skill 归档失败"));
     } finally {
       setInstalling(false);
     }
   };
 
-  const handleUploadFolder = async (files?: FileList | File[]) => {
-    const selectedTargetIds = ensureTargets();
-    if (!selectedTargetIds) {
+  const handleUploadFile = async (file?: File) => {
+    if (!file) {
       return;
     }
+    await loadDraftArchive(file);
+  };
+
+  const handleUploadFolder = async (files?: FileList | File[]) => {
     const selectedFiles = Array.from(files ?? []);
     if (selectedFiles.length === 0) {
       return;
@@ -133,7 +232,7 @@ export function SkillInstallPage() {
     messageApi.open({
       key: "skill-folder-upload",
       type: "loading",
-      content: `正在打包并上传文件夹，共 ${selectedFiles.length} 个文件`,
+      content: `正在打包文件夹，共 ${selectedFiles.length} 个文件`,
       duration: 0
     });
     try {
@@ -143,15 +242,11 @@ export function SkillInstallPage() {
       }
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
       const archive = new File([blob], archiveName, { type: "application/zip" });
-      const validation = await validateSkillArchive(archive);
       messageApi.destroy("skill-folder-upload");
-      await importSkill(selectedTargetIds, archive);
-      messageApi.success(`Skill 已安装：${validation.displayName}，共 ${selectedTargetIds.length} 个目标`);
-      navigate("/skills");
+      await loadDraftArchive(archive);
     } catch (error) {
       messageApi.destroy("skill-folder-upload");
-      messageApi.error(getErrorMessage(error, "从文件夹安装 Skill 失败"));
-    } finally {
+      messageApi.error(getErrorMessage(error, "从文件夹生成 Skill 草稿失败"));
       setInstalling(false);
     }
   };
@@ -234,6 +329,72 @@ export function SkillInstallPage() {
     }
   };
 
+  const handleInstallDraft = async () => {
+    if (!parsedArchive) {
+      return;
+    }
+    const selectedTargetIds = ensureTargets();
+    if (!selectedTargetIds) {
+      return;
+    }
+    const values = await form.validateFields();
+    setInstalling(true);
+    try {
+      const archive = await buildEditableSkillArchive({
+        base: parsedArchive,
+        skillId: values.skillId.trim(),
+        displayName: values.displayName.trim(),
+        version: values.version.trim(),
+        description: values.description.trim(),
+        skillMarkdown
+      });
+      const validation = await validateSkillArchive(archive);
+      await importSkill(selectedTargetIds, archive);
+      messageApi.success(`Skill 已安装：${validation.displayName}，共 ${selectedTargetIds.length} 个目标`);
+      navigate("/skills");
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "安装 Skill 草稿失败"));
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const handleClearDraft = () => {
+    setParsedArchive(null);
+    setSkillMarkdown("");
+    setSelectedPreviewPath("SKILL.md");
+    form.resetFields();
+  };
+
+  const selectedPreviewContent = useMemo(() => {
+    if (!parsedArchive || !watchedDraftValues) {
+      return "";
+    }
+    if (selectedPreviewPath === "SKILL.md") {
+      return skillMarkdown;
+    }
+    if (selectedPreviewPath === "skill.json") {
+      return buildGeneratedManifest(watchedDraftValues, parsedArchive);
+    }
+    return parsedArchive.textFiles[selectedPreviewPath] ?? "";
+  }, [parsedArchive, selectedPreviewPath, skillMarkdown, watchedDraftValues]);
+
+  const selectedPreviewType = useMemo(() => {
+    if (selectedPreviewPath === "SKILL.md") {
+      return "markdown";
+    }
+    if (selectedPreviewPath === "skill.json" || selectedPreviewPath.endsWith(".json")) {
+      return "json";
+    }
+    if (selectedPreviewPath.endsWith(".md")) {
+      return "markdown";
+    }
+    if (selectedPreviewPath.endsWith(".txt")) {
+      return "plaintext";
+    }
+    return "plaintext";
+  }, [selectedPreviewPath]);
+
   return (
     <>
       {contextHolder}
@@ -266,12 +427,123 @@ export function SkillInstallPage() {
           title="安装 Skill"
           onBack={() => navigate("/skills")}
           backLabel="返回管理"
-          meta="先选择目标，再从 GitHub、zip、文件夹或本地目录安装。"
+          meta={parsedArchive ? "编辑 Skill 内容与元信息后安装到所选目标。" : "先选择目标，再从 GitHub、zip、文件夹或本地目录安装。"}
+          actions={parsedArchive ? (
+            <>
+              <Button icon={<UploadOutlined />} loading={installing} onClick={() => fileInputRef.current?.click()}>
+                更换 zip
+              </Button>
+              <Button icon={<CheckCircleOutlined />} loading={installing} onClick={() => folderInputRef.current?.click()}>
+                更换文件夹
+              </Button>
+              <Button icon={<ClearOutlined />} onClick={handleClearDraft}>
+                清除草稿
+              </Button>
+              <Button type="primary" loading={installing} onClick={() => void handleInstallDraft()}>
+                安装到所选目标
+              </Button>
+            </>
+          ) : undefined}
         />
 
-        <Card loading={loading}>
+        <Card loading={loading || archiveLoading}>
           {targets.length === 0 ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可安装的目标，请先创建并启用可写的 SkillTarget" />
+          ) : parsedArchive ? (
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <SkillTargetSelector
+                targets={targets}
+                targetIds={targetIds}
+                onTargetIdsChange={setTargetIds}
+              />
+              {parsedArchive.validation.warnings.length > 0 ? (
+                <Alert
+                  showIcon
+                  type="warning"
+                  message="当前草稿包含提示信息"
+                  description={parsedArchive.validation.warnings.join("；")}
+                />
+              ) : null}
+              <Card size="small" title="安装元信息">
+                <Form form={form} layout="vertical">
+                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                    <Form.Item
+                      label="skillId"
+                      name="skillId"
+                      rules={[
+                        { required: true, message: "请输入 skillId" },
+                        { pattern: /^[a-z0-9-]+$/, message: "skillId 仅支持小写字母、数字和 -" }
+                      ]}
+                    >
+                      <Input placeholder="actiondock-script-example" />
+                    </Form.Item>
+                    <Form.Item label="显示名称" name="displayName" rules={[{ required: true, message: "请输入显示名称" }]}>
+                      <Input placeholder="Skill 名称" />
+                    </Form.Item>
+                    <Form.Item label="版本" name="version" rules={[{ required: true, message: "请输入版本号" }]}>
+                      <Input placeholder="1.0.0" />
+                    </Form.Item>
+                    <Form.Item label="描述" name="description">
+                      <Input.TextArea rows={3} placeholder="Skill 描述" />
+                    </Form.Item>
+                  </Space>
+                </Form>
+              </Card>
+              <Card size="small" title="内容编辑">
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Alert
+                    showIcon
+                    type="info"
+                    message="本页允许修改 SKILL.md、skillId、显示名、版本和描述；其他文件保持只读并会原样打包。"
+                  />
+                  <Descriptions bordered size="small" column={2}>
+                    <Descriptions.Item label="文件数">{parsedArchive.files.filter((item) => !item.directory).length}</Descriptions.Item>
+                    <Descriptions.Item label="入口文件">SKILL.md</Descriptions.Item>
+                    <Descriptions.Item label="维护人">{parsedArchive.validation.owner || "-"}</Descriptions.Item>
+                    <Descriptions.Item label="风险等级">{parsedArchive.validation.riskLevel || "-"}</Descriptions.Item>
+                  </Descriptions>
+                  <Form.Item label="SKILL.md">
+                    <CodeEditor
+                      value={skillMarkdown}
+                      onChange={setSkillMarkdown}
+                      theme={editorTheme}
+                      language="markdown"
+                      height="420px"
+                    />
+                  </Form.Item>
+                </Space>
+              </Card>
+              <Card size="small" title="文件预览">
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <Select
+                    value={selectedPreviewPath}
+                    options={previewFileOptions}
+                    onChange={setSelectedPreviewPath}
+                    style={{ width: "100%" }}
+                  />
+                  {selectedPreviewPath === "SKILL.md" ? (
+                    <Alert showIcon type="info" message="当前正在编辑 SKILL.md；下方展示的是实时内容。" />
+                  ) : null}
+                  {selectedPreviewPath !== "SKILL.md" && !selectedPreviewContent && parsedArchive.textFiles[selectedPreviewPath] === undefined ? (
+                    <Alert
+                      showIcon
+                      type="info"
+                      message="当前文件不支持在线文本预览"
+                      description={<Text code>{selectedPreviewPath}</Text>}
+                    />
+                  ) : (
+                    <CodeEditor
+                      value={selectedPreviewContent}
+                      onChange={() => undefined}
+                      theme={editorTheme}
+                      language={selectedPreviewType}
+                      readOnly
+                      height="320px"
+                    />
+                  )}
+                </Space>
+              </Card>
+            </Space>
           ) : (
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
               <SkillTargetSelector
@@ -355,8 +627,8 @@ export function SkillInstallPage() {
               <div className="skill-install-grid">
                 <section className="skill-install-panel">
                   <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                    <Text strong>从压缩包安装</Text>
-                    <Paragraph type="secondary">适合仓库导出包或本地已有 zip。</Paragraph>
+                    <Text strong>从压缩包载入草稿</Text>
+                    <Paragraph type="secondary">适合仓库导出包或本地已有 zip。载入后可以先修改再安装。</Paragraph>
                     <Button icon={<UploadOutlined />} loading={installing} onClick={() => fileInputRef.current?.click()}>
                       选择 zip
                     </Button>
@@ -364,8 +636,8 @@ export function SkillInstallPage() {
                 </section>
                 <section className="skill-install-panel">
                   <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                    <Text strong>从文件夹安装</Text>
-                    <Paragraph type="secondary">浏览器会先打包当前文件夹，再上传安装。</Paragraph>
+                    <Text strong>从文件夹载入草稿</Text>
+                    <Paragraph type="secondary">浏览器会先打包当前文件夹，再进入可编辑安装页。</Paragraph>
                     <Button icon={<CheckCircleOutlined />} loading={installing} onClick={() => folderInputRef.current?.click()}>
                       选择文件夹
                     </Button>

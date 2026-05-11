@@ -42,7 +42,6 @@ import {
 import { listRepositories, listSkillsByRepository } from "../../resources/api";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
-import { SkillInstallDrawer } from "../../../components/skill/SkillInstallDrawer";
 import { RepositorySkillInstallDrawer } from "../../../components/repository/RepositorySkillInstallDrawer";
 import {
   buildSkillManagementSearch,
@@ -91,7 +90,6 @@ export function SkillManagementPage() {
   const [syncTarget, setSyncTarget] = useState<SkillTarget | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [selectedSyncSkillIds, setSelectedSyncSkillIds] = useState<React.Key[]>([]);
-  const [installDrawerOpen, setInstallDrawerOpen] = useState(false);
   const [repositoryUpdateSkill, setRepositoryUpdateSkill] = useState<Skill | null>(null);
 
   const applyTypeTemplate = (nextType: string) => {
@@ -425,7 +423,7 @@ export function SkillManagementPage() {
               <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
                 刷新
               </Button>
-              <Button type="primary" onClick={() => setInstallDrawerOpen(true)}>
+              <Button type="primary" onClick={() => navigate("/skills/install")}>
                 安装 Skill
               </Button>
               <Button onClick={openCreateTarget}>新增目标</Button>
@@ -594,15 +592,6 @@ export function SkillManagementPage() {
           />
         </Space>
       </Drawer>
-
-      <SkillInstallDrawer
-        open={installDrawerOpen}
-        onClose={() => setInstallDrawerOpen(false)}
-        onSuccess={() => {
-          setInstallDrawerOpen(false);
-          void loadData();
-        }}
-      />
 
       <RepositorySkillInstallDrawer
         open={repositoryUpdateSkill !== null}

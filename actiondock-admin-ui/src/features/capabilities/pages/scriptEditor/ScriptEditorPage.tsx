@@ -59,7 +59,7 @@ import {
 import { formatDateTime, parseJsonText } from "../../../../services/utils";
 import { useCopyMessage } from "../../../../shared/hooks/useCopyMessage";
 import { buildScriptSkillExample } from "../../../../services/skillExamples";
-import { writeInlineSkillPublishSession } from "../../../../services/skillPublishSession";
+import { writeInlineSkillInstallSession } from "../../../../services/skillInstallSession";
 import { UpstreamSyncTag } from "../../../../components/domain/UpstreamSyncTag";
 import { ScriptDiffDrawer } from "../../../../components/diff/ScriptDiffDrawer";
 import { ScriptDiffSummary } from "../../../../components/diff/ScriptDiffSummary";
@@ -269,7 +269,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
     executeCommandPresets
   ]);
 
-  const openSkillPublish = async (value: string) => {
+  const openSkillInstall = async (value: string) => {
     if (!editor.currentScript) {
       return;
     }
@@ -285,8 +285,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
       entrypointPath: "SKILL.md"
     }, null, 2));
     const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-    await writeInlineSkillPublishSession(`${skillId}.zip`, archive);
-    navigate("/skills/publish");
+    await writeInlineSkillInstallSession(`${skillId}.zip`, archive);
+    navigate("/skills/install");
   };
 
   const previewInputSchemaText = formatSchemaEditorState(editor.inputSchemaState);
@@ -830,7 +830,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           skillExample={skillExample}
                           toolContractResponseExample={toolContractResponseExample}
                           onCopy={handleCopyCommand}
-                          onOpenSkillPublish={openSkillPublish}
+                          onOpenSkillInstall={openSkillInstall}
                         />
                       )
                     },
