@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Form, Input, Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import { CodeOutlined, SaveOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent, type Key } from "react";
@@ -25,6 +25,7 @@ import { AiRunStatusTag } from "../../../components/ai/AiTags";
 import { AiStepTracePanel } from "../../../components/ai/AiStepTracePanel";
 import { JsonPreview } from "../../../components/common/JsonPreview";
 import { PageHeader } from "../../../components/common/PageHeader";
+import { Col } from "../../../components/common/SafeCol";
 import { ApiError } from "../../../shared/api/httpClient";
 import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
 import { buildSystemSettingsSearch } from "../../../services/settingsRouting";
@@ -651,7 +652,6 @@ export function AiAgentProfileDetailPage() {
             {!isCreate ? (
               <Button icon={<CodeOutlined />} onClick={handleGenerateScript}>生成脚本</Button>
             ) : null}
-            <Button onClick={openToolManager}>管理工具</Button>
             <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>保存</Button>
           </Space>
         )}
@@ -673,16 +673,25 @@ export function AiAgentProfileDetailPage() {
                     <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
                     <Form.Item name="modelProfileId" label="模型 Profile" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={modelOptions} /></Form.Item>
                     <Form.Item name="toolsetIds" hidden><Select mode="multiple" optionFilterProp="label" options={toolsetOptions} /></Form.Item>
-                    <Form.Item name="skillIds" label="Skills">
-                      <Select
-                        mode="multiple"
-                        allowClear
-                        showSearch
-                        optionFilterProp="label"
-                        placeholder="选择已安装且启用的 Skill"
-                        options={skillOptions}
-                      />
-                    </Form.Item>
+                    <Row gutter={12} align="bottom">
+                      <Col xs={24} md={6}>
+                        <Form.Item label="工具">
+                          <Button block onClick={openToolManager}>管理工具</Button>
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} md={18}>
+                        <Form.Item name="skillIds" label="Skills">
+                          <Select
+                            mode="multiple"
+                            allowClear
+                            showSearch
+                            optionFilterProp="label"
+                            placeholder="选择已安装且启用的 Skill"
+                            options={skillOptions}
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
                     {missingSkillIds.length > 0 ? (
                       <Alert
                         type="warning"
