@@ -1,5 +1,5 @@
 import { Button, Input, Space, Table, Tag, Typography, message } from "antd";
-import { DeleteOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { CodeOutlined, DeleteOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +10,7 @@ import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
 import type { AiAgentProfile, AiModelProfile, AiTool, AiToolset } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
+import { buildAgentWrapperScriptPreset, writeScriptCreatePreset } from "../../../services/scriptCreatePreset";
 
 export function AiAgentProfileListPage() {
   const navigate = useNavigate();
@@ -64,6 +65,11 @@ export function AiAgentProfileListPage() {
     }
   };
 
+  const handleGenerateScript = (agent: AiAgentProfile) => {
+    writeScriptCreatePreset(buildAgentWrapperScriptPreset(agent));
+    navigate("/scripts/new");
+  };
+
   const columns: ColumnsType<AiAgentProfile> = [
     { title: "ID", dataIndex: "id", render: (id) => <TableLinkCell to={`/ai/agents/${id}`}>{id}</TableLinkCell> },
     { title: "名称", dataIndex: "name" },
@@ -106,6 +112,7 @@ export function AiAgentProfileListPage() {
       render: (_, item) => (
         <Space>
           <Button size="small" icon={<PlayCircleOutlined />} onClick={() => navigate(`/ai/agents/${item.id}?tab=test`)}>测试</Button>
+          <Button size="small" icon={<CodeOutlined />} onClick={() => handleGenerateScript(item)}>生成脚本</Button>
           <ConfirmDangerAction
             title="确认删除这个 Agent Profile？"
             description="删除后不可恢复，历史 Run 记录会保留。"

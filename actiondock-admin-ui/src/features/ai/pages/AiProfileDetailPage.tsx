@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Checkbox, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from "antd";
-import { SaveOutlined, PlayCircleOutlined } from "@ant-design/icons";
+import { CodeOutlined, SaveOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent, type Key } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -28,6 +28,7 @@ import { PageHeader } from "../../../components/common/PageHeader";
 import { ApiError } from "../../../shared/api/httpClient";
 import { AiToolPickerTable, ToolConfigWorkspace, filterAiToolsForPicker } from "./AiToolsetDetailPage";
 import { buildSystemSettingsSearch } from "../../../services/settingsRouting";
+import { buildAgentWrapperScriptPreset, writeScriptCreatePreset } from "../../../services/scriptCreatePreset";
 import type {
   AiAgentProfile,
   AiAgentRunSnapshot,
@@ -625,6 +626,16 @@ export function AiAgentProfileDetailPage() {
     setManagerOpen(false);
   };
 
+  const handleGenerateScript = () => {
+    if (!id) return;
+    writeScriptCreatePreset(buildAgentWrapperScriptPreset({
+      id,
+      name: form.getFieldValue("name") || id,
+      description: form.getFieldValue("description")
+    }));
+    navigate("/scripts/new");
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
@@ -636,6 +647,9 @@ export function AiAgentProfileDetailPage() {
           <Space>
             {!isCreate && !isManagedAgent ? (
               <Button onClick={() => navigate(`/packages/publish?source=AGENT&sourceId=${encodeURIComponent(id)}`)}>发布能力包</Button>
+            ) : null}
+            {!isCreate ? (
+              <Button icon={<CodeOutlined />} onClick={handleGenerateScript}>生成脚本</Button>
             ) : null}
             <Button onClick={openToolManager}>管理工具</Button>
             <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => void handleSave()}>保存</Button>

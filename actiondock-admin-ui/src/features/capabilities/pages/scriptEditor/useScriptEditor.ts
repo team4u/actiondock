@@ -224,16 +224,17 @@ export function useScriptEditor({
         if (preset) {
           initializedPresetRef.current = true;
           applyCreateDraftToEditor({
-            id: "",
+            id: preset.idHint ?? "",
             name: preset.nameHint,
-            type: "GROOVY",
-            packaging: "TOOL",
+            type: preset.type ?? "GROOVY",
+            packaging: preset.packaging ?? "TOOL",
             source: preset.source,
-            pythonRequirements: "",
+            pythonRequirements: preset.pythonRequirements ?? "",
             inputSchema: preset.inputSchema,
             outputSchema: preset.outputSchema,
             status: "DRAFT",
-            version: 1
+            version: 1,
+            description: preset.description
           });
           setLoading(false);
           return;

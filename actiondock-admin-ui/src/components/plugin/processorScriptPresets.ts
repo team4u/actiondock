@@ -1,13 +1,8 @@
+import { readAndClearScriptCreatePreset, writeScriptCreatePreset, type ScriptCreatePreset } from "../../services/scriptCreatePreset";
+
 export type ProcessorPurpose = "normalization" | "filter" | "idempotency" | "input";
 
-export interface ProcessorScriptPreset {
-  nameHint: string;
-  inputSchema: Record<string, unknown>;
-  outputSchema: Record<string, unknown>;
-  source: string;
-}
-
-const SESSION_STORAGE_KEY = "actiondock_script_preset";
+export type ProcessorScriptPreset = ScriptCreatePreset;
 
 const NORMALIZATION_INPUT_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -175,16 +170,9 @@ const PRESETS: Record<ProcessorPurpose, ProcessorScriptPreset> = {
 
 export function writePreset(purpose?: ProcessorPurpose): void {
   const preset = purpose ? PRESETS[purpose] : PRESETS.normalization;
-  sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(preset));
+  writeScriptCreatePreset(preset);
 }
 
 export function readAndClearPreset(): ProcessorScriptPreset | null {
-  const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
-  if (!raw) return null;
-  sessionStorage.removeItem(SESSION_STORAGE_KEY);
-  try {
-    return JSON.parse(raw) as ProcessorScriptPreset;
-  } catch {
-    return null;
-  }
+  return readAndClearScriptCreatePreset();
 }
