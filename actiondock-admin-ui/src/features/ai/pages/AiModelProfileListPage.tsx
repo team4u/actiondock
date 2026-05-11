@@ -1,5 +1,5 @@
-import { Button, Input, Space, Table, Tag, Typography, message } from "antd";
-import { DeleteOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Button, Input, Space, Table, message } from "antd";
+import { DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +9,7 @@ import { ConfirmDangerAction } from "../../../components/common/ConfirmDangerAct
 import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
 import type { AiAgentProfile, AiModelProfile } from "../../../shared/types";
-import { formatDateTime, getErrorMessage } from "../../../services/utils";
+import { getErrorMessage } from "../../../services/utils";
 
 export function AiModelProfileListPage() {
   const navigate = useNavigate();
@@ -62,32 +62,24 @@ export function AiModelProfileListPage() {
   const columns: ColumnsType<AiModelProfile> = [
     { title: "ID", dataIndex: "id", render: (id) => <TableLinkCell to={`/ai/models/${id}`}>{id}</TableLinkCell> },
     { title: "名称", dataIndex: "name" },
-    { title: "模型供应商", dataIndex: "modelProvider" },
-    { title: "模型名", dataIndex: "modelName", render: (value) => <Typography.Text code>{value}</Typography.Text> },
-    { title: "API Key", dataIndex: "apiKeyConfigKey", render: (value) => value ? <Typography.Text code>{value}</Typography.Text> : <Typography.Text type="secondary">未配置</Typography.Text> },
     { title: "能力", dataIndex: "capabilities", render: (items) => <Space size={[4, 4]} wrap>{items?.map((item: AiModelProfile["capabilities"][number]) => <AiCapabilityTag key={item} capability={item} />)}</Space> },
-    { title: "状态", dataIndex: "enabled", render: (enabled) => <Tag color={enabled ? "green" : "default"}>{enabled ? "启用" : "禁用"}</Tag> },
     { title: "引用 Agent", render: (_, item) => referencingAgents(item.id).length },
-    { title: "更新时间", dataIndex: "updatedAt", render: formatDateTime },
     {
       title: "操作",
       fixed: "right",
       render: (_, item) => {
         const refs = referencingAgents(item.id);
         return (
-          <Space>
-            <Button size="small" icon={<PlayCircleOutlined />} onClick={() => navigate(`/ai/models/${item.id}?tab=test`)}>测试</Button>
-            <ConfirmDangerAction
-              title="确认删除这个模型 Profile？"
-              description={refs.length > 0 ? `当前被 ${refs.length} 个 Agent 引用，后端会拒绝删除。` : "删除后不可恢复。"}
-              onConfirm={() => handleDelete(item)}
-              disabled={refs.length > 0}
-            >
-              <Button size="small" danger icon={<DeleteOutlined />} loading={deletingId === item.id} disabled={refs.length > 0}>
-                删除
-              </Button>
-            </ConfirmDangerAction>
-          </Space>
+          <ConfirmDangerAction
+            title="确认删除这个模型 Profile？"
+            description={refs.length > 0 ? `当前被 ${refs.length} 个 Agent 引用，后端会拒绝删除。` : "删除后不可恢复。"}
+            onConfirm={() => handleDelete(item)}
+            disabled={refs.length > 0}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />} loading={deletingId === item.id} disabled={refs.length > 0}>
+              删除
+            </Button>
+          </ConfirmDangerAction>
         );
       }
     }
