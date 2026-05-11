@@ -5,10 +5,12 @@ import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptStatus;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
+import org.team4u.actiondock.domain.port.UpstreamBindingRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,13 +30,16 @@ public class ScriptApplicationService {
     private final ScriptRepository scriptRepository;
     private final ScriptEngine scriptEngine;
     private final ScriptScheduleRepository scriptScheduleRepository;
+    private final UpstreamBindingRepository upstreamBindingRepository;
 
     public ScriptApplicationService(ScriptRepository scriptRepository,
                                     ScriptEngine scriptEngine,
-                                    ScriptScheduleRepository scriptScheduleRepository) {
+                                    ScriptScheduleRepository scriptScheduleRepository,
+                                    UpstreamBindingRepository upstreamBindingRepository) {
         this.scriptRepository = scriptRepository;
         this.scriptEngine = scriptEngine;
         this.scriptScheduleRepository = scriptScheduleRepository;
+        this.upstreamBindingRepository = upstreamBindingRepository;
     }
 
     /**
@@ -127,6 +132,8 @@ public class ScriptApplicationService {
     public void delete(String id) {
         ensureEditable(get(id));
         scriptScheduleRepository.deleteByScriptId(id);
+        upstreamBindingRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, id)
+                .ifPresent(binding -> upstreamBindingRepository.deleteById(binding.getId()));
         scriptRepository.deleteById(id);
     }
 

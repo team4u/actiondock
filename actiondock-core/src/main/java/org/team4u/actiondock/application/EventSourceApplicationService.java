@@ -6,13 +6,17 @@ import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.model.EventSourceTransport;
 import org.team4u.actiondock.domain.model.EventSourceTransportType;
+import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.EventSourceWebhookResponse;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorResult;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.port.EventSourceRepository;
+import org.team4u.actiondock.domain.port.EventTriggerRepository;
 import org.team4u.actiondock.domain.port.ProcessorEngine;
+import org.team4u.actiondock.domain.port.UpstreamBindingRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,12 +25,18 @@ import java.util.UUID;
 
 public class EventSourceApplicationService {
     private final EventSourceRepository eventSourceRepository;
+    private final EventTriggerRepository eventTriggerRepository;
     private final ProcessorEngine processorEngine;
+    private final UpstreamBindingRepository upstreamBindingRepository;
 
     public EventSourceApplicationService(EventSourceRepository eventSourceRepository,
-                                         ProcessorEngine processorEngine) {
+                                         EventTriggerRepository eventTriggerRepository,
+                                         ProcessorEngine processorEngine,
+                                         UpstreamBindingRepository upstreamBindingRepository) {
         this.eventSourceRepository = eventSourceRepository;
+        this.eventTriggerRepository = eventTriggerRepository;
         this.processorEngine = processorEngine;
+        this.upstreamBindingRepository = upstreamBindingRepository;
     }
 
     public List<EventSourceDefinition> list() {
@@ -185,6 +195,11 @@ public class EventSourceApplicationService {
 
     public void delete(String id) {
         get(id);
+        for (EventTrigger trigger : eventTriggerRepository.findBySourceId(id)) {
+            eventTriggerRepository.deleteById(trigger.getId());
+        }
+        upstreamBindingRepository.findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, id)
+                .ifPresent(binding -> upstreamBindingRepository.deleteById(binding.getId()));
         eventSourceRepository.deleteById(id);
     }
 
