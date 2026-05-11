@@ -27,6 +27,11 @@ public class JpaApiAccessTokenRepositoryAdapter
     }
 
     @Override
+    public long countEnabled() {
+        return repository.countByEnabledTrue();
+    }
+
+    @Override
     protected ApiAccessTokenEntity toEntity(ApiAccessToken token) {
         ApiAccessTokenEntity entity = new ApiAccessTokenEntity();
         entity.setId(token.getId());

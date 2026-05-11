@@ -9,4 +9,5 @@ import org.team4u.actiondock.storage.jpa.entity.ApiAccessTokenEntity;
  * @author jay.wu
  */
 public interface SpringDataApiAccessTokenRepository extends JpaRepository<ApiAccessTokenEntity, String> {
+    long countByEnabledTrue();
 }

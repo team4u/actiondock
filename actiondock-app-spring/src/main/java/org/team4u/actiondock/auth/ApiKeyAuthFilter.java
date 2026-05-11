@@ -53,7 +53,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        if (!apiAccessTokenApplicationService.hasAnyToken()) {
+        if (!apiAccessTokenApplicationService.hasAnyEnabledToken()) {
             filterChain.doFilter(request, response);
             return;
         }

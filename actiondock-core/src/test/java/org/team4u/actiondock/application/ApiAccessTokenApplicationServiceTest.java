@@ -37,6 +37,16 @@ class ApiAccessTokenApplicationServiceTest {
         assertThat(service.authenticate(created.tokenValue())).isFalse();
     }
 
+    @Test
+    void hasAnyEnabledTokenOnlyCountsEnabledTokens() {
+        ApiAccessTokenApplicationService.CreatedToken created = service.create("Local client");
+
+        assertThat(service.hasAnyEnabledToken()).isTrue();
+
+        service.disable(created.token().getId());
+        assertThat(service.hasAnyEnabledToken()).isFalse();
+    }
+
     private static final class InMemoryApiAccessTokenRepository implements ApiAccessTokenRepository {
         private final Map<String, ApiAccessToken> tokens = new LinkedHashMap<>();
 
@@ -65,6 +75,11 @@ class ApiAccessTokenApplicationServiceTest {
         @Override
         public long count() {
             return tokens.size();
+        }
+
+        @Override
+        public long countEnabled() {
+            return tokens.values().stream().filter(ApiAccessToken::isEnabled).count();
         }
 
         private static ApiAccessToken copy(ApiAccessToken source) {

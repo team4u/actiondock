@@ -73,8 +73,8 @@ public class ApiAccessTokenApplicationService {
         repository.deleteById(normalizeId(id));
     }
 
-    public boolean hasAnyToken() {
-        return repository.count() > 0;
+    public boolean hasAnyEnabledToken() {
+        return repository.countEnabled() > 0;
     }
 
     public boolean authenticate(String rawToken) {

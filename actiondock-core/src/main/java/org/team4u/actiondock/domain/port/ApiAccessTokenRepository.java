@@ -20,4 +20,6 @@ public interface ApiAccessTokenRepository {
     void deleteById(String id);
 
     long count();
+
+    long countEnabled();
 }

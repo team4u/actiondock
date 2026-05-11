@@ -59,7 +59,7 @@ class EventIngestionControllerTest {
 
     @Test
     void webhookRouteBypassesGlobalApiKeyFilter() throws Exception {
-        when(apiAccessTokenRepository.count()).thenReturn(1L);
+        when(apiAccessTokenRepository.countEnabled()).thenReturn(1L);
         when(eventIngestionApplicationService.ingest(eq("source-1"), any())).thenReturn(new EventIngestionResult()
                 .setEventRecord(new EventRecord()
                         .setId("event-1")
@@ -81,7 +81,7 @@ class EventIngestionControllerTest {
 
     @Test
     void payloadTooLargeIsMappedTo413() throws Exception {
-        when(apiAccessTokenRepository.count()).thenReturn(1L);
+        when(apiAccessTokenRepository.countEnabled()).thenReturn(1L);
         when(eventIngestionApplicationService.ingest(eq("source-1"), any()))
                 .thenThrow(new WebhookRequestPayloadTooLargeException("请求体过大"));
 
@@ -94,7 +94,7 @@ class EventIngestionControllerTest {
 
     @Test
     void headersTooLargeIsMappedTo431() throws Exception {
-        when(apiAccessTokenRepository.count()).thenReturn(1L);
+        when(apiAccessTokenRepository.countEnabled()).thenReturn(1L);
         when(eventIngestionApplicationService.ingest(eq("source-1"), any()))
                 .thenThrow(new WebhookRequestHeadersTooLargeException("请求头过长"));
 
@@ -107,7 +107,7 @@ class EventIngestionControllerTest {
 
     @Test
     void webhookRouteReturnsCustomResponseWhenConfigured() throws Exception {
-        when(apiAccessTokenRepository.count()).thenReturn(1L);
+        when(apiAccessTokenRepository.countEnabled()).thenReturn(1L);
         when(eventIngestionApplicationService.ingest(eq("source-1"), any())).thenReturn(new EventIngestionResult()
                 .setEventRecord(new EventRecord()
                         .setId("event-1")

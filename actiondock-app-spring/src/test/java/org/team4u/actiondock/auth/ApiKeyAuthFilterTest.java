@@ -70,6 +70,24 @@ class ApiKeyAuthFilterTest {
         assertThat(response.getStatus()).isEqualTo(401);
     }
 
+    @Test
+    void requestsPassThroughWhenAllTokensAreDisabled() throws Exception {
+        InMemoryApiAccessTokenRepository repository = new InMemoryApiAccessTokenRepository();
+        repository.replaceToken("1234", "adk_1234_secret", "Platform token");
+        ApiAccessToken token = repository.findById("1234").orElseThrow();
+        repository.save(token.setEnabled(false));
+
+        ApiKeyAuthFilter filter = new ApiKeyAuthFilter(new ApiAccessTokenApplicationService(repository));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/scripts");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chain.getRequest()).isNotNull();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
     private static ApiAccessTokenApplicationService serviceWithToken(String name, String rawToken) {
         InMemoryApiAccessTokenRepository repository = new InMemoryApiAccessTokenRepository();
         repository.replaceToken("1234", rawToken, name);
@@ -104,6 +122,11 @@ class ApiKeyAuthFilterTest {
         @Override
         public long count() {
             return tokens.size();
+        }
+
+        @Override
+        public long countEnabled() {
+            return tokens.values().stream().filter(ApiAccessToken::isEnabled).count();
         }
 
         void replaceToken(String id, String rawToken, String name) {
