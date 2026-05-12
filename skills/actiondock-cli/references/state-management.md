@@ -1,8 +1,56 @@
 # 共享状态管理
 
-脚本间/执行间的持久化数据，用于跨执行传递信息。覆盖 `state` 命令。
+脚本间/执行间的持久化数据，用于跨执行传递信息。
 
 ---
+
+## 脚本内 API（`state` 门面）
+
+脚本运行时内置 `state` 对象，可在 Groovy/Python 脚本中直接调用。
+
+### Groovy
+
+```groovy
+// 读取（返回值是一个 Map，不是纯字符串）
+def entry = state.get("namespace", "key")
+def value = entry?.value   // 实际值
+def version = entry?.version  // 版本号
+
+// 写入（无额外选项）
+state.put("namespace", "key", value)
+
+// 写入（带选项 Map）
+state.put("namespace", "key", value, [secret: true, expires_in_seconds: 14400])
+```
+
+### Python
+
+```python
+# 读取
+entry = state.get("namespace", "key")
+value = entry.get("value") if entry else None
+
+# 写入（无额外选项）
+state.put("namespace", "key", value)
+
+# 写入（带选项）
+state.put("namespace", "key", value, secret=True, expires_in_seconds=14400)
+```
+
+### 说明
+
+- `state.get(namespace, key)` 返回 **对象/Map**，含字段：`key`、`value`、`secret`、`version`、`expiresAt`、`createdAt`。**不是纯字符串**，需通过 `.value` 获取实际值。
+- `state.put(namespace, key, value)` 第三个参数起，Groovy 要用 **Map 字面量** `[secret: true, ...]`，Python 用关键字参数。
+- 选项支持：
+  | 参数 | 类型 | 说明 |
+  |------|------|------|
+  | `secret` | `boolean` | 标记为敏感数据，加密存储 |
+  | `expires_in_seconds` | `int` | 相对过期时间（秒） |
+  | `expires_at` | `string` | 绝对过期时间（ISO 8601） |
+
+---
+
+## CLI 命令
 
 ## 列出命名空间
 
