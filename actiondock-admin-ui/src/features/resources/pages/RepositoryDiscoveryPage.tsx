@@ -26,16 +26,14 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  addRepositoryEventSourceLocalAsset,
+  addRepositoryToolLocalAsset,
   installRepositoryPlugin,
-  createRepositoryEventSourceWorkingCopy,
-  createRepositoryToolWorkingCopy,
   getRepositoryEventSource,
   getCapabilityPackage,
   getRepositorySkill,
   getRepositoryTool,
   installCapabilityPackage,
-  installRepositoryEventSource,
-  installRepositoryTool,
   listCapabilityPackages,
   listRepositoryEventSources,
   listRepositories,
@@ -44,9 +42,9 @@ import {
   listRepositoryTools,
   uninstallCapabilityPackage,
   updateCapabilityPackage,
-  updateRepositoryEventSource,
+  updateRepositoryEventSourceLocalAsset,
   updateRepositoryPlugin,
-  updateRepositoryTool
+  updateRepositoryToolLocalAsset
 } from "../../resources/api";
 import { CodeEditor } from "../../../components/common/CodeEditor";
 import { UpstreamSyncTag, getUpstreamActionLabel } from "../../../components/domain/UpstreamSyncTag";
@@ -80,6 +78,28 @@ import { getErrorMessage } from "../../../services/utils";
 const { Text } = Typography;
 
 type InstallAction = "install" | "update";
+type AddMode = "LOCKED" | "TRACKED";
+type LocalAssetAction = "add-local" | "update-local";
+
+function isLocalTool(record: RepositoryToolDescriptor): boolean {
+  return Boolean(record.localState);
+}
+
+function isLocalEventSource(record: RepositoryEventSourceDescriptor): boolean {
+  return Boolean(record.localState);
+}
+
+function localAssetId(record: RepositoryToolDescriptor | RepositoryEventSourceDescriptor): string {
+  return record.localState?.localAssetId ?? ("toolId" in record ? record.toolId : record.eventSourceId);
+}
+
+function isTrackedLocal(record: RepositoryToolDescriptor | RepositoryEventSourceDescriptor): boolean {
+  return record.localState?.mode === "TRACKED";
+}
+
+function isLockedLocal(record: RepositoryToolDescriptor | RepositoryEventSourceDescriptor): boolean {
+  return record.localState?.mode === "LOCKED";
+}
 
 function getSkillInstallLabel(record: RepositorySkillDescriptor): string {
   if (!record.installed) {
@@ -356,10 +376,10 @@ export function RepositoryDiscoveryPage() {
       if (typeFilter !== "ALL" && tool.type !== typeFilter) {
         return false;
       }
-      if (installFilter === "INSTALLED" && !tool.installed) {
+      if (installFilter === "INSTALLED" && !isLocalTool(tool)) {
         return false;
       }
-      if (installFilter === "NOT_INSTALLED" && tool.installed) {
+      if (installFilter === "NOT_INSTALLED" && isLocalTool(tool)) {
         return false;
       }
       if (trustFilter === "TRUSTED" && !tool.trusted) {
@@ -374,7 +394,7 @@ export function RepositoryDiscoveryPage() {
       const haystack = [
         tool.displayName,
         tool.toolId,
-        tool.installedScriptId,
+        tool.localState?.localAssetId ?? "",
         tool.description ?? "",
         tool.owner ?? "",
         tool.repositoryId
@@ -424,10 +444,10 @@ export function RepositoryDiscoveryPage() {
       if (repositoryFilter !== "ALL" && item.repositoryId !== repositoryFilter) {
         return false;
       }
-      if (installFilter === "INSTALLED" && !item.installed) {
+      if (installFilter === "INSTALLED" && !isLocalEventSource(item)) {
         return false;
       }
-      if (installFilter === "NOT_INSTALLED" && item.installed) {
+      if (installFilter === "NOT_INSTALLED" && isLocalEventSource(item)) {
         return false;
       }
       if (trustFilter === "TRUSTED" && !item.trusted) {
@@ -442,7 +462,7 @@ export function RepositoryDiscoveryPage() {
       const haystack = [
         item.displayName,
         item.eventSourceId,
-        item.installedSourceId,
+        item.localState?.localAssetId ?? "",
         item.description ?? "",
         item.owner ?? "",
         item.repositoryId
@@ -594,7 +614,7 @@ export function RepositoryDiscoveryPage() {
     }
   };
 
-  const confirmInstallAction = async (descriptor: RepositoryToolDescriptor, action: InstallAction) => {
+  const confirmToolLocalAssetAction = async (descriptor: RepositoryToolDescriptor, action: LocalAssetAction, mode: AddMode = "LOCKED", customLocalAssetId?: string) => {
     let installSchedules = false;
     let installScriptDependencies = descriptor.scriptDependencies.length > 0;
     let installPluginDependencies = descriptor.pluginDependencies.length > 0;
@@ -612,15 +632,16 @@ export function RepositoryDiscoveryPage() {
     }
 
     const scheduleCount = detailForAction.scheduleTemplate.length;
+    const localId = customLocalAssetId?.trim() || localAssetId(descriptor);
 
     await modal.confirm({
-      title: action === "install" ? "安装脚本资产" : "更新脚本资产",
-      okText: action === "install" ? "安装" : "更新",
+      title: action === "add-local" ? "添加脚本资产" : "更新脚本资产",
+      okText: action === "add-local" ? "添加" : "更新",
       cancelText: "取消",
       content: (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Text>
-            {descriptor.displayName} 将安装到本机脚本 ID <Text code>{descriptor.installedScriptId}</Text>。
+            {descriptor.displayName} 将添加到本机脚本 ID <Text code>{localId}</Text>。
           </Text>
           {scheduleCount > 0 ? (
             <Checkbox onChange={(event) => { installSchedules = event.target.checked; }}>
@@ -656,68 +677,66 @@ export function RepositoryDiscoveryPage() {
       )
     });
 
-    setActionKey(`${action}:${descriptor.installedScriptId}`);
+    setActionKey(`${action}:${descriptor.repositoryId}:${descriptor.toolId}`);
     try {
-      if (action === "install") {
-        await installRepositoryTool(descriptor.repositoryId, descriptor.toolId, {
+      const asset = action === "add-local"
+        ? await addRepositoryToolLocalAsset(descriptor.repositoryId, descriptor.toolId, {
+          mode,
+          localAssetId: localId,
+          installSchedules,
+          installScriptDependencies,
+          installPluginDependencies
+        })
+        : await updateRepositoryToolLocalAsset(descriptor.repositoryId, descriptor.toolId, {
           installSchedules,
           installScriptDependencies,
           installPluginDependencies
         });
-      } else {
-        await updateRepositoryTool(descriptor.repositoryId, descriptor.toolId, {
-          installSchedules,
-          installScriptDependencies,
-          installPluginDependencies
-        });
-      }
-      messageApi.success(action === "install" ? "脚本资产已安装" : "脚本资产已更新");
+      messageApi.success(action === "add-local" ? "脚本资产已添加" : "脚本资产已更新");
       await loadData();
       if (detailOpen) {
         await openDetail(descriptor);
+      }
+      if (mode === "TRACKED" && action === "add-local") {
+        navigate(`/scripts/${encodeURIComponent(asset.localAssetId)}`);
       }
     } catch (error) {
       if (error instanceof ApiError) {
         messageApi.error(error.message);
       } else {
-        messageApi.error(getErrorMessage(error, action === "install" ? "安装失败" : "更新失败"));
+        messageApi.error(getErrorMessage(error, action === "add-local" ? "添加失败" : "更新失败"));
       }
     } finally {
       setActionKey(null);
     }
   };
 
-  const handleDevelopTool = async (descriptor: RepositoryToolDescriptor, scriptId?: string) => {
-    setActionKey(`develop:${descriptor.repositoryId}:${descriptor.toolId}`);
-    try {
-      const script = await createRepositoryToolWorkingCopy(descriptor.repositoryId, descriptor.toolId, { id: scriptId });
-      messageApi.success("已创建脚本工作副本");
-      await loadData();
-      navigate(`/scripts/${encodeURIComponent(script.id)}`);
-    } catch (error) {
-      if (error instanceof ApiError && !scriptId && error.message.includes("脚本 ID 已存在")) {
-        let customScriptId = descriptor.toolId;
-        await modal.confirm({
-          title: "指定工作副本脚本 ID",
-          okText: "创建",
-          cancelText: "取消",
-          content: (
-            <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <Text type="secondary">默认脚本 ID 已被占用，请输入一个本地工作副本 ID。</Text>
-              <Input defaultValue={customScriptId} onChange={(event) => { customScriptId = event.target.value; }} />
-            </Space>
-          ),
-          onOk: () => handleDevelopTool(descriptor, customScriptId.trim())
-        });
-        return;
-      }
-      messageApi.error(getErrorMessage(error, "创建脚本工作副本失败"));
-    } finally {
-      setActionKey(null);
-    }
+  const confirmAddToolToLocal = async (descriptor: RepositoryToolDescriptor) => {
+    const selection: { mode: AddMode; localAssetId: string } = { mode: "LOCKED", localAssetId: localAssetId(descriptor) };
+    await modal.confirm({
+      title: "添加脚本到本地",
+      okText: "添加",
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Text>{descriptor.displayName} 将添加为本地资产。</Text>
+          <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
+          <Select
+            defaultValue={selection.mode}
+            style={{ width: "100%" }}
+            onChange={(value: AddMode) => { selection.mode = value; }}
+            options={[
+              { value: "LOCKED", label: "锁定使用：安装只读脚本，可后续更新" },
+              { value: "TRACKED", label: "可编辑跟踪：创建本地工作副本，可拉取上游" }
+            ]}
+          />
+        </Space>
+      )
+    });
+    await confirmToolLocalAssetAction(descriptor, "add-local", selection.mode, selection.localAssetId);
   };
 
-  const confirmEventSourceInstallAction = async (descriptor: RepositoryEventSourceDescriptor, action: InstallAction) => {
+  const confirmEventSourceLocalAssetAction = async (descriptor: RepositoryEventSourceDescriptor, action: LocalAssetAction, mode: AddMode = "LOCKED", customLocalAssetId?: string) => {
     let installScriptDependencies = descriptor.scriptDependencies.length > 0;
     let detailForAction = eventSourceDetail?.descriptor.repositoryId === descriptor.repositoryId
       && eventSourceDetail?.descriptor.eventSourceId === descriptor.eventSourceId
@@ -733,14 +752,16 @@ export function RepositoryDiscoveryPage() {
       }
     }
 
+    const localId = customLocalAssetId?.trim() || localAssetId(descriptor);
+
     await modal.confirm({
-      title: action === "install" ? "安装事件源资产" : "更新事件源资产",
-      okText: action === "install" ? "安装" : "更新",
+      title: action === "add-local" ? "添加事件源资产" : "更新事件源资产",
+      okText: action === "add-local" ? "添加" : "更新",
       cancelText: "取消",
       content: (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Text>
-            {descriptor.displayName} 将安装到本机事件源 ID <Text code>{descriptor.installedSourceId}</Text>。
+            {descriptor.displayName} 将添加到本机事件源 ID <Text code>{localId}</Text>。
           </Text>
           {descriptor.scriptDependencies.length > 0 ? (
             <Space direction="vertical" size={8} style={{ width: "100%" }}>
@@ -762,61 +783,57 @@ export function RepositoryDiscoveryPage() {
       )
     });
 
-    setActionKey(`${action}:${descriptor.installedSourceId}`);
+    setActionKey(`${action}:${descriptor.repositoryId}:${descriptor.eventSourceId}`);
     try {
-      if (action === "install") {
-        await installRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, {
+      const asset = action === "add-local"
+        ? await addRepositoryEventSourceLocalAsset(descriptor.repositoryId, descriptor.eventSourceId, {
+          mode,
+          localAssetId: localId,
+          installSchedules: false,
+          installScriptDependencies
+        })
+        : await updateRepositoryEventSourceLocalAsset(descriptor.repositoryId, descriptor.eventSourceId, {
           installSchedules: false,
           installScriptDependencies
         });
-      } else {
-        await updateRepositoryEventSource(descriptor.repositoryId, descriptor.eventSourceId, {
-          installSchedules: false,
-          installScriptDependencies
-        });
-      }
-      messageApi.success(action === "install" ? "事件源资产已安装" : "事件源资产已更新");
+      messageApi.success(action === "add-local" ? "事件源资产已添加" : "事件源资产已更新");
       await loadData();
       if (eventSourceDetailOpen) {
         await openEventSourceDetail(descriptor);
       }
+      if (mode === "TRACKED" && action === "add-local") {
+        navigate("/triggers");
+      }
     } catch (error) {
-      messageApi.error(getErrorMessage(error, action === "install" ? "安装事件源失败" : "更新事件源失败"));
+      messageApi.error(getErrorMessage(error, action === "add-local" ? "添加事件源失败" : "更新事件源失败"));
     } finally {
       setActionKey(null);
     }
   };
 
-  const handleDevelopEventSource = async (descriptor: RepositoryEventSourceDescriptor, sourceId?: string) => {
-    setActionKey(`develop:${descriptor.repositoryId}:${descriptor.eventSourceId}`);
-    try {
-      const source = await createRepositoryEventSourceWorkingCopy(descriptor.repositoryId, descriptor.eventSourceId, { id: sourceId });
-      messageApi.success("已创建事件源工作副本");
-      await loadData();
-      navigate("/triggers");
-      return source;
-    } catch (error) {
-      if (error instanceof ApiError && !sourceId && error.message.includes("事件源 ID 已存在")) {
-        let customSourceId = descriptor.eventSourceId;
-        await modal.confirm({
-          title: "指定工作副本事件源 ID",
-          okText: "创建",
-          cancelText: "取消",
-          content: (
-            <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <Text type="secondary">默认事件源 ID 已被占用，请输入一个本地工作副本 ID。</Text>
-              <Input defaultValue={customSourceId} onChange={(event) => { customSourceId = event.target.value; }} />
-            </Space>
-          ),
-          onOk: () => handleDevelopEventSource(descriptor, customSourceId.trim())
-        });
-        return null;
-      }
-      messageApi.error(getErrorMessage(error, "创建事件源工作副本失败"));
-      return null;
-    } finally {
-      setActionKey(null);
-    }
+  const confirmAddEventSourceToLocal = async (descriptor: RepositoryEventSourceDescriptor) => {
+    const selection: { mode: AddMode; localAssetId: string } = { mode: "LOCKED", localAssetId: localAssetId(descriptor) };
+    await modal.confirm({
+      title: "添加事件源到本地",
+      okText: "添加",
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Text>{descriptor.displayName} 将添加为本地资产。</Text>
+          <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
+          <Select
+            defaultValue={selection.mode}
+            style={{ width: "100%" }}
+            onChange={(value: AddMode) => { selection.mode = value; }}
+            options={[
+              { value: "LOCKED", label: "锁定使用：安装只读事件源，可后续更新" },
+              { value: "TRACKED", label: "可编辑跟踪：创建本地工作副本，可拉取上游" }
+            ]}
+          />
+        </Space>
+      )
+    });
+    await confirmEventSourceLocalAssetAction(descriptor, "add-local", selection.mode, selection.localAssetId);
   };
 
   const handlePackageInstall = async (descriptor: CapabilityPackageDescriptor, action: InstallAction) => {
@@ -910,7 +927,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space wrap size={[8, 8]}>
           <TableLinkCell onClick={() => void openDetail(record)}>{record.displayName}</TableLinkCell>
-          <Text code>{record.installedScriptId}</Text>
+          <Text code>{localAssetId(record)}</Text>
         </Space>
       )
     },
@@ -921,7 +938,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space size={[4, 4]}>
           <Text>{record.repositoryId}</Text>
-          {record.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
+          {isTrackedLocal(record) ? <Tag color="purple">跟踪本地资产</Tag> : null}
           <TrustLevelTag level={record.trusted ? "TRUSTED" : "UNTRUSTED"} />
         </Space>
       )
@@ -933,7 +950,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
           <Text>{record.version}</Text>
-          {record.installedVersion ? <Text type="secondary">已装 {record.installedVersion}</Text> : null}
+          {record.localState?.version ? <Text type="secondary">本地 {record.localState.version}</Text> : null}
         </Space>
       )
     },
@@ -943,50 +960,40 @@ export function RepositoryDiscoveryPage() {
       width: 180,
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
-          {record.workingCopyId ? (
+          {isTrackedLocal(record) ? (
             <Button
               size="small"
-              type={record.upstreamSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
-              danger={record.upstreamSyncState === "DIVERGED"}
-              ghost={record.upstreamSyncState === "REMOTE_CHANGES"}
+              type={record.localState?.syncState === "REMOTE_CHANGES" ? "primary" : "default"}
+              danger={record.localState?.syncState === "DIVERGED"}
+              ghost={record.localState?.syncState === "REMOTE_CHANGES"}
               icon={<SyncOutlined />}
-              onClick={() => navigate(`/scripts/${record.workingCopyId}`)}
+              onClick={() => navigate(`/scripts/${localAssetId(record)}`)}
             >
-              {getUpstreamActionLabel(record.upstreamSyncState)}
+              {getUpstreamActionLabel(record.localState?.syncState)}
             </Button>
-          ) : record.installed ? (
+          ) : isLockedLocal(record) ? (
             <Button
               size="small"
-              type={record.updateAvailable ? "primary" : "default"}
-              ghost={record.updateAvailable}
+              type={record.localState?.updateAvailable ? "primary" : "default"}
+              ghost={record.localState?.updateAvailable}
               icon={<SyncOutlined />}
-              disabled={!record.updateAvailable}
-              loading={actionKey === `update:${record.installedScriptId}`}
-              onClick={() => void confirmInstallAction(record, "update")}
+              disabled={!record.localState?.updateAvailable}
+              loading={actionKey === `update-local:${record.repositoryId}:${record.toolId}`}
+              onClick={() => void confirmToolLocalAssetAction(record, "update-local")}
             >
-              {record.updateAvailable ? "更新" : "已安装"}
+              {record.localState?.updateAvailable ? "更新" : "已添加"}
             </Button>
           ) : (
             <Button
               size="small"
               type="primary"
               icon={<DownloadOutlined />}
-              loading={actionKey === `install:${record.installedScriptId}`}
-              onClick={() => void confirmInstallAction(record, "install")}
+              loading={actionKey === `add-local:${record.repositoryId}:${record.toolId}`}
+              onClick={() => void confirmAddToolToLocal(record)}
             >
-              安装
+              添加到本地
             </Button>
           )}
-          {!record.workingCopyId && !record.installed ? (
-            <Button
-              size="small"
-              icon={<SyncOutlined />}
-              loading={actionKey === `develop:${record.repositoryId}:${record.toolId}`}
-              onClick={() => void handleDevelopTool(record)}
-            >
-              创建工作副本
-            </Button>
-          ) : null}
         </Space>
       )
     }
@@ -1081,7 +1088,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
           <TableLinkCell onClick={() => void openEventSourceDetail(record)}>{record.displayName}</TableLinkCell>
-          <Text code>{record.installedSourceId}</Text>
+          <Text code>{localAssetId(record)}</Text>
         </Space>
       )
     },
@@ -1092,7 +1099,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space size={[4, 4]}>
           <Text>{record.repositoryId}</Text>
-          {record.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
+          {isTrackedLocal(record) ? <Tag color="purple">跟踪本地资产</Tag> : null}
           <TrustLevelTag level={record.trusted ? "TRUSTED" : "UNTRUSTED"} />
         </Space>
       )
@@ -1104,7 +1111,7 @@ export function RepositoryDiscoveryPage() {
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
           <Text>{record.version}</Text>
-          {record.installedVersion ? <Text type="secondary">已装 {record.installedVersion}</Text> : null}
+          {record.localState?.version ? <Text type="secondary">本地 {record.localState.version}</Text> : null}
         </Space>
       )
     },
@@ -1114,50 +1121,40 @@ export function RepositoryDiscoveryPage() {
       width: 180,
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
-          {record.workingCopyId ? (
+          {isTrackedLocal(record) ? (
             <Button
               size="small"
-              type={record.upstreamSyncState === "REMOTE_CHANGES" ? "primary" : "default"}
-              danger={record.upstreamSyncState === "DIVERGED"}
-              ghost={record.upstreamSyncState === "REMOTE_CHANGES"}
+              type={record.localState?.syncState === "REMOTE_CHANGES" ? "primary" : "default"}
+              danger={record.localState?.syncState === "DIVERGED"}
+              ghost={record.localState?.syncState === "REMOTE_CHANGES"}
               icon={<SyncOutlined />}
               onClick={() => navigate("/triggers")}
             >
-              {getUpstreamActionLabel(record.upstreamSyncState)}
+              {getUpstreamActionLabel(record.localState?.syncState)}
             </Button>
-          ) : record.installed ? (
+          ) : isLockedLocal(record) ? (
             <Button
               size="small"
-              type={record.updateAvailable ? "primary" : "default"}
-              ghost={record.updateAvailable}
+              type={record.localState?.updateAvailable ? "primary" : "default"}
+              ghost={record.localState?.updateAvailable}
               icon={<SyncOutlined />}
-              disabled={!record.updateAvailable}
-              loading={actionKey === `update:${record.installedSourceId}`}
-              onClick={() => void confirmEventSourceInstallAction(record, "update")}
+              disabled={!record.localState?.updateAvailable}
+              loading={actionKey === `update-local:${record.repositoryId}:${record.eventSourceId}`}
+              onClick={() => void confirmEventSourceLocalAssetAction(record, "update-local")}
             >
-              {record.updateAvailable ? "更新" : "已安装"}
+              {record.localState?.updateAvailable ? "更新" : "已添加"}
             </Button>
           ) : (
             <Button
               size="small"
               type="primary"
               icon={<DownloadOutlined />}
-              loading={actionKey === `install:${record.installedSourceId}`}
-              onClick={() => void confirmEventSourceInstallAction(record, "install")}
+              loading={actionKey === `add-local:${record.repositoryId}:${record.eventSourceId}`}
+              onClick={() => void confirmAddEventSourceToLocal(record)}
             >
-              安装
+              添加到本地
             </Button>
           )}
-          {!record.workingCopyId && !record.installed ? (
-            <Button
-              size="small"
-              icon={<SyncOutlined />}
-              loading={actionKey === `develop:${record.repositoryId}:${record.eventSourceId}`}
-              onClick={() => void handleDevelopEventSource(record)}
-            >
-              创建工作副本
-            </Button>
-          ) : null}
         </Space>
       )
     }
@@ -1436,15 +1433,15 @@ export function RepositoryDiscoveryPage() {
               size="small"
               column={2}
               items={[
-                { key: "tool", label: "脚本 ID", children: <Text code>{detail.descriptor.installedScriptId}</Text> },
+                { key: "tool", label: "脚本 ID", children: <Text code>{localAssetId(detail.descriptor)}</Text> },
                 { key: "repo", label: "来源仓库", children: detail.descriptor.repositoryId },
                 { key: "type", label: "类型", children: getScriptTypeLabel(detail.descriptor.type) },
                 { key: "version", label: "远端版本", children: detail.descriptor.version },
-                { key: "installedVersion", label: "本机版本", children: detail.descriptor.installedVersion || "-" },
+                { key: "installedVersion", label: "本机版本", children: detail.descriptor.localState?.version || "-" },
                 { key: "owner", label: "维护人", children: detail.descriptor.owner || "-" },
                 { key: "risk", label: "风险等级", children: <RiskLevelTag level={detail.descriptor.riskLevel} /> },
                 { key: "trust", label: "仓库信任", children: <TrustLevelTag level={detail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
-                { key: "syncState", label: "上游同步", children: detail.descriptor.workingCopyId ? <UpstreamSyncTag state={detail.descriptor.upstreamSyncState} /> : <Text type="secondary">-</Text> }
+                { key: "syncState", label: "上游同步", children: isTrackedLocal(detail.descriptor) ? <UpstreamSyncTag state={detail.descriptor.localState?.syncState} /> : <Text type="secondary">-</Text> }
               ]}
             />
 
@@ -1452,42 +1449,34 @@ export function RepositoryDiscoveryPage() {
               {detail.descriptor.tags.map((tag) => (
                 <Tag key={tag}>{tag}</Tag>
               ))}
-              {detail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
-              {detail.descriptor.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
-              {detail.descriptor.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
+              {isLocalTool(detail.descriptor) ? <Tag color="blue">已添加</Tag> : <Tag>未添加</Tag>}
+              {isTrackedLocal(detail.descriptor) ? <Tag color="purple">跟踪本地资产</Tag> : null}
+              {detail.descriptor.localState?.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
             </Space>
 
             <Space wrap size={[8, 8]}>
-              {detail.descriptor.workingCopyId ? (
-                <Button onClick={() => navigate(`/scripts/${detail.descriptor.workingCopyId}`)}>
-                  {getUpstreamActionLabel(detail.descriptor.upstreamSyncState)}
+              {isTrackedLocal(detail.descriptor) ? (
+                <Button onClick={() => navigate(`/scripts/${localAssetId(detail.descriptor)}`)}>
+                  {getUpstreamActionLabel(detail.descriptor.localState?.syncState)}
                 </Button>
-              ) : detail.descriptor.installed ? (
+              ) : isLockedLocal(detail.descriptor) ? (
                 <Button
-                  type={detail.descriptor.updateAvailable ? "primary" : "default"}
-                  ghost={detail.descriptor.updateAvailable}
-                  disabled={!detail.descriptor.updateAvailable}
-                  loading={actionKey === `update:${detail.descriptor.installedScriptId}`}
-                  onClick={() => void confirmInstallAction(detail.descriptor, "update")}
+                  type={detail.descriptor.localState?.updateAvailable ? "primary" : "default"}
+                  ghost={detail.descriptor.localState?.updateAvailable}
+                  disabled={!detail.descriptor.localState?.updateAvailable}
+                  loading={actionKey === `update-local:${detail.descriptor.repositoryId}:${detail.descriptor.toolId}`}
+                  onClick={() => void confirmToolLocalAssetAction(detail.descriptor, "update-local")}
                 >
-                  {detail.descriptor.updateAvailable ? "更新脚本" : "已安装"}
+                  {detail.descriptor.localState?.updateAvailable ? "更新脚本" : "已添加"}
                 </Button>
               ) : (
-                <>
-                  <Button
-                    type="primary"
-                    loading={actionKey === `install:${detail.descriptor.installedScriptId}`}
-                    onClick={() => void confirmInstallAction(detail.descriptor, "install")}
-                  >
-                    安装脚本
-                  </Button>
-                  <Button
-                    loading={actionKey === `develop:${detail.descriptor.repositoryId}:${detail.descriptor.toolId}`}
-                    onClick={() => void handleDevelopTool(detail.descriptor)}
-                  >
-                    创建工作副本
-                  </Button>
-                </>
+                <Button
+                  type="primary"
+                  loading={actionKey === `add-local:${detail.descriptor.repositoryId}:${detail.descriptor.toolId}`}
+                  onClick={() => void confirmAddToolToLocal(detail.descriptor)}
+                >
+                  添加到本地
+                </Button>
               )}
             </Space>
 
@@ -1650,54 +1639,46 @@ export function RepositoryDiscoveryPage() {
               size="small"
               column={2}
               items={[
-                { key: "source", label: "事件源 ID", children: <Text code>{eventSourceDetail.descriptor.installedSourceId}</Text> },
+                { key: "source", label: "事件源 ID", children: <Text code>{localAssetId(eventSourceDetail.descriptor)}</Text> },
                 { key: "repo", label: "来源仓库", children: eventSourceDetail.descriptor.repositoryId },
                 { key: "version", label: "远端版本", children: eventSourceDetail.descriptor.version },
-                { key: "installedVersion", label: "本机版本", children: eventSourceDetail.descriptor.installedVersion || "-" },
+                { key: "installedVersion", label: "本机版本", children: eventSourceDetail.descriptor.localState?.version || "-" },
                 { key: "owner", label: "维护人", children: eventSourceDetail.descriptor.owner || "-" },
                 { key: "trust", label: "仓库信任", children: <TrustLevelTag level={eventSourceDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
-                { key: "sync", label: "上游同步", children: eventSourceDetail.descriptor.workingCopyId ? <UpstreamSyncTag state={eventSourceDetail.descriptor.upstreamSyncState} /> : <Text type="secondary">-</Text> }
+                { key: "sync", label: "上游同步", children: isTrackedLocal(eventSourceDetail.descriptor) ? <UpstreamSyncTag state={eventSourceDetail.descriptor.localState?.syncState} /> : <Text type="secondary">-</Text> }
               ]}
             />
 
             <Space wrap size={[8, 8]}>
               {eventSourceDetail.descriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
-              {eventSourceDetail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
-              {eventSourceDetail.descriptor.workingCopyId ? <Tag color="purple">有工作副本</Tag> : null}
-              {eventSourceDetail.descriptor.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
+              {isLocalEventSource(eventSourceDetail.descriptor) ? <Tag color="blue">已添加</Tag> : <Tag>未添加</Tag>}
+              {isTrackedLocal(eventSourceDetail.descriptor) ? <Tag color="purple">跟踪本地资产</Tag> : null}
+              {eventSourceDetail.descriptor.localState?.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
             </Space>
 
             <Space wrap size={[8, 8]}>
-              {eventSourceDetail.descriptor.workingCopyId ? (
+              {isTrackedLocal(eventSourceDetail.descriptor) ? (
                 <Button onClick={() => navigate("/triggers")}>
-                  {getUpstreamActionLabel(eventSourceDetail.descriptor.upstreamSyncState)}
+                  {getUpstreamActionLabel(eventSourceDetail.descriptor.localState?.syncState)}
                 </Button>
-              ) : eventSourceDetail.descriptor.installed ? (
+              ) : isLockedLocal(eventSourceDetail.descriptor) ? (
                 <Button
-                  type={eventSourceDetail.descriptor.updateAvailable ? "primary" : "default"}
-                  ghost={eventSourceDetail.descriptor.updateAvailable}
-                  disabled={!eventSourceDetail.descriptor.updateAvailable}
-                  loading={actionKey === `update:${eventSourceDetail.descriptor.installedSourceId}`}
-                  onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "update")}
+                  type={eventSourceDetail.descriptor.localState?.updateAvailable ? "primary" : "default"}
+                  ghost={eventSourceDetail.descriptor.localState?.updateAvailable}
+                  disabled={!eventSourceDetail.descriptor.localState?.updateAvailable}
+                  loading={actionKey === `update-local:${eventSourceDetail.descriptor.repositoryId}:${eventSourceDetail.descriptor.eventSourceId}`}
+                  onClick={() => void confirmEventSourceLocalAssetAction(eventSourceDetail.descriptor, "update-local")}
                 >
-                  {eventSourceDetail.descriptor.updateAvailable ? "更新事件源" : "已安装"}
+                  {eventSourceDetail.descriptor.localState?.updateAvailable ? "更新事件源" : "已添加"}
                 </Button>
               ) : (
-                <>
-                  <Button
-                    type="primary"
-                    loading={actionKey === `install:${eventSourceDetail.descriptor.installedSourceId}`}
-                    onClick={() => void confirmEventSourceInstallAction(eventSourceDetail.descriptor, "install")}
-                  >
-                    安装事件源
-                  </Button>
-                  <Button
-                    loading={actionKey === `develop:${eventSourceDetail.descriptor.repositoryId}:${eventSourceDetail.descriptor.eventSourceId}`}
-                    onClick={() => void handleDevelopEventSource(eventSourceDetail.descriptor)}
-                  >
-                    创建工作副本
-                  </Button>
-                </>
+                <Button
+                  type="primary"
+                  loading={actionKey === `add-local:${eventSourceDetail.descriptor.repositoryId}:${eventSourceDetail.descriptor.eventSourceId}`}
+                  onClick={() => void confirmAddEventSourceToLocal(eventSourceDetail.descriptor)}
+                >
+                  添加到本地
+                </Button>
               )}
             </Space>
 

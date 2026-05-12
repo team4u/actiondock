@@ -38,7 +38,6 @@ function descriptor(pluginDependencies: PluginDependency[]): RepositoryToolDescr
   return {
     repositoryId: "repo",
     toolId: "tool",
-    installedScriptId: "repo.tool",
     displayName: "Repository Tool",
     version: "1.0.0",
     tags: [],
@@ -47,8 +46,11 @@ function descriptor(pluginDependencies: PluginDependency[]): RepositoryToolDescr
     sourcePath: "tools/tool/source.groovy",
     scriptDependencies: [],
     pluginDependencies,
-    installed: true,
-    updateAvailable: false,
+    localState: {
+      mode: "LOCKED",
+      localAssetId: "repo.tool",
+      updateAvailable: false
+    },
     trusted: true
   };
 }

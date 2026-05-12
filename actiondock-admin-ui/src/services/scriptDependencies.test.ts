@@ -18,7 +18,6 @@ function repositoryTool(overrides: Partial<RepositoryToolDescriptor>): Repositor
   return {
     repositoryId: "repo",
     toolId: "child",
-    installedScriptId: "repo.child",
     displayName: "Child",
     version: "1.0.0",
     tags: [],
@@ -27,8 +26,6 @@ function repositoryTool(overrides: Partial<RepositoryToolDescriptor>): Repositor
     sourcePath: "tools/child/source.groovy",
     scriptDependencies: [],
     pluginDependencies: [],
-    installed: false,
-    updateAvailable: false,
     trusted: true,
     ...overrides
   };

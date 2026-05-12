@@ -3,18 +3,17 @@ package org.team4u.actiondock.application;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.PublishedScriptRevision;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
-import org.team4u.actiondock.domain.port.PublishedScriptRevisionRepository;
+import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
-import org.team4u.actiondock.domain.port.UpstreamBindingRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 
@@ -29,49 +28,18 @@ import java.util.UUID;
 public class ScriptApplicationService {
 
     private final ScriptRepository scriptRepository;
-    private final PublishedScriptRevisionRepository publishedScriptRevisionRepository;
     private final ScriptEngine scriptEngine;
     private final ScriptScheduleRepository scriptScheduleRepository;
-    private final UpstreamBindingRepository upstreamBindingRepository;
+    private final RepositoryLocalAssetRepository repositoryLocalAssetRepository;
 
     public ScriptApplicationService(ScriptRepository scriptRepository,
                                     ScriptEngine scriptEngine,
                                     ScriptScheduleRepository scriptScheduleRepository,
-                                    UpstreamBindingRepository upstreamBindingRepository) {
-        this(scriptRepository, new NoopPublishedScriptRevisionRepository(), scriptEngine, scriptScheduleRepository, upstreamBindingRepository);
-    }
-
-    public ScriptApplicationService(ScriptRepository scriptRepository,
-                                    PublishedScriptRevisionRepository publishedScriptRevisionRepository,
-                                    ScriptEngine scriptEngine,
-                                    ScriptScheduleRepository scriptScheduleRepository,
-                                    UpstreamBindingRepository upstreamBindingRepository) {
+                                    RepositoryLocalAssetRepository repositoryLocalAssetRepository) {
         this.scriptRepository = scriptRepository;
-        this.publishedScriptRevisionRepository = publishedScriptRevisionRepository;
         this.scriptEngine = scriptEngine;
         this.scriptScheduleRepository = scriptScheduleRepository;
-        this.upstreamBindingRepository = upstreamBindingRepository;
-    }
-
-    private static final class NoopPublishedScriptRevisionRepository implements PublishedScriptRevisionRepository {
-        @Override
-        public PublishedScriptRevision save(PublishedScriptRevision revision) {
-            return revision;
-        }
-
-        @Override
-        public Optional<PublishedScriptRevision> findById(String id) {
-            return Optional.empty();
-        }
-
-        @Override
-        public List<PublishedScriptRevision> findByScriptId(String scriptId) {
-            return List.of();
-        }
-
-        @Override
-        public void deleteByScriptId(String scriptId) {
-        }
+        this.repositoryLocalAssetRepository = repositoryLocalAssetRepository;
     }
 
     /**
@@ -163,9 +131,9 @@ public class ScriptApplicationService {
     public void delete(String id) {
         ensureEditable(get(id));
         scriptScheduleRepository.deleteByScriptId(id);
-        publishedScriptRevisionRepository.deleteByScriptId(id);
-        upstreamBindingRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, id)
-                .ifPresent(binding -> upstreamBindingRepository.deleteById(binding.getId()));
+        repositoryLocalAssetRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, id)
+                .map(RepositoryLocalAsset::getId)
+                .ifPresent(repositoryLocalAssetRepository::deleteById);
         scriptRepository.deleteById(id);
     }
 
@@ -196,7 +164,6 @@ public class ScriptApplicationService {
         LocalDateTime now = LocalDateTime.now();
         String revisionId = UUID.randomUUID().toString();
         PublishedScriptRevision revision = PublishedScriptRevision.fromDraft(definition, revisionId, definition.getVersion() + 1, now);
-        publishedScriptRevisionRepository.save(revision);
         definition.setPublishedRevision(revision);
         definition.setVersion(revision.getVersion());
         definition.setUpdatedAt(now);

@@ -14,8 +14,8 @@ import org.team4u.actiondock.domain.port.EventSourceRepository;
 import org.team4u.actiondock.domain.port.EventTriggerRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ProcessorEngine;
+import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
-import org.team4u.actiondock.domain.port.UpstreamBindingRepository;
 
 /**
  * 事件相关配置，注册事件源、触发器、事件摄取和事件记录等 Bean。
@@ -29,8 +29,8 @@ public class EventConfiguration {
     public EventSourceApplicationService eventSourceApplicationService(EventSourceRepository eventSourceRepository,
                                                                        EventTriggerRepository eventTriggerRepository,
                                                                        ProcessorEngine processorEngine,
-                                                                       UpstreamBindingRepository upstreamBindingRepository) {
-        return new EventSourceApplicationService(eventSourceRepository, eventTriggerRepository, processorEngine, upstreamBindingRepository);
+                                                                       RepositoryLocalAssetRepository repositoryLocalAssetRepository) {
+        return new EventSourceApplicationService(eventSourceRepository, eventTriggerRepository, processorEngine, repositoryLocalAssetRepository);
     }
 
     @Bean

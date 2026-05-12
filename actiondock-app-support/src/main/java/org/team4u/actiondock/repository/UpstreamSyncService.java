@@ -8,19 +8,19 @@ import org.team4u.actiondock.domain.model.EventTriggerScope;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
-import org.team4u.actiondock.domain.model.UpstreamBinding;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
@@ -38,16 +38,16 @@ class UpstreamSyncService {
         this.services = services;
     }
 
-    static boolean isRemoteChanged(UpstreamBinding binding, ToolSourceState state) {
+    static boolean isRemoteChanged(RepositoryLocalAsset binding, ToolSourceState state) {
         return !Objects.equals(binding.getBaseCommit(), state.commit())
                 || !Objects.equals(binding.getBaseDigest(), state.digest());
     }
 
-    static boolean isLocalChanged(UpstreamBinding binding, String localDigest) {
+    static boolean isLocalChanged(RepositoryLocalAsset binding, String localDigest) {
         return !Objects.equals(binding.getBaseDigest(), localDigest);
     }
 
-    static UpstreamSyncState resolveSyncState(UpstreamBinding binding, String localDigest, ToolSourceState remoteState) {
+    static UpstreamSyncState resolveSyncState(RepositoryLocalAsset binding, String localDigest, ToolSourceState remoteState) {
         boolean localChanged = isLocalChanged(binding, localDigest);
         boolean remoteChanged = isRemoteChanged(binding, remoteState);
         if (localChanged && remoteChanged) {
@@ -65,22 +65,22 @@ class UpstreamSyncService {
     ScriptDefinition createToolWorkingCopy(String repositoryId, String toolId, WorkingCopyRequest request) {
         RepositoryDefinition repository = catalog.getRepository(repositoryId);
         ensureTrackableRepository(repository);
-        if (repos.upstreamBindingRepository().findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, toolId).isPresent()) {
-            throw new IllegalArgumentException("上游脚本已存在工作副本: " + repositoryId + "/" + toolId);
+        if (repos.repositoryLocalAssetRepository().findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, toolId).isPresent()) {
+            throw new IllegalArgumentException("上游脚本已添加到本地: " + repositoryId + "/" + toolId);
         }
         RepositoryToolDetail detail = catalog.getRepositoryTool(repositoryId, toolId);
         String scriptId = NormalizeUtils.normalizeOrDefault(request == null ? null : request.id(), detail.descriptor().toolId());
         if (repos.scriptRepository().findById(scriptId).isPresent()) {
             throw new IllegalArgumentException("脚本 ID 已存在，请指定其他工作副本 ID: " + scriptId);
         }
-        removeInstalledTool(detail.descriptor().installedScriptId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
         ScriptDefinition saved = repos.scriptRepository().save(buildWorkingCopyScript(scriptId, null, detail));
-        repos.upstreamBindingRepository().save(newBinding(
+        repos.repositoryLocalAssetRepository().save(newBinding(
                 UpstreamAssetType.SCRIPT,
                 saved.getId(),
                 repositoryId,
                 toolId,
+                detail.descriptor().displayName(),
                 detail.descriptor().version(),
                 state
         ));
@@ -89,7 +89,7 @@ class UpstreamSyncService {
 
     UpstreamStatus getScriptUpstreamStatus(String scriptId) {
         ScriptDefinition script = services.scriptApplicationService().get(scriptId);
-        UpstreamBinding binding = requireBinding(UpstreamAssetType.SCRIPT, script.getId());
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.SCRIPT, script.getId());
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
@@ -99,7 +99,7 @@ class UpstreamSyncService {
                 script.getId(),
                 binding.getRepositoryId(),
                 binding.getUpstreamAssetId(),
-                binding.getUpstreamVersion(),
+                binding.getVersion(),
                 binding.getBaseCommit(),
                 state.commit(),
                 binding.getBaseDigest(),
@@ -115,7 +115,7 @@ class UpstreamSyncService {
 
     ScriptDefinition pullScript(String scriptId, boolean force) {
         ScriptDefinition script = services.scriptApplicationService().get(scriptId);
-        UpstreamBinding binding = requireBinding(UpstreamAssetType.SCRIPT, script.getId());
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.SCRIPT, script.getId());
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         catalog.syncRepository(repository.getId());
         RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
@@ -132,13 +132,13 @@ class UpstreamSyncService {
             throw new UpstreamConflictException(script.getId(), binding.getRepositoryId(), binding.getUpstreamAssetId());
         }
         ScriptDefinition saved = repos.scriptRepository().save(buildWorkingCopyScript(script.getId(), script, detail));
-        repos.upstreamBindingRepository().save(updateBinding(binding, detail.descriptor().version(), state));
+        repos.repositoryLocalAssetRepository().save(updateBinding(binding, detail.descriptor().version(), state));
         return saved;
     }
 
     void detachScript(String scriptId) {
-        UpstreamBinding binding = requireBinding(UpstreamAssetType.SCRIPT, scriptId);
-        repos.upstreamBindingRepository().deleteById(binding.getId());
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.SCRIPT, scriptId);
+        repos.repositoryLocalAssetRepository().deleteById(binding.getId());
     }
 
     ScriptDefinition buildBaseScriptDefinition(String scriptId, RepositoryToolDetail detail, String repositoryId) {
@@ -193,22 +193,22 @@ class UpstreamSyncService {
                                                        WorkingCopyRequest request) {
         RepositoryDefinition repository = catalog.getRepository(repositoryId);
         ensureTrackableRepository(repository);
-        if (repos.upstreamBindingRepository().findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repositoryId, eventSourceId).isPresent()) {
-            throw new IllegalArgumentException("上游事件源已存在工作副本: " + repositoryId + "/" + eventSourceId);
+        if (repos.repositoryLocalAssetRepository().findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repositoryId, eventSourceId).isPresent()) {
+            throw new IllegalArgumentException("上游事件源已添加到本地: " + repositoryId + "/" + eventSourceId);
         }
         RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repositoryId, eventSourceId);
         String sourceId = NormalizeUtils.normalizeOrDefault(request == null ? null : request.id(), detail.descriptor().eventSourceId());
         if (repos.eventSourceRepository().findById(sourceId).isPresent()) {
             throw new IllegalArgumentException("事件源 ID 已存在，请指定其他工作副本 ID: " + sourceId);
         }
-        removeInstalledEventSource(detail.descriptor().installedSourceId());
         ToolSourceState state = catalog.resolveEventSourceState(repository, detail);
         EventSourceDefinition saved = saveWorkingCopyEventSource(sourceId, null, detail);
-        repos.upstreamBindingRepository().save(newBinding(
+        repos.repositoryLocalAssetRepository().save(newBinding(
                 UpstreamAssetType.EVENT_SOURCE,
                 saved.getId(),
                 repositoryId,
                 eventSourceId,
+                detail.descriptor().displayName(),
                 detail.descriptor().version(),
                 state
         ));
@@ -218,7 +218,7 @@ class UpstreamSyncService {
     UpstreamStatus getEventSourceUpstreamStatus(String sourceId) {
         EventSourceDefinition source = repos.eventSourceRepository().findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("事件源不存在: " + sourceId));
-        UpstreamBinding binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, source.getId());
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, source.getId());
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveEventSourceState(repository, detail);
@@ -228,7 +228,7 @@ class UpstreamSyncService {
                 source.getId(),
                 binding.getRepositoryId(),
                 binding.getUpstreamAssetId(),
-                binding.getUpstreamVersion(),
+                binding.getVersion(),
                 binding.getBaseCommit(),
                 state.commit(),
                 binding.getBaseDigest(),
@@ -245,7 +245,7 @@ class UpstreamSyncService {
     EventSourceDefinition pullEventSource(String sourceId, boolean force) {
         EventSourceDefinition source = repos.eventSourceRepository().findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("事件源不存在: " + sourceId));
-        UpstreamBinding binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, source.getId());
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, source.getId());
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         catalog.syncRepository(repository.getId());
         RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repository.getId(), binding.getUpstreamAssetId());
@@ -262,13 +262,13 @@ class UpstreamSyncService {
             throw new UpstreamConflictException(source.getId(), binding.getRepositoryId(), binding.getUpstreamAssetId());
         }
         EventSourceDefinition saved = saveWorkingCopyEventSource(source.getId(), source, detail);
-        repos.upstreamBindingRepository().save(updateBinding(binding, detail.descriptor().version(), state));
+        repos.repositoryLocalAssetRepository().save(updateBinding(binding, detail.descriptor().version(), state));
         return saved;
     }
 
     void detachEventSource(String sourceId) {
-        UpstreamBinding binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, sourceId);
-        repos.upstreamBindingRepository().deleteById(binding.getId());
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, sourceId);
+        repos.repositoryLocalAssetRepository().deleteById(binding.getId());
     }
 
     private EventSourceDefinition saveWorkingCopyEventSource(String sourceId,
@@ -357,45 +357,24 @@ class UpstreamSyncService {
         }
     }
 
-    private void removeInstalledTool(String installedScriptId) {
-        if (repos.repositoryToolInstallationRepository().findByToolId(installedScriptId).isEmpty()) {
-            return;
-        }
-        repos.scriptScheduleRepository().findAll().stream()
-                .filter(item -> installedScriptId.equals(item.getRepositoryToolId()))
-                .map(org.team4u.actiondock.domain.model.ScriptSchedule::getId)
-                .toList()
-                .forEach(repos.scriptScheduleRepository()::deleteById);
-        repos.scriptRepository().deleteById(installedScriptId);
-        repos.repositoryToolInstallationRepository().deleteByToolId(installedScriptId);
-    }
-
-    private void removeInstalledEventSource(String installedSourceId) {
-        if (repos.repositoryEventSourceInstallationRepository().findBySourceId(installedSourceId).isEmpty()) {
-            return;
-        }
-        repos.eventTriggerRepository().findBySourceId(installedSourceId).stream()
-                .map(EventTrigger::getId)
-                .toList()
-                .forEach(repos.eventTriggerRepository()::deleteById);
-        repos.eventSourceRepository().deleteById(installedSourceId);
-        repos.repositoryEventSourceInstallationRepository().deleteBySourceId(installedSourceId);
-    }
-
-    private UpstreamBinding newBinding(UpstreamAssetType assetType,
-                                       String localAssetId,
-                                       String repositoryId,
-                                       String upstreamAssetId,
-                                       String upstreamVersion,
-                                       ToolSourceState state) {
+    private RepositoryLocalAsset newBinding(UpstreamAssetType assetType,
+                                            String localAssetId,
+                                            String repositoryId,
+                                            String upstreamAssetId,
+                                            String name,
+                                            String upstreamVersion,
+                                            ToolSourceState state) {
         LocalDateTime now = LocalDateTime.now();
-        return new UpstreamBinding()
-                .setId(UUID.randomUUID().toString())
+        return new RepositoryLocalAsset()
+                .setId(assetType.name() + ":TRACKED:" + localAssetId)
                 .setAssetType(assetType)
                 .setLocalAssetId(localAssetId)
                 .setRepositoryId(repositoryId)
                 .setUpstreamAssetId(upstreamAssetId)
-                .setUpstreamVersion(upstreamVersion)
+                .setMode(RepositoryLocalAssetMode.TRACKED)
+                .setVersion(upstreamVersion)
+                .setLatestVersion(upstreamVersion)
+                .setName(name)
                 .setSourcePath(state.path())
                 .setBaseCommit(state.commit())
                 .setBaseDigest(state.digest())
@@ -404,9 +383,10 @@ class UpstreamSyncService {
                 .setUpdatedAt(now);
     }
 
-    private UpstreamBinding updateBinding(UpstreamBinding binding, String upstreamVersion, ToolSourceState state) {
+    private RepositoryLocalAsset updateBinding(RepositoryLocalAsset binding, String upstreamVersion, ToolSourceState state) {
         return binding
-                .setUpstreamVersion(upstreamVersion)
+                .setVersion(upstreamVersion)
+                .setLatestVersion(upstreamVersion)
                 .setSourcePath(state.path())
                 .setBaseCommit(state.commit())
                 .setBaseDigest(state.digest())
@@ -414,9 +394,10 @@ class UpstreamSyncService {
                 .setUpdatedAt(LocalDateTime.now());
     }
 
-    private UpstreamBinding requireBinding(UpstreamAssetType assetType, String localAssetId) {
-        return repos.upstreamBindingRepository()
+    private RepositoryLocalAsset requireBinding(UpstreamAssetType assetType, String localAssetId) {
+        return repos.repositoryLocalAssetRepository()
                 .findByLocalAsset(assetType, localAssetId)
+                .filter(asset -> asset.getMode() == RepositoryLocalAssetMode.TRACKED)
                 .orElseThrow(() -> new IllegalArgumentException("工作副本未绑定上游: " + localAssetId));
     }
 

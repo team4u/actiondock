@@ -13,13 +13,12 @@ import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
-import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptScope;
-import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
-import org.team4u.actiondock.domain.model.UpstreamBinding;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -28,7 +27,6 @@ import org.team4u.actiondock.domain.port.ManagedSkillRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
-import org.team4u.actiondock.domain.port.RepositoryToolInstallationRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 import org.team4u.actiondock.shared.NormalizeUtils;
@@ -62,8 +60,6 @@ public class RepositoryCatalogService {
      */
     public record Repositories(
             RepositoryDefinitionRepository repositoryDefinitionRepository,
-            RepositoryToolInstallationRepository repositoryToolInstallationRepository,
-            org.team4u.actiondock.domain.port.RepositoryEventSourceInstallationRepository repositoryEventSourceInstallationRepository,
             CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
             ManagedSkillRepository managedSkillRepository,
             ScriptRepository scriptRepository,
@@ -72,7 +68,7 @@ public class RepositoryCatalogService {
             ConfigValueRepository configValueRepository,
             org.team4u.actiondock.domain.port.EventSourceRepository eventSourceRepository,
             org.team4u.actiondock.domain.port.EventTriggerRepository eventTriggerRepository,
-            org.team4u.actiondock.domain.port.UpstreamBindingRepository upstreamBindingRepository,
+            org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository repositoryLocalAssetRepository,
             AiModelProfileRepository aiModelProfileRepository,
             AiAgentProfileRepository aiAgentProfileRepository,
             AiToolsetRepository aiToolsetRepository
@@ -201,13 +197,15 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listAllRepositoryTools() {
         return listAllFromEnabledRepositories(
                 this::listRepositoryTools,
-                Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::installedScriptId));
+                Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::repositoryId)
+                        .thenComparing(RepositoryCatalogTypes.RepositoryToolDescriptor::toolId));
     }
 
     public List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor> listAllRepositoryEventSources() {
         return listAllFromEnabledRepositories(
                 this::listRepositoryEventSources,
-                Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::installedSourceId));
+                Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::repositoryId)
+                        .thenComparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::eventSourceId));
     }
 
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listRepositoryTools(String repositoryId) {
@@ -215,7 +213,7 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         return index.safeTools().stream()
                 .map(entry -> toDescriptor(repository, readToolFile(repository, entry.toolPath()), entry.toolPath()))
-                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::installedScriptId))
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::toolId))
                 .toList();
     }
 
@@ -224,7 +222,7 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         return index.safeEventSources().stream()
                 .map(entry -> toEventSourceDescriptor(repository, readEventSourceFile(repository, entry.eventSourcePath()), entry.eventSourcePath()))
-                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::installedSourceId))
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::eventSourceId))
                 .toList();
     }
 
@@ -644,38 +642,70 @@ public class RepositoryCatalogService {
 
     private RepositoryCatalogTypes.RepositoryToolDescriptor toDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.ToolFile tool, String toolPath) {
         RepositoryCatalogTypes.RepositoryToolDescriptor base = toDescriptorWithoutUpstream(repository, tool, toolPath);
-        UpstreamBinding binding = repos.upstreamBindingRepository()
+        RepositoryLocalAsset asset = repos.repositoryLocalAssetRepository()
                 .findByUpstreamAsset(UpstreamAssetType.SCRIPT, repository.getId(), tool.id())
                 .orElse(null);
-        if (binding == null) {
+        if (asset == null) {
             return base;
         }
-        UpstreamInfo upstreamInfo = resolveUpstreamInfo(repository, tool, toolPath, binding, base);
-        return base.withUpstream(
-                binding.getLocalAssetId(),
-                upstreamInfo.dirty(),
-                upstreamInfo.remoteChanged(),
-                upstreamInfo.syncState()
-        );
+        if (asset.getMode() == RepositoryLocalAssetMode.TRACKED) {
+            UpstreamInfo upstreamInfo = resolveUpstreamInfo(repository, tool, toolPath, asset, base);
+            return base.withLocalState(new RepositoryCatalogTypes.RepositoryLocalAssetState(
+                    "TRACKED",
+                    asset.getLocalAssetId(),
+                    asset.getVersion(),
+                    tool.version(),
+                    upstreamInfo.remoteChanged(),
+                    upstreamInfo.syncState(),
+                    upstreamInfo.dirty(),
+                    upstreamInfo.remoteChanged()
+            ));
+        }
+        return base.withLocalState(new RepositoryCatalogTypes.RepositoryLocalAssetState(
+                "LOCKED",
+                asset.getLocalAssetId(),
+                asset.getVersion(),
+                tool.version(),
+                !Objects.equals(asset.getVersion(), tool.version()),
+                null,
+                false,
+                false
+        ));
     }
 
     private RepositoryCatalogTypes.RepositoryEventSourceDescriptor toEventSourceDescriptor(RepositoryDefinition repository,
                                                                                            RepositoryCatalogTypes.EventSourceFile eventSource,
                                                                                            String eventSourcePath) {
         RepositoryCatalogTypes.RepositoryEventSourceDescriptor base = toEventSourceDescriptorWithoutUpstream(repository, eventSource, eventSourcePath);
-        UpstreamBinding binding = repos.upstreamBindingRepository()
+        RepositoryLocalAsset asset = repos.repositoryLocalAssetRepository()
                 .findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repository.getId(), eventSource.eventSourceId())
                 .orElse(null);
-        if (binding == null) {
+        if (asset == null) {
             return base;
         }
-        UpstreamInfo upstreamInfo = resolveEventSourceUpstreamInfo(repository, eventSource, eventSourcePath, binding, base);
-        return base.withUpstream(
-                binding.getLocalAssetId(),
-                upstreamInfo.dirty(),
-                upstreamInfo.remoteChanged(),
-                upstreamInfo.syncState()
-        );
+        if (asset.getMode() == RepositoryLocalAssetMode.TRACKED) {
+            UpstreamInfo upstreamInfo = resolveEventSourceUpstreamInfo(repository, eventSource, eventSourcePath, asset, base);
+            return base.withLocalState(new RepositoryCatalogTypes.RepositoryLocalAssetState(
+                    "TRACKED",
+                    asset.getLocalAssetId(),
+                    asset.getVersion(),
+                    eventSource.version(),
+                    upstreamInfo.remoteChanged(),
+                    upstreamInfo.syncState(),
+                    upstreamInfo.dirty(),
+                    upstreamInfo.remoteChanged()
+            ));
+        }
+        return base.withLocalState(new RepositoryCatalogTypes.RepositoryLocalAssetState(
+                "LOCKED",
+                asset.getLocalAssetId(),
+                asset.getVersion(),
+                eventSource.version(),
+                !Objects.equals(asset.getVersion(), eventSource.version()),
+                null,
+                false,
+                false
+        ));
     }
 
     private record UpstreamInfo(boolean dirty, boolean remoteChanged, String syncState) {
@@ -684,7 +714,7 @@ public class RepositoryCatalogService {
     private UpstreamInfo resolveUpstreamInfo(RepositoryDefinition repository,
                                              RepositoryCatalogTypes.ToolFile tool,
                                              String toolPath,
-                                             UpstreamBinding binding,
+                                             RepositoryLocalAsset binding,
                                              RepositoryCatalogTypes.RepositoryToolDescriptor base) {
         ScriptDefinition workingCopy = repos.scriptRepository().findById(binding.getLocalAssetId()).orElse(null);
         if (workingCopy == null) {
@@ -709,7 +739,7 @@ public class RepositoryCatalogService {
     private UpstreamInfo resolveEventSourceUpstreamInfo(RepositoryDefinition repository,
                                                         RepositoryCatalogTypes.EventSourceFile eventSource,
                                                         String eventSourcePath,
-                                                        UpstreamBinding binding,
+                                                        RepositoryLocalAsset binding,
                                                         RepositoryCatalogTypes.RepositoryEventSourceDescriptor base) {
         EventSourceDefinition workingCopy = repos.eventSourceRepository().findById(binding.getLocalAssetId()).orElse(null);
         if (workingCopy == null) {
@@ -733,11 +763,8 @@ public class RepositoryCatalogService {
     }
 
     private RepositoryCatalogTypes.RepositoryToolDescriptor toDescriptorWithoutUpstream(RepositoryDefinition repository, RepositoryCatalogTypes.ToolFile tool, String toolPath) {
-        String installedScriptId = repository.getId() + "." + tool.id();
-        RepositoryToolInstallation installation = repos.repositoryToolInstallationRepository().findByToolId(installedScriptId).orElse(null);
-        boolean installed = installation != null;
         return new RepositoryCatalogTypes.RepositoryToolDescriptor(
-                repository.getId(), tool.id(), installedScriptId,
+                repository.getId(), tool.id(),
                 tool.name(), tool.version(), tool.description(), tool.releaseNotes(), tool.owner(),
                 NormalizeUtils.nullSafeList(tool.tags()),
                 tool.type(), ScriptPackaging.fromNullableName(tool.packaging()).name(), tool.sourcePath(),
@@ -748,24 +775,17 @@ public class RepositoryCatalogService {
                 resolveRelativeValue(toolPath, tool.scheduleTemplatePath()),
                 tool.digest(), tool.riskLevel(),
                 NormalizeUtils.nullSafeList(tool.scriptDependencies()), NormalizeUtils.nullSafeList(tool.pluginDependencies()),
-                installed,
-                installed ? installation.getVersion() : null,
-                installed && !Objects.equals(installation.getVersion(), tool.version()),
                 isTrusted(repository),
-                null, false, false, null
+                null
         );
     }
 
     private RepositoryCatalogTypes.RepositoryEventSourceDescriptor toEventSourceDescriptorWithoutUpstream(RepositoryDefinition repository,
                                                                                                           RepositoryCatalogTypes.EventSourceFile eventSource,
                                                                                                           String eventSourcePath) {
-        String installedSourceId = repository.getId() + "." + eventSource.eventSourceId();
-        RepositoryEventSourceInstallation installation = repos.repositoryEventSourceInstallationRepository().findBySourceId(installedSourceId).orElse(null);
-        boolean installed = installation != null;
         return new RepositoryCatalogTypes.RepositoryEventSourceDescriptor(
                 repository.getId(),
                 eventSource.eventSourceId(),
-                installedSourceId,
                 eventSource.displayName(),
                 eventSource.version(),
                 eventSource.description(),
@@ -777,11 +797,8 @@ public class RepositoryCatalogService {
                 resolveRelativeValue(eventSourcePath, eventSource.triggerTemplatePath()),
                 eventSource.digest(),
                 NormalizeUtils.nullSafeList(eventSource.scriptDependencies()),
-                installed,
-                installed ? installation.getVersion() : null,
-                installed && !Objects.equals(installation.getVersion(), eventSource.version()),
                 isTrusted(repository),
-                null, false, false, null
+                null
         );
     }
 

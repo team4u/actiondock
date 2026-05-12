@@ -5,7 +5,8 @@ import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.EventTriggerScope;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
-import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
@@ -15,7 +16,6 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
@@ -48,22 +48,27 @@ public class RepositoryEventSourceService {
         return publisher.publish(repositoryId, request);
     }
 
-    public RepositoryEventSourceInstallation installEventSource(String repositoryId,
-                                                                String eventSourceId,
-                                                                ToolInstallationOptions options) {
-        return installOrUpdate(repositoryId, eventSourceId, options, false, new LinkedHashSet<>());
+    public RepositoryLocalAsset addLocalAsset(String repositoryId,
+                                             String eventSourceId,
+                                             RepositoryLocalAssetRequest request) {
+        RepositoryLocalAssetMode mode = parseMode(request == null ? null : request.mode());
+        if (mode == RepositoryLocalAssetMode.TRACKED) {
+            EventSourceDefinition source = upstreamSync.createEventSourceWorkingCopy(repositoryId, eventSourceId,
+                    new WorkingCopyRequest(request == null ? null : request.localAssetId()));
+            return repos.repositoryLocalAssetRepository()
+                    .findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, source.getId())
+                    .orElseThrow(() -> new IllegalStateException("本地事件源资产记录未创建: " + source.getId()));
+        }
+        return installOrUpdate(repositoryId, eventSourceId,
+                request == null ? ToolInstallationOptions.DEFAULT : request.toOptions(),
+                false,
+                new LinkedHashSet<>());
     }
 
-    public RepositoryEventSourceInstallation updateEventSource(String repositoryId,
-                                                               String eventSourceId,
-                                                               ToolInstallationOptions options) {
+    public RepositoryLocalAsset updateLocalAsset(String repositoryId,
+                                                String eventSourceId,
+                                                ToolInstallationOptions options) {
         return installOrUpdate(repositoryId, eventSourceId, options, true, new LinkedHashSet<>());
-    }
-
-    public EventSourceDefinition createEventSourceWorkingCopy(String repositoryId,
-                                                              String eventSourceId,
-                                                              WorkingCopyRequest request) {
-        return upstreamSync.createEventSourceWorkingCopy(repositoryId, eventSourceId, request);
     }
 
     public UpstreamStatus getUpstreamStatus(String eventSourceId) {
@@ -78,36 +83,49 @@ public class RepositoryEventSourceService {
         upstreamSync.detachEventSource(eventSourceId);
     }
 
-    public void uninstallEventSource(String installedSourceId) {
-        EventSourceDefinition source = repos.eventSourceRepository().findById(installedSourceId)
-                .orElseThrow(() -> new IllegalArgumentException("已安装事件源不存在: " + installedSourceId));
+    public void uninstallEventSource(String localAssetId) {
+        EventSourceDefinition source = repos.eventSourceRepository().findById(localAssetId)
+                .orElseThrow(() -> new IllegalArgumentException("本地事件源不存在: " + localAssetId));
         for (EventTrigger trigger : repos.eventTriggerRepository().findBySourceId(source.getId())) {
             repos.eventTriggerRepository().deleteById(trigger.getId());
         }
         repos.eventSourceRepository().deleteById(source.getId());
-        repos.repositoryEventSourceInstallationRepository().deleteBySourceId(installedSourceId);
+        repos.repositoryLocalAssetRepository()
+                .findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, localAssetId)
+                .ifPresent(asset -> repos.repositoryLocalAssetRepository().deleteById(asset.getId()));
         configTemplateSyncService.removeManagedConfigTemplates(source.getRepositoryId(), source.getRepositoryEventSourceId());
     }
 
-    private RepositoryEventSourceInstallation installOrUpdate(String repositoryId,
-                                                              String eventSourceId,
-                                                              ToolInstallationOptions options,
-                                                              boolean updateOnly,
-                                                              LinkedHashSet<String> visiting) {
+    private RepositoryLocalAsset installOrUpdate(String repositoryId,
+                                                 String eventSourceId,
+                                                 ToolInstallationOptions options,
+                                                 boolean updateOnly,
+                                                 LinkedHashSet<String> visiting) {
         String installationKey = repositoryId + ":" + eventSourceId;
         if (!visiting.add(installationKey)) {
             throw new IllegalStateException("检测到事件源循环依赖: " + String.join(" -> ", visiting) + " -> " + installationKey);
         }
         try {
             RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repositoryId, eventSourceId);
-            String installedSourceId = detail.descriptor().installedSourceId();
-            ensureNoWorkingCopy(repositoryId, eventSourceId);
-            EventSourceDefinition existing = repos.eventSourceRepository().findById(installedSourceId).orElse(null);
+            RepositoryLocalAsset existingAsset = repos.repositoryLocalAssetRepository()
+                    .findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repositoryId, eventSourceId)
+                    .orElse(null);
+            if (existingAsset != null && existingAsset.getMode() != RepositoryLocalAssetMode.LOCKED) {
+                throw new IllegalArgumentException("上游事件源已添加为可编辑跟踪资产，不能按只读资产更新: " + existingAsset.getLocalAssetId());
+            }
+            if (!updateOnly && existingAsset != null) {
+                throw new IllegalArgumentException("上游事件源已添加到本地: " + existingAsset.getLocalAssetId());
+            }
+            if (updateOnly && existingAsset == null) {
+                throw new IllegalArgumentException("事件源尚未添加为只读本地资产: " + repositoryId + "/" + eventSourceId);
+            }
+            String localAssetId = existingAsset == null ? repositoryId + "." + eventSourceId : existingAsset.getLocalAssetId();
+            EventSourceDefinition existing = repos.eventSourceRepository().findById(localAssetId).orElse(null);
             if (updateOnly && existing == null) {
-                throw new IllegalArgumentException("事件源尚未安装: " + installedSourceId);
+                throw new IllegalArgumentException("事件源尚未添加为只读本地资产: " + repositoryId + "/" + eventSourceId);
             }
             resolveScriptDependencies(detail, options, visiting);
-            return persistInstallation(repositoryId, detail, existing);
+            return persistInstallation(repositoryId, detail, localAssetId, existing);
         } finally {
             visiting.remove(installationKey);
         }
@@ -128,39 +146,33 @@ public class RepositoryEventSourceService {
             if (!options.installScriptDependencies()) {
                 throw new IllegalArgumentException("缺少事件源依赖脚本: " + dependency.getRepositoryId() + "/" + dependency.getToolId());
             }
-            repositoryToolService.installTool(
+            repositoryToolService.addLocalAsset(
                     dependency.getRepositoryId(),
                     dependency.getToolId(),
-                    new ToolInstallationOptions(false, true, options.installPluginDependencies(), options.forcePluginUpgrade())
+                    new RepositoryLocalAssetRequest("LOCKED", null, false, true, options.installPluginDependencies(), options.forcePluginUpgrade())
             );
         }
     }
 
-    private void ensureNoWorkingCopy(String repositoryId, String eventSourceId) {
-        repos.upstreamBindingRepository()
-                .findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repositoryId, eventSourceId)
-                .ifPresent(binding -> {
-                    throw new IllegalArgumentException("上游事件源已有工作副本，不能同时安装只读资产: " + binding.getLocalAssetId());
-                });
-    }
-
-    private RepositoryEventSourceInstallation persistInstallation(String repositoryId,
-                                                                  RepositoryEventSourceDetail detail,
-                                                                  EventSourceDefinition existing) {
+    private RepositoryLocalAsset persistInstallation(String repositoryId,
+                                                     RepositoryEventSourceDetail detail,
+                                                     String localAssetId,
+                                                     EventSourceDefinition existing) {
         LocalDateTime now = LocalDateTime.now();
-        EventSourceDefinition source = buildInstalledEventSource(detail, existing, now);
+        EventSourceDefinition source = buildLockedEventSource(detail, localAssetId, existing, now);
         repos.eventSourceRepository().save(source);
         syncInstalledTriggers(source, detail, now);
         configTemplateSyncService.syncConfigTemplates(repositoryId, detail.descriptor().eventSourceId(), detail.descriptor().version(), detail.configTemplate());
-        return saveInstallationRecord(detail, source, existing, now);
+        return saveLockedLocalAsset(detail, source, existing, now);
     }
 
-    private EventSourceDefinition buildInstalledEventSource(RepositoryEventSourceDetail detail,
-                                                            EventSourceDefinition existing,
-                                                            LocalDateTime now) {
+    private EventSourceDefinition buildLockedEventSource(RepositoryEventSourceDetail detail,
+                                                         String localAssetId,
+                                                         EventSourceDefinition existing,
+                                                         LocalDateTime now) {
         EventSourceDefinition source = new EventSourceDefinition()
-                .setId(detail.descriptor().installedSourceId())
-                .setKey(detail.descriptor().installedSourceId())
+                .setId(localAssetId)
+                .setKey(localAssetId)
                 .setName(detail.descriptor().displayName())
                 .setDescription(detail.eventSource().description())
                 .setScope(EventSourceScope.REPOSITORY)
@@ -226,25 +238,34 @@ public class RepositoryEventSourceService {
         }
     }
 
-    private RepositoryEventSourceInstallation saveInstallationRecord(RepositoryEventSourceDetail detail,
-                                                                     EventSourceDefinition source,
-                                                                     EventSourceDefinition existing,
-                                                                     LocalDateTime now) {
-        RepositoryEventSourceInstallation installation = new RepositoryEventSourceInstallation()
-                .setSourceId(source.getId())
+    private RepositoryLocalAsset saveLockedLocalAsset(RepositoryEventSourceDetail detail,
+                                                      EventSourceDefinition source,
+                                                      EventSourceDefinition existing,
+                                                      LocalDateTime now) {
+        RepositoryLocalAsset previous = repos.repositoryLocalAssetRepository()
+                .findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, source.getId())
+                .orElse(null);
+        return repos.repositoryLocalAssetRepository().save(new RepositoryLocalAsset()
+                .setId(previous == null ? "EVENT_SOURCE:LOCKED:" + source.getId() : previous.getId())
+                .setAssetType(UpstreamAssetType.EVENT_SOURCE)
+                .setLocalAssetId(source.getId())
                 .setRepositoryId(source.getRepositoryId())
-                .setEventSourceId(source.getRepositoryEventSourceId())
-                .setName(source.getName())
+                .setUpstreamAssetId(source.getRepositoryEventSourceId())
+                .setMode(RepositoryLocalAssetMode.LOCKED)
                 .setVersion(detail.descriptor().version())
                 .setLatestVersion(detail.descriptor().version())
+                .setName(source.getName())
                 .setOwner(detail.descriptor().owner())
                 .setDescription(detail.descriptor().description())
-                .setInstalledAt(existing == null ? now : Optional.ofNullable(repos.repositoryEventSourceInstallationRepository()
-                        .findBySourceId(source.getId())
-                        .map(RepositoryEventSourceInstallation::getInstalledAt)
-                        .orElse(null)).orElse(now))
-                .setUpdatedAt(now);
-        return repos.repositoryEventSourceInstallationRepository().save(installation);
+                .setCreatedAt(previous == null ? (existing == null ? now : existing.getCreatedAt()) : previous.getCreatedAt())
+                .setUpdatedAt(now));
+    }
+
+    private RepositoryLocalAssetMode parseMode(String mode) {
+        if (NormalizeUtils.isBlank(mode)) {
+            return RepositoryLocalAssetMode.LOCKED;
+        }
+        return RepositoryLocalAssetMode.valueOf(mode);
     }
 
     private static ProcessorDefinition normalizeProcessor(ProcessorDefinition processor) {

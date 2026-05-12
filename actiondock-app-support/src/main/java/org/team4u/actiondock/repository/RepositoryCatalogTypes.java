@@ -117,6 +117,19 @@ public final class RepositoryCatalogTypes {
         public static final ToolInstallationOptions DEFAULT = new ToolInstallationOptions(false, false, false, false);
     }
 
+    public record RepositoryLocalAssetRequest(
+            String mode,
+            String localAssetId,
+            boolean installSchedules,
+            boolean installScriptDependencies,
+            boolean installPluginDependencies,
+            boolean forcePluginUpgrade
+    ) {
+        public ToolInstallationOptions toOptions() {
+            return new ToolInstallationOptions(installSchedules, installScriptDependencies, installPluginDependencies, forcePluginUpgrade);
+        }
+    }
+
     private RepositoryCatalogTypes() {
     }
 
@@ -148,7 +161,6 @@ public final class RepositoryCatalogTypes {
     public record RepositoryToolDescriptor(
             String repositoryId,
             String toolId,
-            String installedScriptId,
             String displayName,
             String version,
             String description,
@@ -167,28 +179,30 @@ public final class RepositoryCatalogTypes {
             String riskLevel,
             List<ScriptDependency> scriptDependencies,
             List<PluginDependency> pluginDependencies,
-            boolean installed,
-            String installedVersion,
-            boolean updateAvailable,
             boolean trusted,
-            String workingCopyId,
-            boolean upstreamDirty,
-            boolean upstreamRemoteChanged,
-            String upstreamSyncState
+            RepositoryLocalAssetState localState
     ) {
-        public RepositoryToolDescriptor withUpstream(String workingCopyId,
-                                                      boolean dirty,
-                                                      boolean remoteChanged,
-                                                      String syncState) {
+        public RepositoryToolDescriptor withLocalState(RepositoryLocalAssetState localState) {
             return new RepositoryToolDescriptor(
-                    repositoryId, toolId, installedScriptId, displayName, version,
+                    repositoryId, toolId, displayName, version,
                     description, releaseNotes, owner, tags, type, packaging,
                     sourcePath, pythonRequirementsPath, inputSchemaPath, outputSchemaPath,
                     configTemplatePath, scheduleTemplatePath, digest, riskLevel,
-                    scriptDependencies, pluginDependencies, installed, installedVersion,
-                    updateAvailable, trusted, workingCopyId, dirty, remoteChanged, syncState
+                    scriptDependencies, pluginDependencies, trusted, localState
             );
         }
+    }
+
+    public record RepositoryLocalAssetState(
+            String mode,
+            String localAssetId,
+            String version,
+            String latestVersion,
+            boolean updateAvailable,
+            String syncState,
+            boolean dirty,
+            boolean remoteChanged
+    ) {
     }
 
     public record RepositoryToolDetail(
@@ -203,7 +217,6 @@ public final class RepositoryCatalogTypes {
     public record RepositoryEventSourceDescriptor(
             String repositoryId,
             String eventSourceId,
-            String installedSourceId,
             String displayName,
             String version,
             String description,
@@ -215,24 +228,14 @@ public final class RepositoryCatalogTypes {
             String triggerTemplatePath,
             String digest,
             List<ScriptDependency> scriptDependencies,
-            boolean installed,
-            String installedVersion,
-            boolean updateAvailable,
             boolean trusted,
-            String workingCopyId,
-            boolean upstreamDirty,
-            boolean upstreamRemoteChanged,
-            String upstreamSyncState
+            RepositoryLocalAssetState localState
     ) {
-        public RepositoryEventSourceDescriptor withUpstream(String sourceId,
-                                                            boolean dirty,
-                                                            boolean remoteChanged,
-                                                            String syncState) {
+        public RepositoryEventSourceDescriptor withLocalState(RepositoryLocalAssetState localState) {
             return new RepositoryEventSourceDescriptor(
-                    repositoryId, eventSourceId, installedSourceId, displayName, version,
+                    repositoryId, eventSourceId, displayName, version,
                     description, releaseNotes, owner, tags, eventSourcePath, configTemplatePath,
-                    triggerTemplatePath, digest, scriptDependencies, installed, installedVersion,
-                    updateAvailable, trusted, sourceId, dirty, remoteChanged, syncState
+                    triggerTemplatePath, digest, scriptDependencies, trusted, localState
             );
         }
     }

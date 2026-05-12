@@ -72,6 +72,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
     }
 
     @Override
+    @Transactional
     public void deleteById(String id) {
         publishedRevisionRepository.deleteByScriptId(id);
         repository.deleteById(id);

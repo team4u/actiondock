@@ -107,8 +107,9 @@ final class ScriptImpactAnalyzer {
             if (descriptor == null) {
                 continue;
             }
-            addImpact(impacts, scriptsById.get(descriptor.installedScriptId()), "仓库模板声明");
-            addImpact(impacts, scriptsById.get(descriptor.workingCopyId()), "仓库模板声明");
+            if (descriptor.localState() != null) {
+                addImpact(impacts, scriptsById.get(descriptor.localState().localAssetId()), "仓库模板声明");
+            }
         }
     }
 

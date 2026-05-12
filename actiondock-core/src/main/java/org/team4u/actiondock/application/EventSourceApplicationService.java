@@ -12,11 +12,12 @@ import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorResult;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.port.EventSourceRepository;
 import org.team4u.actiondock.domain.port.EventTriggerRepository;
 import org.team4u.actiondock.domain.port.ProcessorEngine;
-import org.team4u.actiondock.domain.port.UpstreamBindingRepository;
+import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,16 +28,16 @@ public class EventSourceApplicationService {
     private final EventSourceRepository eventSourceRepository;
     private final EventTriggerRepository eventTriggerRepository;
     private final ProcessorEngine processorEngine;
-    private final UpstreamBindingRepository upstreamBindingRepository;
+    private final RepositoryLocalAssetRepository repositoryLocalAssetRepository;
 
     public EventSourceApplicationService(EventSourceRepository eventSourceRepository,
                                          EventTriggerRepository eventTriggerRepository,
                                          ProcessorEngine processorEngine,
-                                         UpstreamBindingRepository upstreamBindingRepository) {
+                                         RepositoryLocalAssetRepository repositoryLocalAssetRepository) {
         this.eventSourceRepository = eventSourceRepository;
         this.eventTriggerRepository = eventTriggerRepository;
         this.processorEngine = processorEngine;
-        this.upstreamBindingRepository = upstreamBindingRepository;
+        this.repositoryLocalAssetRepository = repositoryLocalAssetRepository;
     }
 
     public List<EventSourceDefinition> list() {
@@ -198,8 +199,9 @@ public class EventSourceApplicationService {
         for (EventTrigger trigger : eventTriggerRepository.findBySourceId(id)) {
             eventTriggerRepository.deleteById(trigger.getId());
         }
-        upstreamBindingRepository.findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, id)
-                .ifPresent(binding -> upstreamBindingRepository.deleteById(binding.getId()));
+        repositoryLocalAssetRepository.findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, id)
+                .map(RepositoryLocalAsset::getId)
+                .ifPresent(repositoryLocalAssetRepository::deleteById);
         eventSourceRepository.deleteById(id);
     }
 

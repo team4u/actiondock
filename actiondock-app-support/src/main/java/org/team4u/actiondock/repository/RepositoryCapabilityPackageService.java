@@ -16,6 +16,7 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptType;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
 import java.time.LocalDateTime;
@@ -234,11 +235,13 @@ public class RepositoryCapabilityPackageService {
     }
 
     private void resolveToolDependency(RepositoryAiPackageDependency dependency) {
-        String installedScriptId = dependency.repositoryId() + "." + dependency.assetId();
-        if (repos.scriptRepository().findById(installedScriptId).isPresent()) {
-            toolService.updateTool(dependency.repositoryId(), dependency.assetId(), ToolInstallationOptions.DEFAULT);
+        if (repos.repositoryLocalAssetRepository()
+                .findByUpstreamAsset(UpstreamAssetType.SCRIPT, dependency.repositoryId(), dependency.assetId())
+                .isPresent()) {
+            toolService.updateLocalAsset(dependency.repositoryId(), dependency.assetId(), ToolInstallationOptions.DEFAULT);
         } else {
-            toolService.installTool(dependency.repositoryId(), dependency.assetId(), ToolInstallationOptions.DEFAULT);
+            toolService.addLocalAsset(dependency.repositoryId(), dependency.assetId(),
+                    new RepositoryLocalAssetRequest("LOCKED", null, false, false, false, false));
         }
     }
 

@@ -1,6 +1,7 @@
 package org.team4u.actiondock.repository;
 
-import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
@@ -13,7 +14,6 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -49,20 +49,27 @@ public class RepositoryToolService {
         this.toolRepositoryPublisher = new ToolRepositoryPublisher(catalog, repos, services);
     }
 
-    public RepositoryToolInstallation installTool(String repositoryId,
-                                                 String toolId,
-                                                 ToolInstallationOptions options) {
-        return installOrUpdateTool(repositoryId, toolId, options, false, new LinkedHashSet<>());
+    public RepositoryLocalAsset addLocalAsset(String repositoryId,
+                                             String toolId,
+                                             RepositoryLocalAssetRequest request) {
+        RepositoryLocalAssetMode mode = parseMode(request == null ? null : request.mode());
+        if (mode == RepositoryLocalAssetMode.TRACKED) {
+            ScriptDefinition script = upstreamSync.createToolWorkingCopy(repositoryId, toolId,
+                    new WorkingCopyRequest(request == null ? null : request.localAssetId()));
+            return repos.repositoryLocalAssetRepository()
+                    .findByLocalAsset(UpstreamAssetType.SCRIPT, script.getId())
+                    .orElseThrow(() -> new IllegalStateException("本地脚本资产记录未创建: " + script.getId()));
+        }
+        return installOrUpdateTool(repositoryId, toolId,
+                request == null ? ToolInstallationOptions.DEFAULT : request.toOptions(),
+                false,
+                new LinkedHashSet<>());
     }
 
-    public RepositoryToolInstallation updateTool(String repositoryId,
-                                                 String toolId,
-                                                 ToolInstallationOptions options) {
+    public RepositoryLocalAsset updateLocalAsset(String repositoryId,
+                                                String toolId,
+                                                ToolInstallationOptions options) {
         return installOrUpdateTool(repositoryId, toolId, options, true, new LinkedHashSet<>());
-    }
-
-    public ScriptDefinition createToolWorkingCopy(String repositoryId, String toolId, WorkingCopyRequest request) {
-        return upstreamSync.createToolWorkingCopy(repositoryId, toolId, request);
     }
 
     public UpstreamStatus getUpstreamStatus(String scriptId) {
@@ -77,19 +84,21 @@ public class RepositoryToolService {
         upstreamSync.detachScript(scriptId);
     }
 
-    public void uninstallTool(String installedScriptId) {
-        ScriptDefinition definition = repos.scriptRepository().findById(installedScriptId)
-                .orElseThrow(() -> new IllegalArgumentException("已安装工具不存在: " + installedScriptId));
+    public void uninstallTool(String localAssetId) {
+        ScriptDefinition definition = repos.scriptRepository().findById(localAssetId)
+                .orElseThrow(() -> new IllegalArgumentException("本地工具不存在: " + localAssetId));
         if (definition.getScope() != ScriptScope.REPOSITORY) {
             throw new IllegalArgumentException("仅支持卸载仓库工具");
         }
         repos.scriptScheduleRepository().findAll().stream()
-                .filter(item -> installedScriptId.equals(item.getRepositoryToolId()))
+                .filter(item -> localAssetId.equals(item.getRepositoryToolId()))
                 .map(ScriptSchedule::getId)
                 .toList()
                 .forEach(repos.scriptScheduleRepository()::deleteById);
-        repos.scriptRepository().deleteById(installedScriptId);
-        repos.repositoryToolInstallationRepository().deleteByToolId(installedScriptId);
+        repos.scriptRepository().deleteById(localAssetId);
+        repos.repositoryLocalAssetRepository()
+                .findByLocalAsset(UpstreamAssetType.SCRIPT, localAssetId)
+                .ifPresent(asset -> repos.repositoryLocalAssetRepository().deleteById(asset.getId()));
     }
 
     public RepositoryPublishConfigPreview previewPublishConfig(RepositoryPublishConfigPreviewRequest request) {
@@ -112,25 +121,36 @@ public class RepositoryToolService {
         return toolRepositoryPublisher.publish(repositoryId, request);
     }
 
-    private RepositoryToolInstallation installOrUpdateTool(String repositoryId,
-                                                           String toolId,
-                                                           ToolInstallationOptions options,
-                                                           boolean updateOnly,
-                                                           LinkedHashSet<String> visiting) {
+    private RepositoryLocalAsset installOrUpdateTool(String repositoryId,
+                                                     String toolId,
+                                                     ToolInstallationOptions options,
+                                                     boolean updateOnly,
+                                                     LinkedHashSet<String> visiting) {
         String installationKey = repositoryId + ":" + toolId;
         if (!visiting.add(installationKey)) {
             throw new IllegalStateException("检测到脚本循环依赖: " + String.join(" -> ", visiting) + " -> " + installationKey);
         }
         try {
             RepositoryToolDetail detail = catalog.getRepositoryTool(repositoryId, toolId);
-            String installedScriptId = detail.descriptor().installedScriptId();
-            ensureNoWorkingCopy(repositoryId, toolId);
-            ScriptDefinition existing = repos.scriptRepository().findById(installedScriptId).orElse(null);
+            RepositoryLocalAsset existingAsset = repos.repositoryLocalAssetRepository()
+                    .findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, toolId)
+                    .orElse(null);
+            if (existingAsset != null && existingAsset.getMode() != RepositoryLocalAssetMode.LOCKED) {
+                throw new IllegalArgumentException("上游脚本已添加为可编辑跟踪资产，不能按只读资产更新: " + existingAsset.getLocalAssetId());
+            }
+            if (!updateOnly && existingAsset != null) {
+                throw new IllegalArgumentException("上游脚本已添加到本地: " + existingAsset.getLocalAssetId());
+            }
+            if (updateOnly && existingAsset == null) {
+                throw new IllegalArgumentException("工具尚未添加为只读本地资产: " + repositoryId + "/" + toolId);
+            }
+            String localAssetId = existingAsset == null ? repositoryId + "." + toolId : existingAsset.getLocalAssetId();
+            ScriptDefinition existing = repos.scriptRepository().findById(localAssetId).orElse(null);
             if (updateOnly && existing == null) {
-                throw new IllegalArgumentException("工具尚未安装: " + installedScriptId);
+                throw new IllegalArgumentException("工具尚未添加为只读本地资产: " + repositoryId + "/" + toolId);
             }
             resolveAllDependencies(repositoryId, detail, options, visiting);
-            return persistToolInstallation(repositoryId, detail, existing, options);
+            return persistLockedLocalAsset(repositoryId, detail, localAssetId, existing, options);
         } finally {
             visiting.remove(installationKey);
         }
@@ -150,48 +170,30 @@ public class RepositoryToolService {
         pluginService.resolvePluginDependencies(repositoryId, detail.descriptor().pluginDependencies(), options.installPluginDependencies(), options.forcePluginUpgrade());
     }
 
-    private RepositoryToolInstallation persistToolInstallation(String repositoryId,
-                                                               RepositoryToolDetail detail,
-                                                               ScriptDefinition existing,
-                                                               ToolInstallationOptions options) {
+    private RepositoryLocalAsset persistLockedLocalAsset(String repositoryId,
+                                                         RepositoryToolDetail detail,
+                                                         String localAssetId,
+                                                         ScriptDefinition existing,
+                                                         ToolInstallationOptions options) {
         LocalDateTime now = LocalDateTime.now();
-        ScriptDefinition definition = buildInstalledScriptDefinition(repositoryId, detail, existing, now);
+        ScriptDefinition definition = buildLockedScriptDefinition(repositoryId, detail, localAssetId, existing, now);
         repos.scriptRepository().save(definition);
         configTemplateSyncService.syncConfigTemplates(repositoryId, detail.descriptor().toolId(), detail.descriptor().version(), detail.configTemplate());
         if (options.installSchedules()) {
             syncScheduleTemplates(definition, detail.scheduleTemplate(), now);
         }
-        return saveToolInstallationRecord(definition, existing, detail, now);
+        return saveLockedLocalAsset(definition, existing, detail, now);
     }
 
-    private ScriptDefinition buildInstalledScriptDefinition(String repositoryId,
-                                                             RepositoryToolDetail detail,
-                                                             ScriptDefinition existing,
-                                                             LocalDateTime now) {
+    private ScriptDefinition buildLockedScriptDefinition(String repositoryId,
+                                                         RepositoryToolDetail detail,
+                                                         String localAssetId,
+                                                         ScriptDefinition existing,
+                                                         LocalDateTime now) {
         return UpstreamSyncService.applyLifecycle(
-                upstreamSync.buildBaseScriptDefinition(detail.descriptor().installedScriptId(), detail, repositoryId),
+                upstreamSync.buildBaseScriptDefinition(localAssetId, detail, repositoryId),
                 existing, ScriptScope.REPOSITORY, false, now)
                 .setVersion(existing == null ? 1 : (existing.getVersion() == null ? 1 : existing.getVersion() + 1));
-    }
-
-    private RepositoryToolInstallation saveToolInstallationRecord(ScriptDefinition definition,
-                                                                   ScriptDefinition existing,
-                                                                   RepositoryToolDetail detail,
-                                                                   LocalDateTime now) {
-        String installedScriptId = definition.getId();
-        RepositoryToolInstallation installation = new RepositoryToolInstallation()
-                .setToolId(installedScriptId)
-                .setRepositoryId(definition.getRepositoryId())
-                .setName(definition.getName())
-                .setVersion(detail.descriptor().version())
-                .setLatestVersion(detail.descriptor().version())
-                .setOwner(definition.getOwner())
-                .setDescription(definition.getDescription())
-                .setInstalledAt(existing == null ? now : Optional.ofNullable(repos.repositoryToolInstallationRepository().findByToolId(installedScriptId)
-                        .map(RepositoryToolInstallation::getInstalledAt)
-                        .orElse(null)).orElse(now))
-                .setUpdatedAt(now);
-        return repos.repositoryToolInstallationRepository().save(installation);
     }
 
     private void resolveScriptDependencies(List<ScriptDependency> dependencies,
@@ -234,12 +236,35 @@ public class RepositoryToolService {
         }
     }
 
-    private void ensureNoWorkingCopy(String repositoryId, String toolId) {
-        repos.upstreamBindingRepository()
-                .findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, toolId)
-                .ifPresent(binding -> {
-                    throw new IllegalArgumentException("上游脚本已有工作副本，不能同时安装只读资产: " + binding.getLocalAssetId());
-                });
+    private RepositoryLocalAsset saveLockedLocalAsset(ScriptDefinition definition,
+                                                      ScriptDefinition existing,
+                                                      RepositoryToolDetail detail,
+                                                      LocalDateTime now) {
+        String localAssetId = definition.getId();
+        RepositoryLocalAsset previous = repos.repositoryLocalAssetRepository()
+                .findByLocalAsset(UpstreamAssetType.SCRIPT, localAssetId)
+                .orElse(null);
+        return repos.repositoryLocalAssetRepository().save(new RepositoryLocalAsset()
+                .setId(previous == null ? "SCRIPT:LOCKED:" + localAssetId : previous.getId())
+                .setAssetType(UpstreamAssetType.SCRIPT)
+                .setLocalAssetId(localAssetId)
+                .setRepositoryId(definition.getRepositoryId())
+                .setUpstreamAssetId(definition.getRepositoryToolId())
+                .setMode(RepositoryLocalAssetMode.LOCKED)
+                .setVersion(detail.descriptor().version())
+                .setLatestVersion(detail.descriptor().version())
+                .setName(definition.getName())
+                .setOwner(definition.getOwner())
+                .setDescription(definition.getDescription())
+                .setCreatedAt(previous == null ? (existing == null ? now : existing.getCreatedAt()) : previous.getCreatedAt())
+                .setUpdatedAt(now));
+    }
+
+    private RepositoryLocalAssetMode parseMode(String mode) {
+        if (NormalizeUtils.isBlank(mode)) {
+            return RepositoryLocalAssetMode.LOCKED;
+        }
+        return RepositoryLocalAssetMode.valueOf(mode);
     }
 
     private void syncScheduleTemplates(ScriptDefinition definition, List<ScheduleTemplateItem> templates, LocalDateTime now) {

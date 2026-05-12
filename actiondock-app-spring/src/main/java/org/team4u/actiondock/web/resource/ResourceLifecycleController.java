@@ -17,7 +17,6 @@ import org.team4u.actiondock.shared.NormalizeUtils;
 import org.team4u.actiondock.web.common.ApiResponse;
 import org.team4u.actiondock.web.repository.RepositoryInstallRequest;
 import org.team4u.actiondock.web.repository.RepositoryPluginInstallRequest;
-import org.team4u.actiondock.web.script.ScriptViewMapper;
 
 import java.util.Locale;
 
@@ -36,7 +35,8 @@ public class ResourceLifecycleController {
 
     private static final String OP_INSTALL = "install";
     private static final String OP_UPDATE = "update";
-    private static final String OP_WORKING_COPY = "working-copy";
+    private static final String OP_ADD_LOCAL = "add-local";
+    private static final String OP_UPDATE_LOCAL = "update-local";
     private static final String OP_PUBLISH = "publish";
     private static final String OP_PREVIEW = "preview";
     private static final String OP_UNINSTALL = "uninstall";
@@ -89,16 +89,11 @@ public class ResourceLifecycleController {
 
     private Object executeRepositoryTool(String operation, ResourceLifecycleRequest request) {
         return switch (operation) {
-            case OP_INSTALL -> repositoryToolService.installTool(normalizeRepositoryId(request),
+            case OP_ADD_LOCAL -> repositoryToolService.addLocalAsset(normalizeRepositoryId(request),
+                    normalizeResourceId(request, "toolId 不能为空"),
+                    convertPayload(request.getPayload(), RepositoryCatalogTypes.RepositoryLocalAssetRequest.class));
+            case OP_UPDATE_LOCAL -> repositoryToolService.updateLocalAsset(normalizeRepositoryId(request),
                     normalizeResourceId(request, "toolId 不能为空"), toolOptions(request.getPayload()));
-            case OP_UPDATE -> repositoryToolService.updateTool(normalizeRepositoryId(request),
-                    normalizeResourceId(request, "toolId 不能为空"), toolOptions(request.getPayload()));
-            case OP_WORKING_COPY -> ScriptViewMapper.toView(
-                    repositoryToolService.createToolWorkingCopy(normalizeRepositoryId(request),
-                            normalizeResourceId(request, "toolId 不能为空"),
-                            convertPayload(request.getPayload(), RepositoryCatalogTypes.WorkingCopyRequest.class)),
-                    true
-            );
             case OP_PUBLISH -> repositoryToolService.publishTool(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPublishRequest.class));
             case OP_PREVIEW -> repositoryToolService.previewPublishConfig(
@@ -126,13 +121,11 @@ public class ResourceLifecycleController {
 
     private Object executeRepositoryEventSource(String operation, ResourceLifecycleRequest request) {
         return switch (operation) {
-            case OP_INSTALL -> repositoryEventSourceService.installEventSource(normalizeRepositoryId(request),
-                    normalizeResourceId(request, "eventSourceId 不能为空"), toolOptions(request.getPayload()));
-            case OP_UPDATE -> repositoryEventSourceService.updateEventSource(normalizeRepositoryId(request),
-                    normalizeResourceId(request, "eventSourceId 不能为空"), toolOptions(request.getPayload()));
-            case OP_WORKING_COPY -> repositoryEventSourceService.createEventSourceWorkingCopy(normalizeRepositoryId(request),
+            case OP_ADD_LOCAL -> repositoryEventSourceService.addLocalAsset(normalizeRepositoryId(request),
                     normalizeResourceId(request, "eventSourceId 不能为空"),
-                    convertPayload(request.getPayload(), RepositoryCatalogTypes.WorkingCopyRequest.class));
+                    convertPayload(request.getPayload(), RepositoryCatalogTypes.RepositoryLocalAssetRequest.class));
+            case OP_UPDATE_LOCAL -> repositoryEventSourceService.updateLocalAsset(normalizeRepositoryId(request),
+                    normalizeResourceId(request, "eventSourceId 不能为空"), toolOptions(request.getPayload()));
             case OP_PUBLISH -> repositoryEventSourceService.publishEventSource(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryEventSourcePublishRequest.class));
             case OP_PREVIEW -> repositoryEventSourceService.previewPublish(

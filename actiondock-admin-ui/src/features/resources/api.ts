@@ -7,15 +7,15 @@ import type {
   CapabilityPackagePublishPreviewRequest,
   CapabilityPackagePublishRequest,
   UpstreamStatus,
-  EventSourceDefinition,
   RepositoryDefinition,
   RepositoryEventSourceDescriptor,
   RepositoryEventSourceDetail,
-  RepositoryEventSourceInstallation,
   RepositoryEventSourcePublishPreview,
   RepositoryEventSourcePublishPreviewRequest,
   RepositoryEventSourcePublishRequest,
   RepositoryInstallRequest,
+  RepositoryLocalAsset,
+  RepositoryLocalAssetRequest,
   RepositoryPluginDescriptor,
   RepositoryPluginInstallRequest,
   RepositoryPluginInstallResult,
@@ -135,76 +135,52 @@ export function runResourceLifecycleOperation<TResult = unknown, TPayload = Reco
   });
 }
 
-export function installRepositoryTool(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<void> {
+export function addRepositoryToolLocalAsset(repositoryId: string, toolId: string, payload: RepositoryLocalAssetRequest): Promise<RepositoryLocalAsset> {
   return runResourceLifecycleOperation({
     resourceType: "REPOSITORY_TOOL",
-    operation: "install",
+    operation: "add-local",
     repositoryId,
     resourceId: toolId,
     payload
-  }).then(() => undefined);
+  }).then((operation) => operation.result as RepositoryLocalAsset);
 }
 
-export function updateRepositoryTool(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<void> {
+export function updateRepositoryToolLocalAsset(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<RepositoryLocalAsset> {
   return runResourceLifecycleOperation({
     resourceType: "REPOSITORY_TOOL",
-    operation: "update",
+    operation: "update-local",
     repositoryId,
     resourceId: toolId,
     payload
-  }).then(() => undefined);
+  }).then((operation) => operation.result as RepositoryLocalAsset);
 }
 
-export function installRepositoryEventSource(
+export function addRepositoryEventSourceLocalAsset(
+  repositoryId: string,
+  eventSourceId: string,
+  payload: RepositoryLocalAssetRequest
+): Promise<RepositoryLocalAsset> {
+  return runResourceLifecycleOperation<RepositoryLocalAsset, RepositoryLocalAssetRequest>({
+    resourceType: "REPOSITORY_EVENT_SOURCE",
+    operation: "add-local",
+    repositoryId,
+    resourceId: eventSourceId,
+    payload
+  }).then((operation) => operation.result);
+}
+
+export function updateRepositoryEventSourceLocalAsset(
   repositoryId: string,
   eventSourceId: string,
   payload: RepositoryInstallRequest
-): Promise<RepositoryEventSourceInstallation> {
-  return runResourceLifecycleOperation<RepositoryEventSourceInstallation, RepositoryInstallRequest>({
+): Promise<RepositoryLocalAsset> {
+  return runResourceLifecycleOperation<RepositoryLocalAsset, RepositoryInstallRequest>({
     resourceType: "REPOSITORY_EVENT_SOURCE",
-    operation: "install",
+    operation: "update-local",
     repositoryId,
     resourceId: eventSourceId,
     payload
   }).then((operation) => operation.result);
-}
-
-export function updateRepositoryEventSource(
-  repositoryId: string,
-  eventSourceId: string,
-  payload: RepositoryInstallRequest
-): Promise<RepositoryEventSourceInstallation> {
-  return runResourceLifecycleOperation<RepositoryEventSourceInstallation, RepositoryInstallRequest>({
-    resourceType: "REPOSITORY_EVENT_SOURCE",
-    operation: "update",
-    repositoryId,
-    resourceId: eventSourceId,
-    payload
-  }).then((operation) => operation.result);
-}
-
-export function createRepositoryEventSourceWorkingCopy(
-  repositoryId: string,
-  eventSourceId: string,
-  payload: { id?: string }
-): Promise<EventSourceDefinition> {
-  return runResourceLifecycleOperation<EventSourceDefinition, { id?: string }>({
-    resourceType: "REPOSITORY_EVENT_SOURCE",
-    operation: "working-copy",
-    repositoryId,
-    resourceId: eventSourceId,
-    payload
-  }).then((operation) => operation.result);
-}
-
-export function createRepositoryToolWorkingCopy(repositoryId: string, toolId: string, payload: { id?: string }): Promise<ScriptDefinition> {
-  return runResourceLifecycleOperation<ScriptDefinition, { id?: string }>({
-    resourceType: "REPOSITORY_TOOL",
-    operation: "working-copy",
-    repositoryId,
-    resourceId: toolId,
-    payload
-  }).then((operation) => normalizeScriptDefinition(operation.result));
 }
 
 export function getUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {

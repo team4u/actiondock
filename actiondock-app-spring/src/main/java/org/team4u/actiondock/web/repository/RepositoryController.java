@@ -14,10 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
-import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
-import org.team4u.actiondock.domain.model.EventSourceDefinition;
-import org.team4u.actiondock.domain.model.RepositoryToolInstallation;
-import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
@@ -27,8 +24,6 @@ import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositorySkillService;
 import org.team4u.actiondock.repository.RepositoryToolService;
 import org.team4u.actiondock.web.common.ApiResponse;
-import org.team4u.actiondock.web.script.ScriptDocumentView;
-import org.team4u.actiondock.web.script.ScriptViewMapper;
 
 import java.io.IOException;
 import java.util.List;
@@ -157,13 +152,6 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.getRepositoryEventSource(id, eventSourceId));
     }
 
-    @PostMapping("/{id}/event-sources/{eventSourceId}/working-copy")
-    public ApiResponse<EventSourceDefinition> createEventSourceWorkingCopy(@PathVariable String id,
-                                                                           @PathVariable String eventSourceId,
-                                                                           @RequestBody(required = false) RepositoryCatalogTypes.WorkingCopyRequest request) {
-        return ApiResponse.success(repositoryEventSourceService.createEventSourceWorkingCopy(id, eventSourceId, request), "已创建事件源工作副本");
-    }
-
     @GetMapping("/packages")
     public ApiResponse<List<RepositoryCatalogTypes.CapabilityPackageDescriptor>> listAllPackages() {
         return ApiResponse.success(repositoryCatalogService.listAllCapabilityPackages());
@@ -249,46 +237,34 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.getRepositoryTool(id, toolId));
     }
 
-    /**
-     * 从仓库安装指定工具到本地。
-     *
-     * @param id 仓库 ID
-     * @param toolId 工具 ID
-     * @param request 安装请求，可指定是否同时安装调度配置
-     * @return API 响应，包含安装记录
-     */
-    @PostMapping("/{id}/tools/{toolId}/install")
-    public ApiResponse<RepositoryToolInstallation> install(@PathVariable String id,
-                                                     @PathVariable String toolId,
-                                                     @RequestBody(required = false) RepositoryInstallRequest request) {
-        return resolveOptionsAndApply(request,
-                options -> repositoryToolService.installTool(id, toolId, options), "安装完成");
+    @PostMapping("/{id}/tools/{toolId}/local-assets")
+    public ApiResponse<RepositoryLocalAsset> addToolLocalAsset(@PathVariable String id,
+                                                               @PathVariable String toolId,
+                                                               @RequestBody(required = false) RepositoryCatalogTypes.RepositoryLocalAssetRequest request) {
+        return ApiResponse.success(repositoryToolService.addLocalAsset(id, toolId, request), "已添加到本地");
     }
 
-    /**
-     * 更新已安装的仓库工具到最新版本。
-     *
-     * @param id 仓库 ID
-     * @param toolId 工具 ID
-     * @param request 更新请求，可指定是否同时更新调度配置
-     * @return API 响应，包含更新后的安装记录
-     */
-    @PostMapping("/{id}/tools/{toolId}/update")
-    public ApiResponse<RepositoryToolInstallation> update(@PathVariable String id,
-                                                    @PathVariable String toolId,
-                                                    @RequestBody(required = false) RepositoryInstallRequest request) {
+    @PostMapping("/{id}/tools/{toolId}/local-assets/update")
+    public ApiResponse<RepositoryLocalAsset> updateToolLocalAsset(@PathVariable String id,
+                                                                  @PathVariable String toolId,
+                                                                  @RequestBody(required = false) RepositoryInstallRequest request) {
         return resolveOptionsAndApply(request,
-                options -> repositoryToolService.updateTool(id, toolId, options), "更新完成");
+                options -> repositoryToolService.updateLocalAsset(id, toolId, options), "本地资产已更新");
     }
 
-    @PostMapping("/{id}/tools/{toolId}/working-copy")
-    public ApiResponse<ScriptDocumentView> createToolWorkingCopy(@PathVariable String id,
-                                                                 @PathVariable String toolId,
-                                                                 @RequestBody(required = false) RepositoryCatalogTypes.WorkingCopyRequest request) {
-        return ApiResponse.success(
-                ScriptViewMapper.toView(repositoryToolService.createToolWorkingCopy(id, toolId, request), true),
-                "已创建脚本工作副本"
-        );
+    @PostMapping("/{id}/event-sources/{eventSourceId}/local-assets")
+    public ApiResponse<RepositoryLocalAsset> addEventSourceLocalAsset(@PathVariable String id,
+                                                                      @PathVariable String eventSourceId,
+                                                                      @RequestBody(required = false) RepositoryCatalogTypes.RepositoryLocalAssetRequest request) {
+        return ApiResponse.success(repositoryEventSourceService.addLocalAsset(id, eventSourceId, request), "已添加到本地");
+    }
+
+    @PostMapping("/{id}/event-sources/{eventSourceId}/local-assets/update")
+    public ApiResponse<RepositoryLocalAsset> updateEventSourceLocalAsset(@PathVariable String id,
+                                                                         @PathVariable String eventSourceId,
+                                                                         @RequestBody(required = false) RepositoryInstallRequest request) {
+        return resolveOptionsAndApply(request,
+                options -> repositoryEventSourceService.updateLocalAsset(id, eventSourceId, options), "本地资产已更新");
     }
 
     /**

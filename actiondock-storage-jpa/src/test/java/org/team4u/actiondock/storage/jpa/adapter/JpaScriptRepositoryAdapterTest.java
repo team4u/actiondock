@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class JpaScriptRepositoryAdapterTest {
@@ -99,5 +100,21 @@ class JpaScriptRepositoryAdapterTest {
         assertThat(found.getPublishedRevision().getPluginDependencies()).hasSize(1);
         assertThat(found.getOutputSchema()).containsKey("properties");
         assertThat(found.getVersion()).isEqualTo(3);
+    }
+
+    @Test
+    void deleteRemovesPublishedRevisionsBeforeDeletingScript() {
+        SpringDataScriptEntityRepository repository = mock(SpringDataScriptEntityRepository.class);
+        SpringDataPublishedScriptRevisionRepository publishedRevisionRepository = mock(SpringDataPublishedScriptRevisionRepository.class);
+        JpaScriptRepositoryAdapter adapter = new JpaScriptRepositoryAdapter(
+                repository,
+                publishedRevisionRepository,
+                new JacksonJsonCodec(new ObjectMapper())
+        );
+
+        adapter.deleteById("script-1");
+
+        verify(publishedRevisionRepository).deleteByScriptId("script-1");
+        verify(repository).deleteById("script-1");
     }
 }

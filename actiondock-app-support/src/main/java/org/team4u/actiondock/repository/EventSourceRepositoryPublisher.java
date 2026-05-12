@@ -8,11 +8,12 @@ import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryEventTriggerBinding;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
-import org.team4u.actiondock.domain.model.UpstreamBinding;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
 import java.nio.file.Path;
@@ -44,8 +45,9 @@ final class EventSourceRepositoryPublisher {
         WritableRepositorySession session = catalog.openWritableRepositorySession(repositoryId);
         RepositoryDefinition repository = session.repository();
         EventSourceDefinition source = requireSource(request.sourceId());
-        UpstreamBinding upstreamBinding = repos.upstreamBindingRepository()
+        RepositoryLocalAsset upstreamBinding = repos.repositoryLocalAssetRepository()
                 .findByLocalAsset(UpstreamAssetType.EVENT_SOURCE, source.getId())
+                .filter(asset -> asset.getMode() == RepositoryLocalAssetMode.TRACKED)
                 .orElse(null);
         if (upstreamBinding != null && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId) && !request.force()) {
             assertUpstreamPublishSafe(source, repository, upstreamBinding);
@@ -75,7 +77,7 @@ final class EventSourceRepositoryPublisher {
         if (upstreamBinding != null
                 && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId)
                 && Objects.equals(upstreamBinding.getUpstreamAssetId(), eventSourceId)) {
-            updateUpstreamBinding(upstreamBinding, publishedDetail);
+            updateTrackedLocalAsset(upstreamBinding, publishedDetail);
         }
         return publishedDetail.descriptor();
     }
@@ -107,7 +109,7 @@ final class EventSourceRepositoryPublisher {
 
     private void assertUpstreamPublishSafe(EventSourceDefinition source,
                                            RepositoryDefinition repository,
-                                           UpstreamBinding binding) {
+                                           RepositoryLocalAsset binding) {
         RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveEventSourceState(repository, detail);
         List<EventTrigger> triggers = repos.eventTriggerRepository().findBySourceId(source.getId());
@@ -118,10 +120,11 @@ final class EventSourceRepositoryPublisher {
         }
     }
 
-    private void updateUpstreamBinding(UpstreamBinding binding, RepositoryEventSourceDetail detail) {
+    private void updateTrackedLocalAsset(RepositoryLocalAsset binding, RepositoryEventSourceDetail detail) {
         ToolSourceState state = catalog.resolveEventSourceState(catalog.getRepository(binding.getRepositoryId()), detail);
-        repos.upstreamBindingRepository().save(binding
-                .setUpstreamVersion(detail.descriptor().version())
+        repos.repositoryLocalAssetRepository().save(binding
+                .setVersion(detail.descriptor().version())
+                .setLatestVersion(detail.descriptor().version())
                 .setSourcePath(state.path())
                 .setBaseCommit(state.commit())
                 .setBaseDigest(state.digest())

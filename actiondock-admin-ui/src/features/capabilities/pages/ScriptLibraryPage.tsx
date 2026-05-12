@@ -42,7 +42,7 @@ import {
   pullUpstreamScript,
   syncRepository,
   uninstallInstalledTool,
-  updateRepositoryTool
+  updateRepositoryToolLocalAsset
 } from "../../resources/api";
 import { ScriptImportDiffModal, type ScriptImportDiffItem } from "../../../components/diff/ScriptImportDiffModal";
 import { ConfirmDangerAction } from "../../../components/common/ConfirmDangerAction";
@@ -176,9 +176,8 @@ export function ScriptLibraryPage() {
   const descriptorMap = useMemo(() => {
     const next = new Map<string, RepositoryToolDescriptor>();
     toolDescriptors.forEach((item) => {
-      next.set(item.installedScriptId, item);
-      if (item.workingCopyId) {
-        next.set(item.workingCopyId, item);
+      if (item.localState) {
+        next.set(item.localState.localAssetId, item);
       }
     });
     return next;
@@ -203,13 +202,13 @@ export function ScriptLibraryPage() {
       if (statusFilter === "PUBLISHED" && !published) {
         return false;
       }
-      if (statusFilter === "UPDATE_AVAILABLE" && !descriptor?.updateAvailable) {
+      if (statusFilter === "UPDATE_AVAILABLE" && !descriptor?.localState?.updateAvailable) {
         return false;
       }
-      if (statusFilter === "REMOTE_CHANGES" && descriptor?.upstreamSyncState !== "REMOTE_CHANGES") {
+      if (statusFilter === "REMOTE_CHANGES" && descriptor?.localState?.syncState !== "REMOTE_CHANGES") {
         return false;
       }
-      if (statusFilter === "DIVERGED" && descriptor?.upstreamSyncState !== "DIVERGED") {
+      if (statusFilter === "DIVERGED" && descriptor?.localState?.syncState !== "DIVERGED") {
         return false;
       }
       if (statusFilter === "READ_ONLY" && script.scope !== "REPOSITORY") {
@@ -444,7 +443,7 @@ export function ScriptLibraryPage() {
 
     setActionKey(`update:${tool.id}`);
     try {
-      await updateRepositoryTool(tool.repositoryId, tool.repositoryToolId, {
+      await updateRepositoryToolLocalAsset(tool.repositoryId, tool.repositoryToolId, {
         installSchedules,
         installScriptDependencies,
         installPluginDependencies
@@ -490,12 +489,14 @@ export function ScriptLibraryPage() {
         try {
           const repositoryTools = await listToolsByRepository(repositoryId);
           updateTargets.push(
-            ...repositoryTools.filter((tool) => tool.installed && tool.updateAvailable)
+            ...repositoryTools.filter((tool) =>
+              tool.localState?.mode === "LOCKED" && tool.localState.updateAvailable
+            )
           );
           upstreamPullTargets.push(
             ...repositoryTools.filter((tool) =>
-              Boolean(tool.workingCopyId)
-              && tool.upstreamSyncState === "REMOTE_CHANGES"
+              tool.localState?.mode === "TRACKED"
+              && tool.localState.syncState === "REMOTE_CHANGES"
             )
           );
         } catch (error) {
@@ -505,24 +506,24 @@ export function ScriptLibraryPage() {
 
       for (const tool of updateTargets) {
         try {
-          await updateRepositoryTool(tool.repositoryId, tool.toolId, {
+          await updateRepositoryToolLocalAsset(tool.repositoryId, tool.toolId, {
             installSchedules: true,
             installScriptDependencies: true,
             installPluginDependencies: true
           });
           updatedCount += 1;
         } catch (error) {
-          toolFailures.push(`${tool.installedScriptId}: ${getErrorMessage(error, "更新失败")}`);
+          toolFailures.push(`${tool.localState?.localAssetId ?? tool.toolId}: ${getErrorMessage(error, "更新失败")}`);
         }
       }
 
       let pulledCount = 0;
       for (const tool of upstreamPullTargets) {
         try {
-          await pullUpstreamScript(tool.workingCopyId!);
+          await pullUpstreamScript(tool.localState!.localAssetId);
           pulledCount += 1;
         } catch (error) {
-          toolFailures.push(`${tool.workingCopyId}: ${getErrorMessage(error, "拉取失败")}`);
+          toolFailures.push(`${tool.localState?.localAssetId ?? tool.toolId}: ${getErrorMessage(error, "拉取失败")}`);
         }
       }
 
@@ -585,8 +586,8 @@ export function ScriptLibraryPage() {
                 {isScriptPublished(record) ? "已发布" : "草稿"}
               </Tag>
             )}
-            {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
-            {descriptor?.workingCopyId === record.id ? <UpstreamSyncTag state={descriptor?.upstreamSyncState} /> : null}
+            {descriptor?.localState?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
+            {descriptor?.localState?.mode === "TRACKED" ? <UpstreamSyncTag state={descriptor.localState.syncState} /> : null}
             {hasScriptDraftChanges(record) ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
@@ -627,7 +628,7 @@ export function ScriptLibraryPage() {
                 size="small"
                 icon={<SyncOutlined />}
                 loading={actionKey === `update:${record.id}`}
-                disabled={!descriptorMap.get(record.id)?.updateAvailable}
+                disabled={!descriptorMap.get(record.id)?.localState?.updateAvailable}
                 onClick={() => void handleUpdate(record)}
               >
                 更新

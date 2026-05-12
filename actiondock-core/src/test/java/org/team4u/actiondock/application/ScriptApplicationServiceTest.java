@@ -3,17 +3,17 @@ package org.team4u.actiondock.application;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.PluginDependency;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
-import org.team4u.actiondock.domain.model.UpstreamBinding;
+import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
-import org.team4u.actiondock.domain.port.UpstreamBindingRepository;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
@@ -33,9 +33,9 @@ class ScriptApplicationServiceTest {
     private final ScriptRepository scriptRepository = mock(ScriptRepository.class);
     private final ScriptEngine scriptEngine = mock(ScriptEngine.class);
     private final ScriptScheduleRepository scriptScheduleRepository = mock(ScriptScheduleRepository.class);
-    private final UpstreamBindingRepository upstreamBindingRepository = mock(UpstreamBindingRepository.class);
+    private final RepositoryLocalAssetRepository repositoryLocalAssetRepository = mock(RepositoryLocalAssetRepository.class);
     private final ScriptApplicationService service =
-            new ScriptApplicationService(scriptRepository, scriptEngine, scriptScheduleRepository, upstreamBindingRepository);
+            new ScriptApplicationService(scriptRepository, scriptEngine, scriptScheduleRepository, repositoryLocalAssetRepository);
 
     @Test
     void saveSetsDefaultsForNewScript() {
@@ -448,7 +448,7 @@ class ScriptApplicationServiceTest {
     void deleteRemovesSchedulesBeforeDeletingScript() {
         when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
                 .setId("script-1")));
-        when(upstreamBindingRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, "script-1")).thenReturn(Optional.empty());
+        when(repositoryLocalAssetRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, "script-1")).thenReturn(Optional.empty());
 
         service.delete("script-1");
 
@@ -457,19 +457,19 @@ class ScriptApplicationServiceTest {
     }
 
     @Test
-    void deleteRemovesUpstreamBindingForWorkingCopy() {
+    void deleteRemovesLocalAssetForWorkingCopy() {
         when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
                 .setId("script-1")));
-        when(upstreamBindingRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, "script-1"))
-                .thenReturn(Optional.of(new UpstreamBinding()
-                        .setId("binding-1")
+        when(repositoryLocalAssetRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, "script-1"))
+                .thenReturn(Optional.of(new RepositoryLocalAsset()
+                        .setId("asset-1")
                         .setAssetType(UpstreamAssetType.SCRIPT)
                         .setLocalAssetId("script-1")));
 
         service.delete("script-1");
 
         verify(scriptScheduleRepository).deleteByScriptId("script-1");
-        verify(upstreamBindingRepository).deleteById("binding-1");
+        verify(repositoryLocalAssetRepository).deleteById("asset-1");
         verify(scriptRepository).deleteById("script-1");
     }
 }

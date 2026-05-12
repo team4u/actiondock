@@ -41,8 +41,6 @@ public class RepositoryConfiguration {
 
     @Bean
     public RepositoryCatalogService repositoryCatalogService(RepositoryDefinitionRepository repositoryDefinitionRepository,
-                                                             RepositoryToolInstallationRepository repositoryToolInstallationRepository,
-                                                             RepositoryEventSourceInstallationRepository repositoryEventSourceInstallationRepository,
                                                              CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
                                                              ManagedSkillRepository managedSkillRepository,
                                                              ScriptRepository scriptRepository,
@@ -51,7 +49,7 @@ public class RepositoryConfiguration {
                                                              ConfigValueRepository configValueRepository,
                                                              EventSourceRepository eventSourceRepository,
                                                              EventTriggerRepository eventTriggerRepository,
-                                                             UpstreamBindingRepository upstreamBindingRepository,
+                                                             RepositoryLocalAssetRepository repositoryLocalAssetRepository,
                                                              AiModelProfileRepository aiModelProfileRepository,
                                                              AiAgentProfileRepository aiAgentProfileRepository,
                                                              AiToolsetRepository aiToolsetRepository,
@@ -64,8 +62,6 @@ public class RepositoryConfiguration {
         return new RepositoryCatalogService(
                 new RepositoryCatalogService.Repositories(
                         repositoryDefinitionRepository,
-                        repositoryToolInstallationRepository,
-                        repositoryEventSourceInstallationRepository,
                         capabilityPackageInstallationRepository,
                         managedSkillRepository,
                         scriptRepository,
@@ -74,7 +70,7 @@ public class RepositoryConfiguration {
                         configValueRepository,
                         eventSourceRepository,
                         eventTriggerRepository,
-                        upstreamBindingRepository,
+                        repositoryLocalAssetRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository
@@ -123,10 +119,8 @@ public class RepositoryConfiguration {
             ConfigValueRepository configValueRepository,
             EventSourceRepository eventSourceRepository,
             EventTriggerRepository eventTriggerRepository,
-            UpstreamBindingRepository upstreamBindingRepository,
+            RepositoryLocalAssetRepository repositoryLocalAssetRepository,
             RepositoryDefinitionRepository repositoryDefinitionRepository,
-            RepositoryToolInstallationRepository repositoryToolInstallationRepository,
-            RepositoryEventSourceInstallationRepository repositoryEventSourceInstallationRepository,
             ManagedSkillRepository managedSkillRepository,
             ScriptApplicationService scriptApplicationService,
             ConfigValueApplicationService configValueApplicationService,
@@ -137,8 +131,6 @@ public class RepositoryConfiguration {
                 repositoryCatalogService,
                 new RepositoryCatalogService.Repositories(
                         repositoryDefinitionRepository,
-                        repositoryToolInstallationRepository,
-                        repositoryEventSourceInstallationRepository,
                         capabilityPackageInstallationRepository,
                         managedSkillRepository,
                         scriptRepository,
@@ -147,7 +139,7 @@ public class RepositoryConfiguration {
                         configValueRepository,
                         eventSourceRepository,
                         eventTriggerRepository,
-                        upstreamBindingRepository,
+                        repositoryLocalAssetRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository

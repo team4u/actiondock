@@ -15,11 +15,17 @@ import org.team4u.actiondock.application.ExecutionPresetApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionPreset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.SubmitMode;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.config.RuntimeConfiguration;
+import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
+import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.storage.jpa.StorageConfiguration;
 import org.team4u.actiondock.storage.jpa.entity.ExecutionEntity;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
@@ -94,6 +100,50 @@ class SharedStorageIntegrationTest {
             assertThat(published.getPublishedRevision()).isNotNull();
             assertThat(published.getPublishedRevision().getPackaging().name()).isEqualTo("TOOL");
         }
+    }
+
+    @Test
+    void deletePublishedScriptRemovesRelatedRowsWithinSpringManagedTransaction() throws SQLException {
+        String dbUrl = "jdbc:h2:file:" + tempDir.resolve("delete-script-runtime").toAbsolutePath().toString().replace("\\", "/") + ";AUTO_SERVER=TRUE";
+
+        try (ConfigurableApplicationContext context = new SpringApplicationBuilder(RuntimeApplication.class)
+                .web(WebApplicationType.NONE)
+                .properties(runtimeProperties(dbUrl, "none"))
+                .run()) {
+            ScriptApplicationService scriptApplicationService = context.getBean(ScriptApplicationService.class);
+            ScriptScheduleRepository scriptScheduleRepository = context.getBean(ScriptScheduleRepository.class);
+            RepositoryLocalAssetRepository repositoryLocalAssetRepository = context.getBean(RepositoryLocalAssetRepository.class);
+
+            scriptApplicationService.save(new ScriptDefinition()
+                    .setId("delete-script")
+                    .setName("Delete Script")
+                    .setType(ScriptType.GROOVY)
+                    .setSource("return [message: 'delete']")
+                    .setInputSchema(Map.of("type", "object"))
+                    .setOutputSchema(Map.of("type", "object")));
+            scriptApplicationService.publish("delete-script");
+
+            scriptScheduleRepository.save(new ScriptSchedule()
+                    .setId("schedule-1")
+                    .setScriptId("delete-script")
+                    .setName("Delete Schedule")
+                    .setCronExpression("0 0 2 * * *")
+                    .setInput(Map.of("mode", "nightly")));
+            repositoryLocalAssetRepository.save(new RepositoryLocalAsset()
+                    .setId("asset-1")
+                    .setAssetType(UpstreamAssetType.SCRIPT)
+                    .setLocalAssetId("delete-script")
+                    .setRepositoryId("repo-1")
+                    .setUpstreamAssetId("tool-1")
+                    .setMode(RepositoryLocalAssetMode.TRACKED));
+
+            scriptApplicationService.delete("delete-script");
+        }
+
+        assertThat(countRows(dbUrl, "script_definition", "id = 'delete-script'")).isZero();
+        assertThat(countRows(dbUrl, "published_script_revision", "script_id = 'delete-script'")).isZero();
+        assertThat(countRows(dbUrl, "script_schedule", "script_id = 'delete-script'")).isZero();
+        assertThat(countRows(dbUrl, "repository_local_asset", "local_asset_id = 'delete-script'")).isZero();
     }
 
     @Test
@@ -239,6 +289,16 @@ class SharedStorageIntegrationTest {
         try (Connection connection = DriverManager.getConnection(dbUrl, "sa", "");
              ResultSet columns = connection.getMetaData().getColumns(null, "PUBLIC", tableName, columnName)) {
             return columns.next();
+        }
+    }
+
+    private static int countRows(String dbUrl, String tableName, String whereClause) throws SQLException {
+        try (Connection connection = DriverManager.getConnection(dbUrl, "sa", "");
+             var statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                     "select count(*) from " + tableName + " where " + whereClause)) {
+            resultSet.next();
+            return resultSet.getInt(1);
         }
     }
 

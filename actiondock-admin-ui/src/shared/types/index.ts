@@ -846,7 +846,6 @@ export interface RepositoryDefinition {
 export interface RepositoryToolDescriptor {
   repositoryId: string;
   toolId: string;
-  installedScriptId: string;
   displayName: string;
   version: string;
   description?: string;
@@ -866,14 +865,19 @@ export interface RepositoryToolDescriptor {
   scriptDependencies: ScriptDependency[];
   pluginDependencies: PluginDependency[];
   aiDependencies?: AiDependency[];
-  installed: boolean;
-  installedVersion?: string;
-  updateAvailable: boolean;
   trusted: boolean;
-  workingCopyId?: string;
-  upstreamDirty?: boolean;
-  upstreamRemoteChanged?: boolean;
-  upstreamSyncState?: UpstreamSyncState;
+  localState?: RepositoryLocalAssetState;
+}
+
+export interface RepositoryLocalAssetState {
+  mode: "LOCKED" | "TRACKED";
+  localAssetId: string;
+  version?: string;
+  latestVersion?: string;
+  updateAvailable: boolean;
+  syncState?: UpstreamSyncState;
+  dirty?: boolean;
+  remoteChanged?: boolean;
 }
 
 export interface RepositoryConfigTemplateItem {
@@ -926,7 +930,6 @@ export interface RepositoryEventTriggerTemplateItem {
 export interface RepositoryEventSourceDescriptor {
   repositoryId: string;
   eventSourceId: string;
-  installedSourceId: string;
   displayName: string;
   version: string;
   description?: string;
@@ -938,14 +941,8 @@ export interface RepositoryEventSourceDescriptor {
   triggerTemplatePath?: string;
   digest?: string;
   scriptDependencies: ScriptDependency[];
-  installed: boolean;
-  installedVersion?: string;
-  updateAvailable: boolean;
   trusted: boolean;
-  workingCopyId?: string;
-  upstreamDirty?: boolean;
-  upstreamRemoteChanged?: boolean;
-  upstreamSyncState?: UpstreamSyncState;
+  localState?: RepositoryLocalAssetState;
 }
 
 export interface RepositoryEventSourceDetail {
@@ -970,19 +967,6 @@ export interface RepositoryEventSourceDetail {
   };
   configTemplate: RepositoryConfigTemplateItem[];
   triggerTemplate: RepositoryEventTriggerTemplateItem[];
-}
-
-export interface RepositoryEventSourceInstallation {
-  sourceId: string;
-  repositoryId: string;
-  eventSourceId: string;
-  name: string;
-  version: string;
-  latestVersion?: string;
-  owner?: string;
-  description?: string;
-  installedAt?: string;
-  updatedAt?: string;
 }
 
 export interface RepositoryAiPackageDependency {
@@ -1199,8 +1183,33 @@ export interface RepositoryInstallRequest {
   forcePluginUpgrade?: boolean;
 }
 
+export interface RepositoryLocalAssetRequest extends RepositoryInstallRequest {
+  mode: "LOCKED" | "TRACKED";
+  localAssetId?: string;
+}
+
+export interface RepositoryLocalAsset {
+  id: string;
+  assetType: "SCRIPT" | "EVENT_SOURCE";
+  localAssetId: string;
+  repositoryId: string;
+  upstreamAssetId: string;
+  mode: "LOCKED" | "TRACKED";
+  version?: string;
+  latestVersion?: string;
+  name?: string;
+  owner?: string;
+  description?: string;
+  sourcePath?: string;
+  baseCommit?: string;
+  baseDigest?: string;
+  lastSyncedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type ResourceLifecycleResourceType = "REPOSITORY_TOOL" | "REPOSITORY_EVENT_SOURCE" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
-export type ResourceLifecycleOperation = "install" | "update" | "working-copy" | "publish" | "preview" | "uninstall";
+export type ResourceLifecycleOperation = "install" | "update" | "add-local" | "update-local" | "publish" | "preview" | "uninstall";
 
 export interface ResourceLifecycleRequest<TPayload = Record<string, unknown>> {
   resourceType: ResourceLifecycleResourceType;

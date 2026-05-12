@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.team4u.actiondock.storage.jpa.entity.PluginRegistrationEntity;
-import org.team4u.actiondock.storage.jpa.entity.RepositoryToolInstallationEntity;
+import org.team4u.actiondock.storage.jpa.entity.RepositoryLocalAssetEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,10 +18,10 @@ class SpringDataDescriptionStorageTest {
     private SpringDataPluginRegistrationRepository pluginRepository;
 
     @Autowired
-    private SpringDataRepositoryToolInstallationRepository toolInstallationRepository;
+    private SpringDataRepositoryLocalAssetRepository localAssetRepository;
 
     @Test
-    void storesLongMarkdownDescriptionsForPluginsAndInstalledTools() {
+    void storesLongMarkdownDescriptionsForPluginsAndRepositoryLocalAssets() {
         String markdown = """
                 # README
 
@@ -39,15 +39,19 @@ class SpringDataDescriptionStorageTest {
         plugin.setEnabled(true);
         pluginRepository.save(plugin);
 
-        RepositoryToolInstallationEntity tool = new RepositoryToolInstallationEntity();
-        tool.setToolId("repo.markdown-tool");
-        tool.setRepositoryId("repo");
-        tool.setName("Markdown Tool");
-        tool.setDescription(markdown);
-        toolInstallationRepository.save(tool);
+        RepositoryLocalAssetEntity localAsset = new RepositoryLocalAssetEntity();
+        localAsset.setId("SCRIPT:LOCKED:repo.markdown-tool");
+        localAsset.setAssetType("SCRIPT");
+        localAsset.setLocalAssetId("repo.markdown-tool");
+        localAsset.setRepositoryId("repo");
+        localAsset.setUpstreamAssetId("markdown-tool");
+        localAsset.setMode("LOCKED");
+        localAsset.setName("Markdown Tool");
+        localAsset.setDescription(markdown);
+        localAssetRepository.save(localAsset);
 
         assertThat(pluginRepository.findById("markdown-plugin").orElseThrow().getDescription()).isEqualTo(markdown);
-        assertThat(toolInstallationRepository.findById("repo.markdown-tool").orElseThrow().getDescription()).isEqualTo(markdown);
+        assertThat(localAssetRepository.findById("SCRIPT:LOCKED:repo.markdown-tool").orElseThrow().getDescription()).isEqualTo(markdown);
     }
 
     @SpringBootConfiguration

@@ -4,13 +4,14 @@ import org.team4u.actiondock.domain.exception.UpstreamConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
-import org.team4u.actiondock.domain.model.UpstreamBinding;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
@@ -70,8 +71,9 @@ final class ToolRepositoryPublisher {
         RepositoryDefinition repository = session.repository();
 
         ScriptDefinition sourceScript = catalog.scriptApplicationService().get(NormalizeUtils.normalize(request.scriptId(), "scriptId 不能为空"));
-        UpstreamBinding upstreamBinding = repos.upstreamBindingRepository()
+        RepositoryLocalAsset upstreamBinding = repos.repositoryLocalAssetRepository()
                 .findByLocalAsset(UpstreamAssetType.SCRIPT, sourceScript.getId())
+                .filter(asset -> asset.getMode() == RepositoryLocalAssetMode.TRACKED)
                 .orElse(null);
         if (upstreamBinding != null && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId) && !request.force()) {
             assertUpstreamPublishSafe(sourceScript, repository, upstreamBinding);
@@ -102,12 +104,12 @@ final class ToolRepositoryPublisher {
         if (upstreamBinding != null
                 && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId)
                 && Objects.equals(upstreamBinding.getUpstreamAssetId(), toolId)) {
-            updateUpstreamBinding(upstreamBinding, publishedDetail);
+            updateTrackedLocalAsset(upstreamBinding, publishedDetail);
         }
         return publishedDetail.descriptor();
     }
 
-    private void assertUpstreamPublishSafe(ScriptDefinition script, RepositoryDefinition repository, UpstreamBinding binding) {
+    private void assertUpstreamPublishSafe(ScriptDefinition script, RepositoryDefinition repository, RepositoryLocalAsset binding) {
         RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
         UpstreamSyncState syncState = UpstreamSyncService.resolveSyncState(binding, catalog.computeWorkingCopyLocalDigest(script), state);
@@ -116,10 +118,11 @@ final class ToolRepositoryPublisher {
         }
     }
 
-    private void updateUpstreamBinding(UpstreamBinding binding, RepositoryToolDetail detail) {
+    private void updateTrackedLocalAsset(RepositoryLocalAsset binding, RepositoryToolDetail detail) {
         ToolSourceState state = catalog.resolveToolSourceState(catalog.getRepository(binding.getRepositoryId()), detail);
-        repos.upstreamBindingRepository().save(binding
-                .setUpstreamVersion(detail.descriptor().version())
+        repos.repositoryLocalAssetRepository().save(binding
+                .setVersion(detail.descriptor().version())
+                .setLatestVersion(detail.descriptor().version())
                 .setSourcePath(state.path())
                 .setBaseCommit(state.commit())
                 .setBaseDigest(state.digest())
