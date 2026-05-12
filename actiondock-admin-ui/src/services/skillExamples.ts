@@ -256,15 +256,16 @@ export function buildScriptSkillExample(context: ScriptSkillExampleContext): str
       ...renderCommandSection("### 执行脚本", executeHttp)
     ]),
     joinSections([
-      "## 避免转义坑",
+      "## 调用注意事项",
       [
-        "复杂 JSON 在 bash/zsh 里容易被引号、换行和 shell 展开影响。优先先写临时文件，再执行命令。",
-        "- 顶层 `string` / `number` / `integer` / `boolean` / `enum` 字段可以直接展开成 `--name value` 形式。",
-        "- 布尔字段存在时，可以直接写成无值 flag，例如 `--enabled`。",
-        "- 对象和数组字段不要硬塞进普通 flag；改用 `--input-file` 或 `--input-json`。",
+        "优先使用 CLI 扁平 flag 模式传参：`--name value`。简单类型（`string` / `number` / `integer` / `boolean` / `enum`）的顶层字段直接展开成 flag 即可。",
+        "- 布尔字段可以直接写成无值 flag，例如 `--enabled`。",
+        "- 遇到对象或数组字段时，再退回 `--input-file` 或 `--input-json`。",
         "- `--input-json` 和 `--input-file` 不能同时使用；传入内容顶层必须是 JSON 对象。",
         "- `--input-file` 提供基础对象，后面的简单 flag 会继续合并进去，并覆盖同名字段。",
-        "- 只有输入非常简单时，才建议直接内联 `--input-json`。"
+        "",
+        "如果命令行输出的内容较多，应将输出重定向到临时文件以避免截断，使用完毕后删除临时文件。",
+        "例如：`actiondock script run ... > /tmp/result.json && cat /tmp/result.json`。"
       ].join("\n"),
       renderCodeBlock("bash", buildScriptFileCliExample(context, executeCli)),
       renderCodeBlock("bash", buildScriptFileHttpExample(context, executeHttp))
@@ -313,15 +314,17 @@ export function buildPluginSkillExample(context: PluginSkillExampleContext): str
       ...renderCommandSection("### 调用动作", invokeHttp)
     ]),
     joinSections([
-      "## 避免转义坑",
+      "## 调用注意事项",
       [
-        "动作参数和 scriptInput 都可能包含复杂 JSON。优先先写临时文件，再执行命令。",
-        "- 动作参数里顶层 `string` / `number` / `integer` / `boolean` / `enum` 字段可以直接展开成普通 flag。",
-        "- 布尔字段存在时，可以直接写成无值 flag，例如 `--enabled`。",
-        "- 对象和数组字段不要硬塞进普通 flag；改用 `--args-file` / `--args-json`。",
+        "优先使用 CLI 扁平 flag 模式传参：`--name value`。简单类型（`string` / `number` / `integer` / `boolean` / `enum`）的顶层字段直接展开成 flag 即可。",
+        "- 布尔字段可以直接写成无值 flag，例如 `--enabled`。",
+        "- 遇到对象或数组字段时，再退回 `--args-file` / `--args-json`。",
         "- `scriptInput` 也是 JSON 对象；优先用 `--script-input-file`，简单场景再用 `--script-input-json`。",
         "- `--args-json` 和 `--args-file` 不能同时使用；`--script-input-json` 和 `--script-input-file` 也不能同时使用。",
-        "- 这些 JSON 输入的顶层都必须是对象。"
+        "- 这些 JSON 输入的顶层都必须是对象。",
+        "",
+        "如果命令行输出的内容较多，应将输出重定向到临时文件以避免截断，使用完毕后删除临时文件。",
+        "例如：`actiondock plugin invoke ... > /tmp/result.json && cat /tmp/result.json`。"
       ].join("\n"),
       renderCodeBlock("bash", buildPluginFileCliExample(context, invokeCli)),
       renderCodeBlock("bash", buildPluginFileHttpExample(context, invokeHttp))

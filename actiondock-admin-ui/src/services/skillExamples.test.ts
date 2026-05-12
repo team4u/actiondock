@@ -38,9 +38,9 @@ describe("skillExamples", () => {
     expect(result).toContain("Authorization: Bearer <token>");
     expect(result).toContain("http://localhost:8080/api/scripts/hello-groovy/execute");
     expect(result).toContain('"name": "Alice"');
-    expect(result).toContain("## 避免转义坑");
-    expect(result).toContain("顶层 `string` / `number` / `integer` / `boolean` / `enum` 字段可以直接展开成 `--name value` 形式。");
-    expect(result).toContain("对象和数组字段不要硬塞进普通 flag；改用 `--input-file` 或 `--input-json`。");
+    expect(result).toContain("## 调用注意事项");
+    expect(result).toContain("简单类型（`string` / `number` / `integer` / `boolean` / `enum`）的顶层字段直接展开成 flag 即可。");
+    expect(result).toContain("遇到对象或数组字段时，再退回 `--input-file` 或 `--input-json`。");
     expect(result).toContain("`--input-json` 和 `--input-file` 不能同时使用；传入内容顶层必须是 JSON 对象。");
     expect(result).toContain("后面的简单 flag 会继续合并进去，并覆盖同名字段。");
     expect(result).toContain("/tmp/hello-groovy-input.json");
@@ -95,8 +95,8 @@ describe("skillExamples", () => {
     expect(result).toContain("--token '<token>'");
     expect(result).toContain("http://localhost:8080/api/plugins/plugin-a/actions/summarize/invoke");
     expect(result).toContain('"locale": "zh-CN"');
-    expect(result).toContain("## 避免转义坑");
-    expect(result).toContain("动作参数里顶层 `string` / `number` / `integer` / `boolean` / `enum` 字段可以直接展开成普通 flag。");
+    expect(result).toContain("## 调用注意事项");
+    expect(result).toContain("简单类型（`string` / `number` / `integer` / `boolean` / `enum`）的顶层字段直接展开成 flag 即可。");
     expect(result).toContain("`scriptInput` 也是 JSON 对象；优先用 `--script-input-file`，简单场景再用 `--script-input-json`。");
     expect(result).toContain("这些 JSON 输入的顶层都必须是对象。");
     expect(result).toContain("--args-file '/tmp/plugin-a-summarize-args.json'");
