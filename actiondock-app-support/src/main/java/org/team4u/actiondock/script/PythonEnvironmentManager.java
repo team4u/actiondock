@@ -1,7 +1,5 @@
 package org.team4u.actiondock.script;
 
-import org.team4u.actiondock.shared.NormalizeUtils;
-
 import org.team4u.actiondock.application.PythonRequirementsSupport;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
@@ -9,26 +7,20 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.repository.RepositoryVersionUtils;
+import org.team4u.actiondock.shared.NormalizeUtils;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -41,17 +33,19 @@ import java.util.function.Consumer;
  */
 class PythonEnvironmentManager {
 
-    /** stderr 日志协议前缀，与 Python 脚本端的日志输出协议一致。 */
+    /**
+     * stderr 日志协议前缀，与 Python 脚本端的日志输出协议一致。
+     */
     static final String LOG_PREFIX = "__ACTIONDOCK_LOG__";
 
     private static final String VENV_VALIDATION_RUNNER = """
             import json
             import sys
             import venv
-
+            
             print(json.dumps({
-                "version": "{}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro),
-                "executable": sys.executable
+                'version': '{}.{}.{}'.format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro),
+                'executable': sys.executable
             }, ensure_ascii=False))
             """;
 
@@ -64,8 +58,8 @@ class PythonEnvironmentManager {
     }
 
     PythonEnvironmentManager(JsonCodec jsonCodec,
-                                    AppProperties.Python properties,
-                                    Executor asyncExecutor) {
+                             AppProperties.Python properties,
+                             Executor asyncExecutor) {
         this.jsonCodec = Objects.requireNonNull(jsonCodec);
         this.properties = Objects.requireNonNull(properties);
         this.asyncExecutor = asyncExecutor == null ? ForkJoinPool.commonPool() : asyncExecutor;
@@ -83,9 +77,9 @@ class PythonEnvironmentManager {
      * @throws InterruptedException 如果被中断
      */
     PythonExecutable resolveRuntimeExecutable(PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
-                                                     ScriptDefinition definition,
-                                                     ScriptExecutionContext executionContext,
-                                                     String baseExecutable)
+                                              ScriptDefinition definition,
+                                              ScriptExecutionContext executionContext,
+                                              String baseExecutable)
             throws IOException, InterruptedException {
         PythonRuntimeInfo runtimeInfo = inspectRuntime(baseExecutable, definition.getId());
         if (parsedRequirements == null || parsedRequirements.isEmpty()) {
@@ -149,10 +143,10 @@ class PythonEnvironmentManager {
      * @throws InterruptedException 如果被中断
      */
     Path prepareEnvironment(String executable,
-                                   PythonRuntimeInfo runtimeInfo,
-                                   PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
-                                   ScriptDefinition definition,
-                                   ScriptExecutionContext executionContext)
+                            PythonRuntimeInfo runtimeInfo,
+                            PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
+                            ScriptDefinition definition,
+                            ScriptExecutionContext executionContext)
             throws IOException, InterruptedException {
         Path cacheRoot = resolveEnvCacheDir();
         Files.createDirectories(cacheRoot);
@@ -189,10 +183,10 @@ class PythonEnvironmentManager {
      * @throws InterruptedException 如果被中断
      */
     void installEnvironment(String executable,
-                                   Path envDir,
-                                   PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
-                                   ScriptDefinition definition,
-                                   ScriptExecutionContext executionContext)
+                            Path envDir,
+                            PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
+                            ScriptDefinition definition,
+                            ScriptExecutionContext executionContext)
             throws IOException, InterruptedException {
         if (executionContext != null) {
             executionContext.log(ExecutionLogLevel.INFO, "[python-install] Preparing virtual environment");
@@ -212,9 +206,9 @@ class PythonEnvironmentManager {
      * @throws InterruptedException 如果被中断
      */
     void createVirtualEnvironment(String executable,
-                                         Path envDir,
-                                         ScriptDefinition definition,
-                                         ScriptExecutionContext executionContext)
+                                  Path envDir,
+                                  ScriptDefinition definition,
+                                  ScriptExecutionContext executionContext)
             throws IOException, InterruptedException {
         ProcessSupport.ProcessResult venvResult = runLoggedCommand(
                 List.of(executable, "-m", "venv", envDir.toAbsolutePath().toString()),
@@ -243,9 +237,9 @@ class PythonEnvironmentManager {
      * @throws InterruptedException 如果被中断
      */
     void installPipDependencies(Path envDir,
-                                       PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
-                                       ScriptDefinition definition,
-                                       ScriptExecutionContext executionContext)
+                                PythonRequirementsSupport.ParsedPythonRequirements parsedRequirements,
+                                ScriptDefinition definition,
+                                ScriptExecutionContext executionContext)
             throws IOException, InterruptedException {
         Path requirementsPath = envDir.resolve("requirements.txt");
         Files.writeString(requirementsPath, parsedRequirements.normalizedText(), StandardCharsets.UTF_8);
@@ -307,10 +301,10 @@ class PythonEnvironmentManager {
     // ---- 进程运行辅助方法 ----
 
     private ProcessSupport.ProcessResult runCommand(List<String> command,
-                                     String stdin,
-                                     String configJson,
-                                     Consumer<ProcessSupport.LogEvent> logConsumer,
-                                     int timeoutSeconds)
+                                                    String stdin,
+                                                    String configJson,
+                                                    Consumer<ProcessSupport.LogEvent> logConsumer,
+                                                    int timeoutSeconds)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command);
@@ -320,15 +314,16 @@ class PythonEnvironmentManager {
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
                 readErrorStreamForEnv(
                         process.getErrorStream(),
-                        logConsumer == null ? event -> { } : logConsumer
+                        logConsumer == null ? event -> {
+                        } : logConsumer
                 ), asyncExecutor);
 
         return ProcessSupport.runProcessToCompletion(process, stdin, stdoutFuture, stderrFuture, timeoutSeconds, properties.getTimeoutSeconds());
     }
 
     private ProcessSupport.ProcessResult runLoggedCommand(List<String> command,
-                                           ScriptExecutionContext executionContext,
-                                           int timeoutSeconds)
+                                                          ScriptExecutionContext executionContext,
+                                                          int timeoutSeconds)
             throws IOException, InterruptedException {
         Process process = new ProcessBuilder(command).start();
         CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() ->
