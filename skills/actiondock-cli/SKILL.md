@@ -45,6 +45,7 @@ npm i -g actiondock
 | "查看执行结果" / "执行历史" / "清空执行记录" | `references/execution-history.md` |
 | "定时任务" / "定时执行" / "cron" / "schedule" | `references/schedule-management.md` |
 | "共享状态" / "state" / "命名空间" | `references/state-management.md` |
+| "日志" / "log" / "脚本日志" / "打印日志" | `references/script-logging.md` |
 
 ## 意图路由
 
@@ -58,6 +59,7 @@ npm i -g actiondock
 | "执行脚本" / "跑一下脚本" / "运行 xxx" | 日常执行 |
 | "有哪些脚本" / "列出脚本" / "脚本入参" | 日常执行 |
 | "调用插件" / "看插件动作" / "插件参数" | `references/plugin-usage.md` |
+| "脚本里打日志" / "log.info" / "log.debug" / "log.warn" / "log.error" | `references/script-logging.md` |
 
 如果用户意图同时涉及多个模块（如"创建脚本并定时运行"、"写 processor 脚本并创建事件触发器"），先完成上游产物，再按需加载命令参考文档。
 
