@@ -4,22 +4,64 @@ import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 import { ActionDockCliError, isRecord } from "./error.js";
+function normalizeScriptDefinition(script) {
+    const published = script.published ?? null;
+    const publishedFlag = Boolean(script.publication?.published ?? published);
+    const dirty = Boolean(script.publication?.dirty);
+    return {
+        ...script,
+        published,
+        publication: {
+            published: publishedFlag,
+            dirty,
+            publishedVersion: script.publication?.publishedVersion ?? published?.version,
+            publishedAt: script.publication?.publishedAt ?? published?.publishedAt
+        }
+    };
+}
+function normalizePublishedRevision(scriptId, revision) {
+    return normalizeScriptDefinition({
+        id: revision.scriptId || scriptId,
+        name: revision.name,
+        type: revision.type,
+        packaging: revision.packaging,
+        source: revision.source,
+        pythonRequirements: revision.pythonRequirements,
+        inputSchema: revision.inputSchema,
+        outputSchema: revision.outputSchema,
+        version: revision.version,
+        owner: revision.owner,
+        description: revision.description,
+        tags: revision.tags,
+        published: revision,
+        publication: {
+            published: true,
+            dirty: false,
+            publishedVersion: revision.version,
+            publishedAt: revision.publishedAt
+        }
+    });
+}
 export class ActionDockClient {
     options;
     constructor(options) {
         this.options = options;
     }
     async listScripts() {
-        return this.requestJson("/api/scripts");
+        return this.requestJson("/api/scripts").then((items) => items.map(normalizeScriptDefinition));
     }
     async getScript(scriptId, draft) {
-        return this.requestJson(draft ? `/api/scripts/${scriptId}` : `/api/scripts/${scriptId}/published`);
+        if (draft) {
+            return this.requestJson(`/api/scripts/${scriptId}`).then(normalizeScriptDefinition);
+        }
+        return this.requestJson(`/api/scripts/${scriptId}/published`)
+            .then((revision) => normalizePublishedRevision(scriptId, revision));
     }
     async createScript(definition) {
         return this.requestJson("/api/scripts", {
             method: "POST",
             body: JSON.stringify(definition)
-        });
+        }).then(normalizeScriptDefinition);
     }
     async deleteScript(scriptId) {
         await this.requestJson(`/api/scripts/${scriptId}`, {
@@ -30,13 +72,13 @@ export class ActionDockClient {
         return this.requestJson(`/api/scripts/${sourceScriptId}/fork`, {
             method: "POST",
             body: JSON.stringify(payload)
-        });
+        }).then(normalizeScriptDefinition);
     }
     async patchScript(scriptId, patch) {
         return this.requestJson(`/api/scripts/${scriptId}`, {
             method: "PATCH",
             body: JSON.stringify(patch)
-        });
+        }).then(normalizeScriptDefinition);
     }
     async validateScript(scriptId) {
         await this.requestJson(`/api/scripts/${scriptId}/validate`, {
@@ -46,12 +88,12 @@ export class ActionDockClient {
     async publishScript(scriptId) {
         return this.requestJson(`/api/scripts/${scriptId}/publish`, {
             method: "POST"
-        });
+        }).then(normalizeScriptDefinition);
     }
     async discardDraft(scriptId) {
         return this.requestJson(`/api/scripts/${scriptId}/discard-draft`, {
             method: "POST"
-        });
+        }).then(normalizeScriptDefinition);
     }
     async getScriptUpstreamStatus(scriptId) {
         return this.requestJson(`/api/scripts/${scriptId}/upstream`);
@@ -59,7 +101,7 @@ export class ActionDockClient {
     async pullUpstreamScript(scriptId, force = false) {
         return this.requestJson(`/api/scripts/${scriptId}/upstream/pull?force=${force}`, {
             method: "POST"
-        });
+        }).then(normalizeScriptDefinition);
     }
     async executeScript(options, draft) {
         return this.requestJson(`/api/scripts/${options.scriptId}/execute`, {

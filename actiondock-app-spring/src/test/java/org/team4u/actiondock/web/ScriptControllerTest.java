@@ -16,8 +16,8 @@ import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 
@@ -88,38 +88,38 @@ class ScriptControllerTest {
     @Test
     void publishedDetailReturnsWrappedPublishedDefinition() throws Exception {
         when(scriptApplicationService.getPublished("script-1"))
-                .thenReturn(new ScriptDefinition()
-                        .setId("script-1")
-                        .setName("Live")
-                        .setSource("return [message: 'live']")
-                        .setStatus(ScriptStatus.PUBLISHED));
+                .thenReturn(publishedScript("script-1", "Live", "return [message: 'live']"));
 
         mockMvc.perform(get("/api/scripts/script-1/published"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(0))
-                .andExpect(jsonPath("$.data.id").value("script-1"))
+                .andExpect(jsonPath("$.data.scriptId").value("script-1"))
                 .andExpect(jsonPath("$.data.name").value("Live"))
-                .andExpect(jsonPath("$.data.status").value("PUBLISHED"))
                 .andExpect(jsonPath("$.data.source").value("return [message: 'live']"));
     }
 
     @Test
     void detailKeepsPublishedSnapshotSource() throws Exception {
-        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+        ScriptDefinition script = new ScriptDefinition()
                 .setId("script-1")
                 .setName("Live")
                 .setSource("return [message: 'draft']")
-                .setPublishedSnapshot(new org.team4u.actiondock.domain.model.PublishedScriptSnapshot()
+                .setInputSchema(Map.of("type", "object"))
+                .setOutputSchema(Map.of("type", "object"))
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("revision-1")
+                        .setScriptId("script-1")
+                        .setVersion(1)
                         .setName("Live")
                         .setSource("return [message: 'live']")
                         .setInputSchema(Map.of("type", "object"))
-                        .setOutputSchema(Map.of("type", "object")))
-                .setStatus(ScriptStatus.PUBLISHED));
+                        .setOutputSchema(Map.of("type", "object")));
+        when(scriptApplicationService.get("script-1")).thenReturn(script);
 
         mockMvc.perform(get("/api/scripts/script-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.source").value("return [message: 'draft']"))
-                .andExpect(jsonPath("$.data.publishedSnapshot.source").value("return [message: 'live']"));
+                .andExpect(jsonPath("$.data.published.source").value("return [message: 'live']"));
     }
 
     @Test
@@ -385,5 +385,16 @@ class ScriptControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.msg").value("missing"));
+    }
+
+    private static ScriptDefinition publishedScript(String id, String name, String source) {
+        ScriptDefinition script = new ScriptDefinition()
+                .setId(id)
+                .setName(name)
+                .setSource(source)
+                .setInputSchema(Map.of())
+                .setOutputSchema(Map.of());
+        script.setPublishedRevision(PublishedScriptRevision.fromDraft(script, id + ":published:1", 1, LocalDateTime.now()));
+        return script;
     }
 }

@@ -65,6 +65,7 @@ import { ScriptDiffDrawer } from "../../../../components/diff/ScriptDiffDrawer";
 import { ScriptDiffSummary } from "../../../../components/diff/ScriptDiffSummary";
 import { formatSchemaEditorState } from "../../../../services/schema";
 import { buildPublishDiffTarget, buildPublishScriptDiff } from "../../../../services/scriptDiff";
+import { isScriptPublished } from "../../../../services/scriptPublication";
 import { useScriptEditor } from "./useScriptEditor";
 import { useScriptExecution } from "./useScriptExecution";
 import { useScriptPublishToRepo } from "./useScriptPublishToRepo";
@@ -379,7 +380,10 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
         source: editor.sourceText,
         inputSchema: publishTarget.inputSchema ?? {},
         outputSchema: publishTarget.outputSchema ?? {},
-        status: "DRAFT",
+        publication: {
+          published: false,
+          dirty: false
+        },
         version: 1
       },
       publishTarget
@@ -690,8 +694,8 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
             <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 3 }}>
               <Descriptions.Item label="状态 / 更新时间">
                 <Space size={8} wrap>
-                  <Tag color={editor.currentScript.status === "PUBLISHED" ? "green" : "gold"}>
-                    {editor.currentScript.status === "PUBLISHED" ? "已发布" : "草稿"}
+                  <Tag color={isScriptPublished(editor.currentScript) ? "green" : "gold"}>
+                    {isScriptPublished(editor.currentScript) ? "已发布" : "草稿"}
                   </Tag>
                   {editor.hasUnpublishedChanges ? (
                     <Tooltip title="保存为草稿，需点击「发布」生效。如需回退可「丢弃草稿」。">

@@ -45,6 +45,7 @@ import { SchemaObjectEditor } from "../../../components/schema/SchemaObjectEdito
 import { resolveSchemaFields } from "../../../services/schema";
 import { buildSchemaFieldInitialState, isValidationErrorData } from "../../../services/schemaExecution";
 import { ApiError } from "../../../shared/api/httpClient";
+import { hasScriptDraftChanges, toPublishedScriptDefinition } from "../../../services/scriptPublication";
 import {
   buildSchemaObjectEditorJsonText,
   parseSchemaObjectEditorJsonText
@@ -78,23 +79,7 @@ interface ScheduleFormValues {
 type ScheduleDebugResult = ExecutionRecord | ExecutionResponse;
 
 function toPublishedScheduleScript(script: ScriptDefinition): ScriptDefinition | null {
-  if (script.publishedSnapshot) {
-    return {
-      ...script,
-      name: script.publishedSnapshot.name,
-      type: script.publishedSnapshot.type,
-      source: script.publishedSnapshot.source,
-      inputSchema: script.publishedSnapshot.inputSchema,
-      outputSchema: script.publishedSnapshot.outputSchema,
-      status: "PUBLISHED"
-    };
-  }
-
-  if (script.status === "PUBLISHED") {
-    return script;
-  }
-
-  return null;
+  return toPublishedScriptDefinition(script);
 }
 
 function hasDebugPayload(
@@ -173,12 +158,13 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
     () => publishedScripts.find((script) => script.id === selectedScriptId) ?? null,
     [publishedScripts, selectedScriptId]
   );
+  const selectedDraftScript = useMemo(
+    () => scripts.find((script) => script.id === selectedScriptId) ?? null,
+    [scripts, selectedScriptId]
+  );
   const selectedScript = useMemo(
-    () =>
-      selectedPublishedScript ??
-      scripts.find((script) => script.id === selectedScriptId) ??
-      null,
-    [scripts, selectedPublishedScript, selectedScriptId]
+    () => selectedPublishedScript ?? selectedDraftScript,
+    [selectedDraftScript, selectedPublishedScript]
   );
   const scheduleScriptOptions = useMemo(() => {
     const options = publishedScripts.map((script) => ({
@@ -358,7 +344,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      if (selectedScript?.hasUnpublishedChanges) {
+      if (hasScriptDraftChanges(selectedDraftScript)) {
         messageApi.warning("定时任务仍会运行已发布版本，脚本有未发布的变更");
       }
       const payload: ScriptScheduleUpsertRequest = {

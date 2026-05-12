@@ -3,7 +3,6 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.domain.exception.UpstreamConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.PluginDependency;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptDependency;
@@ -85,9 +84,8 @@ final class ToolRepositoryPublisher {
         String version = NormalizeUtils.normalize(request.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
         List<ScriptSchedule> selectedSchedules = RepositoryCatalogTypes.resolvePublishSchedules(script.getId(), request.scheduleIds(), repos.scriptScheduleRepository());
         List<ScriptDependency> scriptDependencies = resolveToolScriptDependencies(repositoryId, script, request);
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
         RepositoryPublishConfigResolver.PublishConfigResolution configResolution = RepositoryPublishConfigResolver.resolve(
-                snapshot == null ? script.getSource() : snapshot.getSource(),
+                script.getSource(),
                 selectedSchedules.stream().map(ScriptSchedule::getInput).toList(),
                 catalog.configValueRepository().findAll()
         );
@@ -149,11 +147,10 @@ final class ToolRepositoryPublisher {
     }
 
     private static void writeToolSourceFiles(Path toolDir, ScriptDefinition script, String sourceFileName) throws IOException {
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
-        Files.writeString(toolDir.resolve(sourceFileName), snapshot.getSource(), StandardCharsets.UTF_8);
-        if (snapshot.getPythonRequirements() != null
-                && !snapshot.getPythonRequirements().isBlank()) {
-            Files.writeString(toolDir.resolve(TOOL_REQUIREMENTS_FILE), snapshot.getPythonRequirements(), StandardCharsets.UTF_8);
+        Files.writeString(toolDir.resolve(sourceFileName), script.getSource(), StandardCharsets.UTF_8);
+        if (script.getPythonRequirements() != null
+                && !script.getPythonRequirements().isBlank()) {
+            Files.writeString(toolDir.resolve(TOOL_REQUIREMENTS_FILE), script.getPythonRequirements(), StandardCharsets.UTF_8);
         }
     }
 
@@ -165,10 +162,9 @@ final class ToolRepositoryPublisher {
                                           List<ScheduleTemplateItem> scheduleTemplates,
                                           List<ScriptDependency> scriptDependencies,
                                           List<PluginDependency> pluginDeps) {
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
         catalog.writeJson(toolDir.resolve(TOOL_DESCRIPTOR_FILE), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies, pluginDeps));
-        catalog.writeJson(toolDir.resolve(TOOL_INPUT_SCHEMA_FILE), snapshot.getInputSchema());
-        catalog.writeJson(toolDir.resolve(TOOL_OUTPUT_SCHEMA_FILE), snapshot.getOutputSchema());
+        catalog.writeJson(toolDir.resolve(TOOL_INPUT_SCHEMA_FILE), script.getInputSchema());
+        catalog.writeJson(toolDir.resolve(TOOL_OUTPUT_SCHEMA_FILE), script.getOutputSchema());
     }
 
     private void writeToolOptionalFiles(Path toolDir,
@@ -201,7 +197,7 @@ final class ToolRepositoryPublisher {
                 NormalizeUtils.normalizeNullable(request.owner()),
                 NormalizeUtils.nullSafeList(request.tags()),
                 sourceFileName,
-                NormalizeUtils.isBlank(script.getPublishedSnapshot().getPythonRequirements())
+                NormalizeUtils.isBlank(script.getPythonRequirements())
                         ? null
                         : TOOL_REQUIREMENTS_FILE,
                 TOOL_INPUT_SCHEMA_FILE,
@@ -222,10 +218,9 @@ final class ToolRepositoryPublisher {
         }
         Map<String, PluginDependency> dependencies = new LinkedHashMap<>();
         mergePluginDependencies(dependencies, script.getPluginDependencies());
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
         mergePluginDependencies(
                 dependencies,
-                extractPluginDependenciesFromSource(snapshot == null ? script.getSource() : snapshot.getSource(), installedPluginVersions)
+                extractPluginDependenciesFromSource(script.getSource(), installedPluginVersions)
         );
         return List.copyOf(dependencies.values());
     }
@@ -233,8 +228,7 @@ final class ToolRepositoryPublisher {
     private List<ScriptDependency> resolveToolScriptDependencies(String defaultRepositoryId,
                                                                    ScriptDefinition script,
                                                                    RepositoryPublishRequest request) {
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
-        String source = snapshot == null ? script.getSource() : snapshot.getSource();
+        String source = script.getSource();
         assertLiteralScriptInvocations(source);
         List<String> detectedScriptIds = AiPackageIdRewriter.extractScriptDependenciesFromSource(source);
         if (detectedScriptIds.isEmpty()) {

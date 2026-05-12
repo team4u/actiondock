@@ -30,7 +30,36 @@ function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
         message: { type: "string" }
       }
     },
-    status: "PUBLISHED",
+    published: {
+      scriptId: "user-query",
+      revisionId: "rev-1",
+      version: 2,
+      publishedAt: "2026-04-30T10:00:00",
+      name: "User Query",
+      type: "GROOVY",
+      packaging: "TOOL",
+      source: "return [message: 'ok']",
+      pythonRequirements: "requests==2.31.0",
+      inputSchema: {
+        type: "object",
+        properties: {
+          region: { type: "string" }
+        }
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          message: { type: "string" }
+        }
+      },
+      scriptDependencies: []
+    },
+    publication: {
+      published: true,
+      dirty: false,
+      publishedVersion: 2,
+      publishedAt: "2026-04-30T10:00:00"
+    },
     version: 2,
     scriptDependencies: [],
     ...overrides
@@ -307,7 +336,7 @@ describe("buildScriptDiff", () => {
 
 describe("buildPublishScriptDiff", () => {
   it("treats scripts without published snapshot as initial publish", () => {
-    const current = script({ status: "DRAFT", publishedSnapshot: undefined });
+    const current = script({ published: null, publication: { published: false, dirty: false } });
     const diff = buildPublishScriptDiff(
       current,
       buildPublishDiffTarget({
@@ -337,7 +366,11 @@ describe("buildPublishScriptDiff", () => {
           requiredActions: ["draft"]
         }
       ],
-      publishedSnapshot: {
+      published: {
+        scriptId: "user-query",
+        revisionId: "rev-1",
+        version: 2,
+        publishedAt: "2026-04-30T10:00:00",
         name: "User Query",
         type: "GROOVY",
         packaging: "TOOL",
@@ -372,6 +405,12 @@ describe("buildPublishScriptDiff", () => {
             required: true
           }
         ]
+      },
+      publication: {
+        published: true,
+        dirty: false,
+        publishedVersion: 2,
+        publishedAt: "2026-04-30T10:00:00"
       }
     });
 
@@ -385,11 +424,11 @@ describe("buildPublishScriptDiff", () => {
         pythonRequirements: current.pythonRequirements,
         inputSchema: current.inputSchema,
         outputSchema: current.outputSchema,
-        description: current.publishedSnapshot?.description,
-        owner: current.publishedSnapshot?.owner,
-        tags: current.publishedSnapshot?.tags,
+        description: current.published?.description,
+        owner: current.published?.owner,
+        tags: current.published?.tags,
         scriptDependencies: current.scriptDependencies,
-        pluginDependencies: current.publishedSnapshot?.pluginDependencies,
+        pluginDependencies: current.published?.pluginDependencies,
         aiDependencies: ["CHAT:::required"]
       })
     );
@@ -404,7 +443,11 @@ describe("buildPublishScriptDiff", () => {
       description: "draft desc",
       owner: "draft-owner",
       tags: ["draft"],
-      publishedSnapshot: {
+      published: {
+        scriptId: "user-query",
+        revisionId: "rev-1",
+        version: 2,
+        publishedAt: "2026-04-30T10:00:00",
         name: "User Query",
         type: "GROOVY",
         packaging: "TOOL",
@@ -415,6 +458,12 @@ describe("buildPublishScriptDiff", () => {
         tags: [],
         inputSchema: script().inputSchema,
         outputSchema: script().outputSchema
+      },
+      publication: {
+        published: true,
+        dirty: false,
+        publishedVersion: 2,
+        publishedAt: "2026-04-30T10:00:00"
       }
     });
 
@@ -442,7 +491,11 @@ describe("buildPublishScriptDiff", () => {
     const current = script({
       type: "PYTHON",
       source: "return {'message': 'ok'}",
-      publishedSnapshot: {
+      published: {
+        scriptId: "user-query",
+        revisionId: "rev-1",
+        version: 2,
+        publishedAt: "2026-04-30T10:00:00",
         name: "User Query",
         type: "PYTHON",
         packaging: "TOOL",
@@ -451,6 +504,12 @@ describe("buildPublishScriptDiff", () => {
         inputSchema: script().inputSchema,
         outputSchema: script().outputSchema,
         aiDependencies: [{ capability: "CHAT", profile: "", agentProfile: "", required: true }]
+      },
+      publication: {
+        published: true,
+        dirty: false,
+        publishedVersion: 2,
+        publishedAt: "2026-04-30T10:00:00"
       }
     });
 

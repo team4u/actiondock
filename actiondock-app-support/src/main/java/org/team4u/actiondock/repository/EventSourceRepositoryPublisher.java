@@ -149,7 +149,7 @@ final class EventSourceRepositoryPublisher {
             ScriptDefinition target = repos.scriptRepository().findById(
                     NormalizeUtils.normalize(trigger.getTargetScriptId(), "事件触发器 targetScriptId 不能为空: " + trigger.getId()))
                     .orElseThrow(() -> new IllegalArgumentException("事件触发器目标脚本不存在: " + trigger.getTargetScriptId()));
-            if (target.getPublishedSnapshot() == null && target.getScope() != ScriptScope.REPOSITORY && NormalizeUtils.isBlank(target.getRepositoryId())) {
+            if (!target.hasPublishedRevision() && target.getScope() != ScriptScope.REPOSITORY && NormalizeUtils.isBlank(target.getRepositoryId())) {
                 throw new IllegalArgumentException("事件触发器目标脚本尚未发布: " + trigger.getTargetScriptId());
             }
             ScriptDependency dependency = new ScriptDependency()

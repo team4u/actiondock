@@ -11,7 +11,6 @@ import org.team4u.actiondock.domain.model.EventSourceDefinition;
 import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.PluginRegistration;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
 import org.team4u.actiondock.domain.model.RepositoryEventSourceInstallation;
@@ -817,8 +816,8 @@ public class RepositoryCatalogService {
         if (script.getPackaging() != ScriptPackaging.TOOL) {
             return;
         }
-        List<AiDependency> dependencies = Optional.ofNullable(script.getPublishedSnapshot())
-                .map(PublishedScriptSnapshot::getAiDependencies)
+        List<AiDependency> dependencies = Optional.ofNullable(script.getPublishedRevision())
+                .map(org.team4u.actiondock.domain.model.PublishedScriptRevision::getAiDependencies)
                 .orElseGet(script::getAiDependencies);
         boolean usesAgent = dependencies.stream().anyMatch(AiPackageDependencyCollector::isAgentDependency);
         if (usesAgent) {

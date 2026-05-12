@@ -37,6 +37,7 @@ import {
 import type { RepositoryPublishVersionSuggestion } from "./types";
 import type { ScriptDiffResult, ScriptDiffTarget } from "../../../../services/scriptDiff";
 import { useDefaultOwner } from "../../../../shared/hooks/useDefaultOwner";
+import { getPublishedScriptContent, isScriptPublished } from "../../../../services/scriptPublication";
 
 function normalizeTagValues(tags: string[] | undefined): string[] {
   return (tags ?? []).filter((item) => item.trim().length > 0);
@@ -188,12 +189,12 @@ export function useScriptPublishToRepo({
     previousDrafts: PublishScriptDependencyDraft[] = []
   ): PublishScriptDependencyDraft[] => {
     const declaredDependencies = new Map(
-      (script.scriptDependencies ?? script.publishedSnapshot?.scriptDependencies ?? []).map((item) => [item.scriptId, item])
+      (script.scriptDependencies ?? getPublishedScriptContent(script)?.scriptDependencies ?? []).map((item) => [item.scriptId, item])
     );
     const publishedScripts = new Map(
       availableScripts
         .filter((item) => item.id !== script.id)
-        .filter((item) => Boolean(item.publishedSnapshot))
+        .filter((item) => isScriptPublished(item))
         .map((item) => [item.id, item])
     );
     const previousDraftsByScriptId = new Map(previousDrafts.map((item) => [item.scriptId, item]));

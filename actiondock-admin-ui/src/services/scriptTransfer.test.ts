@@ -16,7 +16,6 @@ describe("parseScriptImportBundle", () => {
             source: "return [message: 'hello']",
             inputSchema: { type: "object", properties: {} },
             outputSchema: { type: "object", properties: {} },
-            status: "PUBLISHED",
             version: 3,
             owner: "platform-team",
             description: "demo script",

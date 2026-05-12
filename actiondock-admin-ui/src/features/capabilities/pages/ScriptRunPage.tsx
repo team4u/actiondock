@@ -51,6 +51,7 @@ import type {
 } from "../../../shared/types";
 import { ApiError } from "../../../shared/api/httpClient";
 import { getErrorMessage, isExecutionActive } from "../../../services/utils";
+import { isScriptPublished } from "../../../services/scriptPublication";
 
 const { Text, Title } = Typography;
 
@@ -115,8 +116,8 @@ export function ScriptRunPage() {
     () => buildSchemaFieldInitialState(supportedInputFields),
     [supportedInputFields]
   );
-  const canExecute = Boolean(script?.status === "PUBLISHED" && unsupportedInputFields.length === 0);
-  const canBatchExecute = Boolean(script?.status === "PUBLISHED");
+  const canExecute = Boolean(isScriptPublished(script) && unsupportedInputFields.length === 0);
+  const canBatchExecute = Boolean(isScriptPublished(script));
   const backPath = "/scripts";
 
   const watchedFormValues = Form.useWatch([], form) as Record<string, unknown> | undefined;

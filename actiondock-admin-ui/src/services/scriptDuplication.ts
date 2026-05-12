@@ -34,7 +34,10 @@ export function buildDuplicatedScriptDefinition(
     source: source.source,
     inputSchema: cloneSchema(source.inputSchema),
     outputSchema: cloneSchema(source.outputSchema),
-    status: "DRAFT",
+    publication: {
+      published: false,
+      dirty: false
+    },
     version: 1
   };
 }

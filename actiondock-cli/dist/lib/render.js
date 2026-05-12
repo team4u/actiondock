@@ -7,7 +7,7 @@ export function renderScriptList(items) {
         .map((item) => {
         const name = item.name ? ` ${item.name}` : "";
         const type = item.type ? ` [${item.type}]` : "";
-        const published = item.publishedSnapshot ? " published" : " draft-only";
+        const published = item.publication?.published ? " published" : " draft-only";
         return `${item.id}${name}${type}${published}`;
     })
         .join("\n");
@@ -49,9 +49,8 @@ export function renderScriptDetail(script, target) {
         `Script: ${script.id}${script.name ? ` (${script.name})` : ""}`,
         `Target: ${target}`,
         `Type: ${script.type ?? "-"}`,
-        `Status: ${script.status ?? "-"}`,
         `Version: ${script.version ?? "-"}`,
-        `Published: ${script.publishedSnapshot ? "yes" : "no"}`
+        `Published: ${script.publication?.published ? "yes" : "no"}`
     ];
     if (script.description) {
         lines.push(`Description: ${script.description}`);

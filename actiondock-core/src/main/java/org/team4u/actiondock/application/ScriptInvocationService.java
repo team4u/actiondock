@@ -67,7 +67,7 @@ public class ScriptInvocationService extends OptionalServiceSupport {
         try {
             ScriptDefinition definition = scriptRepository.findById(resolvedScriptId)
                     .orElseThrow(() -> new IllegalArgumentException(buildMissingScriptMessage(normalizedScriptId, callerDefinition)));
-            if (definition.getPublishedSnapshot() == null) {
+            if (!definition.hasPublishedRevision()) {
                 throw new IllegalArgumentException("脚本未发布: " + resolvedScriptId);
             }
 

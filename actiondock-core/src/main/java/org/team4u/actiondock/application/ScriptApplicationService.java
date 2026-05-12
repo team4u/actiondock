@@ -2,11 +2,11 @@ package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.port.PublishedScriptRevisionRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -14,6 +14,7 @@ import org.team4u.actiondock.domain.port.UpstreamBindingRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 
@@ -28,6 +29,7 @@ import java.util.UUID;
 public class ScriptApplicationService {
 
     private final ScriptRepository scriptRepository;
+    private final PublishedScriptRevisionRepository publishedScriptRevisionRepository;
     private final ScriptEngine scriptEngine;
     private final ScriptScheduleRepository scriptScheduleRepository;
     private final UpstreamBindingRepository upstreamBindingRepository;
@@ -36,10 +38,40 @@ public class ScriptApplicationService {
                                     ScriptEngine scriptEngine,
                                     ScriptScheduleRepository scriptScheduleRepository,
                                     UpstreamBindingRepository upstreamBindingRepository) {
+        this(scriptRepository, new NoopPublishedScriptRevisionRepository(), scriptEngine, scriptScheduleRepository, upstreamBindingRepository);
+    }
+
+    public ScriptApplicationService(ScriptRepository scriptRepository,
+                                    PublishedScriptRevisionRepository publishedScriptRevisionRepository,
+                                    ScriptEngine scriptEngine,
+                                    ScriptScheduleRepository scriptScheduleRepository,
+                                    UpstreamBindingRepository upstreamBindingRepository) {
         this.scriptRepository = scriptRepository;
+        this.publishedScriptRevisionRepository = publishedScriptRevisionRepository;
         this.scriptEngine = scriptEngine;
         this.scriptScheduleRepository = scriptScheduleRepository;
         this.upstreamBindingRepository = upstreamBindingRepository;
+    }
+
+    private static final class NoopPublishedScriptRevisionRepository implements PublishedScriptRevisionRepository {
+        @Override
+        public PublishedScriptRevision save(PublishedScriptRevision revision) {
+            return revision;
+        }
+
+        @Override
+        public Optional<PublishedScriptRevision> findById(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<PublishedScriptRevision> findByScriptId(String scriptId) {
+            return List.of();
+        }
+
+        @Override
+        public void deleteByScriptId(String scriptId) {
+        }
     }
 
     /**
@@ -61,9 +93,6 @@ public class ScriptApplicationService {
             if (definition.getVersion() == null) {
                 definition.setVersion(1);
             }
-            if (definition.getStatus() == null) {
-                definition.setStatus(ScriptStatus.DRAFT);
-            }
             if (definition.getPackaging() == null) {
                 definition.setPackaging(ScriptPackaging.TOOL);
             }
@@ -72,9 +101,11 @@ public class ScriptApplicationService {
             }
         } else {
             ensureEditable(existing);
+            if (definition.getVersion() == null) {
+                definition.setVersion(existing.getVersion());
+            }
             definition.mergeFrom(existing);
         }
-        definition.normalizePublicationState();
         definition.setUpdatedAt(now);
         return scriptRepository.save(definition);
     }
@@ -101,7 +132,7 @@ public class ScriptApplicationService {
      */
     public ScriptDefinition getPublished(String id) {
         ScriptDefinition definition = get(id);
-        if (definition.getPublishedSnapshot() == null) {
+        if (!definition.hasPublishedRevision()) {
             throw new IllegalArgumentException("脚本未发布: " + id);
         }
         return definition.toPublishedDefinition();
@@ -132,6 +163,7 @@ public class ScriptApplicationService {
     public void delete(String id) {
         ensureEditable(get(id));
         scriptScheduleRepository.deleteByScriptId(id);
+        publishedScriptRevisionRepository.deleteByScriptId(id);
         upstreamBindingRepository.findByLocalAsset(UpstreamAssetType.SCRIPT, id)
                 .ifPresent(binding -> upstreamBindingRepository.deleteById(binding.getId()));
         scriptRepository.deleteById(id);
@@ -161,8 +193,14 @@ public class ScriptApplicationService {
      */
     public ScriptDefinition publish(String id) {
         ScriptDefinition definition = get(id);
-        definition.publish();
-        definition.setUpdatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        String revisionId = UUID.randomUUID().toString();
+        PublishedScriptRevision revision = PublishedScriptRevision.fromDraft(definition, revisionId, definition.getVersion() + 1, now);
+        publishedScriptRevisionRepository.save(revision);
+        definition.setPublishedRevision(revision);
+        definition.setVersion(revision.getVersion());
+        definition.setUpdatedAt(now);
+        definition.setDirty(false);
         return scriptRepository.save(definition);
     }
 
@@ -176,9 +214,13 @@ public class ScriptApplicationService {
      * @throws IllegalArgumentException 如果脚本不存在或尚未发布
      */
     public ScriptDefinition discardDraft(String id) {
-        ScriptDefinition published = getPublished(id);
-        published.setUpdatedAt(LocalDateTime.now());
-        return scriptRepository.save(published);
+        ScriptDefinition definition = get(id);
+        if (!definition.hasPublishedRevision()) {
+            throw new IllegalArgumentException("脚本未发布: " + id);
+        }
+        definition.revertToPublished();
+        definition.setUpdatedAt(LocalDateTime.now());
+        return scriptRepository.save(definition);
     }
 
     public ScriptDefinition createFork(String id, String targetId, String targetName) {
@@ -190,12 +232,9 @@ public class ScriptApplicationService {
         if (scriptRepository.findById(normalizedId).isPresent()) {
             throw new IllegalArgumentException("脚本已存在: " + normalizedId);
         }
-        PublishedScriptSnapshot sourceSnapshot = source.getPublishedSnapshot();
-        ScriptDefinition fork = sourceSnapshot == null ? source.fullCopy() : source.toPublishedDefinition();
+        ScriptDefinition fork = source.hasPublishedRevision() ? source.toPublishedDefinition() : source.fullCopy();
         fork.setId(normalizedId)
                 .setName(ApplicationServiceSupport.normalize(targetName, "Fork 名称不能为空"))
-                .setStatus(ScriptStatus.DRAFT)
-                .setPublishedSnapshot(sourceSnapshot)
                 .setVersion(1)
                 .setScope(ScriptScope.PERSONAL)
                 .setRepositoryId(source.getRepositoryId())
@@ -204,6 +243,32 @@ public class ScriptApplicationService {
                 .setEditable(true)
                 .setCreatedAt(null)
                 .setUpdatedAt(null);
+        if (source.hasPublishedRevision()) {
+            PublishedScriptRevision sourceRevision = source.getPublishedRevision();
+            String forkRevisionId = UUID.randomUUID().toString();
+            fork.setPublishedRevision(new PublishedScriptRevision()
+                    .setId(forkRevisionId)
+                    .setScriptId(normalizedId)
+                    .setVersion(1)
+                    .setPublishedAt(LocalDateTime.now())
+                    .setName(sourceRevision.getName())
+                    .setType(sourceRevision.getType())
+                    .setPackaging(sourceRevision.getPackaging())
+                    .setSource(sourceRevision.getSource())
+                    .setPythonRequirements(sourceRevision.getPythonRequirements())
+                    .setInputSchema(sourceRevision.getInputSchema())
+                    .setOutputSchema(sourceRevision.getOutputSchema())
+                    .setOwner(sourceRevision.getOwner())
+                    .setDescription(sourceRevision.getDescription())
+                    .setTags(sourceRevision.getTags())
+                    .setScriptDependencies(sourceRevision.getScriptDependencies())
+                    .setPluginDependencies(sourceRevision.getPluginDependencies())
+                    .setAiDependencies(sourceRevision.getAiDependencies()));
+        } else {
+            fork.setPublishedRevisionId(null)
+                    .setPublishedAt(null)
+                    .setPublishedRevision(null);
+        }
         ScriptDefinition saved = save(fork);
         copySchedulesToFork(source.getId(), saved.getId());
         return saved;

@@ -17,6 +17,7 @@ import org.team4u.actiondock.shared.NormalizeUtils;
 import org.team4u.actiondock.web.common.ApiResponse;
 import org.team4u.actiondock.web.repository.RepositoryInstallRequest;
 import org.team4u.actiondock.web.repository.RepositoryPluginInstallRequest;
+import org.team4u.actiondock.web.script.ScriptViewMapper;
 
 import java.util.Locale;
 
@@ -92,9 +93,12 @@ public class ResourceLifecycleController {
                     normalizeResourceId(request, "toolId 不能为空"), toolOptions(request.getPayload()));
             case OP_UPDATE -> repositoryToolService.updateTool(normalizeRepositoryId(request),
                     normalizeResourceId(request, "toolId 不能为空"), toolOptions(request.getPayload()));
-            case OP_WORKING_COPY -> repositoryToolService.createToolWorkingCopy(normalizeRepositoryId(request),
-                    normalizeResourceId(request, "toolId 不能为空"),
-                    convertPayload(request.getPayload(), RepositoryCatalogTypes.WorkingCopyRequest.class));
+            case OP_WORKING_COPY -> ScriptViewMapper.toView(
+                    repositoryToolService.createToolWorkingCopy(normalizeRepositoryId(request),
+                            normalizeResourceId(request, "toolId 不能为空"),
+                            convertPayload(request.getPayload(), RepositoryCatalogTypes.WorkingCopyRequest.class)),
+                    true
+            );
             case OP_PUBLISH -> repositoryToolService.publishTool(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPublishRequest.class));
             case OP_PREVIEW -> repositoryToolService.previewPublishConfig(

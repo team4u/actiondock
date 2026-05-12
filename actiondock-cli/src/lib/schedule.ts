@@ -32,7 +32,7 @@ export async function buildScheduleInput(params: {
   valueFlags?: Iterable<string>;
 }): Promise<Record<string, unknown>> {
   const script = await params.client.getScript(params.scriptId, false);
-  const schema = script.publishedSnapshot?.inputSchema ?? script.inputSchema;
+  const schema = script.published?.inputSchema ?? script.inputSchema;
   const fields = extractSchemaFields(schema);
   const baseInput = {
     ...(params.existingInput ?? {}),

@@ -18,7 +18,6 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "script_definition", indexes = {
-        @Index(name = "idx_script_status", columnList = "status"),
         @Index(name = "idx_script_scope", columnList = "scope")
 })
 public class ScriptEntity {
@@ -44,35 +43,9 @@ public class ScriptEntity {
     @Lob
     private String outputSchemaJson;
 
-    private String publishedName;
-
-    private String publishedType;
-    private String publishedPackaging;
-
-    @Lob
-    private String publishedSource;
-    @Lob
-    private String publishedPythonRequirements;
-
-    @Lob
-    private String publishedInputSchemaJson;
-
-    @Lob
-    private String publishedOutputSchemaJson;
-    private String publishedOwner;
-    @Lob
-    private String publishedDescription;
-    @Lob
-    private String publishedTagsJson;
-    @Lob
-    private String publishedPluginDependenciesJson;
-    @Lob
-    private String publishedScriptDependenciesJson;
-    @Lob
-    private String publishedAiDependenciesJson;
-
-    private String status;
     private Integer versionValue;
+    private String publishedRevisionId;
+    private LocalDateTime publishedAt;
     private String scope;
     private String repositoryId;
     private String repositoryToolId;
@@ -113,36 +86,12 @@ public class ScriptEntity {
     public void setInputSchemaJson(String inputSchemaJson) { this.inputSchemaJson = inputSchemaJson; }
     public String getOutputSchemaJson() { return outputSchemaJson; }
     public void setOutputSchemaJson(String outputSchemaJson) { this.outputSchemaJson = outputSchemaJson; }
-    public String getPublishedName() { return publishedName; }
-    public void setPublishedName(String publishedName) { this.publishedName = publishedName; }
-    public String getPublishedType() { return publishedType; }
-    public void setPublishedType(String publishedType) { this.publishedType = publishedType; }
-    public String getPublishedPackaging() { return publishedPackaging; }
-    public void setPublishedPackaging(String publishedPackaging) { this.publishedPackaging = publishedPackaging; }
-    public String getPublishedSource() { return publishedSource; }
-    public void setPublishedSource(String publishedSource) { this.publishedSource = publishedSource; }
-    public String getPublishedPythonRequirements() { return publishedPythonRequirements; }
-    public void setPublishedPythonRequirements(String publishedPythonRequirements) { this.publishedPythonRequirements = publishedPythonRequirements; }
-    public String getPublishedInputSchemaJson() { return publishedInputSchemaJson; }
-    public void setPublishedInputSchemaJson(String publishedInputSchemaJson) { this.publishedInputSchemaJson = publishedInputSchemaJson; }
-    public String getPublishedOutputSchemaJson() { return publishedOutputSchemaJson; }
-    public void setPublishedOutputSchemaJson(String publishedOutputSchemaJson) { this.publishedOutputSchemaJson = publishedOutputSchemaJson; }
-    public String getPublishedOwner() { return publishedOwner; }
-    public void setPublishedOwner(String publishedOwner) { this.publishedOwner = publishedOwner; }
-    public String getPublishedDescription() { return publishedDescription; }
-    public void setPublishedDescription(String publishedDescription) { this.publishedDescription = publishedDescription; }
-    public String getPublishedTagsJson() { return publishedTagsJson; }
-    public void setPublishedTagsJson(String publishedTagsJson) { this.publishedTagsJson = publishedTagsJson; }
-    public String getPublishedPluginDependenciesJson() { return publishedPluginDependenciesJson; }
-    public void setPublishedPluginDependenciesJson(String publishedPluginDependenciesJson) { this.publishedPluginDependenciesJson = publishedPluginDependenciesJson; }
-    public String getPublishedScriptDependenciesJson() { return publishedScriptDependenciesJson; }
-    public void setPublishedScriptDependenciesJson(String publishedScriptDependenciesJson) { this.publishedScriptDependenciesJson = publishedScriptDependenciesJson; }
-    public String getPublishedAiDependenciesJson() { return publishedAiDependenciesJson; }
-    public void setPublishedAiDependenciesJson(String publishedAiDependenciesJson) { this.publishedAiDependenciesJson = publishedAiDependenciesJson; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
     public Integer getVersionValue() { return versionValue; }
     public void setVersionValue(Integer versionValue) { this.versionValue = versionValue; }
+    public String getPublishedRevisionId() { return publishedRevisionId; }
+    public void setPublishedRevisionId(String publishedRevisionId) { this.publishedRevisionId = publishedRevisionId; }
+    public LocalDateTime getPublishedAt() { return publishedAt; }
+    public void setPublishedAt(LocalDateTime publishedAt) { this.publishedAt = publishedAt; }
     public String getScope() { return scope; }
     public void setScope(String scope) { this.scope = scope; }
     public String getRepositoryId() { return repositoryId; }

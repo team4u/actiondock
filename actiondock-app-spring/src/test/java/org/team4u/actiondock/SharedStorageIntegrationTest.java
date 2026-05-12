@@ -91,8 +91,8 @@ class SharedStorageIntegrationTest {
 
             assertThat(draft.getPackaging().name()).isEqualTo("TOOL");
             assertThat(published.getPackaging().name()).isEqualTo("TOOL");
-            assertThat(published.getPublishedSnapshot()).isNotNull();
-            assertThat(published.getPublishedSnapshot().getPackaging().name()).isEqualTo("TOOL");
+            assertThat(published.getPublishedRevision()).isNotNull();
+            assertThat(published.getPublishedRevision().getPackaging().name()).isEqualTo("TOOL");
         }
     }
 

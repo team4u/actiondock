@@ -10,7 +10,6 @@ export interface ScriptDefinition {
   type?: string;
   packaging?: string;
   scope?: string;
-  status?: string;
   version?: number;
   description?: string;
   owner?: string;
@@ -19,21 +18,35 @@ export interface ScriptDefinition {
   pythonRequirements?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
-  publishedSnapshot?: {
-    name?: string;
-    type?: string;
-    packaging?: string;
-    source?: string;
-    pythonRequirements?: string;
-    owner?: string;
-    description?: string;
-    tags?: string[];
-    inputSchema?: Record<string, unknown>;
-    outputSchema?: Record<string, unknown>;
-    scriptDependencies?: unknown[];
-    pluginDependencies?: unknown[];
-    aiDependencies?: unknown[];
-  } | null;
+  published?: PublishedScriptRevision | null;
+  publication?: ScriptPublicationState;
+}
+
+export interface PublishedScriptRevision {
+  scriptId: string;
+  revisionId: string;
+  version: number;
+  publishedAt?: string;
+  name?: string;
+  type?: string;
+  packaging?: string;
+  source?: string;
+  pythonRequirements?: string;
+  owner?: string;
+  description?: string;
+  tags?: string[];
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  scriptDependencies?: unknown[];
+  pluginDependencies?: unknown[];
+  aiDependencies?: unknown[];
+}
+
+export interface ScriptPublicationState {
+  published: boolean;
+  dirty: boolean;
+  publishedVersion?: number;
+  publishedAt?: string;
 }
 
 export interface ExecutionResponse {

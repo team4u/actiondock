@@ -8,6 +8,7 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.domain.port.PublishedScriptRevisionRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
@@ -55,9 +56,16 @@ public class ScriptConfiguration {
 
     @Bean
     public ScriptApplicationService scriptApplicationService(ScriptRepository scriptRepository,
+                                                             PublishedScriptRevisionRepository publishedScriptRevisionRepository,
                                                              ScriptEngine scriptEngine,
                                                              ScriptScheduleRepository scriptScheduleRepository,
                                                              UpstreamBindingRepository upstreamBindingRepository) {
-        return new ScriptApplicationService(scriptRepository, scriptEngine, scriptScheduleRepository, upstreamBindingRepository);
+        return new ScriptApplicationService(
+                scriptRepository,
+                publishedScriptRevisionRepository,
+                scriptEngine,
+                scriptScheduleRepository,
+                upstreamBindingRepository
+        );
     }
 }

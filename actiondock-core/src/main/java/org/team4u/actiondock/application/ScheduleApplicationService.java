@@ -139,9 +139,10 @@ public class ScheduleApplicationService {
                 .setInput(SchemaValueCopier.copyMap(schedule.getInput()))
                 .setEnabled(schedule.isEnabled())
                 .setUpdatedAt(now);
+        ScriptDefinition publishedScript = script.toPublishedDefinition();
         ScriptSchemaSupport.validateInput(script.getId(),
                 configValueApplicationService.resolveMap(target.getInput()),
-                script.getPublishedSnapshot().getInputSchema());
+                publishedScript.getInputSchema());
         return scriptScheduleRepository.save(target);
     }
 
@@ -247,7 +248,7 @@ public class ScheduleApplicationService {
 
     private ScriptDefinition ensurePublishedScript(String scriptId) {
         ScriptDefinition script = ensureScriptExists(scriptId);
-        if (script.getPublishedSnapshot() == null) {
+        if (!script.hasPublishedRevision()) {
             throw new IllegalArgumentException("脚本未发布: " + scriptId);
         }
         return script;

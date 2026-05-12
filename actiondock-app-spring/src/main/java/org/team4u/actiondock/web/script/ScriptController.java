@@ -54,8 +54,8 @@ public class ScriptController {
      * @return API 响应，包含脚本定义列表
      */
     @GetMapping
-    public ApiResponse<List<ScriptDefinition>> list(@RequestParam(defaultValue = "false") boolean includeUiSchema,
-                                                    @RequestParam(defaultValue = "false") boolean includeManaged) {
+    public ApiResponse<List<ScriptDocumentView>> list(@RequestParam(defaultValue = "false") boolean includeUiSchema,
+                                                      @RequestParam(defaultValue = "false") boolean includeManaged) {
         return ApiResponse.success(scriptApplicationService.list(includeManaged).stream()
                 .map(definition -> toResponse(definition, includeUiSchema))
                 .toList());
@@ -69,7 +69,7 @@ public class ScriptController {
      * @return API 响应，包含保存后的脚本定义
      */
     @PostMapping
-    public ApiResponse<ScriptDefinition> save(
+    public ApiResponse<ScriptDocumentView> save(
             @RequestParam(defaultValue = "false") boolean includeUiSchema,
             @RequestBody ScriptDefinition definition
     ) {
@@ -84,7 +84,7 @@ public class ScriptController {
      * @return API 响应，包含脚本定义
      */
     @GetMapping("/{id}")
-    public ApiResponse<ScriptDefinition> detail(
+    public ApiResponse<ScriptDocumentView> detail(
             @PathVariable String id,
             @RequestParam(defaultValue = "false") boolean includeUiSchema
     ) {
@@ -99,11 +99,11 @@ public class ScriptController {
      * @return API 响应，包含已发布的脚本快照
      */
     @GetMapping("/{id}/published")
-    public ApiResponse<ScriptDefinition> publishedDetail(
+    public ApiResponse<ScriptPublishedRevisionView> publishedDetail(
             @PathVariable String id,
             @RequestParam(defaultValue = "false") boolean includeUiSchema
     ) {
-        return ApiResponse.success(toResponse(scriptApplicationService.getPublished(id), includeUiSchema));
+        return ApiResponse.success(ScriptViewMapper.toPublishedView(scriptApplicationService.getPublished(id), includeUiSchema));
     }
 
     /**
@@ -115,7 +115,7 @@ public class ScriptController {
      * @return API 响应，包含更新后的脚本定义
      */
     @PutMapping("/{id}")
-    public ApiResponse<ScriptDefinition> update(
+    public ApiResponse<ScriptDocumentView> update(
             @PathVariable String id,
             @RequestParam(defaultValue = "false") boolean includeUiSchema,
             @RequestBody ScriptDefinition definition
@@ -133,7 +133,7 @@ public class ScriptController {
      * @return API 响应，包含更新后的脚本定义
      */
     @PatchMapping("/{id}")
-    public ApiResponse<ScriptDefinition> patch(
+    public ApiResponse<ScriptDocumentView> patch(
             @PathVariable String id,
             @RequestParam(defaultValue = "false") boolean includeUiSchema,
             @RequestBody(required = false) Map<String, Object> patch
@@ -174,7 +174,7 @@ public class ScriptController {
      * @return API 响应，包含发布后的脚本定义
      */
     @PostMapping("/{id}/publish")
-    public ApiResponse<ScriptDefinition> publish(
+    public ApiResponse<ScriptDocumentView> publish(
             @PathVariable String id,
             @RequestParam(defaultValue = "false") boolean includeUiSchema
     ) {
@@ -189,7 +189,7 @@ public class ScriptController {
      * @return API 响应，包含恢复后的脚本定义
      */
     @PostMapping("/{id}/discard-draft")
-    public ApiResponse<ScriptDefinition> discardDraft(
+    public ApiResponse<ScriptDocumentView> discardDraft(
             @PathVariable String id,
             @RequestParam(defaultValue = "false") boolean includeUiSchema
     ) {
@@ -247,9 +247,9 @@ public class ScriptController {
      * @return API 响应，包含 Fork 后的脚本定义
      */
     @PostMapping("/{id}/fork")
-    public ApiResponse<ScriptDefinition> fork(@PathVariable String id,
-                                              @RequestParam(defaultValue = "false") boolean includeUiSchema,
-                                              @RequestBody RepositoryForkRequest request) {
+    public ApiResponse<ScriptDocumentView> fork(@PathVariable String id,
+                                                @RequestParam(defaultValue = "false") boolean includeUiSchema,
+                                                @RequestBody RepositoryForkRequest request) {
         return ApiResponse.success(
                 toResponse(scriptApplicationService.createFork(id, request.getId(), request.getName()), includeUiSchema),
                 "Fork 创建成功"
@@ -262,9 +262,9 @@ public class ScriptController {
     }
 
     @PostMapping("/{id}/upstream/pull")
-    public ApiResponse<ScriptDefinition> upstreamPull(@PathVariable String id,
-                                                      @RequestParam(defaultValue = "false") boolean force,
-                                                      @RequestParam(defaultValue = "false") boolean includeUiSchema) {
+    public ApiResponse<ScriptDocumentView> upstreamPull(@PathVariable String id,
+                                                        @RequestParam(defaultValue = "false") boolean force,
+                                                        @RequestParam(defaultValue = "false") boolean includeUiSchema) {
         return ApiResponse.success(
                 toResponse(repositoryToolService.pullUpstreamScript(id, force), includeUiSchema),
                 "脚本工作副本已拉取上游更新"
@@ -277,7 +277,7 @@ public class ScriptController {
         return ApiResponse.success(null, "已断开上游跟踪");
     }
 
-    private ScriptDefinition toResponse(ScriptDefinition definition, boolean includeUiSchema) {
-        return includeUiSchema ? definition : ScriptViewMapper.withoutUiSchema(definition);
+    private ScriptDocumentView toResponse(ScriptDefinition definition, boolean includeUiSchema) {
+        return ScriptViewMapper.toView(definition, includeUiSchema);
     }
 }

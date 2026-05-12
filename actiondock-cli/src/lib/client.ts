@@ -39,6 +39,7 @@ import type {
   RepositoryToolDescriptor,
   RepositoryToolDetail,
   RepositoryToolInstallation,
+  PublishedScriptRevision,
   ScriptScheduleUpsertRequest,
   ScriptScheduleView,
   ScriptDefinition,
@@ -73,22 +74,66 @@ interface BinaryResponse {
   headers: http.IncomingHttpHeaders;
 }
 
+function normalizeScriptDefinition(script: ScriptDefinition): ScriptDefinition {
+  const published = script.published ?? null;
+  const publishedFlag = Boolean(script.publication?.published ?? published);
+  const dirty = Boolean(script.publication?.dirty);
+  return {
+    ...script,
+    published,
+    publication: {
+      published: publishedFlag,
+      dirty,
+      publishedVersion: script.publication?.publishedVersion ?? published?.version,
+      publishedAt: script.publication?.publishedAt ?? published?.publishedAt
+    }
+  };
+}
+
+function normalizePublishedRevision(scriptId: string, revision: PublishedScriptRevision): ScriptDefinition {
+  return normalizeScriptDefinition({
+    id: revision.scriptId || scriptId,
+    name: revision.name,
+    type: revision.type,
+    packaging: revision.packaging,
+    source: revision.source,
+    pythonRequirements: revision.pythonRequirements,
+    inputSchema: revision.inputSchema,
+    outputSchema: revision.outputSchema,
+    version: revision.version,
+    owner: revision.owner,
+    description: revision.description,
+    tags: revision.tags,
+    published: revision,
+    publication: {
+      published: true,
+      dirty: false,
+      publishedVersion: revision.version,
+      publishedAt: revision.publishedAt
+    }
+  });
+}
+
 export class ActionDockClient {
   constructor(private readonly options: ClientOptions) {}
 
   async listScripts(): Promise<ScriptDefinition[]> {
-    return this.requestJson<ScriptDefinition[]>("/api/scripts");
+    return this.requestJson<ScriptDefinition[]>("/api/scripts").then((items) => items.map(normalizeScriptDefinition));
   }
 
   async getScript(scriptId: string, draft: boolean): Promise<ScriptDefinition> {
-    return this.requestJson<ScriptDefinition>(draft ? `/api/scripts/${scriptId}` : `/api/scripts/${scriptId}/published`);
+    if (draft) {
+      return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}`).then(normalizeScriptDefinition);
+    }
+    return this.requestJson<PublishedScriptRevision>(`/api/scripts/${scriptId}/published`)
+      .then((revision) => normalizePublishedRevision(scriptId, revision));
   }
 
   async createScript(definition: ScriptDefinition): Promise<ScriptDefinition> {
     return this.requestJson<ScriptDefinition>("/api/scripts", {
       method: "POST",
       body: JSON.stringify(definition)
-    });
+    }).then(normalizeScriptDefinition);
   }
 
   async deleteScript(scriptId: string): Promise<void> {
@@ -101,14 +146,14 @@ export class ActionDockClient {
     return this.requestJson<ScriptDefinition>(`/api/scripts/${sourceScriptId}/fork`, {
       method: "POST",
       body: JSON.stringify(payload)
-    });
+    }).then(normalizeScriptDefinition);
   }
 
   async patchScript(scriptId: string, patch: Record<string, unknown>): Promise<ScriptDefinition> {
     return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}`, {
       method: "PATCH",
       body: JSON.stringify(patch)
-    });
+    }).then(normalizeScriptDefinition);
   }
 
   async validateScript(scriptId: string): Promise<void> {
@@ -120,13 +165,13 @@ export class ActionDockClient {
   async publishScript(scriptId: string): Promise<ScriptDefinition> {
     return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}/publish`, {
       method: "POST"
-    });
+    }).then(normalizeScriptDefinition);
   }
 
   async discardDraft(scriptId: string): Promise<ScriptDefinition> {
     return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}/discard-draft`, {
       method: "POST"
-    });
+    }).then(normalizeScriptDefinition);
   }
 
   async getScriptUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {
@@ -136,7 +181,7 @@ export class ActionDockClient {
   async pullUpstreamScript(scriptId: string, force = false): Promise<ScriptDefinition> {
     return this.requestJson<ScriptDefinition>(`/api/scripts/${scriptId}/upstream/pull?force=${force}`, {
       method: "POST"
-    });
+    }).then(normalizeScriptDefinition);
   }
 
   async executeScript(options: ExecuteOptions, draft: boolean): Promise<ExecutionResponse> {

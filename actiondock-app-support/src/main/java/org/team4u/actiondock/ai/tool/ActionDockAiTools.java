@@ -11,7 +11,7 @@ import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.PluginActionMetadata;
 import org.team4u.actiondock.domain.model.PluginRegistration;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
@@ -72,10 +72,10 @@ public final class ActionDockAiTools {
                         objectSchema(Map.of("pluginId", stringSchema())),
                         objectSchema(Map.of("plugins", Map.of("type", "array"))),
                         (input, context) -> listPluginActions(pluginRepo, string(input.get("pluginId")))),
-                tool("get_published_snapshot", "读取脚本已发布快照", AiToolPermission.READ_ONLY,
+                tool("get_published_revision", "读取脚本已发布修订", AiToolPermission.READ_ONLY,
                         objectSchema(Map.of("scriptId", stringSchema())),
-                        objectSchema(Map.of("publishedSnapshot", Map.of("type", "object"))),
-                        (input, context) -> publishedSnapshot(scriptRepo, string(input.get("scriptId"))))
+                        objectSchema(Map.of("publishedRevision", Map.of("type", "object"))),
+                        (input, context) -> publishedRevision(scriptRepo, string(input.get("scriptId"))))
         );
     }
 
@@ -171,22 +171,27 @@ public final class ActionDockAiTools {
         return Map.of("plugins", registrations.stream().map(ActionDockAiTools::pluginMap).toList());
     }
 
-    private static Map<String, Object> publishedSnapshot(ScriptRepository repository, String scriptId) {
+    private static Map<String, Object> publishedRevision(ScriptRepository repository, String scriptId) {
         ScriptDefinition script = requireScript(repository, scriptId);
-        PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
+        PublishedScriptRevision revision = script.getPublishedRevision();
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("scriptId", script.getId());
-        if (snapshot == null) {
-            values.put("publishedSnapshot", Map.of());
+        if (revision == null) {
+            values.put("publishedRevision", Map.of());
         } else {
-            Map<String, Object> snapshotValues = new LinkedHashMap<>();
-            snapshotValues.put("name", value(snapshot.getName()));
-            snapshotValues.put("type", snapshot.getType() == null ? null : snapshot.getType().name());
-            snapshotValues.put("source", value(snapshot.getSource()));
-            snapshotValues.put("inputSchema", snapshot.getInputSchema());
-            snapshotValues.put("outputSchema", snapshot.getOutputSchema());
-            snapshotValues.put("aiDependencies", snapshot.getAiDependencies());
-            values.put("publishedSnapshot", snapshotValues);
+            Map<String, Object> revisionValues = new LinkedHashMap<>();
+            revisionValues.put("revisionId", revision.getId());
+            revisionValues.put("version", revision.getVersion());
+            revisionValues.put("publishedAt", time(revision.getPublishedAt()));
+            revisionValues.put("name", value(revision.getName()));
+            revisionValues.put("type", revision.getType() == null ? null : revision.getType().name());
+            revisionValues.put("packaging", revision.getPackaging() == null ? null : revision.getPackaging().name());
+            revisionValues.put("source", value(revision.getSource()));
+            revisionValues.put("pythonRequirements", revision.getPythonRequirements());
+            revisionValues.put("inputSchema", revision.getInputSchema());
+            revisionValues.put("outputSchema", revision.getOutputSchema());
+            revisionValues.put("aiDependencies", revision.getAiDependencies());
+            values.put("publishedRevision", revisionValues);
         }
         return values;
     }
@@ -243,8 +248,11 @@ public final class ActionDockAiTools {
                 "id", script.getId(),
                 "name", script.getName(),
                 "type", script.getType() == null ? null : script.getType().name(),
-                "status", script.getStatus() == null ? null : script.getStatus().name(),
+                "published", script.hasPublishedRevision(),
+                "dirty", script.hasUnpublishedChanges(),
                 "version", script.getVersion(),
+                "publishedRevisionId", script.getPublishedRevisionId(),
+                "publishedAt", time(script.getPublishedAt()),
                 "scope", script.getScope() == null ? null : script.getScope().name(),
                 "description", script.getDescription(),
                 "tags", script.getTags(),

@@ -27,6 +27,8 @@ import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositorySkillService;
 import org.team4u.actiondock.repository.RepositoryToolService;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.script.ScriptDocumentView;
+import org.team4u.actiondock.web.script.ScriptViewMapper;
 
 import java.io.IOException;
 import java.util.List;
@@ -280,10 +282,13 @@ public class RepositoryController {
     }
 
     @PostMapping("/{id}/tools/{toolId}/working-copy")
-    public ApiResponse<ScriptDefinition> createToolWorkingCopy(@PathVariable String id,
-                                                               @PathVariable String toolId,
-                                                               @RequestBody(required = false) RepositoryCatalogTypes.WorkingCopyRequest request) {
-        return ApiResponse.success(repositoryToolService.createToolWorkingCopy(id, toolId, request), "已创建脚本工作副本");
+    public ApiResponse<ScriptDocumentView> createToolWorkingCopy(@PathVariable String id,
+                                                                 @PathVariable String toolId,
+                                                                 @RequestBody(required = false) RepositoryCatalogTypes.WorkingCopyRequest request) {
+        return ApiResponse.success(
+                ScriptViewMapper.toView(repositoryToolService.createToolWorkingCopy(id, toolId, request), true),
+                "已创建脚本工作副本"
+        );
     }
 
     /**

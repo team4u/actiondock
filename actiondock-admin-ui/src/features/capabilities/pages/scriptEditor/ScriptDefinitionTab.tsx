@@ -6,6 +6,7 @@ import { SchemaBuilder } from "../../../../components/schema/SchemaBuilder";
 import type { FormInstance } from "antd";
 import type { PluginReferenceView, ScriptDefinition, ScriptType } from "../../../../shared/types";
 import type { SchemaEditorState } from "../../../../services/schema";
+import { getPublishedScriptContent, hasScriptDraftChanges } from "../../../../services/scriptPublication";
 import {
   getSourceFileName,
   getSourceLanguage,
@@ -272,13 +273,16 @@ export function ScriptDefinitionTab({
                     {
                       key: "name",
                       dataIndex: "name",
-                      render: (_value: string, script: ScriptDefinition) => (
-                        <Space wrap size={[8, 8]}>
-                          <Text>{script.name || script.id}</Text>
-                          {script.publishedSnapshot ? <Tag>{script.publishedSnapshot.type}</Tag> : null}
-                          {script.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
-                        </Space>
-                      )
+                      render: (_value: string, script: ScriptDefinition) => {
+                        const published = getPublishedScriptContent(script);
+                        return (
+                          <Space wrap size={[8, 8]}>
+                            <Text>{script.name || script.id}</Text>
+                            {published ? <Tag>{published.type}</Tag> : null}
+                            {hasScriptDraftChanges(script) ? <Tag color="gold">有草稿</Tag> : null}
+                          </Space>
+                        );
+                      }
                     }
                   ]}
                   dataSource={filteredScriptReferences}

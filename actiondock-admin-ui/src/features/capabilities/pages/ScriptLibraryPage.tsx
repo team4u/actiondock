@@ -58,16 +58,17 @@ import {
 } from "../../../services/scriptTransfer";
 import { buildScriptDiff, toDiffTarget } from "../../../services/scriptDiff";
 import { ApiError } from "../../../shared/api/httpClient";
-import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptStatus, ScriptType } from "../../../shared/types";
+import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptType } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
 import { UpstreamSyncTag } from "../../../components/domain/UpstreamSyncTag";
 import { ForkScriptModal } from "../../../components/common/ForkScriptModal";
 import { useForkScript } from "../../../shared/hooks/useForkScript";
+import { hasScriptDraftChanges, isScriptPublished } from "../../../services/scriptPublication";
 
 const { Text } = Typography;
 
 type SourceFilter = "ALL" | Exclude<ScriptScope, undefined>;
-type StatusFilter = "ALL" | ScriptStatus | "UPDATE_AVAILABLE" | "REMOTE_CHANGES" | "DIVERGED" | "READ_ONLY";
+type StatusFilter = "ALL" | "DRAFT" | "PUBLISHED" | "UPDATE_AVAILABLE" | "REMOTE_CHANGES" | "DIVERGED" | "READ_ONLY";
 type TypeFilter = "ALL" | ScriptType;
 
 
@@ -77,7 +78,7 @@ function isEditableAsset(script: ScriptDefinition): boolean {
 }
 
 function isRunnable(script: ScriptDefinition): boolean {
-  return script.status === "PUBLISHED";
+  return isScriptPublished(script);
 }
 
 function renderPluginDependencies(dependencies: PluginDependency[]) {
@@ -195,10 +196,11 @@ export function ScriptLibraryPage() {
       if (typeFilter !== "ALL" && script.type !== typeFilter) {
         return false;
       }
-      if (statusFilter === "DRAFT" && script.status !== "DRAFT") {
+      const published = isScriptPublished(script);
+      if (statusFilter === "DRAFT" && published) {
         return false;
       }
-      if (statusFilter === "PUBLISHED" && script.status !== "PUBLISHED") {
+      if (statusFilter === "PUBLISHED" && !published) {
         return false;
       }
       if (statusFilter === "UPDATE_AVAILABLE" && !descriptor?.updateAvailable) {
@@ -579,13 +581,13 @@ export function ScriptLibraryPage() {
           <Space wrap size={[4, 4]}>
             <ScopeTag scope={record.scope} />
             {record.scope !== "REPOSITORY" && (
-              <Tag color={record.status === "PUBLISHED" ? "green" : "gold"}>
-                {record.status === "PUBLISHED" ? "已发布" : "草稿"}
+              <Tag color={isScriptPublished(record) ? "green" : "gold"}>
+                {isScriptPublished(record) ? "已发布" : "草稿"}
               </Tag>
             )}
             {descriptor?.updateAvailable ? <Tag color="processing">可更新</Tag> : null}
             {descriptor?.workingCopyId === record.id ? <UpstreamSyncTag state={descriptor?.upstreamSyncState} /> : null}
-            {record.hasUnpublishedChanges ? <Tag color="gold">有草稿</Tag> : null}
+            {hasScriptDraftChanges(record) ? <Tag color="gold">有草稿</Tag> : null}
           </Space>
         );
       }

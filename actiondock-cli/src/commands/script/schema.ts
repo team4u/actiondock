@@ -39,7 +39,7 @@ export default class ScriptSchemaCommand extends BaseCommand {
         token: resolveToken(flags)
       });
       const script = await client.getScript(args.scriptId, flags.draft);
-      const schema = flags.draft ? script.inputSchema : script.publishedSnapshot?.inputSchema ?? script.inputSchema;
+      const schema = flags.draft ? script.inputSchema : script.published?.inputSchema ?? script.inputSchema;
       const fields = extractSchemaFields(schema);
       const { flagFields, jsonOnlyFields } = splitSchemaFields(fields);
       const payload = {

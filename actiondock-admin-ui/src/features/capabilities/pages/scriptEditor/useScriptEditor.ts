@@ -28,6 +28,7 @@ import { parseGeneratedScriptText } from "../../../../services/generatedScript";
 import { buildScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
 import type { UpstreamStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../../../shared/types";
 import type { SchemaEditorState } from "../../../../services/schema";
+import { hasScriptDraftChanges } from "../../../../services/scriptPublication";
 import {
   type ScriptEditorFormValues,
   getDefaultSource,
@@ -79,9 +80,7 @@ export function useScriptEditor({
   const copyFromScriptId = mode === "create" ? searchParams.get("copyFrom")?.trim() || null : null;
   const canImportGeneratedScript = true;
   const isReadOnlyScript = Boolean(mode === "edit" && currentScript && currentScript.editable === false);
-  const hasUnpublishedChanges = Boolean(
-    currentScript?.status === "PUBLISHED" && currentScript.hasUnpublishedChanges
-  );
+  const hasUnpublishedChanges = hasScriptDraftChanges(currentScript);
   const canPublishToRepository = Boolean(currentScript && currentScript.scope !== "REPOSITORY");
 
   const detectedPluginDependencies = useMemo(
@@ -160,7 +159,10 @@ export function useScriptEditor({
       pythonRequirements: "",
       inputSchema: {},
       outputSchema: {},
-      status: "DRAFT",
+      publication: {
+        published: false,
+        dirty: false
+      },
       version: 1
     });
   };
@@ -232,7 +234,10 @@ export function useScriptEditor({
             pythonRequirements: preset.pythonRequirements ?? "",
             inputSchema: preset.inputSchema,
             outputSchema: preset.outputSchema,
-            status: "DRAFT",
+            publication: {
+              published: false,
+              dirty: false
+            },
             version: 1,
             description: preset.description
           });
@@ -310,13 +315,16 @@ export function useScriptEditor({
       pythonRequirements: values.pythonRequirements?.trim() ? values.pythonRequirements : undefined,
       inputSchema,
       outputSchema,
-      status: currentScript?.status ?? "DRAFT",
+      published: currentScript?.published,
+      publication: currentScript?.publication ?? {
+        published: false,
+        dirty: false
+      },
       version: currentScript?.version ?? 1,
       description: values.description?.trim() || undefined,
       scriptDependencies: currentScript?.scriptDependencies,
       pluginDependencies: selectedScriptType === "GROOVY" ? detectedPluginDependencies : [],
       aiDependencies: selectedScriptType === "GROOVY" ? detectedAiDependencies : [],
-      publishedSnapshot: currentScript?.publishedSnapshot,
       createdAt: currentScript?.createdAt,
       updatedAt: currentScript?.updatedAt
     };

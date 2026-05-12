@@ -120,7 +120,7 @@ public class ScriptScheduleDispatcher {
             }
 
             ScriptDefinition script = scriptRepository.findById(schedule.getScriptId()).orElse(null);
-            if (script == null || script.getPublishedSnapshot() == null) {
+            if (script == null || !script.hasPublishedRevision()) {
                 synchronizedCancelSchedule(scheduleId);
                 return;
             }

@@ -34,12 +34,12 @@ export default class ScriptListCommand extends BaseCommand {
         token: resolveToken(flags)
       });
       const scripts = await client.listScripts();
-      const filtered = flags.all ? scripts : scripts.filter((item) => Boolean(item.publishedSnapshot));
+      const filtered = flags.all ? scripts : scripts.filter((item) => Boolean(item.publication?.published));
       const items = filtered.map((item) => ({
         id: item.id,
         name: item.name ?? null,
         type: item.type ?? null,
-        published: Boolean(item.publishedSnapshot)
+        published: Boolean(item.publication?.published)
       }));
 
       if (flags.json) {

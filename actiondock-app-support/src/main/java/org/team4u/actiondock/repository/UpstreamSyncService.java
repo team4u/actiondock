@@ -6,12 +6,11 @@ import org.team4u.actiondock.domain.model.EventSourceScope;
 import org.team4u.actiondock.domain.model.EventTrigger;
 import org.team4u.actiondock.domain.model.EventTriggerScope;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptScope;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.model.UpstreamBinding;
@@ -156,7 +155,6 @@ class UpstreamSyncService {
                 .setPythonRequirements(detail.pythonRequirements())
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setRepositoryId(repositoryId)
                 .setRepositoryToolId(d.toolId())
                 .setRepositoryVersion(d.version())
@@ -165,7 +163,12 @@ class UpstreamSyncService {
                 .setTags(d.tags())
                 .setScriptDependencies(d.scriptDependencies())
                 .setPluginDependencies(d.pluginDependencies());
-        definition.setPublishedSnapshot(definition.snapshotCurrent());
+        definition.setPublishedRevision(PublishedScriptRevision.fromDraft(
+                definition,
+                scriptId + ":published:" + definition.getVersion(),
+                definition.getVersion(),
+                LocalDateTime.now()
+        ));
         return definition;
     }
 

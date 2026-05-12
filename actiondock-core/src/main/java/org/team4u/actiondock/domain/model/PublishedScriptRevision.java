@@ -1,21 +1,21 @@
 package org.team4u.actiondock.domain.model;
 
-import java.util.Collections;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * 已发布脚本的快照，记录脚本发布时的完整状态。
- * <p>
- * 快照包含脚本的名称、类型、源代码和输入输出模式。
- * 用于保存和恢复已发布的脚本版本，确保历史版本的可追溯性。
- *
- * @author jay.wu
+ * 不可变的已发布脚本修订。
  */
-public class PublishedScriptSnapshot {
+public class PublishedScriptRevision {
+    private String id;
+    private String scriptId;
+    private Integer version = 1;
+    private LocalDateTime publishedAt;
     private String name;
     private ScriptType type = ScriptType.GROOVY;
     private ScriptPackaging packaging = ScriptPackaging.TOOL;
@@ -30,18 +30,17 @@ public class PublishedScriptSnapshot {
     private List<PluginDependency> pluginDependencies = new ArrayList<>();
     private List<AiDependency> aiDependencies = new ArrayList<>();
 
-    public PublishedScriptSnapshot() {
+    public PublishedScriptRevision() {
     }
 
-    /**
-     * 拷贝构造函数，基于另一个快照创建新实例。
-     *
-     * @param other 要拷贝的源快照
-     */
-    public PublishedScriptSnapshot(PublishedScriptSnapshot other) {
+    public PublishedScriptRevision(PublishedScriptRevision other) {
         if (other == null) {
             return;
         }
+        setId(other.id);
+        setScriptId(other.scriptId);
+        setVersion(other.version);
+        setPublishedAt(other.publishedAt);
         setName(other.name);
         setType(other.type);
         setPackaging(other.packaging);
@@ -57,11 +56,68 @@ public class PublishedScriptSnapshot {
         setAiDependencies(other.aiDependencies);
     }
 
+    public static PublishedScriptRevision fromDraft(ScriptDefinition draft, String revisionId, Integer version, LocalDateTime publishedAt) {
+        return new PublishedScriptRevision()
+                .setId(revisionId)
+                .setScriptId(draft.getId())
+                .setVersion(version == null ? 1 : version)
+                .setPublishedAt(publishedAt)
+                .setName(draft.getName())
+                .setType(draft.getType())
+                .setPackaging(draft.getPackaging())
+                .setSource(draft.getSource())
+                .setPythonRequirements(draft.getPythonRequirements())
+                .setInputSchema(draft.getInputSchema())
+                .setOutputSchema(draft.getOutputSchema())
+                .setOwner(draft.getOwner())
+                .setDescription(draft.getDescription())
+                .setTags(draft.getTags())
+                .setScriptDependencies(draft.getScriptDependencies())
+                .setPluginDependencies(draft.getPluginDependencies())
+                .setAiDependencies(draft.getAiDependencies());
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public PublishedScriptRevision setId(String id) {
+        this.id = id;
+        return this;
+    }
+
+    public String getScriptId() {
+        return scriptId;
+    }
+
+    public PublishedScriptRevision setScriptId(String scriptId) {
+        this.scriptId = scriptId;
+        return this;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public PublishedScriptRevision setVersion(Integer version) {
+        this.version = version == null ? 1 : version;
+        return this;
+    }
+
+    public LocalDateTime getPublishedAt() {
+        return publishedAt;
+    }
+
+    public PublishedScriptRevision setPublishedAt(LocalDateTime publishedAt) {
+        this.publishedAt = publishedAt;
+        return this;
+    }
+
     public String getName() {
         return name;
     }
 
-    public PublishedScriptSnapshot setName(String name) {
+    public PublishedScriptRevision setName(String name) {
         this.name = name;
         return this;
     }
@@ -70,7 +126,7 @@ public class PublishedScriptSnapshot {
         return type;
     }
 
-    public PublishedScriptSnapshot setType(ScriptType type) {
+    public PublishedScriptRevision setType(ScriptType type) {
         this.type = type == null ? ScriptType.GROOVY : type;
         return this;
     }
@@ -79,7 +135,7 @@ public class PublishedScriptSnapshot {
         return packaging;
     }
 
-    public PublishedScriptSnapshot setPackaging(ScriptPackaging packaging) {
+    public PublishedScriptRevision setPackaging(ScriptPackaging packaging) {
         this.packaging = packaging == null ? ScriptPackaging.TOOL : packaging;
         return this;
     }
@@ -88,7 +144,7 @@ public class PublishedScriptSnapshot {
         return source;
     }
 
-    public PublishedScriptSnapshot setSource(String source) {
+    public PublishedScriptRevision setSource(String source) {
         this.source = source;
         return this;
     }
@@ -97,35 +153,25 @@ public class PublishedScriptSnapshot {
         return pythonRequirements;
     }
 
-    public PublishedScriptSnapshot setPythonRequirements(String pythonRequirements) {
+    public PublishedScriptRevision setPythonRequirements(String pythonRequirements) {
         this.pythonRequirements = pythonRequirements;
         return this;
     }
 
-    /**
-     * 获取输入模式的不可变视图。
-     *
-     * @return 输入模式的不可变映射
-     */
     public Map<String, Object> getInputSchema() {
         return Collections.unmodifiableMap(inputSchema);
     }
 
-    public PublishedScriptSnapshot setInputSchema(Map<String, Object> inputSchema) {
+    public PublishedScriptRevision setInputSchema(Map<String, Object> inputSchema) {
         this.inputSchema = SchemaValueCopier.copyMap(inputSchema);
         return this;
     }
 
-    /**
-     * 获取输出模式的不可变视图。
-     *
-     * @return 输出模式的不可变映射
-     */
     public Map<String, Object> getOutputSchema() {
         return Collections.unmodifiableMap(outputSchema);
     }
 
-    public PublishedScriptSnapshot setOutputSchema(Map<String, Object> outputSchema) {
+    public PublishedScriptRevision setOutputSchema(Map<String, Object> outputSchema) {
         this.outputSchema = SchemaValueCopier.copyMap(outputSchema);
         return this;
     }
@@ -134,7 +180,7 @@ public class PublishedScriptSnapshot {
         return owner;
     }
 
-    public PublishedScriptSnapshot setOwner(String owner) {
+    public PublishedScriptRevision setOwner(String owner) {
         this.owner = owner;
         return this;
     }
@@ -143,7 +189,7 @@ public class PublishedScriptSnapshot {
         return description;
     }
 
-    public PublishedScriptSnapshot setDescription(String description) {
+    public PublishedScriptRevision setDescription(String description) {
         this.description = description;
         return this;
     }
@@ -152,7 +198,7 @@ public class PublishedScriptSnapshot {
         return List.copyOf(tags);
     }
 
-    public PublishedScriptSnapshot setTags(List<String> tags) {
+    public PublishedScriptRevision setTags(List<String> tags) {
         this.tags = tags == null ? new ArrayList<>() : new ArrayList<>(tags);
         return this;
     }
@@ -161,7 +207,7 @@ public class PublishedScriptSnapshot {
         return SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
     }
 
-    public PublishedScriptSnapshot setScriptDependencies(List<ScriptDependency> scriptDependencies) {
+    public PublishedScriptRevision setScriptDependencies(List<ScriptDependency> scriptDependencies) {
         this.scriptDependencies = SchemaValueCopier.copyList(scriptDependencies, ScriptDependency::copy);
         return this;
     }
@@ -170,7 +216,7 @@ public class PublishedScriptSnapshot {
         return SchemaValueCopier.copyList(pluginDependencies, PluginDependency::copy);
     }
 
-    public PublishedScriptSnapshot setPluginDependencies(List<PluginDependency> pluginDependencies) {
+    public PublishedScriptRevision setPluginDependencies(List<PluginDependency> pluginDependencies) {
         this.pluginDependencies = SchemaValueCopier.copyList(pluginDependencies, PluginDependency::copy);
         return this;
     }
@@ -179,18 +225,13 @@ public class PublishedScriptSnapshot {
         return SchemaValueCopier.copyList(aiDependencies, AiDependency::copy);
     }
 
-    public PublishedScriptSnapshot setAiDependencies(List<AiDependency> aiDependencies) {
+    public PublishedScriptRevision setAiDependencies(List<AiDependency> aiDependencies) {
         this.aiDependencies = SchemaValueCopier.copyList(aiDependencies, AiDependency::copy);
         return this;
     }
 
-    /**
-     * 创建当前快照的深拷贝。
-     *
-     * @return 新的快照实例，包含相同的数据
-     */
-    public PublishedScriptSnapshot copy() {
-        return new PublishedScriptSnapshot(this);
+    public PublishedScriptRevision copy() {
+        return new PublishedScriptRevision(this);
     }
 
     void applyTo(ScriptDefinition target) {
@@ -209,15 +250,35 @@ public class PublishedScriptSnapshot {
         target.setAiDependencies(aiDependencies);
     }
 
+    public boolean matchesDraft(ScriptDefinition definition) {
+        return Objects.equals(name, definition.getName())
+                && type == definition.getType()
+                && packaging == definition.getPackaging()
+                && Objects.equals(source, definition.getSource())
+                && Objects.equals(pythonRequirements, definition.getPythonRequirements())
+                && Objects.equals(inputSchema, definition.getInputSchema())
+                && Objects.equals(outputSchema, definition.getOutputSchema())
+                && Objects.equals(owner, definition.getOwner())
+                && Objects.equals(description, definition.getDescription())
+                && Objects.equals(tags, definition.getTags())
+                && Objects.equals(scriptDependencies, definition.getScriptDependencies())
+                && Objects.equals(pluginDependencies, definition.getPluginDependencies())
+                && Objects.equals(aiDependencies, definition.getAiDependencies());
+    }
+
     @Override
     public boolean equals(Object object) {
         if (this == object) {
             return true;
         }
-        if (!(object instanceof PublishedScriptSnapshot other)) {
+        if (!(object instanceof PublishedScriptRevision other)) {
             return false;
         }
-        return Objects.equals(name, other.name)
+        return Objects.equals(id, other.id)
+                && Objects.equals(scriptId, other.scriptId)
+                && Objects.equals(version, other.version)
+                && Objects.equals(publishedAt, other.publishedAt)
+                && Objects.equals(name, other.name)
                 && type == other.type
                 && packaging == other.packaging
                 && Objects.equals(source, other.source)
@@ -235,6 +296,10 @@ public class PublishedScriptSnapshot {
     @Override
     public int hashCode() {
         return Objects.hash(
+                id,
+                scriptId,
+                version,
+                publishedAt,
                 name,
                 type,
                 packaging,

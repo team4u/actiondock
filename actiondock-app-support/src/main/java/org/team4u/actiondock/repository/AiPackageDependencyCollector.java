@@ -14,7 +14,6 @@ import org.team4u.actiondock.ai.tool.ActionDockDynamicAiToolProvider;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.PluginRegistration;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
@@ -149,9 +148,8 @@ class AiPackageDependencyCollector {
             return;
         }
         ScriptDefinition published = scriptApplicationService.getPublished(scriptId);
-        PublishedScriptSnapshot snapshot = published.getPublishedSnapshot();
         builder.addScript(published.getId(), toAiPackageScriptFile(published));
-        collectTransitiveDependencies(repository, builder, published, snapshot);
+        collectTransitiveDependencies(repository, builder, published);
     }
 
     /**
@@ -194,15 +192,13 @@ class AiPackageDependencyCollector {
 
     private void collectTransitiveDependencies(RepositoryDefinition repository,
                                                AiPackageBundleBuilder builder,
-                                               ScriptDefinition published,
-                                               PublishedScriptSnapshot snapshot) {
-        String source = snapshot == null ? published.getSource() : snapshot.getSource();
+                                               ScriptDefinition published) {
+        String source = published.getSource();
         collectPluginDependencies(builder, published.getPluginDependencies());
         for (String nestedScriptId : AiPackageIdRewriter.extractScriptDependenciesFromSource(source)) {
             collectScriptDependency(repository, builder, nestedScriptId);
         }
-        collectAiDependencies(repository, builder,
-                snapshot == null ? published.getAiDependencies() : snapshot.getAiDependencies());
+        collectAiDependencies(repository, builder, published.getAiDependencies());
     }
 
     private void collectPluginDependencies(AiPackageBundleBuilder builder, List<PluginDependency> dependencies) {
@@ -312,20 +308,19 @@ class AiPackageDependencyCollector {
     }
 
     static AiPackageScriptFile toAiPackageScriptFile(ScriptDefinition published) {
-        PublishedScriptSnapshot snapshot = published.getPublishedSnapshot();
         return new AiPackageScriptFile(
                 published.getId(),
-                snapshot == null ? published.getName() : snapshot.getName(),
-                (snapshot == null ? published.getType() : snapshot.getType()).name(),
-                (snapshot == null ? published.getPackaging() : snapshot.getPackaging()).name(),
+                published.getName(),
+                published.getType().name(),
+                published.getPackaging().name(),
                 published.getDescription(),
                 published.getTags(),
-                snapshot == null ? published.getSource() : snapshot.getSource(),
-                snapshot == null ? published.getPythonRequirements() : snapshot.getPythonRequirements(),
-                snapshot == null ? published.getInputSchema() : snapshot.getInputSchema(),
-                snapshot == null ? published.getOutputSchema() : snapshot.getOutputSchema(),
+                published.getSource(),
+                published.getPythonRequirements(),
+                published.getInputSchema(),
+                published.getOutputSchema(),
                 published.getPluginDependencies(),
-                snapshot == null ? published.getAiDependencies() : snapshot.getAiDependencies()
+                published.getAiDependencies()
         );
     }
 

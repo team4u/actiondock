@@ -3,6 +3,7 @@ import { PlusOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ProcessorDefinition, ProcessorMode, ScriptDefinition } from "../../shared/types";
+import { isScriptPublished } from "../../services/scriptPublication";
 import { parseJsonText, prettyJson } from "../../services/utils";
 import type { ProcessorPurpose } from "./processorScriptPresets";
 import { writePreset } from "./processorScriptPresets";
@@ -53,7 +54,7 @@ export function ProcessorEditor({
   const publishedScriptOptions = useMemo(
     () =>
       scripts
-        .filter((script) => Boolean(script.publishedSnapshot) || script.status === "PUBLISHED")
+        .filter((script) => isScriptPublished(script))
         .sort((left, right) => left.id.localeCompare(right.id))
         .map((script) => ({
           label: `${script.name} (${script.id})`,

@@ -5,14 +5,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * 脚本定义实体，表示一个可执行的脚本配置。
- * <p>
- * 脚本定义包含脚本的源代码、类型、输入输出模式以及发布状态。
- * 支持草稿和发布两种状态，通过快照机制实现版本管理。
- *
- * @author jay.wu
+ * 脚本定义聚合，保存当前 draft 和已发布 revision 指针。
  */
 public class ScriptDefinition {
     private String id;
@@ -23,9 +19,10 @@ public class ScriptDefinition {
     private String pythonRequirements;
     private Map<String, Object> inputSchema = SchemaValueCopier.copyMap(null);
     private Map<String, Object> outputSchema = SchemaValueCopier.copyMap(null);
-    private ScriptStatus status = ScriptStatus.DRAFT;
     private Integer version = 1;
-    private PublishedScriptSnapshot publishedSnapshot;
+    private String publishedRevisionId;
+    private LocalDateTime publishedAt;
+    private PublishedScriptRevision publishedRevision;
     private ScriptScope scope = ScriptScope.PERSONAL;
     private String repositoryId;
     private String repositoryToolId;
@@ -67,7 +64,7 @@ public class ScriptDefinition {
     }
 
     public ScriptDefinition setType(ScriptType type) {
-        this.type = type;
+        this.type = type == null ? ScriptType.GROOVY : type;
         return this;
     }
 
@@ -116,21 +113,44 @@ public class ScriptDefinition {
         return this;
     }
 
-    public ScriptStatus getStatus() {
-        return status;
-    }
-
-    public ScriptDefinition setStatus(ScriptStatus status) {
-        this.status = status;
-        return this;
-    }
-
     public Integer getVersion() {
         return version;
     }
 
     public ScriptDefinition setVersion(Integer version) {
         this.version = version;
+        if (this.publishedRevision != null && version != null) {
+            this.publishedRevision = this.publishedRevision.copy().setVersion(version);
+        }
+        return this;
+    }
+
+    public String getPublishedRevisionId() {
+        return publishedRevisionId;
+    }
+
+    public ScriptDefinition setPublishedRevisionId(String publishedRevisionId) {
+        this.publishedRevisionId = publishedRevisionId;
+        return this;
+    }
+
+    public LocalDateTime getPublishedAt() {
+        return publishedAt;
+    }
+
+    public ScriptDefinition setPublishedAt(LocalDateTime publishedAt) {
+        this.publishedAt = publishedAt;
+        return this;
+    }
+
+    public PublishedScriptRevision getPublishedRevision() {
+        return publishedRevision == null ? null : publishedRevision.copy();
+    }
+
+    public ScriptDefinition setPublishedRevision(PublishedScriptRevision publishedRevision) {
+        this.publishedRevision = publishedRevision == null ? null : publishedRevision.copy();
+        this.publishedRevisionId = this.publishedRevision == null ? null : this.publishedRevision.getId();
+        this.publishedAt = this.publishedRevision == null ? null : this.publishedRevision.getPublishedAt();
         return this;
     }
 
@@ -287,43 +307,16 @@ public class ScriptDefinition {
         return this;
     }
 
-    /**
-     * 获取已发布快照的副本。
-     * <p>
-     * 如果脚本已发布且存在快照，返回快照的深拷贝以防止意外修改。
-     * 如果脚本状态为已发布但无存储快照，则基于当前内容创建临时快照。
-     *
-     * @return 发布的快照副本，如果未发布则返回 null
-     */
-    public PublishedScriptSnapshot getPublishedSnapshot() {
-        PublishedScriptSnapshot snapshot = resolveEffectiveSnapshot();
-        return snapshot == null ? null : snapshot.copy();
+    public boolean hasPublishedRevision() {
+        return publishedRevision != null;
     }
 
-    public ScriptDefinition setPublishedSnapshot(PublishedScriptSnapshot publishedSnapshot) {
-        this.publishedSnapshot = publishedSnapshot == null ? null : publishedSnapshot.copy();
-        return this;
+    public boolean hasUnpublishedChanges() {
+        return publishedRevision != null && !publishedRevision.matchesDraft(this);
     }
 
-    /**
-     * 检查是否存在存储的发布快照。
-     *
-     * @return 如果存在存储的发布快照返回 true
-     */
-    private boolean hasStoredPublishedSnapshot() {
-        return publishedSnapshot != null;
-    }
-
-    /**
-     * 创建当前状态的快照。
-     * <p>
-     * 快照包含脚本的当前名称、类型、源代码和输入输出模式。
-     * 用于保存脚本的发布版本。
-     *
-     * @return 基于当前内容创建的新快照实例
-     */
-    public PublishedScriptSnapshot snapshotCurrent() {
-        return new PublishedScriptSnapshot()
+    private ScriptDefinition copyDraftFieldsTo(ScriptDefinition target) {
+        return target
                 .setName(name)
                 .setType(type)
                 .setPackaging(packaging)
@@ -339,30 +332,13 @@ public class ScriptDefinition {
                 .setAiDependencies(aiDependencies);
     }
 
-    /**
-     * 检查是否存在未发布的更改。
-     * <p>
-     * 通过比较已发布快照与当前内容来判断是否有未发布的修改。
-     *
-     * @return 如果存在未发布的更改返回 true
-     */
-    public boolean getHasUnpublishedChanges() {
-        PublishedScriptSnapshot snapshot = getStoredSnapshot();
-        return snapshot != null && !snapshot.equals(snapshotCurrent());
-    }
-
-    /**
-     * 将脚本转换为已发布状态的定义。
-     * <p>
-     * 基于存储的发布快照创建一个新的脚本定义，设置状态为已发布。
-     * 用于执行已发布的脚本版本，确保用户获取的是经过审批的稳定版本。
-     *
-     * @return 已发布状态的脚本定义
-     * @throws IllegalStateException 如果脚本尚未发布
-     */
     private ScriptDefinition copyMetadataTo(ScriptDefinition target) {
         return target
                 .setId(id)
+                .setVersion(version)
+                .setPublishedRevisionId(publishedRevisionId)
+                .setPublishedAt(publishedAt)
+                .setPublishedRevision(publishedRevision)
                 .setScope(scope)
                 .setRepositoryId(repositoryId)
                 .setRepositoryToolId(repositoryToolId)
@@ -378,16 +354,14 @@ public class ScriptDefinition {
     }
 
     public ScriptDefinition toPublishedDefinition() {
-        PublishedScriptSnapshot snapshot = resolveEffectiveSnapshot();
-        if (snapshot == null) {
-            throw new IllegalStateException("脚本尚未发布: " + id);
+        if (publishedRevision == null) {
+            throw new IllegalStateException("脚本未发布: " + id);
         }
-
         ScriptDefinition definition = new ScriptDefinition()
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(version)
-                .setPublishedSnapshot(snapshot);
-        snapshot.applyTo(definition);
+                .setPublishedRevision(publishedRevision);
+        publishedRevision.applyTo(definition);
+        definition.setDirty(false);
         return copyMetadataTo(definition);
     }
 
@@ -409,92 +383,58 @@ public class ScriptDefinition {
         return this;
     }
 
-    /**
-     * 获取已存储的发布快照。
-     *
-     * @return 存储的快照，如果没有则返回 null
-     */
-    private PublishedScriptSnapshot getStoredSnapshot() {
-        return publishedSnapshot;
-    }
-
-    /**
-     * 解析有效的发布快照。
-     * <p>
-     * 优先返回存储的快照，如果没有存储快照但状态为已发布，
-     * 则基于当前内容创建临时快照。
-     *
-     * @return 发布的快照，如果未发布则返回 null
-     */
-    private PublishedScriptSnapshot resolveEffectiveSnapshot() {
-        if (publishedSnapshot != null) {
-            return publishedSnapshot;
-        }
-        if (status == ScriptStatus.PUBLISHED) {
-            return snapshotCurrent();
-        }
-        return null;
-    }
-
-    /**
-     * 发布脚本，将当前内容冻结为发布快照并切换为 PUBLISHED 状态。
-     *
-     * @return 当前实例
-     * @throws IllegalStateException 如果脚本是 ARCHIVED 状态
-     */
-    public ScriptDefinition publish() {
-        if (status == ScriptStatus.ARCHIVED) {
-            throw new IllegalStateException("已归档脚本不能发布: " + id);
-        }
-        this.publishedSnapshot = snapshotCurrent();
-        this.status = ScriptStatus.PUBLISHED;
-        this.version = version + 1;
+    public ScriptDefinition publish(String revisionId, LocalDateTime publishedAt) {
+        PublishedScriptRevision revision = PublishedScriptRevision.fromDraft(this, revisionId, version + 1, publishedAt);
+        this.publishedRevision = revision;
+        this.publishedRevisionId = revisionId;
+        this.publishedAt = publishedAt;
+        this.version = revision.getVersion();
         sourceMetadata.setDirty(false);
         return this;
     }
 
-    /**
-     * 丢弃草稿，恢复为已发布快照的内容。
-     *
-     * @return 当前实例
-     * @throws IllegalStateException 如果没有已发布快照
-     */
-    ScriptDefinition revertToPublished() {
-        PublishedScriptSnapshot snapshot = getStoredSnapshot();
-        if (snapshot == null) {
-            throw new IllegalStateException("没有已发布快照可恢复: " + id);
+    public ScriptDefinition revertToPublished() {
+        if (publishedRevision == null) {
+            throw new IllegalStateException("没有已发布修订可恢复: " + id);
         }
-        snapshot.applyTo(this);
-        this.status = ScriptStatus.PUBLISHED;
+        publishedRevision.applyTo(this);
         sourceMetadata.setDirty(false);
         return this;
     }
 
-    /**
-     * 从已有的脚本定义合并缺失字段。
-     * <p>
-     * 当传入的定义中某个字段为 null 时，使用已有定义的对应字段填充。
-     * 同时根据比较结果计算 dirty 标志。
-     *
-     * @param existing 已有的脚本定义
-     * @return 当前实例
-     */
     public ScriptDefinition mergeFrom(ScriptDefinition existing) {
         mergeNullFieldsFrom(existing);
-        setDirty(isEditable() ? existing.isDirty() || !snapshotCurrent().equals(existing.snapshotCurrent()) : existing.isDirty());
+        setDirty(isEditable() ? existing.isDirty() || !sameDraftAs(existing) : existing.isDirty());
         setEditable(existing.isEditable());
         return this;
+    }
+
+    private boolean sameDraftAs(ScriptDefinition other) {
+        return Objects.equals(name, other.name)
+                && type == other.type
+                && packaging == other.packaging
+                && Objects.equals(source, other.source)
+                && Objects.equals(pythonRequirements, other.pythonRequirements)
+                && Objects.equals(inputSchema, other.inputSchema)
+                && Objects.equals(outputSchema, other.outputSchema)
+                && Objects.equals(owner, other.owner)
+                && Objects.equals(description, other.description)
+                && Objects.equals(tags, other.tags)
+                && Objects.equals(scriptDependencies, other.scriptDependencies)
+                && Objects.equals(pluginDependencies, other.pluginDependencies)
+                && Objects.equals(aiDependencies, other.aiDependencies);
     }
 
     private void mergeNullFieldsFrom(ScriptDefinition existing) {
         if (createdAt == null) setCreatedAt(existing.getCreatedAt());
         if (version == null) setVersion(existing.getVersion());
+        if (publishedRevisionId == null) setPublishedRevisionId(existing.getPublishedRevisionId());
+        if (publishedAt == null) setPublishedAt(existing.getPublishedAt());
+        if (publishedRevision == null) setPublishedRevision(existing.getPublishedRevision());
         if (owner == null) setOwner(existing.getOwner());
         if (packaging == null) setPackaging(existing.getPackaging());
         if (description == null) setDescription(existing.getDescription());
         if (pythonRequirements == null) setPythonRequirements(existing.getPythonRequirements());
-        if (status == null) setStatus(existing.getStatus());
-        if (!hasStoredPublishedSnapshot()) setPublishedSnapshot(existing.getPublishedSnapshot());
         if (scope == null) setScope(existing.getScope());
         if (repositoryId == null) setRepositoryId(existing.getRepositoryId());
         if (repositoryToolId == null) setRepositoryToolId(existing.getRepositoryToolId());
@@ -507,20 +447,11 @@ public class ScriptDefinition {
 
     public ScriptDefinition fullCopy() {
         ScriptDefinition copy = new ScriptDefinition()
-                .setStatus(status)
                 .setVersion(version)
-                .setPublishedSnapshot(publishedSnapshot);
-        snapshotCurrent().applyTo(copy);
+                .setPublishedRevisionId(publishedRevisionId)
+                .setPublishedAt(publishedAt)
+                .setPublishedRevision(publishedRevision);
+        copyDraftFieldsTo(copy);
         return copyMetadataTo(copy);
-    }
-
-    public void normalizePublicationState() {
-        if (hasStoredPublishedSnapshot()) {
-            setStatus(ScriptStatus.PUBLISHED);
-            return;
-        }
-        if (status == ScriptStatus.PUBLISHED) {
-            setPublishedSnapshot(snapshotCurrent());
-        }
     }
 }

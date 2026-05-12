@@ -7,10 +7,9 @@ import org.team4u.actiondock.domain.model.ExecutionLogEntry;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
@@ -296,13 +295,16 @@ class ExecutionApplicationServiceTest {
                 .setName("Draft")
                 .setType(ScriptType.PYTHON)
                 .setSource("return {'message': 'draft'}")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-1")
+                        .setScriptId("script-1")
+                        .setVersion(1)
+                        .setPublishedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Live")
                         .setType(ScriptType.GROOVY)
                         .setSource("return [message: 'live']")
                         .setInputSchema(Map.of("type", "object"))
-                        .setOutputSchema(Map.of("type", "object")))
-                .setStatus(ScriptStatus.PUBLISHED));
+                        .setOutputSchema(Map.of("type", "object"))));
         when(scriptEngine.execute(any(), any(), any())).thenReturn(Map.of("message", "live"));
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
@@ -322,7 +324,7 @@ class ExecutionApplicationServiceTest {
 
     @Test
     void executePublishedRejectsUnpublishedScript() {
-        scriptRepository.save(new ScriptDefinition().setId("script-1").setStatus(ScriptStatus.DRAFT));
+        scriptRepository.save(new ScriptDefinition().setId("script-1"));
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,
                 executionRepository,

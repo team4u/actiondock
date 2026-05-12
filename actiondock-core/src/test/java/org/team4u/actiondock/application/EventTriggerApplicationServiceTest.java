@@ -10,7 +10,7 @@ import org.team4u.actiondock.domain.model.EventSourceTransport;
 import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorResult;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.port.EventDispatchRepository;
@@ -153,7 +153,11 @@ class EventTriggerApplicationServiceTest {
     }
 
     private static ScriptDefinition publishedScript(String id, Map<String, Object> inputSchema) {
-        PublishedScriptSnapshot snapshot = new PublishedScriptSnapshot()
+        PublishedScriptRevision revision = new PublishedScriptRevision()
+                .setId("rev-" + id)
+                .setScriptId(id)
+                .setVersion(1)
+                .setPublishedAt(java.time.LocalDateTime.of(2026, 4, 30, 10, 0))
                 .setName("script")
                 .setSource("return input")
                 .setInputSchema(inputSchema)
@@ -164,6 +168,6 @@ class EventTriggerApplicationServiceTest {
                 .setSource("return input")
                 .setInputSchema(inputSchema)
                 .setOutputSchema(Map.of("type", "object"))
-                .setPublishedSnapshot(snapshot);
+                .setPublishedRevision(revision);
     }
 }

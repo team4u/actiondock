@@ -172,7 +172,7 @@ public class ExecutionApplicationService {
 
     private ScriptDefinition getPublishedScript(String scriptId) {
         ScriptDefinition definition = getScript(scriptId);
-        if (definition.getPublishedSnapshot() == null) {
+        if (!definition.hasPublishedRevision()) {
             throw new IllegalArgumentException("脚本未发布: " + scriptId);
         }
         return definition.toPublishedDefinition();

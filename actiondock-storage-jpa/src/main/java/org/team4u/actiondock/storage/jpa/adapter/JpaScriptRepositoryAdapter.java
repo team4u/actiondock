@@ -1,21 +1,23 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Component;
 
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.AiDependency;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
 import org.team4u.actiondock.domain.model.PluginDependency;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptScope;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataPublishedScriptRevisionRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,15 +29,26 @@ import java.util.Optional;
 @Component
 public class JpaScriptRepositoryAdapter implements ScriptRepository {
     private final SpringDataScriptEntityRepository repository;
+    private final SpringDataPublishedScriptRevisionRepository publishedRevisionRepository;
     private final JsonCodec jsonCodec;
 
-    public JpaScriptRepositoryAdapter(SpringDataScriptEntityRepository repository, JsonCodec jsonCodec) {
+    public JpaScriptRepositoryAdapter(SpringDataScriptEntityRepository repository,
+                                      SpringDataPublishedScriptRevisionRepository publishedRevisionRepository,
+                                      JsonCodec jsonCodec) {
         this.repository = repository;
+        this.publishedRevisionRepository = publishedRevisionRepository;
         this.jsonCodec = jsonCodec;
     }
 
     @Override
+    @Transactional
     public ScriptDefinition save(ScriptDefinition definition) {
+        PublishedScriptRevision revision = definition.getPublishedRevision();
+        if (revision != null) {
+            revision = ensurePersistableRevision(definition, revision);
+            publishedRevisionRepository.save(toRevisionEntity(revision));
+            definition.setPublishedRevision(revision);
+        }
         return toDomain(repository.save(toEntity(definition)));
     }
 
@@ -60,20 +73,12 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
 
     @Override
     public void deleteById(String id) {
+        publishedRevisionRepository.deleteByScriptId(id);
         repository.deleteById(id);
     }
 
-    /**
-     * 将脚本定义领域对象转换为 JPA 实体。
-     * <p>
-     * 将已发布快照平铺到实体的 published 前缀字段，Schema 使用 JSON 序列化。
-     *
-     * @param definition 脚本定义领域对象
-     * @return JPA 实体
-     */
     private ScriptEntity toEntity(ScriptDefinition definition) {
         ScriptEntity entity = new ScriptEntity();
-        PublishedScriptSnapshot publishedSnapshot = definition.getPublishedSnapshot();
         entity.setId(definition.getId());
         entity.setName(definition.getName());
         entity.setType(definition.getType().name());
@@ -82,23 +87,9 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setPythonRequirements(definition.getPythonRequirements());
         entity.setInputSchemaJson(jsonCodec.write(definition.getInputSchema()));
         entity.setOutputSchemaJson(jsonCodec.write(definition.getOutputSchema()));
-        if (publishedSnapshot != null) {
-            entity.setPublishedName(publishedSnapshot.getName());
-            entity.setPublishedType(publishedSnapshot.getType().name());
-            entity.setPublishedPackaging(publishedSnapshot.getPackaging().name());
-            entity.setPublishedSource(publishedSnapshot.getSource());
-            entity.setPublishedPythonRequirements(publishedSnapshot.getPythonRequirements());
-            entity.setPublishedInputSchemaJson(jsonCodec.write(publishedSnapshot.getInputSchema()));
-            entity.setPublishedOutputSchemaJson(jsonCodec.write(publishedSnapshot.getOutputSchema()));
-            entity.setPublishedOwner(publishedSnapshot.getOwner());
-            entity.setPublishedDescription(publishedSnapshot.getDescription());
-            entity.setPublishedTagsJson(jsonCodec.write(publishedSnapshot.getTags()));
-            entity.setPublishedPluginDependenciesJson(jsonCodec.write(publishedSnapshot.getPluginDependencies()));
-            entity.setPublishedScriptDependenciesJson(jsonCodec.write(publishedSnapshot.getScriptDependencies()));
-            entity.setPublishedAiDependenciesJson(jsonCodec.write(publishedSnapshot.getAiDependencies()));
-        }
-        entity.setStatus(definition.getStatus().name());
         entity.setVersionValue(definition.getVersion());
+        entity.setPublishedRevisionId(definition.getPublishedRevisionId());
+        entity.setPublishedAt(definition.getPublishedAt());
         entity.setScope(definition.getScope().name());
         entity.setRepositoryId(definition.getRepositoryId());
         entity.setRepositoryToolId(definition.getRepositoryToolId());
@@ -120,14 +111,6 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         return entity;
     }
 
-    /**
-     * 将 JPA 实体转换为脚本定义领域对象。
-     * <p>
-     * 从 published 前缀字段重建已发布快照，Schema 使用 JSON 反序列化。
-     *
-     * @param entity JPA 实体
-     * @return 脚本定义领域对象
-     */
     private ScriptDefinition toDomain(ScriptEntity entity) {
         return new ScriptDefinition()
                 .setId(entity.getId())
@@ -138,9 +121,10 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setPythonRequirements(entity.getPythonRequirements())
                 .setInputSchema(jsonCodec.readMap(entity.getInputSchemaJson()))
                 .setOutputSchema(jsonCodec.readMap(entity.getOutputSchemaJson()))
-                .setPublishedSnapshot(toSnapshot(entity))
-                .setStatus(ScriptStatus.valueOf(entity.getStatus()))
                 .setVersion(entity.getVersionValue())
+                .setPublishedRevisionId(entity.getPublishedRevisionId())
+                .setPublishedAt(entity.getPublishedAt())
+                .setPublishedRevision(resolvePublishedRevision(entity))
                 .setScope(entity.getScope() == null ? ScriptScope.PERSONAL : ScriptScope.valueOf(entity.getScope()))
                 .setRepositoryId(entity.getRepositoryId())
                 .setRepositoryToolId(entity.getRepositoryToolId())
@@ -161,34 +145,77 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setUpdatedAt(entity.getUpdatedAt());
     }
 
-    /**
-     * 从 JPA 实体的 published 字段重建已发布快照。
-     *
-     * @param entity JPA 实体
-     * @return 已发布快照，所有 published 字段为空时返回 null
-     */
-    private PublishedScriptSnapshot toSnapshot(ScriptEntity entity) {
-        if (entity.getPublishedType() == null && entity.getPublishedPackaging() == null
-                && entity.getPublishedSource() == null && entity.getPublishedName() == null
-                && entity.getPublishedInputSchemaJson() == null && entity.getPublishedOutputSchemaJson() == null
-                && entity.getPublishedOwner() == null && entity.getPublishedDescription() == null
-                && entity.getPublishedTagsJson() == null && entity.getPublishedPluginDependenciesJson() == null) {
+    private PublishedScriptRevision resolvePublishedRevision(ScriptEntity entity) {
+        if (entity.getPublishedRevisionId() == null || entity.getPublishedRevisionId().isBlank()) {
             return null;
         }
+        return publishedRevisionRepository.findById(entity.getPublishedRevisionId())
+                .map(this::toRevisionDomain)
+                .orElse(null);
+    }
 
-        return new PublishedScriptSnapshot()
-                .setName(entity.getPublishedName())
-                .setType(entity.getPublishedType() == null ? ScriptType.GROOVY : ScriptType.valueOf(entity.getPublishedType()))
-                .setPackaging(entity.getPublishedPackaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(entity.getPublishedPackaging()))
-                .setSource(entity.getPublishedSource())
-                .setPythonRequirements(entity.getPublishedPythonRequirements())
-                .setInputSchema(jsonCodec.readMap(entity.getPublishedInputSchemaJson()))
-                .setOutputSchema(jsonCodec.readMap(entity.getPublishedOutputSchemaJson()))
-                .setOwner(entity.getPublishedOwner())
-                .setDescription(entity.getPublishedDescription())
-                .setTags(jsonCodec.readList(entity.getPublishedTagsJson(), String.class))
-                .setPluginDependencies(jsonCodec.readList(entity.getPublishedPluginDependenciesJson(), PluginDependency.class))
-                .setScriptDependencies(jsonCodec.readList(entity.getPublishedScriptDependenciesJson(), ScriptDependency.class))
-                .setAiDependencies(jsonCodec.readList(entity.getPublishedAiDependenciesJson(), AiDependency.class));
+    private PublishedScriptRevision ensurePersistableRevision(ScriptDefinition definition, PublishedScriptRevision revision) {
+        PublishedScriptRevision normalized = revision.copy();
+        if (normalized.getScriptId() == null || normalized.getScriptId().isBlank()) {
+            normalized.setScriptId(definition.getId());
+        }
+        if (normalized.getVersion() == null) {
+            normalized.setVersion(definition.getVersion());
+        }
+        if (normalized.getId() == null || normalized.getId().isBlank()) {
+            normalized.setId(normalized.getScriptId() + ":published:" + normalized.getVersion());
+        }
+        if (normalized.getPublishedAt() == null) {
+            LocalDateTime publishedAt = definition.getPublishedAt();
+            if (publishedAt == null) {
+                publishedAt = definition.getUpdatedAt() == null ? definition.getCreatedAt() : definition.getUpdatedAt();
+            }
+            normalized.setPublishedAt(publishedAt);
+        }
+        return normalized;
+    }
+
+    private org.team4u.actiondock.storage.jpa.entity.PublishedScriptRevisionEntity toRevisionEntity(PublishedScriptRevision revision) {
+        org.team4u.actiondock.storage.jpa.entity.PublishedScriptRevisionEntity entity =
+                new org.team4u.actiondock.storage.jpa.entity.PublishedScriptRevisionEntity();
+        entity.setId(revision.getId());
+        entity.setScriptId(revision.getScriptId());
+        entity.setVersionValue(revision.getVersion());
+        entity.setPublishedAt(revision.getPublishedAt());
+        entity.setName(revision.getName());
+        entity.setType(revision.getType().name());
+        entity.setPackaging(revision.getPackaging().name());
+        entity.setSource(revision.getSource());
+        entity.setPythonRequirements(revision.getPythonRequirements());
+        entity.setInputSchemaJson(jsonCodec.write(revision.getInputSchema()));
+        entity.setOutputSchemaJson(jsonCodec.write(revision.getOutputSchema()));
+        entity.setOwner(revision.getOwner());
+        entity.setDescription(revision.getDescription());
+        entity.setTagsJson(jsonCodec.write(revision.getTags()));
+        entity.setScriptDependenciesJson(jsonCodec.write(revision.getScriptDependencies()));
+        entity.setPluginDependenciesJson(jsonCodec.write(revision.getPluginDependencies()));
+        entity.setAiDependenciesJson(jsonCodec.write(revision.getAiDependencies()));
+        return entity;
+    }
+
+    private PublishedScriptRevision toRevisionDomain(org.team4u.actiondock.storage.jpa.entity.PublishedScriptRevisionEntity entity) {
+        return new PublishedScriptRevision()
+                .setId(entity.getId())
+                .setScriptId(entity.getScriptId())
+                .setVersion(entity.getVersionValue())
+                .setPublishedAt(entity.getPublishedAt())
+                .setName(entity.getName())
+                .setType(entity.getType() == null ? ScriptType.GROOVY : ScriptType.valueOf(entity.getType()))
+                .setPackaging(entity.getPackaging() == null ? ScriptPackaging.TOOL : ScriptPackaging.valueOf(entity.getPackaging()))
+                .setSource(entity.getSource())
+                .setPythonRequirements(entity.getPythonRequirements())
+                .setInputSchema(jsonCodec.readMap(entity.getInputSchemaJson()))
+                .setOutputSchema(jsonCodec.readMap(entity.getOutputSchemaJson()))
+                .setOwner(entity.getOwner())
+                .setDescription(entity.getDescription())
+                .setTags(jsonCodec.readList(entity.getTagsJson(), String.class))
+                .setScriptDependencies(jsonCodec.readList(entity.getScriptDependenciesJson(), ScriptDependency.class))
+                .setPluginDependencies(jsonCodec.readList(entity.getPluginDependenciesJson(), PluginDependency.class))
+                .setAiDependencies(jsonCodec.readList(entity.getAiDependenciesJson(), AiDependency.class));
     }
 }

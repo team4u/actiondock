@@ -787,26 +787,26 @@ function diffSource(
 }
 
 function toPublishBase(script: ScriptDefinition): ScriptDiffTarget | undefined {
-  const snapshot = script.publishedSnapshot;
-  if (!snapshot) {
+  const published = script.published;
+  if (!published) {
     return undefined;
   }
 
   return {
-    name: normalizeString(snapshot.name),
-    type: snapshot.type,
-    packaging: snapshot.packaging,
-    source: snapshot.source,
-    pythonRequirements: snapshot.pythonRequirements,
-    description: normalizeString(snapshot.description),
-    owner: normalizeString(snapshot.owner),
-    tags: normalizeStringArray(snapshot.tags),
-    inputSchema: snapshot.inputSchema,
-    outputSchema: snapshot.outputSchema,
-    scriptDependencies: snapshot.scriptDependencies,
-    pluginDependencies: snapshot.pluginDependencies,
+    name: normalizeString(published.name),
+    type: published.type,
+    packaging: published.packaging,
+    source: published.source,
+    pythonRequirements: published.pythonRequirements,
+    description: normalizeString(published.description),
+    owner: normalizeString(published.owner),
+    tags: normalizeStringArray(published.tags),
+    inputSchema: published.inputSchema,
+    outputSchema: published.outputSchema,
+    scriptDependencies: published.scriptDependencies,
+    pluginDependencies: published.pluginDependencies,
     aiDependencies: normalizeAiDependencies(
-      snapshot.aiDependencies?.map((item) => [item.capability, item.profile ?? "", item.agentProfile ?? "", item.required ? "required" : "optional"].join(":"))
+      published.aiDependencies?.map((item) => [item.capability, item.profile ?? "", item.agentProfile ?? "", item.required ? "required" : "optional"].join(":"))
     )
   };
 }

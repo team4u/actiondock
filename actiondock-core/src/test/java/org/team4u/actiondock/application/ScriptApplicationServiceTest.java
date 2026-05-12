@@ -1,13 +1,12 @@
 package org.team4u.actiondock.application;
 
 import org.junit.jupiter.api.Test;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.model.UpstreamBinding;
@@ -46,11 +45,10 @@ class ScriptApplicationServiceTest {
                 .setId("script-1")
                 .setName("Hello")
                 .setSource("return [:]")
-                .setVersion(null)
-                .setStatus(null));
+                .setVersion(null));
 
         assertThat(saved.getVersion()).isEqualTo(1);
-        assertThat(saved.getStatus()).isEqualTo(ScriptStatus.DRAFT);
+        assertThat(saved.hasPublishedRevision()).isFalse();
         assertThat(saved.getPackaging()).isEqualTo(ScriptPackaging.TOOL);
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();
@@ -65,30 +63,32 @@ class ScriptApplicationServiceTest {
                 .setName("Published")
                 .setType(ScriptType.GROOVY)
                 .setSource("return [message: 'published']")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-script-1")
+                        .setScriptId("script-1")
+                        .setVersion(7)
+                        .setPublishedAt(LocalDateTime.of(2024, 1, 2, 3, 4))
                         .setName("Published")
                         .setType(ScriptType.GROOVY)
                         .setSource("return [message: 'published']")
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("type", "object")))
                 .setCreatedAt(createdAt)
-                .setVersion(7)
-                .setStatus(ScriptStatus.PUBLISHED)));
+                .setVersion(7)));
         when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ScriptDefinition saved = service.save(new ScriptDefinition()
                 .setId("script-1")
                 .setName("Updated")
                 .setSource("return [:]")
-                .setVersion(null)
-                .setStatus(null));
+                .setVersion(null));
 
         assertThat(saved.getCreatedAt()).isEqualTo(createdAt);
         assertThat(saved.getVersion()).isEqualTo(7);
-        assertThat(saved.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
-        assertThat(saved.getPublishedSnapshot()).isNotNull();
-        assertThat(saved.getPublishedSnapshot().getSource()).isEqualTo("return [message: 'published']");
-        assertThat(saved.getHasUnpublishedChanges()).isTrue();
+        assertThat(saved.hasPublishedRevision()).isTrue();
+        assertThat(saved.getPublishedRevision()).isNotNull();
+        assertThat(saved.getPublishedRevision().getSource()).isEqualTo("return [message: 'published']");
+        assertThat(saved.hasUnpublishedChanges()).isTrue();
         assertThat(saved.getUpdatedAt()).isAfterOrEqualTo(createdAt);
     }
 
@@ -109,8 +109,7 @@ class ScriptApplicationServiceTest {
                 .setSourceCommit("abc123")
                 .setSourceDigest("digest")
                 .setDirty(false)
-                .setVersion(1)
-                .setStatus(ScriptStatus.DRAFT)));
+                .setVersion(1)));
         when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ScriptDefinition saved = service.save(new ScriptDefinition()
@@ -158,24 +157,23 @@ class ScriptApplicationServiceTest {
                         .setRequiredActions(List.of("send"))))
                 .setInputSchema(Map.of("type", "object"))
                 .setOutputSchema(Map.of("type", "object"))
-                .setVersion(2)
-                .setStatus(ScriptStatus.DRAFT)));
+                .setVersion(2)));
         when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         ScriptDefinition published = service.publish("script-1");
 
-        assertThat(published.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
+        assertThat(published.hasPublishedRevision()).isTrue();
         assertThat(published.getVersion()).isEqualTo(3);
-        assertThat(published.getPublishedSnapshot()).isNotNull();
+        assertThat(published.getPublishedRevision()).isNotNull();
         assertThat(published.getPackaging()).isEqualTo(ScriptPackaging.FLOW);
-        assertThat(published.getPublishedSnapshot().getPackaging()).isEqualTo(ScriptPackaging.FLOW);
-        assertThat(published.getPublishedSnapshot().getSource()).isEqualTo("return [message: 'draft']");
-        assertThat(published.getPublishedSnapshot().getPythonRequirements()).isEqualTo("requests==2.31.0");
-        assertThat(published.getPublishedSnapshot().getOwner()).isEqualTo("alice");
-        assertThat(published.getPublishedSnapshot().getDescription()).isEqualTo("draft desc");
-        assertThat(published.getPublishedSnapshot().getTags()).containsExactly("demo");
-        assertThat(published.getPublishedSnapshot().getPluginDependencies()).hasSize(1);
-        assertThat(published.getHasUnpublishedChanges()).isFalse();
+        assertThat(published.getPublishedRevision().getPackaging()).isEqualTo(ScriptPackaging.FLOW);
+        assertThat(published.getPublishedRevision().getSource()).isEqualTo("return [message: 'draft']");
+        assertThat(published.getPublishedRevision().getPythonRequirements()).isEqualTo("requests==2.31.0");
+        assertThat(published.getPublishedRevision().getOwner()).isEqualTo("alice");
+        assertThat(published.getPublishedRevision().getDescription()).isEqualTo("draft desc");
+        assertThat(published.getPublishedRevision().getTags()).containsExactly("demo");
+        assertThat(published.getPublishedRevision().getPluginDependencies()).hasSize(1);
+        assertThat(published.hasUnpublishedChanges()).isFalse();
         assertThat(published.getUpdatedAt()).isNotNull();
     }
 
@@ -193,8 +191,7 @@ class ScriptApplicationServiceTest {
                 .setSource("return [message: 'draft']")
                 .setInputSchema(inputSchema)
                 .setOutputSchema(Map.of("type", "object"))
-                .setVersion(1)
-                .setStatus(ScriptStatus.DRAFT);
+                .setVersion(1);
         when(scriptRepository.findById("script-1")).thenReturn(Optional.of(draft));
         when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -203,7 +200,7 @@ class ScriptApplicationServiceTest {
         Map<String, Object> currentProperties = (Map<String, Object>) published.getInputSchema().get("properties");
         @SuppressWarnings("unchecked")
         Map<String, Object> publishedProperties =
-                (Map<String, Object>) published.getPublishedSnapshot().getInputSchema().get("properties");
+                (Map<String, Object>) published.getPublishedRevision().getInputSchema().get("properties");
         @SuppressWarnings("unchecked")
         Map<String, Object> currentMessageField = (Map<String, Object>) currentProperties.get("message");
         @SuppressWarnings("unchecked")
@@ -212,7 +209,7 @@ class ScriptApplicationServiceTest {
         currentMessageField.put("title", "Message");
 
         assertThat(publishedMessageField).doesNotContainKey("title");
-        assertThat(published.getHasUnpublishedChanges()).isTrue();
+        assertThat(published.hasUnpublishedChanges()).isTrue();
     }
 
     @Test
@@ -223,7 +220,11 @@ class ScriptApplicationServiceTest {
                 .setType(ScriptType.PYTHON)
                 .setPackaging(ScriptPackaging.TOOL)
                 .setSource("return {'message': 'draft'}")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-script-1")
+                        .setScriptId("script-1")
+                        .setVersion(4)
+                        .setPublishedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Live")
                         .setType(ScriptType.GROOVY)
                         .setPackaging(ScriptPackaging.FLOW)
@@ -238,7 +239,6 @@ class ScriptApplicationServiceTest {
                                 .setPluginId("email-plugin")
                                 .setVersionRange(">= 1.0.0")
                                 .setRequiredActions(List.of("send")))))
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(4)));
 
         ScriptDefinition published = service.getPublished("script-1");
@@ -252,8 +252,8 @@ class ScriptApplicationServiceTest {
         assertThat(published.getDescription()).isEqualTo("published desc");
         assertThat(published.getTags()).containsExactly("stable");
         assertThat(published.getPluginDependencies()).hasSize(1);
-        assertThat(published.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
-        assertThat(published.getHasUnpublishedChanges()).isFalse();
+        assertThat(published.hasPublishedRevision()).isTrue();
+        assertThat(published.hasUnpublishedChanges()).isFalse();
     }
 
     @Test
@@ -264,7 +264,11 @@ class ScriptApplicationServiceTest {
                 .setType(ScriptType.PYTHON)
                 .setPackaging(ScriptPackaging.TOOL)
                 .setSource("return {'message': 'draft'}")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-script-1")
+                        .setScriptId("script-1")
+                        .setVersion(5)
+                        .setPublishedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Live")
                         .setType(ScriptType.GROOVY)
                         .setPackaging(ScriptPackaging.FLOW)
@@ -272,7 +276,6 @@ class ScriptApplicationServiceTest {
                         .setDescription("published desc")
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("type", "object")))
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(5)));
         when(scriptRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -284,7 +287,7 @@ class ScriptApplicationServiceTest {
         assertThat(discarded.getSource()).isEqualTo("return [message: 'live']");
         assertThat(discarded.getDescription()).isEqualTo("published desc");
         assertThat(discarded.getVersion()).isEqualTo(5);
-        assertThat(discarded.getHasUnpublishedChanges()).isFalse();
+        assertThat(discarded.hasUnpublishedChanges()).isFalse();
     }
 
     @Test
@@ -297,13 +300,16 @@ class ScriptApplicationServiceTest {
                 .setOwner("draft-owner")
                 .setDescription("draft desc")
                 .setTags(List.of("draft"))
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-script-1")
+                        .setScriptId("script-1")
+                        .setVersion(2)
+                        .setPublishedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Live")
                         .setType(ScriptType.GROOVY)
                         .setSource("return [message: 'live']")
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("type", "object")))
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(2)));
 
         ScriptDefinition published = service.getPublished("script-1");
@@ -317,8 +323,7 @@ class ScriptApplicationServiceTest {
     @Test
     void discardDraftRejectsUnpublishedScript() {
         when(scriptRepository.findById("script-1")).thenReturn(Optional.of(new ScriptDefinition()
-                .setId("script-1")
-                .setStatus(ScriptStatus.DRAFT)));
+                .setId("script-1")));
 
         assertThatThrownBy(() -> service.discardDraft("script-1"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -332,13 +337,16 @@ class ScriptApplicationServiceTest {
                 .setName("Repository Tool")
                 .setType(ScriptType.GROOVY)
                 .setSource("return [message: 'draft']")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-repo.tool")
+                        .setScriptId("repo.tool")
+                        .setVersion(4)
+                        .setPublishedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Live Tool")
                         .setType(ScriptType.PYTHON)
                         .setSource("return {'message': 'live'}")
                         .setInputSchema(Map.of("type", "object"))
                         .setOutputSchema(Map.of("type", "object")))
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(4)
                 .setScope(ScriptScope.REPOSITORY)
                 .setRepositoryId("repo")
@@ -374,7 +382,7 @@ class ScriptApplicationServiceTest {
         assertThat(fork.getRepositoryToolId()).isEqualTo("tool");
         assertThat(fork.getRepositoryVersion()).isEqualTo("1.0.0");
         assertThat(fork.getSource()).isEqualTo("return {'message': 'live'}");
-        assertThat(fork.getPublishedSnapshot()).isNotNull();
+        assertThat(fork.getPublishedRevision()).isNotNull();
 
         ArgumentCaptor<ScriptSchedule> scheduleCaptor = ArgumentCaptor.forClass(ScriptSchedule.class);
         verify(scriptScheduleRepository).save(scheduleCaptor.capture());

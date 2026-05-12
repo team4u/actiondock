@@ -8,7 +8,7 @@ import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.PluginRegistration;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.model.SharedStateEntry;
@@ -306,12 +306,12 @@ class PythonScriptEngineTest {
     private static ScriptInvocationService invocationService() {
         ScriptDefinition child = new ScriptDefinition()
                 .setId("child")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
-                        .setName("Child")
-                        .setType(ScriptType.GROOVY)
-                        .setSource("return {:}")
-                        .setInputSchema(Map.of("type", "object"))
-                        .setOutputSchema(Map.of("type", "object")));
+                .setName("Child")
+                .setType(ScriptType.GROOVY)
+                .setSource("return {:}")
+                .setInputSchema(Map.of("type", "object"))
+                .setOutputSchema(Map.of("type", "object"));
+        child.setPublishedRevision(PublishedScriptRevision.fromDraft(child, "child:published:1", 1, LocalDateTime.now()));
         ScriptRepository repository = new ScriptRepository() {
             @Override
             public ScriptDefinition save(ScriptDefinition definition) {

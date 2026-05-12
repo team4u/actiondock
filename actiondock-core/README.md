@@ -4,7 +4,7 @@
 
 ## 负责范围
 
-- 脚本定义、发布快照和执行模型
+- 脚本定义、发布修订和执行模型
 - 输入输出 Schema 校验与结果投影
 - 执行记录、日志、错误详情、参数预设
 - 定时任务与调度领域模型
@@ -33,7 +33,7 @@
 ### 执行模型
 
 - `ScriptDefinition`：当前草稿或本地脚本定义
-- `PublishedScriptSnapshot`：已发布快照
+- `PublishedScriptRevision`：已发布脚本修订
 - `ExecutionRecord`：执行记录，含状态、输入、输出、日志和错误详情
 - `ExecutionPreset`：命名参数预设
 - `SubmitMode`：同步或异步提交方式

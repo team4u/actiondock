@@ -1,16 +1,22 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { ExecutionPreset, ExecutionPresetUpsertRequest, ScriptDefinition } from "../../shared/types";
+import type { ExecutionPreset, ExecutionPresetUpsertRequest, PublishedScriptRevision, ScriptDefinition } from "../../shared/types";
+import {
+  fromPublishedScriptRevision,
+  normalizeScriptDefinition,
+  normalizeScriptDefinitions
+} from "../../services/scriptPublication";
 
 export function listScripts(): Promise<ScriptDefinition[]> {
-  return request<ScriptDefinition[]>("/api/scripts?includeUiSchema=true");
+  return request<ScriptDefinition[]>("/api/scripts?includeUiSchema=true").then(normalizeScriptDefinitions);
 }
 
 export function getScript(id: string): Promise<ScriptDefinition> {
-  return request<ScriptDefinition>(`/api/scripts/${id}?includeUiSchema=true`);
+  return request<ScriptDefinition>(`/api/scripts/${id}?includeUiSchema=true`).then(normalizeScriptDefinition);
 }
 
 export function getPublishedScript(id: string): Promise<ScriptDefinition> {
-  return request<ScriptDefinition>(`/api/scripts/${id}/published?includeUiSchema=true`);
+  return request<PublishedScriptRevision>(`/api/scripts/${id}/published?includeUiSchema=true`)
+    .then((revision) => fromPublishedScriptRevision(revision, id) as ScriptDefinition);
 }
 
 export function createScript(payload: ScriptDefinition): Promise<ScriptDefinition> {
@@ -18,7 +24,7 @@ export function createScript(payload: ScriptDefinition): Promise<ScriptDefinitio
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
-  });
+  }).then(normalizeScriptDefinition);
 }
 
 export function updateScript(id: string, payload: ScriptDefinition): Promise<ScriptDefinition> {
@@ -26,7 +32,7 @@ export function updateScript(id: string, payload: ScriptDefinition): Promise<Scr
     method: "PUT",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
-  });
+  }).then(normalizeScriptDefinition);
 }
 
 export function deleteScript(id: string): Promise<void> {
@@ -44,13 +50,13 @@ export function validateScript(id: string): Promise<void> {
 export function publishScript(id: string): Promise<ScriptDefinition> {
   return request<ScriptDefinition>(`/api/scripts/${id}/publish?includeUiSchema=true`, {
     method: "POST"
-  });
+  }).then(normalizeScriptDefinition);
 }
 
 export function discardDraft(id: string): Promise<ScriptDefinition> {
   return request<ScriptDefinition>(`/api/scripts/${id}/discard-draft?includeUiSchema=true`, {
     method: "POST"
-  });
+  }).then(normalizeScriptDefinition);
 }
 
 export function listPresets(scriptId: string): Promise<ExecutionPreset[]> {

@@ -2,7 +2,7 @@ package org.team4u.actiondock.application;
 
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
@@ -211,7 +211,11 @@ class ScriptInvocationServiceTest {
                                 "name", Map.of("type", "string", "title", "Name")
                         )
                 ))
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-" + id)
+                        .setScriptId(id)
+                        .setVersion(1)
+                        .setPublishedAt(java.time.LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Published Name")
                         .setType(ScriptType.GROOVY)
                         .setSource("published-source")

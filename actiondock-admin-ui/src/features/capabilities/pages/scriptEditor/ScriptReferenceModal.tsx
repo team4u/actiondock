@@ -11,6 +11,7 @@ import { resolveSchemaFields } from "../../../../services/schema";
 import { buildScriptInvokeSnippet } from "../../../../services/scriptInvocationSnippets";
 import { useCopyMessage } from "../../../../shared/hooks/useCopyMessage";
 import type { ScriptDefinition, ScriptType } from "../../../../shared/types";
+import { getPublishedScriptContent, hasScriptDraftChanges } from "../../../../services/scriptPublication";
 
 const { Text } = Typography;
 
@@ -28,13 +29,14 @@ export function ScriptReferenceModal({
   messageApi
 }: ScriptReferenceModalProps) {
   const handleCopy = useCopyMessage(messageApi, "调用已复制", "复制失败");
+  const published = getPublishedScriptContent(script);
 
-  if (!script?.publishedSnapshot) return null;
+  if (!script || !published) return null;
   const apiKey = getApiKey() || undefined;
   const origin = window.location.origin;
 
   const args = buildSchemaFieldExampleValues(
-    resolveSchemaFields(script.publishedSnapshot.inputSchema).supportedFields
+    resolveSchemaFields(published.inputSchema).supportedFields
   );
   const snippet = buildScriptInvokeSnippet(selectedScriptType, script.id, args);
   const cliPresets = buildCliCommandPresets({
@@ -68,10 +70,10 @@ export function ScriptReferenceModal({
       <Space direction="vertical" size={14} style={{ width: "100%" }}>
         <Space wrap size={[8, 8]}>
           <Text type="secondary">{script.id}</Text>
-          <Tag>{script.publishedSnapshot.type}</Tag>
+          <Tag>{published.type}</Tag>
           <Tag color="green">已发布</Tag>
           <Text type="secondary">v{script.version}</Text>
-          {script.hasUnpublishedChanges ? (
+          {hasScriptDraftChanges(script) ? (
             <Text type="warning">存在未发布改动，以下为已发布契约</Text>
           ) : null}
         </Space>
@@ -83,7 +85,7 @@ export function ScriptReferenceModal({
             {
               key: "published-name",
               label: "已发布名称",
-              children: script.publishedSnapshot.name || script.name || script.id
+              children: published.name || script.name || script.id
             },
             {
               key: "published-type",
@@ -95,14 +97,14 @@ export function ScriptReferenceModal({
         <Row gutter={[12, 12]}>
           <Col xs={24} md={12}>
             <SchemaFieldList
-              schema={script.publishedSnapshot.inputSchema}
+              schema={published.inputSchema}
               title="输入字段"
               emptyDescription="无输入字段"
             />
           </Col>
           <Col xs={24} md={12}>
             <SchemaFieldList
-              schema={script.publishedSnapshot.outputSchema}
+              schema={published.outputSchema}
               title="输出字段"
               emptyDescription="无输出字段"
             />

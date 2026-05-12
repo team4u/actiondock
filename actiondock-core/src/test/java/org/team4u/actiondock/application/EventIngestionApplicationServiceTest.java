@@ -21,7 +21,7 @@ import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorMode;
 import org.team4u.actiondock.domain.model.ProcessorResult;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.TemplateProcessorConfig;
 import org.team4u.actiondock.domain.model.SubmitMode;
@@ -321,7 +321,11 @@ class EventIngestionApplicationServiceTest {
                 .setId(id)
                 .setName("script")
                 .setOutputSchema(Map.of("type", "object", "properties", Map.of("result", Map.of("type", "string"))))
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-" + id)
+                        .setScriptId(id)
+                        .setVersion(1)
+                        .setPublishedAt(java.time.LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("script")
                         .setOutputSchema(Map.of("type", "object", "properties", Map.of("result", Map.of("type", "string")))));
     }

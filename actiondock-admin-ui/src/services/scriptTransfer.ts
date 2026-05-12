@@ -1,14 +1,15 @@
 import type {
   ConfigValue,
+  AiDependency,
   PluginDependency,
-  PublishedScriptSnapshot,
+  PublishedScriptRevision,
   ScriptSchedule,
   ScriptDefinition,
   ScriptDependency,
   ScriptPackaging,
-  ScriptStatus,
   ScriptType
 } from "../shared/types";
+import { normalizeScriptDefinition } from "./scriptPublication";
 
 export interface ScriptExportBundleV1 {
   version: 1;
@@ -48,7 +49,6 @@ export interface ConfigValueImportAnalysis {
 
 const SUPPORTED_SCRIPT_TYPES: ScriptType[] = ["GROOVY", "PYTHON"];
 const SUPPORTED_SCRIPT_PACKAGING: ScriptPackaging[] = ["TOOL", "FLOW"];
-const SUPPORTED_STATUSES: ScriptStatus[] = ["DRAFT", "PUBLISHED"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -148,7 +148,32 @@ function parseScriptDependencies(value: unknown, fieldName: string): ScriptDepen
   return value.map((item, index) => parseScriptDependency(item, `${fieldName}[${index}]`));
 }
 
-function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScriptSnapshot | undefined {
+function parseAiDependency(value: unknown, fieldName: string): AiDependency {
+  if (!isRecord(value)) {
+    throw new Error(`${fieldName} 必须是对象`);
+  }
+  if (!isNonEmptyString(value.capability)) {
+    throw new Error(`${fieldName}.capability 缺少合法值`);
+  }
+  return {
+    capability: value.capability.trim() as AiDependency["capability"],
+    profile: assertOptionalString(value.profile, `${fieldName}.profile`),
+    agentProfile: assertOptionalString(value.agentProfile, `${fieldName}.agentProfile`),
+    required: assertBoolean(value.required, `${fieldName}.required`)
+  };
+}
+
+function parseAiDependencies(value: unknown, fieldName: string): AiDependency[] | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} 必须是数组`);
+  }
+  return value.map((item, index) => parseAiDependency(item, `${fieldName}[${index}]`));
+}
+
+function parsePublishedRevision(value: unknown, fieldName: string): PublishedScriptRevision | undefined {
   if (value == null) {
     return undefined;
   }
@@ -175,6 +200,10 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
   }
 
   return {
+    scriptId: assertOptionalString(value.scriptId, `${fieldName}.scriptId`) ?? "",
+    revisionId: assertOptionalString(value.revisionId, `${fieldName}.revisionId`) ?? "",
+    version: Number.isInteger(value.version) && Number(value.version) > 0 ? Number(value.version) : 1,
+    publishedAt: assertOptionalString(value.publishedAt, `${fieldName}.publishedAt`),
     name: name.trim(),
     type: type as ScriptType,
     packaging: (packaging as ScriptPackaging | undefined) ?? "TOOL",
@@ -186,7 +215,8 @@ function parsePublishedSnapshot(value: unknown, fieldName: string): PublishedScr
     inputSchema: assertSchemaObject(value.inputSchema, `${fieldName}.inputSchema`),
     outputSchema: assertSchemaObject(value.outputSchema, `${fieldName}.outputSchema`),
     scriptDependencies: parseScriptDependencies(value.scriptDependencies, `${fieldName}.scriptDependencies`),
-    pluginDependencies: parsePluginDependencies(value.pluginDependencies, `${fieldName}.pluginDependencies`)
+    pluginDependencies: parsePluginDependencies(value.pluginDependencies, `${fieldName}.pluginDependencies`),
+    aiDependencies: parseAiDependencies(value.aiDependencies, `${fieldName}.aiDependencies`)
   };
 }
 
@@ -200,7 +230,6 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
   const source = value.source;
   const type = value.type;
   const packaging = value.packaging;
-  const status = value.status;
   const version = value.version;
 
   if (!isNonEmptyString(id)) {
@@ -218,14 +247,24 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
   if (packaging != null && !SUPPORTED_SCRIPT_PACKAGING.includes(packaging as ScriptPackaging)) {
     throw new Error(`第 ${index + 1} 条脚本 ${id} 的 packaging 仅支持 ${SUPPORTED_SCRIPT_PACKAGING.join(" / ")}`);
   }
-  if (!SUPPORTED_STATUSES.includes(status as ScriptStatus)) {
-    throw new Error(`第 ${index + 1} 条脚本 ${id} 的 status 不合法`);
-  }
   if (!Number.isInteger(version) || Number(version) <= 0) {
     throw new Error(`第 ${index + 1} 条脚本 ${id} 的 version 必须是正整数`);
   }
 
-  return {
+  const published = parsePublishedRevision(
+    value.published,
+    `第 ${index + 1} 条脚本 ${id} 的 published`
+  );
+  const publication = isRecord(value.publication)
+    ? {
+        published: value.publication.published == null ? Boolean(published) : assertBoolean(value.publication.published, `第 ${index + 1} 条脚本 ${id} 的 publication.published`),
+        dirty: value.publication.dirty == null ? false : assertBoolean(value.publication.dirty, `第 ${index + 1} 条脚本 ${id} 的 publication.dirty`),
+        publishedVersion: value.publication.publishedVersion == null ? undefined : Number(value.publication.publishedVersion),
+        publishedAt: assertOptionalString(value.publication.publishedAt, `第 ${index + 1} 条脚本 ${id} 的 publication.publishedAt`)
+      }
+    : undefined;
+
+  return normalizeScriptDefinition({
     id: id.trim(),
     name: name.trim(),
     type: type as ScriptType,
@@ -233,7 +272,6 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
     source,
     inputSchema: assertSchemaObject(value.inputSchema, `第 ${index + 1} 条脚本 ${id} 的 inputSchema`),
     outputSchema: assertSchemaObject(value.outputSchema, `第 ${index + 1} 条脚本 ${id} 的 outputSchema`),
-    status: status as ScriptStatus,
     version: Number(version),
     owner: assertOptionalString(value.owner, `第 ${index + 1} 条脚本 ${id} 的 owner`),
     description: assertOptionalString(value.description, `第 ${index + 1} 条脚本 ${id} 的 description`),
@@ -246,10 +284,11 @@ export function parseScriptDefinition(value: unknown, index: number): ScriptDefi
       value.pluginDependencies,
       `第 ${index + 1} 条脚本 ${id} 的 pluginDependencies`
     ),
-    publishedSnapshot: parsePublishedSnapshot(value.publishedSnapshot, `第 ${index + 1} 条脚本 ${id} 的 publishedSnapshot`),
+    published,
+    publication,
     createdAt: assertOptionalString(value.createdAt, `第 ${index + 1} 条脚本 ${id} 的 createdAt`),
     updatedAt: assertOptionalString(value.updatedAt, `第 ${index + 1} 条脚本 ${id} 的 updatedAt`)
-  };
+  });
 }
 
 export function parseScriptSchedule(value: unknown, index: number): ScriptSchedule {

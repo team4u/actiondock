@@ -25,23 +25,12 @@ function buildScriptDefinition(): ScriptDefinition {
         }
       }
     },
-    status: "PUBLISHED",
-    version: 7,
-    publishedSnapshot: {
-      name: "Hello Groovy Live",
-      type: "GROOVY",
-      packaging: "FLOW",
-      source: "return [message: 'live']",
-      inputSchema: {
-        type: "object",
-        properties: {}
-      },
-      outputSchema: {
-        type: "object",
-        properties: {}
-      }
+    published: null,
+    publication: {
+      published: false,
+      dirty: false
     },
-    hasUnpublishedChanges: true,
+    version: 7,
     createdAt: "2024-01-02T03:04:05",
     updatedAt: "2024-01-03T04:05:06"
   };
@@ -84,10 +73,14 @@ describe("script duplication helpers", () => {
           }
         }
       },
-      status: "DRAFT",
+      published: null,
+      publication: {
+        published: false,
+        dirty: false
+      },
       version: 1
     });
-    expect(duplicated).not.toHaveProperty("publishedSnapshot");
+    expect(duplicated).not.toHaveProperty("published");
     expect(duplicated).not.toHaveProperty("createdAt");
     expect(duplicated).not.toHaveProperty("updatedAt");
   });

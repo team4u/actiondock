@@ -117,10 +117,11 @@ public class EventTriggerApplicationService {
         ScriptDefinition script = scriptRepository.findById(trigger.getTargetScriptId())
                 .orElseThrow(() -> new IllegalArgumentException("目标脚本不存在: " + trigger.getTargetScriptId()));
         requirePublished(script);
+        ScriptDefinition publishedScript = script.toPublishedDefinition();
         ScriptSchemaSupport.validateInput(
                 script.getId(),
                 defaultMappedInput(sampleCtx),
-                script.getPublishedSnapshot().getInputSchema()
+                publishedScript.getInputSchema()
         );
     }
 
@@ -211,7 +212,7 @@ public class EventTriggerApplicationService {
             mappedInput = inputResult.getOutput();
         }
         try {
-            ScriptSchemaSupport.validateInput(script.getId(), mappedInput, script.getPublishedSnapshot().getInputSchema());
+            ScriptSchemaSupport.validateInput(script.getId(), mappedInput, script.toPublishedDefinition().getInputSchema());
         } catch (InvalidExecutionInputException exception) {
             TriggerTestResult early = new TriggerTestResult(event, filterResult, filterMatched,
                     idempotencyResult, idempotencyKey, inputResult, mappedInput, false, exception.getFieldErrors(), null);
@@ -340,7 +341,7 @@ public class EventTriggerApplicationService {
             ScriptDefinition script = scriptRepository.findById(trigger.getTargetScriptId())
                     .orElseThrow(() -> new IllegalArgumentException("目标脚本不存在: " + trigger.getTargetScriptId()));
             requirePublished(script);
-            ScriptSchemaSupport.validateInput(script.getId(), mappedInput, script.getPublishedSnapshot().getInputSchema());
+            ScriptSchemaSupport.validateInput(script.getId(), mappedInput, script.toPublishedDefinition().getInputSchema());
             ExecutionRecord execution = executionApplicationService.executePublished(
                     script.getId(),
                     mappedInput,
@@ -419,7 +420,7 @@ public class EventTriggerApplicationService {
 
 
     private static void requirePublished(ScriptDefinition script) {
-        if (script.getPublishedSnapshot() == null) {
+        if (!script.hasPublishedRevision()) {
             throw new IllegalArgumentException("目标脚本未发布: " + script.getId());
         }
     }

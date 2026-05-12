@@ -1,6 +1,6 @@
 package org.team4u.actiondock.web.script;
 
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 
 import java.util.ArrayList;
@@ -9,37 +9,84 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 脚本视图映射器，负责将实体转换为 API 响应所需的格式。
- *
- * @author jay.wu
+ * 脚本 API 视图映射器。
  */
 public final class ScriptViewMapper {
 
     private ScriptViewMapper() {
     }
 
-    /**
-     * 创建去除 UI 扩展字段的脚本定义副本，用于 API 响应。
-     */
-    public static ScriptDefinition withoutUiSchema(ScriptDefinition source) {
-        return source.fullCopy()
-                .setInputSchema(sanitizeSchema(source.getInputSchema()))
-                .setOutputSchema(sanitizeSchema(source.getOutputSchema()))
-                .setPublishedSnapshot(sanitizeSnapshot(source.getPublishedSnapshot()));
+    public static ScriptDocumentView toView(ScriptDefinition source, boolean includeUiSchema) {
+        Map<String, Object> inputSchema = schema(source.getInputSchema(), includeUiSchema);
+        Map<String, Object> outputSchema = schema(source.getOutputSchema(), includeUiSchema);
+        ScriptPublishedRevisionView published = toPublishedView(source.getPublishedRevision(), includeUiSchema);
+        return new ScriptDocumentView(
+                source.getId(),
+                source.getName(),
+                source.getType(),
+                source.getPackaging(),
+                source.getSource(),
+                source.getPythonRequirements(),
+                inputSchema,
+                outputSchema,
+                source.getVersion(),
+                source.getScope(),
+                source.getRepositoryId(),
+                source.getRepositoryToolId(),
+                source.getRepositoryVersion(),
+                source.getSourcePath(),
+                source.getSourceCommit(),
+                source.getSourceDigest(),
+                source.getSourceSyncedAt(),
+                source.isDirty(),
+                source.isEditable(),
+                source.getOwner(),
+                source.getDescription(),
+                source.getTags(),
+                source.getScriptDependencies(),
+                source.getPluginDependencies(),
+                source.getAiDependencies(),
+                published,
+                new ScriptPublicationView(
+                        source.hasPublishedRevision(),
+                        source.hasUnpublishedChanges(),
+                        source.hasPublishedRevision() ? source.getVersion() : null,
+                        source.getPublishedAt()
+                ),
+                source.getCreatedAt(),
+                source.getUpdatedAt()
+        );
     }
 
-    private static PublishedScriptSnapshot sanitizeSnapshot(PublishedScriptSnapshot snapshot) {
-        if (snapshot == null) {
+    public static ScriptPublishedRevisionView toPublishedView(ScriptDefinition source, boolean includeUiSchema) {
+        return toPublishedView(source.getPublishedRevision(), includeUiSchema);
+    }
+
+    public static ScriptPublishedRevisionView toPublishedView(PublishedScriptRevision revision, boolean includeUiSchema) {
+        if (revision == null) {
             return null;
         }
-        return new PublishedScriptSnapshot(snapshot)
-                .setInputSchema(sanitizeSchema(snapshot.getInputSchema()))
-                .setOutputSchema(sanitizeSchema(snapshot.getOutputSchema()));
+        return new ScriptPublishedRevisionView(
+                revision.getScriptId(),
+                revision.getId(),
+                revision.getVersion(),
+                revision.getPublishedAt(),
+                revision.getName(),
+                revision.getType(),
+                revision.getPackaging(),
+                revision.getSource(),
+                revision.getPythonRequirements(),
+                schema(revision.getInputSchema(), includeUiSchema),
+                schema(revision.getOutputSchema(), includeUiSchema),
+                revision.getOwner(),
+                revision.getDescription(),
+                revision.getTags(),
+                revision.getScriptDependencies(),
+                revision.getPluginDependencies(),
+                revision.getAiDependencies()
+        );
     }
 
-    /**
-     * 清洗 Schema Map，递归移除 UI 扩展字段（ui、x-ui）。
-     */
     static Map<String, Object> sanitizeSchema(Map<String, Object> schema) {
         if (schema == null || schema.isEmpty()) {
             return new LinkedHashMap<>();
@@ -51,6 +98,10 @@ public final class ScriptViewMapper {
             return result;
         }
         return new LinkedHashMap<>();
+    }
+
+    private static Map<String, Object> schema(Map<String, Object> schema, boolean includeUiSchema) {
+        return includeUiSchema ? new LinkedHashMap<>(schema) : sanitizeSchema(schema);
     }
 
     private static Object sanitizeValue(Object value) {

@@ -3,12 +3,13 @@ package org.team4u.actiondock.storage.jpa.adapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.PluginDependency;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
+import org.team4u.actiondock.storage.jpa.entity.PublishedScriptRevisionEntity;
 import org.team4u.actiondock.storage.jpa.entity.ScriptEntity;
 import org.team4u.actiondock.storage.jpa.json.JacksonJsonCodec;
+import org.team4u.actiondock.storage.jpa.repo.SpringDataPublishedScriptRevisionRepository;
 import org.team4u.actiondock.storage.jpa.repo.SpringDataScriptEntityRepository;
 
 import java.time.LocalDateTime;
@@ -27,15 +28,27 @@ class JpaScriptRepositoryAdapterTest {
     @Test
     void saveSerializesAndFindByIdDeserializesScriptDefinition() {
         SpringDataScriptEntityRepository repository = mock(SpringDataScriptEntityRepository.class);
+        SpringDataPublishedScriptRevisionRepository publishedRevisionRepository = mock(SpringDataPublishedScriptRevisionRepository.class);
         AtomicReference<ScriptEntity> stored = new AtomicReference<>();
+        AtomicReference<PublishedScriptRevisionEntity> storedRevision = new AtomicReference<>();
         when(repository.save(any())).thenAnswer(invocation -> {
             ScriptEntity entity = invocation.getArgument(0);
             stored.set(entity);
             return entity;
         });
         when(repository.findById("script-1")).thenAnswer(invocation -> Optional.ofNullable(stored.get()));
+        when(publishedRevisionRepository.save(any())).thenAnswer(invocation -> {
+            PublishedScriptRevisionEntity entity = invocation.getArgument(0);
+            storedRevision.set(entity);
+            return entity;
+        });
+        when(publishedRevisionRepository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(storedRevision.get()));
 
-        JpaScriptRepositoryAdapter adapter = new JpaScriptRepositoryAdapter(repository, new JacksonJsonCodec(new ObjectMapper()));
+        JpaScriptRepositoryAdapter adapter = new JpaScriptRepositoryAdapter(
+                repository,
+                publishedRevisionRepository,
+                new JacksonJsonCodec(new ObjectMapper())
+        );
         ScriptDefinition definition = new ScriptDefinition()
                 .setId("script-1")
                 .setName("Hello")
@@ -43,7 +56,11 @@ class JpaScriptRepositoryAdapterTest {
                 .setSource("return [:]")
                 .setInputSchema(new LinkedHashMap<>(Map.of("type", "object")))
                 .setOutputSchema(new LinkedHashMap<>(Map.of("properties", Map.of("message", Map.of("type", "string")))))
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-1")
+                        .setScriptId("script-1")
+                        .setVersion(3)
+                        .setPublishedAt(LocalDateTime.of(2024, 1, 2, 3, 4))
                         .setName("Published Hello")
                         .setType(ScriptType.PYTHON)
                         .setSource("return {'message': 'published'}")
@@ -56,7 +73,6 @@ class JpaScriptRepositoryAdapterTest {
                                 .setPluginId("email-plugin")
                                 .setVersionRange(">=1.0.0")
                                 .setRequiredActions(List.of("send")))))
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setVersion(3)
                 .setCreatedAt(LocalDateTime.of(2024, 1, 2, 3, 4))
                 .setUpdatedAt(LocalDateTime.of(2024, 1, 2, 4, 5));
@@ -65,21 +81,22 @@ class JpaScriptRepositoryAdapterTest {
         ScriptDefinition found = adapter.findById("script-1").orElseThrow();
 
         assertThat(stored.get().getType()).isEqualTo("GROOVY");
-        assertThat(stored.get().getStatus()).isEqualTo("PUBLISHED");
         assertThat(stored.get().getInputSchemaJson()).contains("\"type\":\"object\"");
-        assertThat(stored.get().getPublishedType()).isEqualTo("PYTHON");
-        assertThat(stored.get().getPublishedSource()).isEqualTo("return {'message': 'published'}");
-        assertThat(stored.get().getPublishedOwner()).isEqualTo("platform");
-        assertThat(stored.get().getPublishedDescription()).isEqualTo("published desc");
-        assertThat(stored.get().getPublishedTagsJson()).contains("\"demo\"");
-        assertThat(stored.get().getPublishedPluginDependenciesJson()).contains("\"pluginId\":\"email-plugin\"");
-        assertThat(saved.getStatus()).isEqualTo(ScriptStatus.PUBLISHED);
-        assertThat(found.getPublishedSnapshot()).isNotNull();
-        assertThat(found.getPublishedSnapshot().getType()).isEqualTo(ScriptType.PYTHON);
-        assertThat(found.getPublishedSnapshot().getOwner()).isEqualTo("platform");
-        assertThat(found.getPublishedSnapshot().getDescription()).isEqualTo("published desc");
-        assertThat(found.getPublishedSnapshot().getTags()).containsExactly("demo");
-        assertThat(found.getPublishedSnapshot().getPluginDependencies()).hasSize(1);
+        assertThat(stored.get().getPublishedRevisionId()).isNotBlank();
+        assertThat(stored.get().getPublishedAt()).isNotNull();
+        assertThat(storedRevision.get().getType()).isEqualTo("PYTHON");
+        assertThat(storedRevision.get().getSource()).isEqualTo("return {'message': 'published'}");
+        assertThat(storedRevision.get().getOwner()).isEqualTo("platform");
+        assertThat(storedRevision.get().getDescription()).isEqualTo("published desc");
+        assertThat(storedRevision.get().getTagsJson()).contains("\"demo\"");
+        assertThat(storedRevision.get().getPluginDependenciesJson()).contains("\"pluginId\":\"email-plugin\"");
+        assertThat(saved.hasPublishedRevision()).isTrue();
+        assertThat(found.getPublishedRevision()).isNotNull();
+        assertThat(found.getPublishedRevision().getType()).isEqualTo(ScriptType.PYTHON);
+        assertThat(found.getPublishedRevision().getOwner()).isEqualTo("platform");
+        assertThat(found.getPublishedRevision().getDescription()).isEqualTo("published desc");
+        assertThat(found.getPublishedRevision().getTags()).containsExactly("demo");
+        assertThat(found.getPublishedRevision().getPluginDependencies()).hasSize(1);
         assertThat(found.getOutputSchema()).containsKey("properties");
         assertThat(found.getVersion()).isEqualTo(3);
     }

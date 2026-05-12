@@ -31,6 +31,7 @@ import type {
   ResourceLifecycleRequest,
   ScriptDefinition
 } from "../../shared/types";
+import { normalizeScriptDefinition } from "../../services/scriptPublication";
 
 export function listRepositories(): Promise<RepositoryDefinition[]> {
   return request<RepositoryDefinition[]>("/api/repositories");
@@ -203,7 +204,7 @@ export function createRepositoryToolWorkingCopy(repositoryId: string, toolId: st
     repositoryId,
     resourceId: toolId,
     payload
-  }).then((operation) => operation.result);
+  }).then((operation) => normalizeScriptDefinition(operation.result));
 }
 
 export function getUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {
@@ -213,7 +214,7 @@ export function getUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {
 export function pullUpstreamScript(scriptId: string, force = false): Promise<ScriptDefinition> {
   return request<ScriptDefinition>(`/api/scripts/${encodeURIComponent(scriptId)}/upstream/pull?includeUiSchema=true&force=${force}`, {
     method: "POST"
-  });
+  }).then(normalizeScriptDefinition);
 }
 
 export function installRepositoryPlugin(
@@ -255,7 +256,7 @@ export function forkRepositoryTool(scriptId: string, payload: { id: string; name
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
-  });
+  }).then(normalizeScriptDefinition);
 }
 
 export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryToolDescriptor> {

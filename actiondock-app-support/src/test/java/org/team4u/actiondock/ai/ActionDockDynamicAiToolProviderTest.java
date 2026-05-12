@@ -18,10 +18,9 @@ import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
@@ -46,7 +45,6 @@ class ActionDockDynamicAiToolProviderTest {
                 .setId("draft-script")
                 .setName("Draft Script")
                 .setType(ScriptType.GROOVY)
-                .setStatus(ScriptStatus.DRAFT)
                 .setSource("return [:]"));
         InMemoryAiAgentProfileRepository agents = new InMemoryAiAgentProfileRepository();
         agents.save(new AiAgentProfile().setId("enabled-agent").setName("Enabled Agent").setDescription("Visible agent description").setModelProfileId("model").setEnabled(true));
@@ -201,7 +199,6 @@ class ActionDockDynamicAiToolProviderTest {
                 .setName(name)
                 .setType(ScriptType.GROOVY)
                 .setPackaging(packaging)
-                .setStatus(ScriptStatus.PUBLISHED)
                 .setSource("return [message: 'Hello ' + input.name]")
                 .setInputSchema(Map.of(
                         "type", "object",
@@ -211,8 +208,7 @@ class ActionDockDynamicAiToolProviderTest {
                         "type", "object",
                         "properties", Map.of("message", Map.of("type", "string"))
                 ));
-        PublishedScriptSnapshot snapshot = script.snapshotCurrent();
-        return script.setPublishedSnapshot(snapshot);
+        return script.setPublishedRevision(PublishedScriptRevision.fromDraft(script, id + ":published:1", 1, java.time.LocalDateTime.now()));
     }
 
     private static class NoopAgentRuntime implements AiAgentRuntime {

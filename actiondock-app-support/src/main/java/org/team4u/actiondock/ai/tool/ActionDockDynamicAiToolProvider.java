@@ -21,7 +21,7 @@ import org.team4u.actiondock.application.ObjectValues;
 import org.team4u.actiondock.application.ExecutionOutputProjector;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.SubmitMode;
@@ -94,11 +94,11 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
     }
 
     private static boolean isPublishedToolScript(ScriptDefinition script) {
-        PublishedScriptSnapshot snapshot = script == null ? null : script.getPublishedSnapshot();
+        PublishedScriptRevision revision = script == null ? null : script.getPublishedRevision();
         return script != null
                 && !script.getId().startsWith(MANAGED_INTERNAL_PREFIX)
-                && snapshot != null
-                && snapshot.getPackaging() == ScriptPackaging.TOOL;
+                && revision != null
+                && revision.getPackaging() == ScriptPackaging.TOOL;
     }
 
     private static boolean isVisibleAgentTool(AiAgentProfile profile) {
@@ -144,17 +144,17 @@ public class ActionDockDynamicAiToolProvider implements AiToolProvider {
 
         @Override
         public Map<String, Object> inputSchema() {
-            PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
-            return snapshot == null || snapshot.getInputSchema() == null ? objectSchema(Map.of()) : snapshot.getInputSchema();
+            PublishedScriptRevision revision = script.getPublishedRevision();
+            return revision == null || revision.getInputSchema() == null ? objectSchema(Map.of()) : revision.getInputSchema();
         }
 
         @Override
         public Map<String, Object> outputSchema() {
-            PublishedScriptSnapshot snapshot = script.getPublishedSnapshot();
+            PublishedScriptRevision revision = script.getPublishedRevision();
             return objectSchema(Map.of(
                     "executionId", stringSchema("脚本执行记录 ID"),
                     "status", stringSchema("脚本执行状态"),
-                    "data", snapshot == null || snapshot.getOutputSchema() == null ? Map.of("type", "object") : snapshot.getOutputSchema(),
+                    "data", revision == null || revision.getOutputSchema() == null ? Map.of("type", "object") : revision.getOutputSchema(),
                     "errorMessage", stringSchema("执行失败时的错误信息")
             ));
         }

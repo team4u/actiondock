@@ -7,7 +7,7 @@ import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ExecutionLogLevel;
 import org.team4u.actiondock.domain.model.PluginRegistration;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.model.SharedStateEntry;
@@ -270,20 +270,7 @@ class GroovyScriptEngineTest {
                 org.team4u.actiondock.application.ConfigValueApplicationService.disabled(),
                 List.of(new FailingSystemPlugin())
         );
-        ScriptDefinition child = new ScriptDefinition()
-                .setId("child")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
-                        .setName("Child")
-                        .setType(ScriptType.GROOVY)
-                        .setSource("return plugins.invoke('failing-system-plugin', 'explode', [message: input.name])")
-                        .setInputSchema(Map.of(
-                                "type", "object",
-                                "required", List.of("name"),
-                                "properties", Map.of(
-                                        "name", Map.of("type", "string", "title", "Name")
-                                )
-                        ))
-                        .setOutputSchema(Map.of("type", "object")));
+        ScriptDefinition child = publishedChild("return plugins.invoke('failing-system-plugin', 'explode', [message: input.name])");
         GroovyScriptEngine childEngine = new GroovyScriptEngine(
                 groovyProperties(),
                 pluginRuntimeService,
@@ -513,20 +500,7 @@ class GroovyScriptEngineTest {
     }
 
     private static ScriptInvocationService invocationService() {
-        ScriptDefinition child = new ScriptDefinition()
-                .setId("child")
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
-                        .setName("Child")
-                        .setType(ScriptType.GROOVY)
-                        .setSource("return [message: 'Hello, ' + input.name]")
-                        .setInputSchema(Map.of(
-                                "type", "object",
-                                "required", List.of("name"),
-                                "properties", Map.of(
-                                        "name", Map.of("type", "string", "title", "Name")
-                                )
-                        ))
-                        .setOutputSchema(Map.of("type", "object")));
+        ScriptDefinition child = publishedChild("return [message: 'Hello, ' + input.name]");
         ScriptEngine nestedEngine = new ScriptEngine() {
             @Override
             public void validate(ScriptDefinition definition) {
@@ -538,6 +512,23 @@ class GroovyScriptEngineTest {
             }
         };
         return invocationService(child, nestedEngine);
+    }
+
+    private static ScriptDefinition publishedChild(String source) {
+        ScriptDefinition child = new ScriptDefinition()
+                .setId("child")
+                .setName("Child")
+                .setType(ScriptType.GROOVY)
+                .setSource(source)
+                .setInputSchema(Map.of(
+                        "type", "object",
+                        "required", List.of("name"),
+                        "properties", Map.of(
+                                "name", Map.of("type", "string", "title", "Name")
+                        )
+                ))
+                .setOutputSchema(Map.of("type", "object"));
+        return child.setPublishedRevision(PublishedScriptRevision.fromDraft(child, "child:published:1", 1, java.time.LocalDateTime.now()));
     }
 
     private static ScriptInvocationService invocationService(ScriptDefinition child, ScriptEngine nestedEngine) {

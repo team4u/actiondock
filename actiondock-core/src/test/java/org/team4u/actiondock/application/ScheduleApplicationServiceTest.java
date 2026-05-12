@@ -2,10 +2,9 @@ package org.team4u.actiondock.application;
 
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.model.ConfigValue;
-import org.team4u.actiondock.domain.model.PublishedScriptSnapshot;
+import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -37,7 +36,7 @@ class ScheduleApplicationServiceTest {
 
     @Test
     void saveRejectsUnpublishedScript() {
-        scriptRepository.save(new ScriptDefinition().setId("script-1").setStatus(ScriptStatus.DRAFT));
+        scriptRepository.save(new ScriptDefinition().setId("script-1"));
 
         assertThatThrownBy(() -> service.save("script-1", new ScriptSchedule()
                 .setName("Nightly")
@@ -88,8 +87,11 @@ class ScheduleApplicationServiceTest {
         scriptRepository.save(new ScriptDefinition()
                 .setId("script-1")
                 .setName("Published")
-                .setStatus(ScriptStatus.PUBLISHED)
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-1")
+                        .setScriptId("script-1")
+                        .setVersion(1)
+                        .setPublishedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Published")
                         .setSource("return [:]")
                         .setInputSchema(Map.of(
@@ -150,8 +152,11 @@ class ScheduleApplicationServiceTest {
         return new ScriptDefinition()
                 .setId(id)
                 .setName("Published")
-                .setStatus(ScriptStatus.PUBLISHED)
-                .setPublishedSnapshot(new PublishedScriptSnapshot()
+                .setPublishedRevision(new PublishedScriptRevision()
+                        .setId("rev-" + id)
+                        .setScriptId(id)
+                        .setVersion(1)
+                        .setPublishedAt(LocalDateTime.of(2026, 4, 30, 10, 0))
                         .setName("Published")
                         .setSource("return [:]"));
     }

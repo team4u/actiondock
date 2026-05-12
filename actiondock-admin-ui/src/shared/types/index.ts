@@ -1,4 +1,3 @@
-export type ScriptStatus = "DRAFT" | "PUBLISHED";
 export type ScriptType = "GROOVY" | "PYTHON";
 export type ScriptPackaging = "TOOL" | "FLOW";
 export type ScriptScope = "PERSONAL" | "REPOSITORY" | "SAMPLE";
@@ -26,7 +25,11 @@ export interface ForkFormValues {
   name: string;
 }
 
-export interface PublishedScriptSnapshot {
+export interface PublishedScriptRevision {
+  scriptId: string;
+  revisionId: string;
+  version: number;
+  publishedAt?: string;
   name: string;
   type: ScriptType;
   packaging: ScriptPackaging;
@@ -42,6 +45,13 @@ export interface PublishedScriptSnapshot {
   aiDependencies?: AiDependency[];
 }
 
+export interface ScriptPublicationState {
+  published: boolean;
+  dirty: boolean;
+  publishedVersion?: number;
+  publishedAt?: string;
+}
+
 export interface ScriptDefinition {
   id: string;
   name: string;
@@ -51,7 +61,6 @@ export interface ScriptDefinition {
   pythonRequirements?: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
-  status: ScriptStatus;
   version: number;
   scope?: ScriptScope;
   repositoryId?: string;
@@ -69,8 +78,8 @@ export interface ScriptDefinition {
   scriptDependencies?: ScriptDependency[];
   pluginDependencies?: PluginDependency[];
   aiDependencies?: AiDependency[];
-  publishedSnapshot?: PublishedScriptSnapshot;
-  hasUnpublishedChanges?: boolean;
+  published?: PublishedScriptRevision | null;
+  publication?: ScriptPublicationState;
   createdAt?: string;
   updatedAt?: string;
 }

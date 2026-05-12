@@ -15,7 +15,7 @@ export function resolveScheduleEnabled(params) {
 }
 export async function buildScheduleInput(params) {
     const script = await params.client.getScript(params.scriptId, false);
-    const schema = script.publishedSnapshot?.inputSchema ?? script.inputSchema;
+    const schema = script.published?.inputSchema ?? script.inputSchema;
     const fields = extractSchemaFields(schema);
     const baseInput = {
         ...(params.existingInput ?? {}),

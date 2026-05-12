@@ -39,6 +39,7 @@ import { ProcessorEditor } from "../../../components/plugin/ProcessorEditor";
 import { ExecutionResultCard } from "../../../components/execution/ExecutionResultCard";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
+import { isScriptPublished } from "../../../services/scriptPublication";
 import type {
   EventSourceDefinition,
   EventTrigger,
@@ -127,7 +128,7 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
 
   const scriptOptions = useMemo(
     () => scripts
-      .filter((script) => Boolean(script.publishedSnapshot) || script.status === "PUBLISHED")
+      .filter((script) => isScriptPublished(script))
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((script) => ({ label: `${script.name} (${script.id})`, value: script.id })),
     [scripts]

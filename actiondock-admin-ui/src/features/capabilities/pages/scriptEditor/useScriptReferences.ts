@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { PluginReferenceView, ScriptDefinition } from "../../../../shared/types";
+import { getPublishedScriptContent } from "../../../../services/scriptPublication";
 
 export interface UseScriptReferencesParams {
   currentScript: ScriptDefinition | null;
@@ -55,7 +56,7 @@ export function useScriptReferences({
   );
   const scriptReferences = useMemo(
     () => availableScripts.filter(
-      (script) => Boolean(script.publishedSnapshot) && script.id !== currentScript?.id
+      (script) => Boolean(getPublishedScriptContent(script)) && script.id !== currentScript?.id
     ),
     [availableScripts, currentScript?.id]
   );
@@ -73,8 +74,8 @@ export function useScriptReferences({
     const normalizedQuery = deferredScriptReferenceQuery.trim().toLowerCase();
     if (!normalizedQuery) return scriptReferences;
     return scriptReferences.filter((script) => {
-      const snapshot = script.publishedSnapshot;
-      const haystack = `${script.name || ""} ${script.id} ${snapshot?.name || ""}`.toLowerCase();
+      const published = getPublishedScriptContent(script);
+      const haystack = `${script.name || ""} ${script.id} ${published?.name || ""}`.toLowerCase();
       return normalizedQuery.split(/\s+/).every((keyword) => haystack.includes(keyword));
     });
   }, [deferredScriptReferenceQuery, scriptReferences]);

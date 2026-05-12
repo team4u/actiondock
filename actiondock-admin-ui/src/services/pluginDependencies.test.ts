@@ -24,7 +24,11 @@ function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
     source: "",
     inputSchema: {},
     outputSchema: {},
-    status: "DRAFT",
+    published: null,
+    publication: {
+      published: false,
+      dirty: false
+    },
     version: 1,
     ...overrides
   };

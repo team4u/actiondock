@@ -61,7 +61,11 @@ const script: ScriptDefinition = {
   source: "return [message: 'hi']",
   inputSchema: {},
   outputSchema: {},
-  status: "DRAFT",
+  published: null,
+  publication: {
+    published: false,
+    dirty: false
+  },
   version: 1
 };
 

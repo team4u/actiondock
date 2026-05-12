@@ -15,7 +15,6 @@ import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
-import org.team4u.actiondock.domain.model.ScriptStatus;
 import org.team4u.actiondock.domain.model.ScriptType;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
@@ -373,7 +372,6 @@ public class RepositoryCapabilityPackageService {
                     .setInputSchema(script.inputSchema() == null ? Map.of() : script.inputSchema())
                     .setOutputSchema(script.outputSchema() == null ? Map.of() : script.outputSchema())
                     .setAiDependencies(AiPackageIdRewriter.rewriteAiDependencies(script.aiDependencies(), ctx.modelIdMappings, ctx.agentIdMappings))
-                    .setStatus(ScriptStatus.PUBLISHED)
                     .setVersion(1)
                     .setEditable(false)
                     .setDescription(script.description())
@@ -381,7 +379,12 @@ public class RepositoryCapabilityPackageService {
                     .setPluginDependencies(script.pluginDependencies())
                     .setCreatedAt(ctx.now)
                     .setUpdatedAt(ctx.now);
-            definition.setPublishedSnapshot(definition.snapshotCurrent());
+            definition.setPublishedRevision(org.team4u.actiondock.domain.model.PublishedScriptRevision.fromDraft(
+                    definition,
+                    runtimeScriptId + ":published:1",
+                    1,
+                    ctx.now
+            ));
             repos.scriptRepository().save(definition);
             installedIds.add(runtimeScriptId);
         }
