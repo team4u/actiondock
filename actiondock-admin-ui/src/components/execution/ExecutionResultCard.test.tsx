@@ -21,7 +21,7 @@ vi.mock("antd", async () => {
   };
 });
 
-vi.mock("./SchemaObjectResultView", () => ({
+vi.mock("../schema/SchemaObjectResultView", () => ({
   SchemaObjectResultView: ({ value, schemaName }: { value?: Record<string, unknown>; schemaName?: string }) => (
     <div
       data-testid="schema-object-result-view"

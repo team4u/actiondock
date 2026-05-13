@@ -89,6 +89,8 @@ export function RepositoryDiscoveryPage() {
         detailOpen={discovery.detailOpen}
         detailLoading={discovery.detailLoading}
         detail={discovery.detail}
+        availableTools={discovery.tools}
+        availablePlugins={discovery.plugins}
         eventSourceDetailOpen={discovery.eventSourceDetailOpen}
         eventSourceDetailLoading={discovery.eventSourceDetailLoading}
         eventSourceDetail={discovery.eventSourceDetail}

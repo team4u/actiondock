@@ -14,6 +14,43 @@ import type {
 import type { InstallFilter, TrustFilter, TypeFilter } from "./types";
 
 const { Text } = Typography;
+export type DependencyToolLookup = Pick<RepositoryToolDescriptor, "repositoryId" | "toolId" | "displayName">;
+export type DependencyPluginLookup = Pick<RepositoryPluginDescriptor, "repositoryId" | "pluginId" | "displayName">;
+
+interface DependencyRenderOptions {
+  currentRepositoryId?: string;
+  availableTools?: DependencyToolLookup[];
+  availablePlugins?: DependencyPluginLookup[];
+}
+
+function resolveScriptDependencyRepositoryId(
+  dependency: ScriptDependency,
+  currentRepositoryId?: string
+): string {
+  return dependency.repositoryId || currentRepositoryId || "";
+}
+
+function resolveScriptDependencyName(
+  dependency: ScriptDependency,
+  options?: DependencyRenderOptions
+): string | undefined {
+  const repositoryId = resolveScriptDependencyRepositoryId(dependency, options?.currentRepositoryId);
+  return options?.availableTools?.find(
+    (tool) => tool.repositoryId === repositoryId && tool.toolId === dependency.toolId
+  )?.displayName;
+}
+
+function resolvePluginDependencyName(
+  dependency: PluginDependency,
+  options?: DependencyRenderOptions
+): string | undefined {
+  if (!options?.currentRepositoryId) {
+    return undefined;
+  }
+  return options.availablePlugins?.find(
+    (plugin) => plugin.repositoryId === options.currentRepositoryId && plugin.pluginId === dependency.pluginId
+  )?.displayName;
+}
 
 export function isLocalTool(record: RepositoryToolDescriptor): boolean {
   return Boolean(record.localState);
@@ -239,7 +276,10 @@ export function filterRepositoryPlugins(
   });
 }
 
-export function renderPluginDependencies(dependencies: PluginDependency[]) {
+export function renderPluginDependencies(
+  dependencies: PluginDependency[],
+  options?: DependencyRenderOptions
+) {
   if (dependencies.length === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有声明插件依赖" />;
   }
@@ -252,10 +292,17 @@ export function renderPluginDependencies(dependencies: PluginDependency[]) {
       dataSource={dependencies}
       columns={[
         {
-          title: "插件 ID",
-          dataIndex: "pluginId",
-          key: "pluginId",
-          render: (value: string) => <Text code>{value}</Text>
+          title: "插件",
+          key: "plugin",
+          render: (_value: unknown, record) => {
+            const name = resolvePluginDependencyName(record, options);
+            return (
+              <Space direction="vertical" size={2}>
+                {name ? <Text strong>{name}</Text> : null}
+                <Text code>{record.pluginId}</Text>
+              </Space>
+            );
+          }
         },
         {
           title: "版本要求",
@@ -278,7 +325,10 @@ export function renderPluginDependencies(dependencies: PluginDependency[]) {
   );
 }
 
-export function renderScriptDependencies(dependencies: ScriptDependency[]) {
+export function renderScriptDependencies(
+  dependencies: ScriptDependency[],
+  options?: DependencyRenderOptions
+) {
   if (dependencies.length === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该脚本没有声明脚本依赖" />;
   }
@@ -291,15 +341,25 @@ export function renderScriptDependencies(dependencies: ScriptDependency[]) {
       dataSource={dependencies}
       columns={[
         {
-          title: "逻辑脚本 ID",
-          dataIndex: "scriptId",
-          key: "scriptId",
-          render: (value: string) => <Text code>{value}</Text>
+          title: "依赖脚本",
+          key: "script",
+          render: (_value: unknown, record) => {
+            const name = resolveScriptDependencyName(record, options);
+            return (
+              <Space direction="vertical" size={2}>
+                {name ? <Text strong>{name}</Text> : null}
+                <Text code>{record.scriptId}</Text>
+              </Space>
+            );
+          }
         },
         {
           title: "仓库脚本",
           key: "target",
-          render: (_value: unknown, record) => <Text code>{`${record.repositoryId}/${record.toolId}`}</Text>
+          render: (_value: unknown, record) => {
+            const repositoryId = resolveScriptDependencyRepositoryId(record, options?.currentRepositoryId);
+            return <Text code>{`${repositoryId}/${record.toolId}`}</Text>;
+          }
         },
         {
           title: "版本要求",

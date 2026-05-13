@@ -35,21 +35,21 @@ vi.mock("antd", async () => {
   };
 });
 
-vi.mock("../../components/schema/SchemaObjectEditor", () => ({
+vi.mock("../../../../components/schema/SchemaObjectEditor", () => ({
   SchemaObjectEditor: () => <div data-testid="schema-object-editor" />
 }));
 
-vi.mock("../../components/execution/ExecutionResultCard", () => ({
+vi.mock("../../../../components/execution/ExecutionResultCard", () => ({
   ExecutionResultCard: ({ execution }: { execution: ExecutionRecord }) => (
     <div data-testid="execution-result-card">{execution.id}</div>
   )
 }));
 
-vi.mock("../../components/execution/BatchRunPanel", () => ({
+vi.mock("../../../../components/execution/BatchRunPanel", () => ({
   BatchRunPanel: () => <div data-testid="batch-run-panel" />
 }));
 
-vi.mock("../../components/common/ConfirmDangerAction", () => ({
+vi.mock("../../../../components/common/ConfirmDangerAction", () => ({
   ConfirmDangerAction: ({ children }: { children: React.ReactNode }) => <>{children}</>
 }));
 

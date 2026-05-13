@@ -73,7 +73,6 @@ describe("script duplication helpers", () => {
           }
         }
       },
-      published: null,
       publication: {
         published: false,
         dirty: false

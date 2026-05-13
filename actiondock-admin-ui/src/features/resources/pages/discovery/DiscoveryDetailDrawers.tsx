@@ -10,7 +10,9 @@ import type {
   CapabilityPackageDetail,
   RepositoryEventSourceDescriptor,
   RepositoryEventSourceDetail,
+  RepositoryPluginDescriptor,
   RepositorySkillDetail,
+  RepositoryToolDescriptor,
   RepositoryToolDetail
 } from "../../../../shared/types";
 import { getScriptTypeLabel } from "../../../../components/domain/typeLabels";
@@ -36,6 +38,8 @@ interface DiscoveryDetailDrawersProps {
   detailOpen: boolean;
   detailLoading: boolean;
   detail: RepositoryToolDetail | null;
+  availableTools: RepositoryToolDescriptor[];
+  availablePlugins: RepositoryPluginDescriptor[];
   eventSourceDetailOpen: boolean;
   eventSourceDetailLoading: boolean;
   eventSourceDetail: RepositoryEventSourceDetail | null;
@@ -76,6 +80,8 @@ export function DiscoveryDetailDrawers({
   detailOpen,
   detailLoading,
   detail,
+  availableTools,
+  availablePlugins,
   eventSourceDetailOpen,
   eventSourceDetailLoading,
   eventSourceDetail,
@@ -297,12 +303,18 @@ export function DiscoveryDetailDrawers({
                 {
                   key: "scripts",
                   label: `脚本依赖 (${detail.descriptor.scriptDependencies.length})`,
-                  children: renderScriptDependencies(detail.descriptor.scriptDependencies)
+                  children: renderScriptDependencies(detail.descriptor.scriptDependencies, {
+                    currentRepositoryId: detail.descriptor.repositoryId,
+                    availableTools
+                  })
                 },
                 {
                   key: "plugins",
                   label: `插件依赖 (${detail.descriptor.pluginDependencies.length})`,
-                  children: renderPluginDependencies(detail.descriptor.pluginDependencies)
+                  children: renderPluginDependencies(detail.descriptor.pluginDependencies, {
+                    currentRepositoryId: detail.descriptor.repositoryId,
+                    availablePlugins
+                  })
                 },
                 {
                   key: "schedules",
@@ -484,7 +496,10 @@ export function DiscoveryDetailDrawers({
                 {
                   key: "dependencies",
                   label: `脚本依赖 (${eventSourceDetail.descriptor.scriptDependencies.length})`,
-                  children: renderScriptDependencies(eventSourceDetail.descriptor.scriptDependencies)
+                  children: renderScriptDependencies(eventSourceDetail.descriptor.scriptDependencies, {
+                    currentRepositoryId: eventSourceDetail.descriptor.repositoryId,
+                    availableTools
+                  })
                 },
                 {
                   key: "triggers",

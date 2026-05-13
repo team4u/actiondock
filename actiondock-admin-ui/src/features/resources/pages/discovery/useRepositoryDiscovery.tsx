@@ -46,7 +46,9 @@ import {
   getSkillInstallLabel,
   isLocalEventSource,
   isLocalTool,
-  localAssetId
+  localAssetId,
+  renderPluginDependencies,
+  renderScriptDependencies
 } from "./discoveryHelpers";
 import type {
   AddMode,
@@ -302,6 +304,10 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
               <Checkbox defaultChecked onChange={(event) => { installScriptDependencies = event.target.checked; }}>
                 同时安装或更新 {descriptor.scriptDependencies.length} 个脚本依赖
               </Checkbox>
+              {renderScriptDependencies(descriptor.scriptDependencies, {
+                currentRepositoryId: descriptor.repositoryId,
+                availableTools: tools
+              })}
               <Text type="secondary">将按依赖声明自动补齐本地脚本版本。</Text>
             </Space>
           ) : (
@@ -312,6 +318,10 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
               <Checkbox defaultChecked onChange={(event) => { installPluginDependencies = event.target.checked; }}>
                 同时安装或更新 {descriptor.pluginDependencies.length} 个插件依赖
               </Checkbox>
+              {renderPluginDependencies(descriptor.pluginDependencies, {
+                currentRepositoryId: descriptor.repositoryId,
+                availablePlugins: plugins
+              })}
               <Text type="secondary">插件依赖会按当前仓库版本要求解析。</Text>
             </Space>
           ) : (
@@ -430,6 +440,10 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
               <Checkbox defaultChecked onChange={(event) => { installScriptDependencies = event.target.checked; }}>
                 同时安装或更新 {descriptor.scriptDependencies.length} 个脚本依赖
               </Checkbox>
+              {renderScriptDependencies(descriptor.scriptDependencies, {
+                currentRepositoryId: descriptor.repositoryId,
+                availableTools: tools
+              })}
               <Text type="secondary">目标脚本会按模板依赖自动补齐。</Text>
             </Space>
           ) : (
@@ -594,6 +608,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
 
   return {
     repositories,
+    tools,
     loading,
     actionKey,
     packageActionKey,
@@ -602,6 +617,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     filteredPackages,
     filteredSkills,
     filteredPlugins,
+    plugins,
     detailOpen,
     detailLoading,
     detail,

@@ -1,6 +1,7 @@
-import { Alert, Empty, Select, Space, Typography } from "antd";
+import { Alert, Button, Empty, Select, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { message } from "antd";
+import { useNavigate } from "react-router-dom";
 import { listSkillTargets } from "../../features/skills/api";
 import type { SkillTarget } from "../../shared/types";
 import { getErrorMessage } from "../../services/utils";
@@ -51,13 +52,18 @@ interface SkillTargetSelectorProps {
 }
 
 export function SkillTargetSelector({ targets, targetIds, onTargetIdsChange }: SkillTargetSelectorProps) {
+  const navigate = useNavigate();
   const targetOptions = useMemo(
     () => targets.map((t) => ({ value: t.id, label: `${t.name} (${t.type})` })),
     [targets]
   );
 
   if (targets.length === 0) {
-    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可安装的目标，请先创建并启用可写的 SkillTarget" />;
+    return (
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可安装的目标，请先创建并启用可写的 SkillTarget">
+        <Button type="primary" onClick={() => navigate("/skills?tab=targets")}>前往创建目标</Button>
+      </Empty>
+    );
   }
 
   return (

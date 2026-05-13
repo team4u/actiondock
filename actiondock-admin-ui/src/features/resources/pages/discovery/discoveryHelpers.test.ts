@@ -1,11 +1,14 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   filterRepositoryTools,
   isLockedLocal,
   isTrackedLocal,
-  localAssetId
+  localAssetId,
+  renderPluginDependencies,
+  renderScriptDependencies
 } from "./discoveryHelpers";
-import type { RepositoryToolDescriptor } from "../../../../shared/types";
+import type { RepositoryPluginDescriptor, RepositoryToolDescriptor } from "../../../../shared/types";
 
 function createTool(overrides: Partial<RepositoryToolDescriptor> = {}): RepositoryToolDescriptor {
   return {
@@ -20,6 +23,24 @@ function createTool(overrides: Partial<RepositoryToolDescriptor> = {}): Reposito
     scriptDependencies: [],
     pluginDependencies: [],
     trusted: true,
+    ...overrides
+  };
+}
+
+function createPlugin(overrides: Partial<RepositoryPluginDescriptor> = {}): RepositoryPluginDescriptor {
+  return {
+    repositoryId: "repo-a",
+    pluginId: "plugin-a",
+    displayName: "Alpha Plugin",
+    version: "1.0.0",
+    tags: [],
+    artifact: {
+      uri: "file:///plugins/plugin-a.zip"
+    },
+    installed: false,
+    updateAvailable: false,
+    trusted: true,
+    dependentToolCount: 0,
     ...overrides
   };
 }
@@ -78,5 +99,55 @@ describe("discoveryHelpers", () => {
     expect(localAssetId(remoteOnly)).toBe("remote-only");
     expect(isTrackedLocal(remoteOnly)).toBe(false);
     expect(isLockedLocal(remoteOnly)).toBe(false);
+  });
+
+  it("renders script dependencies with resolved names and fallback ids", () => {
+    const html = renderToStaticMarkup(
+      renderScriptDependencies([
+        { scriptId: "billing-sync", repositoryId: "repo-a", toolId: "billing-sync", versionRange: ">= 1.2.0" },
+        { scriptId: "orphan-task", repositoryId: "repo-b", toolId: "orphan-task" }
+      ], {
+        currentRepositoryId: "repo-a",
+        availableTools: [
+          createTool({
+            repositoryId: "repo-a",
+            toolId: "billing-sync",
+            displayName: "Billing Sync"
+          })
+        ]
+      })
+    );
+
+    expect(html).toContain("Billing Sync");
+    expect(html).toContain("billing-sync");
+    expect(html).toContain("repo-a/billing-sync");
+    expect(html).toContain("&gt;= 1.2.0");
+    expect(html).toContain("orphan-task");
+    expect(html).toContain("repo-b/orphan-task");
+  });
+
+  it("renders plugin dependencies with resolved names and fallback ids", () => {
+    const html = renderToStaticMarkup(
+      renderPluginDependencies([
+        { pluginId: "plugin-a", versionRange: ">= 2.0.0", requiredActions: ["run"] },
+        { pluginId: "missing-plugin", requiredActions: [] }
+      ], {
+        currentRepositoryId: "repo-a",
+        availablePlugins: [
+          createPlugin({
+            repositoryId: "repo-a",
+            pluginId: "plugin-a",
+            displayName: "Alpha Plugin"
+          })
+        ]
+      })
+    );
+
+    expect(html).toContain("Alpha Plugin");
+    expect(html).toContain("plugin-a");
+    expect(html).toContain("&gt;= 2.0.0");
+    expect(html).toContain("run");
+    expect(html).toContain("missing-plugin");
+    expect(html).toContain("未声明");
   });
 });

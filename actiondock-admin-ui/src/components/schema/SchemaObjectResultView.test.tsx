@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SchemaObjectResultView } from "./SchemaObjectResultView";
 
-vi.mock("./CodeEditor", () => ({
+vi.mock("../common/CodeEditor", () => ({
   CodeEditor: ({
     value,
     language,
@@ -18,7 +18,7 @@ vi.mock("./CodeEditor", () => ({
   )
 }));
 
-vi.mock("./MarkdownDescription", () => ({
+vi.mock("../common/MarkdownDescription", () => ({
   MarkdownDescription: ({ value }: { value?: string }) => (
     <div data-testid="markdown-description">{value}</div>
   )
