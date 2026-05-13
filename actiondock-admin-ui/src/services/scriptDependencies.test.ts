@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "./scriptDependencies";
+import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies, resolveAutoScriptDependency } from "./scriptDependencies";
 import type { RepositoryDefinition, RepositoryToolDescriptor } from "../shared/types";
 
 function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinition {
@@ -100,5 +100,80 @@ describe("autoMatchScriptDependency", () => {
     const repositoryTools = [repositoryTool({ repositoryId: "a", toolId: "other" })];
 
     expect(autoMatchScriptDependency("child", repositories, repositoryTools, "a")).toBeUndefined();
+  });
+});
+
+describe("resolveAutoScriptDependency", () => {
+  it("prefers the target repository over a declared dependency from another repository", () => {
+    const repositories = [repository({ id: "target" }), repository({ id: "publisher" })];
+    const repositoryTools = [
+      repositoryTool({ repositoryId: "target", toolId: "child", version: "3.0.0" }),
+      repositoryTool({ repositoryId: "publisher", toolId: "child", version: "1.0.0" })
+    ];
+
+    expect(resolveAutoScriptDependency({
+      scriptId: "child",
+      repositories,
+      repositoryTools,
+      preferredRepositoryId: "target",
+      declaredDependency: {
+        repositoryId: "publisher",
+        toolId: "child",
+        versionRange: ">= 1.0.0"
+      }
+    })).toEqual({
+      scriptId: "child",
+      repositoryId: "target",
+      toolId: "child",
+      versionRange: ">= 3.0.0"
+    });
+  });
+
+  it("falls back to the declared dependency when the target repository does not contain the tool", () => {
+    const repositories = [repository({ id: "target" }), repository({ id: "publisher" })];
+    const repositoryTools = [
+      repositoryTool({ repositoryId: "publisher", toolId: "child", version: "1.0.0" })
+    ];
+
+    expect(resolveAutoScriptDependency({
+      scriptId: "child",
+      repositories,
+      repositoryTools,
+      preferredRepositoryId: "target",
+      declaredDependency: {
+        repositoryId: "publisher",
+        toolId: "child",
+        versionRange: ">= 1.0.0"
+      }
+    })).toEqual({
+      scriptId: "child",
+      repositoryId: "publisher",
+      toolId: "child",
+      versionRange: ">= 1.0.0"
+    });
+  });
+
+  it("falls back to the local published script source when there is no declared dependency", () => {
+    const repositories = [repository({ id: "target" }), repository({ id: "publisher" })];
+    const repositoryTools = [
+      repositoryTool({ repositoryId: "publisher", toolId: "child", version: "2.0.0" })
+    ];
+
+    expect(resolveAutoScriptDependency({
+      scriptId: "child",
+      repositories,
+      repositoryTools,
+      preferredRepositoryId: "target",
+      localScriptSource: {
+        repositoryId: "publisher",
+        repositoryToolId: "child",
+        repositoryVersion: "2.0.0"
+      }
+    })).toEqual({
+      scriptId: "child",
+      repositoryId: "publisher",
+      toolId: "child",
+      versionRange: ">= 2.0.0"
+    });
   });
 });

@@ -22,7 +22,7 @@ import type {
   ScriptSchedule
 } from "../../../../shared/types";
 import { getErrorMessage } from "../../../../services/utils";
-import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies } from "../../../../services/scriptDependencies";
+import { extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies, resolveAutoScriptDependency } from "../../../../services/scriptDependencies";
 import { getEnabledRepositories, getPublishableRepositories } from "../../../../services/repositoryPublish";
 import {
   buildRepositoryPublishDiffTarget,
@@ -220,22 +220,21 @@ export function useScriptPublishToRepo({
       }
 
       const declared = declaredDependencies.get(scriptId);
-      if (declared?.repositoryId?.trim() && declared.toolId?.trim()) {
-        return toDraft(scriptId, declared.repositoryId, declared.toolId, declared.versionRange, "MANUAL");
-      }
-
       const localScript = publishedScripts.get(scriptId);
-      if (localScript?.repositoryId?.trim() && localScript.repositoryToolId?.trim()) {
-        return toDraft(
-          scriptId,
-          localScript.repositoryId,
-          localScript.repositoryToolId,
-          localScript.repositoryVersion ? `>= ${localScript.repositoryVersion}` : undefined,
-          "MANUAL"
-        );
-      }
-
-      const matched = autoMatchScriptDependency(scriptId, repositories, repositoryTools, preferredRepositoryId);
+      const matched = resolveAutoScriptDependency({
+        scriptId,
+        repositories,
+        repositoryTools,
+        preferredRepositoryId,
+        declaredDependency: declared,
+        localScriptSource: localScript
+          ? {
+              repositoryId: localScript.repositoryId,
+              repositoryToolId: localScript.repositoryToolId,
+              repositoryVersion: localScript.repositoryVersion
+            }
+          : undefined
+      });
       if (matched) {
         return toDraft(scriptId, matched.repositoryId, matched.toolId, matched.versionRange, "AUTO");
       }

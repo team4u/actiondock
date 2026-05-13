@@ -51,6 +51,8 @@ class GitCommandRunner {
     private static GitResult executeGitCommand(Path workdir, List<String> command) {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workdir.toFile());
+        builder.environment().putIfAbsent("GIT_SSH_COMMAND",
+                "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts");
         try {
             Process process = builder.start();
             boolean finished = process.waitFor(GIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);

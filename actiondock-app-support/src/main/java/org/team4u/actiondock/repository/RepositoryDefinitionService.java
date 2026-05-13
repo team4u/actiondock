@@ -110,7 +110,7 @@ class RepositoryDefinitionService {
                 .setName(NormalizeUtils.normalize(target.getName(), "仓库名称不能为空"))
                 .setType(type)
                 .setUrl(NormalizeUtils.normalize(target.getUrl(), "仓库地址不能为空"))
-                .setBranch(REPO_TYPE_GIT.equals(type) ? NormalizeUtils.normalizeOrDefault(target.getBranch(), DEFAULT_GIT_BRANCH) : null)
+                .setBranch(REPO_TYPE_GIT.equals(type) ? NormalizeUtils.normalizeNullable(target.getBranch()) : null)
                 .setEnabled(target.isEnabled())
                 .setTrustLevel(trustLevel)
                 .setDescription(NormalizeUtils.normalizeNullable(target.getDescription()))

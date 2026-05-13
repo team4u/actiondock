@@ -23,7 +23,7 @@ public final class RepositoryVersionUtils {
         if (NormalizeUtils.isBlank(version)) {
             return false;
         }
-        for (String token : range.trim().split("\\s+")) {
+        for (String token : range.trim().replaceAll("(>=|<=|>|<|=)\\s+", "$1").split("\\s+")) {
             if (token.isBlank()) {
                 continue;
             }

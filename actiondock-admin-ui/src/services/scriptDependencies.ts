@@ -87,3 +87,104 @@ export function autoMatchScriptDependency(
   }
   return undefined;
 }
+
+export interface ScriptDependencyLocalSource {
+  repositoryId?: string | null;
+  repositoryToolId?: string | null;
+  repositoryVersion?: string | null;
+}
+
+export interface ResolveAutoScriptDependencyOptions {
+  scriptId: string;
+  repositories: Pick<RepositoryDefinition, "id">[];
+  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "toolId" | "version">[];
+  preferredRepositoryId?: string;
+  declaredDependency?: Pick<ScriptDependency, "repositoryId" | "toolId" | "versionRange"> | null;
+  localScriptSource?: ScriptDependencyLocalSource | null;
+}
+
+function resolveRepositoryToolVersionRange(
+  versionRange: string | undefined,
+  version: string | undefined | null
+): string | undefined {
+  if (versionRange?.trim()) {
+    return versionRange.trim();
+  }
+  return version?.trim() ? `>= ${version.trim()}` : undefined;
+}
+
+function toMatchedDependency(
+  scriptId: string,
+  repositoryId: string | undefined | null,
+  toolId: string | undefined | null,
+  versionRange?: string,
+  repositoryVersion?: string | null
+): ScriptDependency | undefined {
+  const normalizedScriptId = scriptId.trim();
+  const normalizedRepositoryId = repositoryId?.trim();
+  const normalizedToolId = toolId?.trim();
+  if (!normalizedScriptId || !normalizedRepositoryId || !normalizedToolId) {
+    return undefined;
+  }
+  return {
+    scriptId: normalizedScriptId,
+    repositoryId: normalizedRepositoryId,
+    toolId: normalizedToolId,
+    versionRange: resolveRepositoryToolVersionRange(versionRange, repositoryVersion)
+  };
+}
+
+export function resolveAutoScriptDependency({
+  scriptId,
+  repositories,
+  repositoryTools,
+  preferredRepositoryId,
+  declaredDependency,
+  localScriptSource
+}: ResolveAutoScriptDependencyOptions): ScriptDependency | undefined {
+  const normalizedScriptId = scriptId.trim();
+  if (!normalizedScriptId) {
+    return undefined;
+  }
+
+  const preferredTool = preferredRepositoryId
+    ? repositoryTools.find(
+        (item) => item.repositoryId === preferredRepositoryId && item.toolId === normalizedScriptId
+      )
+    : undefined;
+  const preferredMatch = preferredTool
+    ? toMatchedDependency(
+        normalizedScriptId,
+        preferredTool.repositoryId,
+        preferredTool.toolId,
+        undefined,
+        preferredTool.version
+      )
+    : undefined;
+  if (preferredMatch) {
+    return preferredMatch;
+  }
+
+  const declaredMatch = toMatchedDependency(
+    normalizedScriptId,
+    declaredDependency?.repositoryId,
+    declaredDependency?.toolId,
+    declaredDependency?.versionRange
+  );
+  if (declaredMatch) {
+    return declaredMatch;
+  }
+
+  const localSourceMatch = toMatchedDependency(
+    normalizedScriptId,
+    localScriptSource?.repositoryId,
+    localScriptSource?.repositoryToolId,
+    undefined,
+    localScriptSource?.repositoryVersion
+  );
+  if (localSourceMatch) {
+    return localSourceMatch;
+  }
+
+  return autoMatchScriptDependency(normalizedScriptId, repositories, repositoryTools, preferredRepositoryId);
+}
