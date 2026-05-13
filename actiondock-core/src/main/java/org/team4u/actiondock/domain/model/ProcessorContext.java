@@ -7,7 +7,8 @@ public class ProcessorContext {
     private Map<String, Object> event = new LinkedHashMap<>();
     private Map<String, Object> headers = new LinkedHashMap<>();
     private Map<String, Object> query = new LinkedHashMap<>();
-    private Map<String, Object> body = new LinkedHashMap<>();
+    private Object body = new LinkedHashMap<String, Object>();
+    private String rawBody;
     private Map<String, Object> source = new LinkedHashMap<>();
     private Map<String, Object> trigger = new LinkedHashMap<>();
     private Map<String, Object> variables = new LinkedHashMap<>();
@@ -39,12 +40,21 @@ public class ProcessorContext {
         return this;
     }
 
-    public Map<String, Object> getBody() {
-        return SchemaValueCopier.copyMap(body);
+    public Object getBody() {
+        return SchemaValueCopier.copyObject(body);
     }
 
-    public ProcessorContext setBody(Map<String, Object> body) {
-        this.body = SchemaValueCopier.copyMap(body);
+    public ProcessorContext setBody(Object body) {
+        this.body = SchemaValueCopier.copyObject(body);
+        return this;
+    }
+
+    public String getRawBody() {
+        return rawBody;
+    }
+
+    public ProcessorContext setRawBody(String rawBody) {
+        this.rawBody = rawBody;
         return this;
     }
 
@@ -81,6 +91,7 @@ public class ProcessorContext {
         value.put("headers", getHeaders());
         value.put("query", getQuery());
         value.put("body", getBody());
+        value.put("rawBody", getRawBody());
         value.put("source", getSource());
         value.put("trigger", getTrigger());
         value.put("variables", getVariables());

@@ -58,7 +58,7 @@ import type {
   RepositoryEventSourceDescriptor,
   ScriptDefinition
 } from "../../../shared/types";
-import { formatDateTime, getErrorMessage, parseJsonText, prettyJson } from "../../../services/utils";
+import { formatDateTime, getErrorMessage, parseJsonText, parseJsonValueOrText, prettyJson } from "../../../services/utils";
 
 const { Text } = Typography;
 
@@ -115,23 +115,44 @@ function prettyJsonValue(value: unknown): string {
   return JSON.stringify(value ?? null, null, 2);
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toBodyText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (isObjectRecord(value)) {
+    return prettyJson(value);
+  }
+  return "{}";
+}
+
 function createDefaultSampleContext(): Record<string, unknown> {
   return {
     event: {
       headers: {},
       query: {},
-      body: {}
+      body: {},
+      rawBody: "{}"
     }
   };
 }
 
 function buildTestPayloadFromSampleContext(sampleContext?: Record<string, unknown>) {
   const event = (sampleContext?.event as Record<string, unknown> | undefined) ?? {};
+  const body = event.body;
+  const rawBody = typeof event.rawBody === "string"
+    ? event.rawBody
+    : typeof body === "string"
+      ? body
+      : prettyJson(isObjectRecord(body) ? body : {});
   return {
     headers: prettyJson((event.headers as Record<string, unknown>) ?? {}),
     query: prettyJson((event.query as Record<string, unknown>) ?? {}),
-    body: prettyJson((event.body as Record<string, unknown>) ?? {}),
-    rawBody: prettyJson((event.body as Record<string, unknown>) ?? {})
+    body: toBodyText(body),
+    rawBody
   };
 }
 
@@ -327,7 +348,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
       const payload: IncomingEventPayload = {
         headers: parseJsonText(testHeadersText, "测试 headers"),
         query: parseJsonText(testQueryText, "测试 query"),
-        body: parseJsonText(testBodyText, "测试 body"),
+        body: parseJsonValueOrText(testBodyText),
         rawBody: testRawBody,
         contentType: "application/json"
       };
@@ -339,6 +360,13 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
     } finally {
       setTesting(false);
     }
+  };
+
+  const handleTestBodyChange = (nextBodyText: string) => {
+    if (testRawBody === testBodyText) {
+      setTestRawBody(nextBodyText);
+    }
+    setTestBodyText(nextBodyText);
   };
 
   const toggleEnabled = async (item: EventSourceDefinition) => {
@@ -801,8 +829,8 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
               <Form.Item label={fieldLabel("Query JSON", "查询参数，常用于简单 token 鉴权。")}>
                 <Input.TextArea rows={3} value={testQueryText} onChange={(event) => setTestQueryText(event.target.value)} />
               </Form.Item>
-              <Form.Item label={fieldLabel("Body JSON", "外部系统提交的结构化请求体。")}>
-                <Input.TextArea rows={6} value={testBodyText} onChange={(event) => setTestBodyText(event.target.value)} />
+              <Form.Item label={fieldLabel("Body", "外部系统提交的请求体，可填写 JSON 对象或纯文本。")}>
+                <Input.TextArea rows={6} value={testBodyText} onChange={(event) => handleTestBodyChange(event.target.value)} />
               </Form.Item>
               <Form.Item label={fieldLabel("Raw Body", "HMAC 签名通常基于原始请求体计算。")}>
                 <Input.TextArea rows={4} value={testRawBody} onChange={(event) => setTestRawBody(event.target.value)} />
@@ -824,7 +852,7 @@ export function EventSourceManagementPage({ embedded = false }: EventSourceManag
                 使用默认样例
               </Button>
               {testResult ? (
-                <pre className="json-preview">{prettyJson(testResult as unknown as Record<string, unknown>)}</pre>
+                <pre className="json-preview">{prettyJson(testResult)}</pre>
               ) : null}
             </Space>
           </Card>

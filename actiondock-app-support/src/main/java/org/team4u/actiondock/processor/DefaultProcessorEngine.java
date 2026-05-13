@@ -107,6 +107,10 @@ public class DefaultProcessorEngine implements ProcessorEngine {
             throw new IllegalArgumentException("SCRIPT_REF 缺少 scriptId");
         }
         Map<String, Object> input = new LinkedHashMap<>();
+        input.put("headers", context == null ? Map.of() : context.getHeaders());
+        input.put("query", context == null ? Map.of() : context.getQuery());
+        input.put("body", context == null ? Map.of() : context.getBody());
+        input.put("rawBody", context == null ? null : context.getRawBody());
         input.put("event", context == null ? Map.of() : context.getEvent());
         input.put("source", context == null ? Map.of() : context.getSource());
         input.put("trigger", context == null ? Map.of() : context.getTrigger());

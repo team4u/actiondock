@@ -143,8 +143,8 @@ curl -X POST http://localhost:5177/api/schedules/{id}/disable
 
 点进一条记录后，可以看到：
 
-1. **原始请求**：Headers、Query、Body
-2. **标准化事件**：处理器输出结果
+1. **原始请求**：Headers、Query、Body、Raw Body
+2. **标准化事件**：处理器输出结果，其中 `body` 可能是对象，也可能是字符串
 3. **分发记录**：哪些触发器命中、执行结果、错误信息
 
 > 事件框架的架构、配置方法、处理器详解、鉴权模式、REST API 和完整示例请参考 [事件框架配置指南](event-framework.md)。

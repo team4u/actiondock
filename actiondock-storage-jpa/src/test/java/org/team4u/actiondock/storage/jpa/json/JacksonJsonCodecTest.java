@@ -21,6 +21,7 @@ class JacksonJsonCodecTest {
 
         assertThat(codec.read(objectJson, ScriptDefinition.class).getName()).isEqualTo("Hello");
         assertThat(codec.readUntyped("[1,2,3]")).isEqualTo(List.of(1, 2, 3));
+        assertThat(codec.readUntyped("\"hello\"")).isEqualTo("hello");
         assertThat(codec.readList(listJson, ScriptDefinition.class))
                 .singleElement()
                 .satisfies(definition -> {

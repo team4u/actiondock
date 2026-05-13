@@ -73,7 +73,7 @@ public class JpaEventRecordRepositoryAdapter implements EventRecordRepository {
                 .setSubject(entity.getSubject())
                 .setRawHeaders(jsonCodec.readMap(entity.getRawHeadersJson()))
                 .setRawQuery(jsonCodec.readMap(entity.getRawQueryJson()))
-                .setRawBody(jsonCodec.readMap(entity.getRawBodyJson()))
+                .setRawBody(jsonCodec.readUntyped(entity.getRawBodyJson()))
                 .setNormalizedEvent(read(jsonCodec, entity.getNormalizedEventJson(), NormalizedEvent.class))
                 .setErrorMessage(entity.getErrorMessage())
                 .setCreatedAt(entity.getCreatedAt());

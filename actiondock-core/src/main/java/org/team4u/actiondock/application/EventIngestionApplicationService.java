@@ -65,7 +65,6 @@ public class EventIngestionApplicationService {
         }
         IncomingEventPayload safePayload = payload == null ? new IncomingEventPayload() : payload;
         validatePayloadShape(safePayload);
-        verifyContentType(source, safePayload);
         verifyAuth(source, safePayload);
 
         EventRecord record = normalizeEventRecord(source, safePayload);
@@ -75,11 +74,11 @@ public class EventIngestionApplicationService {
     private EventRecord normalizeEventRecord(EventSourceDefinition source, IncomingEventPayload safePayload) {
         Map<String, Object> rawHeaders = safePayload.getHeaders();
         Map<String, Object> rawQuery = safePayload.getQuery();
-        Map<String, Object> rawBody = parseBody(safePayload.getRawBody());
+        Object materializedBody = materializeBody(safePayload);
         IncomingEventPayload materializedPayload = new IncomingEventPayload()
                 .setHeaders(rawHeaders)
                 .setQuery(rawQuery)
-                .setBody(rawBody)
+                .setBody(materializedBody)
                 .setRawBody(safePayload.getRawBody())
                 .setContentType(safePayload.getContentType());
         EventRecord record = eventRecordRepository.save(new EventRecord()
@@ -89,7 +88,7 @@ public class EventIngestionApplicationService {
                 .setStatus(EventRecordStatus.RECEIVED)
                 .setRawHeaders(sanitizeForStorage(source, rawHeaders))
                 .setRawQuery(sanitizeForStorage(source, rawQuery))
-                .setRawBody(rawBody)
+                .setRawBody(materializedBody)
                 .setCreatedAt(LocalDateTime.now()));
 
         NormalizedEvent event = eventSourceApplicationService.normalize(source, materializedPayload, record.getId());
@@ -162,21 +161,6 @@ public class EventIngestionApplicationService {
         }
     }
 
-    private static void verifyContentType(EventSourceDefinition source, IncomingEventPayload payload) {
-        String contentType = payload.getContentType();
-        if (contentType == null || contentType.isBlank()) {
-            return;
-        }
-        List<String> contentTypes = source.getTransport().getContentTypes();
-        if (contentTypes.isEmpty()) {
-            return;
-        }
-        boolean matched = contentTypes.stream().anyMatch(contentType::startsWith);
-        if (!matched) {
-            throw new IllegalArgumentException("不支持的 Content-Type: " + contentType);
-        }
-    }
-
     private void verifyAuth(EventSourceDefinition source, IncomingEventPayload payload) {
         try {
             authenticator.verify(source, payload);
@@ -231,15 +215,24 @@ public class EventIngestionApplicationService {
         }
     }
 
-    private Map<String, Object> parseBody(String rawBody) {
-        if (rawBody == null || rawBody.isBlank()) {
+    private Object materializeBody(IncomingEventPayload payload) {
+        String rawBody = payload.getRawBody();
+        if (rawBody != null && !rawBody.isBlank()) {
+            try {
+                Object parsed = jsonCodec.readUntyped(rawBody);
+                if (parsed instanceof Map<?, ?> map) {
+                    return MapValueConverter.toResultMap(map);
+                }
+            } catch (RuntimeException ignored) {
+                // Non-JSON payloads fall back to the original raw body string.
+            }
+            return rawBody;
+        }
+        Object body = payload.getBody();
+        if (body == null) {
             return Map.of();
         }
-        try {
-            return jsonCodec.readMap(rawBody);
-        } catch (RuntimeException exception) {
-            throw new IllegalArgumentException("请求体必须是 JSON 对象", exception);
-        }
+        return SchemaValueCopier.copyObject(body);
     }
 
     private static EventRecordStatus resolveRecordStatus(List<EventDispatchRecord> dispatches) {
@@ -297,6 +290,7 @@ public class EventIngestionApplicationService {
                 .setHeaders(event.getHeaders())
                 .setQuery(event.getQuery())
                 .setBody(event.getBody())
+                .setRawBody(event.getRawBody())
                 .setSource(ApplicationServiceSupport.toSourceMap(source))
                 .setVariables(Map.of(
                         "dispatches", dispatches.stream().map(this::toDispatchValue).toList(),

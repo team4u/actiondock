@@ -27,6 +27,7 @@ public class RepositoryEventSourceService {
     private final EventSourceRepositoryPublisher publisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
     private final RepositoryToolService repositoryToolService;
+    private final RepositoryDependencyResolver dependencyResolver;
 
     public RepositoryEventSourceService(RepositoryCatalogService catalog,
                                         RepositoryCatalogService.Repositories repos,
@@ -38,6 +39,7 @@ public class RepositoryEventSourceService {
         this.repositoryToolService = repositoryToolService;
         this.upstreamSync = new UpstreamSyncService(catalog, repos, catalog.getServices());
         this.publisher = new EventSourceRepositoryPublisher(catalog, repos);
+        this.dependencyResolver = new RepositoryDependencyResolver(catalog);
     }
 
     public RepositoryEventSourcePublishPreview previewPublish(RepositoryEventSourcePublishPreviewRequest request) {
@@ -124,31 +126,34 @@ public class RepositoryEventSourceService {
             if (updateOnly && existing == null) {
                 throw new IllegalArgumentException("事件源尚未添加为只读本地资产: " + repositoryId + "/" + eventSourceId);
             }
-            resolveScriptDependencies(detail, options, visiting);
+            resolveScriptDependencies(repositoryId, detail, options, visiting);
             return persistInstallation(repositoryId, detail, localAssetId, existing);
         } finally {
             visiting.remove(installationKey);
         }
     }
 
-    private void resolveScriptDependencies(RepositoryEventSourceDetail detail,
+    private void resolveScriptDependencies(String repositoryId,
+                                           RepositoryEventSourceDetail detail,
                                            ToolInstallationOptions options,
                                            LinkedHashSet<String> visiting) {
         for (ScriptDependency dependency : NormalizeUtils.nullSafeList(detail.descriptor().scriptDependencies())) {
+            String dependencyToolId = NormalizeUtils.normalize(dependency.getToolId(), "toolId 不能为空");
+            String dependencyRepositoryId = dependencyResolver.resolveToolRepositoryId(repositoryId, dependency.getRepositoryId(), dependencyToolId);
             ScriptDefinition installed = repos.scriptRepository()
                     .findInstalledByRepositorySource(
-                            NormalizeUtils.normalize(dependency.getRepositoryId(), "repositoryId 不能为空"),
-                            NormalizeUtils.normalize(dependency.getToolId(), "toolId 不能为空"))
+                            dependencyRepositoryId,
+                            dependencyToolId)
                     .orElse(null);
             if (installed != null && RepositoryVersionUtils.versionSatisfies(installed.getRepositoryVersion(), dependency.getVersionRange())) {
                 continue;
             }
             if (!options.installScriptDependencies()) {
-                throw new IllegalArgumentException("缺少事件源依赖脚本: " + dependency.getRepositoryId() + "/" + dependency.getToolId());
+                throw new IllegalArgumentException("缺少事件源依赖脚本: " + dependencyRepositoryId + "/" + dependencyToolId);
             }
             repositoryToolService.addLocalAsset(
-                    dependency.getRepositoryId(),
-                    dependency.getToolId(),
+                    dependencyRepositoryId,
+                    dependencyToolId,
                     new RepositoryLocalAssetRequest("LOCKED", null, false, true, options.installPluginDependencies(), options.forcePluginUpgrade())
             );
         }
@@ -200,10 +205,16 @@ public class RepositoryEventSourceService {
                 .collect(java.util.stream.Collectors.toMap(EventTrigger::getRepositoryTriggerId, java.util.function.Function.identity(), (a, b) -> a, java.util.LinkedHashMap::new));
         for (EventTriggerTemplateItem template : detail.triggerTemplate()) {
             EventTrigger existing = existingByTemplateId.get(template.id());
+            String targetToolId = NormalizeUtils.normalize(template.targetScriptDependency().getToolId(), "toolId 不能为空");
+            String targetRepositoryId = dependencyResolver.resolveToolRepositoryId(
+                    source.getRepositoryId(),
+                    template.targetScriptDependency().getRepositoryId(),
+                    targetToolId
+            );
             ScriptDefinition target = repos.scriptRepository().findInstalledByRepositorySource(
-                    NormalizeUtils.normalize(template.targetScriptDependency().getRepositoryId(), "repositoryId 不能为空"),
-                    NormalizeUtils.normalize(template.targetScriptDependency().getToolId(), "toolId 不能为空")
-            ).orElseThrow(() -> new IllegalArgumentException("依赖脚本尚未安装: " + template.targetScriptDependency().getRepositoryId() + "/" + template.targetScriptDependency().getToolId()));
+                    targetRepositoryId,
+                    targetToolId
+            ).orElseThrow(() -> new IllegalArgumentException("依赖脚本尚未安装: " + targetRepositoryId + "/" + targetToolId));
             EventTrigger trigger = new EventTrigger()
                     .setId(existing == null ? source.getId() + "." + template.id() : existing.getId())
                     .setName(template.name())

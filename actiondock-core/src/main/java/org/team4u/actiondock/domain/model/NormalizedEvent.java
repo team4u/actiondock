@@ -15,7 +15,8 @@ public class NormalizedEvent {
     private String timestamp;
     private Map<String, Object> headers = new LinkedHashMap<>();
     private Map<String, Object> query = new LinkedHashMap<>();
-    private Map<String, Object> body = new LinkedHashMap<>();
+    private Object body = new LinkedHashMap<String, Object>();
+    private String rawBody;
     private LocalDateTime receivedAt;
 
     public String getId() {
@@ -108,12 +109,21 @@ public class NormalizedEvent {
         return this;
     }
 
-    public Map<String, Object> getBody() {
-        return SchemaValueCopier.copyMap(body);
+    public Object getBody() {
+        return SchemaValueCopier.copyObject(body);
     }
 
-    public NormalizedEvent setBody(Map<String, Object> body) {
-        this.body = SchemaValueCopier.copyMap(body);
+    public NormalizedEvent setBody(Object body) {
+        this.body = SchemaValueCopier.copyObject(body);
+        return this;
+    }
+
+    public String getRawBody() {
+        return rawBody;
+    }
+
+    public NormalizedEvent setRawBody(String rawBody) {
+        this.rawBody = rawBody;
         return this;
     }
 

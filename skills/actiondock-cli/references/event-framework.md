@@ -254,9 +254,12 @@ return (executions[0].output ?: [:]) as Map
   "subject": "Login failed",
   "headers": {},
   "query": {},
-  "body": {}
+  "body": {},
+  "rawBody": "{\"action\":\"opened\"}"
 }
 ```
+
+`body` 可以是对象，也可以是字符串；`rawBody` 保留原始请求体文本。
 
 ### 处理器脚本
 
@@ -265,10 +268,12 @@ Python：
 ```python
 event = input.get("event", {})
 body = event.get("body", {})
+body_obj = body if isinstance(body, dict) else {}
 
 return {
-    "title": body.get("issue", {}).get("title"),
-    "author": body.get("sender", {}).get("login")
+    "title": body_obj.get("issue", {}).get("title"),
+    "author": body_obj.get("sender", {}).get("login"),
+    "rawBody": event.get("rawBody"),
 }
 ```
 
@@ -276,11 +281,12 @@ Groovy：
 
 ```groovy
 def event = input.event ?: [:]
-def body = event.body ?: [:]
+def body = event.body instanceof Map ? event.body : [:]
 
 return [
   title: body.issue?.title,
-  author: body.sender?.login
+  author: body.sender?.login,
+  rawBody: event.rawBody
 ]
 ```
 
@@ -432,7 +438,8 @@ actiondock execution get <execution-id> --json
     "eventId": "delivery-1",
     "headers": {},
     "query": {},
-    "body": {}
+    "body": {},
+    "rawBody": "{\"action\":\"opened\"}"
   }
 }
 ```
@@ -453,6 +460,7 @@ actiondock execution get <execution-id> --json
 - `headers`
 - `query`
 - `body`
+- `rawBody`
 - `receivedAt`
 
 `input.source` 的字段：
@@ -473,7 +481,7 @@ Groovy：
 
 ```groovy
 def event = input.event ?: [:]
-def body = event.body ?: [:]
+def body = event.body instanceof Map ? event.body : [:]
 return [
   sourceKey: event.sourceKey,
   eventType: event.eventType,
@@ -481,7 +489,8 @@ return [
   actor: event.actor,
   subject: event.subject,
   title: body.issue?.title,
-  author: body.sender?.login
+  author: body.sender?.login,
+  rawBody: event.rawBody
 ]
 ```
 
@@ -490,7 +499,8 @@ Python：
 ```python
 event = input.get("event", {})
 body = event.get("body", {})
-issue = body.get("issue", {})
+body_obj = body if isinstance(body, dict) else {}
+issue = body_obj.get("issue", {})
 
 return {
     "sourceKey": event.get("sourceKey"),
@@ -499,6 +509,7 @@ return {
     "actor": event.get("actor"),
     "subject": event.get("subject"),
     "title": issue.get("title"),
-    "author": body.get("sender", {}).get("login"),
+    "author": body_obj.get("sender", {}).get("login"),
+    "rawBody": event.get("rawBody"),
 }
 ```

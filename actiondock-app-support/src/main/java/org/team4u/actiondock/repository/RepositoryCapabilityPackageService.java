@@ -48,6 +48,7 @@ public class RepositoryCapabilityPackageService {
     private final RepositoryToolService toolService;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
     private final RepositoryAiPackageService aiPackageService;
+    private final RepositoryDependencyResolver dependencyResolver;
 
     public RepositoryCapabilityPackageService(RepositoryCatalogService catalog,
                                                RepositoryCatalogService.Repositories repos,
@@ -63,6 +64,7 @@ public class RepositoryCapabilityPackageService {
         this.toolService = toolService;
         this.configTemplateSyncService = configTemplateSyncService;
         this.aiPackageService = aiPackageService;
+        this.dependencyResolver = new RepositoryDependencyResolver(catalog);
         catalog.setCapabilityPackageService(this);
     }
 
@@ -134,7 +136,7 @@ public class RepositoryCapabilityPackageService {
         try {
             CapabilityPackageInstallation existing = findExistingOrThrow(installationId, packageId, updateOnly);
             CapabilityPackageDetail detail = catalog.getCapabilityPackage(repositoryId, packageId);
-            resolveExternalDependencies(detail.releaseFile().externalDependencies(), visiting);
+            resolveExternalDependencies(repositoryId, detail.releaseFile().externalDependencies(), visiting);
             uninstallExistingAssets(existing);
             return installPackageAssets(repositoryId, packageId, detail, existing);
         } finally {
@@ -215,48 +217,56 @@ public class RepositoryCapabilityPackageService {
         );
     }
 
-    private void resolveExternalDependencies(List<RepositoryAiPackageDependency> dependencies,
+    private void resolveExternalDependencies(String repositoryId,
+                                             List<RepositoryAiPackageDependency> dependencies,
                                              LinkedHashSet<String> visiting) {
         for (RepositoryAiPackageDependency dependency : NormalizeUtils.nullSafeList(dependencies)) {
             DependencyAssetType type = DependencyAssetType.fromString(dependency.assetType());
             switch (type) {
-                case AI_PACKAGE -> resolveAiPackageDependency(dependency, visiting);
-                case TOOL -> resolveToolDependency(dependency);
-                case PLUGIN -> resolvePluginDependency(dependency);
+                case AI_PACKAGE -> resolveAiPackageDependency(repositoryId, dependency, visiting);
+                case TOOL -> resolveToolDependency(repositoryId, dependency);
+                case PLUGIN -> resolvePluginDependency(repositoryId, dependency);
             }
         }
     }
 
-    private void resolveAiPackageDependency(RepositoryAiPackageDependency dependency,
+    private void resolveAiPackageDependency(String repositoryId,
+                                            RepositoryAiPackageDependency dependency,
                                             LinkedHashSet<String> visiting) {
-        String dependencyInstallationId = RepositoryCatalogTypes.capabilityPackageInstallationId(dependency.repositoryId(), dependency.assetId());
+        String dependencyRepositoryId = dependencyResolver.resolveCapabilityPackageRepositoryId(repositoryId, dependency.repositoryId(), dependency.assetId());
+        String dependencyInstallationId = RepositoryCatalogTypes.capabilityPackageInstallationId(dependencyRepositoryId, dependency.assetId());
         boolean alreadyInstalled = repos.capabilityPackageInstallationRepository().findByInstallationId(dependencyInstallationId).isPresent();
-        installOrUpdateCapabilityPackage(dependency.repositoryId(), dependency.assetId(), alreadyInstalled, visiting);
+        installOrUpdateCapabilityPackage(dependencyRepositoryId, dependency.assetId(), alreadyInstalled, visiting);
     }
 
-    private void resolveToolDependency(RepositoryAiPackageDependency dependency) {
+    private void resolveToolDependency(String repositoryId, RepositoryAiPackageDependency dependency) {
+        String dependencyRepositoryId = dependencyResolver.resolveToolRepositoryId(repositoryId, dependency.repositoryId(), dependency.assetId());
         if (repos.repositoryLocalAssetRepository()
-                .findByUpstreamAsset(UpstreamAssetType.SCRIPT, dependency.repositoryId(), dependency.assetId())
+                .findByUpstreamAsset(UpstreamAssetType.SCRIPT, dependencyRepositoryId, dependency.assetId())
                 .isPresent()) {
-            toolService.updateLocalAsset(dependency.repositoryId(), dependency.assetId(), ToolInstallationOptions.DEFAULT);
+            toolService.updateLocalAsset(dependencyRepositoryId, dependency.assetId(), ToolInstallationOptions.DEFAULT);
         } else {
-            toolService.addLocalAsset(dependency.repositoryId(), dependency.assetId(),
+            toolService.addLocalAsset(dependencyRepositoryId, dependency.assetId(),
                     new RepositoryLocalAssetRequest("LOCKED", null, false, false, false, false));
         }
     }
 
-    private void resolvePluginDependency(RepositoryAiPackageDependency dependency) {
+    private void resolvePluginDependency(String repositoryId, RepositoryAiPackageDependency dependency) {
         PluginRegistration registration = findExistingPluginRegistration(dependency.assetId());
+        if (registration != null
+                && NormalizeUtils.isBlank(dependency.repositoryId())
+                && Objects.equals(registration.getRepositoryPluginId(), dependency.assetId())) {
+            return;
+        }
+        String dependencyRepositoryId = dependencyResolver.resolvePluginRepositoryId(repositoryId, dependency.repositoryId(), dependency.assetId());
         if (registration == null) {
-            if (NormalizeUtils.isBlank(dependency.repositoryId())) {
+            if (NormalizeUtils.isBlank(dependencyRepositoryId)) {
                 throw new IllegalArgumentException("缺少插件仓库来源，且本地未安装插件: " + dependency.assetId());
             }
-            pluginService.installPlugin(dependency.repositoryId(), dependency.assetId(), false);
-        } else if (dependency.repositoryId() != null
-                && !dependency.repositoryId().isBlank()
-                && (!Objects.equals(registration.getRepositoryId(), dependency.repositoryId())
-                || !Objects.equals(registration.getRepositoryPluginId(), dependency.assetId()))) {
-            pluginService.installPlugin(dependency.repositoryId(), dependency.assetId(), false);
+            pluginService.installPlugin(dependencyRepositoryId, dependency.assetId(), false);
+        } else if (!Objects.equals(registration.getRepositoryId(), dependencyRepositoryId)
+                || !Objects.equals(registration.getRepositoryPluginId(), dependency.assetId())) {
+            pluginService.installPlugin(dependencyRepositoryId, dependency.assetId(), false);
         }
     }
 

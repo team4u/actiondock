@@ -234,6 +234,7 @@ public class EventSourceApplicationService {
                 .setHeaders(payload.getHeaders())
                 .setQuery(payload.getQuery())
                 .setBody(payload.getBody())
+                .setRawBody(payload.getRawBody())
                 .setReceivedAt(LocalDateTime.now());
     }
 
@@ -245,7 +246,7 @@ public class EventSourceApplicationService {
         setStringField(output, "timestamp", event::setTimestamp);
         ApplicationServiceSupport.setMapField(output, "headers", event::setHeaders);
         ApplicationServiceSupport.setMapField(output, "query", event::setQuery);
-        ApplicationServiceSupport.setMapField(output, "body", event::setBody);
+        ApplicationServiceSupport.setObjectField(output, "body", event::setBody);
     }
 
     private static void setStringField(Map<String, Object> output, String key, java.util.function.Consumer<String> setter) {
@@ -268,6 +269,7 @@ public class EventSourceApplicationService {
                 .setHeaders(payload.getHeaders())
                 .setQuery(payload.getQuery())
                 .setBody(payload.getBody())
+                .setRawBody(payload.getRawBody())
                 .setEvent(ApplicationServiceSupport.toEventMap(event))
                 .setSource(ApplicationServiceSupport.toSourceMap(source))
                 .setTrigger(trigger == null ? Map.of() : trigger);

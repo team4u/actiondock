@@ -54,9 +54,7 @@ public class RepositoryAutoSyncScheduler {
     }
 
     void syncAllEnabledRepositories() {
-        List<RepositoryDefinition> repositories = repositoryCatalogService.listRepositories().stream()
-                .filter(RepositoryDefinition::isEnabled)
-                .toList();
+        List<RepositoryDefinition> repositories = repositoryCatalogService.listEnabledDiscoveryRepositories();
         if (repositories.isEmpty()) {
             return;
         }

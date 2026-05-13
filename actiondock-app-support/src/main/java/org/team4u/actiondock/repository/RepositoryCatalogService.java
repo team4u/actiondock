@@ -167,6 +167,12 @@ public class RepositoryCatalogService {
         return definitionService.listRepositories();
     }
 
+    public List<RepositoryDefinition> listEnabledDiscoveryRepositories() {
+        return definitionService.listRepositories().stream()
+                .filter(this::isDiscoveryRepository)
+                .toList();
+    }
+
     public RepositoryDefinition getRepository(String repositoryId) {
         return definitionService.getRepository(repositoryId);
     }
@@ -1001,10 +1007,16 @@ public class RepositoryCatalogService {
 
     private <T> List<T> listAllFromEnabledRepositories(Function<String, List<T>> lister, Comparator<T> comparator) {
         return listRepositories().stream()
-                .filter(RepositoryDefinition::isEnabled)
+                .filter(this::isDiscoveryRepository)
                 .flatMap(repo -> lister.apply(repo.getId()).stream())
                 .sorted(comparator)
                 .toList();
+    }
+
+    private boolean isDiscoveryRepository(RepositoryDefinition repository) {
+        return repository != null
+                && repository.isEnabled()
+                && !REPO_TYPE_HTTP.equals(repository.getType());
     }
 
     private static <E> E findEntryById(List<E> entries, String id, Function<E, String> idExtractor, String label) {

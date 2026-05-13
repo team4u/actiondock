@@ -241,10 +241,18 @@ HMAC 推荐字段：
   "event": {
     "headers": {},
     "query": {},
-    "body": {}
+    "body": {},
+    "rawBody": "{}"
   }
 }
 ```
+
+说明：
+
+- `event.body` 可以是 JSON 对象，也可以是字符串
+- `event.rawBody` 用来保留原始请求体，适合签名校验、纯文本回调或自行解析 XML / 自定义协议
+- 如果原始请求体能解析成 JSON 顶层对象，平台会把该对象放进 `body`
+- 如果原始请求体是纯文本、JSON 字符串、JSON 数组或其他非对象内容，平台会保留原始文本到 `body`，同时 `rawBody` 也可直接读取
 
 #### 1.6 外部响应（可选）
 
@@ -279,7 +287,8 @@ POST /api/event-sources/{sourceId}/events
 注意：
 
 - 这是**事件源级**配置，不是触发器级配置
-- 只有在 `鉴权通过 + Content-Type 合法 + JSON 解析成功` 后，才会进入自定义响应逻辑
+- 只有在 `鉴权通过 + 标准化链路执行成功` 后，才会进入自定义响应逻辑
+- Webhook 请求体不要求必须是 JSON 对象；纯文本或其他原始字符串请求体也可以进入标准化与响应处理
 - 更早的错误（例如鉴权失败、请求体非法）仍然返回系统默认错误响应
 - `responseProcessor` 输出必须是一个 JSON 对象
 
@@ -301,6 +310,7 @@ POST /api/event-sources/{sourceId}/events
 
 - `event`：标准化后的事件
 - `headers` / `query` / `body`：标准化事件中的对应字段
+- `rawBody`：标准化事件中的原始请求体文本
 - `source`：当前事件源基础信息
 - `variables.dispatches`：所有触发器的分发结果
 - `variables.executions`：所有同步触发器的执行结果
@@ -333,6 +343,7 @@ POST /api/event-sources/{sourceId}/events
       "employeeId": "9527",
       "email": "user@example.com"
     },
+    "rawBody": "{\"employeeId\":\"9527\",\"email\":\"user@example.com\"}",
     "receivedAt": "2026-05-08T12:00:01"
   },
   "headers": {
@@ -343,6 +354,7 @@ POST /api/event-sources/{sourceId}/events
     "employeeId": "9527",
     "email": "user@example.com"
   },
+  "rawBody": "{\"employeeId\":\"9527\",\"email\":\"user@example.com\"}",
   "source": {
     "id": "source-1",
     "key": "employee.offboard",
@@ -696,10 +708,17 @@ Input Processor 决定最终怎么喂给目标脚本。
 - `headers`
 - `query`
 - `body`
+- `rawBody`
 - `source`
 - `trigger`
 
 输出必须是一个对象。
+
+其中：
+
+- `body` 可能是对象，也可能是字符串
+- `rawBody` 始终表示原始请求体文本
+- 如果脚本要读取对象字段，先判断 `body` 是否真的是对象；如果是纯文本、XML、签名串或 JSON 标量，优先读 `rawBody`
 
 ## UI 使用顺序
 

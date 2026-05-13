@@ -20,7 +20,8 @@ describe("repositoryPublish", () => {
     const repositories = getEnabledRepositories([
       repository({ id: "b" }),
       repository({ id: "c", enabled: false }),
-      repository({ id: "a", type: "LOCAL_DIR" })
+      repository({ id: "a", type: "LOCAL_DIR" }),
+      repository({ id: "d", type: "HTTP" })
     ]);
 
     expect(repositories.map((item) => item.id)).toEqual(["a", "b"]);

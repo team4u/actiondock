@@ -165,11 +165,12 @@ export function EventRecordManagementPage({ embedded = false }: EventRecordManag
               <pre className="json-preview">{prettyJson({
                 headers: currentRecord.rawHeaders,
                 query: currentRecord.rawQuery,
-                body: currentRecord.rawBody
+                body: currentRecord.rawBody,
+                rawBody: currentRecord.normalizedEvent?.rawBody
               })}</pre>
             </Card>
             <Card size="small" title="标准事件">
-              <pre className="json-preview">{prettyJson((currentRecord.normalizedEvent ?? {}) as unknown as Record<string, unknown>)}</pre>
+              <pre className="json-preview">{prettyJson(currentRecord.normalizedEvent ?? {})}</pre>
             </Card>
             <Card size="small" title="分发记录">
               {dispatches.length === 0 ? (

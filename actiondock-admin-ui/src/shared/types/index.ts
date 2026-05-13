@@ -418,6 +418,8 @@ export interface EventSourceWebhookResponse {
   errorResponse?: EventSourceWebhookErrorResponse;
 }
 
+export type EventBody = Record<string, unknown> | string;
+
 export interface NormalizedEvent {
   id?: string;
   sourceId?: string;
@@ -429,7 +431,8 @@ export interface NormalizedEvent {
   timestamp?: string;
   headers: Record<string, unknown>;
   query: Record<string, unknown>;
-  body: Record<string, unknown>;
+  body: EventBody;
+  rawBody?: string;
   receivedAt?: string;
 }
 
@@ -496,7 +499,7 @@ export interface EventRecord {
   subject?: string;
   rawHeaders: Record<string, unknown>;
   rawQuery: Record<string, unknown>;
-  rawBody: Record<string, unknown>;
+  rawBody: EventBody;
   normalizedEvent?: NormalizedEvent;
   errorMessage?: string;
   createdAt?: string;
@@ -522,7 +525,7 @@ export interface EventDispatchRecord {
 export interface IncomingEventPayload {
   headers?: Record<string, unknown>;
   query?: Record<string, unknown>;
-  body?: Record<string, unknown>;
+  body?: EventBody;
   rawBody?: string;
   contentType?: string;
 }
@@ -533,7 +536,8 @@ export interface ProcessorTestRequest {
     event?: Record<string, unknown>;
     headers?: Record<string, unknown>;
     query?: Record<string, unknown>;
-    body?: Record<string, unknown>;
+    body?: EventBody;
+    rawBody?: string;
     source?: Record<string, unknown>;
     trigger?: Record<string, unknown>;
     variables?: Record<string, unknown>;

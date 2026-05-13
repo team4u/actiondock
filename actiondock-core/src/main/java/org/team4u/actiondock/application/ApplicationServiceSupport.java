@@ -6,6 +6,7 @@ import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorResult;
+import org.team4u.actiondock.domain.model.SchemaValueCopier;
 import org.team4u.actiondock.domain.port.ProcessorEngine;
 
 import java.util.LinkedHashMap;
@@ -72,6 +73,7 @@ final class ApplicationServiceSupport {
         value.put("headers", event.getHeaders());
         value.put("query", event.getQuery());
         value.put("body", event.getBody());
+        value.put("rawBody", event.getRawBody());
         value.put("receivedAt", event.getReceivedAt() == null ? null : event.getReceivedAt().toString());
         return value;
     }
@@ -118,7 +120,8 @@ final class ApplicationServiceSupport {
         setMapField(sampleContext, "event", context::setEvent);
         setMapField(sampleContext, "headers", context::setHeaders);
         setMapField(sampleContext, "query", context::setQuery);
-        setMapField(sampleContext, "body", context::setBody);
+        setObjectField(sampleContext, "body", context::setBody);
+        setStringField(sampleContext, "rawBody", context::setRawBody);
         setMapField(sampleContext, "source", context::setSource);
         setMapField(sampleContext, "trigger", context::setTrigger);
         setMapField(sampleContext, "variables", context::setVariables);
@@ -128,6 +131,18 @@ final class ApplicationServiceSupport {
     static void setMapField(Map<String, Object> source, String key, Consumer<Map<String, Object>> setter) {
         if (source.get(key) instanceof Map<?, ?> map) {
             setter.accept(MapValueConverter.toResultMap(map));
+        }
+    }
+
+    static void setObjectField(Map<String, Object> source, String key, Consumer<Object> setter) {
+        if (source.containsKey(key)) {
+            setter.accept(SchemaValueCopier.copyObject(source.get(key)));
+        }
+    }
+
+    static void setStringField(Map<String, Object> source, String key, Consumer<String> setter) {
+        if (source.containsKey(key)) {
+            setter.accept(ObjectValues.stringValue(source.get(key)));
         }
     }
 }

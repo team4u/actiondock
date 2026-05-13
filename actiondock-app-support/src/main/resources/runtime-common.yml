@@ -4,6 +4,10 @@ spring:
     driver-class-name: org.h2.Driver
     username: sa
     password:
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
   jpa:
     hibernate:
       ddl-auto: validate

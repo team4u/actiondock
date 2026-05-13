@@ -46,11 +46,10 @@ class RepositoryDefinitionService {
     RepositoryDefinition saveRepository(RepositoryDefinition definition) {
         RepositoryDefinition target = definition == null ? new RepositoryDefinition() : definition;
         String id = NormalizeUtils.normalize(target.getId(), "仓库 ID 不能为空");
-        String type = validateRepositoryType(target);
-        String trustLevel = validateTrustLevel(target);
-
         LocalDateTime now = LocalDateTime.now();
         RepositoryDefinition existing = repositoryDefinitionRepository.findById(id).orElse(null);
+        String type = validateRepositoryType(target, existing);
+        String trustLevel = validateTrustLevel(target);
         RepositoryDefinition saved = repositoryDefinitionRepository.save(
                 buildRepositoryDefinition(id, target, type, trustLevel, existing, now)
         );
@@ -83,12 +82,15 @@ class RepositoryDefinitionService {
         return repositoryDefinitionRepository;
     }
 
-    private String validateRepositoryType(RepositoryDefinition target) {
+    private String validateRepositoryType(RepositoryDefinition target, RepositoryDefinition existing) {
         String type = NormalizeUtils.normalizeOrDefault(target.getType(), REPO_TYPE_GIT).toUpperCase(Locale.ROOT);
-        if (!List.of(REPO_TYPE_GIT, REPO_TYPE_HTTP, REPO_TYPE_LOCAL_DIR).contains(type)) {
-            throw new IllegalArgumentException("仓库类型仅支持 GIT / HTTP / LOCAL_DIR");
+        if (List.of(REPO_TYPE_GIT, REPO_TYPE_LOCAL_DIR).contains(type)) {
+            return type;
         }
-        return type;
+        if (REPO_TYPE_HTTP.equals(type) && existing != null && REPO_TYPE_HTTP.equals(existing.getType())) {
+            return type;
+        }
+        throw new IllegalArgumentException("仓库类型仅支持 GIT / LOCAL_DIR");
     }
 
     private String validateTrustLevel(RepositoryDefinition target) {

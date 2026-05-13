@@ -46,8 +46,7 @@ public class RepositorySkillService {
      * @return 所有仓库中已启用的 Skill 描述符列表，按 skillId 排序
      */
     public List<RepositorySkillDescriptor> listAllRepositorySkills() {
-        return catalog.listRepositories().stream()
-                .filter(RepositoryDefinition::isEnabled)
+        return catalog.listEnabledDiscoveryRepositories().stream()
                 .flatMap(repo -> listRepositorySkills(repo.getId()).stream())
                 .sorted(Comparator.comparing(RepositorySkillDescriptor::skillId))
                 .toList();

@@ -205,8 +205,7 @@ public class PluginRuntimeService {
     /**
      * 持久化插件文件并加载到运行时。
      * <p>
-     * 包含通用的空内容校验、文件写入、插件加载、缓存和版本校验逻辑，
-     * 供 install 和 upgrade 流程复用。
+     * 先将内容写入临时文件，校验通过后原子性移动到目标路径，避免失败时遗留不完整文件。
      *
      * @param content           插件文件内容
      * @param destination       目标写入路径
@@ -217,18 +216,47 @@ public class PluginRuntimeService {
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("插件文件不能为空");
         }
+        Path staging = stagingPath(destination);
         try {
-            Files.createDirectories(pluginsRoot);
-            Files.write(destination, content);
+            Files.createDirectories(staging.getParent());
+            Files.write(staging, content);
         } catch (IOException exception) {
             throw new IllegalStateException("写入插件文件失败: " + destination.getFileName(), exception);
         }
-        String pluginId = loadPlugin(destination);
-        PluginManifest manifest = cacheManifest(pluginId);
-        if (NormalizeUtils.isNotBlank(repositoryVersion) && !repositoryVersion.equals(manifest.getVersion())) {
-            throw new IllegalArgumentException("插件版本与仓库描述不一致: " + manifest.getVersion());
+        String pluginId = null;
+        try {
+            pluginId = loadPlugin(staging);
+            PluginManifest manifest = cacheManifest(pluginId);
+            if (NormalizeUtils.isNotBlank(repositoryVersion) && !repositoryVersion.equals(manifest.getVersion())) {
+                throw new IllegalArgumentException("插件版本与仓库描述不一致: " + manifest.getVersion());
+            }
+        } catch (Exception exception) {
+            if (pluginId != null) {
+                unloadIfLoaded(pluginId);
+            }
+            deleteSilently(staging);
+            throw exception;
+        }
+        try {
+            Files.move(staging, destination);
+        } catch (IOException exception) {
+            unloadIfLoaded(pluginId);
+            deleteSilently(staging);
+            throw new IllegalStateException("提交插件文件失败: " + destination.getFileName(), exception);
         }
         return pluginId;
+    }
+
+    private Path stagingPath(Path destination) {
+        return pluginsRoot.resolve(".staging").resolve(destination.getFileName());
+    }
+
+    private static void deleteSilently(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            LOGGER.warn("删除临时文件失败: {}", path, e);
+        }
     }
 
     private PluginView install(String originalFilename,
@@ -534,6 +562,7 @@ public class PluginRuntimeService {
         } catch (IOException e) {
             throw new IllegalStateException("Cannot initialize plugin directories", e);
         }
+        cleanupStagingFiles();
         pluginRegistryRepository.findEnabled().forEach(registration -> {
             try {
                 loadRegisteredPlugin(registration);
@@ -542,6 +571,18 @@ public class PluginRuntimeService {
                 LOGGER.warn("Failed to load plugin on startup: {}", registration.getPluginId(), e);
             }
         });
+    }
+
+    private void cleanupStagingFiles() {
+        Path stagingDir = pluginsRoot.resolve(".staging");
+        if (!Files.isDirectory(stagingDir)) {
+            return;
+        }
+        try (var stream = Files.list(stagingDir)) {
+            stream.forEach(PluginRuntimeService::deleteSilently);
+        } catch (IOException e) {
+            LOGGER.warn("扫描 staging 文件失败", e);
+        }
     }
 
     private static String resolveSubmitMode(ScriptExecutionContext executionContext) {

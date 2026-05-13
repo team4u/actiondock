@@ -12,6 +12,7 @@ import org.team4u.actiondock.domain.model.NormalizedEvent;
 import org.team4u.actiondock.domain.model.ProcessorContext;
 import org.team4u.actiondock.domain.model.ProcessorDefinition;
 import org.team4u.actiondock.domain.model.ProcessorResult;
+import org.team4u.actiondock.domain.model.SchemaValueCopier;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
@@ -383,14 +384,15 @@ public class EventTriggerApplicationService {
             event.setActor(stringValue(eventValue.get("actor")));
             event.setSubject(stringValue(eventValue.get("subject")));
             event.setTimestamp(stringValue(eventValue.get("timestamp")));
+            event.setRawBody(stringValue(eventValue.get("rawBody")));
             if (eventValue.get("headers") instanceof Map<?, ?> headers) {
                 event.setHeaders(MapValueConverter.toResultMap(headers));
             }
             if (eventValue.get("query") instanceof Map<?, ?> query) {
                 event.setQuery(MapValueConverter.toResultMap(query));
             }
-            if (eventValue.get("body") instanceof Map<?, ?> body) {
-                event.setBody(MapValueConverter.toResultMap(body));
+            if (eventValue.containsKey("body")) {
+                event.setBody(SchemaValueCopier.copyObject(eventValue.get("body")));
             }
         }
         return buildContext(source, trigger, event);
@@ -401,6 +403,7 @@ public class EventTriggerApplicationService {
                 .setHeaders(event.getHeaders())
                 .setQuery(event.getQuery())
                 .setBody(event.getBody())
+                .setRawBody(event.getRawBody())
                 .setEvent(ApplicationServiceSupport.toEventMap(event))
                 .setSource(ApplicationServiceSupport.toSourceMap(source))
                 .setTrigger(EventProcessorUtils.triggerMap(trigger));

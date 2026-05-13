@@ -1,4 +1,4 @@
-import type { ExecutionStatus } from "../shared/types";
+import type { EventBody, ExecutionStatus } from "../shared/types";
 
 export function getExecutionStatusColor(status?: ExecutionStatus): string {
   switch (status) {
@@ -33,7 +33,7 @@ export function formatDateTime(value?: string): string {
   return value.replace("T", " ").slice(0, 19);
 }
 
-export function prettyJson(value: Record<string, unknown> | undefined): string {
+export function prettyJson(value: unknown): string {
   return JSON.stringify(value ?? {}, null, 2);
 }
 
@@ -47,6 +47,21 @@ export function parseJsonText(value: string, fieldName: string): Record<string, 
   } catch (error) {
     const reason = error instanceof Error ? error.message : "格式错误";
     throw new Error(`${fieldName} 不是合法 JSON: ${reason}`);
+  }
+}
+
+export function parseJsonValueOrText(value: string): EventBody {
+  if (!value.trim()) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return value;
+  } catch {
+    return value;
   }
 }
 

@@ -84,27 +84,41 @@ class EventIngestionApplicationServiceTest {
         assertThat(record.getSourceKey()).isEqualTo("source-key");
         assertThat(record.getRawHeaders()).isEmpty();
         assertThat(record.getRawQuery()).isEmpty();
-        assertThat(record.getRawBody()).isEmpty();
+        assertThat(record.getRawBody()).isEqualTo(Map.of());
         assertThat(record.getErrorMessage()).isEqualTo("事件鉴权失败");
         verify(eventSourceApplicationService, never()).normalize(any(), any(), any());
         verify(eventTriggerApplicationService, never()).list();
     }
 
     @Test
-    void invalidJsonIsRejectedOnlyAfterAuthPasses() {
+    void nonJsonStringBodyIsAcceptedAfterAuthPasses() {
         EventSourceDefinition source = headerTokenSource();
         when(eventSourceApplicationService.get("source-1")).thenReturn(source);
+        when(eventSourceApplicationService.normalize(eq(source), any(), anyString())).thenAnswer(invocation -> {
+            IncomingEventPayload payload = invocation.getArgument(1);
+            assertThat(payload.getRawBody()).isEqualTo("not-json");
+            assertThat(payload.getBody()).isEqualTo("not-json");
+            return new NormalizedEvent()
+                    .setEventType("text")
+                    .setEventId("evt-text")
+                    .setBody(payload.getBody())
+                    .setRawBody(payload.getRawBody());
+        });
+        when(eventTriggerApplicationService.list()).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.ingest("source-1", payload()
+        EventIngestionResult result = service.ingest("source-1", payload()
                 .setHeaders(Map.of("X-Webhook-Token", "topsecret"))
                 .setRawBody("not-json")
-                .setContentType("application/json")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("请求体必须是 JSON 对象");
+                .setContentType("text/plain"));
 
-        assertThat(eventRecordRepository.savedRecords()).isEmpty();
-        verify(eventSourceApplicationService, never()).normalize(any(), any(), any());
-        verify(eventTriggerApplicationService, never()).list();
+        assertThat(result.getEventRecord().getStatus()).isEqualTo(EventRecordStatus.IGNORED);
+        EventRecord record = eventRecordRepository.savedRecords().getLast();
+        assertThat(record.getRawBody()).isEqualTo("not-json");
+        assertThat(record.getNormalizedEvent()).isNotNull();
+        assertThat(record.getNormalizedEvent().getBody()).isEqualTo("not-json");
+        assertThat(record.getNormalizedEvent().getRawBody()).isEqualTo("not-json");
+        verify(eventSourceApplicationService).normalize(eq(source), any(), anyString());
+        verify(eventTriggerApplicationService).list();
     }
 
     @Test
@@ -115,12 +129,14 @@ class EventIngestionApplicationServiceTest {
         when(eventSourceApplicationService.normalize(eq(source), any(), anyString())).thenAnswer(invocation -> {
             IncomingEventPayload payload = invocation.getArgument(1);
             assertThat(payload.getRawBody()).isEqualTo(rawBody);
-            assertThat(payload.getBody()).containsEntry("event", "created");
+            assertThat(payload.getBody()).isEqualTo(Map.of("event", "created", "nested", Map.of("x", 1)));
             return new NormalizedEvent()
                     .setEventType("created")
                     .setEventId("evt-1")
                     .setActor("bot")
-                    .setSubject("demo");
+                    .setSubject("demo")
+                    .setBody(payload.getBody())
+                    .setRawBody(payload.getRawBody());
         });
         when(eventTriggerApplicationService.list()).thenReturn(List.of());
 
@@ -133,11 +149,34 @@ class EventIngestionApplicationServiceTest {
         assertThat(eventRecordRepository.savedRecords()).hasSize(3);
         EventRecord record = eventRecordRepository.savedRecords().getLast();
         assertThat(record.getRawHeaders()).containsEntry("X-Signature", "[REDACTED]");
-        assertThat(record.getRawBody()).containsEntry("event", "created");
-        assertThat(record.getRawBody().get("nested")).isInstanceOf(Map.class);
+        assertThat(record.getRawBody()).isEqualTo(Map.of("event", "created", "nested", Map.of("x", 1)));
         verify(eventSourceApplicationService).normalize(eq(source), any(), anyString());
         verify(eventTriggerApplicationService).list();
         verify(eventTriggerApplicationService, never()).dispatch(any(), any(), any(), any());
+    }
+
+    @Test
+    void jsonScalarBodyFallsBackToOriginalRawString() {
+        EventSourceDefinition source = headerTokenSource();
+        when(eventSourceApplicationService.get("source-1")).thenReturn(source);
+        when(eventSourceApplicationService.normalize(eq(source), any(), anyString())).thenAnswer(invocation -> {
+            IncomingEventPayload payload = invocation.getArgument(1);
+            assertThat(payload.getBody()).isEqualTo("\"hello\"");
+            return new NormalizedEvent()
+                    .setEventType("scalar")
+                    .setEventId("evt-scalar")
+                    .setBody(payload.getBody())
+                    .setRawBody(payload.getRawBody());
+        });
+        when(eventTriggerApplicationService.list()).thenReturn(List.of());
+
+        EventIngestionResult result = service.ingest("source-1", payload()
+                .setHeaders(Map.of("X-Webhook-Token", "topsecret"))
+                .setRawBody("\"hello\"")
+                .setContentType("application/json"));
+
+        assertThat(result.getEventRecord().getRawBody()).isEqualTo("\"hello\"");
+        assertThat(result.getEventRecord().getNormalizedEvent().getRawBody()).isEqualTo("\"hello\"");
     }
 
     @Test

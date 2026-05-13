@@ -12,7 +12,8 @@ const NORMALIZATION_INPUT_SCHEMA: Record<string, unknown> = {
       properties: {
         headers: { type: "object", description: "请求头" },
         query: { type: "object", description: "查询参数" },
-        body: { type: "object", description: "请求体" },
+        body: { description: "请求体，可能是对象或纯文本" },
+        rawBody: { type: "string", description: "原始请求体字符串" },
         sourceId: { type: "string", description: "事件源 ID" },
         sourceKey: { type: "string", description: "事件源 Key" }
       }
@@ -43,19 +44,21 @@ const NORMALIZATION_OUTPUT_SCHEMA: Record<string, unknown> = {
 };
 
 const NORMALIZATION_SOURCE = `// 标准化处理器: 从原始请求中提取标准事件字段
-// input.event 包含 headers, query, body
+// input.event.body 可能是对象或纯文本
+// input.event.rawBody 始终是原始请求字符串
 // input.source 包含 { id, key, name }
 def event = input.event ?: [:]
 def headers = event.headers ?: [:]
 def query = event.query ?: [:]
 def body = event.body ?: [:]
+def rawBody = event.rawBody ?: ""
 
 return [
-    eventType: headers['X-Event-Type'] ?: body.action ?: "",
-    eventId: body.id ?: "",
-    actor: body.user?.name ?: "",
-    subject: body.subject ?: "",
-    timestamp: body.timestamp ?: new Date().toString()
+    eventType: headers['X-Event-Type'] ?: (body instanceof Map ? body.action : rawBody) ?: "",
+    eventId: body instanceof Map ? (body.id ?: "") : "",
+    actor: body instanceof Map ? (body.user?.name ?: "") : "",
+    subject: body instanceof Map ? (body.subject ?: "") : "",
+    timestamp: body instanceof Map ? (body.timestamp ?: new Date().toString()) : new Date().toString()
 ]`;
 
 const EVENT_INPUT_SCHEMA: Record<string, unknown> = {
@@ -71,7 +74,8 @@ const EVENT_INPUT_SCHEMA: Record<string, unknown> = {
         timestamp: { type: "string", description: "事件时间" },
         headers: { type: "object", description: "原始请求头" },
         query: { type: "object", description: "原始查询参数" },
-        body: { type: "object", description: "原始请求体" }
+        body: { description: "原始请求体，可能是对象或纯文本" },
+        rawBody: { type: "string", description: "原始请求体字符串" }
       }
     },
     source: {
@@ -130,15 +134,16 @@ return [
 ]`;
 
 const INPUT_SOURCE = `// 入参映射处理器: 将标准事件转换为目标脚本的输入
-// input.event 包含标准化事件字段
+// input.event.body 可能是对象或纯文本
 // input.source 包含 { id, key, name }
 // input.trigger 包含 { id, name, targetScriptId }
 def event = input.event ?: [:]
 def body = event.body ?: [:]
+def rawBody = event.rawBody ?: ""
 
 // TODO: 根据目标脚本的输入结构修改映射
 return [
-    // message: body.issue?.title ?: ""
+    // message: body instanceof Map ? (body.issue?.title ?: "") : rawBody
 ]`;
 
 const PRESETS: Record<ProcessorPurpose, ProcessorScriptPreset> = {

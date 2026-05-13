@@ -78,22 +78,26 @@ return {
   - `timestamp`（可选）
   - `headers`
   - `query`
-  - `body`
+  - `body`（可能是对象，也可能是字符串）
+  - `rawBody`（原始请求体文本）
   - `receivedAt`
 - `input.source` 通常包含 `id`、`key`、`name`
 - `input.trigger` 通常包含 `id`、`name`、`targetScriptId`
 - 输出必须直接对齐目标脚本的 `inputSchema`
 - 如果用户没有明确要求，处理器脚本只做事件到目标脚本入参的转换，不顺手承担业务主逻辑
 - 如果只是做 JSONPath 等价转换，直接用 `get` 组装返回值即可；字段缺失就保持 `null`，不要额外写分支
+- 如果要解包 `body` 里的字段，先判断它是不是对象；纯文本、XML、签名串或 JSON 标量优先从 `rawBody` 读取
 
 Python 最小模板：
 
 ```python
 event = input.get("event", {})
 body = event.get("body", {})
+body_obj = body if isinstance(body, dict) else {}
 
 return {
     # TODO: 返回目标脚本需要的字段
+    # "rawBody": event.get("rawBody"),
 }
 ```
 
@@ -101,10 +105,11 @@ Groovy 最小模板：
 
 ```groovy
 def event = input.event ?: [:]
-def body = event.body ?: [:]
+def body = event.body instanceof Map ? event.body : [:]
 
 return [
   // TODO: 返回目标脚本需要的字段
+  // rawBody: event.rawBody
 ]
 ```
 

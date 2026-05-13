@@ -34,6 +34,7 @@ public class RepositoryToolService {
     private final UpstreamSyncService upstreamSync;
     private final ToolRepositoryPublisher toolRepositoryPublisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
+    private final RepositoryDependencyResolver dependencyResolver;
 
     public RepositoryToolService(RepositoryCatalogService catalog,
                                  RepositoryPluginService pluginService,
@@ -47,6 +48,7 @@ public class RepositoryToolService {
         this.upstreamSync = new UpstreamSyncService(catalog, repos, services);
         this.configTemplateSyncService = configTemplateSyncService;
         this.toolRepositoryPublisher = new ToolRepositoryPublisher(catalog, repos, services);
+        this.dependencyResolver = new RepositoryDependencyResolver(catalog);
     }
 
     public RepositoryLocalAsset addLocalAsset(String repositoryId,
@@ -162,6 +164,7 @@ public class RepositoryToolService {
                                         LinkedHashSet<String> visiting) {
         resolveScriptDependencies(
                 detail.descriptor().scriptDependencies(),
+                repositoryId,
                 options.installScriptDependencies(),
                 options.installPluginDependencies(),
                 options.forcePluginUpgrade(),
@@ -197,14 +200,15 @@ public class RepositoryToolService {
     }
 
     private void resolveScriptDependencies(List<ScriptDependency> dependencies,
+                                           String repositoryId,
                                            boolean installScriptDependencies,
                                            boolean installPluginDependencies,
                                            boolean forcePluginUpgrade,
                                            LinkedHashSet<String> visiting) {
         for (ScriptDependency dependency : NormalizeUtils.nullSafeList(dependencies)) {
             String scriptId = NormalizeUtils.normalize(dependency.getScriptId(), "脚本依赖 scriptId 不能为空");
-            String depRepositoryId = NormalizeUtils.normalize(dependency.getRepositoryId(), "脚本依赖 repositoryId 不能为空: " + scriptId);
             String depToolId = NormalizeUtils.normalize(dependency.getToolId(), "脚本依赖 toolId 不能为空: " + scriptId);
+            String depRepositoryId = dependencyResolver.resolveToolRepositoryId(repositoryId, dependency.getRepositoryId(), depToolId);
             ScriptDefinition installed = repos.scriptRepository().findInstalledByRepositorySource(depRepositoryId, depToolId).orElse(null);
             if (installed != null && RepositoryVersionUtils.versionSatisfies(installed.getRepositoryVersion(), dependency.getVersionRange())) {
                 continue;

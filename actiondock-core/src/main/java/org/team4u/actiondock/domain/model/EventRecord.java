@@ -15,7 +15,7 @@ public class EventRecord {
     private String subject;
     private Map<String, Object> rawHeaders = new LinkedHashMap<>();
     private Map<String, Object> rawQuery = new LinkedHashMap<>();
-    private Map<String, Object> rawBody = new LinkedHashMap<>();
+    private Object rawBody = new LinkedHashMap<String, Object>();
     private NormalizedEvent normalizedEvent;
     private String errorMessage;
     private LocalDateTime createdAt;
@@ -110,12 +110,12 @@ public class EventRecord {
         return this;
     }
 
-    public Map<String, Object> getRawBody() {
-        return SchemaValueCopier.copyMap(rawBody);
+    public Object getRawBody() {
+        return SchemaValueCopier.copyObject(rawBody);
     }
 
-    public EventRecord setRawBody(Map<String, Object> rawBody) {
-        this.rawBody = SchemaValueCopier.copyMap(rawBody);
+    public EventRecord setRawBody(Object rawBody) {
+        this.rawBody = SchemaValueCopier.copyObject(rawBody);
         return this;
     }
 

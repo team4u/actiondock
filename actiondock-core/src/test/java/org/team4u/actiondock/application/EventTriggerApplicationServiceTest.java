@@ -118,7 +118,8 @@ class EventTriggerApplicationServiceTest {
                 .setSubject("demo")
                 .setHeaders(Map.of("X-Test", "1"))
                 .setQuery(Map.of("page", "1"))
-                .setBody(Map.of("hello", "world"));
+                .setBody("plain-text")
+                .setRawBody("plain-text");
         ScriptDefinition script = publishedScript("script-1", Map.of(
                 "type", "object",
                 "properties", Map.of("sourceId", Map.of("type", "string")),
@@ -146,7 +147,8 @@ class EventTriggerApplicationServiceTest {
         assertThat(dispatch.getMappedInput()).containsEntry("subject", "demo");
         assertThat(dispatch.getMappedInput()).containsEntry("headers", Map.of("X-Test", "1"));
         assertThat(dispatch.getMappedInput()).containsEntry("query", Map.of("page", "1"));
-        assertThat(dispatch.getMappedInput()).containsEntry("body", Map.of("hello", "world"));
+        assertThat(dispatch.getMappedInput()).containsEntry("body", "plain-text");
+        assertThat(dispatch.getMappedInput()).containsEntry("rawBody", "plain-text");
         assertThat(result.execution()).isNotNull();
         assertThat(result.scriptDefinition()).isNotNull();
         verify(processorEngine, never()).process(any(), any());

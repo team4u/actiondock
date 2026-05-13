@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -77,6 +78,30 @@ class EventIngestionControllerTest {
                 .andExpect(jsonPath("$.data.event.id").value("event-1"));
 
         verify(eventIngestionApplicationService).ingest(eq("source-1"), any());
+    }
+
+    @Test
+    void webhookRouteAcceptsPlainTextBody() throws Exception {
+        when(apiAccessTokenRepository.countEnabled()).thenReturn(1L);
+        when(eventIngestionApplicationService.ingest(eq("source-1"), any())).thenReturn(new EventIngestionResult()
+                .setEventRecord(new EventRecord()
+                        .setId("event-plain")
+                        .setSourceId("source-1")
+                        .setSourceKey("source-key")
+                        .setStatus(EventRecordStatus.IGNORED)
+                        .setCreatedAt(LocalDateTime.now()))
+                .setDispatches(List.of()));
+
+        mockMvc.perform(post("/api/event-sources/source-1/events")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("hello webhook"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.event.id").value("event-plain"));
+
+        verify(eventIngestionApplicationService).ingest(eq("source-1"), argThat(payload ->
+                payload != null
+                        && "hello webhook".equals(payload.getRawBody())
+                        && MediaType.TEXT_PLAIN_VALUE.equals(payload.getContentType())));
     }
 
     @Test

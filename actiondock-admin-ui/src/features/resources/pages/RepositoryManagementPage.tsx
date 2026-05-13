@@ -32,7 +32,9 @@ import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
 import { TrustLevelTag } from "../../../components/domain/TrustLevelTag";
 import { ConfirmDangerAction } from "../../../components/common/ConfirmDangerAction";
+import { InfoHint } from "../../../components/common/InfoHint";
 import { getRepositoryTypeLabel } from "../../../components/domain/typeLabels";
+import { suggestRepositoryId } from "../../../services/repositoryId";
 import { ApiError } from "../../../shared/api/httpClient";
 import type { RepositoryDefinition } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
@@ -61,12 +63,14 @@ interface RepositoryFormValues {
 export function RepositoryManagementPage() {
   const [form] = Form.useForm<RepositoryFormValues>();
   const repositoryType = Form.useWatch("type", form) ?? "GIT";
+  const repositoryUrl = Form.useWatch("url", form) ?? "";
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const [repositoryIdManuallyEdited, setRepositoryIdManuallyEdited] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadData = async () => {
@@ -93,11 +97,12 @@ export function RepositoryManagementPage() {
       name: "",
       type: "GIT",
       url: "",
-      branch: "main",
+      branch: "",
       enabled: true,
       trustLevel: "UNTRUSTED",
       description: ""
     });
+    setRepositoryIdManuallyEdited(false);
     setEditorState({ mode: "create" });
   };
 
@@ -112,13 +117,22 @@ export function RepositoryManagementPage() {
       trustLevel: item.trustLevel,
       description: item.description ?? ""
     });
+    setRepositoryIdManuallyEdited(true);
     setEditorState({ mode: "edit", repositoryId: item.id });
   };
 
   const closeEditor = () => {
     setEditorState(null);
+    setRepositoryIdManuallyEdited(false);
     form.resetFields();
   };
+
+  useEffect(() => {
+    if (editorState?.mode !== "create" || repositoryIdManuallyEdited) {
+      return;
+    }
+    form.setFieldValue("id", suggestRepositoryId(repositoryType, repositoryUrl));
+  }, [editorState?.mode, form, repositoryIdManuallyEdited, repositoryType, repositoryUrl]);
 
   const handleSubmit = async () => {
     try {
@@ -129,7 +143,7 @@ export function RepositoryManagementPage() {
         name: values.name.trim(),
         type: values.type,
         url: values.url.trim(),
-        branch: values.type === "GIT" ? values.branch?.trim() || "main" : undefined,
+        branch: values.type === "GIT" ? values.branch?.trim() || undefined : undefined,
         enabled: values.enabled,
         trustLevel: values.trustLevel,
         description: values.description?.trim() || undefined
@@ -248,13 +262,21 @@ export function RepositoryManagementPage() {
     }
   ];
 
+  const typeOptions = [
+    { value: "GIT", label: "Git 仓库" },
+    { value: "LOCAL_DIR", label: "本地目录仓库" }
+  ];
+  const editorTypeOptions = editorState?.mode === "edit" && repositoryType === "HTTP"
+    ? [...typeOptions, { value: "HTTP", label: "HTTP 静态仓库" }]
+    : typeOptions;
+
   return (
     <>
       {contextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
           title="脚本仓库"
-          meta={<Text type="secondary">支持 Git、HTTP 与本地目录仓库。本地目录仓库在创建时会自动初始化为空仓库，不需要手工创建 actiondock.repository.json，也不用先点同步。</Text>}
+          meta={<Text type="secondary">支持 Git 与本地目录仓库。本地目录仓库在创建时会自动初始化为空仓库，不需要手工创建 actiondock.repository.json，也不用先点同步。</Text>}
           actions={
             <>
               <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
@@ -278,7 +300,7 @@ export function RepositoryManagementPage() {
               emptyText: (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="还没有配置脚本仓库。先添加一个 Git、HTTP 或本地目录仓库。"
+                  description="还没有配置脚本仓库。先添加一个 Git 或本地目录仓库。"
                 />
               )
             }}
@@ -297,14 +319,22 @@ export function RepositoryManagementPage() {
         <Form form={form} layout="vertical" initialValues={{ enabled: true, trustLevel: "UNTRUSTED", type: "GIT" }}>
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <Form.Item
-              label="仓库 ID"
+              label={<InfoHint label="仓库 ID" content="创建时会根据 Git 地址或目录名自动生成默认值。可以手工修改；发布依赖解析会优先按当前仓库和同名资产自动兼容，减少不同环境仓库 ID 不一致带来的安装问题。" />}
               name="id"
               rules={[
                 { required: true, message: "请输入仓库 ID" },
                 { pattern: /^[A-Za-z0-9._-]+$/, message: "仅支持字母、数字、点、中横线和下划线" }
               ]}
             >
-              <Input disabled={editorState?.mode === "edit"} placeholder="例如 repo-platform" />
+              <Input
+                disabled={editorState?.mode === "edit"}
+                placeholder="例如 repo-platform"
+                onChange={() => {
+                  if (editorState?.mode === "create") {
+                    setRepositoryIdManuallyEdited(true);
+                  }
+                }}
+              />
             </Form.Item>
 
             <Form.Item
@@ -317,13 +347,7 @@ export function RepositoryManagementPage() {
 
             <Space size={12} style={{ width: "100%" }} wrap>
               <Form.Item label="类型" name="type" style={{ flex: "1 1 180px", minWidth: 180 }}>
-                <Select
-                  options={[
-                    { value: "GIT", label: "Git 仓库" },
-                    { value: "HTTP", label: "HTTP 静态仓库" },
-                    { value: "LOCAL_DIR", label: "本地目录仓库" }
-                  ]}
-                />
+                <Select options={editorTypeOptions} />
               </Form.Item>
               <Form.Item label="信任级别" name="trustLevel" style={{ flex: "1 1 180px", minWidth: 180 }}>
                 <Select

@@ -41,6 +41,7 @@ import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
 import { isScriptPublished } from "../../../services/scriptPublication";
 import type {
+  EventBody,
   EventSourceDefinition,
   EventTrigger,
   EventTriggerTestResult,
@@ -73,6 +74,20 @@ function createEmptyDraft(): EventTrigger {
   };
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function coerceEventBody(value: unknown): EventBody {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (isObjectRecord(value)) {
+    return value;
+  }
+  return {};
+}
+
 function buildDefaultEventJson(source?: EventSourceDefinition): string {
   const value = source?.sampleContext && typeof source.sampleContext === "object"
     ? ((source.sampleContext.event as Record<string, unknown>) ?? {})
@@ -81,6 +96,7 @@ function buildDefaultEventJson(source?: EventSourceDefinition): string {
     headers: {},
     query: {},
     body: {},
+    rawBody: "{}",
     ...value
   });
 }
@@ -204,7 +220,8 @@ export function EventTriggerManagementPage({ embedded = false }: EventTriggerMan
         event: {
           headers: (event.headers as Record<string, unknown>) ?? {},
           query: (event.query as Record<string, unknown>) ?? {},
-          body: (event.body as Record<string, unknown>) ?? {},
+          body: coerceEventBody(event.body),
+          rawBody: typeof event.rawBody === "string" ? event.rawBody : undefined,
           id: typeof event.id === "string" ? event.id : undefined,
           sourceId: typeof event.sourceId === "string" ? event.sourceId : draft.sourceId,
           sourceKey: typeof event.sourceKey === "string" ? event.sourceKey : sourceById.get(draft.sourceId)?.key,

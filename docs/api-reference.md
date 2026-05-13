@@ -2,13 +2,13 @@
 
 ## 一句话理解
 
-ActionDock 的 REST API 以 `/api` 为前缀，使用 JSON 格式，通过 Bearer Token 认证（可配置为开放模式）。所有 API 响应用 `ApiResponse<T>` 包装，包含 `code`、`message` 和 `data` 字段。
+ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格式，通过 Bearer Token 认证（可配置为开放模式）。Webhook 接收接口 `POST /api/event-sources/{id}/events` 是例外：它不要求平台级 Bearer Token，且请求体既可以是 JSON 对象，也可以是原始字符串。所有 API 响应用 `ApiResponse<T>` 包装，包含 `code`、`message` 和 `data` 字段。
 
 ## API 访问基础
 
 - **Base URL**: `http://localhost:5177/api`
 - **Swagger UI**: `http://localhost:5177/swagger-ui.html`
-- **Content-Type**: `application/json`
+- **Content-Type**: 默认使用 `application/json`；Webhook 接收接口 `POST /api/event-sources/{id}/events` 也支持 `text/plain` 等原始字符串请求体
 - **认证**: `Authorization: Bearer <token>` 请求头
 - **开放模式**: 如果没有配置任何访问令牌，所有 API 请求不需要认证
 
@@ -234,7 +234,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，使用 JSON 格式，通过 Beare
 | `GET` | `/api/event-sources/{id}` | 事件源详情 |
 | `PUT` | `/api/event-sources/{id}` | 更新事件源 |
 | `POST` | `/api/event-sources/{id}/test-normalization` | 测试标准化 |
-| `POST` | `/api/event-sources/{id}/events` | 接收外部事件（**不需要 Bearer Token**） |
+| `POST` | `/api/event-sources/{id}/events` | 接收外部事件（**不需要 Bearer Token**，请求体支持 JSON 对象或原始字符串） |
 
 ### 事件触发
 
