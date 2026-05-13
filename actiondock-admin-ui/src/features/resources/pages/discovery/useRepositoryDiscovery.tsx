@@ -363,26 +363,33 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
       mode: "LOCKED",
       localAssetId: localAssetId(descriptor)
     };
-    await modal.confirm({
-      title: "添加脚本到本地",
-      okText: "添加",
-      cancelText: "取消",
-      content: (
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Text>{descriptor.displayName} 将添加为本地资产。</Text>
-          <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
-          <Select
-            defaultValue={selection.mode}
-            style={{ width: "100%" }}
-            onChange={(value: AddMode) => { selection.mode = value; }}
-            options={[
-              { value: "LOCKED", label: "锁定使用：安装只读脚本，可后续更新" },
-              { value: "TRACKED", label: "可编辑跟踪：创建本地工作副本，可拉取上游" }
-            ]}
-          />
-        </Space>
-      )
+    const confirmed = await new Promise<boolean>((resolve) => {
+      modal.confirm({
+        title: "添加脚本到本地",
+        okText: "添加",
+        cancelText: "取消",
+        onOk: () => { resolve(true); },
+        onCancel: () => { resolve(false); },
+        content: (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Text>{descriptor.displayName} 将添加为本地资产。</Text>
+            <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
+            <Select
+              defaultValue={selection.mode}
+              style={{ width: "100%" }}
+              onChange={(value: AddMode) => { selection.mode = value; }}
+              options={[
+                { value: "LOCKED", label: "锁定使用：安装只读脚本，可后续更新" },
+                { value: "TRACKED", label: "可编辑跟踪：创建本地工作副本，可拉取上游" }
+              ]}
+            />
+          </Space>
+        )
+      });
     });
+    if (!confirmed) {
+      return;
+    }
     await confirmToolLocalAssetAction(descriptor, "add-local", selection.mode, selection.localAssetId);
   }, [confirmToolLocalAssetAction, modal]);
 
@@ -471,26 +478,33 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
       mode: "LOCKED",
       localAssetId: localAssetId(descriptor)
     };
-    await modal.confirm({
-      title: "添加事件源到本地",
-      okText: "添加",
-      cancelText: "取消",
-      content: (
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Text>{descriptor.displayName} 将添加为本地资产。</Text>
-          <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
-          <Select
-            defaultValue={selection.mode}
-            style={{ width: "100%" }}
-            onChange={(value: AddMode) => { selection.mode = value; }}
-            options={[
-              { value: "LOCKED", label: "锁定使用：安装只读事件源，可后续更新" },
-              { value: "TRACKED", label: "可编辑跟踪：创建本地工作副本，可拉取上游" }
-            ]}
-          />
-        </Space>
-      )
+    const confirmed = await new Promise<boolean>((resolve) => {
+      modal.confirm({
+        title: "添加事件源到本地",
+        okText: "添加",
+        cancelText: "取消",
+        onOk: () => { resolve(true); },
+        onCancel: () => { resolve(false); },
+        content: (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Text>{descriptor.displayName} 将添加为本地资产。</Text>
+            <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
+            <Select
+              defaultValue={selection.mode}
+              style={{ width: "100%" }}
+              onChange={(value: AddMode) => { selection.mode = value; }}
+              options={[
+                { value: "LOCKED", label: "锁定使用：安装只读事件源，可后续更新" },
+                { value: "TRACKED", label: "可编辑跟踪：创建本地工作副本，可拉取上游" }
+              ]}
+            />
+          </Space>
+        )
+      });
     });
+    if (!confirmed) {
+      return;
+    }
     await confirmEventSourceLocalAssetAction(descriptor, "add-local", selection.mode, selection.localAssetId);
   }, [confirmEventSourceLocalAssetAction, modal]);
 
