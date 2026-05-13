@@ -4,6 +4,7 @@ import {
   buildAutoCsvMapping,
   buildDraftFromCsvSource,
   buildDraftFromObjectRows,
+  getCsvMappableFields,
   parseCsvSource,
   parseJsonArraySource,
   parseJsonLinesSource
@@ -27,6 +28,36 @@ const simpleFields: SchemaFieldDefinition[] = [
     label: "重试次数",
     kind: "integer",
     required: false
+  }
+];
+
+const mixedFields: SchemaFieldDefinition[] = [
+  ...simpleFields,
+  {
+    name: "payload",
+    label: "负载",
+    kind: "object",
+    required: false,
+    children: [
+      {
+        name: "code",
+        label: "编码",
+        kind: "string",
+        required: true
+      }
+    ]
+  },
+  {
+    name: "items",
+    label: "条目",
+    kind: "array",
+    required: false,
+    items: {
+      name: "items",
+      label: "items",
+      kind: "string",
+      required: false
+    }
   }
 ];
 
@@ -64,6 +95,14 @@ describe("batch parser", () => {
     expect(csv.rows).toEqual([{ name: "a" }, { name: "b" }]);
   });
 
+  it("keeps only simple top-level fields for CSV mapping", () => {
+    expect(getCsvMappableFields(mixedFields).map((field) => field.name)).toEqual([
+      "orderId",
+      "dryRun",
+      "retryCount"
+    ]);
+  });
+
   it("flags required and enum-like mismatches via object draft validation", () => {
     const draft = buildDraftFromObjectRows(
       [{ dryRun: "true" as unknown as boolean }],
@@ -85,5 +124,21 @@ describe("batch parser", () => {
     });
 
     expect(draft.items[0]?.warnings).toContain("列 reason 未映射，将忽略该值");
+  });
+
+  it("allows JSON object and array fields through base validation", () => {
+    const draft = buildDraftFromObjectRows(
+      [
+        {
+          orderId: "A001",
+          payload: { code: "ok" },
+          items: ["a", "b"]
+        }
+      ],
+      mixedFields
+    );
+
+    expect(draft.summary.invalidCount).toBe(0);
+    expect(draft.items[0]?.errors).toEqual([]);
   });
 });

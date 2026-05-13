@@ -28,6 +28,20 @@ function isInteger(value: unknown): value is number {
   return isFiniteNumber(value) && Number.isInteger(value);
 }
 
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isCsvMappableKind(kind: SchemaFieldDefinition["kind"]): boolean {
+  return ["string", "number", "integer", "boolean", "enum"].includes(kind);
+}
+
+export function getCsvMappableFields(
+  supportedFields: SchemaFieldDefinition[]
+): SchemaFieldDefinition[] {
+  return supportedFields.filter((field) => isCsvMappableKind(field.kind));
+}
+
 function matchesFieldType(field: SchemaFieldDefinition, value: unknown): boolean {
   switch (field.kind) {
     case "string":
@@ -40,6 +54,10 @@ function matchesFieldType(field: SchemaFieldDefinition, value: unknown): boolean
       return typeof value === "boolean";
     case "enum":
       return typeof value === "string" && Boolean(field.enumValues?.includes(value));
+    case "object":
+      return isRecordLike(value);
+    case "array":
+      return Array.isArray(value);
     default:
       return false;
   }

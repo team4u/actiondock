@@ -39,7 +39,10 @@ describe("BatchRunPanel", () => {
     expect(html).toContain("JSON 数组");
     expect(html).toContain("JSONL");
     expect(html).toContain("CSV");
-    expect(html).toContain("批量提交");
+    expect(html).toContain("批量输入");
+    expect(html).toContain("数据格式");
+    expect(html).toContain("格式说明");
+    expect(html).toContain("复制示例");
     expect(html).toContain("批量结果");
     expect(html).toContain("校验明细");
     expect(html).toContain("开始批量运行");

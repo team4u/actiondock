@@ -36,6 +36,7 @@ import {
   buildAutoCsvMapping,
   buildDraftFromCsvSource,
   buildDraftFromObjectRows,
+  getCsvMappableFields,
   parseCsvSource,
   parseJsonArraySource,
   parseJsonLinesSource
@@ -59,6 +60,10 @@ import {
   exportBatchSessionAsJson,
   formatBatchExportFileName
 } from "../../batch/export";
+import {
+  buildBatchSourceGuidance,
+  getBatchSourcePlaceholder
+} from "../../batch/sourceGuidance";
 import { copyText, getExecutionStatusColor, prettyJson } from "../../services/utils";
 
 const { Text, Title } = Typography;
@@ -160,6 +165,20 @@ export function BatchRunPanel({
   const [csvMapping, setCsvMapping] = useState<CsvColumnMapping>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
+  const csvMappableFields = useMemo(
+    () => getCsvMappableFields(supportedFields),
+    [supportedFields]
+  );
+  const jsonOnlyFieldLabels = useMemo(
+    () => [
+      ...supportedFields
+        .filter((field) => field.kind === "object" || field.kind === "array")
+        .map((field) => field.label),
+      ...unsupportedFields
+    ],
+    [supportedFields, unsupportedFields]
+  );
+  const csvAvailable = csvMappableFields.length > 0;
 
   const {
     session,
@@ -200,13 +219,22 @@ export function BatchRunPanel({
   }, [dataSource]);
 
   useEffect(() => {
+    if (dataSource.sourceType === "CSV" && !csvAvailable) {
+      setDataSource((current) => ({
+        ...current,
+        sourceType: "JSON_ARRAY"
+      }));
+    }
+  }, [csvAvailable, dataSource.sourceType]);
+
+  useEffect(() => {
     if (!parsedCsvState.data) {
       setCsvMapping({});
       return;
     }
 
     const csvData = parsedCsvState.data;
-    const suggested = buildAutoCsvMapping(csvData.headers, supportedFields);
+    const suggested = buildAutoCsvMapping(csvData.headers, csvMappableFields);
     setCsvMapping((previous) => {
       const next: CsvColumnMapping = {};
       for (const header of csvData.headers) {
@@ -214,7 +242,7 @@ export function BatchRunPanel({
       }
       return next;
     });
-  }, [parsedCsvState.data, supportedFields]);
+  }, [csvMappableFields, parsedCsvState.data]);
 
   const preview = useMemo(() => {
     const text = dataSource.text.trim();
@@ -254,8 +282,8 @@ export function BatchRunPanel({
         ...buildDraftFromCsvSource({
           csv: parsedCsvState.data ?? parseCsvSource(dataSource.text),
           mapping: csvMapping,
-          supportedFields,
-          unsupportedFields
+          supportedFields: csvMappableFields,
+          unsupportedFields: jsonOnlyFieldLabels
         })
       };
     } catch (error) {
@@ -270,7 +298,7 @@ export function BatchRunPanel({
         }
       };
     }
-  }, [csvMapping, dataSource, parsedCsvState, supportedFields, unsupportedFields]);
+  }, [csvMapping, csvMappableFields, dataSource, jsonOnlyFieldLabels, parsedCsvState, supportedFields]);
 
   useEffect(() => {
     if (selectedItemId && !session?.items.some((item) => item.id === selectedItemId)) {
@@ -422,6 +450,16 @@ export function BatchRunPanel({
 
   const handleUploadClick = () => fileInputRef.current?.click();
 
+  const sourceGuidance = useMemo(
+    () =>
+      buildBatchSourceGuidance({
+        sourceType: dataSource.sourceType,
+        supportedFields,
+        jsonOnlyFieldLabels
+      }),
+    [dataSource.sourceType, jsonOnlyFieldLabels, supportedFields]
+  );
+
   const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -432,6 +470,10 @@ export function BatchRunPanel({
     try {
       const text = await file.text();
       const nextSourceType = readFileSourceType(file.name, dataSource.sourceType);
+      if (nextSourceType === "CSV" && !csvAvailable) {
+        messageApi.warning("当前脚本没有可映射的简单字段，请改用 JSON 数组或 JSONL");
+        return;
+      }
       setDataSource({
         sourceType: nextSourceType,
         text
@@ -499,15 +541,25 @@ export function BatchRunPanel({
   };
 
   const handleDownloadTemplate = () => {
-    if (supportedFields.length === 0) {
+    if (!csvAvailable) {
       messageApi.warning("当前脚本没有简单字段可生成 CSV 模板");
       return;
     }
     downloadTextFile(
       `${formatBatchExportFileName(scriptId, "template")}.csv`,
-      buildCsvTemplate(supportedFields),
+      buildCsvTemplate(csvMappableFields),
       "text/csv;charset=utf-8"
     );
+  };
+
+  const handleCopyExample = () => {
+    if (!sourceGuidance.example) {
+      messageApi.warning("当前格式暂无可复制示例");
+      return;
+    }
+    void copyText(sourceGuidance.example)
+      .then(() => messageApi.success("已复制示例"))
+      .catch(() => messageApi.error("复制示例失败"));
   };
 
   const sourceExtra = (
@@ -515,9 +567,14 @@ export function BatchRunPanel({
       <Button icon={<UploadOutlined />} onClick={handleUploadClick}>
         上传文件
       </Button>
-      <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate}>
-        下载 CSV 模板
+      <Button icon={<CopyOutlined />} onClick={handleCopyExample}>
+        复制示例
       </Button>
+      {dataSource.sourceType === "CSV" ? (
+        <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate} disabled={!csvAvailable}>
+          下载 CSV 模板
+        </Button>
+      ) : null}
     </Space>
   );
   const exportMenu = {
@@ -572,31 +629,85 @@ export function BatchRunPanel({
         <div className="batch-run-panel__sidebar">
           <Card
             type="inner"
-            title="批量提交"
+            title="批量输入"
             extra={sourceExtra}
             className="batch-run-panel__sticky-card"
           >
             <Space direction="vertical" size={16} style={{ width: "100%" }}>
-              <Tabs
-                activeKey={dataSource.sourceType}
-                onChange={(key) => setDataSource((current) => ({ ...current, sourceType: key as BatchInputSource }))}
-                items={[
-                  { key: "JSON_ARRAY", label: "JSON 数组" },
-                  { key: "JSONL", label: "JSONL" },
-                  { key: "CSV", label: "CSV" }
-                ]}
-              />
+              <div className="batch-run-panel__section">
+                <div className="batch-run-panel__section-header">
+                  <Text strong>数据格式</Text>
+                </div>
 
-              {unsupportedFields.length > 0 ? (
+                <Tabs
+                  activeKey={dataSource.sourceType}
+                  onChange={(key) => setDataSource((current) => ({ ...current, sourceType: key as BatchInputSource }))}
+                  items={[
+                    { key: "JSON_ARRAY", label: "JSON 数组" },
+                    { key: "JSONL", label: "JSONL" },
+                    { key: "CSV", label: "CSV", disabled: !csvAvailable }
+                  ]}
+                />
+
+                <Collapse
+                  ghost
+                  className="batch-run-panel__collapse"
+                  items={[
+                    {
+                      key: "source-guide",
+                      label: "格式说明",
+                      children: (
+                        <div className="batch-run-panel__guide">
+                          <div>
+                            <Text strong>适用场景</Text>
+                            <div className="batch-run-panel__guide-text">{sourceGuidance.useCase}</div>
+                          </div>
+                          <div>
+                            <Text strong>格式规则</Text>
+                            <ul className="batch-run-panel__guide-list">
+                              {sourceGuidance.formatRules.map((rule) => (
+                                <li key={rule}>{rule}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <Text strong>最小示例</Text>
+                            <pre className="json-preview">{sourceGuidance.example || "当前格式暂无可用示例"}</pre>
+                          </div>
+                          <div>
+                            <Text strong>注意事项</Text>
+                            <ul className="batch-run-panel__guide-list">
+                              {sourceGuidance.cautions.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )
+                    }
+                  ]}
+                />
+              </div>
+
+              {jsonOnlyFieldLabels.length > 0 ? (
                 <Alert
                   type="info"
                   showIcon
-                  message="复杂字段说明"
+                  message={dataSource.sourceType === "CSV" ? "以下字段需改用 JSON" : "复杂字段说明"}
                   description={
                     dataSource.sourceType === "CSV"
-                      ? `CSV 仅支持简单顶层字段；以下复杂字段请改用 JSON/JSONL：${unsupportedFields.join("、")}`
-                      : `以下复杂字段不会做前端预校验，仍会在提交时由后端校验：${unsupportedFields.join("、")}`
+                      ? `CSV 仅支持简单顶层字段；以下字段请改用 JSON 数组 / JSONL：${jsonOnlyFieldLabels.join("、")}`
+                      : `以下字段建议在 JSON 中维护；前端只做基础结构检查，完整校验仍由后端执行：${jsonOnlyFieldLabels.join("、")}`
                   }
+                />
+              ) : null}
+
+              {!csvAvailable && dataSource.sourceType !== "CSV" ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  message="CSV 当前不可用"
+                  description="当前脚本没有可映射的简单顶层字段，请使用 JSON 数组或 JSONL。"
                 />
               ) : null}
 
@@ -608,7 +719,7 @@ export function BatchRunPanel({
                 theme={editorTheme}
                 language={getEditorLanguage(dataSource.sourceType)}
                 height="240px"
-                placeholder={`请输入或上传${formatSourceLabel(dataSource.sourceType)}数据`}
+                placeholder={getBatchSourcePlaceholder(dataSource.sourceType)}
               />
 
               {dataSource.sourceType === "CSV" && parsedCsvState.data ? (
@@ -621,6 +732,9 @@ export function BatchRunPanel({
                       label: `参数映射（${parsedCsvState.data.headers.length} 列）`,
                       children: (
                         <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                          <Text type="secondary">
+                            表头会优先按字段名自动匹配；未匹配上的列可在这里手工映射。
+                          </Text>
                           {parsedCsvState.data.headers.map((header) => (
                             <div key={header} className="batch-run-panel__mapping-row">
                               <Text code>{header}</Text>
@@ -635,7 +749,7 @@ export function BatchRunPanel({
                                 style={{ minWidth: 220 }}
                                 options={[
                                   { value: null, label: "忽略此列" },
-                                  ...supportedFields.map((field) => ({
+                                  ...csvMappableFields.map((field) => ({
                                     value: field.name,
                                     label: `${field.label} (${field.name})`
                                   }))

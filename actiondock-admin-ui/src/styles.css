@@ -409,6 +409,28 @@ a {
   align-items: center;
 }
 
+.batch-run-panel__guide {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.batch-run-panel__guide-text {
+  margin-top: 6px;
+  color: var(--app-text-secondary);
+  line-height: 1.7;
+}
+
+.batch-run-panel__guide-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--app-text-secondary);
+}
+
+.batch-run-panel__guide-list li + li {
+  margin-top: 4px;
+}
+
 .batch-run-panel__collapse {
   border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-lg);
