@@ -64,8 +64,13 @@ public class RepositoryController {
      * @return API 响应，包含仓库定义列表
      */
     @GetMapping
-    public ApiResponse<List<RepositoryDefinition>> list() {
-        return ApiResponse.success(repositoryCatalogService.listRepositories());
+    public ApiResponse<List<RepositoryDefinition>> list(@RequestParam(value = "purpose", required = false) String purpose) {
+        return ApiResponse.success(repositoryCatalogService.listRepositories(purpose));
+    }
+
+    @GetMapping("/resolve")
+    public ApiResponse<RepositoryCatalogService.ProjectRepositoryResolution> resolveProject(@RequestParam("project") String project) {
+        return ApiResponse.success(repositoryCatalogService.resolveProjectRepository(project));
     }
 
     /**

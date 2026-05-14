@@ -6,6 +6,7 @@ import type {
   CapabilityPackagePublishPreview,
   CapabilityPackagePublishPreviewRequest,
   CapabilityPackagePublishRequest,
+  ProjectRepositoryResolution,
   UpstreamStatus,
   RepositoryDefinition,
   RepositoryWebhookDescriptor,
@@ -33,8 +34,9 @@ import type {
 } from "../../shared/types";
 import { normalizeScriptDefinition } from "../../services/scriptPublication";
 
-export function listRepositories(): Promise<RepositoryDefinition[]> {
-  return request<RepositoryDefinition[]>("/api/repositories");
+export function listRepositories(purpose?: "CAPABILITY" | "PROJECT"): Promise<RepositoryDefinition[]> {
+  const suffix = purpose ? `?purpose=${encodeURIComponent(purpose)}` : "";
+  return request<RepositoryDefinition[]>(`/api/repositories${suffix}`);
 }
 
 export function createRepository(payload: RepositoryDefinition): Promise<RepositoryDefinition> {
@@ -63,6 +65,10 @@ export function syncRepository(id: string): Promise<RepositoryDefinition> {
   return request<RepositoryDefinition>(`/api/repositories/${encodeURIComponent(id)}/sync`, {
     method: "POST"
   });
+}
+
+export function resolveProjectRepository(project: string): Promise<ProjectRepositoryResolution> {
+  return request<ProjectRepositoryResolution>(`/api/repositories/resolve?project=${encodeURIComponent(project)}`);
 }
 
 export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {

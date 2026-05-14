@@ -171,15 +171,64 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/repositories` | 仓库列表 |
+| `GET` | `/api/repositories` | 仓库列表，支持 `purpose` 过滤 |
 | `POST` | `/api/repositories` | 创建仓库 |
 | `GET` | `/api/repositories/{id}` | 仓库详情 |
 | `PUT` | `/api/repositories/{id}` | 更新仓库 |
 | `DELETE` | `/api/repositories/{id}` | 删除仓库 |
+| `GET` | `/api/repositories/resolve?project={value}` | 解析项目仓库并返回 `PROJECT.md` 原文 |
 | `POST` | `/api/repositories/{id}/sync` | 同步仓库 |
 | `GET` | `/api/repositories/{id}/tools` | 列出仓库中的可用工具 |
 | `POST` | `/api/repositories/{id}/tools/{toolId}/local-assets` | 添加仓库工具到本地 |
 | `POST` | `/api/repositories/{id}/tools/{toolId}/local-assets/update` | 更新本地仓库工具 |
+
+### RepositoryDefinition
+
+```json
+{
+  "id": "billing-service",
+  "name": "Billing Service",
+  "type": "LOCAL_DIR",
+  "purpose": "PROJECT",
+  "url": "/Users/code/projects/billing-service",
+  "enabled": true,
+  "trustLevel": "UNTRUSTED",
+  "project": {
+    "markerPath": ".actiondock/PROJECT.md",
+    "aliases": ["billing", "账单服务"]
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+|------|------|
+| `type` | 访问方式：`GIT` / `HTTP` / `LOCAL_DIR` |
+| `purpose` | 仓库用途：`CAPABILITY` / `PROJECT` |
+| `project.markerPath` | 项目知识入口文件，相对仓库根目录 |
+| `project.aliases` | 项目标识别名，可用于 `project` 参数匹配 |
+
+### 项目仓库解析响应
+
+```json
+{
+  "projectId": "billing-service",
+  "repositoryId": "billing-service",
+  "type": "LOCAL_DIR",
+  "purpose": "PROJECT",
+  "root": "/Users/code/projects/billing-service",
+  "markerPath": ".actiondock/PROJECT.md",
+  "enabled": true,
+  "exists": true,
+  "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
+}
+```
+
+说明：
+
+- `project` 查询参数可传仓库 ID 或别名
+- `content` 是 `PROJECT.md` 的原始 Markdown 内容
 
 ## 定时任务 API
 

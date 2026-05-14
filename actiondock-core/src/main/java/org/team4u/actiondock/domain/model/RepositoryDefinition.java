@@ -9,14 +9,39 @@ import java.time.LocalDateTime;
  */
 public class RepositoryDefinition {
 
+    public static class ProjectSettings {
+        private String markerPath;
+        private java.util.List<String> aliases;
+
+        public String getMarkerPath() {
+            return markerPath;
+        }
+
+        public ProjectSettings setMarkerPath(String markerPath) {
+            this.markerPath = markerPath;
+            return this;
+        }
+
+        public java.util.List<String> getAliases() {
+            return aliases;
+        }
+
+        public ProjectSettings setAliases(java.util.List<String> aliases) {
+            this.aliases = aliases;
+            return this;
+        }
+    }
+
     private String id;
     private String name;
     private String type;
+    private String purpose;
     private String url;
     private String branch;
     private boolean enabled = true;
     private String trustLevel;
     private String description;
+    private ProjectSettings project;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -45,6 +70,15 @@ public class RepositoryDefinition {
 
     public RepositoryDefinition setType(String type) {
         this.type = type;
+        return this;
+    }
+
+    public String getPurpose() {
+        return purpose;
+    }
+
+    public RepositoryDefinition setPurpose(String purpose) {
+        this.purpose = purpose;
         return this;
     }
 
@@ -90,6 +124,15 @@ public class RepositoryDefinition {
 
     public RepositoryDefinition setDescription(String description) {
         this.description = description;
+        return this;
+    }
+
+    public ProjectSettings getProject() {
+        return project;
+    }
+
+    public RepositoryDefinition setProject(ProjectSettings project) {
+        this.project = project;
         return this;
     }
 

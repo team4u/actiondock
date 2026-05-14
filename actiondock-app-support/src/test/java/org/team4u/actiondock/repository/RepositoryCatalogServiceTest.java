@@ -4,9 +4,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
+import org.team4u.actiondock.domain.port.ConfigValueRepository;
+import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
+import org.team4u.actiondock.domain.port.ManagedSkillRepository;
+import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
+import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
+import org.team4u.actiondock.domain.port.ScriptRepository;
+import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
+import org.team4u.actiondock.plugin.PluginRuntimeService;
 
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
@@ -19,6 +29,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class RepositoryCatalogServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -556,6 +567,55 @@ class RepositoryCatalogServiceTest {
         }
     }
 
+    @Test
+    void resolveProjectRepositoryReturnsRawMarkdownContent() throws Exception {
+        Path projectRoot = tempDir.resolve("billing-service");
+        Files.createDirectories(projectRoot.resolve(".actiondock"));
+        Files.writeString(projectRoot.resolve(".actiondock/PROJECT.md"), "# Billing Service\n\nUse docs first.\n");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("billing-service")
+                .setName("Billing Service")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl(projectRoot.toString())
+                .setEnabled(true)
+                .setProject(new RepositoryDefinition.ProjectSettings().setMarkerPath(".actiondock/PROJECT.md").setAliases(List.of("billing")));
+
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        RepositoryCatalogService.ProjectRepositoryResolution resolution = service.resolveProjectRepository("billing");
+
+        assertThat(resolution.projectId()).isEqualTo("billing-service");
+        assertThat(resolution.markerPath()).isEqualTo(".actiondock/PROJECT.md");
+        assertThat(resolution.content()).contains("Billing Service");
+    }
+
+    @Test
+    void projectLocalDirRepositoryDoesNotInitializeCapabilityWorkspaceOnSave() {
+        Path projectRoot = tempDir.resolve("project-no-index");
+        RepositoryDefinitionRepository repositoryDefinitionRepository = new InMemoryRepositoryDefinitionRepository();
+        RepositoryDefinitionService service = new RepositoryDefinitionService(repositoryDefinitionRepository, jsonCodec, tempDir.resolve("repositories"));
+
+        RepositoryDefinition saved = service.saveRepository(new RepositoryDefinition()
+                .setId("project-no-index")
+                .setName("Project No Index")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl(projectRoot.toString())
+                .setEnabled(true)
+                .setProject(new RepositoryDefinition.ProjectSettings().setMarkerPath(".actiondock/PROJECT.md")));
+
+        assertThat(saved.getPurpose()).isEqualTo(REPO_PURPOSE_PROJECT);
+        assertThat(Files.exists(projectRoot.resolve(REPOSITORY_INDEX_FILE))).isFalse();
+        assertThat(Files.exists(projectRoot.resolve(TOOLS_DIR))).isFalse();
+    }
+
     private RepositoryDefinition localRepository() {
         return new RepositoryDefinition().setId("repo-1").setType("LOCAL_DIR").setUrl(tempDir.toString());
     }
@@ -569,6 +629,63 @@ class RepositoryCatalogServiceTest {
         });
         server.start();
         return server;
+    }
+
+    private RepositoryCatalogService.Repositories repositories(List<RepositoryDefinition> items) {
+        return new RepositoryCatalogService.Repositories(
+                new InMemoryRepositoryDefinitionRepository(items),
+                mock(CapabilityPackageInstallationRepository.class),
+                mock(ManagedSkillRepository.class),
+                mock(ScriptRepository.class),
+                mock(ScriptScheduleRepository.class),
+                mock(ExecutionPresetRepository.class),
+                mock(ConfigValueRepository.class),
+                mock(org.team4u.actiondock.domain.port.WebhookRepository.class),
+                mock(RepositoryLocalAssetRepository.class),
+                mock(org.team4u.actiondock.ai.api.AiModelProfileRepository.class),
+                mock(org.team4u.actiondock.ai.api.AiAgentProfileRepository.class),
+                mock(org.team4u.actiondock.ai.api.AiToolsetRepository.class)
+        );
+    }
+
+    private AppProperties appProperties() {
+        AppProperties properties = new AppProperties();
+        properties.setHomeDir(tempDir.resolve("actiondock-home").toString());
+        return properties;
+    }
+
+    private static final class InMemoryRepositoryDefinitionRepository implements RepositoryDefinitionRepository {
+        private final java.util.LinkedHashMap<String, RepositoryDefinition> items = new java.util.LinkedHashMap<>();
+
+        private InMemoryRepositoryDefinitionRepository() {
+        }
+
+        private InMemoryRepositoryDefinitionRepository(List<RepositoryDefinition> initialItems) {
+            for (RepositoryDefinition item : initialItems) {
+                save(item);
+            }
+        }
+
+        @Override
+        public RepositoryDefinition save(RepositoryDefinition registryDefinition) {
+            items.put(registryDefinition.getId(), registryDefinition);
+            return registryDefinition;
+        }
+
+        @Override
+        public java.util.Optional<RepositoryDefinition> findById(String id) {
+            return java.util.Optional.ofNullable(items.get(id));
+        }
+
+        @Override
+        public List<RepositoryDefinition> findAll() {
+            return List.copyOf(items.values());
+        }
+
+        @Override
+        public void deleteById(String id) {
+            items.remove(id);
+        }
     }
 
     private static final class TestJsonCodec implements JsonCodec {

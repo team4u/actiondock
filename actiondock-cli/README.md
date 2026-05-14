@@ -56,6 +56,24 @@ actiondock webhook upstream-pull <webhookId> --force
 - 上游同步关系由 `upstream binding` 维护。
 - `--force` 会在存在本地改动时强制用上游内容覆盖当前工作副本。
 
+## 项目仓库解析
+
+如果要读取某个业务项目的知识库入口，使用：
+
+```bash
+actiondock repository list --purpose project
+actiondock repository resolve --project <projectId-or-alias>
+actiondock repository resolve --project <projectId-or-alias> --json
+```
+
+约定上，项目仓库会在项目根目录放一个 `.actiondock/PROJECT.md`。CLI 会返回：
+
+- 项目根目录
+- marker 路径
+- `PROJECT.md` 的原始 Markdown 内容
+
+后续再根据正文去读取 `overview.md`、`database.md`、`workflows.md`、`runbooks/` 或源码。
+
 ## 打包与发布流程
 
 从仓库根目录进入本目录：

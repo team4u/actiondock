@@ -69,12 +69,12 @@ ActionDock 做的核心事情是：
 
 - [脚本管理](script-management.md) — 脚本库、编辑、发布、导入导出、Fork、工作副本
 - [插件管理](plugin-management.md) — 插件安装、生命周期、在脚本中调用 Action
-- [Skills 管理](skills-management.md) — Skills 安装目标、安装、发布、详情
+- [Skills 管理](skills-management.md) — Skills 安装目标、安装、发布、详情，以及项目知识库用法约定
 - [AI 能力](ai-capabilities.md) — 模型配置、Agent 配置、Toolset、运行记录
 
 ### 📦 资源
 
-- [仓库与分发](repository-distribution.md) — 仓库发现、仓库管理、安装更新、发布
+- [仓库与分发](repository-distribution.md) — 仓库发现、仓库管理、安装更新、发布、项目仓库解析
 
 ### ⏱️ 触发
 
@@ -87,7 +87,7 @@ ActionDock 做的核心事情是：
 ### 📖 参考
 
 - [脚本编写指南](script-writing-guide.md) — 脚本结构、Schema、运行时 API 完整参考
-- [CLI 参考](cli-reference.md) — 安装、配置、脚本命令、服务管理
+- [CLI 参考](cli-reference.md) — 安装、配置、脚本命令、项目仓库解析、服务管理
 - [API 参考与 FAQ](api-reference.md) — 全部端点分类、常见问题、术语表
 
 ---

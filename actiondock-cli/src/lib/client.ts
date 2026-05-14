@@ -22,6 +22,7 @@ import type {
   PluginReferenceView,
   PluginView,
   RepositoryDefinition,
+  ProjectRepositoryResolution,
   RepositoryWebhookDescriptor,
   RepositoryWebhookDetail,
   RepositoryLocalAsset,
@@ -344,8 +345,9 @@ export class ActionDockClient {
     return this.requestJson<PluginView[]>("/api/plugins");
   }
 
-  async listRepositories(): Promise<RepositoryDefinition[]> {
-    return this.requestJson<RepositoryDefinition[]>("/api/repositories");
+  async listRepositories(purpose?: string): Promise<RepositoryDefinition[]> {
+    const suffix = purpose ? `?${new URLSearchParams({ purpose }).toString()}` : "";
+    return this.requestJson<RepositoryDefinition[]>(`/api/repositories${suffix}`);
   }
 
   async createRepository(payload: RepositoryDefinition): Promise<RepositoryDefinition> {
@@ -372,6 +374,10 @@ export class ActionDockClient {
     return this.requestJson<RepositoryDefinition>(`/api/repositories/${repositoryId}/sync`, {
       method: "POST"
     });
+  }
+
+  async resolveProjectRepository(project: string): Promise<ProjectRepositoryResolution> {
+    return this.requestJson<ProjectRepositoryResolution>(`/api/repositories/resolve?${new URLSearchParams({ project }).toString()}`);
   }
 
   async listRepositoryTools(repositoryId?: string): Promise<RepositoryToolDescriptor[]> {

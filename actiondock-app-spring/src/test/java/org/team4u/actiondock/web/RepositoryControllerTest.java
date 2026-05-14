@@ -51,6 +51,46 @@ class RepositoryControllerTest {
     private RepositorySkillService repositorySkillService;
 
     @Test
+    void listSupportsPurposeFilter() throws Exception {
+        when(repositoryCatalogService.listRepositories("PROJECT"))
+                .thenReturn(java.util.List.of(new org.team4u.actiondock.domain.model.RepositoryDefinition()
+                        .setId("billing-service")
+                        .setName("Billing Service")
+                        .setType("LOCAL_DIR")
+                        .setPurpose("PROJECT")
+                        .setUrl("/tmp/billing")));
+
+        mockMvc.perform(get("/api/repositories").param("purpose", "PROJECT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("billing-service"))
+                .andExpect(jsonPath("$.data[0].purpose").value("PROJECT"));
+
+        verify(repositoryCatalogService).listRepositories("PROJECT");
+    }
+
+    @Test
+    void resolveProjectReturnsMarkdownContent() throws Exception {
+        when(repositoryCatalogService.resolveProjectRepository("billing"))
+                .thenReturn(new RepositoryCatalogService.ProjectRepositoryResolution(
+                        "billing-service",
+                        "billing-service",
+                        "LOCAL_DIR",
+                        "PROJECT",
+                        "/tmp/billing",
+                        ".actiondock/PROJECT.md",
+                        true,
+                        true,
+                        "# Billing Service"
+                ));
+
+        mockMvc.perform(get("/api/repositories/resolve").param("project", "billing"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.projectId").value("billing-service"))
+                .andExpect(jsonPath("$.data.markerPath").value(".actiondock/PROJECT.md"))
+                .andExpect(jsonPath("$.data.content").value("# Billing Service"));
+    }
+
+    @Test
     void skillArchiveReturnsBinaryDownload() throws Exception {
         when(repositorySkillService.exportRepositorySkillArchive("repo-1", "skill-1"))
                 .thenReturn(new RepositoryCatalogTypes.RepositoryBinaryArchive("skill-1.zip", "zip-content".getBytes()));

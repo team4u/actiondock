@@ -11,11 +11,14 @@ export default class RepositoryCreateCommand extends BaseCommand {
     ...BaseCommand.baseFlags,
     "repository-id": Flags.string({ description: "Repository ID", required: true }),
     name: Flags.string({ description: "Repository name", required: true }),
-    type: Flags.string({ description: "Repository type", options: ["git", "http", "local-dir"], required: true }),
+    type: Flags.string({ description: "Repository type", options: ["git", "local-dir"], required: true }),
+    purpose: Flags.string({ description: "Repository purpose", options: ["capability", "project"], default: "capability" }),
     url: Flags.string({ description: "Repository URL or local path", required: true }),
     branch: Flags.string({ description: "Git branch" }),
     "trust-level": Flags.string({ description: "Repository trust level", options: ["trusted", "untrusted"], default: "untrusted" }),
     description: Flags.string({ description: "Repository description" }),
+    "marker-path": Flags.string({ description: "Project knowledge marker path", default: ".actiondock/PROJECT.md" }),
+    aliases: Flags.string({ description: "Comma-separated project aliases" }),
     disabled: Flags.boolean({ description: "Create repository as disabled" }),
     ...serverTokenFlags,
     help: Flags.help({ char: "h" })
@@ -24,6 +27,7 @@ export default class RepositoryCreateCommand extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(RepositoryCreateCommand);
     try {
+      const isProject = flags.purpose === "project";
       const item = await createClient(flags).createRepository({
         id: flags["repository-id"],
         name: flags.name,
@@ -32,7 +36,14 @@ export default class RepositoryCreateCommand extends BaseCommand {
         branch: flags.branch,
         trustLevel: flags["trust-level"].toUpperCase().replace("-", "_"),
         description: flags.description,
-        enabled: !flags.disabled
+        enabled: !flags.disabled,
+        purpose: isProject ? "PROJECT" : undefined,
+        project: isProject
+          ? {
+              markerPath: flags["marker-path"],
+              aliases: flags.aliases?.split(",").map((item) => item.trim()).filter(Boolean)
+            }
+          : undefined
       });
       flags.json ? this.printJson(item) : this.log(renderRepositoryDetail(item));
     } catch (error) {

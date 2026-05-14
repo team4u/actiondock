@@ -244,8 +244,9 @@ export class ActionDockClient {
     async listPlugins() {
         return this.requestJson("/api/plugins");
     }
-    async listRepositories() {
-        return this.requestJson("/api/repositories");
+    async listRepositories(purpose) {
+        const suffix = purpose ? `?${new URLSearchParams({ purpose }).toString()}` : "";
+        return this.requestJson(`/api/repositories${suffix}`);
     }
     async createRepository(payload) {
         return this.requestJson("/api/repositories", {
@@ -268,6 +269,9 @@ export class ActionDockClient {
         return this.requestJson(`/api/repositories/${repositoryId}/sync`, {
             method: "POST"
         });
+    }
+    async resolveProjectRepository(project) {
+        return this.requestJson(`/api/repositories/resolve?${new URLSearchParams({ project }).toString()}`);
     }
     async listRepositoryTools(repositoryId) {
         if (repositoryId) {

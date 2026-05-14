@@ -17,6 +17,7 @@ export type AiCallerType = "SCRIPT" | "PLUGIN" | "ADMIN_TEST" | "AGENT";
 export type AiStepType = "MODEL_REASONING" | "TOOL_CALL" | "TOOL_RESULT" | "APPROVAL" | "INTERRUPT";
 export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
+export type RepositoryPurpose = "CAPABILITY" | "PROJECT";
 export type UpstreamSyncState = "SYNCED" | "LOCAL_CHANGES" | "REMOTE_CHANGES" | "DIVERGED";
 
 export interface ForkFormValues {
@@ -660,14 +661,31 @@ export interface RepositoryDefinition {
   id: string;
   name: string;
   type: RepositoryType;
+  purpose?: RepositoryPurpose;
   url: string;
   branch?: string;
   enabled: boolean;
   trustLevel: RepositoryTrustLevel;
   description?: string;
+  project?: {
+    markerPath?: string;
+    aliases?: string[];
+  };
   lastSyncedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface ProjectRepositoryResolution {
+  projectId: string;
+  repositoryId: string;
+  type: RepositoryType;
+  purpose: RepositoryPurpose;
+  root: string;
+  markerPath: string;
+  enabled: boolean;
+  exists: boolean;
+  content: string;
 }
 
 export interface RepositoryToolDescriptor {

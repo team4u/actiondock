@@ -38,6 +38,13 @@ class RepositoryDefinitionService {
                 .toList();
     }
 
+    List<RepositoryDefinition> listRepositoriesByPurpose(String purpose) {
+        String normalizedPurpose = normalizePurpose(purpose);
+        return listRepositories().stream()
+                .filter(item -> normalizedPurpose.equals(item.getPurpose()))
+                .toList();
+    }
+
     RepositoryDefinition getRepository(String repositoryId) {
         return repositoryDefinitionRepository.findById(repositoryId)
                 .orElseThrow(() -> new IllegalArgumentException("仓库不存在: " + repositoryId));
@@ -49,11 +56,12 @@ class RepositoryDefinitionService {
         LocalDateTime now = LocalDateTime.now();
         RepositoryDefinition existing = repositoryDefinitionRepository.findById(id).orElse(null);
         String type = validateRepositoryType(target, existing);
+        String purpose = validateRepositoryPurpose(target);
         String trustLevel = validateTrustLevel(target);
         RepositoryDefinition saved = repositoryDefinitionRepository.save(
-                buildRepositoryDefinition(id, target, type, trustLevel, existing, now)
+                buildRepositoryDefinition(id, target, type, purpose, trustLevel, existing, now)
         );
-        if (REPO_TYPE_LOCAL_DIR.equals(type)) {
+        if (REPO_TYPE_LOCAL_DIR.equals(type) && REPO_PURPOSE_CAPABILITY.equals(purpose)) {
             ensureLocalDirRepository(saved);
             saved.setLastSyncedAt(now).setUpdatedAt(now);
             return repositoryDefinitionRepository.save(saved);
@@ -101,9 +109,36 @@ class RepositoryDefinitionService {
         return trustLevel;
     }
 
+    private String validateRepositoryPurpose(RepositoryDefinition target) {
+        String purpose = normalizePurpose(target == null ? null : target.getPurpose());
+        if (!List.of(REPO_PURPOSE_CAPABILITY, REPO_PURPOSE_PROJECT).contains(purpose)) {
+            throw new IllegalArgumentException("purpose 仅支持 CAPABILITY / PROJECT");
+        }
+        return purpose;
+    }
+
+    private String normalizePurpose(String purpose) {
+        return NormalizeUtils.normalizeOrDefault(purpose, REPO_PURPOSE_CAPABILITY).toUpperCase(Locale.ROOT);
+    }
+
+    private RepositoryDefinition.ProjectSettings normalizeProjectSettings(RepositoryDefinition target, String purpose) {
+        if (!REPO_PURPOSE_PROJECT.equals(purpose)) {
+            return null;
+        }
+        RepositoryDefinition.ProjectSettings source = target == null ? null : target.getProject();
+        return new RepositoryDefinition.ProjectSettings()
+                .setMarkerPath(NormalizeUtils.normalizeOrDefault(source == null ? null : source.getMarkerPath(), DEFAULT_PROJECT_MARKER_PATH))
+                .setAliases(NormalizeUtils.nullSafeList(source == null ? null : source.getAliases()).stream()
+                        .map(NormalizeUtils::normalizeNullable)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .toList());
+    }
+
     private RepositoryDefinition buildRepositoryDefinition(String id,
                                                            RepositoryDefinition target,
                                                            String type,
+                                                           String purpose,
                                                            String trustLevel,
                                                            RepositoryDefinition existing,
                                                            LocalDateTime now) {
@@ -111,11 +146,13 @@ class RepositoryDefinitionService {
                 .setId(id)
                 .setName(NormalizeUtils.normalize(target.getName(), "仓库名称不能为空"))
                 .setType(type)
+                .setPurpose(purpose)
                 .setUrl(NormalizeUtils.normalize(target.getUrl(), "仓库地址不能为空"))
                 .setBranch(REPO_TYPE_GIT.equals(type) ? NormalizeUtils.normalizeNullable(target.getBranch()) : null)
                 .setEnabled(target.isEnabled())
                 .setTrustLevel(trustLevel)
                 .setDescription(NormalizeUtils.normalizeNullable(target.getDescription()))
+                .setProject(normalizeProjectSettings(target, purpose))
                 .setLastSyncedAt(existing == null ? null : existing.getLastSyncedAt())
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())
                 .setUpdatedAt(now);

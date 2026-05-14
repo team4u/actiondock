@@ -55,6 +55,19 @@ import java.util.function.Function;
  */
 public class RepositoryCatalogService {
 
+    public record ProjectRepositoryResolution(
+            String projectId,
+            String repositoryId,
+            String type,
+            String purpose,
+            String root,
+            String markerPath,
+            boolean enabled,
+            boolean exists,
+            String content
+    ) {
+    }
+
     /**
      * 仓库接口分组，将所有仓储端口聚合为一个上下文。
      */
@@ -166,9 +179,21 @@ public class RepositoryCatalogService {
         return definitionService.listRepositories();
     }
 
+    public List<RepositoryDefinition> listRepositories(String purpose) {
+        return NormalizeUtils.isBlank(purpose)
+                ? listRepositories()
+                : definitionService.listRepositoriesByPurpose(purpose);
+    }
+
     public List<RepositoryDefinition> listEnabledDiscoveryRepositories() {
         return definitionService.listRepositories().stream()
                 .filter(this::isDiscoveryRepository)
+                .toList();
+    }
+
+    public List<RepositoryDefinition> listEnabledSyncRepositories() {
+        return definitionService.listRepositories().stream()
+                .filter(item -> item != null && item.isEnabled() && !REPO_TYPE_HTTP.equals(item.getType()))
                 .toList();
     }
 
@@ -186,6 +211,20 @@ public class RepositoryCatalogService {
 
     public RepositoryDefinition syncRepository(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
+        if (REPO_PURPOSE_PROJECT.equalsIgnoreCase(repository.getPurpose())) {
+            switch (repository.getType()) {
+                case REPO_TYPE_GIT -> gitOps.syncGitRepository(repository, resolveRepositoryRoot(repository));
+                case REPO_TYPE_LOCAL_DIR -> {
+                    Path root = resolveRepositoryRoot(repository);
+                    if (!Files.isDirectory(root)) {
+                        throw new IllegalArgumentException("项目目录不存在: " + root);
+                    }
+                }
+                default -> throw new IllegalArgumentException("项目仓库类型仅支持 GIT / LOCAL_DIR");
+            }
+            repository.setLastSyncedAt(LocalDateTime.now()).setUpdatedAt(LocalDateTime.now());
+            return repos.repositoryDefinitionRepository().save(repository);
+        }
         switch (repository.getType()) {
             case REPO_TYPE_GIT -> {
                 Path root = resolveRepositoryRoot(repository);
@@ -197,6 +236,37 @@ public class RepositoryCatalogService {
         }
         repository.setLastSyncedAt(LocalDateTime.now()).setUpdatedAt(LocalDateTime.now());
         return repos.repositoryDefinitionRepository().save(repository);
+    }
+
+    public ProjectRepositoryResolution resolveProjectRepository(String projectRef) {
+        RepositoryDefinition repository = findProjectRepository(projectRef);
+        Path root = resolveRepositoryRoot(repository);
+        if (REPO_TYPE_GIT.equals(repository.getType())) {
+            gitOps.syncGitRepository(repository, root);
+        }
+        boolean exists = Files.exists(root);
+        Path marker = safeResolveProjectMarkerPath(root, repository);
+        if (!Files.exists(marker)) {
+            throw new IllegalArgumentException("项目知识入口不存在: " + repository.getId());
+        }
+        if (!Files.isRegularFile(marker)) {
+            throw new IllegalArgumentException("项目知识入口必须是文件: " + repository.getId());
+        }
+        try {
+            return new ProjectRepositoryResolution(
+                    repository.getId(),
+                    repository.getId(),
+                    repository.getType(),
+                    repository.getPurpose(),
+                    root.toString(),
+                    repository.getProject().getMarkerPath(),
+                    repository.isEnabled(),
+                    exists,
+                    Files.readString(marker, StandardCharsets.UTF_8)
+            );
+        } catch (IOException exception) {
+            throw new IllegalStateException("读取项目知识入口失败: " + marker, exception);
+        }
     }
 
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listAllRepositoryTools() {
@@ -916,6 +986,22 @@ public class RepositoryCatalogService {
         return definitionService.resolveRepositoryRoot(repository);
     }
 
+    private RepositoryDefinition findProjectRepository(String projectRef) {
+        String normalized = NormalizeUtils.normalize(projectRef, "project 不能为空");
+        return definitionService.listRepositories().stream()
+                .filter(item -> REPO_PURPOSE_PROJECT.equalsIgnoreCase(item.getPurpose()))
+                .filter(item -> normalized.equals(item.getId()) || NormalizeUtils.nullSafeList(item.getProject() == null ? null : item.getProject().getAliases()).contains(normalized))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("项目仓库不存在: " + normalized));
+    }
+
+    private Path safeResolveProjectMarkerPath(Path root, RepositoryDefinition repository) {
+        if (repository.getProject() == null) {
+            throw new IllegalArgumentException("项目仓库缺少 markerPath: " + repository.getId());
+        }
+        return safeResolvePath(root, repository.getProject().getMarkerPath(), "项目知识入口路径");
+    }
+
     private static boolean isTrusted(RepositoryDefinition repository) {
         return REPO_TRUST_TRUSTED.equalsIgnoreCase(NormalizeUtils.normalizeOrDefault(repository.getTrustLevel(), REPO_TRUST_UNTRUSTED));
     }
@@ -984,6 +1070,7 @@ public class RepositoryCatalogService {
     private boolean isDiscoveryRepository(RepositoryDefinition repository) {
         return repository != null
                 && repository.isEnabled()
+                && REPO_PURPOSE_CAPABILITY.equalsIgnoreCase(repository.getPurpose())
                 && !REPO_TYPE_HTTP.equals(repository.getType());
     }
 

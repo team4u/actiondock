@@ -176,6 +176,77 @@ actiondock server        # 前台启动服务
 actiondock server -p 8080  # 指定端口启动
 ```
 
+## 仓库命令
+
+### 列出仓库
+
+```bash
+actiondock repository list
+actiondock repository list --purpose capability
+actiondock repository list --purpose project
+```
+
+`purpose` 用来区分仓库用途：
+
+- `CAPABILITY`：分发脚本、插件、Skills、能力包
+- `PROJECT`：指向业务项目代码库，并暴露项目知识入口
+
+### 创建项目仓库
+
+```bash
+actiondock repository create \
+  --repository-id billing-service \
+  --name "Billing Service" \
+  --type local-dir \
+  --purpose project \
+  --url /Users/code/projects/billing-service \
+  --marker-path .actiondock/PROJECT.md \
+  --aliases billing,账单服务
+```
+
+项目仓库支持：
+
+- `--type git`
+- `--type local-dir`
+
+默认知识入口文件是 `.actiondock/PROJECT.md`。
+
+### 解析项目知识入口
+
+```bash
+actiondock repository resolve --project billing-service
+actiondock repository resolve --project 账单服务 --json
+```
+
+这个命令会：
+
+1. 按仓库 ID 或别名定位 `purpose=PROJECT` 的仓库
+2. 对 `GIT` 类型先同步本地副本
+3. 读取项目根目录下的 `PROJECT.md`
+4. 返回项目根路径、marker 路径和原始 Markdown 内容
+
+### 返回结果示例
+
+```json
+{
+  "projectId": "billing-service",
+  "repositoryId": "billing-service",
+  "type": "LOCAL_DIR",
+  "purpose": "PROJECT",
+  "root": "/Users/code/projects/billing-service",
+  "markerPath": ".actiondock/PROJECT.md",
+  "enabled": true,
+  "exists": true,
+  "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
+}
+```
+
+推荐用法：
+
+1. 先读 `content`
+2. 再按正文中描述的入口文件、目录和关键词去 `read` / `grep`
+3. 只有在 Markdown 不足时再读源码
+
 ## 配置命令参考
 
 ```bash
@@ -220,6 +291,9 @@ actiondock script publish my-script
 
 # 7. 执行验证
 actiondock script run my-script --name alice --json
+
+# 8. 解析项目仓库知识入口
+actiondock repository resolve --project my-project --json
 ```
 
 ## 常见问题

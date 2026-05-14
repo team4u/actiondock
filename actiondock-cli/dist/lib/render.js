@@ -297,7 +297,8 @@ export function renderRepositoryList(items) {
     return items
         .map((item) => {
         const enabled = item.enabled ? " enabled" : " disabled";
-        return `${item.id} ${item.name}${enabled} ${item.type} ${item.url}`;
+        const purpose = item.purpose ? ` ${item.purpose}` : "";
+        return `${item.id} ${item.name}${enabled}${purpose} ${item.type} ${item.url}`;
     })
         .join("\n");
 }
@@ -306,6 +307,7 @@ export function renderRepositoryDetail(item) {
         `Repository: ${item.id}`,
         `Name: ${item.name}`,
         `Type: ${item.type}`,
+        `Purpose: ${item.purpose ?? "-"}`,
         `Url: ${item.url}`,
         `Enabled: ${item.enabled ? "yes" : "no"}`,
         `TrustLevel: ${item.trustLevel ?? "-"}`
@@ -319,6 +321,21 @@ export function renderRepositoryDetail(item) {
     if (item.lastSyncedAt) {
         lines.push(`LastSyncedAt: ${item.lastSyncedAt}`);
     }
+    return lines.join("\n");
+}
+export function renderProjectRepositoryResolution(item) {
+    const lines = [
+        `Project: ${item.projectId}`,
+        `Repository: ${item.repositoryId}`,
+        `Type: ${item.type}`,
+        `Purpose: ${item.purpose}`,
+        `Root: ${item.root}`,
+        `Marker: ${item.markerPath}`,
+        `Enabled: ${item.enabled ? "yes" : "no"}`,
+        `Exists: ${item.exists ? "yes" : "no"}`,
+        "Content:",
+        item.content
+    ];
     return lines.join("\n");
 }
 export function renderRepositoryToolList(items) {

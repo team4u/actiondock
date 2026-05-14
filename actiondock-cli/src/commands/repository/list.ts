@@ -9,6 +9,7 @@ export default class RepositoryListCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
+    purpose: Flags.string({ description: "Repository purpose", options: ["capability", "project"] }),
     ...serverTokenFlags,
     help: Flags.help({ char: "h" })
   };
@@ -16,7 +17,7 @@ export default class RepositoryListCommand extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(RepositoryListCommand);
     try {
-      const items = await createClient(flags).listRepositories();
+      const items = await createClient(flags).listRepositories(flags.purpose?.toUpperCase());
       flags.json ? this.printJson(items) : this.log(renderRepositoryList(items));
     } catch (error) {
       this.handleError(error, flags.json);

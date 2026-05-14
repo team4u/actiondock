@@ -2,7 +2,7 @@
 
 ## 一句话理解
 
-仓库系统是 ActionDock 的"包管理器"。你可以把脚本、插件和 Skills 发布到仓库（Git 仓库、HTTP 服务器或本地目录），团队成员通过仓库发现、一键安装、自动更新。对于需要本地修改的仓库脚本或Webhook，可以从仓库资产创建工作副本，再通过上游绑定拉取更新。
+仓库系统是 ActionDock 的资源分发和项目入口解析层。你可以把脚本、插件和 Skills 发布到能力仓库（Git 仓库、HTTP 服务器或本地目录），也可以把业务项目注册为项目仓库。团队成员可以通过仓库发现、一键安装、自动更新，或者通过 `repository resolve --project` 找到某个项目的知识入口。对于需要本地修改的仓库脚本或Webhook，可以从仓库资产创建工作副本，再通过上游绑定拉取更新。
 
 ## 仓库数据模型
 
@@ -11,13 +11,20 @@ public class RepositoryDefinition {
     private String id;               // 仓库唯一标识
     private String name;             // 人类可读名称
     private RepositoryType type;     // GIT / HTTP / LOCAL_DIR
+    private String purpose;          // CAPABILITY / PROJECT
     private String url;              // Git URL / HTTP URL / 本地路径
     private String branch;           // Git 分支（可选）
     private boolean enabled;         // 是否启用
     private TrustLevel trustLevel;   // TRUSTED / UNTRUSTED
     private String description;
+    private ProjectSettings project; // markerPath / aliases，仅 PROJECT 使用
 }
 ```
+
+`type` 表示“怎么访问仓库”，`purpose` 表示“仓库拿来做什么”。
+
+- `type`: `GIT` / `HTTP` / `LOCAL_DIR`
+- `purpose`: `CAPABILITY` / `PROJECT`
 
 ## 仓库类型
 
@@ -26,6 +33,49 @@ public class RepositoryDefinition {
 | `GIT` | `https://github.com/org/actiondock-tools.git` | 从 Git 仓库自动同步 |
 | `HTTP` | `https://tools.example.com/repo.json` | 从 HTTP 端点下载索引 |
 | `LOCAL_DIR` | `C:\shared-tools` | 从本地目录加载 |
+
+项目仓库当前只支持 `GIT` 和 `LOCAL_DIR`。
+
+## 仓库用途
+
+| 用途 | 说明 |
+|------|------|
+| `CAPABILITY` | 分发工具、Webhook、插件、Skills、能力包 |
+| `PROJECT` | 指向业务项目目录，并提供项目知识入口文件 |
+
+## 项目仓库与 `PROJECT.md`
+
+项目仓库只负责告诉调用方：
+
+1. 这个项目仓库在哪里
+2. 项目知识入口文件在哪里
+3. 返回入口文件原文
+
+默认知识入口文件：
+
+```text
+.actiondock/PROJECT.md
+```
+
+`PROJECT.md` 推荐采用“极简 frontmatter + Markdown 正文”的形式：
+
+```md
+---
+project_id: billing-service
+display_name: Billing Service
+---
+
+# Billing Service
+
+## AI 优先阅读
+
+1. `overview.md`
+2. `database.md`
+3. `workflows.md`
+4. `runbooks/`
+```
+
+ActionDock 当前不会把正文拆成复杂结构，也不会做向量检索。它只做稳定定位并返回原始 Markdown 内容，后续检索由调用方自行完成。
 
 ## 安装模型
 
@@ -72,6 +122,14 @@ public class RepositoryDefinition {
 
 路径：管理台 → 资源 → 仓库管理
 
+仓库管理页面同时承载两类仓库：
+
+```text
+Repositories
+├── Capability Repositories
+└── Project Repositories
+```
+
 ### 表格列
 
 | 列 | 说明 |
@@ -95,6 +153,46 @@ public class RepositoryDefinition {
 | 启用 | 是否启用 | 是 |
 | 信任级别 | `TRUSTED` / `UNTRUSTED` | 建议用 `UNTRUSTED` 先检查 |
 | 描述 | 仓库用途说明 | |
+
+创建项目仓库时，额外字段为：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| Purpose | 仓库用途 | `PROJECT` |
+| Marker Path | 项目知识入口文件 | `.actiondock/PROJECT.md` |
+| Aliases | 项目标识别名 | `billing,账单服务` |
+
+### 解析项目仓库
+
+通过 CLI：
+
+```bash
+actiondock repository resolve --project billing-service
+```
+
+通过 REST API：
+
+```bash
+curl "http://localhost:5177/api/repositories/resolve?project=billing-service"
+```
+
+返回结果示例：
+
+```json
+{
+  "projectId": "billing-service",
+  "repositoryId": "billing-service",
+  "type": "LOCAL_DIR",
+  "purpose": "PROJECT",
+  "root": "/Users/code/projects/billing-service",
+  "markerPath": ".actiondock/PROJECT.md",
+  "enabled": true,
+  "exists": true,
+  "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
+}
+```
+
+这一步会直接返回项目根目录、知识入口文件路径和入口文件原文。
 
 ### 只读安装 vs 工作副本 选择建议
 
@@ -246,13 +344,14 @@ curl -X POST http://localhost:5177/api/scripts/{id}/publish \
 
 ```bash
 # 仓库 CRUD
-GET    /api/repositories                        # 列表
+GET    /api/repositories                        # 列表（支持 ?purpose=CAPABILITY|PROJECT）
 POST   /api/repositories                        # 创建
 GET    /api/repositories/{id}                   # 详情
 PUT    /api/repositories/{id}                   # 更新
 DELETE /api/repositories/{id}                   # 删除
 
 # 仓库操作
+GET    /api/repositories/resolve?project=...    # 解析项目仓库并返回 PROJECT.md 原文
 POST   /api/repositories/{id}/sync              # 同步仓库
 GET    /api/repositories/{id}/tools             # 列出可用工具
 POST   /api/repositories/{id}/tools/{toolId}/local-assets         # 添加仓库工具到本地

@@ -1,5 +1,6 @@
 import {
   DeleteOutlined,
+  EyeOutlined,
   PlusOutlined,
   ReloadOutlined,
   SyncOutlined
@@ -15,16 +16,18 @@ import {
   Space,
   Switch,
   Table,
+  Tabs,
   Tag,
   Typography,
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createRepository,
   deleteRepository,
   listRepositories,
+  resolveProjectRepository,
   syncRepository,
   updateRepository
 } from "../../resources/api";
@@ -36,12 +39,13 @@ import { InfoHint } from "../../../components/common/InfoHint";
 import { getRepositoryTypeLabel } from "../../../components/domain/typeLabels";
 import { suggestRepositoryId } from "../../../services/repositoryId";
 import { ApiError } from "../../../shared/api/httpClient";
-import type { RepositoryDefinition } from "../../../shared/types";
+import type { ProjectRepositoryResolution, RepositoryDefinition, RepositoryPurpose } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 type EditorMode = "create" | "edit";
+type RepositoryTabKey = "CAPABILITY" | "PROJECT";
 
 interface EditorState {
   mode: EditorMode;
@@ -52,25 +56,32 @@ interface RepositoryFormValues {
   id: string;
   name: string;
   type: RepositoryDefinition["type"];
+  purpose: RepositoryPurpose;
   url: string;
   branch?: string;
   enabled: boolean;
   trustLevel: RepositoryDefinition["trustLevel"];
   description?: string;
+  markerPath?: string;
+  aliases?: string;
 }
-
 
 export function RepositoryManagementPage() {
   const [form] = Form.useForm<RepositoryFormValues>();
   const repositoryType = Form.useWatch("type", form) ?? "GIT";
+  const repositoryPurpose = Form.useWatch("purpose", form) ?? "CAPABILITY";
   const repositoryUrl = Form.useWatch("url", form) ?? "";
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
+  const [activeTab, setActiveTab] = useState<RepositoryTabKey>("CAPABILITY");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [repositoryIdManuallyEdited, setRepositoryIdManuallyEdited] = useState(false);
+  const [resolution, setResolution] = useState<ProjectRepositoryResolution | null>(null);
+  const [resolutionOpen, setResolutionOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadData = async () => {
@@ -91,16 +102,28 @@ export function RepositoryManagementPage() {
     void loadData();
   }, []);
 
+  const capabilityRepositories = useMemo(
+    () => repositories.filter((item) => (item.purpose ?? "CAPABILITY") === "CAPABILITY"),
+    [repositories]
+  );
+  const projectRepositories = useMemo(
+    () => repositories.filter((item) => (item.purpose ?? "CAPABILITY") === "PROJECT"),
+    [repositories]
+  );
+
   const openCreate = () => {
     form.setFieldsValue({
       id: "",
       name: "",
       type: "GIT",
+      purpose: activeTab,
       url: "",
       branch: "",
       enabled: true,
       trustLevel: "UNTRUSTED",
-      description: ""
+      description: "",
+      markerPath: ".actiondock/PROJECT.md",
+      aliases: ""
     });
     setRepositoryIdManuallyEdited(false);
     setEditorState({ mode: "create" });
@@ -110,12 +133,15 @@ export function RepositoryManagementPage() {
     form.setFieldsValue({
       id: item.id,
       name: item.name,
-      type: item.type,
+      type: item.type === "HTTP" ? "GIT" : item.type,
+      purpose: item.purpose ?? "CAPABILITY",
       url: item.url,
       branch: item.branch,
       enabled: item.enabled,
       trustLevel: item.trustLevel,
-      description: item.description ?? ""
+      description: item.description ?? "",
+      markerPath: item.project?.markerPath ?? ".actiondock/PROJECT.md",
+      aliases: item.project?.aliases?.join(", ") ?? ""
     });
     setRepositoryIdManuallyEdited(true);
     setEditorState({ mode: "edit", repositoryId: item.id });
@@ -142,11 +168,21 @@ export function RepositoryManagementPage() {
         id: values.id.trim(),
         name: values.name.trim(),
         type: values.type,
+        purpose: values.purpose,
         url: values.url.trim(),
         branch: values.type === "GIT" ? values.branch?.trim() || undefined : undefined,
         enabled: values.enabled,
         trustLevel: values.trustLevel,
-        description: values.description?.trim() || undefined
+        description: values.description?.trim() || undefined,
+        project: values.purpose === "PROJECT"
+          ? {
+              markerPath: values.markerPath?.trim() || undefined,
+              aliases: values.aliases
+                ?.split(",")
+                .map((item) => item.trim())
+                .filter(Boolean)
+            }
+          : undefined
       };
       const saved = editorState?.mode === "edit" && editorState.repositoryId
         ? await updateRepository(editorState.repositoryId, payload)
@@ -187,19 +223,34 @@ export function RepositoryManagementPage() {
     }
   };
 
-  const columns: ColumnsType<RepositoryDefinition> = [
+  const handleResolve = async (repositoryId: string) => {
+    setResolvingId(repositoryId);
+    try {
+      const resolved = await resolveProjectRepository(repositoryId);
+      setResolution(resolved);
+      setResolutionOpen(true);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "解析项目知识入口失败"));
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const commonRepositoryCell = (_value: unknown, record: RepositoryDefinition) => (
+    <Space direction="vertical" size={2}>
+      <Space wrap size={[8, 8]}>
+        <TableLinkCell onClick={() => openEdit(record)}>{record.name}</TableLinkCell>
+        {record.enabled ? <Tag color="blue">已启用</Tag> : <Tag>已禁用</Tag>}
+      </Space>
+      <Text type="secondary">{record.description || record.url}</Text>
+    </Space>
+  );
+
+  const capabilityColumns: ColumnsType<RepositoryDefinition> = [
     {
       title: "仓库",
       key: "name",
-      render: (_value: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          <Space wrap size={[8, 8]}>
-            <TableLinkCell onClick={() => openEdit(record)}>{record.name}</TableLinkCell>
-            {record.enabled ? <Tag color="blue">已启用</Tag> : <Tag>已禁用</Tag>}
-          </Space>
-          <Text type="secondary">{record.description || record.url}</Text>
-        </Space>
-      )
+      render: commonRepositoryCell
     },
     {
       title: "类型",
@@ -262,21 +313,102 @@ export function RepositoryManagementPage() {
     }
   ];
 
+  const projectColumns: ColumnsType<RepositoryDefinition> = [
+    {
+      title: "项目",
+      key: "name",
+      render: commonRepositoryCell
+    },
+    {
+      title: "项目 ID",
+      dataIndex: "id",
+      key: "id",
+      width: 180
+    },
+    {
+      title: "类型",
+      dataIndex: "type",
+      key: "type",
+      width: 120,
+      render: (value: RepositoryDefinition["type"]) => getRepositoryTypeLabel(value)
+    },
+    {
+      title: "Marker",
+      key: "markerPath",
+      width: 200,
+      render: (_value: unknown, record) => record.project?.markerPath ?? ".actiondock/PROJECT.md"
+    },
+    {
+      title: "最近同步",
+      dataIndex: "lastSyncedAt",
+      key: "lastSyncedAt",
+      width: 180,
+      render: (value?: string) => formatDateTime(value)
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 280,
+      render: (_value: unknown, record) => (
+        <Space wrap size={[4, 4]}>
+          <Button
+            size="small"
+            icon={<EyeOutlined />}
+            loading={resolvingId === record.id}
+            onClick={() => void handleResolve(record.id)}
+          >
+            Resolve
+          </Button>
+          <Button
+            size="small"
+            icon={<SyncOutlined />}
+            loading={syncingId === record.id}
+            onClick={() => void handleSync(record.id)}
+          >
+            同步
+          </Button>
+          <ConfirmDangerAction
+            title="确认删除这个项目仓库？"
+            description="删除后将无法继续通过 ActionDock 解析该项目知识入口。"
+            onConfirm={async () => {
+              setDeletingId(record.id);
+              try {
+                await deleteRepository(record.id);
+                setRepositories((previous) => previous.filter((item) => item.id !== record.id));
+                messageApi.success("仓库已删除");
+              } catch (error) {
+                messageApi.error(getErrorMessage(error, "删除仓库失败"));
+              } finally {
+                setDeletingId(null);
+              }
+            }}
+            loading={deletingId === record.id}
+          >
+            <Button danger size="small" icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </ConfirmDangerAction>
+        </Space>
+      )
+    }
+  ];
+
   const typeOptions = [
     { value: "GIT", label: "Git 仓库" },
     { value: "LOCAL_DIR", label: "本地目录仓库" }
   ];
-  const editorTypeOptions = editorState?.mode === "edit" && repositoryType === "HTTP"
-    ? [...typeOptions, { value: "HTTP", label: "HTTP 静态仓库" }]
-    : typeOptions;
 
   return (
     <>
       {contextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
-          title="脚本仓库"
-          meta={<Text type="secondary">支持 Git 与本地目录仓库。本地目录仓库在创建时会自动初始化为空仓库，不需要手工创建 actiondock.repository.json，也不用先点同步。</Text>}
+          title="仓库"
+          meta={(
+            <Text type="secondary">
+              能力仓库用于发现和发布脚本、Webhook、插件、能力包与 Skill；项目仓库只用于定位并读取项目知识入口 Markdown。
+            </Text>
+          )}
           actions={
             <>
               <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
@@ -290,21 +422,55 @@ export function RepositoryManagementPage() {
         />
 
         <Card>
-          <Table<RepositoryDefinition>
-            rowKey="id"
-            loading={loading}
-            columns={columns}
-            dataSource={repositories}
-            scroll={{ x: 800 }}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="还没有配置脚本仓库。先添加一个 Git 或本地目录仓库。"
-                />
-              )
-            }}
-            pagination={{ pageSize: 10, showSizeChanger: true }}
+          <Tabs
+            activeKey={activeTab}
+            onChange={(value) => setActiveTab(value as RepositoryTabKey)}
+            items={[
+              {
+                key: "CAPABILITY",
+                label: `能力仓库 (${capabilityRepositories.length})`,
+                children: (
+                  <Table<RepositoryDefinition>
+                    rowKey="id"
+                    loading={loading}
+                    columns={capabilityColumns}
+                    dataSource={capabilityRepositories}
+                    scroll={{ x: 800 }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="还没有配置能力仓库。先添加一个 Git 或本地目录仓库。"
+                        />
+                      )
+                    }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                  />
+                )
+              },
+              {
+                key: "PROJECT",
+                label: `项目仓库 (${projectRepositories.length})`,
+                children: (
+                  <Table<RepositoryDefinition>
+                    rowKey="id"
+                    loading={loading}
+                    columns={projectColumns}
+                    dataSource={projectRepositories}
+                    scroll={{ x: 960 }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="还没有配置项目仓库。添加后可通过 Resolve 读取 .actiondock/PROJECT.md。"
+                        />
+                      )
+                    }}
+                    pagination={{ pageSize: 10, showSizeChanger: true }}
+                  />
+                )
+              }
+            ]}
           />
         </Card>
       </Space>
@@ -314,12 +480,16 @@ export function RepositoryManagementPage() {
         open={Boolean(editorState)}
         onClose={closeEditor}
         destroyOnClose
-        width={480}
+        width={520}
       >
-        <Form form={form} layout="vertical" initialValues={{ enabled: true, trustLevel: "UNTRUSTED", type: "GIT" }}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{ enabled: true, trustLevel: "UNTRUSTED", type: "GIT", purpose: activeTab }}
+        >
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <Form.Item
-              label={<InfoHint label="仓库 ID" content="创建时会根据 Git 地址或目录名自动生成默认值。可以手工修改；发布依赖解析会优先按当前仓库和同名资产自动兼容，减少不同环境仓库 ID 不一致带来的安装问题。" />}
+              label={<InfoHint label="仓库 ID" content="创建时会根据 Git 地址或目录名自动生成默认值。项目仓库的项目 ID 也直接使用这个值。" />}
               name="id"
               rules={[
                 { required: true, message: "请输入仓库 ID" },
@@ -328,7 +498,7 @@ export function RepositoryManagementPage() {
             >
               <Input
                 disabled={editorState?.mode === "edit"}
-                placeholder="例如 repo-platform"
+                placeholder="例如 repo-platform 或 billing-service"
                 onChange={() => {
                   if (editorState?.mode === "create") {
                     setRepositoryIdManuallyEdited(true);
@@ -342,14 +512,25 @@ export function RepositoryManagementPage() {
               name="name"
               rules={[{ required: true, message: "请输入仓库名称" }]}
             >
-              <Input placeholder="例如 平台组脚本仓库" />
+              <Input placeholder="例如 平台能力仓库 / Billing Service" />
             </Form.Item>
 
             <Space size={12} style={{ width: "100%" }} wrap>
-              <Form.Item label="类型" name="type" style={{ flex: "1 1 180px", minWidth: 180 }}>
-                <Select options={editorTypeOptions} />
+              <Form.Item label="用途" name="purpose" style={{ flex: "1 1 180px", minWidth: 180 }}>
+                <Select
+                  options={[
+                    { value: "CAPABILITY", label: "能力仓库" },
+                    { value: "PROJECT", label: "项目仓库" }
+                  ]}
+                />
               </Form.Item>
-              <Form.Item label="信任级别" name="trustLevel" style={{ flex: "1 1 180px", minWidth: 180 }}>
+              <Form.Item label="类型" name="type" style={{ flex: "1 1 180px", minWidth: 180 }}>
+                <Select options={typeOptions} />
+              </Form.Item>
+            </Space>
+
+            {repositoryPurpose === "CAPABILITY" ? (
+              <Form.Item label="信任级别" name="trustLevel">
                 <Select
                   options={[
                     { value: "TRUSTED", label: "可信" },
@@ -357,24 +538,50 @@ export function RepositoryManagementPage() {
                   ]}
                 />
               </Form.Item>
-            </Space>
+            ) : (
+              <Form.Item label="信任级别" name="trustLevel" hidden>
+                <Input />
+              </Form.Item>
+            )}
 
             <Form.Item
               label={repositoryType === "LOCAL_DIR" ? "本地路径" : "地址"}
               name="url"
               rules={[{ required: true, message: "请输入仓库地址或目录路径" }]}
             >
-              <Input placeholder={repositoryType === "LOCAL_DIR" ? "/Users/me/actiondock-repo" : "https://example.com/repo.git"} />
+              <Input placeholder={repositoryType === "LOCAL_DIR" ? "/Users/me/projects/billing-service" : "git@github.com:company/billing-service.git"} />
             </Form.Item>
 
-            {repositoryType === "LOCAL_DIR" ? (
+            {repositoryPurpose === "CAPABILITY" && repositoryType === "LOCAL_DIR" ? (
               <Text type="secondary">保存时会自动创建目录、tools/ 子目录和空的 actiondock.repository.json。</Text>
+            ) : null}
+
+            {repositoryPurpose === "PROJECT" ? (
+              <Text type="secondary">项目仓库不会初始化 actiondock.repository.json，只会在 Resolve 时读取知识入口 Markdown。</Text>
             ) : null}
 
             {repositoryType === "GIT" ? (
               <Form.Item label="分支" name="branch">
                 <Input placeholder="main" />
               </Form.Item>
+            ) : null}
+
+            {repositoryPurpose === "PROJECT" ? (
+              <>
+                <Form.Item
+                  label="知识入口路径"
+                  name="markerPath"
+                  rules={[{ required: true, message: "请输入项目知识入口路径" }]}
+                >
+                  <Input placeholder=".actiondock/PROJECT.md" />
+                </Form.Item>
+                <Form.Item
+                  label={<InfoHint label="别名" content="可选，多个别名用英文逗号分隔。CLI 和 API 的 project 参数可以匹配这些别名。" />}
+                  name="aliases"
+                >
+                  <Input placeholder="例如 billing, 账单服务" />
+                </Form.Item>
+              </>
             ) : null}
 
             <Form.Item label="说明" name="description">
@@ -390,6 +597,31 @@ export function RepositoryManagementPage() {
             </Button>
           </Space>
         </Form>
+      </Drawer>
+
+      <Drawer
+        title={resolution ? `项目知识入口：${resolution.projectId}` : "项目知识入口"}
+        open={resolutionOpen}
+        onClose={() => setResolutionOpen(false)}
+        width={720}
+      >
+        {resolution ? (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Card size="small">
+              <Space direction="vertical" size={4}>
+                <Text><strong>仓库：</strong>{resolution.repositoryId}</Text>
+                <Text><strong>根目录：</strong>{resolution.root}</Text>
+                <Text><strong>Marker：</strong>{resolution.markerPath}</Text>
+                <Text><strong>类型：</strong>{getRepositoryTypeLabel(resolution.type)}</Text>
+              </Space>
+            </Card>
+            <Card size="small" title="PROJECT.md">
+              <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
+                {resolution.content}
+              </Paragraph>
+            </Card>
+          </Space>
+        ) : null}
       </Drawer>
     </>
   );

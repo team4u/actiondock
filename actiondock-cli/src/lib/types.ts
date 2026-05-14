@@ -186,14 +186,31 @@ export interface RepositoryDefinition {
   id: string;
   name: string;
   type: string;
+  purpose?: string;
   url: string;
   branch?: string;
   enabled: boolean;
   trustLevel: string;
   description?: string;
+  project?: {
+    markerPath?: string;
+    aliases?: string[];
+  };
   lastSyncedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface ProjectRepositoryResolution {
+  projectId: string;
+  repositoryId: string;
+  type: string;
+  purpose: string;
+  root: string;
+  markerPath: string;
+  enabled: boolean;
+  exists: boolean;
+  content: string;
 }
 
 export interface RepositoryInstallRequest {

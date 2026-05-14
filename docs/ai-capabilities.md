@@ -175,6 +175,18 @@ Toolset 是工具的集合，Agent 通过 Toolset 知道可以使用哪些工具
 | `SCRIPT` | 脚本暴露的工具——已发布脚本自动注册为可调用工具 |
 | `AGENT` | 自定义 Agent 级别工具 |
 
+## 项目任务的建议
+
+如果要回答某个业务项目里的实现、数据库、流程或 runbook 问题，建议先走项目知识入口解析，而不是直接扫源码：
+
+1. 识别目标项目 ID 或别名
+2. 调用 `actiondock repository resolve --project <value>`
+3. 优先阅读返回的 `PROJECT.md`
+4. 按正文中列出的 Markdown 文档和关键词继续检索
+5. 只有在文档不足时再读源码
+
+这套模式的目标是让 ActionDock 只做稳定定位，真正的阅读、搜索和推理由调用方自己完成。
+
 ## AI 概览页面
 
 路径：管理台 → 能力 → AI

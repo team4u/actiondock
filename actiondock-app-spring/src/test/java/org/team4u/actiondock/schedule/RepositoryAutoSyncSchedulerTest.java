@@ -55,7 +55,7 @@ class RepositoryAutoSyncSchedulerTest {
     void syncsOnlyEnabledRepositories() {
         RecordingTaskScheduler taskScheduler = new RecordingTaskScheduler();
         RepositoryCatalogService repositoryCatalogService = mock(RepositoryCatalogService.class);
-        when(repositoryCatalogService.listEnabledDiscoveryRepositories()).thenReturn(List.of(
+        when(repositoryCatalogService.listEnabledSyncRepositories()).thenReturn(List.of(
                 new RepositoryDefinition().setId("repo-enabled").setEnabled(true),
                 new RepositoryDefinition().setId("repo-enabled-2").setEnabled(true)
         ));
@@ -72,7 +72,7 @@ class RepositoryAutoSyncSchedulerTest {
     void continuesWhenSingleRepositorySyncFails() {
         RecordingTaskScheduler taskScheduler = new RecordingTaskScheduler();
         RepositoryCatalogService repositoryCatalogService = mock(RepositoryCatalogService.class);
-        when(repositoryCatalogService.listEnabledDiscoveryRepositories()).thenReturn(List.of(
+        when(repositoryCatalogService.listEnabledSyncRepositories()).thenReturn(List.of(
                 new RepositoryDefinition().setId("repo-1").setEnabled(true),
                 new RepositoryDefinition().setId("repo-2").setEnabled(true)
         ));
@@ -91,7 +91,7 @@ class RepositoryAutoSyncSchedulerTest {
     void skipsHttpRepositoriesThroughDiscoveryFilter() {
         RecordingTaskScheduler taskScheduler = new RecordingTaskScheduler();
         RepositoryCatalogService repositoryCatalogService = mock(RepositoryCatalogService.class);
-        when(repositoryCatalogService.listEnabledDiscoveryRepositories()).thenReturn(List.of(
+        when(repositoryCatalogService.listEnabledSyncRepositories()).thenReturn(List.of(
                 new RepositoryDefinition().setId("repo-enabled").setEnabled(true)
         ));
 
