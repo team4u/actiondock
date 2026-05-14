@@ -18,11 +18,19 @@
 actiondock repository list --purpose project --json
 ```
 
+如果是 `GIT` 类型项目仓库，先同步：
+
+```bash
+actiondock repository sync <repositoryId> --json
+```
+
 再解析具体项目：
 
 ```bash
 actiondock repository resolve --repository-id <repositoryId> --json
 ```
+
+这个命令只做定位和读取，不会触发仓库同步。`GIT` 类型项目仓库需要先准备好本地副本。
 
 ## 返回结果理解
 
@@ -37,7 +45,7 @@ actiondock repository resolve --repository-id <repositoryId> --json
   "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
-  "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
+  "content": "# Billing Service\n\n## 优先阅读\n\n1. `overview.md`\n..."
 }
 ```
 

@@ -178,7 +178,9 @@ actiondock server -p 8080  # 指定端口启动
 
 ## 仓库命令
 
-### 列出仓库
+### 仓库定义管理
+
+#### 列出仓库
 
 ```bash
 actiondock repository list
@@ -191,9 +193,17 @@ actiondock repository list --purpose project
 - `CAPABILITY`：分发脚本、插件、Skills、能力包
 - `PROJECT`：指向业务项目代码库，并暴露项目知识入口
 
-### 创建项目仓库
+#### 创建仓库
 
 ```bash
+actiondock repository create \
+  --repository-id team-tools \
+  --name "Team Tools" \
+  --type git \
+  --purpose capability \
+  --url https://github.com/example/team-tools.git \
+  --branch main
+
 actiondock repository create \
   --repository-id billing-service \
   --name "Billing Service" \
@@ -209,7 +219,38 @@ actiondock repository create \
 
 项目知识入口固定为仓库根目录 `ACTIONDOCK.md`。
 
-### 解析项目知识入口
+#### 更新仓库
+
+```bash
+actiondock repository update billing-service \
+  --name "Billing Service" \
+  --type local-dir \
+  --purpose project \
+  --url /Users/code/projects/billing-service \
+  --enabled
+```
+
+#### 删除仓库
+
+```bash
+actiondock repository delete billing-service
+actiondock repository delete billing-service --json
+```
+
+#### 同步仓库
+
+```bash
+actiondock repository sync billing-service
+actiondock repository sync billing-service --json
+```
+
+这个命令用于手工同步仓库内容。
+
+- `GIT` 仓库会拉取最新内容到本地副本
+- `LOCAL_DIR` 仓库会做本地目录检查
+- 项目仓库如果是 `GIT` 类型，通常先执行这个命令，再执行 `repository resolve`
+
+### 项目仓库解析
 
 ```bash
 actiondock repository resolve --repository-id billing-service
@@ -219,9 +260,13 @@ actiondock repository resolve --repository-id billing-service --json
 这个命令会：
 
 1. 按仓库 ID 定位 `purpose=PROJECT` 的仓库
-2. 对 `GIT` 类型先同步本地副本
-3. 读取项目根目录下的 `ACTIONDOCK.md`
-4. 返回项目根路径、入口路径和原始 Markdown 内容
+2. 读取项目根目录下的 `ACTIONDOCK.md`
+3. 返回项目根路径、入口路径和原始 Markdown 内容
+
+说明：
+
+- `repository resolve` 不会触发仓库同步
+- `GIT` 类型项目仓库需要先通过定时任务或手工同步准备好本地副本
 
 ### 返回结果示例
 
@@ -234,7 +279,7 @@ actiondock repository resolve --repository-id billing-service --json
   "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
-  "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
+  "content": "# Billing Service\n\n## 优先阅读\n\n1. `overview.md`\n..."
 }
 ```
 
@@ -243,6 +288,109 @@ actiondock repository resolve --repository-id billing-service --json
 1. 先读 `content`
 2. 再按正文中描述的入口文件、目录和关键词去 `read` / `grep`
 3. 只有在 Markdown 不足时再读源码
+
+### 仓库工具
+
+#### 列出仓库工具
+
+```bash
+actiondock repository tool list
+actiondock repository tool list --repository team-tools
+actiondock repository tool list --repository team-tools --json
+```
+
+#### 查看仓库工具详情
+
+```bash
+actiondock repository tool get team-tools hello-groovy
+actiondock repository tool get team-tools hello-groovy --json
+```
+
+#### 安装仓库工具
+
+```bash
+actiondock repository tool install team-tools hello-groovy
+actiondock repository tool install team-tools hello-groovy \
+  --install-script-dependencies \
+  --install-plugin-dependencies \
+  --install-schedules
+```
+
+#### 更新已安装的仓库工具
+
+```bash
+actiondock repository tool update team-tools hello-groovy
+actiondock repository tool update team-tools hello-groovy \
+  --install-script-dependencies \
+  --install-plugin-dependencies \
+  --install-schedules
+```
+
+#### 卸载仓库工具
+
+```bash
+actiondock repository tool uninstall hello-groovy
+actiondock repository tool uninstall hello-groovy --json
+```
+
+这里传的是本地脚本 ID，不是仓库里的 `toolId`。
+
+#### 创建脚本工作副本
+
+```bash
+actiondock repository tool working-copy team-tools hello-groovy
+actiondock repository tool working-copy team-tools hello-groovy --script-id hello-groovy-copy
+```
+
+### 仓库 Webhook
+
+#### 列出仓库 Webhook
+
+```bash
+actiondock webhook repository-list
+actiondock webhook repository-list --repository team-tools
+actiondock webhook repository-list --repository team-tools --json
+```
+
+#### 查看仓库 Webhook 详情
+
+```bash
+actiondock webhook repository-get team-tools order-created
+actiondock webhook repository-get team-tools order-created --json
+```
+
+#### 安装仓库 Webhook
+
+```bash
+actiondock webhook repository-install team-tools order-created
+actiondock webhook repository-install team-tools order-created --install-script-dependencies
+```
+
+#### 更新已安装的仓库 Webhook
+
+```bash
+actiondock webhook repository-update team-tools order-created
+actiondock webhook repository-update team-tools order-created --install-script-dependencies
+```
+
+#### 创建 Webhook 工作副本
+
+```bash
+actiondock webhook repository-working-copy team-tools order-created
+actiondock webhook repository-working-copy team-tools order-created --webhook-id order-created-copy
+```
+
+#### 查看上游状态与拉取更新
+
+```bash
+actiondock script upstream-status hello-groovy
+actiondock script upstream-pull hello-groovy
+actiondock script upstream-pull hello-groovy --force
+
+actiondock webhook upstream-status order-created
+actiondock webhook upstream-pull order-created
+actiondock webhook upstream-pull order-created --force
+```
 
 ## 配置命令参考
 

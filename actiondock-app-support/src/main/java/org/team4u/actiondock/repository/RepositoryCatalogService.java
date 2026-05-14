@@ -240,10 +240,16 @@ public class RepositoryCatalogService {
     public ProjectRepositoryResolution resolveProjectRepository(String repositoryId) {
         RepositoryDefinition repository = findProjectRepository(repositoryId);
         Path root = resolveRepositoryRoot(repository);
-        if (REPO_TYPE_GIT.equals(repository.getType())) {
-            gitOps.syncGitRepository(repository, root);
-        }
         boolean exists = Files.exists(root);
+        if (!exists) {
+            if (REPO_TYPE_GIT.equals(repository.getType())) {
+                throw new IllegalArgumentException("项目仓库尚未同步，请先同步仓库: " + repository.getId());
+            }
+            throw new IllegalArgumentException("项目仓库目录不存在: " + repository.getId());
+        }
+        if (!Files.isDirectory(root)) {
+            throw new IllegalArgumentException("项目仓库根路径必须是目录: " + repository.getId());
+        }
         Path entry = safeResolveProjectEntryPath(root);
         if (!Files.exists(entry)) {
             throw new IllegalArgumentException("项目知识入口不存在: " + repository.getId());

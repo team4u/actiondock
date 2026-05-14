@@ -214,13 +214,14 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
   "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
-  "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
+  "content": "# Billing Service\n\n## 优先阅读\n\n1. `overview.md`\n..."
 }
 ```
 
 说明：
 
 - `repositoryId` 查询参数传项目仓库 ID
+- 该接口只做定位和读取，不会触发仓库同步
 - `content` 是 `ACTIONDOCK.md` 的原始 Markdown 内容
 
 ## 定时任务 API

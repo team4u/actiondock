@@ -2,7 +2,7 @@
 
 ## 一句话理解
 
-仓库系统是 ActionDock 的资源分发和项目入口解析层。你可以把脚本、插件和 Skills 发布到能力仓库（Git 仓库、HTTP 服务器或本地目录），也可以把业务项目注册为项目仓库。团队成员可以通过仓库发现、一键安装、自动更新，或者通过 `repository resolve --repository-id` 找到某个项目的知识入口。对于需要本地修改的仓库脚本或Webhook，可以从仓库资产创建工作副本，再通过上游绑定拉取更新。
+仓库系统是 ActionDock 的资源分发和项目入口解析层。你可以把脚本、插件和 Skills 发布到能力仓库（Git 仓库或本地目录），也可以把业务项目注册为项目仓库。团队成员可以通过仓库发现、一键安装、自动更新，或者通过 `repository resolve --repository-id` 找到某个项目的知识入口。对于需要本地修改的仓库脚本或Webhook，可以从仓库资产创建工作副本，再通过上游绑定拉取更新。
 
 ## 仓库数据模型
 
@@ -10,9 +10,9 @@
 public class RepositoryDefinition {
     private String id;               // 仓库唯一标识
     private String name;             // 人类可读名称
-    private RepositoryType type;     // GIT / HTTP / LOCAL_DIR
+    private RepositoryType type;     // GIT / LOCAL_DIR
     private String purpose;          // CAPABILITY / PROJECT
-    private String url;              // Git URL / HTTP URL / 本地路径
+    private String url;              // Git URL / 本地路径
     private String branch;           // Git 分支（可选）
     private boolean enabled;         // 是否启用
     private TrustLevel trustLevel;   // TRUSTED / UNTRUSTED
@@ -22,7 +22,7 @@ public class RepositoryDefinition {
 
 `type` 表示“怎么访问仓库”，`purpose` 表示“仓库拿来做什么”。
 
-- `type`: `GIT` / `HTTP` / `LOCAL_DIR`
+- `type`: `GIT` / `LOCAL_DIR`
 - `purpose`: `CAPABILITY` / `PROJECT`
 
 ## 仓库类型
@@ -30,7 +30,6 @@ public class RepositoryDefinition {
 | 类型 | URL 示例 | 说明 |
 |------|----------|------|
 | `GIT` | `https://github.com/org/actiondock-tools.git` | 从 Git 仓库自动同步 |
-| `HTTP` | `https://tools.example.com/repo.json` | 从 HTTP 端点下载索引 |
 | `LOCAL_DIR` | `C:\shared-tools` | 从本地目录加载 |
 
 项目仓库当前只支持 `GIT` 和 `LOCAL_DIR`。
@@ -56,17 +55,12 @@ public class RepositoryDefinition {
 ACTIONDOCK.md
 ```
 
-`ACTIONDOCK.md` 推荐采用“极简 frontmatter + Markdown 正文”的形式：
+`ACTIONDOCK.md` 直接写正文内容即可：
 
 ```md
----
-project_id: billing-service
-display_name: Billing Service
----
-
 # Billing Service
 
-## AI 优先阅读
+## 优先阅读
 
 1. `overview.md`
 2. `database.md`
@@ -135,7 +129,7 @@ Repositories
 |----|------|
 | ID | 仓库标识（点击进入详情） |
 | 名称 | 人类可读名称 |
-| 类型 | `GIT` / `HTTP` / `LOCAL_DIR` |
+| 类型 | `GIT` / `LOCAL_DIR` |
 | 信任级别 | `TRUSTED` / `UNTRUSTED` |
 | 状态 | 上次同步状态 |
 | 操作 | 同步、编辑、删除 |
@@ -146,8 +140,8 @@ Repositories
 |------|------|------|
 | ID | 仓库唯一标识 | `team-scripts` |
 | 名称 | 人类可读名称 | `团队脚本库` |
-| 类型 | `GIT` / `HTTP` / `LOCAL_DIR` | `GIT` |
-| URL | Git URL/HTTP URL/本地路径 | `https://github.com/org/tools.git` |
+| 类型 | `GIT` / `LOCAL_DIR` | `GIT` |
+| URL | Git URL/本地路径 | `https://github.com/org/tools.git` |
 | Branch | Git 分支（可选） | `main` 或 `develop` |
 | 启用 | 是否启用 | 是 |
 | 信任级别 | `TRUSTED` / `UNTRUSTED` | 建议用 `UNTRUSTED` 先检查 |
@@ -164,7 +158,15 @@ Repositories
 通过 CLI：
 
 ```bash
+actiondock repository sync billing-service
 actiondock repository resolve --repository-id billing-service
+```
+
+如果希望先看同步结果，也可以：
+
+```bash
+actiondock repository sync billing-service --json
+actiondock repository resolve --repository-id billing-service --json
 ```
 
 通过 REST API：
@@ -184,11 +186,17 @@ curl "http://localhost:5177/api/repositories/resolve?repositoryId=billing-servic
   "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
-  "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
+  "content": "# Billing Service\n\n## 优先阅读\n\n1. `overview.md`\n..."
 }
 ```
 
 这一步会直接返回项目根目录、知识入口文件路径和入口文件原文。
+
+说明：
+
+- `repository sync` 用于手工同步仓库
+- `repository resolve` 只做定位和读取，不会触发仓库同步
+- `GIT` 类型项目仓库需要先通过手工同步或定时同步准备好本地副本
 
 ### 只读安装 vs 工作副本 选择建议
 

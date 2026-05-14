@@ -596,6 +596,32 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
+    void resolveProjectRepositoryDoesNotAutoSyncGitRepository() {
+        Path missingGitRoot = tempDir.resolve("actiondock-home").resolve("repositories").resolve("billing-service");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("billing-service")
+                .setName("Billing Service")
+                .setType(REPO_TYPE_GIT)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("https://example.com/billing.git")
+                .setEnabled(true);
+
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        assertThatThrownBy(() -> service.resolveProjectRepository("billing-service"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("项目仓库尚未同步，请先同步仓库")
+                .hasMessageContaining("billing-service");
+        assertThat(Files.exists(missingGitRoot)).isFalse();
+    }
+
+    @Test
     void projectLocalDirRepositoryDoesNotInitializeCapabilityWorkspaceOnSave() {
         Path projectRoot = tempDir.resolve("project-no-index");
         RepositoryDefinitionRepository repositoryDefinitionRepository = new InMemoryRepositoryDefinitionRepository();

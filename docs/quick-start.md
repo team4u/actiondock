@@ -135,7 +135,7 @@ actiondock script run hello-groovy --name alice --json
 
 资源区
 ├── 仓库发现    ← 浏览可安装的脚本/插件/Skills
-└── 仓库管理    ← 配置 Git/HTTP/本地仓库
+└── 仓库管理    ← 配置 Git/本地仓库
 
 触发区
 └── 触发中心    ← 定时任务、Webhook、Webhook、执行记录

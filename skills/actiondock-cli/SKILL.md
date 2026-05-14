@@ -87,6 +87,7 @@ npm i -g actiondock
 - 默认连接本机服务 `http://127.0.0.1:5177`，本地使用不要要求用户先配置连接；只有连接其他 Server、保存 Token 或频繁切换多个 Server 时，才使用 `actiondock config add/use/list` 管理 profile，临时切换用 `--profile <name>`。
 - 第一次执行已发布脚本前，通过 `script schema <id>` 获取入参，避免用 `get` 查看脚本细节。
 - 项目相关任务必须先解析项目仓库：`actiondock repository resolve --repository-id <repositoryId> --json`。
+- 如果项目仓库是 `GIT` 类型且本地副本还没准备好，先执行 `actiondock repository sync <repositoryId>`。
 - 先读 `ACTIONDOCK.md`，再按正文里给出的入口文件、目录和关键词搜索；不要一上来就全仓库扫源码。
 - 如果 `ACTIONDOCK.md` 已明确说不要优先搜索 `dist`、`build`、`node_modules`，就遵守它。
 - Webhook 相关对象优先使用 `--definition-file`、`--payload-file`，不要把大段 JSON 直接内联到命令里。
