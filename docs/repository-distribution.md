@@ -17,7 +17,7 @@ public class RepositoryDefinition {
     private boolean enabled;         // 是否启用
     private TrustLevel trustLevel;   // TRUSTED / UNTRUSTED
     private String description;
-    private ProjectSettings project; // markerPath / aliases，仅 PROJECT 使用
+    private ProjectSettings project; // markerPath，仅 PROJECT 使用
 }
 ```
 
@@ -160,7 +160,6 @@ Repositories
 |------|------|------|
 | Purpose | 仓库用途 | `PROJECT` |
 | Marker Path | 项目知识入口文件 | `.actiondock/PROJECT.md` |
-| Aliases | 项目标识别名 | `billing,账单服务` |
 
 ### 解析项目仓库
 
@@ -180,7 +179,6 @@ curl "http://localhost:5177/api/repositories/resolve?project=billing-service"
 
 ```json
 {
-  "projectId": "billing-service",
   "repositoryId": "billing-service",
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",

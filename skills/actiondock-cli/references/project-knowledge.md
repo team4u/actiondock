@@ -21,13 +21,8 @@ actiondock repository list --purpose project --json
 再解析具体项目：
 
 ```bash
-actiondock repository resolve --project <projectId-or-alias> --json
+actiondock repository resolve --project <repositoryId> --json
 ```
-
-`<projectId-or-alias>` 可以是：
-
-- 仓库 ID
-- 项目标识别名
 
 ## 返回结果理解
 
@@ -35,7 +30,6 @@ actiondock repository resolve --project <projectId-or-alias> --json
 
 ```json
 {
-  "projectId": "billing-service",
   "repositoryId": "billing-service",
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",

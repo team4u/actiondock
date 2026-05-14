@@ -179,7 +179,7 @@ Toolset 是工具的集合，Agent 通过 Toolset 知道可以使用哪些工具
 
 如果要回答某个业务项目里的实现、数据库、流程或 runbook 问题，建议先走项目知识入口解析，而不是直接扫源码：
 
-1. 识别目标项目 ID 或别名
+1. 识别目标项目 ID
 2. 调用 `actiondock repository resolve --project <value>`
 3. 优先阅读返回的 `PROJECT.md`
 4. 按正文中列出的 Markdown 文档和关键词继续检索

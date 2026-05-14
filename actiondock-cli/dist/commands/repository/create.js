@@ -15,7 +15,6 @@ export default class RepositoryCreateCommand extends BaseCommand {
         "trust-level": Flags.string({ description: "Repository trust level", options: ["trusted", "untrusted"], default: "untrusted" }),
         description: Flags.string({ description: "Repository description" }),
         "marker-path": Flags.string({ description: "Project knowledge marker path", default: ".actiondock/PROJECT.md" }),
-        aliases: Flags.string({ description: "Comma-separated project aliases" }),
         disabled: Flags.boolean({ description: "Create repository as disabled" }),
         ...serverTokenFlags,
         help: Flags.help({ char: "h" })
@@ -36,8 +35,7 @@ export default class RepositoryCreateCommand extends BaseCommand {
                 purpose: isProject ? "PROJECT" : undefined,
                 project: isProject
                     ? {
-                        markerPath: flags["marker-path"],
-                        aliases: flags.aliases?.split(",").map((item) => item.trim()).filter(Boolean)
+                        markerPath: flags["marker-path"]
                     }
                     : undefined
             });

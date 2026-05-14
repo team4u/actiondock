@@ -579,7 +579,7 @@ class RepositoryCatalogServiceTest {
                 .setPurpose(REPO_PURPOSE_PROJECT)
                 .setUrl(projectRoot.toString())
                 .setEnabled(true)
-                .setProject(new RepositoryDefinition.ProjectSettings().setMarkerPath(".actiondock/PROJECT.md").setAliases(List.of("billing")));
+                .setProject(new RepositoryDefinition.ProjectSettings().setMarkerPath(".actiondock/PROJECT.md"));
 
         RepositoryCatalogService service = new RepositoryCatalogService(
                 repositories(List.of(repository)),
@@ -589,9 +589,9 @@ class RepositoryCatalogServiceTest {
                 null
         );
 
-        RepositoryCatalogService.ProjectRepositoryResolution resolution = service.resolveProjectRepository("billing");
+        RepositoryCatalogService.ProjectRepositoryResolution resolution = service.resolveProjectRepository("billing-service");
 
-        assertThat(resolution.projectId()).isEqualTo("billing-service");
+        assertThat(resolution.repositoryId()).isEqualTo("billing-service");
         assertThat(resolution.markerPath()).isEqualTo(".actiondock/PROJECT.md");
         assertThat(resolution.content()).contains("Billing Service");
     }

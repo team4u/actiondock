@@ -9,7 +9,7 @@ export default class RepositoryResolveCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    project: Flags.string({ description: "Project repository id or alias", required: true }),
+    project: Flags.string({ description: "Project repository id", required: true }),
     ...serverTokenFlags,
     help: Flags.help({ char: "h" })
   };

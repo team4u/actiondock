@@ -200,8 +200,7 @@ actiondock repository create \
   --type local-dir \
   --purpose project \
   --url /Users/code/projects/billing-service \
-  --marker-path .actiondock/PROJECT.md \
-  --aliases billing,账单服务
+  --marker-path .actiondock/PROJECT.md
 ```
 
 项目仓库支持：
@@ -215,12 +214,12 @@ actiondock repository create \
 
 ```bash
 actiondock repository resolve --project billing-service
-actiondock repository resolve --project 账单服务 --json
+actiondock repository resolve --project billing-service --json
 ```
 
 这个命令会：
 
-1. 按仓库 ID 或别名定位 `purpose=PROJECT` 的仓库
+1. 按仓库 ID 定位 `purpose=PROJECT` 的仓库
 2. 对 `GIT` 类型先同步本地副本
 3. 读取项目根目录下的 `PROJECT.md`
 4. 返回项目根路径、marker 路径和原始 Markdown 内容
@@ -229,7 +228,6 @@ actiondock repository resolve --project 账单服务 --json
 
 ```json
 {
-  "projectId": "billing-service",
   "repositoryId": "billing-service",
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",

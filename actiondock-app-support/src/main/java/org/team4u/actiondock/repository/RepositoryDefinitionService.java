@@ -127,12 +127,7 @@ class RepositoryDefinitionService {
         }
         RepositoryDefinition.ProjectSettings source = target == null ? null : target.getProject();
         return new RepositoryDefinition.ProjectSettings()
-                .setMarkerPath(NormalizeUtils.normalizeOrDefault(source == null ? null : source.getMarkerPath(), DEFAULT_PROJECT_MARKER_PATH))
-                .setAliases(NormalizeUtils.nullSafeList(source == null ? null : source.getAliases()).stream()
-                        .map(NormalizeUtils::normalizeNullable)
-                        .filter(java.util.Objects::nonNull)
-                        .distinct()
-                        .toList());
+                .setMarkerPath(NormalizeUtils.normalizeOrDefault(source == null ? null : source.getMarkerPath(), DEFAULT_PROJECT_MARKER_PATH));
     }
 
     private RepositoryDefinition buildRepositoryDefinition(String id,

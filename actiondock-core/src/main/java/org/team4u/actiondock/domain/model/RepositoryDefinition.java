@@ -11,7 +11,6 @@ public class RepositoryDefinition {
 
     public static class ProjectSettings {
         private String markerPath;
-        private java.util.List<String> aliases;
 
         public String getMarkerPath() {
             return markerPath;
@@ -19,15 +18,6 @@ public class RepositoryDefinition {
 
         public ProjectSettings setMarkerPath(String markerPath) {
             this.markerPath = markerPath;
-            return this;
-        }
-
-        public java.util.List<String> getAliases() {
-            return aliases;
-        }
-
-        public ProjectSettings setAliases(java.util.List<String> aliases) {
-            this.aliases = aliases;
             return this;
         }
     }

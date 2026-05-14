@@ -669,7 +669,6 @@ export interface RepositoryDefinition {
   description?: string;
   project?: {
     markerPath?: string;
-    aliases?: string[];
   };
   lastSyncedAt?: string;
   createdAt?: string;
@@ -677,7 +676,6 @@ export interface RepositoryDefinition {
 }
 
 export interface ProjectRepositoryResolution {
-  projectId: string;
   repositoryId: string;
   type: RepositoryType;
   purpose: RepositoryPurpose;

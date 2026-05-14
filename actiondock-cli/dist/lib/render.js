@@ -325,7 +325,6 @@ export function renderRepositoryDetail(item) {
 }
 export function renderProjectRepositoryResolution(item) {
     const lines = [
-        `Project: ${item.projectId}`,
         `Repository: ${item.repositoryId}`,
         `Type: ${item.type}`,
         `Purpose: ${item.purpose}`,

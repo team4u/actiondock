@@ -63,7 +63,6 @@ interface RepositoryFormValues {
   trustLevel: RepositoryDefinition["trustLevel"];
   description?: string;
   markerPath?: string;
-  aliases?: string;
 }
 
 export function RepositoryManagementPage() {
@@ -122,8 +121,7 @@ export function RepositoryManagementPage() {
       enabled: true,
       trustLevel: "UNTRUSTED",
       description: "",
-      markerPath: ".actiondock/PROJECT.md",
-      aliases: ""
+      markerPath: ".actiondock/PROJECT.md"
     });
     setRepositoryIdManuallyEdited(false);
     setEditorState({ mode: "create" });
@@ -140,8 +138,7 @@ export function RepositoryManagementPage() {
       enabled: item.enabled,
       trustLevel: item.trustLevel,
       description: item.description ?? "",
-      markerPath: item.project?.markerPath ?? ".actiondock/PROJECT.md",
-      aliases: item.project?.aliases?.join(", ") ?? ""
+      markerPath: item.project?.markerPath ?? ".actiondock/PROJECT.md"
     });
     setRepositoryIdManuallyEdited(true);
     setEditorState({ mode: "edit", repositoryId: item.id });
@@ -176,11 +173,7 @@ export function RepositoryManagementPage() {
         description: values.description?.trim() || undefined,
         project: values.purpose === "PROJECT"
           ? {
-              markerPath: values.markerPath?.trim() || undefined,
-              aliases: values.aliases
-                ?.split(",")
-                .map((item) => item.trim())
-                .filter(Boolean)
+              markerPath: values.markerPath?.trim() || undefined
             }
           : undefined
       };
@@ -575,12 +568,6 @@ export function RepositoryManagementPage() {
                 >
                   <Input placeholder=".actiondock/PROJECT.md" />
                 </Form.Item>
-                <Form.Item
-                  label={<InfoHint label="别名" content="可选，多个别名用英文逗号分隔。CLI 和 API 的 project 参数可以匹配这些别名。" />}
-                  name="aliases"
-                >
-                  <Input placeholder="例如 billing, 账单服务" />
-                </Form.Item>
               </>
             ) : null}
 
@@ -600,7 +587,7 @@ export function RepositoryManagementPage() {
       </Drawer>
 
       <Drawer
-        title={resolution ? `项目知识入口：${resolution.projectId}` : "项目知识入口"}
+        title={resolution ? `项目知识入口：${resolution.repositoryId}` : "项目知识入口"}
         open={resolutionOpen}
         onClose={() => setResolutionOpen(false)}
         width={720}

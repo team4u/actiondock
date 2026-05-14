@@ -137,7 +137,7 @@ public class SkillInstallation {
 
 如果需要处理某个业务项目，推荐遵循以下规则：
 
-1. 先识别用户要操作的项目 ID 或别名
+1. 先识别用户要操作的项目 ID
 2. 调用 `actiondock repository resolve --project <value>`
 3. 先阅读返回的 `PROJECT.md` 原文
 4. 按正文中写明的优先级去读 Markdown 文档

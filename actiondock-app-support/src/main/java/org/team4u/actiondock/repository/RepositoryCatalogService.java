@@ -56,7 +56,6 @@ import java.util.function.Function;
 public class RepositoryCatalogService {
 
     public record ProjectRepositoryResolution(
-            String projectId,
             String repositoryId,
             String type,
             String purpose,
@@ -254,7 +253,6 @@ public class RepositoryCatalogService {
         }
         try {
             return new ProjectRepositoryResolution(
-                    repository.getId(),
                     repository.getId(),
                     repository.getType(),
                     repository.getPurpose(),
@@ -990,7 +988,7 @@ public class RepositoryCatalogService {
         String normalized = NormalizeUtils.normalize(projectRef, "project 不能为空");
         return definitionService.listRepositories().stream()
                 .filter(item -> REPO_PURPOSE_PROJECT.equalsIgnoreCase(item.getPurpose()))
-                .filter(item -> normalized.equals(item.getId()) || NormalizeUtils.nullSafeList(item.getProject() == null ? null : item.getProject().getAliases()).contains(normalized))
+                .filter(item -> normalized.equals(item.getId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("项目仓库不存在: " + normalized));
     }

@@ -380,7 +380,6 @@ export function renderRepositoryDetail(item: RepositoryDefinition): string {
 
 export function renderProjectRepositoryResolution(item: ProjectRepositoryResolution): string {
   const lines = [
-    `Project: ${item.projectId}`,
     `Repository: ${item.repositoryId}`,
     `Type: ${item.type}`,
     `Purpose: ${item.purpose}`,

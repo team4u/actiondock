@@ -62,8 +62,8 @@ actiondock webhook upstream-pull <webhookId> --force
 
 ```bash
 actiondock repository list --purpose project
-actiondock repository resolve --project <projectId-or-alias>
-actiondock repository resolve --project <projectId-or-alias> --json
+actiondock repository resolve --project <repositoryId>
+actiondock repository resolve --project <repositoryId> --json
 ```
 
 约定上，项目仓库会在项目根目录放一个 `.actiondock/PROJECT.md`。CLI 会返回：

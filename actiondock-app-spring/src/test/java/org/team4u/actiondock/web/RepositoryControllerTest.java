@@ -70,9 +70,8 @@ class RepositoryControllerTest {
 
     @Test
     void resolveProjectReturnsMarkdownContent() throws Exception {
-        when(repositoryCatalogService.resolveProjectRepository("billing"))
+        when(repositoryCatalogService.resolveProjectRepository("billing-service"))
                 .thenReturn(new RepositoryCatalogService.ProjectRepositoryResolution(
-                        "billing-service",
                         "billing-service",
                         "LOCAL_DIR",
                         "PROJECT",
@@ -83,9 +82,9 @@ class RepositoryControllerTest {
                         "# Billing Service"
                 ));
 
-        mockMvc.perform(get("/api/repositories/resolve").param("project", "billing"))
+        mockMvc.perform(get("/api/repositories/resolve").param("project", "billing-service"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.projectId").value("billing-service"))
+                .andExpect(jsonPath("$.data.repositoryId").value("billing-service"))
                 .andExpect(jsonPath("$.data.markerPath").value(".actiondock/PROJECT.md"))
                 .andExpect(jsonPath("$.data.content").value("# Billing Service"));
     }

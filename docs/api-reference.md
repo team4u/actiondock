@@ -194,8 +194,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
   "enabled": true,
   "trustLevel": "UNTRUSTED",
   "project": {
-    "markerPath": ".actiondock/PROJECT.md",
-    "aliases": ["billing", "账单服务"]
+    "markerPath": ".actiondock/PROJECT.md"
   }
 }
 ```
@@ -207,13 +206,11 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `type` | 访问方式：`GIT` / `HTTP` / `LOCAL_DIR` |
 | `purpose` | 仓库用途：`CAPABILITY` / `PROJECT` |
 | `project.markerPath` | 项目知识入口文件，相对仓库根目录 |
-| `project.aliases` | 项目标识别名，可用于 `project` 参数匹配 |
 
 ### 项目仓库解析响应
 
 ```json
 {
-  "projectId": "billing-service",
   "repositoryId": "billing-service",
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",
@@ -227,7 +224,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 说明：
 
-- `project` 查询参数可传仓库 ID 或别名
+- `project` 查询参数传项目仓库 ID
 - `content` 是 `PROJECT.md` 的原始 Markdown 内容
 
 ## 定时任务 API
