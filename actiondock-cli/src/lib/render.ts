@@ -15,7 +15,6 @@ import type {
   RepositoryLocalAsset,
   RepositoryToolDescriptor,
   RepositoryToolDetail,
-  RepositoryToolInstallation,
   SchemaFieldDescriptor,
   ExecutionPresetView,
   ScriptScheduleView,
@@ -422,19 +421,6 @@ export function renderRepositoryToolDetail(item: RepositoryToolDetail): string {
   }
   if (item.scheduleTemplate.length > 0) {
     lines.push(`ScheduleTemplates: ${item.scheduleTemplate.length}`);
-  }
-  return lines.join("\n");
-}
-
-export function renderRepositoryToolInstallation(item: RepositoryToolInstallation): string {
-  const lines = [
-    `RepositoryTool: ${item.repositoryId}/${item.toolId}`,
-    `Script: ${item.scriptId ?? "-"}`,
-    `Name: ${item.name ?? "-"}`,
-    `Version: ${item.version}`
-  ];
-  if (item.latestVersion) {
-    lines.push(`LatestVersion: ${item.latestVersion}`);
   }
   return lines.join("\n");
 }

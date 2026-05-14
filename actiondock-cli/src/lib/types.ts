@@ -243,19 +243,6 @@ export interface RepositoryToolDetail {
   scheduleTemplate: unknown[];
 }
 
-export interface RepositoryToolInstallation {
-  scriptId?: string;
-  repositoryId: string;
-  toolId: string;
-  name?: string;
-  version: string;
-  latestVersion?: string;
-  owner?: string;
-  description?: string;
-  installedAt?: string;
-  updatedAt?: string;
-}
-
 export interface UpstreamStatus {
   localAssetId: string;
   repositoryId: string;

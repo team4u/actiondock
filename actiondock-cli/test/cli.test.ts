@@ -976,44 +976,38 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/install") {
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/local-assets") {
       return json(res, {
         status: 0,
         msg: "installed",
         data: {
-          scriptId: "tool-1",
+          id: `SCRIPT:${body?.mode ?? "LOCKED"}:${body?.localAssetId ?? "repo-1.tool-1"}`,
+          assetType: "SCRIPT",
+          localAssetId: body?.localAssetId ?? "repo-1.tool-1",
           repositoryId: "repo-1",
-          toolId: "tool-1",
+          upstreamAssetId: "tool-1",
+          mode: body?.mode ?? "LOCKED",
           name: "Tool 1",
-          version: "1.0.0"
+          version: "1.0.0",
+          latestVersion: "1.0.0"
         }
       });
     }
 
-    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/update") {
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/local-assets/update") {
       return json(res, {
         status: 0,
         msg: "updated",
         data: {
-          scriptId: "tool-1",
+          id: "SCRIPT:LOCKED:repo-1.tool-1",
+          assetType: "SCRIPT",
+          localAssetId: "repo-1.tool-1",
           repositoryId: "repo-1",
-          toolId: "tool-1",
+          upstreamAssetId: "tool-1",
+          mode: "LOCKED",
           name: "Tool 1",
-          version: "1.0.1"
-        }
-      });
-    }
-
-    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/working-copy") {
-      return json(res, {
-        status: 0,
-        msg: "developed",
-        data: {
-          id: body?.id ?? "tool-1-dev",
-          name: "Tool 1",
-          type: "GROOVY",
-          status: "DRAFT",
-          publishedSnapshot: null
+          version: "1.0.1",
+          latestVersion: "1.0.1"
         }
       });
     }
@@ -1892,8 +1886,9 @@ describe("CLI integration", () => {
       "--json"
     ]);
     expect(install.status).toBe(0);
-    const installRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/tools/tool-1/install");
+    const installRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/tools/tool-1/local-assets");
     expect(installRequest?.body).toEqual({
+      mode: "LOCKED",
       installSchedules: true,
       installScriptDependencies: false,
       installPluginDependencies: true,
@@ -1901,13 +1896,36 @@ describe("CLI integration", () => {
     });
 
     expect((await runCli(["repository", "tool", "update", "repo-1", "tool-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    const updateRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/tools/tool-1/local-assets/update");
+    expect(updateRequest?.body).toEqual({
+      installSchedules: false,
+      installScriptDependencies: false,
+      installPluginDependencies: false,
+      forcePluginUpgrade: false
+    });
+
     const develop = await runCli(["repository", "tool", "working-copy", "repo-1", "tool-1", "--script-id", "tool-dev", "--server", baseUrl, "--json"]);
     expect(develop.status).toBe(0);
     expect(JSON.parse(develop.stdout)).toEqual(
       expect.objectContaining({
-        id: "tool-dev"
+        localAssetId: "tool-dev",
+        mode: "TRACKED",
+        upstreamAssetId: "tool-1"
       })
     );
+    const workingCopyRequest = requests.find((item) =>
+      item.method === "POST" &&
+      item.url === "/api/repositories/repo-1/tools/tool-1/local-assets" &&
+      item.body?.mode === "TRACKED"
+    );
+    expect(workingCopyRequest?.body).toEqual({
+      mode: "TRACKED",
+      installSchedules: false,
+      installScriptDependencies: false,
+      installPluginDependencies: false,
+      forcePluginUpgrade: false,
+      localAssetId: "tool-dev"
+    });
 
     const uninstall = await runCli(["repository", "tool", "uninstall", "published-tool", "--server", baseUrl, "--json"]);
     expect(uninstall.status).toBe(0);

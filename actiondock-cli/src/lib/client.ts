@@ -29,7 +29,6 @@ import type {
   ResourceLifecycleOperationView,
   RepositoryToolDescriptor,
   RepositoryToolDetail,
-  RepositoryToolInstallation,
   PublishedScriptRevision,
   ScriptScheduleUpsertRequest,
   ScriptScheduleView,
@@ -390,10 +389,10 @@ export class ActionDockClient {
     repositoryId: string,
     toolId: string,
     payload: RepositoryInstallRequest
-  ): Promise<RepositoryToolInstallation> {
-    return this.requestJson<RepositoryToolInstallation>(`/api/repositories/${repositoryId}/tools/${toolId}/install`, {
+  ): Promise<RepositoryLocalAsset> {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ mode: "LOCKED", ...payload })
     });
   }
 
@@ -401,17 +400,24 @@ export class ActionDockClient {
     repositoryId: string,
     toolId: string,
     payload: RepositoryInstallRequest
-  ): Promise<RepositoryToolInstallation> {
-    return this.requestJson<RepositoryToolInstallation>(`/api/repositories/${repositoryId}/tools/${toolId}/update`, {
+  ): Promise<RepositoryLocalAsset> {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets/update`, {
       method: "POST",
       body: JSON.stringify(payload)
     });
   }
 
-  async createRepositoryToolWorkingCopy(repositoryId: string, toolId: string, scriptId?: string): Promise<ScriptDefinition> {
-    return this.requestJson<ScriptDefinition>(`/api/repositories/${repositoryId}/tools/${toolId}/working-copy`, {
+  async createRepositoryToolWorkingCopy(repositoryId: string, toolId: string, localAssetId?: string): Promise<RepositoryLocalAsset> {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
       method: "POST",
-      body: JSON.stringify(scriptId ? { id: scriptId } : {})
+      body: JSON.stringify({
+        mode: "TRACKED",
+        installSchedules: false,
+        installScriptDependencies: false,
+        installPluginDependencies: false,
+        forcePluginUpgrade: false,
+        ...(localAssetId ? { localAssetId } : {})
+      })
     });
   }
 

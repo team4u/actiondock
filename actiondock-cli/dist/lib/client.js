@@ -279,21 +279,28 @@ export class ActionDockClient {
         return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}`);
     }
     async installRepositoryTool(repositoryId, toolId, payload) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/install`, {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
             method: "POST",
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ mode: "LOCKED", ...payload })
         });
     }
     async updateRepositoryTool(repositoryId, toolId, payload) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/update`, {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets/update`, {
             method: "POST",
             body: JSON.stringify(payload)
         });
     }
-    async createRepositoryToolWorkingCopy(repositoryId, toolId, scriptId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/working-copy`, {
+    async createRepositoryToolWorkingCopy(repositoryId, toolId, localAssetId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
             method: "POST",
-            body: JSON.stringify(scriptId ? { id: scriptId } : {})
+            body: JSON.stringify({
+                mode: "TRACKED",
+                installSchedules: false,
+                installScriptDependencies: false,
+                installPluginDependencies: false,
+                forcePluginUpgrade: false,
+                ...(localAssetId ? { localAssetId } : {})
+            })
         });
     }
     async uninstallRepositoryTool(scriptId) {

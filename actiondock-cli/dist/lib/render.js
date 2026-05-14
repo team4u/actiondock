@@ -369,18 +369,6 @@ export function renderRepositoryToolDetail(item) {
     }
     return lines.join("\n");
 }
-export function renderRepositoryToolInstallation(item) {
-    const lines = [
-        `RepositoryTool: ${item.repositoryId}/${item.toolId}`,
-        `Script: ${item.scriptId ?? "-"}`,
-        `Name: ${item.name ?? "-"}`,
-        `Version: ${item.version}`
-    ];
-    if (item.latestVersion) {
-        lines.push(`LatestVersion: ${item.latestVersion}`);
-    }
-    return lines.join("\n");
-}
 export function renderUpstreamStatus(item) {
     const lines = [
         `ResourceId: ${item.localAssetId}`,

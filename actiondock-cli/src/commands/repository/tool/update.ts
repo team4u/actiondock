@@ -2,7 +2,7 @@ import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../../lib/command.js";
 import { buildRepositoryInstallRequest, createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
-import { renderRepositoryToolInstallation } from "../../../lib/render.js";
+import { renderRepositoryLocalAsset } from "../../../lib/render.js";
 
 export default class RepositoryToolUpdateCommand extends BaseCommand {
   static description = "Update an installed repository tool";
@@ -26,7 +26,7 @@ export default class RepositoryToolUpdateCommand extends BaseCommand {
     const { args, flags } = await this.parse(RepositoryToolUpdateCommand);
     try {
       const item = await createClient(flags).updateRepositoryTool(args.repositoryId, args.toolId, buildRepositoryInstallRequest(flags));
-      flags.json ? this.printJson(item) : this.log(renderRepositoryToolInstallation(item));
+      flags.json ? this.printJson(item) : this.log(renderRepositoryLocalAsset(item));
     } catch (error) {
       this.handleError(error, flags.json);
     }
