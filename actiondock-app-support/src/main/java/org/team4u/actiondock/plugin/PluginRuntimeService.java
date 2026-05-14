@@ -230,19 +230,29 @@ public class PluginRuntimeService {
             if (NormalizeUtils.isNotBlank(repositoryVersion) && !repositoryVersion.equals(manifest.getVersion())) {
                 throw new IllegalArgumentException("插件版本与仓库描述不一致: " + manifest.getVersion());
             }
+            unloadIfLoaded(pluginId);
         } catch (Exception exception) {
             if (pluginId != null) {
                 unloadIfLoaded(pluginId);
+                manifestCache.remove(pluginId);
             }
             deleteSilently(staging);
             throw exception;
         }
         try {
             Files.move(staging, destination);
+            loadPlugin(destination);
+            cacheManifest(pluginId);
         } catch (IOException exception) {
             unloadIfLoaded(pluginId);
+            manifestCache.remove(pluginId);
             deleteSilently(staging);
             throw new IllegalStateException("提交插件文件失败: " + destination.getFileName(), exception);
+        } catch (Exception exception) {
+            unloadIfLoaded(pluginId);
+            manifestCache.remove(pluginId);
+            deleteSilently(destination);
+            throw exception;
         }
         return pluginId;
     }
@@ -618,6 +628,14 @@ public class PluginRuntimeService {
     private boolean isLoadedAndStarted(String pluginId) {
         PluginWrapper wrapper = pluginManager.getPlugin(pluginId);
         return wrapper != null && wrapper.getPluginState().isStarted();
+    }
+
+    Path getPluginPath(String pluginId) {
+        PluginWrapper wrapper = pluginManager.getPlugin(pluginId);
+        if (wrapper == null) {
+            throw new IllegalArgumentException("插件未加载到 JVM: " + pluginId);
+        }
+        return wrapper.getPluginPath();
     }
 
     private ActionDockPlugin requireLoadedExtension(String pluginId) {

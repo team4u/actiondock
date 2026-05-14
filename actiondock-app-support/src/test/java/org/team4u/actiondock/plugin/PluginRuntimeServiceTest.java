@@ -125,6 +125,63 @@ class PluginRuntimeServiceTest {
     }
 
     @Test
+    void installLoadsPluginFromFinalPathAfterStagingValidation() throws IOException {
+        Path pluginJar = buildPluginJar(
+                Files.createTempFile("actiondock-plugin-upload-", ".jar"),
+                demoPluginManifestJson("0.2.0", "ActionDock Demo Plugin")
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+
+        PluginRegistration registration = repository.findByPluginId("actiondock-demo-plugin").orElseThrow();
+        assertThat(service.getPluginPath("actiondock-demo-plugin"))
+                .isEqualTo(tempDir.resolve(registration.getFileName()));
+        assertThat(service.getPluginPath("actiondock-demo-plugin").toString()).doesNotContain(".staging");
+        assertThat(service.invoke(
+                "actiondock-demo-plugin",
+                "echo",
+                null,
+                null,
+                null,
+                Map.of("message", "hello")
+        )).isEqualTo(Map.of("message", "demo:hello"));
+    }
+
+    @Test
+    void upgradeWithSameUploadFilenameLoadsPluginFromNewFinalPath() throws IOException {
+        Path pluginJar = buildPluginJar(
+                Files.createTempFile("actiondock-plugin-upload-", ".jar"),
+                demoPluginManifestJson("0.2.0", "ActionDock Demo Plugin")
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+        String oldFileName = repository.findByPluginId("actiondock-demo-plugin").orElseThrow().getFileName();
+
+        Path upgradedJar = buildPluginJar(
+                Files.createTempFile("actiondock-plugin-upgrade-", ".jar"),
+                demoPluginManifestJson("0.3.0", "ActionDock Demo Plugin Upgraded")
+        );
+
+        PluginView upgraded = service.upgrade("actiondock-demo-plugin", "demo-plugin.jar", Files.readAllBytes(upgradedJar));
+
+        PluginRegistration registration = repository.findByPluginId("actiondock-demo-plugin").orElseThrow();
+        assertThat(upgraded.getVersion()).isEqualTo("0.3.0");
+        assertThat(registration.getFileName()).isNotEqualTo(oldFileName);
+        assertThat(registration.getFileName()).startsWith("demo-plugin-").endsWith(".jar");
+        assertThat(service.getPluginPath("actiondock-demo-plugin"))
+                .isEqualTo(tempDir.resolve(registration.getFileName()));
+        assertThat(service.getPluginPath("actiondock-demo-plugin").toString()).doesNotContain(".staging");
+        assertThat(Files.exists(tempDir.resolve(oldFileName))).isFalse();
+    }
+
+    @Test
     void initializesOnlyEnabledPluginsFromRegistry() throws IOException {
         Path pluginJar = buildPluginJar(tempDir.resolve("enabled-plugin.jar"), demoPluginManifestJson("0.2.0", "ActionDock Demo Plugin"));
         InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();

@@ -1,6 +1,9 @@
 package org.team4u.actiondock.web;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,6 +24,7 @@ import org.team4u.actiondock.plugin.PluginView;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -48,6 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 )
 @AutoConfigureMockMvc
 @Import(GlobalExceptionHandler.class)
+@ExtendWith(OutputCaptureExtension.class)
 class PluginControllerTest {
     @Autowired
     private MockMvc mockMvc;
@@ -180,7 +185,7 @@ class PluginControllerTest {
     }
 
     @Test
-    void invokeReturnsStructuredErrorDetailWhenPluginFails() throws Exception {
+    void invokeReturnsStructuredErrorDetailWhenPluginFails(CapturedOutput output) throws Exception {
         when(pluginRuntimeService.invokeForDebug(
                 eq("demo-plugin"),
                 eq("echo"),
@@ -203,5 +208,23 @@ class PluginControllerTest {
                 .andExpect(jsonPath("$.msg").value("plugin failed"))
                 .andExpect(jsonPath("$.data.type").value("java.lang.IllegalStateException"))
                 .andExpect(jsonPath("$.data.stackTrace").exists());
+
+        assertThat(output).contains("ERROR");
+        assertThat(output).contains("API exception status=500 method=POST uri=/api/plugins/demo-plugin/actions/echo/invoke message=plugin failed");
+    }
+
+    @Test
+    void installLogsBadRequestWhenPluginValidationFails(CapturedOutput output) throws Exception {
+        when(pluginRuntimeService.install(eq("demo.jar"), any(byte[].class)))
+                .thenThrow(new IllegalArgumentException("bad plugin"));
+
+        mockMvc.perform(multipart("/api/plugins/install")
+                        .file(new MockMultipartFile("file", "demo.jar", "application/java-archive", "jar".getBytes())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.msg").value("bad plugin"));
+
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("API exception status=400 method=POST uri=/api/plugins/install message=bad plugin");
     }
 }
