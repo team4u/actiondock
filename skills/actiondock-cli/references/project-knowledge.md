@@ -18,19 +18,21 @@
 actiondock repository list --purpose project --json
 ```
 
-如果是 `GIT` 类型项目仓库，先同步：
-
-```bash
-actiondock repository sync <repositoryId> --json
-```
-
 再解析具体项目：
 
 ```bash
 actiondock repository resolve --repository-id <repositoryId> --json
 ```
 
-这个命令只做定位和读取，不会触发仓库同步。`GIT` 类型项目仓库需要先准备好本地副本。
+这个命令只做定位和读取，不会触发仓库同步。
+
+如果需要手工同步仓库，也可以使用：
+
+```bash
+actiondock repository sync <repositoryId> --json
+```
+
+这个命令主要用于手工刷新仓库内容，不是读取项目知识入口的必经步骤。
 
 ## 返回结果理解
 
@@ -53,33 +55,17 @@ actiondock repository resolve --repository-id <repositoryId> --json
 
 - `root`: 项目根目录
 - `entryPath`: 项目知识入口文件，相对项目根目录
-- `content`: `ACTIONDOCK.md` 原始内容
+- `content`: 入口文件原始内容
 
 ## 工作流
 
-### 1. 先读 `content`
+### 1. 先读入口文件正文
 
-`content` 通常会告诉你：
+返回结果里的 `content` 就是 `ACTIONDOCK.md` 正文。先读这份正文，再继续后面的文件读取和检索。
 
-- 项目概览
-- 哪些知识文档优先阅读
-- 某类任务应该优先看哪些文件
-- 推荐关键词
-- 哪些目录不要优先搜索
+### 2. 按正文继续读取
 
-### 2. 优先读 Markdown 知识文件
-
-如果正文提到这些文件，优先读：
-
-- `overview.md`
-- `database.md`
-- `workflows.md`
-- `runbooks/`
-
-或者正文里提到的更细粒度文件，例如：
-
-- `workflows/refund.md`
-- `runbooks/refund-compensation.md`
+接下来按 `ACTIONDOCK.md` 正文里给出的文件路径、目录、任务说明和关键词继续读取。
 
 ### 3. 只在必要时读源码
 
@@ -91,12 +77,20 @@ actiondock repository resolve --repository-id <repositoryId> --json
 
 ### 4. 避免低价值目录
 
-如果 `ACTIONDOCK.md` 没给出更具体规则，默认不要优先搜索：
+如果 `ACTIONDOCK.md` 没给出更具体规则，默认不要优先搜索这些目录或忽略文件：
 
 - `dist`
 - `build`
 - `node_modules`
 - `.git`
+- `.gitignore`
+- `.ignore`
+- `.dockerignore`
+- `.npmignore`
+- `.eslintignore`
+- `.prettierignore`
+
+可以把这类文件统一理解为各类 `*ignore` 文件，通常不提供业务知识。
 
 ## 回答用户时要体现的依据
 
