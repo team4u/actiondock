@@ -71,7 +71,7 @@ POST /api/webhooks/{id}/test-webhook
 
 ## 定时任务
 
-定时任务能力不变，继续通过：
+定时任务通过：
 
 - `GET /api/schedules`
 - `POST /api/schedules`
