@@ -667,9 +667,6 @@ export interface RepositoryDefinition {
   enabled: boolean;
   trustLevel: RepositoryTrustLevel;
   description?: string;
-  project?: {
-    markerPath?: string;
-  };
   lastSyncedAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -680,7 +677,7 @@ export interface ProjectRepositoryResolution {
   type: RepositoryType;
   purpose: RepositoryPurpose;
   root: string;
-  markerPath: string;
+  entryPath: string;
   enabled: boolean;
   exists: boolean;
   content: string;

@@ -67,8 +67,8 @@ export function syncRepository(id: string): Promise<RepositoryDefinition> {
   });
 }
 
-export function resolveProjectRepository(project: string): Promise<ProjectRepositoryResolution> {
-  return request<ProjectRepositoryResolution>(`/api/repositories/resolve?project=${encodeURIComponent(project)}`);
+export function resolveProjectRepository(repositoryId: string): Promise<ProjectRepositoryResolution> {
+  return request<ProjectRepositoryResolution>(`/api/repositories/resolve?repositoryId=${encodeURIComponent(repositoryId)}`);
 }
 
 export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {

@@ -69,8 +69,8 @@ public class RepositoryController {
     }
 
     @GetMapping("/resolve")
-    public ApiResponse<RepositoryCatalogService.ProjectRepositoryResolution> resolveProject(@RequestParam("project") String project) {
-        return ApiResponse.success(repositoryCatalogService.resolveProjectRepository(project));
+    public ApiResponse<RepositoryCatalogService.ProjectRepositoryResolution> resolveProject(@RequestParam("repositoryId") String repositoryId) {
+        return ApiResponse.success(repositoryCatalogService.resolveProjectRepository(repositoryId));
     }
 
     /**

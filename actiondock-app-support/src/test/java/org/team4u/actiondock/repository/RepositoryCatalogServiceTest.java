@@ -570,16 +570,15 @@ class RepositoryCatalogServiceTest {
     @Test
     void resolveProjectRepositoryReturnsRawMarkdownContent() throws Exception {
         Path projectRoot = tempDir.resolve("billing-service");
-        Files.createDirectories(projectRoot.resolve(".actiondock"));
-        Files.writeString(projectRoot.resolve(".actiondock/PROJECT.md"), "# Billing Service\n\nUse docs first.\n");
+        Files.createDirectories(projectRoot);
+        Files.writeString(projectRoot.resolve("ACTIONDOCK.md"), "# Billing Service\n\nUse docs first.\n");
         RepositoryDefinition repository = new RepositoryDefinition()
                 .setId("billing-service")
                 .setName("Billing Service")
                 .setType(REPO_TYPE_LOCAL_DIR)
                 .setPurpose(REPO_PURPOSE_PROJECT)
                 .setUrl(projectRoot.toString())
-                .setEnabled(true)
-                .setProject(new RepositoryDefinition.ProjectSettings().setMarkerPath(".actiondock/PROJECT.md"));
+                .setEnabled(true);
 
         RepositoryCatalogService service = new RepositoryCatalogService(
                 repositories(List.of(repository)),
@@ -592,7 +591,7 @@ class RepositoryCatalogServiceTest {
         RepositoryCatalogService.ProjectRepositoryResolution resolution = service.resolveProjectRepository("billing-service");
 
         assertThat(resolution.repositoryId()).isEqualTo("billing-service");
-        assertThat(resolution.markerPath()).isEqualTo(".actiondock/PROJECT.md");
+        assertThat(resolution.entryPath()).isEqualTo("ACTIONDOCK.md");
         assertThat(resolution.content()).contains("Billing Service");
     }
 
@@ -608,8 +607,7 @@ class RepositoryCatalogServiceTest {
                 .setType(REPO_TYPE_LOCAL_DIR)
                 .setPurpose(REPO_PURPOSE_PROJECT)
                 .setUrl(projectRoot.toString())
-                .setEnabled(true)
-                .setProject(new RepositoryDefinition.ProjectSettings().setMarkerPath(".actiondock/PROJECT.md")));
+                .setEnabled(true));
 
         assertThat(saved.getPurpose()).isEqualTo(REPO_PURPOSE_PROJECT);
         assertThat(Files.exists(projectRoot.resolve(REPOSITORY_INDEX_FILE))).isFalse();

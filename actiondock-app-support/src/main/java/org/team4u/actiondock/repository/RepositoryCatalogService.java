@@ -60,7 +60,7 @@ public class RepositoryCatalogService {
             String type,
             String purpose,
             String root,
-            String markerPath,
+            String entryPath,
             boolean enabled,
             boolean exists,
             String content
@@ -237,18 +237,18 @@ public class RepositoryCatalogService {
         return repos.repositoryDefinitionRepository().save(repository);
     }
 
-    public ProjectRepositoryResolution resolveProjectRepository(String projectRef) {
-        RepositoryDefinition repository = findProjectRepository(projectRef);
+    public ProjectRepositoryResolution resolveProjectRepository(String repositoryId) {
+        RepositoryDefinition repository = findProjectRepository(repositoryId);
         Path root = resolveRepositoryRoot(repository);
         if (REPO_TYPE_GIT.equals(repository.getType())) {
             gitOps.syncGitRepository(repository, root);
         }
         boolean exists = Files.exists(root);
-        Path marker = safeResolveProjectMarkerPath(root, repository);
-        if (!Files.exists(marker)) {
+        Path entry = safeResolveProjectEntryPath(root);
+        if (!Files.exists(entry)) {
             throw new IllegalArgumentException("项目知识入口不存在: " + repository.getId());
         }
-        if (!Files.isRegularFile(marker)) {
+        if (!Files.isRegularFile(entry)) {
             throw new IllegalArgumentException("项目知识入口必须是文件: " + repository.getId());
         }
         try {
@@ -257,13 +257,13 @@ public class RepositoryCatalogService {
                     repository.getType(),
                     repository.getPurpose(),
                     root.toString(),
-                    repository.getProject().getMarkerPath(),
+                    DEFAULT_PROJECT_ENTRY_PATH,
                     repository.isEnabled(),
                     exists,
-                    Files.readString(marker, StandardCharsets.UTF_8)
+                    Files.readString(entry, StandardCharsets.UTF_8)
             );
         } catch (IOException exception) {
-            throw new IllegalStateException("读取项目知识入口失败: " + marker, exception);
+            throw new IllegalStateException("读取项目知识入口失败: " + entry, exception);
         }
     }
 
@@ -984,8 +984,8 @@ public class RepositoryCatalogService {
         return definitionService.resolveRepositoryRoot(repository);
     }
 
-    private RepositoryDefinition findProjectRepository(String projectRef) {
-        String normalized = NormalizeUtils.normalize(projectRef, "project 不能为空");
+    private RepositoryDefinition findProjectRepository(String repositoryId) {
+        String normalized = NormalizeUtils.normalize(repositoryId, "repositoryId 不能为空");
         return definitionService.listRepositories().stream()
                 .filter(item -> REPO_PURPOSE_PROJECT.equalsIgnoreCase(item.getPurpose()))
                 .filter(item -> normalized.equals(item.getId()))
@@ -993,11 +993,8 @@ public class RepositoryCatalogService {
                 .orElseThrow(() -> new IllegalArgumentException("项目仓库不存在: " + normalized));
     }
 
-    private Path safeResolveProjectMarkerPath(Path root, RepositoryDefinition repository) {
-        if (repository.getProject() == null) {
-            throw new IllegalArgumentException("项目仓库缺少 markerPath: " + repository.getId());
-        }
-        return safeResolvePath(root, repository.getProject().getMarkerPath(), "项目知识入口路径");
+    private Path safeResolveProjectEntryPath(Path root) {
+        return safeResolvePath(root, DEFAULT_PROJECT_ENTRY_PATH, "项目知识入口路径");
     }
 
     private static boolean isTrusted(RepositoryDefinition repository) {

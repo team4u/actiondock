@@ -199,8 +199,7 @@ actiondock repository create \
   --name "Billing Service" \
   --type local-dir \
   --purpose project \
-  --url /Users/code/projects/billing-service \
-  --marker-path .actiondock/PROJECT.md
+  --url /Users/code/projects/billing-service
 ```
 
 项目仓库支持：
@@ -208,21 +207,21 @@ actiondock repository create \
 - `--type git`
 - `--type local-dir`
 
-默认知识入口文件是 `.actiondock/PROJECT.md`。
+项目知识入口固定为仓库根目录 `ACTIONDOCK.md`。
 
 ### 解析项目知识入口
 
 ```bash
-actiondock repository resolve --project billing-service
-actiondock repository resolve --project billing-service --json
+actiondock repository resolve --repository-id billing-service
+actiondock repository resolve --repository-id billing-service --json
 ```
 
 这个命令会：
 
 1. 按仓库 ID 定位 `purpose=PROJECT` 的仓库
 2. 对 `GIT` 类型先同步本地副本
-3. 读取项目根目录下的 `PROJECT.md`
-4. 返回项目根路径、marker 路径和原始 Markdown 内容
+3. 读取项目根目录下的 `ACTIONDOCK.md`
+4. 返回项目根路径、入口路径和原始 Markdown 内容
 
 ### 返回结果示例
 
@@ -232,7 +231,7 @@ actiondock repository resolve --project billing-service --json
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",
   "root": "/Users/code/projects/billing-service",
-  "markerPath": ".actiondock/PROJECT.md",
+  "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
   "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
@@ -291,7 +290,7 @@ actiondock script publish my-script
 actiondock script run my-script --name alice --json
 
 # 8. 解析项目仓库知识入口
-actiondock repository resolve --project my-project --json
+actiondock repository resolve --repository-id my-project --json
 ```
 
 ## 常见问题

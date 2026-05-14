@@ -24,7 +24,7 @@ ActionDock 做的核心事情是：
 - 统一脚本抽象 — 脚本不是一段源码，而是带 Schema、发布快照、依赖、日志和执行入口的脚本资产
 - 多入口复用 — 管理台、REST API、CLI、Agent 共用同一脚本
 - 仓库化协作 — 脚本、插件、AI 能力包可从仓库发现、安装、更新
-- 项目知识解析 — 项目仓库可通过 `repository resolve --project` 返回 `PROJECT.md` 原文，供后续检索
+- 项目知识解析 — 项目仓库可通过 `repository resolve --repository-id` 返回 `ACTIONDOCK.md` 原文，供后续检索
 - Webhook仓库资产 — Webhook可连同配置模板和脚本依赖一起发布、安装
 - AI 原生集成 — 脚本可暴露给 Agent，AI 辅助生成、诊断、Review
 - 治理能力完整 — 内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复
@@ -113,7 +113,7 @@ npm run build     # 构建
 | 文档 | 说明 |
 |------|------|
 | [让脚本真正可复用](docs/script-platform.md) | 项目理念与核心能力介绍 |
-| [仓库与分发](docs/repository-distribution.md) | 能力仓库、项目仓库、`PROJECT.md` 知识入口 |
+| [仓库与分发](docs/repository-distribution.md) | 能力仓库、项目仓库、`ACTIONDOCK.md` 知识入口 |
 | [用户手册](docs/user-manual.md) | 完整文档入口 |
 
 ## 技术栈

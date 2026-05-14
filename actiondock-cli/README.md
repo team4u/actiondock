@@ -62,15 +62,15 @@ actiondock webhook upstream-pull <webhookId> --force
 
 ```bash
 actiondock repository list --purpose project
-actiondock repository resolve --project <repositoryId>
-actiondock repository resolve --project <repositoryId> --json
+actiondock repository resolve --repository-id <repositoryId>
+actiondock repository resolve --repository-id <repositoryId> --json
 ```
 
-约定上，项目仓库会在项目根目录放一个 `.actiondock/PROJECT.md`。CLI 会返回：
+约定上，项目仓库会在项目根目录放一个 `ACTIONDOCK.md`。CLI 会返回：
 
 - 项目根目录
 - marker 路径
-- `PROJECT.md` 的原始 Markdown 内容
+- `ACTIONDOCK.md` 的原始 Markdown 内容
 
 后续再根据正文去读取 `overview.md`、`database.md`、`workflows.md`、`runbooks/` 或源码。
 

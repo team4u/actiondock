@@ -38,7 +38,6 @@ public class JpaRepositoryDefinitionRepositoryAdapter
         entity.setEnabled(definition.isEnabled());
         entity.setTrustLevel(definition.getTrustLevel());
         entity.setDescription(definition.getDescription());
-        entity.setProjectMarkerPath(definition.getProject() == null ? null : definition.getProject().getMarkerPath());
         entity.setLastSyncedAt(definition.getLastSyncedAt());
         entity.setCreatedAt(definition.getCreatedAt());
         entity.setUpdatedAt(definition.getUpdatedAt());
@@ -63,8 +62,6 @@ public class JpaRepositoryDefinitionRepositoryAdapter
                 .setEnabled(entity.isEnabled())
                 .setTrustLevel(entity.getTrustLevel())
                 .setDescription(entity.getDescription())
-                .setProject(new RepositoryDefinition.ProjectSettings()
-                        .setMarkerPath(entity.getProjectMarkerPath()))
                 .setLastSyncedAt(entity.getLastSyncedAt())
                 .setCreatedAt(entity.getCreatedAt())
                 .setUpdatedAt(entity.getUpdatedAt());

@@ -192,9 +192,6 @@ export interface RepositoryDefinition {
   enabled: boolean;
   trustLevel: string;
   description?: string;
-  project?: {
-    markerPath?: string;
-  };
   lastSyncedAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -205,7 +202,7 @@ export interface ProjectRepositoryResolution {
   type: string;
   purpose: string;
   root: string;
-  markerPath: string;
+  entryPath: string;
   enabled: boolean;
   exists: boolean;
   content: string;

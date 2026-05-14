@@ -72,7 +72,7 @@ public final class RepositoryCatalogTypes {
     /** 仓库用途：项目仓库。 */
     public static final String REPO_PURPOSE_PROJECT = "PROJECT";
     /** 项目知识入口默认文件。 */
-    public static final String DEFAULT_PROJECT_MARKER_PATH = ".actiondock/PROJECT.md";
+    public static final String DEFAULT_PROJECT_ENTRY_PATH = "ACTIONDOCK.md";
 
     public static final String ERR_HTTP_REPO_UNSUPPORTED_EXPORT = "HTTP 仓库暂不支持导出 Skill 归档";
     public static final String ERR_HTTP_REPO_UNSUPPORTED_PUBLISH = "HTTP 仓库暂不支持发布";

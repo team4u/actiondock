@@ -16,7 +16,6 @@ export default class RepositoryUpdateCommand extends BaseCommand {
         branch: Flags.string({ description: "Git branch" }),
         "trust-level": Flags.string({ description: "Repository trust level", options: ["trusted", "untrusted"], default: "untrusted" }),
         description: Flags.string({ description: "Repository description" }),
-        "marker-path": Flags.string({ description: "Project knowledge marker path", default: ".actiondock/PROJECT.md" }),
         enabled: Flags.boolean({ description: "Mark repository as enabled" }),
         disabled: Flags.boolean({ description: "Mark repository as disabled" }),
         ...serverTokenFlags,
@@ -35,12 +34,7 @@ export default class RepositoryUpdateCommand extends BaseCommand {
                 trustLevel: flags["trust-level"].toUpperCase().replace("-", "_"),
                 description: flags.description,
                 enabled: flags.disabled ? false : true,
-                purpose: isProject ? "PROJECT" : undefined,
-                project: isProject
-                    ? {
-                        markerPath: flags["marker-path"]
-                    }
-                    : undefined
+                purpose: isProject ? "PROJECT" : undefined
             });
             flags.json ? this.printJson(item) : this.log(renderRepositoryDetail(item));
         }

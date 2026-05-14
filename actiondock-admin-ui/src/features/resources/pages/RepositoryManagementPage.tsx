@@ -62,7 +62,6 @@ interface RepositoryFormValues {
   enabled: boolean;
   trustLevel: RepositoryDefinition["trustLevel"];
   description?: string;
-  markerPath?: string;
 }
 
 export function RepositoryManagementPage() {
@@ -120,8 +119,7 @@ export function RepositoryManagementPage() {
       branch: "",
       enabled: true,
       trustLevel: "UNTRUSTED",
-      description: "",
-      markerPath: ".actiondock/PROJECT.md"
+      description: ""
     });
     setRepositoryIdManuallyEdited(false);
     setEditorState({ mode: "create" });
@@ -137,8 +135,7 @@ export function RepositoryManagementPage() {
       branch: item.branch,
       enabled: item.enabled,
       trustLevel: item.trustLevel,
-      description: item.description ?? "",
-      markerPath: item.project?.markerPath ?? ".actiondock/PROJECT.md"
+      description: item.description ?? ""
     });
     setRepositoryIdManuallyEdited(true);
     setEditorState({ mode: "edit", repositoryId: item.id });
@@ -170,12 +167,7 @@ export function RepositoryManagementPage() {
         branch: values.type === "GIT" ? values.branch?.trim() || undefined : undefined,
         enabled: values.enabled,
         trustLevel: values.trustLevel,
-        description: values.description?.trim() || undefined,
-        project: values.purpose === "PROJECT"
-          ? {
-              markerPath: values.markerPath?.trim() || undefined
-            }
-          : undefined
+        description: values.description?.trim() || undefined
       };
       const saved = editorState?.mode === "edit" && editorState.repositoryId
         ? await updateRepository(editorState.repositoryId, payload)
@@ -326,12 +318,6 @@ export function RepositoryManagementPage() {
       render: (value: RepositoryDefinition["type"]) => getRepositoryTypeLabel(value)
     },
     {
-      title: "Marker",
-      key: "markerPath",
-      width: 200,
-      render: (_value: unknown, record) => record.project?.markerPath ?? ".actiondock/PROJECT.md"
-    },
-    {
       title: "最近同步",
       dataIndex: "lastSyncedAt",
       key: "lastSyncedAt",
@@ -455,7 +441,7 @@ export function RepositoryManagementPage() {
                       emptyText: (
                         <Empty
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description="还没有配置项目仓库。添加后可通过 Resolve 读取 .actiondock/PROJECT.md。"
+                          description="还没有配置项目仓库。添加后可通过 Resolve 读取根目录 ACTIONDOCK.md。"
                         />
                       )
                     }}
@@ -550,25 +536,13 @@ export function RepositoryManagementPage() {
             ) : null}
 
             {repositoryPurpose === "PROJECT" ? (
-              <Text type="secondary">项目仓库不会初始化 actiondock.repository.json，只会在 Resolve 时读取知识入口 Markdown。</Text>
+              <Text type="secondary">项目仓库不会初始化 actiondock.repository.json，只会在 Resolve 时读取根目录 ACTIONDOCK.md。</Text>
             ) : null}
 
             {repositoryType === "GIT" ? (
               <Form.Item label="分支" name="branch">
                 <Input placeholder="main" />
               </Form.Item>
-            ) : null}
-
-            {repositoryPurpose === "PROJECT" ? (
-              <>
-                <Form.Item
-                  label="知识入口路径"
-                  name="markerPath"
-                  rules={[{ required: true, message: "请输入项目知识入口路径" }]}
-                >
-                  <Input placeholder=".actiondock/PROJECT.md" />
-                </Form.Item>
-              </>
             ) : null}
 
             <Form.Item label="说明" name="description">
@@ -598,11 +572,11 @@ export function RepositoryManagementPage() {
               <Space direction="vertical" size={4}>
                 <Text><strong>仓库：</strong>{resolution.repositoryId}</Text>
                 <Text><strong>根目录：</strong>{resolution.root}</Text>
-                <Text><strong>Marker：</strong>{resolution.markerPath}</Text>
+                <Text><strong>Entry：</strong>{resolution.entryPath}</Text>
                 <Text><strong>类型：</strong>{getRepositoryTypeLabel(resolution.type)}</Text>
               </Space>
             </Card>
-            <Card size="small" title="PROJECT.md">
+            <Card size="small" title="ACTIONDOCK.md">
               <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
                 {resolution.content}
               </Paragraph>

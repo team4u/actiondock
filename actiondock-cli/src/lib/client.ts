@@ -376,8 +376,8 @@ export class ActionDockClient {
     });
   }
 
-  async resolveProjectRepository(project: string): Promise<ProjectRepositoryResolution> {
-    return this.requestJson<ProjectRepositoryResolution>(`/api/repositories/resolve?${new URLSearchParams({ project }).toString()}`);
+  async resolveProjectRepository(repositoryId: string): Promise<ProjectRepositoryResolution> {
+    return this.requestJson<ProjectRepositoryResolution>(`/api/repositories/resolve?${new URLSearchParams({ repositoryId }).toString()}`);
   }
 
   async listRepositoryTools(repositoryId?: string): Promise<RepositoryToolDescriptor[]> {

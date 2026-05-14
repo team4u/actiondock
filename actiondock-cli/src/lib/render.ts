@@ -384,7 +384,7 @@ export function renderProjectRepositoryResolution(item: ProjectRepositoryResolut
     `Type: ${item.type}`,
     `Purpose: ${item.purpose}`,
     `Root: ${item.root}`,
-    `Marker: ${item.markerPath}`,
+    `Entry: ${item.entryPath}`,
     `Enabled: ${item.enabled ? "yes" : "no"}`,
     `Exists: ${item.exists ? "yes" : "no"}`,
     "Content:",

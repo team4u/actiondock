@@ -176,7 +176,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `GET` | `/api/repositories/{id}` | 仓库详情 |
 | `PUT` | `/api/repositories/{id}` | 更新仓库 |
 | `DELETE` | `/api/repositories/{id}` | 删除仓库 |
-| `GET` | `/api/repositories/resolve?project={value}` | 解析项目仓库并返回 `PROJECT.md` 原文 |
+| `GET` | `/api/repositories/resolve?repositoryId={value}` | 解析项目仓库并返回 `ACTIONDOCK.md` 原文 |
 | `POST` | `/api/repositories/{id}/sync` | 同步仓库 |
 | `GET` | `/api/repositories/{id}/tools` | 列出仓库中的可用工具 |
 | `POST` | `/api/repositories/{id}/tools/{toolId}/local-assets` | 添加仓库工具到本地 |
@@ -192,10 +192,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
   "purpose": "PROJECT",
   "url": "/Users/code/projects/billing-service",
   "enabled": true,
-  "trustLevel": "UNTRUSTED",
-  "project": {
-    "markerPath": ".actiondock/PROJECT.md"
-  }
+  "trustLevel": "UNTRUSTED"
 }
 ```
 
@@ -205,7 +202,6 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 |------|------|
 | `type` | 访问方式：`GIT` / `HTTP` / `LOCAL_DIR` |
 | `purpose` | 仓库用途：`CAPABILITY` / `PROJECT` |
-| `project.markerPath` | 项目知识入口文件，相对仓库根目录 |
 
 ### 项目仓库解析响应
 
@@ -215,7 +211,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",
   "root": "/Users/code/projects/billing-service",
-  "markerPath": ".actiondock/PROJECT.md",
+  "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
   "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
@@ -224,8 +220,8 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 说明：
 
-- `project` 查询参数传项目仓库 ID
-- `content` 是 `PROJECT.md` 的原始 Markdown 内容
+- `repositoryId` 查询参数传项目仓库 ID
+- `content` 是 `ACTIONDOCK.md` 的原始 Markdown 内容
 
 ## 定时任务 API
 

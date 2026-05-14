@@ -76,16 +76,16 @@ class RepositoryControllerTest {
                         "LOCAL_DIR",
                         "PROJECT",
                         "/tmp/billing",
-                        ".actiondock/PROJECT.md",
+                        "ACTIONDOCK.md",
                         true,
                         true,
                         "# Billing Service"
                 ));
 
-        mockMvc.perform(get("/api/repositories/resolve").param("project", "billing-service"))
+        mockMvc.perform(get("/api/repositories/resolve").param("repositoryId", "billing-service"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.repositoryId").value("billing-service"))
-                .andExpect(jsonPath("$.data.markerPath").value(".actiondock/PROJECT.md"))
+                .andExpect(jsonPath("$.data.entryPath").value("ACTIONDOCK.md"))
                 .andExpect(jsonPath("$.data.content").value("# Billing Service"));
     }
 

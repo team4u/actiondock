@@ -2,7 +2,6 @@ package org.team4u.actiondock.storage.jpa.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
@@ -25,9 +24,6 @@ public class RepositoryDefinitionEntity {
     private boolean enabled = true;
     private String trustLevel;
     private String description;
-    private String projectMarkerPath;
-    @Lob
-    private String projectAliasesJson;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -102,22 +98,6 @@ public class RepositoryDefinitionEntity {
 
     public void setDescription(String description) {
         this.description = description;
-    }
-
-    public String getProjectMarkerPath() {
-        return projectMarkerPath;
-    }
-
-    public void setProjectMarkerPath(String projectMarkerPath) {
-        this.projectMarkerPath = projectMarkerPath;
-    }
-
-    public String getProjectAliasesJson() {
-        return projectAliasesJson;
-    }
-
-    public void setProjectAliasesJson(String projectAliasesJson) {
-        this.projectAliasesJson = projectAliasesJson;
     }
 
     public LocalDateTime getLastSyncedAt() {

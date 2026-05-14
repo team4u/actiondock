@@ -21,7 +21,7 @@ actiondock repository list --purpose project --json
 再解析具体项目：
 
 ```bash
-actiondock repository resolve --project <repositoryId> --json
+actiondock repository resolve --repository-id <repositoryId> --json
 ```
 
 ## 返回结果理解
@@ -34,7 +34,7 @@ actiondock repository resolve --project <repositoryId> --json
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",
   "root": "/Users/code/projects/billing-service",
-  "markerPath": ".actiondock/PROJECT.md",
+  "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
   "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
@@ -44,8 +44,8 @@ actiondock repository resolve --project <repositoryId> --json
 重点字段：
 
 - `root`: 项目根目录
-- `markerPath`: 项目知识入口文件，相对项目根目录
-- `content`: `PROJECT.md` 原始内容
+- `entryPath`: 项目知识入口文件，相对项目根目录
+- `content`: `ACTIONDOCK.md` 原始内容
 
 ## 工作流
 
@@ -83,7 +83,7 @@ actiondock repository resolve --project <repositoryId> --json
 
 ### 4. 避免低价值目录
 
-如果 `PROJECT.md` 没给出更具体规则，默认不要优先搜索：
+如果 `ACTIONDOCK.md` 没给出更具体规则，默认不要优先搜索：
 
 - `dist`
 - `build`
@@ -94,11 +94,11 @@ actiondock repository resolve --project <repositoryId> --json
 
 如果结论依赖项目知识库，回答里应明确指出依据来自：
 
-- `PROJECT.md`
+- `ACTIONDOCK.md`
 - 具体的 Markdown 文档
 - 必要时补充源码文件
 
 ## 术语
 
-- `PROJECT.md`: 项目知识入口文件
+- `ACTIONDOCK.md`: 项目知识入口文件
 - `project repository`: 被注册为 `purpose=PROJECT` 的仓库

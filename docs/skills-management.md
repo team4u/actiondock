@@ -6,7 +6,7 @@ Skills 是可安装到本地目录的技能包。它们通常是 AI 辅助工具
 
 Skills 不通过 ActionDock 运行时执行——它们只是被安装到文件系统目录中，由外部工具加载。
 
-对于项目型任务，可以把 ActionDock 当成“项目知识入口解析器”使用：先通过 `repository resolve --project` 取得 `PROJECT.md`，再按正文里的文件路径和关键词继续读取项目文档或源码。
+对于项目型任务，可以把 ActionDock 当成“项目知识入口解析器”使用：先通过 `repository resolve --repository-id` 取得 `ACTIONDOCK.md`，再按正文里的文件路径和关键词继续读取项目文档或源码。
 
 ## 核心概念
 
@@ -138,13 +138,13 @@ public class SkillInstallation {
 如果需要处理某个业务项目，推荐遵循以下规则：
 
 1. 先识别用户要操作的项目 ID
-2. 调用 `actiondock repository resolve --project <value>`
-3. 先阅读返回的 `PROJECT.md` 原文
+2. 调用 `actiondock repository resolve --repository-id <value>`
+3. 先阅读返回的 `ACTIONDOCK.md` 原文
 4. 按正文中写明的优先级去读 Markdown 文档
 5. 只有在知识文档不足时再读源码
 6. 避免优先扫描 `dist`、`build`、`node_modules` 这类目录
 
-一个典型的 `PROJECT.md` 会描述：
+一个典型的 `ACTIONDOCK.md` 会描述：
 
 - 项目概览
 - 优先阅读的知识库文件

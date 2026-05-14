@@ -270,8 +270,8 @@ export class ActionDockClient {
             method: "POST"
         });
     }
-    async resolveProjectRepository(project) {
-        return this.requestJson(`/api/repositories/resolve?${new URLSearchParams({ project }).toString()}`);
+    async resolveProjectRepository(repositoryId) {
+        return this.requestJson(`/api/repositories/resolve?${new URLSearchParams({ repositoryId }).toString()}`);
     }
     async listRepositoryTools(repositoryId) {
         if (repositoryId) {

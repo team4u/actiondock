@@ -17,7 +17,6 @@ export default class RepositoryCreateCommand extends BaseCommand {
     branch: Flags.string({ description: "Git branch" }),
     "trust-level": Flags.string({ description: "Repository trust level", options: ["trusted", "untrusted"], default: "untrusted" }),
     description: Flags.string({ description: "Repository description" }),
-    "marker-path": Flags.string({ description: "Project knowledge marker path", default: ".actiondock/PROJECT.md" }),
     disabled: Flags.boolean({ description: "Create repository as disabled" }),
     ...serverTokenFlags,
     help: Flags.help({ char: "h" })
@@ -36,12 +35,7 @@ export default class RepositoryCreateCommand extends BaseCommand {
         trustLevel: flags["trust-level"].toUpperCase().replace("-", "_"),
         description: flags.description,
         enabled: !flags.disabled,
-        purpose: isProject ? "PROJECT" : undefined,
-        project: isProject
-          ? {
-              markerPath: flags["marker-path"]
-            }
-          : undefined
+        purpose: isProject ? "PROJECT" : undefined
       });
       flags.json ? this.printJson(item) : this.log(renderRepositoryDetail(item));
     } catch (error) {

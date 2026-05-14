@@ -9,19 +9,6 @@ import java.time.LocalDateTime;
  */
 public class RepositoryDefinition {
 
-    public static class ProjectSettings {
-        private String markerPath;
-
-        public String getMarkerPath() {
-            return markerPath;
-        }
-
-        public ProjectSettings setMarkerPath(String markerPath) {
-            this.markerPath = markerPath;
-            return this;
-        }
-    }
-
     private String id;
     private String name;
     private String type;
@@ -31,7 +18,6 @@ public class RepositoryDefinition {
     private boolean enabled = true;
     private String trustLevel;
     private String description;
-    private ProjectSettings project;
     private LocalDateTime lastSyncedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -114,15 +100,6 @@ public class RepositoryDefinition {
 
     public RepositoryDefinition setDescription(String description) {
         this.description = description;
-        return this;
-    }
-
-    public ProjectSettings getProject() {
-        return project;
-    }
-
-    public RepositoryDefinition setProject(ProjectSettings project) {
-        this.project = project;
         return this;
     }
 

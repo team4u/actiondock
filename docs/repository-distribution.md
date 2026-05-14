@@ -2,7 +2,7 @@
 
 ## 一句话理解
 
-仓库系统是 ActionDock 的资源分发和项目入口解析层。你可以把脚本、插件和 Skills 发布到能力仓库（Git 仓库、HTTP 服务器或本地目录），也可以把业务项目注册为项目仓库。团队成员可以通过仓库发现、一键安装、自动更新，或者通过 `repository resolve --project` 找到某个项目的知识入口。对于需要本地修改的仓库脚本或Webhook，可以从仓库资产创建工作副本，再通过上游绑定拉取更新。
+仓库系统是 ActionDock 的资源分发和项目入口解析层。你可以把脚本、插件和 Skills 发布到能力仓库（Git 仓库、HTTP 服务器或本地目录），也可以把业务项目注册为项目仓库。团队成员可以通过仓库发现、一键安装、自动更新，或者通过 `repository resolve --repository-id` 找到某个项目的知识入口。对于需要本地修改的仓库脚本或Webhook，可以从仓库资产创建工作副本，再通过上游绑定拉取更新。
 
 ## 仓库数据模型
 
@@ -17,7 +17,6 @@ public class RepositoryDefinition {
     private boolean enabled;         // 是否启用
     private TrustLevel trustLevel;   // TRUSTED / UNTRUSTED
     private String description;
-    private ProjectSettings project; // markerPath，仅 PROJECT 使用
 }
 ```
 
@@ -43,7 +42,7 @@ public class RepositoryDefinition {
 | `CAPABILITY` | 分发工具、Webhook、插件、Skills、能力包 |
 | `PROJECT` | 指向业务项目目录，并提供项目知识入口文件 |
 
-## 项目仓库与 `PROJECT.md`
+## 项目仓库与 `ACTIONDOCK.md`
 
 项目仓库只负责告诉调用方：
 
@@ -51,13 +50,13 @@ public class RepositoryDefinition {
 2. 项目知识入口文件在哪里
 3. 返回入口文件原文
 
-默认知识入口文件：
+固定知识入口文件：
 
 ```text
-.actiondock/PROJECT.md
+ACTIONDOCK.md
 ```
 
-`PROJECT.md` 推荐采用“极简 frontmatter + Markdown 正文”的形式：
+`ACTIONDOCK.md` 推荐采用“极简 frontmatter + Markdown 正文”的形式：
 
 ```md
 ---
@@ -159,20 +158,19 @@ Repositories
 | 字段 | 说明 | 示例 |
 |------|------|------|
 | Purpose | 仓库用途 | `PROJECT` |
-| Marker Path | 项目知识入口文件 | `.actiondock/PROJECT.md` |
 
 ### 解析项目仓库
 
 通过 CLI：
 
 ```bash
-actiondock repository resolve --project billing-service
+actiondock repository resolve --repository-id billing-service
 ```
 
 通过 REST API：
 
 ```bash
-curl "http://localhost:5177/api/repositories/resolve?project=billing-service"
+curl "http://localhost:5177/api/repositories/resolve?repositoryId=billing-service"
 ```
 
 返回结果示例：
@@ -183,7 +181,7 @@ curl "http://localhost:5177/api/repositories/resolve?project=billing-service"
   "type": "LOCAL_DIR",
   "purpose": "PROJECT",
   "root": "/Users/code/projects/billing-service",
-  "markerPath": ".actiondock/PROJECT.md",
+  "entryPath": "ACTIONDOCK.md",
   "enabled": true,
   "exists": true,
   "content": "---\nproject_id: billing-service\n---\n\n# Billing Service\n..."
@@ -349,7 +347,7 @@ PUT    /api/repositories/{id}                   # 更新
 DELETE /api/repositories/{id}                   # 删除
 
 # 仓库操作
-GET    /api/repositories/resolve?project=...    # 解析项目仓库并返回 PROJECT.md 原文
+GET    /api/repositories/resolve?repositoryId=...    # 解析项目仓库并返回 ACTIONDOCK.md 原文
 POST   /api/repositories/{id}/sync              # 同步仓库
 GET    /api/repositories/{id}/tools             # 列出可用工具
 POST   /api/repositories/{id}/tools/{toolId}/local-assets         # 添加仓库工具到本地

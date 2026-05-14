@@ -121,15 +121,6 @@ class RepositoryDefinitionService {
         return NormalizeUtils.normalizeOrDefault(purpose, REPO_PURPOSE_CAPABILITY).toUpperCase(Locale.ROOT);
     }
 
-    private RepositoryDefinition.ProjectSettings normalizeProjectSettings(RepositoryDefinition target, String purpose) {
-        if (!REPO_PURPOSE_PROJECT.equals(purpose)) {
-            return null;
-        }
-        RepositoryDefinition.ProjectSettings source = target == null ? null : target.getProject();
-        return new RepositoryDefinition.ProjectSettings()
-                .setMarkerPath(NormalizeUtils.normalizeOrDefault(source == null ? null : source.getMarkerPath(), DEFAULT_PROJECT_MARKER_PATH));
-    }
-
     private RepositoryDefinition buildRepositoryDefinition(String id,
                                                            RepositoryDefinition target,
                                                            String type,
@@ -147,7 +138,6 @@ class RepositoryDefinitionService {
                 .setEnabled(target.isEnabled())
                 .setTrustLevel(trustLevel)
                 .setDescription(NormalizeUtils.normalizeNullable(target.getDescription()))
-                .setProject(normalizeProjectSettings(target, purpose))
                 .setLastSyncedAt(existing == null ? null : existing.getLastSyncedAt())
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())
                 .setUpdatedAt(now);
