@@ -13,38 +13,23 @@ export function parseOptionalObject(inputJson, inputFile, labels) {
     }
     return value;
 }
-export function parseProcessorDefinition(processorJson, processorFile) {
-    return parseDefinitionInput(processorJson, processorFile, {
-        jsonFlag: "`--processor-json`",
-        fileFlag: "`--processor-file`"
-    });
-}
-export function parseProcessorContext(contextJson, contextFile) {
-    return parseInputObject(contextJson, contextFile, {
-        jsonFlag: "`--context-json`",
-        fileFlag: "`--context-file`"
-    });
-}
-export function parseExpectedOutputSchema(schemaJson, schemaFile) {
-    return parseOptionalObject(schemaJson, schemaFile, {
-        jsonFlag: "`--expected-output-schema-json`",
-        fileFlag: "`--expected-output-schema-file`"
-    });
-}
-export function parseIncomingEventPayload(payloadJson, payloadFile) {
+export function parseWebhookRequest(payloadJson, payloadFile) {
     const payload = parseInputObject(payloadJson, payloadFile, {
         jsonFlag: "`--payload-json`",
         fileFlag: "`--payload-file`"
     });
     const result = {};
+    if (typeof payload.method === "string") {
+        result.method = payload.method;
+    }
+    if (typeof payload.path === "string") {
+        result.path = payload.path;
+    }
     if ("headers" in payload) {
-        result.headers = coerceRecord(payload.headers, "headers");
+        result.headers = coerceStringListRecord(payload.headers, "headers");
     }
     if ("query" in payload) {
-        result.query = coerceRecord(payload.query, "query");
-    }
-    if ("body" in payload) {
-        result.body = coerceRecord(payload.body, "body");
+        result.query = coerceStringListRecord(payload.query, "query");
     }
     if (typeof payload.rawBody === "string") {
         result.rawBody = payload.rawBody;
@@ -54,13 +39,7 @@ export function parseIncomingEventPayload(payloadJson, payloadFile) {
     }
     return result;
 }
-export function parseNormalizedEvent(eventJson, eventFile) {
-    return parseDefinitionInput(eventJson, eventFile, {
-        jsonFlag: "`--event-json`",
-        fileFlag: "`--event-file`"
-    });
-}
-export function mergeEventSourceDefinition(base, overrides) {
+export function mergeWebhookDefinition(base, overrides) {
     const next = deepMerge({}, base);
     if (overrides.id !== undefined)
         next.id = overrides.id;
@@ -80,46 +59,8 @@ export function mergeEventSourceDefinition(base, overrides) {
     }
     return next;
 }
-export function mergeEventTriggerDefinition(base, overrides) {
-    const next = deepMerge({}, base);
-    if (overrides.id !== undefined)
-        next.id = overrides.id;
-    if (overrides.name !== undefined)
-        next.name = overrides.name;
-    if (overrides.description !== undefined)
-        next.description = overrides.description;
-    if (overrides.enabled !== undefined)
-        next.enabled = overrides.enabled;
-    if (overrides.sourceId !== undefined)
-        next.sourceId = overrides.sourceId;
-    if (overrides.targetScriptId !== undefined)
-        next.targetScriptId = overrides.targetScriptId;
-    if (overrides.submitMode !== undefined)
-        next.submitMode = overrides.submitMode;
-    if (overrides.responseView !== undefined)
-        next.responseView = overrides.responseView;
-    return next;
-}
 export function mergeDefinitionPatch(base, patch) {
     return deepMerge(base, patch);
-}
-export function applyProcessorFieldOverrides(merged, patch, processorFields) {
-    const next = cloneValue(merged);
-    for (const field of processorFields) {
-        const key = String(field);
-        if (!(key in patch)) {
-            continue;
-        }
-        const value = patch[key];
-        if (isProcessorLikeEmptyObject(value)) {
-            next[key] = {};
-            continue;
-        }
-        if (isRecord(value) && "mode" in value) {
-            next[key] = cloneValue(value);
-        }
-    }
-    return next;
 }
 export function resolveEnabledFlag(params) {
     const { enabledFlag, disabledFlag, fallback } = params;
@@ -140,17 +81,22 @@ function parseRequiredObject(value, jsonFlag, fileFlag) {
     }
     return value;
 }
-function coerceRecord(value, label) {
+function coerceStringListRecord(value, label) {
     if (value === undefined || value === null) {
         return {};
     }
     if (!isRecord(value)) {
         throw new ActionDockCliError(`payload.${label} 必须是 JSON 对象。`, 2);
     }
-    return value;
-}
-function isProcessorLikeEmptyObject(value) {
-    return isRecord(value) && Object.keys(value).length === 0;
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+        if (Array.isArray(item)) {
+            result[key] = item.map((entry) => String(entry));
+            continue;
+        }
+        result[key] = [String(item)];
+    }
+    return result;
 }
 function deepMerge(target, source) {
     if (!isRecord(target) || !isRecord(source)) {

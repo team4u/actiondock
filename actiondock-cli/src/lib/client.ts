@@ -13,29 +13,20 @@ import type {
   ConfigValueView,
   ExecutionPresetUpsertRequest,
   ExecutionPresetView,
-  EventDispatchRecord,
-  EventIngestionView,
-  EventRecord,
-  EventSourceDefinition,
-  EventTrigger,
-  EventTriggerTestRequest,
-  EventTriggerTestResult,
+  WebhookDefinition,
   ExecutionResponse,
-  IncomingEventPayload,
   PluginConfigView,
   PluginDownload,
   PluginInvokeRequest,
   PluginInvokeResponse,
   PluginReferenceView,
   PluginView,
-  ProcessorTestRequest,
-  ProcessorTestResult,
-  NormalizedEvent,
   RepositoryDefinition,
-  RepositoryEventSourceDescriptor,
-  RepositoryEventSourceDetail,
-  RepositoryEventSourceInstallation,
+  RepositoryWebhookDescriptor,
+  RepositoryWebhookDetail,
+  RepositoryLocalAsset,
   RepositoryInstallRequest,
+  ResourceLifecycleOperationView,
   RepositoryToolDescriptor,
   RepositoryToolDetail,
   RepositoryToolInstallation,
@@ -48,7 +39,9 @@ import type {
   SharedStateDetail,
   SharedStateSummary,
   SharedStateRequest,
-  UpstreamStatus
+  UpstreamStatus,
+  WebhookInvokeResult,
+  WebhookRequest
 } from "./types.js";
 
 export interface ClientOptions {
@@ -291,145 +284,58 @@ export class ActionDockClient {
     });
   }
 
-  async listEventSources(): Promise<EventSourceDefinition[]> {
-    return this.requestJson<EventSourceDefinition[]>("/api/event-sources");
+  async listWebhooks(): Promise<WebhookDefinition[]> {
+    return this.requestJson<WebhookDefinition[]>("/api/webhooks");
   }
 
-  async getEventSourceUpstreamStatus(sourceId: string): Promise<UpstreamStatus> {
-    return this.requestJson<UpstreamStatus>(`/api/event-sources/${sourceId}/upstream`);
+  async getWebhookUpstreamStatus(webhookId: string): Promise<UpstreamStatus> {
+    return this.requestJson<UpstreamStatus>(`/api/webhooks/${webhookId}/upstream`);
   }
 
-  async pullUpstreamEventSource(sourceId: string, force = false): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/upstream/pull?force=${force}`, {
+  async pullUpstreamWebhook(webhookId: string, force = false): Promise<WebhookDefinition> {
+    return this.requestJson<WebhookDefinition>(`/api/webhooks/${webhookId}/upstream/pull?force=${force}`, {
       method: "POST"
     });
   }
 
-  async getEventSource(sourceId: string): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}`);
+  async getWebhook(webhookId: string): Promise<WebhookDefinition> {
+    return this.requestJson<WebhookDefinition>(`/api/webhooks/${webhookId}`);
   }
 
-  async createEventSource(definition: EventSourceDefinition): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>("/api/event-sources", {
+  async createWebhook(definition: WebhookDefinition): Promise<WebhookDefinition> {
+    return this.requestJson<WebhookDefinition>("/api/webhooks", {
       method: "POST",
       body: JSON.stringify(definition)
     });
   }
 
-  async updateEventSource(sourceId: string, definition: EventSourceDefinition): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}`, {
+  async updateWebhook(webhookId: string, definition: WebhookDefinition): Promise<WebhookDefinition> {
+    return this.requestJson<WebhookDefinition>(`/api/webhooks/${webhookId}`, {
       method: "PUT",
       body: JSON.stringify(definition)
     });
   }
 
-  async enableEventSource(sourceId: string): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/enable`, {
+  async enableWebhook(webhookId: string): Promise<WebhookDefinition> {
+    return this.requestJson<WebhookDefinition>(`/api/webhooks/${webhookId}/enable`, {
       method: "POST"
     });
   }
 
-  async disableEventSource(sourceId: string): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>(`/api/event-sources/${sourceId}/disable`, {
+  async disableWebhook(webhookId: string): Promise<WebhookDefinition> {
+    return this.requestJson<WebhookDefinition>(`/api/webhooks/${webhookId}/disable`, {
       method: "POST"
     });
   }
 
-  async deleteEventSource(sourceId: string): Promise<void> {
-    await this.requestJson<null>(`/api/event-sources/${sourceId}`, {
+  async deleteWebhook(webhookId: string): Promise<void> {
+    await this.requestJson<null>(`/api/webhooks/${webhookId}`, {
       method: "DELETE"
     });
   }
 
-  async testEventSourceNormalization(sourceId: string, payload: IncomingEventPayload): Promise<NormalizedEvent> {
-    return this.requestJson<NormalizedEvent>(`/api/event-sources/${sourceId}/test-normalization`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async ingestEventSource(sourceId: string, payload: IncomingEventPayload): Promise<EventIngestionView> {
-    return this.requestJson<EventIngestionView>(`/api/event-sources/${sourceId}/events`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async listEventSourceEvents(sourceId: string, limit?: number): Promise<EventRecord[]> {
-    const search = new URLSearchParams();
-    if (typeof limit === "number" && limit > 0) {
-      search.set("limit", String(limit));
-    }
-    const suffix = search.size > 0 ? `?${search.toString()}` : "";
-    return this.requestJson<EventRecord[]>(`/api/event-sources/${sourceId}/events${suffix}`);
-  }
-
-  async listEventTriggers(): Promise<EventTrigger[]> {
-    return this.requestJson<EventTrigger[]>("/api/event-triggers");
-  }
-
-  async getEventTrigger(triggerId: string): Promise<EventTrigger> {
-    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}`);
-  }
-
-  async createEventTrigger(definition: EventTrigger): Promise<EventTrigger> {
-    return this.requestJson<EventTrigger>("/api/event-triggers", {
-      method: "POST",
-      body: JSON.stringify(definition)
-    });
-  }
-
-  async updateEventTrigger(triggerId: string, definition: EventTrigger): Promise<EventTrigger> {
-    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}`, {
-      method: "PUT",
-      body: JSON.stringify(definition)
-    });
-  }
-
-  async enableEventTrigger(triggerId: string): Promise<EventTrigger> {
-    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}/enable`, {
-      method: "POST"
-    });
-  }
-
-  async disableEventTrigger(triggerId: string): Promise<EventTrigger> {
-    return this.requestJson<EventTrigger>(`/api/event-triggers/${triggerId}/disable`, {
-      method: "POST"
-    });
-  }
-
-  async deleteEventTrigger(triggerId: string): Promise<void> {
-    await this.requestJson<null>(`/api/event-triggers/${triggerId}`, {
-      method: "DELETE"
-    });
-  }
-
-  async testEventTrigger(triggerId: string, payload: EventTriggerTestRequest): Promise<EventTriggerTestResult> {
-    return this.requestJson<EventTriggerTestResult>(`/api/event-triggers/${triggerId}/test`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async listEventTriggerDispatches(triggerId: string): Promise<EventDispatchRecord[]> {
-    return this.requestJson<EventDispatchRecord[]>(`/api/event-triggers/${triggerId}/dispatches`);
-  }
-
-  async listEventRecords(sourceId?: string): Promise<EventRecord[]> {
-    const suffix = sourceId ? `?${new URLSearchParams({ sourceId }).toString()}` : "";
-    return this.requestJson<EventRecord[]>(`/api/event-records${suffix}`);
-  }
-
-  async getEventRecord(recordId: string): Promise<EventRecord> {
-    return this.requestJson<EventRecord>(`/api/event-records/${recordId}`);
-  }
-
-  async listEventRecordDispatches(recordId: string): Promise<EventDispatchRecord[]> {
-    return this.requestJson<EventDispatchRecord[]>(`/api/event-records/${recordId}/dispatches`);
-  }
-
-  async testProcessor(payload: ProcessorTestRequest): Promise<ProcessorTestResult> {
-    return this.requestJson<ProcessorTestResult>("/api/processors/test", {
+  async invokeWebhook(webhookId: string, payload: WebhookRequest): Promise<WebhookInvokeResult> {
+    return this.requestWebhook(`/api/webhooks/${webhookId}`, {
       method: "POST",
       body: JSON.stringify(payload)
     });
@@ -515,67 +421,74 @@ export class ActionDockClient {
     });
   }
 
-  async listRepositoryEventSources(): Promise<RepositoryEventSourceDescriptor[]> {
-    return this.requestJson<RepositoryEventSourceDescriptor[]>("/api/repositories/event-sources");
+  async listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
+    return this.requestJson<RepositoryWebhookDescriptor[]>("/api/repositories/webhooks");
   }
 
-  async listRepositoryEventSourcesByRepository(repositoryId: string): Promise<RepositoryEventSourceDescriptor[]> {
-    return this.requestJson<RepositoryEventSourceDescriptor[]>(`/api/repositories/${repositoryId}/event-sources`);
+  async listRepositoryWebhooksByRepository(repositoryId: string): Promise<RepositoryWebhookDescriptor[]> {
+    return this.requestJson<RepositoryWebhookDescriptor[]>(`/api/repositories/${repositoryId}/webhooks`);
   }
 
-  async getRepositoryEventSource(repositoryId: string, eventSourceId: string): Promise<RepositoryEventSourceDetail> {
-    return this.requestJson<RepositoryEventSourceDetail>(`/api/repositories/${repositoryId}/event-sources/${eventSourceId}`);
+  async getRepositoryWebhook(repositoryId: string, webhookId: string): Promise<RepositoryWebhookDetail> {
+    return this.requestJson<RepositoryWebhookDetail>(`/api/repositories/${repositoryId}/webhooks/${webhookId}`);
   }
 
-  async installRepositoryEventSource(
+  async installRepositoryWebhook(
     repositoryId: string,
-    eventSourceId: string,
+    webhookId: string,
     payload: RepositoryInstallRequest
-  ): Promise<RepositoryEventSourceInstallation> {
-    return this.requestJson<RepositoryEventSourceInstallation>("/api/resource-lifecycle/operations", {
+  ): Promise<RepositoryLocalAsset> {
+    return this.requestJson<ResourceLifecycleOperationView<RepositoryLocalAsset>>("/api/resource-lifecycle/operations", {
       method: "POST",
       body: JSON.stringify({
-        resourceType: "REPOSITORY_EVENT_SOURCE",
-        operation: "install",
+        resourceType: "REPOSITORY_WEBHOOK",
+        operation: "add-local",
         repositoryId,
-        resourceId: eventSourceId,
+        resourceId: webhookId,
+        payload: { mode: "LOCKED", ...payload }
+      })
+    }).then((operation) => operation.result);
+  }
+
+  async updateRepositoryWebhook(
+    repositoryId: string,
+    webhookId: string,
+    payload: RepositoryInstallRequest
+  ): Promise<RepositoryLocalAsset> {
+    return this.requestJson<ResourceLifecycleOperationView<RepositoryLocalAsset>>("/api/resource-lifecycle/operations", {
+      method: "POST",
+      body: JSON.stringify({
+        resourceType: "REPOSITORY_WEBHOOK",
+        operation: "update-local",
+        repositoryId,
+        resourceId: webhookId,
         payload
       })
-    });
+    }).then((operation) => operation.result);
   }
 
-  async updateRepositoryEventSource(
+  async createRepositoryWebhookWorkingCopy(
     repositoryId: string,
-    eventSourceId: string,
-    payload: RepositoryInstallRequest
-  ): Promise<RepositoryEventSourceInstallation> {
-    return this.requestJson<RepositoryEventSourceInstallation>("/api/resource-lifecycle/operations", {
+    webhookId: string,
+    localAssetId?: string
+  ): Promise<RepositoryLocalAsset> {
+    return this.requestJson<ResourceLifecycleOperationView<RepositoryLocalAsset>>("/api/resource-lifecycle/operations", {
       method: "POST",
       body: JSON.stringify({
-        resourceType: "REPOSITORY_EVENT_SOURCE",
-        operation: "update",
+        resourceType: "REPOSITORY_WEBHOOK",
+        operation: "add-local",
         repositoryId,
-        resourceId: eventSourceId,
-        payload
+        resourceId: webhookId,
+        payload: {
+          mode: "TRACKED",
+          installSchedules: false,
+          installScriptDependencies: false,
+          installPluginDependencies: false,
+          forcePluginUpgrade: false,
+          ...(localAssetId ? { localAssetId } : {})
+        }
       })
-    });
-  }
-
-  async createRepositoryEventSourceWorkingCopy(
-    repositoryId: string,
-    eventSourceId: string,
-    sourceId?: string
-  ): Promise<EventSourceDefinition> {
-    return this.requestJson<EventSourceDefinition>("/api/resource-lifecycle/operations", {
-      method: "POST",
-      body: JSON.stringify({
-        resourceType: "REPOSITORY_EVENT_SOURCE",
-        operation: "working-copy",
-        repositoryId,
-        resourceId: eventSourceId,
-        payload: sourceId ? { id: sourceId } : {}
-      })
-    });
+    }).then((operation) => operation.result);
   }
 
   async getPlugin(pluginId: string): Promise<PluginView> {
@@ -858,6 +771,60 @@ export class ActionDockClient {
     return {
       body: payload.body,
       headers: payload.headers
+    };
+  }
+
+  private async requestWebhook(pathname: string, init?: RequestOptions): Promise<WebhookInvokeResult> {
+    const url = new URL(`${this.options.serverUrl}${pathname}`);
+    const method = init?.method ?? "GET";
+    const headers = this.buildHeaders(init?.headers, init?.body);
+    const body = init?.body;
+    const transport = url.protocol === "https:" ? https : http;
+    const payload = await new Promise<{ statusCode: number; bodyText: string; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
+      const request = transport.request(url, { method, headers }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on("end", () => {
+          resolve({
+            statusCode: response.statusCode ?? 500,
+            bodyText: Buffer.concat(chunks).toString("utf8"),
+            headers: response.headers
+          });
+        });
+      });
+      request.on("error", (error) => reject(error));
+      if (body) {
+        request.write(body);
+      }
+      request.end();
+    }).catch((error: unknown) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new ActionDockCliError(`请求 ActionDock 服务失败: ${detail}`, 4);
+    });
+
+    const parsedBody = parseMaybeJson(payload.bodyText);
+    const normalizedHeaders: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(payload.headers)) {
+      if (value === undefined) {
+        continue;
+      }
+      normalizedHeaders[key] = Array.isArray(value) ? value.map(String) : [String(value)];
+    }
+
+    if (payload.statusCode < 200 || payload.statusCode >= 300) {
+      const message = isRecord(parsedBody) && typeof parsedBody.msg === "string"
+        ? parsedBody.msg
+        : `请求失败: HTTP ${payload.statusCode}`;
+      const exitCode = payload.statusCode === 401 || payload.statusCode === 403 ? 3 : 5;
+      throw new ActionDockCliError(message, exitCode, parsedBody ?? payload.bodyText);
+    }
+
+    return {
+      status: payload.statusCode,
+      headers: normalizedHeaders,
+      body: parsedBody
     };
   }
 

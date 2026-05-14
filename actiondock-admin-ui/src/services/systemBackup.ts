@@ -1,7 +1,6 @@
 import type {
   ConfigValue,
-  EventSourceDefinition,
-  EventTrigger,
+  WebhookDefinition,
   ExecutionPreset,
   RepositoryDefinition,
   ScriptDefinition,
@@ -74,8 +73,7 @@ export interface SystemBackupBundleV1 {
   data: {
     scripts: ScriptDefinition[];
     schedules: ScriptSchedule[];
-    eventSources: EventSourceDefinition[];
-    eventTriggers: EventTrigger[];
+    webhooks: WebhookDefinition[];
     configValues: ConfigValue[];
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
@@ -92,8 +90,7 @@ export interface SystemBackupBundleV1 {
 export interface BackupAnalysis {
   scripts: { total: number; create: number; overwrite: number };
   schedules: { total: number; create: number; overwrite: number };
-  eventSources: { total: number; create: number; overwrite: number };
-  eventTriggers: { total: number; create: number; overwrite: number };
+  webhooks: { total: number; create: number; overwrite: number };
   configValues: { total: number; create: number; overwrite: number };
   executionPresets: { total: number; create: number; overwrite: number };
   repositories: { total: number; create: number; overwrite: number };
@@ -208,8 +205,7 @@ export function buildBackupJson(
   data: {
     scripts: ScriptDefinition[];
     schedules: ScriptSchedule[];
-    eventSources: EventSourceDefinition[];
-    eventTriggers: EventTrigger[];
+    webhooks: WebhookDefinition[];
     configValues: ConfigValue[];
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
@@ -257,8 +253,7 @@ export function buildBackupJson(
     data: {
       scripts: [...data.scripts].sort((a, b) => a.id.localeCompare(b.id)),
       schedules: [...data.schedules].sort((a, b) => a.id.localeCompare(b.id)),
-      eventSources: [...data.eventSources].sort((a, b) => a.id.localeCompare(b.id)),
-      eventTriggers: [...data.eventTriggers].sort((a, b) => a.id.localeCompare(b.id)),
+      webhooks: [...data.webhooks].sort((a, b) => a.id.localeCompare(b.id)),
       configValues: [...data.configValues]
         .sort((a, b) => a.key.localeCompare(b.key))
         .map(item => ({
@@ -313,11 +308,8 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
   const schedules = Array.isArray(data.schedules)
     ? (data.schedules as unknown[]).map((s, i) => parseScriptSchedule(s, i))
     : [];
-  const eventSources = Array.isArray(data.eventSources)
-    ? (data.eventSources as EventSourceDefinition[])
-    : [];
-  const eventTriggers = Array.isArray(data.eventTriggers)
-    ? (data.eventTriggers as EventTrigger[])
+  const webhooks = Array.isArray(data.webhooks)
+    ? (data.webhooks as WebhookDefinition[])
     : [];
   const configValues = Array.isArray(data.configValues)
     ? (data.configValues as unknown[]).map((c, i) => parseConfigValue(c, i))
@@ -354,7 +346,7 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
     version: 1,
     type: "actiondock-system-backup",
     exportedAt: parsed.exportedAt as string,
-    data: { scripts, schedules, eventSources, eventTriggers, configValues, executionPresets, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills }
+    data: { scripts, schedules, webhooks, configValues, executionPresets, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills }
   };
 }
 
@@ -363,8 +355,7 @@ export function analyzeBackupBundle(
   current: {
     scripts: ScriptDefinition[];
     schedules: ScriptSchedule[];
-    eventSources: EventSourceDefinition[];
-    eventTriggers: EventTrigger[];
+    webhooks: WebhookDefinition[];
     configValues: ConfigValue[];
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
@@ -459,8 +450,7 @@ export function analyzeBackupBundle(
   return {
     scripts: analyze(bundle.data.scripts, current.scripts),
     schedules: analyze(bundle.data.schedules, current.schedules),
-    eventSources: analyze(bundle.data.eventSources, current.eventSources),
-    eventTriggers: analyze(bundle.data.eventTriggers, current.eventTriggers),
+    webhooks: analyze(bundle.data.webhooks, current.webhooks),
     configValues: { total: bundle.data.configValues.length, create: cvCreate, overwrite: cvOverwrite },
     executionPresets: analyze(bundle.data.executionPresets, current.executionPresets),
     repositories: analyze(bundle.data.repositories, current.repositories),

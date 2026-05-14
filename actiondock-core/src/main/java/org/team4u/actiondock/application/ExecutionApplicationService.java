@@ -148,10 +148,7 @@ public class ExecutionApplicationService {
                 .setScheduleId(executionMetadata.getScheduleId())
                 .setAgentRunId(executionMetadata.getAgentRunId())
                 .setAgentStepId(executionMetadata.getAgentStepId())
-                .setEventSourceId(executionMetadata.getEventSourceId())
-                .setEventTriggerId(executionMetadata.getEventTriggerId())
-                .setEventRecordId(executionMetadata.getEventRecordId())
-                .setEventDispatchId(executionMetadata.getEventDispatchId())
+                .setWebhookId(executionMetadata.getWebhookId())
                 .setInput(payload)
                 .setCreatedAt(LocalDateTime.now());
 

@@ -138,7 +138,7 @@ actiondock script run hello-groovy --name alice --json
 └── 仓库管理    ← 配置 Git/HTTP/本地仓库
 
 触发区
-└── 触发中心    ← 定时任务、事件源、事件触发、事件记录
+└── 触发中心    ← 定时任务、Webhook、Webhook、执行记录
 
 设置区
 ├── 配置值      ← API Key 等全局配置
@@ -154,7 +154,7 @@ actiondock script run hello-groovy --name alice --json
 2. 学习 [脚本编写指南](script-writing-guide.md) 掌握运行时 API
 3. 配置 [AI 模型](ai-capabilities.md) 让 Agent 调用你的脚本
 4. 通过 [仓库与分发](repository-distribution.md) 把脚本分发给团队
-5. 设置 [事件源](trigger-center.md) 接入外部系统 Webhook
+5. 设置 [Webhook](trigger-center.md) 接入外部系统 Webhook
 
 ---
 

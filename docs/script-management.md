@@ -238,7 +238,7 @@ pandas>=2.0
 | REST API | `POST /api/scripts/{id}/execute` |
 | CLI | `actiondock script run <id> --param value` |
 | 定时任务 | 触发中心 → 定时触发 |
-| 事件触发 | 触发中心 → 事件触发 |
+| Webhook | 触发中心 → Webhook |
 
 ### 执行模式
 
@@ -386,7 +386,7 @@ Script ID 在同一个命名空间下必须唯一。换个 ID 重试。
 
 ### Q: 执行时报"脚本尚未发布"
 
-定时任务和事件触发只能引用已发布的脚本。先 `POST /api/scripts/{id}/publish` 发布。
+定时任务和Webhook只能引用已发布的脚本。先 `POST /api/scripts/{id}/publish` 发布。
 
 ### Q: 校验失败
 
@@ -404,7 +404,7 @@ Script ID 在同一个命名空间下必须唯一。换个 ID 重试。
 
 ### Q: 执行结果与实际不符
 
-脚本编辑器的「执行」标签页运行的是草稿，而定时任务和事件触发运行的是已发布版本。如果修改后没有发布，两边结果可能不同。
+脚本编辑器的「执行」标签页运行的是草稿，而定时任务和Webhook运行的是已发布版本。如果修改后没有发布，两边结果可能不同。
 
 ## 最佳实践
 

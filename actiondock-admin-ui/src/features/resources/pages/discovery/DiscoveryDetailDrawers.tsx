@@ -8,8 +8,8 @@ import { UpstreamSyncTag, getUpstreamActionLabel } from "../../../../components/
 import type {
   CapabilityPackageDescriptor,
   CapabilityPackageDetail,
-  RepositoryEventSourceDescriptor,
-  RepositoryEventSourceDetail,
+  RepositoryWebhookDescriptor,
+  RepositoryWebhookDetail,
   RepositoryPluginDescriptor,
   RepositorySkillDetail,
   RepositoryToolDescriptor,
@@ -18,7 +18,7 @@ import type {
 import { getScriptTypeLabel } from "../../../../components/domain/typeLabels";
 import {
   getSkillInstallLabel,
-  isLocalEventSource,
+  isLocalWebhook,
   isLocalTool,
   isLockedLocal,
   isTrackedLocal,
@@ -40,9 +40,9 @@ interface DiscoveryDetailDrawersProps {
   detail: RepositoryToolDetail | null;
   availableTools: RepositoryToolDescriptor[];
   availablePlugins: RepositoryPluginDescriptor[];
-  eventSourceDetailOpen: boolean;
-  eventSourceDetailLoading: boolean;
-  eventSourceDetail: RepositoryEventSourceDetail | null;
+  webhookDetailOpen: boolean;
+  webhookDetailLoading: boolean;
+  webhookDetail: RepositoryWebhookDetail | null;
   packageDetailOpen: boolean;
   packageDetailLoading: boolean;
   packageDetail: CapabilityPackageDetail | null;
@@ -50,7 +50,7 @@ interface DiscoveryDetailDrawersProps {
   skillDetailLoading: boolean;
   skillDetail: RepositorySkillDetail | null;
   onCloseToolDetail: () => void;
-  onCloseEventSourceDetail: () => void;
+  onCloseWebhookDetail: () => void;
   onClosePackageDetail: () => void;
   onCloseSkillDetail: () => void;
   onOpenSkillInstall: (descriptor: RepositorySkillDetail["descriptor"]) => void;
@@ -61,13 +61,13 @@ interface DiscoveryDetailDrawersProps {
     customLocalAssetId?: string
   ) => void | Promise<void>;
   onAddToolToLocal: (descriptor: RepositoryToolDetail["descriptor"]) => void | Promise<void>;
-  onEventSourceLocalAssetAction: (
-    descriptor: RepositoryEventSourceDetail["descriptor"],
+  onWebhookLocalAssetAction: (
+    descriptor: RepositoryWebhookDetail["descriptor"],
     action: LocalAssetAction,
     mode?: AddMode,
     customLocalAssetId?: string
   ) => void | Promise<void>;
-  onAddEventSourceToLocal: (descriptor: RepositoryEventSourceDetail["descriptor"]) => void | Promise<void>;
+  onAddWebhookToLocal: (descriptor: RepositoryWebhookDetail["descriptor"]) => void | Promise<void>;
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onNavigate: (path: string) => void;
@@ -82,9 +82,9 @@ export function DiscoveryDetailDrawers({
   detail,
   availableTools,
   availablePlugins,
-  eventSourceDetailOpen,
-  eventSourceDetailLoading,
-  eventSourceDetail,
+  webhookDetailOpen,
+  webhookDetailLoading,
+  webhookDetail,
   packageDetailOpen,
   packageDetailLoading,
   packageDetail,
@@ -92,14 +92,14 @@ export function DiscoveryDetailDrawers({
   skillDetailLoading,
   skillDetail,
   onCloseToolDetail,
-  onCloseEventSourceDetail,
+  onCloseWebhookDetail,
   onClosePackageDetail,
   onCloseSkillDetail,
   onOpenSkillInstall,
   onToolLocalAssetAction,
   onAddToolToLocal,
-  onEventSourceLocalAssetAction,
-  onAddEventSourceToLocal,
+  onWebhookLocalAssetAction,
+  onAddWebhookToLocal,
   onPackageInstall,
   onPackageUninstall,
   onNavigate
@@ -353,18 +353,18 @@ export function DiscoveryDetailDrawers({
       </Drawer>
 
       <Drawer
-        title={eventSourceDetail?.descriptor.displayName || "事件源资产详情"}
-        open={eventSourceDetailOpen}
-        onClose={onCloseEventSourceDetail}
+        title={webhookDetail?.descriptor.displayName || "Webhook资产详情"}
+        open={webhookDetailOpen}
+        onClose={onCloseWebhookDetail}
         width={920}
         destroyOnHidden
       >
-        {eventSourceDetailLoading ? (
+        {webhookDetailLoading ? (
           <div className="page-loading">
             <Spin size="large" />
           </div>
-        ) : !eventSourceDetail ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="事件源详情加载失败" />
+        ) : !webhookDetail ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Webhook详情加载失败" />
         ) : (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Descriptions
@@ -372,43 +372,43 @@ export function DiscoveryDetailDrawers({
               size="small"
               column={2}
               items={[
-                { key: "source", label: "事件源 ID", children: <Text code>{localAssetId(eventSourceDetail.descriptor)}</Text> },
-                { key: "repo", label: "来源仓库", children: eventSourceDetail.descriptor.repositoryId },
-                { key: "version", label: "远端版本", children: eventSourceDetail.descriptor.version },
-                { key: "installedVersion", label: "本机版本", children: eventSourceDetail.descriptor.localState?.version || "-" },
-                { key: "owner", label: "维护人", children: eventSourceDetail.descriptor.owner || "-" },
-                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={eventSourceDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
-                { key: "sync", label: "上游同步", children: isTrackedLocal(eventSourceDetail.descriptor) ? <UpstreamSyncTag state={eventSourceDetail.descriptor.localState?.syncState} /> : <Text type="secondary">-</Text> }
+                { key: "source", label: "Webhook ID", children: <Text code>{localAssetId(webhookDetail.descriptor)}</Text> },
+                { key: "repo", label: "来源仓库", children: webhookDetail.descriptor.repositoryId },
+                { key: "version", label: "远端版本", children: webhookDetail.descriptor.version },
+                { key: "installedVersion", label: "本机版本", children: webhookDetail.descriptor.localState?.version || "-" },
+                { key: "owner", label: "维护人", children: webhookDetail.descriptor.owner || "-" },
+                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={webhookDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> },
+                { key: "sync", label: "上游同步", children: isTrackedLocal(webhookDetail.descriptor) ? <UpstreamSyncTag state={webhookDetail.descriptor.localState?.syncState} /> : <Text type="secondary">-</Text> }
               ]}
             />
 
             <Space wrap size={[8, 8]}>
-              {eventSourceDetail.descriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
-              {isLocalEventSource(eventSourceDetail.descriptor) ? <Tag color="blue">已添加</Tag> : <Tag>未添加</Tag>}
-              {isTrackedLocal(eventSourceDetail.descriptor) ? <Tag color="purple">跟踪本地资产</Tag> : null}
-              {eventSourceDetail.descriptor.localState?.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
+              {webhookDetail.descriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+              {isLocalWebhook(webhookDetail.descriptor) ? <Tag color="blue">已添加</Tag> : <Tag>未添加</Tag>}
+              {isTrackedLocal(webhookDetail.descriptor) ? <Tag color="purple">跟踪本地资产</Tag> : null}
+              {webhookDetail.descriptor.localState?.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
             </Space>
 
             <Space wrap size={[8, 8]}>
-              {isTrackedLocal(eventSourceDetail.descriptor) ? (
-                <Button onClick={() => onNavigate("/triggers")}>
-                  {getUpstreamActionLabel(eventSourceDetail.descriptor.localState?.syncState)}
+              {isTrackedLocal(webhookDetail.descriptor) ? (
+                <Button onClick={() => onNavigate("/webhooks")}>
+                  {getUpstreamActionLabel(webhookDetail.descriptor.localState?.syncState)}
                 </Button>
-              ) : isLockedLocal(eventSourceDetail.descriptor) ? (
+              ) : isLockedLocal(webhookDetail.descriptor) ? (
                 <Button
-                  type={eventSourceDetail.descriptor.localState?.updateAvailable ? "primary" : "default"}
-                  ghost={eventSourceDetail.descriptor.localState?.updateAvailable}
-                  disabled={!eventSourceDetail.descriptor.localState?.updateAvailable}
-                  loading={actionKey === `update-local:${eventSourceDetail.descriptor.repositoryId}:${eventSourceDetail.descriptor.eventSourceId}`}
-                  onClick={() => void onEventSourceLocalAssetAction(eventSourceDetail.descriptor, "update-local")}
+                  type={webhookDetail.descriptor.localState?.updateAvailable ? "primary" : "default"}
+                  ghost={webhookDetail.descriptor.localState?.updateAvailable}
+                  disabled={!webhookDetail.descriptor.localState?.updateAvailable}
+                  loading={actionKey === `update-local:${webhookDetail.descriptor.repositoryId}:${webhookDetail.descriptor.webhookId}`}
+                  onClick={() => void onWebhookLocalAssetAction(webhookDetail.descriptor, "update-local")}
                 >
-                  {eventSourceDetail.descriptor.localState?.updateAvailable ? "更新事件源" : "已添加"}
+                  {webhookDetail.descriptor.localState?.updateAvailable ? "更新Webhook" : "已添加"}
                 </Button>
               ) : (
                 <Button
                   type="primary"
-                  loading={actionKey === `add-local:${eventSourceDetail.descriptor.repositoryId}:${eventSourceDetail.descriptor.eventSourceId}`}
-                  onClick={() => void onAddEventSourceToLocal(eventSourceDetail.descriptor)}
+                  loading={actionKey === `add-local:${webhookDetail.descriptor.repositoryId}:${webhookDetail.descriptor.webhookId}`}
+                  onClick={() => void onAddWebhookToLocal(webhookDetail.descriptor)}
                 >
                   添加到本地
                 </Button>
@@ -422,8 +422,8 @@ export function DiscoveryDetailDrawers({
                   label: "说明",
                   children: (
                     <MarkdownDescription
-                      value={eventSourceDetail.descriptor.description}
-                      emptyText="该事件源没有填写说明。"
+                      value={webhookDetail.descriptor.description}
+                      emptyText="该Webhook没有填写说明。"
                       className="markdown-description--panel"
                     />
                   )
@@ -433,7 +433,7 @@ export function DiscoveryDetailDrawers({
                   label: "发布日志",
                   children: (
                     <MarkdownDescription
-                      value={eventSourceDetail.descriptor.releaseNotes}
+                      value={webhookDetail.descriptor.releaseNotes}
                       emptyText="该版本没有填写发布日志。"
                       className="markdown-description--panel"
                     />
@@ -444,21 +444,25 @@ export function DiscoveryDetailDrawers({
                   label: "接入配置",
                   children: (
                     <Descriptions bordered size="small" column={2}>
-                      <Descriptions.Item label="Transport">{eventSourceDetail.eventSource.transport.type}</Descriptions.Item>
-                      <Descriptions.Item label="Content Types">{(eventSourceDetail.eventSource.transport.contentTypes ?? []).join(", ") || "-"}</Descriptions.Item>
-                      <Descriptions.Item label="Auth Mode">{eventSourceDetail.eventSource.auth?.mode || "NONE"}</Descriptions.Item>
-                      <Descriptions.Item label="Secret Config">{eventSourceDetail.eventSource.auth?.secretConfigKey ? <Text code>{eventSourceDetail.eventSource.auth.secretConfigKey}</Text> : "-"}</Descriptions.Item>
+                      <Descriptions.Item label="Transport">{webhookDetail.webhook.transport.type}</Descriptions.Item>
+                      <Descriptions.Item label="Endpoint">
+                        <Text code>{webhookDetail.webhook.transport.endpointPath || "-"}</Text>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="Content Types">{(webhookDetail.webhook.transport.contentTypes ?? []).join(", ") || "-"}</Descriptions.Item>
+                      <Descriptions.Item label="Webhook Script">
+                        {webhookDetail.webhook.webhookScriptId ? <Text code>{webhookDetail.webhook.webhookScriptId}</Text> : "-"}
+                      </Descriptions.Item>
                     </Descriptions>
                   )
                 },
                 {
                   key: "sample",
-                  label: "样例上下文",
+                  label: "样例请求",
                   children: (
                     <CodeEditor
                       height="320px"
                       language="json"
-                      value={JSON.stringify(eventSourceDetail.eventSource.sampleContext ?? {}, null, 2)}
+                      value={JSON.stringify(webhookDetail.webhook.sampleRequest ?? {}, null, 2)}
                       onChange={() => undefined}
                       theme={editorTheme}
                       readOnly={true}
@@ -467,13 +471,13 @@ export function DiscoveryDetailDrawers({
                 },
                 {
                   key: "config",
-                  label: `配置模板 (${eventSourceDetail.configTemplate.length})`,
-                  children: eventSourceDetail.configTemplate.length > 0 ? (
+                  label: `配置模板 (${webhookDetail.configTemplate.length})`,
+                  children: webhookDetail.configTemplate.length > 0 ? (
                     <Table
                       rowKey="key"
                       size="small"
                       pagination={false}
-                      dataSource={eventSourceDetail.configTemplate}
+                      dataSource={webhookDetail.configTemplate}
                       columns={[
                         { title: "配置键", dataIndex: "key", key: "key", render: (value: string) => <Text code>{value}</Text> },
                         { title: "说明", dataIndex: "label", key: "label", render: (value?: string) => value || "-" },
@@ -490,47 +494,16 @@ export function DiscoveryDetailDrawers({
                       ]}
                     />
                   ) : (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该事件源没有配置模板" />
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该Webhook没有配置模板" />
                   )
                 },
                 {
                   key: "dependencies",
-                  label: `脚本依赖 (${eventSourceDetail.descriptor.scriptDependencies.length})`,
-                  children: renderScriptDependencies(eventSourceDetail.descriptor.scriptDependencies, {
-                    currentRepositoryId: eventSourceDetail.descriptor.repositoryId,
+                  label: `脚本依赖 (${webhookDetail.descriptor.scriptDependencies.length})`,
+                  children: renderScriptDependencies(webhookDetail.descriptor.scriptDependencies, {
+                    currentRepositoryId: webhookDetail.descriptor.repositoryId,
                     availableTools
                   })
-                },
-                {
-                  key: "triggers",
-                  label: `触发器模板 (${eventSourceDetail.triggerTemplate.length})`,
-                  children: eventSourceDetail.triggerTemplate.length > 0 ? (
-                    <Table
-                      rowKey="id"
-                      size="small"
-                      pagination={false}
-                      dataSource={eventSourceDetail.triggerTemplate}
-                      columns={[
-                        { title: "模板 ID", dataIndex: "id", key: "id", render: (value: string) => <Text code>{value}</Text> },
-                        { title: "名称", dataIndex: "name", key: "name" },
-                        {
-                          title: "目标脚本",
-                          key: "target",
-                          render: (_value: unknown, record) => (
-                            <Text code>{`${record.targetScriptDependency.repositoryId}/${record.targetScriptDependency.toolId}`}</Text>
-                          )
-                        },
-                        {
-                          title: "默认状态",
-                          dataIndex: "enabledByDefault",
-                          key: "enabledByDefault",
-                          render: (value: boolean) => value ? <Tag color="processing">默认启用</Tag> : <Tag>默认停用</Tag>
-                        }
-                      ]}
-                    />
-                  ) : (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该事件源没有触发器模板" />
-                  )
                 }
               ]}
             />

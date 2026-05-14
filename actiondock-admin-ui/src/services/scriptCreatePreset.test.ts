@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractAiDependenciesFromSource } from "./aiDependencies";
-import { buildAgentWrapperScriptPreset, slugifyScriptId, suggestPresetScriptId } from "./scriptCreatePreset";
+import { buildAgentWrapperScriptPreset, buildWebhookScriptPreset, slugifyScriptId, suggestPresetScriptId } from "./scriptCreatePreset";
 
 describe("scriptCreatePreset", () => {
   it("slugifies generated script ids", () => {
@@ -38,5 +38,21 @@ describe("scriptCreatePreset", () => {
     });
 
     expect(preset.source).toContain("agentProfile: 'agent\\\\with\\'quote'");
+  });
+
+  it("builds a webhook preset with request envelope input schema", () => {
+    const preset = buildWebhookScriptPreset({
+      key: "github-webhook",
+      name: "GitHub Webhook"
+    });
+
+    expect(preset.idHint).toBe("webhook-github-webhook");
+    expect(preset.nameHint).toBe("GitHub Webhook 脚本");
+    expect(preset.inputSchema.required).toEqual(["request", "webhook"]);
+    expect((preset.inputSchema.properties as Record<string, unknown>)).toHaveProperty("request");
+    expect((preset.inputSchema.properties as Record<string, unknown>)).toHaveProperty("webhook");
+    expect(preset.outputSchema.required).toEqual(["status"]);
+    expect(preset.source).toContain("def request = input.request instanceof Map ? input.request : [:]");
+    expect(preset.source).toContain("\"Content-Type\": [\"application/json;charset=UTF-8\"]");
   });
 });

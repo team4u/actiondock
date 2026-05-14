@@ -24,10 +24,7 @@ public class ExecutionRecord {
     private String scheduleId;
     private String agentRunId;
     private String agentStepId;
-    private String eventSourceId;
-    private String eventTriggerId;
-    private String eventRecordId;
-    private String eventDispatchId;
+    private String webhookId;
     private Map<String, Object> input = new LinkedHashMap<>();
     private Map<String, Object> output = new LinkedHashMap<>();
     private List<ExecutionLogEntry> logs = new ArrayList<>();
@@ -119,39 +116,12 @@ public class ExecutionRecord {
         return this;
     }
 
-    public String getEventSourceId() {
-        return eventSourceId;
+    public String getWebhookId() {
+        return webhookId;
     }
 
-    public ExecutionRecord setEventSourceId(String eventSourceId) {
-        this.eventSourceId = eventSourceId;
-        return this;
-    }
-
-    public String getEventTriggerId() {
-        return eventTriggerId;
-    }
-
-    public ExecutionRecord setEventTriggerId(String eventTriggerId) {
-        this.eventTriggerId = eventTriggerId;
-        return this;
-    }
-
-    public String getEventRecordId() {
-        return eventRecordId;
-    }
-
-    public ExecutionRecord setEventRecordId(String eventRecordId) {
-        this.eventRecordId = eventRecordId;
-        return this;
-    }
-
-    public String getEventDispatchId() {
-        return eventDispatchId;
-    }
-
-    public ExecutionRecord setEventDispatchId(String eventDispatchId) {
-        this.eventDispatchId = eventDispatchId;
+    public ExecutionRecord setWebhookId(String webhookId) {
+        this.webhookId = webhookId;
         return this;
     }
 

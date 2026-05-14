@@ -29,10 +29,10 @@ final class RepositoryIndexUtils {
         return withReplaced(current, repository, tools, null, null, null, null);
     }
 
-    static RepositoryCatalogTypes.RepositoryIndexFile withEventSources(RepositoryCatalogTypes.RepositoryIndexFile current,
+    static RepositoryCatalogTypes.RepositoryIndexFile withWebhooks(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                        RepositoryDefinition repository,
-                                                                       List<RepositoryCatalogTypes.RepositoryEventSourceIndexEntry> eventSources) {
-        return withReplaced(current, repository, null, eventSources, null, null, null);
+                                                                       List<RepositoryCatalogTypes.RepositoryWebhookIndexEntry> webhooks) {
+        return withReplaced(current, repository, null, webhooks, null, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withPlugins(RepositoryCatalogTypes.RepositoryIndexFile current,
@@ -57,7 +57,7 @@ final class RepositoryIndexUtils {
     private static <T extends Record> RepositoryCatalogTypes.RepositoryIndexFile withReplaced(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                         RepositoryDefinition repository,
                                                                         List<RepositoryCatalogTypes.RepositoryIndexEntry> tools,
-                                                                        List<RepositoryCatalogTypes.RepositoryEventSourceIndexEntry> eventSources,
+                                                                        List<RepositoryCatalogTypes.RepositoryWebhookIndexEntry> webhooks,
                                                                         List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins,
                                                                         List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages,
                                                                         List<RepositoryCatalogTypes.RepositorySkillIndexEntry> skills) {
@@ -66,7 +66,7 @@ final class RepositoryIndexUtils {
                 repository.getName(),
                 NormalizeUtils.normalizeNullable(repository.getDescription()),
                 tools != null ? tools : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.tools())),
-                eventSources != null ? eventSources : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.eventSources())),
+                webhooks != null ? webhooks : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.webhooks())),
                 plugins != null ? plugins : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.plugins())),
                 packages != null ? packages : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.packages())),
                 skills != null ? skills : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.skills()))

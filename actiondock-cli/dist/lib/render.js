@@ -83,17 +83,8 @@ export function renderExecution(response) {
     if (response.triggerSource) {
         lines.push(`Trigger: ${response.triggerSource}`);
     }
-    if (response.eventSourceId) {
-        lines.push(`EventSource: ${response.eventSourceId}`);
-    }
-    if (response.eventTriggerId) {
-        lines.push(`EventTrigger: ${response.eventTriggerId}`);
-    }
-    if (response.eventRecordId) {
-        lines.push(`EventRecord: ${response.eventRecordId}`);
-    }
-    if (response.eventDispatchId) {
-        lines.push(`EventDispatch: ${response.eventDispatchId}`);
+    if (response.webhookId) {
+        lines.push(`Webhook: ${response.webhookId}`);
     }
     if (response.errorMessage) {
         lines.push(`Error: ${response.errorMessage}`);
@@ -195,9 +186,9 @@ export function renderExecutionPresetDetail(item) {
     }
     return lines.join("\n");
 }
-export function renderEventSourceList(items) {
+export function renderWebhookList(items) {
     if (items.length === 0) {
-        return "没有事件源。";
+        return "没有Webhook。";
     }
     return items
         .map((item) => {
@@ -209,9 +200,9 @@ export function renderEventSourceList(items) {
     })
         .join("\n");
 }
-export function renderEventSourceDetail(item) {
+export function renderWebhookDetail(item) {
     const lines = [
-        `EventSource: ${item.id}`,
+        `Webhook: ${item.id}`,
         `Key: ${item.key ?? "-"}`,
         `Name: ${item.name ?? "-"}`,
         `Enabled: ${item.enabled ? "yes" : "no"}`,
@@ -220,48 +211,45 @@ export function renderEventSourceDetail(item) {
     if (item.transport?.endpointPath) {
         lines.push(`EndpointPath: ${item.transport.endpointPath}`);
     }
+    if (item.webhookScriptId) {
+        lines.push(`WebhookScript: ${item.webhookScriptId}`);
+    }
     if (item.description) {
         lines.push(`Description: ${item.description}`);
-    }
-    if (item.auth?.mode) {
-        lines.push(`Auth: ${item.auth.mode}`);
     }
     if (item.lastReceivedAt) {
         lines.push(`LastReceivedAt: ${item.lastReceivedAt}`);
     }
-    if (item.normalizationProcessor) {
-        lines.push(`Normalization: ${item.normalizationProcessor.mode ?? "-"}`);
-    }
-    if (item.sampleContext && Object.keys(item.sampleContext).length > 0) {
-        lines.push("SampleContext:");
-        lines.push(indent(formatValue(item.sampleContext)));
+    if (item.sampleRequest && Object.keys(item.sampleRequest).length > 0) {
+        lines.push("SampleRequest:");
+        lines.push(indent(formatValue(item.sampleRequest)));
     }
     return lines.join("\n");
 }
-export function renderRepositoryEventSourceList(items) {
+export function renderRepositoryWebhookList(items) {
     if (items.length === 0) {
-        return "没有仓库事件源。";
+        return "没有仓库Webhook。";
     }
     return items
         .map((item) => {
-        const installed = item.installed ? ` installed=${item.installedVersion ?? item.version}` : " not-installed";
-        const workingCopy = item.workingCopyId ? ` working-copy=${item.workingCopyId}` : "";
-        return `${item.repositoryId}/${item.eventSourceId} ${item.displayName}@${item.version}${installed}${workingCopy}`;
+        const local = item.localState
+            ? ` local=${item.localState.localAssetId}@${item.localState.version ?? item.version} ${item.localState.mode}`
+            : " not-installed";
+        return `${item.repositoryId}/${item.webhookId} ${item.displayName}@${item.version}${local}`;
     })
         .join("\n");
 }
-export function renderRepositoryEventSourceDetail(item) {
+export function renderRepositoryWebhookDetail(item) {
     const descriptor = item.descriptor;
     const lines = [
-        `RepositoryEventSource: ${descriptor.repositoryId}/${descriptor.eventSourceId}`,
-        `InstalledId: ${descriptor.installedSourceId}`,
+        `RepositoryWebhook: ${descriptor.repositoryId}/${descriptor.webhookId}`,
         `Name: ${descriptor.displayName}`,
         `Version: ${descriptor.version}`,
-        `Installed: ${descriptor.installed ? `yes${descriptor.installedVersion ? ` (${descriptor.installedVersion})` : ""}` : "no"}`,
+        `Installed: ${descriptor.localState ? `yes (${descriptor.localState.localAssetId})` : "no"}`,
         `Trusted: ${descriptor.trusted ? "yes" : "no"}`
     ];
-    if (descriptor.workingCopyId) {
-        lines.push(`WorkingCopy: ${descriptor.workingCopyId}`);
+    if (descriptor.localState?.mode === "TRACKED") {
+        lines.push(`WorkingCopy: ${descriptor.localState.localAssetId}`);
     }
     if (descriptor.owner) {
         lines.push(`Owner: ${descriptor.owner}`);
@@ -269,11 +257,11 @@ export function renderRepositoryEventSourceDetail(item) {
     if (descriptor.description) {
         lines.push(`Description: ${descriptor.description}`);
     }
-    if (item.eventSource.transport?.type) {
-        lines.push(`Transport: ${item.eventSource.transport.type}`);
+    if (item.webhook.transport?.type) {
+        lines.push(`Transport: ${item.webhook.transport.type}`);
     }
-    if (item.eventSource.auth?.mode) {
-        lines.push(`Auth: ${item.eventSource.auth.mode}`);
+    if (item.webhook.webhookScriptId) {
+        lines.push(`WebhookScript: ${item.webhook.webhookScriptId}`);
     }
     if (descriptor.scriptDependencies.length > 0) {
         lines.push("ScriptDependencies:");
@@ -284,8 +272,21 @@ export function renderRepositoryEventSourceDetail(item) {
     if (item.configTemplate.length > 0) {
         lines.push(`ConfigTemplates: ${item.configTemplate.length}`);
     }
-    if (item.triggerTemplate.length > 0) {
-        lines.push(`TriggerTemplates: ${item.triggerTemplate.length}`);
+    return lines.join("\n");
+}
+export function renderRepositoryLocalAsset(item) {
+    const lines = [
+        `RepositoryAsset: ${item.repositoryId}/${item.upstreamAssetId}`,
+        `LocalAsset: ${item.localAssetId}`,
+        `Type: ${item.assetType}`,
+        `Mode: ${item.mode}`,
+        `Version: ${item.version ?? "-"}`
+    ];
+    if (item.latestVersion) {
+        lines.push(`LatestVersion: ${item.latestVersion}`);
+    }
+    if (item.name) {
+        lines.push(`Name: ${item.name}`);
     }
     return lines.join("\n");
 }
@@ -400,209 +401,17 @@ export function renderUpstreamStatus(item) {
     }
     return lines.join("\n");
 }
-export function renderEventTriggerList(items) {
-    if (items.length === 0) {
-        return "没有事件触发器。";
-    }
-    return items
-        .map((item) => {
-        const name = item.name ? ` ${item.name}` : "";
-        const source = item.sourceId ? ` source=${item.sourceId}` : "";
-        const script = item.targetScriptId ? ` script=${item.targetScriptId}` : "";
-        const enabled = typeof item.enabled === "boolean" ? ` ${item.enabled ? "enabled" : "disabled"}` : "";
-        return `${item.id}${name}${enabled}${source}${script}`;
-    })
-        .join("\n");
-}
-export function renderEventTriggerDetail(item) {
+export function renderWebhookInvokeResult(result) {
     const lines = [
-        `EventTrigger: ${item.id}`,
-        `Name: ${item.name ?? "-"}`,
-        `Enabled: ${item.enabled ? "yes" : "no"}`,
-        `Source: ${item.sourceId ?? "-"}`,
-        `TargetScript: ${item.targetScriptId ?? "-"}`,
-        `SubmitMode: ${item.submitMode ?? "-"}`,
-        `ResponseView: ${item.responseView ?? "-"}`
+        `HTTP ${result.status}`
     ];
-    if (item.description) {
-        lines.push(`Description: ${item.description}`);
+    if (Object.keys(result.headers).length > 0) {
+        lines.push("Headers:");
+        lines.push(indent(formatValue(result.headers)));
     }
-    if (item.filterProcessor) {
-        lines.push(`FilterProcessor: ${item.filterProcessor.mode ?? "-"}`);
-    }
-    if (item.idempotencyProcessor) {
-        lines.push(`IdempotencyProcessor: ${item.idempotencyProcessor.mode ?? "-"}`);
-    }
-    if (item.inputProcessor) {
-        lines.push(`InputProcessor: ${item.inputProcessor.mode ?? "-"}`);
-    }
-    if (item.lastEventId) {
-        lines.push(`LastEventId: ${item.lastEventId}`);
-    }
-    if (item.lastExecutionId) {
-        lines.push(`LastExecution: ${item.lastExecutionId}${item.lastExecutionStatus ? ` ${item.lastExecutionStatus}` : ""}`);
-    }
-    return lines.join("\n");
-}
-export function renderEventRecordList(items) {
-    if (items.length === 0) {
-        return "没有事件记录。";
-    }
-    return items
-        .map((item) => {
-        const source = item.sourceKey ? ` ${item.sourceKey}` : item.sourceId ? ` ${item.sourceId}` : "";
-        const status = item.status ? ` ${item.status}` : "";
-        const eventType = item.eventType ? ` ${item.eventType}` : "";
-        return `${item.id}${source}${status}${eventType}`;
-    })
-        .join("\n");
-}
-export function renderEventRecordDetail(item) {
-    const lines = [
-        `EventRecord: ${item.id}`,
-        `SourceId: ${item.sourceId ?? "-"}`,
-        `SourceKey: ${item.sourceKey ?? "-"}`,
-        `Status: ${item.status ?? "-"}`,
-        `EventType: ${item.eventType ?? "-"}`,
-        `EventId: ${item.eventId ?? "-"}`
-    ];
-    if (item.actor) {
-        lines.push(`Actor: ${item.actor}`);
-    }
-    if (item.subject) {
-        lines.push(`Subject: ${item.subject}`);
-    }
-    if (item.errorMessage) {
-        lines.push(`Error: ${item.errorMessage}`);
-    }
-    if (item.rawHeaders) {
-        lines.push("RawHeaders:");
-        lines.push(indent(formatValue(item.rawHeaders)));
-    }
-    if (item.rawQuery) {
-        lines.push("RawQuery:");
-        lines.push(indent(formatValue(item.rawQuery)));
-    }
-    if (item.rawBody) {
-        lines.push("RawBody:");
-        lines.push(indent(formatValue(item.rawBody)));
-    }
-    if (item.normalizedEvent) {
-        lines.push("NormalizedEvent:");
-        lines.push(indent(renderNormalizedEvent(item.normalizedEvent)));
-    }
-    return lines.join("\n");
-}
-export function renderEventDispatchList(items) {
-    if (items.length === 0) {
-        return "没有事件分发记录。";
-    }
-    return items
-        .map((item) => {
-        const trigger = item.triggerId ? ` trigger=${item.triggerId}` : "";
-        const status = item.status ? ` ${item.status}` : "";
-        const execution = item.executionId ? ` execution=${item.executionId}` : "";
-        return `${item.id}${status}${trigger}${execution}`;
-    })
-        .join("\n");
-}
-export function renderEventDispatchDetail(item) {
-    const lines = [
-        `EventDispatch: ${item.id}`,
-        `EventRecord: ${item.eventId ?? "-"}`,
-        `SourceId: ${item.sourceId ?? "-"}`,
-        `TriggerId: ${item.triggerId ?? "-"}`,
-        `TargetScript: ${item.targetScriptId ?? "-"}`,
-        `Status: ${item.status ?? "-"}`
-    ];
-    if (item.filterMatched !== undefined) {
-        lines.push(`FilterMatched: ${item.filterMatched ? "yes" : "no"}`);
-    }
-    if (item.idempotencyKey) {
-        lines.push(`IdempotencyKey: ${item.idempotencyKey}`);
-    }
-    if (item.executionId) {
-        lines.push(`Execution: ${item.executionId}${item.executionStatus ? ` ${item.executionStatus}` : ""}`);
-    }
-    if (item.errorMessage) {
-        lines.push(`Error: ${item.errorMessage}`);
-    }
-    if (item.mappedInput && Object.keys(item.mappedInput).length > 0) {
-        lines.push("MappedInput:");
-        lines.push(indent(formatValue(item.mappedInput)));
-    }
-    return lines.join("\n");
-}
-export function renderProcessorTestResult(result) {
-    const lines = [
-        `Success: ${result.success ? "yes" : "no"}`,
-        `SchemaValid: ${result.schemaValid === false ? "no" : "yes"}`
-    ];
-    if (typeof result.durationMs === "number") {
-        lines.push(`DurationMs: ${result.durationMs}`);
-    }
-    if (result.errorMessage) {
-        lines.push(`Error: ${result.errorMessage}`);
-    }
-    if (result.output !== undefined) {
-        lines.push("Output:");
-        lines.push(indent(formatValue(result.output)));
-    }
-    if (result.fieldErrors && result.fieldErrors.length > 0) {
-        lines.push("FieldErrors:");
-        lines.push(indent(formatValue(result.fieldErrors)));
-    }
-    if (result.logs && result.logs.length > 0) {
-        lines.push(`Logs: ${result.logs.length}`);
-    }
-    return lines.join("\n");
-}
-export function renderEventTriggerTestResult(result) {
-    const lines = [];
-    if (result.event) {
-        lines.push("Event:");
-        lines.push(indent(renderNormalizedEvent(result.event)));
-    }
-    lines.push(`FilterMatched: ${result.filterMatched ? "yes" : "no"}`);
-    if (result.idempotencyKey) {
-        lines.push(`IdempotencyKey: ${result.idempotencyKey}`);
-    }
-    lines.push(`SchemaValid: ${result.schemaValid === false ? "no" : "yes"}`);
-    if (result.filterResult) {
-        lines.push("FilterResult:");
-        lines.push(indent(renderProcessorTestResult(result.filterResult)));
-    }
-    if (result.idempotencyResult) {
-        lines.push("IdempotencyResult:");
-        lines.push(indent(renderProcessorTestResult(result.idempotencyResult)));
-    }
-    if (result.inputResult) {
-        lines.push("InputResult:");
-        lines.push(indent(renderProcessorTestResult(result.inputResult)));
-    }
-    if (result.mappedInput !== undefined) {
-        lines.push("MappedInput:");
-        lines.push(indent(formatValue(result.mappedInput)));
-    }
-    if (result.fieldErrors && result.fieldErrors.length > 0) {
-        lines.push("FieldErrors:");
-        lines.push(indent(formatValue(result.fieldErrors)));
-    }
-    if (result.execution) {
-        lines.push("Execution:");
-        lines.push(indent(renderExecution(result.execution)));
-    }
-    return lines.join("\n");
-}
-export function renderEventIngestionResult(result) {
-    const lines = [];
-    if (result.event) {
-        lines.push("Event:");
-        lines.push(indent(renderEventRecordDetail(result.event)));
-    }
-    lines.push(`Dispatches: ${result.dispatches?.length ?? 0}`);
-    if (result.dispatches && result.dispatches.length > 0) {
-        lines.push(indent(renderEventDispatchList(result.dispatches)));
+    if (result.body !== undefined) {
+        lines.push("Body:");
+        lines.push(indent(formatValue(result.body)));
     }
     return lines.join("\n");
 }
@@ -761,36 +570,6 @@ function formatSupplement(field) {
         fragments.push(field.description);
     }
     return fragments.length > 0 ? ` (${fragments.join("; ")})` : "";
-}
-function renderNormalizedEvent(event) {
-    const lines = [
-        `Id: ${event.id ?? "-"}`,
-        `SourceId: ${event.sourceId ?? "-"}`,
-        `SourceKey: ${event.sourceKey ?? "-"}`,
-        `EventType: ${event.eventType ?? "-"}`,
-        `EventId: ${event.eventId ?? "-"}`,
-        `Actor: ${event.actor ?? "-"}`,
-        `Subject: ${event.subject ?? "-"}`
-    ];
-    if (event.timestamp) {
-        lines.push(`Timestamp: ${event.timestamp}`);
-    }
-    if (event.receivedAt) {
-        lines.push(`ReceivedAt: ${event.receivedAt}`);
-    }
-    if (event.headers) {
-        lines.push("Headers:");
-        lines.push(indent(formatValue(event.headers)));
-    }
-    if (event.query) {
-        lines.push("Query:");
-        lines.push(indent(formatValue(event.query)));
-    }
-    if (event.body) {
-        lines.push("Body:");
-        lines.push(indent(formatValue(event.body)));
-    }
-    return lines.join("\n");
 }
 function indent(text) {
     return text

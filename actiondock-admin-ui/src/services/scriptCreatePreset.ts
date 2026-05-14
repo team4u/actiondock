@@ -112,6 +112,123 @@ return output`
   };
 }
 
+export interface WebhookScriptPresetOptions {
+  key?: string;
+  name?: string;
+}
+
+export function buildWebhookScriptPreset(options?: WebhookScriptPresetOptions): ScriptCreatePreset {
+  const normalizedKey = options?.key?.trim();
+  const normalizedName = options?.name?.trim();
+  const label = normalizedName || normalizedKey || "Webhook";
+
+  return {
+    idHint: normalizedKey ? `webhook-${slugifyScriptId(normalizedKey)}` : "webhook-script",
+    nameHint: `${label} 脚本`,
+    description: "处理 Webhook 请求并直接返回 HTTP 响应。",
+    type: "GROOVY",
+    packaging: "TOOL",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request: {
+          type: "object",
+          title: "请求",
+          properties: {
+            method: { type: "string", title: "Method", description: "HTTP 方法" },
+            path: { type: "string", title: "Path", description: "请求路径" },
+            headers: {
+              type: "object",
+              title: "Headers",
+              description: "请求头，多值头为 string[]",
+              additionalProperties: {
+                type: "array",
+                items: { type: "string" }
+              }
+            },
+            query: {
+              type: "object",
+              title: "Query",
+              description: "查询参数，多值参数为 string[]",
+              additionalProperties: {
+                type: "array",
+                items: { type: "string" }
+              }
+            },
+            rawBody: {
+              type: "string",
+              title: "Raw Body",
+              description: "原始请求体字符串",
+              "x-ui": { widget: "textarea", rows: 8 }
+            },
+            contentType: { type: "string", title: "Content-Type", description: "请求 Content-Type" }
+          },
+          required: ["method", "path", "headers", "query"]
+        },
+        webhook: {
+          type: "object",
+          title: "Webhook",
+          properties: {
+            id: { type: "string", title: "ID" },
+            key: { type: "string", title: "Key" },
+            name: { type: "string", title: "Name" }
+          },
+          required: ["id", "key", "name"]
+        }
+      },
+      required: ["request", "webhook"]
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "integer", title: "HTTP Status", description: "返回的 HTTP 状态码" },
+        headers: {
+          type: "object",
+          title: "Response Headers",
+          description: "响应头，值可以是 string 或 string[]"
+        },
+        body: {
+          title: "Response Body",
+          description: "响应体，可以是字符串、对象或 null"
+        }
+      },
+      required: ["status"]
+    },
+    source: `def request = input.request instanceof Map ? input.request : [:]
+def webhook = input.webhook instanceof Map ? input.webhook : [:]
+def method = (request.method ?: "POST").toString()
+def path = (request.path ?: "").toString()
+def headers = request.headers instanceof Map ? request.headers : [:]
+def query = request.query instanceof Map ? request.query : [:]
+def rawBody = request.rawBody?.toString()
+def contentType = (request.contentType ?: "").toString()
+
+// TODO: 在这里实现鉴权、验签、幂等和业务逻辑
+return [
+    status : 200,
+    headers: [
+        "Content-Type": ["application/json;charset=UTF-8"]
+    ],
+    body   : [
+        ok        : true,
+        webhook   : [
+            id  : webhook.id,
+            key : webhook.key,
+            name: webhook.name
+        ],
+        request   : [
+            method     : method,
+            path       : path,
+            contentType: contentType,
+            headers    : headers,
+            query      : query,
+            rawBody    : rawBody
+        ]
+    ]
+]`
+  };
+}
+
 export function writeScriptCreatePreset(preset: ScriptCreatePreset): void {
   sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(preset));
 }

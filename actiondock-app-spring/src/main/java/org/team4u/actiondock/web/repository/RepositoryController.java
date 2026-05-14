@@ -19,7 +19,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
 import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
-import org.team4u.actiondock.repository.RepositoryEventSourceService;
+import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositorySkillService;
 import org.team4u.actiondock.repository.RepositoryToolService;
@@ -40,20 +40,20 @@ public class RepositoryController {
     private final RepositoryCatalogService repositoryCatalogService;
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryToolService repositoryToolService;
-    private final RepositoryEventSourceService repositoryEventSourceService;
+    private final RepositoryWebhookService repositoryWebhookService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final RepositorySkillService repositorySkillService;
 
     public RepositoryController(RepositoryCatalogService repositoryCatalogService,
                                 RepositoryPluginService repositoryPluginService,
                                 RepositoryToolService repositoryToolService,
-                                RepositoryEventSourceService repositoryEventSourceService,
+                                RepositoryWebhookService repositoryWebhookService,
                                 RepositoryCapabilityPackageService repositoryCapabilityPackageService,
                                 RepositorySkillService repositorySkillService) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryToolService = repositoryToolService;
-        this.repositoryEventSourceService = repositoryEventSourceService;
+        this.repositoryWebhookService = repositoryWebhookService;
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
         this.repositorySkillService = repositorySkillService;
     }
@@ -136,20 +136,20 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
     }
 
-    @GetMapping("/event-sources")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor>> listAllEventSources() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositoryEventSources());
+    @GetMapping("/webhooks")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryWebhookDescriptor>> listAllWebhooks() {
+        return ApiResponse.success(repositoryCatalogService.listAllRepositoryWebhooks());
     }
 
-    @GetMapping("/{id}/event-sources")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor>> listRepositoryEventSources(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositoryEventSources(id));
+    @GetMapping("/{id}/webhooks")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryWebhookDescriptor>> listRepositoryWebhooks(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listRepositoryWebhooks(id));
     }
 
-    @GetMapping("/{id}/event-sources/{eventSourceId}")
-    public ApiResponse<RepositoryCatalogTypes.RepositoryEventSourceDetail> eventSourceDetail(@PathVariable String id,
-                                                                                             @PathVariable String eventSourceId) {
-        return ApiResponse.success(repositoryCatalogService.getRepositoryEventSource(id, eventSourceId));
+    @GetMapping("/{id}/webhooks/{webhookId}")
+    public ApiResponse<RepositoryCatalogTypes.RepositoryWebhookDetail> webhookDetail(@PathVariable String id,
+                                                                                             @PathVariable String webhookId) {
+        return ApiResponse.success(repositoryCatalogService.getRepositoryWebhook(id, webhookId));
     }
 
     @GetMapping("/packages")
@@ -252,19 +252,19 @@ public class RepositoryController {
                 options -> repositoryToolService.updateLocalAsset(id, toolId, options), "本地资产已更新");
     }
 
-    @PostMapping("/{id}/event-sources/{eventSourceId}/local-assets")
-    public ApiResponse<RepositoryLocalAsset> addEventSourceLocalAsset(@PathVariable String id,
-                                                                      @PathVariable String eventSourceId,
+    @PostMapping("/{id}/webhooks/{webhookId}/local-assets")
+    public ApiResponse<RepositoryLocalAsset> addWebhookLocalAsset(@PathVariable String id,
+                                                                      @PathVariable String webhookId,
                                                                       @RequestBody(required = false) RepositoryCatalogTypes.RepositoryLocalAssetRequest request) {
-        return ApiResponse.success(repositoryEventSourceService.addLocalAsset(id, eventSourceId, request), "已添加到本地");
+        return ApiResponse.success(repositoryWebhookService.addLocalAsset(id, webhookId, request), "已添加到本地");
     }
 
-    @PostMapping("/{id}/event-sources/{eventSourceId}/local-assets/update")
-    public ApiResponse<RepositoryLocalAsset> updateEventSourceLocalAsset(@PathVariable String id,
-                                                                         @PathVariable String eventSourceId,
+    @PostMapping("/{id}/webhooks/{webhookId}/local-assets/update")
+    public ApiResponse<RepositoryLocalAsset> updateWebhookLocalAsset(@PathVariable String id,
+                                                                         @PathVariable String webhookId,
                                                                          @RequestBody(required = false) RepositoryInstallRequest request) {
         return resolveOptionsAndApply(request,
-                options -> repositoryEventSourceService.updateLocalAsset(id, eventSourceId, options), "本地资产已更新");
+                options -> repositoryWebhookService.updateLocalAsset(id, webhookId, options), "本地资产已更新");
     }
 
     /**

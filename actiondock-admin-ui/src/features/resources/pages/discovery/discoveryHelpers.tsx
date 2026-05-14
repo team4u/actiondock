@@ -5,7 +5,7 @@ import type {
   CapabilityPackageDescriptor,
   PluginDependency,
   RepositoryAiPackageDependency,
-  RepositoryEventSourceDescriptor,
+  RepositoryWebhookDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
   RepositoryToolDescriptor,
@@ -56,19 +56,19 @@ export function isLocalTool(record: RepositoryToolDescriptor): boolean {
   return Boolean(record.localState);
 }
 
-export function isLocalEventSource(record: RepositoryEventSourceDescriptor): boolean {
+export function isLocalWebhook(record: RepositoryWebhookDescriptor): boolean {
   return Boolean(record.localState);
 }
 
-export function localAssetId(record: RepositoryToolDescriptor | RepositoryEventSourceDescriptor): string {
-  return record.localState?.localAssetId ?? ("toolId" in record ? record.toolId : record.eventSourceId);
+export function localAssetId(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): string {
+  return record.localState?.localAssetId ?? ("toolId" in record ? record.toolId : record.webhookId);
 }
 
-export function isTrackedLocal(record: RepositoryToolDescriptor | RepositoryEventSourceDescriptor): boolean {
+export function isTrackedLocal(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): boolean {
   return record.localState?.mode === "TRACKED";
 }
 
-export function isLockedLocal(record: RepositoryToolDescriptor | RepositoryEventSourceDescriptor): boolean {
+export function isLockedLocal(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): boolean {
   return record.localState?.mode === "LOCKED";
 }
 
@@ -191,20 +191,20 @@ export function filterCapabilityPackages(
   });
 }
 
-export function filterRepositoryEventSources(
-  eventSources: RepositoryEventSourceDescriptor[],
+export function filterRepositoryWebhooks(
+  webhooks: RepositoryWebhookDescriptor[],
   filters: {
     searchText: string;
     repositoryFilter: string;
     installFilter: InstallFilter;
     trustFilter: TrustFilter;
   }
-): RepositoryEventSourceDescriptor[] {
-  return eventSources.filter((item) => {
+): RepositoryWebhookDescriptor[] {
+  return webhooks.filter((item) => {
     if (!matchesRepositoryFilter(item.repositoryId, filters.repositoryFilter)) {
       return false;
     }
-    if (!matchesInstallFilter(isLocalEventSource(item), filters.installFilter)) {
+    if (!matchesInstallFilter(isLocalWebhook(item), filters.installFilter)) {
       return false;
     }
     if (!matchesTrustFilter(item.trusted, filters.trustFilter)) {
@@ -212,7 +212,7 @@ export function filterRepositoryEventSources(
     }
     return matchesKeyword(filters.searchText, [
       item.displayName,
-      item.eventSourceId,
+      item.webhookId,
       item.localState?.localAssetId,
       item.description,
       item.owner,

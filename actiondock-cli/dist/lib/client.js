@@ -194,121 +194,49 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async listEventSources() {
-        return this.requestJson("/api/event-sources");
+    async listWebhooks() {
+        return this.requestJson("/api/webhooks");
     }
-    async getEventSourceUpstreamStatus(sourceId) {
-        return this.requestJson(`/api/event-sources/${sourceId}/upstream`);
+    async getWebhookUpstreamStatus(webhookId) {
+        return this.requestJson(`/api/webhooks/${webhookId}/upstream`);
     }
-    async pullUpstreamEventSource(sourceId, force = false) {
-        return this.requestJson(`/api/event-sources/${sourceId}/upstream/pull?force=${force}`, {
+    async pullUpstreamWebhook(webhookId, force = false) {
+        return this.requestJson(`/api/webhooks/${webhookId}/upstream/pull?force=${force}`, {
             method: "POST"
         });
     }
-    async getEventSource(sourceId) {
-        return this.requestJson(`/api/event-sources/${sourceId}`);
+    async getWebhook(webhookId) {
+        return this.requestJson(`/api/webhooks/${webhookId}`);
     }
-    async createEventSource(definition) {
-        return this.requestJson("/api/event-sources", {
+    async createWebhook(definition) {
+        return this.requestJson("/api/webhooks", {
             method: "POST",
             body: JSON.stringify(definition)
         });
     }
-    async updateEventSource(sourceId, definition) {
-        return this.requestJson(`/api/event-sources/${sourceId}`, {
+    async updateWebhook(webhookId, definition) {
+        return this.requestJson(`/api/webhooks/${webhookId}`, {
             method: "PUT",
             body: JSON.stringify(definition)
         });
     }
-    async enableEventSource(sourceId) {
-        return this.requestJson(`/api/event-sources/${sourceId}/enable`, {
+    async enableWebhook(webhookId) {
+        return this.requestJson(`/api/webhooks/${webhookId}/enable`, {
             method: "POST"
         });
     }
-    async disableEventSource(sourceId) {
-        return this.requestJson(`/api/event-sources/${sourceId}/disable`, {
+    async disableWebhook(webhookId) {
+        return this.requestJson(`/api/webhooks/${webhookId}/disable`, {
             method: "POST"
         });
     }
-    async deleteEventSource(sourceId) {
-        await this.requestJson(`/api/event-sources/${sourceId}`, {
+    async deleteWebhook(webhookId) {
+        await this.requestJson(`/api/webhooks/${webhookId}`, {
             method: "DELETE"
         });
     }
-    async testEventSourceNormalization(sourceId, payload) {
-        return this.requestJson(`/api/event-sources/${sourceId}/test-normalization`, {
-            method: "POST",
-            body: JSON.stringify(payload)
-        });
-    }
-    async ingestEventSource(sourceId, payload) {
-        return this.requestJson(`/api/event-sources/${sourceId}/events`, {
-            method: "POST",
-            body: JSON.stringify(payload)
-        });
-    }
-    async listEventSourceEvents(sourceId, limit) {
-        const search = new URLSearchParams();
-        if (typeof limit === "number" && limit > 0) {
-            search.set("limit", String(limit));
-        }
-        const suffix = search.size > 0 ? `?${search.toString()}` : "";
-        return this.requestJson(`/api/event-sources/${sourceId}/events${suffix}`);
-    }
-    async listEventTriggers() {
-        return this.requestJson("/api/event-triggers");
-    }
-    async getEventTrigger(triggerId) {
-        return this.requestJson(`/api/event-triggers/${triggerId}`);
-    }
-    async createEventTrigger(definition) {
-        return this.requestJson("/api/event-triggers", {
-            method: "POST",
-            body: JSON.stringify(definition)
-        });
-    }
-    async updateEventTrigger(triggerId, definition) {
-        return this.requestJson(`/api/event-triggers/${triggerId}`, {
-            method: "PUT",
-            body: JSON.stringify(definition)
-        });
-    }
-    async enableEventTrigger(triggerId) {
-        return this.requestJson(`/api/event-triggers/${triggerId}/enable`, {
-            method: "POST"
-        });
-    }
-    async disableEventTrigger(triggerId) {
-        return this.requestJson(`/api/event-triggers/${triggerId}/disable`, {
-            method: "POST"
-        });
-    }
-    async deleteEventTrigger(triggerId) {
-        await this.requestJson(`/api/event-triggers/${triggerId}`, {
-            method: "DELETE"
-        });
-    }
-    async testEventTrigger(triggerId, payload) {
-        return this.requestJson(`/api/event-triggers/${triggerId}/test`, {
-            method: "POST",
-            body: JSON.stringify(payload)
-        });
-    }
-    async listEventTriggerDispatches(triggerId) {
-        return this.requestJson(`/api/event-triggers/${triggerId}/dispatches`);
-    }
-    async listEventRecords(sourceId) {
-        const suffix = sourceId ? `?${new URLSearchParams({ sourceId }).toString()}` : "";
-        return this.requestJson(`/api/event-records${suffix}`);
-    }
-    async getEventRecord(recordId) {
-        return this.requestJson(`/api/event-records/${recordId}`);
-    }
-    async listEventRecordDispatches(recordId) {
-        return this.requestJson(`/api/event-records/${recordId}/dispatches`);
-    }
-    async testProcessor(payload) {
-        return this.requestJson("/api/processors/test", {
+    async invokeWebhook(webhookId, payload) {
+        return this.requestWebhook(`/api/webhooks/${webhookId}`, {
             method: "POST",
             body: JSON.stringify(payload)
         });
@@ -373,50 +301,57 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async listRepositoryEventSources() {
-        return this.requestJson("/api/repositories/event-sources");
+    async listRepositoryWebhooks() {
+        return this.requestJson("/api/repositories/webhooks");
     }
-    async listRepositoryEventSourcesByRepository(repositoryId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/event-sources`);
+    async listRepositoryWebhooksByRepository(repositoryId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/webhooks`);
     }
-    async getRepositoryEventSource(repositoryId, eventSourceId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/event-sources/${eventSourceId}`);
+    async getRepositoryWebhook(repositoryId, webhookId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/webhooks/${webhookId}`);
     }
-    async installRepositoryEventSource(repositoryId, eventSourceId, payload) {
+    async installRepositoryWebhook(repositoryId, webhookId, payload) {
         return this.requestJson("/api/resource-lifecycle/operations", {
             method: "POST",
             body: JSON.stringify({
-                resourceType: "REPOSITORY_EVENT_SOURCE",
-                operation: "install",
+                resourceType: "REPOSITORY_WEBHOOK",
+                operation: "add-local",
                 repositoryId,
-                resourceId: eventSourceId,
+                resourceId: webhookId,
+                payload: { mode: "LOCKED", ...payload }
+            })
+        }).then((operation) => operation.result);
+    }
+    async updateRepositoryWebhook(repositoryId, webhookId, payload) {
+        return this.requestJson("/api/resource-lifecycle/operations", {
+            method: "POST",
+            body: JSON.stringify({
+                resourceType: "REPOSITORY_WEBHOOK",
+                operation: "update-local",
+                repositoryId,
+                resourceId: webhookId,
                 payload
             })
-        });
+        }).then((operation) => operation.result);
     }
-    async updateRepositoryEventSource(repositoryId, eventSourceId, payload) {
+    async createRepositoryWebhookWorkingCopy(repositoryId, webhookId, localAssetId) {
         return this.requestJson("/api/resource-lifecycle/operations", {
             method: "POST",
             body: JSON.stringify({
-                resourceType: "REPOSITORY_EVENT_SOURCE",
-                operation: "update",
+                resourceType: "REPOSITORY_WEBHOOK",
+                operation: "add-local",
                 repositoryId,
-                resourceId: eventSourceId,
-                payload
+                resourceId: webhookId,
+                payload: {
+                    mode: "TRACKED",
+                    installSchedules: false,
+                    installScriptDependencies: false,
+                    installPluginDependencies: false,
+                    forcePluginUpgrade: false,
+                    ...(localAssetId ? { localAssetId } : {})
+                }
             })
-        });
-    }
-    async createRepositoryEventSourceWorkingCopy(repositoryId, eventSourceId, sourceId) {
-        return this.requestJson("/api/resource-lifecycle/operations", {
-            method: "POST",
-            body: JSON.stringify({
-                resourceType: "REPOSITORY_EVENT_SOURCE",
-                operation: "working-copy",
-                repositoryId,
-                resourceId: eventSourceId,
-                payload: sourceId ? { id: sourceId } : {}
-            })
-        });
+        }).then((operation) => operation.result);
     }
     async getPlugin(pluginId) {
         return this.requestJson(`/api/plugins/${pluginId}`);
@@ -651,6 +586,56 @@ export class ActionDockClient {
         return {
             body: payload.body,
             headers: payload.headers
+        };
+    }
+    async requestWebhook(pathname, init) {
+        const url = new URL(`${this.options.serverUrl}${pathname}`);
+        const method = init?.method ?? "GET";
+        const headers = this.buildHeaders(init?.headers, init?.body);
+        const body = init?.body;
+        const transport = url.protocol === "https:" ? https : http;
+        const payload = await new Promise((resolve, reject) => {
+            const request = transport.request(url, { method, headers }, (response) => {
+                const chunks = [];
+                response.on("data", (chunk) => {
+                    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                });
+                response.on("end", () => {
+                    resolve({
+                        statusCode: response.statusCode ?? 500,
+                        bodyText: Buffer.concat(chunks).toString("utf8"),
+                        headers: response.headers
+                    });
+                });
+            });
+            request.on("error", (error) => reject(error));
+            if (body) {
+                request.write(body);
+            }
+            request.end();
+        }).catch((error) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            throw new ActionDockCliError(`请求 ActionDock 服务失败: ${detail}`, 4);
+        });
+        const parsedBody = parseMaybeJson(payload.bodyText);
+        const normalizedHeaders = {};
+        for (const [key, value] of Object.entries(payload.headers)) {
+            if (value === undefined) {
+                continue;
+            }
+            normalizedHeaders[key] = Array.isArray(value) ? value.map(String) : [String(value)];
+        }
+        if (payload.statusCode < 200 || payload.statusCode >= 300) {
+            const message = isRecord(parsedBody) && typeof parsedBody.msg === "string"
+                ? parsedBody.msg
+                : `请求失败: HTTP ${payload.statusCode}`;
+            const exitCode = payload.statusCode === 401 || payload.statusCode === 403 ? 3 : 5;
+            throw new ActionDockCliError(message, exitCode, parsedBody ?? payload.bodyText);
+        }
+        return {
+            status: payload.statusCode,
+            headers: normalizedHeaders,
+            body: parsedBody
         };
     }
     buildHeaders(headers, body) {

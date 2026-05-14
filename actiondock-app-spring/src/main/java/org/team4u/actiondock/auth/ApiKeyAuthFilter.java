@@ -34,7 +34,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return !path.startsWith("/api/")
                 || ("POST".equalsIgnoreCase(request.getMethod())
-                && path.matches("^/api/event-sources/[^/]+/events$"));
+                && path.matches("^/api/webhooks/[^/]+$"));
     }
 
     /**

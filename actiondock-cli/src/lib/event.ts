@@ -1,13 +1,6 @@
 import { ActionDockCliError, isRecord } from "./error.js";
 import { parseInputObject, parseJsonValueInput } from "./input.js";
-import type {
-  EventSourceDefinition,
-  EventTrigger,
-  IncomingEventPayload,
-  NormalizedEvent,
-  ProcessorContext,
-  ProcessorDefinition
-} from "./types.js";
+import type { WebhookDefinition, WebhookRequest } from "./types.js";
 
 type JsonSourceFlags = {
   jsonFlag: string;
@@ -37,53 +30,26 @@ export function parseOptionalObject<T extends object>(
   return value as T;
 }
 
-export function parseProcessorDefinition(
-  processorJson: string | undefined,
-  processorFile: string | undefined
-): ProcessorDefinition {
-  return parseDefinitionInput<ProcessorDefinition>(processorJson, processorFile, {
-    jsonFlag: "`--processor-json`",
-    fileFlag: "`--processor-file`"
-  });
-}
-
-export function parseProcessorContext(
-  contextJson: string | undefined,
-  contextFile: string | undefined
-): ProcessorContext {
-  return parseInputObject(contextJson, contextFile, {
-    jsonFlag: "`--context-json`",
-    fileFlag: "`--context-file`"
-  }) as ProcessorContext;
-}
-
-export function parseExpectedOutputSchema(
-  schemaJson: string | undefined,
-  schemaFile: string | undefined
-): Record<string, unknown> | undefined {
-  return parseOptionalObject<Record<string, unknown>>(schemaJson, schemaFile, {
-    jsonFlag: "`--expected-output-schema-json`",
-    fileFlag: "`--expected-output-schema-file`"
-  });
-}
-
-export function parseIncomingEventPayload(
+export function parseWebhookRequest(
   payloadJson: string | undefined,
   payloadFile: string | undefined
-): IncomingEventPayload {
+): WebhookRequest {
   const payload = parseInputObject(payloadJson, payloadFile, {
     jsonFlag: "`--payload-json`",
     fileFlag: "`--payload-file`"
   });
-  const result: IncomingEventPayload = {};
+  const result: WebhookRequest = {};
+  if (typeof payload.method === "string") {
+    result.method = payload.method;
+  }
+  if (typeof payload.path === "string") {
+    result.path = payload.path;
+  }
   if ("headers" in payload) {
-    result.headers = coerceRecord(payload.headers, "headers");
+    result.headers = coerceStringListRecord(payload.headers, "headers");
   }
   if ("query" in payload) {
-    result.query = coerceRecord(payload.query, "query");
-  }
-  if ("body" in payload) {
-    result.body = coerceRecord(payload.body, "body");
+    result.query = coerceStringListRecord(payload.query, "query");
   }
   if (typeof payload.rawBody === "string") {
     result.rawBody = payload.rawBody;
@@ -94,18 +60,8 @@ export function parseIncomingEventPayload(
   return result;
 }
 
-export function parseNormalizedEvent(
-  eventJson: string | undefined,
-  eventFile: string | undefined
-): NormalizedEvent {
-  return parseDefinitionInput<NormalizedEvent>(eventJson, eventFile, {
-    jsonFlag: "`--event-json`",
-    fileFlag: "`--event-file`"
-  });
-}
-
-export function mergeEventSourceDefinition(
-  base: EventSourceDefinition,
+export function mergeWebhookDefinition(
+  base: WebhookDefinition,
   overrides: {
     id?: string;
     name?: string;
@@ -114,8 +70,8 @@ export function mergeEventSourceDefinition(
     enabled?: boolean;
     transportType?: string;
   }
-): EventSourceDefinition {
-  const next = deepMerge({}, base) as EventSourceDefinition;
+): WebhookDefinition {
+  const next = deepMerge({}, base) as WebhookDefinition;
   if (overrides.id !== undefined) next.id = overrides.id;
   if (overrides.name !== undefined) next.name = overrides.name;
   if (overrides.key !== undefined) next.key = overrides.key;
@@ -130,58 +86,9 @@ export function mergeEventSourceDefinition(
   return next;
 }
 
-export function mergeEventTriggerDefinition(
-  base: EventTrigger,
-  overrides: {
-    id?: string;
-    name?: string;
-    description?: string;
-    enabled?: boolean;
-    sourceId?: string;
-    targetScriptId?: string;
-    submitMode?: string;
-    responseView?: string;
-  }
-): EventTrigger {
-  const next = deepMerge({}, base) as EventTrigger;
-  if (overrides.id !== undefined) next.id = overrides.id;
-  if (overrides.name !== undefined) next.name = overrides.name;
-  if (overrides.description !== undefined) next.description = overrides.description;
-  if (overrides.enabled !== undefined) next.enabled = overrides.enabled;
-  if (overrides.sourceId !== undefined) next.sourceId = overrides.sourceId;
-  if (overrides.targetScriptId !== undefined) next.targetScriptId = overrides.targetScriptId;
-  if (overrides.submitMode !== undefined) next.submitMode = overrides.submitMode;
-  if (overrides.responseView !== undefined) next.responseView = overrides.responseView;
-  return next;
-}
-
 export function mergeDefinitionPatch<T extends object>(base: T, patch: Partial<T>): T {
   return deepMerge(base, patch) as T;
 }
-
-export function applyProcessorFieldOverrides<T extends object>(
-  merged: T,
-  patch: Partial<T>,
-  processorFields: Array<keyof T>
-): T {
-  const next = cloneValue(merged) as Record<string, unknown>;
-  for (const field of processorFields) {
-    const key = String(field);
-    if (!(key in (patch as Record<string, unknown>))) {
-      continue;
-    }
-    const value = (patch as Record<string, unknown>)[key];
-    if (isProcessorLikeEmptyObject(value)) {
-      next[key] = {};
-      continue;
-    }
-    if (isRecord(value) && "mode" in value) {
-      next[key] = cloneValue(value);
-    }
-  }
-  return next as T;
-}
-
 export function resolveEnabledFlag(params: {
   enabledFlag?: boolean;
   disabledFlag?: boolean;
@@ -211,18 +118,22 @@ function parseRequiredObject<T extends object>(
   return value as T;
 }
 
-function coerceRecord(value: unknown, label: string): Record<string, unknown> {
+function coerceStringListRecord(value: unknown, label: string): Record<string, string[]> {
   if (value === undefined || value === null) {
     return {};
   }
   if (!isRecord(value)) {
     throw new ActionDockCliError(`payload.${label} 必须是 JSON 对象。`, 2);
   }
-  return value;
-}
-
-function isProcessorLikeEmptyObject(value: unknown): boolean {
-  return isRecord(value) && Object.keys(value).length === 0;
+  const result: Record<string, string[]> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (Array.isArray(item)) {
+      result[key] = item.map((entry) => String(entry));
+      continue;
+    }
+    result[key] = [String(item)];
+  }
+  return result;
 }
 
 function deepMerge(target: unknown, source: unknown): unknown {

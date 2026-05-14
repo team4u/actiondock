@@ -8,10 +8,7 @@ public class ExecutionSubmissionMetadata {
     private String scheduleId;
     private String agentRunId;
     private String agentStepId;
-    private String eventSourceId;
-    private String eventTriggerId;
-    private String eventRecordId;
-    private String eventDispatchId;
+    private String webhookId;
 
     public ExecutionTriggerSource getTriggerSource() {
         return triggerSource;
@@ -49,39 +46,12 @@ public class ExecutionSubmissionMetadata {
         return this;
     }
 
-    public String getEventSourceId() {
-        return eventSourceId;
+    public String getWebhookId() {
+        return webhookId;
     }
 
-    public ExecutionSubmissionMetadata setEventSourceId(String eventSourceId) {
-        this.eventSourceId = eventSourceId;
-        return this;
-    }
-
-    public String getEventTriggerId() {
-        return eventTriggerId;
-    }
-
-    public ExecutionSubmissionMetadata setEventTriggerId(String eventTriggerId) {
-        this.eventTriggerId = eventTriggerId;
-        return this;
-    }
-
-    public String getEventRecordId() {
-        return eventRecordId;
-    }
-
-    public ExecutionSubmissionMetadata setEventRecordId(String eventRecordId) {
-        this.eventRecordId = eventRecordId;
-        return this;
-    }
-
-    public String getEventDispatchId() {
-        return eventDispatchId;
-    }
-
-    public ExecutionSubmissionMetadata setEventDispatchId(String eventDispatchId) {
-        this.eventDispatchId = eventDispatchId;
+    public ExecutionSubmissionMetadata setWebhookId(String webhookId) {
+        this.webhookId = webhookId;
         return this;
     }
 

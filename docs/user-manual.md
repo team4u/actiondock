@@ -78,7 +78,7 @@ ActionDock 做的核心事情是：
 
 ### ⏱️ 触发
 
-- [触发中心](trigger-center.md) — 定时任务、事件源、事件触发、事件记录
+- [触发中心](trigger-center.md) — 定时任务、Webhook、Webhook、执行记录
 
 ### ⚙️ 设置
 

@@ -41,6 +41,8 @@ function getTriggerSourceLabel(source: string): string {
       return "AI 工具";
     case "EVENT":
       return "事件";
+    case "WEBHOOK":
+      return "Webhook";
     default:
       return source;
   }
@@ -119,6 +121,8 @@ export function ExecutionResultCard({
                     ? "cyan"
                     : execution.triggerSource === "EVENT"
                       ? "purple"
+                      : execution.triggerSource === "WEBHOOK"
+                        ? "geekblue"
                       : "default"
               }>
                 {getTriggerSourceLabel(execution.triggerSource)}
@@ -126,11 +130,6 @@ export function ExecutionResultCard({
               {execution.scheduleId ? (
                 <Text code className="execution-result-card__meta-code">
                   {execution.scheduleId}
-                </Text>
-              ) : null}
-              {"eventRecordId" in execution && execution.eventRecordId ? (
-                <Text code className="execution-result-card__meta-code">
-                  {execution.eventRecordId}
                 </Text>
               ) : null}
             </div>

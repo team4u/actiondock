@@ -215,7 +215,7 @@ ActionDock 会保存脚本执行的关键信息：
 * 日志里记录了哪些步骤
 * 失败时错误详情是什么
 
-外部事件进入平台后，也会保存事件记录、标准化结果和触发器派发结果。
+外部 Webhook 调用脚本后，也会保存执行记录，脚本输入中会保留请求来源。
 
 这让脚本不只是能跑，还能回看、能解释、能追责。
 
@@ -262,7 +262,7 @@ Groovy 可以调用 Python 脚本，Python 也可以调用 Groovy 脚本。
 Groovy 调用脚本：
 
 ```groovy
-def result = scripts.invoke("python-data-processor", [input: rawData])
+def result = scripts.invoke("python-data-脚本转换", [input: rawData])
 ```
 
 Python 调用脚本：
@@ -515,7 +515,7 @@ ActionDock 的 Repository 机制用来解决这个问题。
 
 * 脚本工具
 * 插件
-* 事件源资产
+* Webhook资产
 * AI 能力包
 * Skills
 * 调度模板
@@ -529,7 +529,7 @@ ActionDock 的 Repository 机制用来解决这个问题。
 
 仓库也支持工作副本与上游同步。
 
-仓库里的工具和事件源资产可以创建为本地工作副本。平台会通过上游绑定记录来源、版本、路径、提交和摘要，并判断当前状态是：
+仓库里的工具和Webhook资产可以创建为本地工作副本。平台会通过上游绑定记录来源、版本、路径、提交和摘要，并判断当前状态是：
 
 * 已同步
 * 本地有改动

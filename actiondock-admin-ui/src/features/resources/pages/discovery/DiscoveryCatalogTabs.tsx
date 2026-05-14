@@ -6,14 +6,14 @@ import { TrustLevelTag } from "../../../../components/domain/TrustLevelTag";
 import { getUpstreamActionLabel } from "../../../../components/domain/UpstreamSyncTag";
 import type {
   CapabilityPackageDescriptor,
-  RepositoryEventSourceDescriptor,
+  RepositoryWebhookDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
   RepositoryToolDescriptor
 } from "../../../../shared/types";
 import {
   getSkillInstallLabel,
-  isLocalEventSource,
+  isLocalWebhook,
   isLocalTool,
   isLockedLocal,
   isTrackedLocal,
@@ -29,12 +29,12 @@ interface DiscoveryCatalogTabsProps {
   actionKey: string | null;
   packageActionKey: string | null;
   filteredTools: RepositoryToolDescriptor[];
-  filteredEventSources: RepositoryEventSourceDescriptor[];
+  filteredWebhooks: RepositoryWebhookDescriptor[];
   filteredPackages: CapabilityPackageDescriptor[];
   filteredSkills: RepositorySkillDescriptor[];
   filteredPlugins: RepositoryPluginDescriptor[];
   onOpenToolDetail: (descriptor: RepositoryToolDescriptor) => void | Promise<void>;
-  onOpenEventSourceDetail: (descriptor: RepositoryEventSourceDescriptor) => void | Promise<void>;
+  onOpenWebhookDetail: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
   onOpenPackageDetail: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onOpenSkillDetail: (descriptor: RepositorySkillDescriptor) => void | Promise<void>;
   onOpenSkillInstall: (descriptor: RepositorySkillDescriptor) => void;
@@ -45,13 +45,13 @@ interface DiscoveryCatalogTabsProps {
     customLocalAssetId?: string
   ) => void | Promise<void>;
   onAddToolToLocal: (descriptor: RepositoryToolDescriptor) => void | Promise<void>;
-  onEventSourceLocalAssetAction: (
-    descriptor: RepositoryEventSourceDescriptor,
+  onWebhookLocalAssetAction: (
+    descriptor: RepositoryWebhookDescriptor,
     action: LocalAssetAction,
     mode?: AddMode,
     customLocalAssetId?: string
   ) => void | Promise<void>;
-  onAddEventSourceToLocal: (descriptor: RepositoryEventSourceDescriptor) => void | Promise<void>;
+  onAddWebhookToLocal: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onPluginAction: (record: RepositoryPluginDescriptor, action: "install" | "update", force?: boolean) => Promise<void>;
@@ -63,19 +63,19 @@ export function DiscoveryCatalogTabs({
   actionKey,
   packageActionKey,
   filteredTools,
-  filteredEventSources,
+  filteredWebhooks,
   filteredPackages,
   filteredSkills,
   filteredPlugins,
   onOpenToolDetail,
-  onOpenEventSourceDetail,
+  onOpenWebhookDetail,
   onOpenPackageDetail,
   onOpenSkillDetail,
   onOpenSkillInstall,
   onToolLocalAssetAction,
   onAddToolToLocal,
-  onEventSourceLocalAssetAction,
-  onAddEventSourceToLocal,
+  onWebhookLocalAssetAction,
+  onAddWebhookToLocal,
   onPackageInstall,
   onPackageUninstall,
   onPluginAction,
@@ -242,13 +242,13 @@ export function DiscoveryCatalogTabs({
     }
   ];
 
-  const eventSourceColumns: ColumnsType<RepositoryEventSourceDescriptor> = [
+  const webhookColumns: ColumnsType<RepositoryWebhookDescriptor> = [
     {
-      title: "事件源",
-      key: "eventSource",
+      title: "Webhook",
+      key: "webhook",
       render: (_value: unknown, record) => (
         <Space direction="vertical" size={2}>
-          <TableLinkCell onClick={() => void onOpenEventSourceDetail(record)}>{record.displayName}</TableLinkCell>
+          <TableLinkCell onClick={() => void onOpenWebhookDetail(record)}>{record.displayName}</TableLinkCell>
           <Text code>{localAssetId(record)}</Text>
         </Space>
       )
@@ -289,7 +289,7 @@ export function DiscoveryCatalogTabs({
               danger={record.localState?.syncState === "DIVERGED"}
               ghost={record.localState?.syncState === "REMOTE_CHANGES"}
               icon={<SyncOutlined />}
-              onClick={() => onNavigate("/triggers")}
+              onClick={() => onNavigate("/webhooks")}
             >
               {getUpstreamActionLabel(record.localState?.syncState)}
             </Button>
@@ -300,8 +300,8 @@ export function DiscoveryCatalogTabs({
               ghost={record.localState?.updateAvailable}
               icon={<SyncOutlined />}
               disabled={!record.localState?.updateAvailable}
-              loading={actionKey === `update-local:${record.repositoryId}:${record.eventSourceId}`}
-              onClick={() => void onEventSourceLocalAssetAction(record, "update-local")}
+              loading={actionKey === `update-local:${record.repositoryId}:${record.webhookId}`}
+              onClick={() => void onWebhookLocalAssetAction(record, "update-local")}
             >
               {record.localState?.updateAvailable ? "更新" : "已添加"}
             </Button>
@@ -310,8 +310,8 @@ export function DiscoveryCatalogTabs({
               size="small"
               type="primary"
               icon={<DownloadOutlined />}
-              loading={actionKey === `add-local:${record.repositoryId}:${record.eventSourceId}`}
-              onClick={() => void onAddEventSourceToLocal(record)}
+              loading={actionKey === `add-local:${record.repositoryId}:${record.webhookId}`}
+              onClick={() => void onAddWebhookToLocal(record)}
             >
               添加到本地
             </Button>
@@ -394,21 +394,21 @@ export function DiscoveryCatalogTabs({
           )
         },
         {
-          key: "event-sources",
-          label: `事件源 (${filteredEventSources.length})`,
+          key: "webhooks",
+          label: `Webhook (${filteredWebhooks.length})`,
           children: (
-            <Table<RepositoryEventSourceDescriptor>
-              rowKey={(item) => `${item.repositoryId}:${item.eventSourceId}`}
+            <Table<RepositoryWebhookDescriptor>
+              rowKey={(item) => `${item.repositoryId}:${item.webhookId}`}
               loading={loading}
-              columns={eventSourceColumns}
-              dataSource={filteredEventSources}
+              columns={webhookColumns}
+              dataSource={filteredWebhooks}
               scroll={{ x: 980 }}
               pagination={{ pageSize: 10, showSizeChanger: true }}
               locale={{
                 emptyText: (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="当前没有可发现的事件源。先到仓库管理页添加并同步仓库。"
+                    description="当前没有可发现的Webhook。先到仓库管理页添加并同步仓库。"
                   />
                 )
               }}

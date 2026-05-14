@@ -19,7 +19,7 @@ import {
 } from "../../../resources/api";
 import { listPluginReferences, listPlugins } from "../../../plugins/api";
 import { ApiError } from "../../../../shared/api/httpClient";
-import { readAndClearPreset } from "../../../../components/plugin/processorScriptPresets";
+import { readAndClearScriptCreatePreset } from "../../../../services/scriptCreatePreset";
 import { buildDuplicatedScriptDefinition } from "../../../../services/scriptDuplication";
 import { createEmptySchemaEditorState, deserializeSchema, deserializeSchemaJsonText, serializeSchemaEditorState } from "../../../../services/schema";
 import { extractPluginDependenciesFromSource } from "../../../../services/pluginDependencies";
@@ -222,7 +222,7 @@ export function useScriptEditor({
       if (!copyFromScriptId) {
         initializedCopySourceRef.current = null;
         if (initializedPresetRef.current) return;
-        const preset = readAndClearPreset();
+        const preset = readAndClearScriptCreatePreset();
         if (preset) {
           initializedPresetRef.current = true;
           applyCreateDraftToEditor({

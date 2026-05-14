@@ -8,11 +8,11 @@ import type {
   CapabilityPackagePublishRequest,
   UpstreamStatus,
   RepositoryDefinition,
-  RepositoryEventSourceDescriptor,
-  RepositoryEventSourceDetail,
-  RepositoryEventSourcePublishPreview,
-  RepositoryEventSourcePublishPreviewRequest,
-  RepositoryEventSourcePublishRequest,
+  RepositoryWebhookDescriptor,
+  RepositoryWebhookDetail,
+  RepositoryWebhookPublishPreview,
+  RepositoryWebhookPublishPreviewRequest,
+  RepositoryWebhookPublishRequest,
   RepositoryInstallRequest,
   RepositoryLocalAsset,
   RepositoryLocalAssetRequest,
@@ -69,8 +69,8 @@ export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
   return request<RepositoryToolDescriptor[]>("/api/repositories/tools");
 }
 
-export function listRepositoryEventSources(): Promise<RepositoryEventSourceDescriptor[]> {
-  return request<RepositoryEventSourceDescriptor[]>("/api/repositories/event-sources");
+export function listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
+  return request<RepositoryWebhookDescriptor[]>("/api/repositories/webhooks");
 }
 
 export function listCapabilityPackages(): Promise<CapabilityPackageDescriptor[]> {
@@ -89,8 +89,8 @@ export function listToolsByRepository(id: string): Promise<RepositoryToolDescrip
   return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/tools`);
 }
 
-export function listEventSourcesByRepository(id: string): Promise<RepositoryEventSourceDescriptor[]> {
-  return request<RepositoryEventSourceDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/event-sources`);
+export function listWebhooksByRepository(id: string): Promise<RepositoryWebhookDescriptor[]> {
+  return request<RepositoryWebhookDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/webhooks`);
 }
 
 export function listPluginsByRepository(id: string): Promise<RepositoryPluginDescriptor[]> {
@@ -109,8 +109,8 @@ export function getRepositoryTool(repositoryId: string, toolId: string): Promise
   return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}`);
 }
 
-export function getRepositoryEventSource(repositoryId: string, eventSourceId: string): Promise<RepositoryEventSourceDetail> {
-  return request<RepositoryEventSourceDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/event-sources/${encodeURIComponent(eventSourceId)}`);
+export function getRepositoryWebhook(repositoryId: string, webhookId: string): Promise<RepositoryWebhookDetail> {
+  return request<RepositoryWebhookDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/webhooks/${encodeURIComponent(webhookId)}`);
 }
 
 export function getCapabilityPackage(repositoryId: string, packageId: string): Promise<CapabilityPackageDetail> {
@@ -155,30 +155,30 @@ export function updateRepositoryToolLocalAsset(repositoryId: string, toolId: str
   }).then((operation) => operation.result as RepositoryLocalAsset);
 }
 
-export function addRepositoryEventSourceLocalAsset(
+export function addRepositoryWebhookLocalAsset(
   repositoryId: string,
-  eventSourceId: string,
+  webhookId: string,
   payload: RepositoryLocalAssetRequest
 ): Promise<RepositoryLocalAsset> {
   return runResourceLifecycleOperation<RepositoryLocalAsset, RepositoryLocalAssetRequest>({
-    resourceType: "REPOSITORY_EVENT_SOURCE",
+    resourceType: "REPOSITORY_WEBHOOK",
     operation: "add-local",
     repositoryId,
-    resourceId: eventSourceId,
+    resourceId: webhookId,
     payload
   }).then((operation) => operation.result);
 }
 
-export function updateRepositoryEventSourceLocalAsset(
+export function updateRepositoryWebhookLocalAsset(
   repositoryId: string,
-  eventSourceId: string,
+  webhookId: string,
   payload: RepositoryInstallRequest
 ): Promise<RepositoryLocalAsset> {
   return runResourceLifecycleOperation<RepositoryLocalAsset, RepositoryInstallRequest>({
-    resourceType: "REPOSITORY_EVENT_SOURCE",
+    resourceType: "REPOSITORY_WEBHOOK",
     operation: "update-local",
     repositoryId,
-    resourceId: eventSourceId,
+    resourceId: webhookId,
     payload
   }).then((operation) => operation.result);
 }
@@ -244,22 +244,22 @@ export function publishRepositoryTool(repositoryId: string, payload: RepositoryP
   }).then((operation) => operation.result);
 }
 
-export function previewRepositoryEventSourcePublish(
-  payload: RepositoryEventSourcePublishPreviewRequest
-): Promise<RepositoryEventSourcePublishPreview> {
-  return runResourceLifecycleOperation<RepositoryEventSourcePublishPreview, RepositoryEventSourcePublishPreviewRequest>({
-    resourceType: "REPOSITORY_EVENT_SOURCE",
+export function previewRepositoryWebhookPublish(
+  payload: RepositoryWebhookPublishPreviewRequest
+): Promise<RepositoryWebhookPublishPreview> {
+  return runResourceLifecycleOperation<RepositoryWebhookPublishPreview, RepositoryWebhookPublishPreviewRequest>({
+    resourceType: "REPOSITORY_WEBHOOK",
     operation: "preview",
     payload
   }).then((operation) => operation.result);
 }
 
-export function publishRepositoryEventSource(
+export function publishRepositoryWebhook(
   repositoryId: string,
-  payload: RepositoryEventSourcePublishRequest
-): Promise<RepositoryEventSourceDescriptor> {
-  return runResourceLifecycleOperation<RepositoryEventSourceDescriptor, RepositoryEventSourcePublishRequest>({
-    resourceType: "REPOSITORY_EVENT_SOURCE",
+  payload: RepositoryWebhookPublishRequest
+): Promise<RepositoryWebhookDescriptor> {
+  return runResourceLifecycleOperation<RepositoryWebhookDescriptor, RepositoryWebhookPublishRequest>({
+    resourceType: "REPOSITORY_WEBHOOK",
     operation: "publish",
     repositoryId,
     payload

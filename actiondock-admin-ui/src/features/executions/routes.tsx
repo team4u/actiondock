@@ -1,9 +1,12 @@
 import { lazy } from "react";
 import type { AppFeatureDefinition } from "../../app/featureRegistry";
 
-const TriggerCenterPage = lazy(() =>
-  import("./pages/TriggerCenterPage").then((module) => ({ default: module.TriggerCenterPage }))
+const WebhookManagementPage = lazy(() =>
+  import("./pages/WebhookManagementPage").then((module) => ({ default: module.WebhookManagementPage }))
 );
+const ScheduleManagementPage = lazy(() =>
+  import("./pages/ScheduleManagementPage").then((module) => ({ default: module.ScheduleManagementPage }))
+)
 const ScheduleEditorPage = lazy(() =>
   import("./pages/ScheduleEditorPage").then((module) => ({ default: module.ScheduleEditorPage }))
 );
@@ -39,10 +42,14 @@ export const executionsFeature: AppFeatureDefinition = {
   key: "executions",
   section: "executions",
   navLabel: "触发",
-  navPath: () => "/triggers",
-  navItems: [],
+  navPath: () => "/webhooks",
+  navItems: [
+    { label: "Webhook", path: "/webhooks" },
+    { label: "定时任务", path: "/schedules" }
+  ],
   routes: (colorMode) => [
-    { path: "/triggers", element: <TriggerCenterPage />, title: "触发中心", navKey: "executions" },
+    { path: "/webhooks", element: <WebhookManagementPage />, title: "Webhook", navKey: "executions" },
+    { path: "/schedules", element: <ScheduleManagementPage />, title: "定时任务", navKey: "executions" },
     { path: "/schedules/new", element: <ScheduleEditorPage mode="create" colorMode={colorMode} />, title: "定时任务编辑器", navKey: "executions" },
     { path: "/schedules/:id", element: <ScheduleEditorPage mode="edit" colorMode={colorMode} />, title: "定时任务编辑器", navKey: "executions" }
   ]

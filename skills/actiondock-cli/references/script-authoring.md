@@ -4,7 +4,7 @@
 
 如果脚本需求涉及 `plugins.invoke(...)`、`scripts.invoke(...)` 或 `actiondock-ai`，补读 `references/script-runtime-calls.md`，确认源码内调用方式后再生成脚本。
 
-如果脚本用途是事件框架里的 `SCRIPT_REF` Processor，还必须补读 `references/event-framework.md`，按其中的事件输入约定来写，不要把普通业务脚本和处理器脚本混写。
+如果脚本用途是 Webhook，补读 `references/event-framework.md`，按其中的 `input.request` / `input.webhook` 输入约定和 HTTP 响应输出约定来写。
 
 如果脚本是 Python，且需要额外第三方依赖，必须同时产出 `pythonRequirements`。该字段的内容等价于 `requirements.txt` 文本，并在执行前由平台安装到隔离缓存环境中。
 
@@ -62,54 +62,63 @@ return {
 - 需求更接近 Python 字典处理、字符串处理，或用户明确要求 Python 时，选 Python
 - 如果用户没有指定语言，默认仍可优先生成 Groovy；如果需求明显更适合 Python，再改为 Python
 
-### 处理器脚本额外约定
+### Webhook 脚本额外约定
 
-当脚本是事件触发器里的 `SCRIPT_REF` Processor 时，额外遵守下面约定：
+当脚本用于 Webhook 时，默认输入为：
 
-- 输入主对象默认从 `input.event` 读取
-- `input.event` 通常包含：
-  - `id`（事件记录 ID；`test-normalization` 时可能为空）
-  - `sourceId`
-  - `sourceKey`
-  - `eventType`（可选）
-  - `eventId`（可选）
-  - `actor`（可选）
-  - `subject`（可选）
-  - `timestamp`（可选）
+- `input.request`
+  - `method`
+  - `path`
   - `headers`
   - `query`
-  - `body`（可能是对象，也可能是字符串）
-  - `rawBody`（原始请求体文本）
-  - `receivedAt`
-- `input.source` 通常包含 `id`、`key`、`name`
-- `input.trigger` 通常包含 `id`、`name`、`targetScriptId`
-- 输出必须直接对齐目标脚本的 `inputSchema`
-- 如果用户没有明确要求，处理器脚本只做事件到目标脚本入参的转换，不顺手承担业务主逻辑
-- 如果只是做 JSONPath 等价转换，直接用 `get` 组装返回值即可；字段缺失就保持 `null`，不要额外写分支
-- 如果要解包 `body` 里的字段，先判断它是不是对象；纯文本、XML、签名串或 JSON 标量优先从 `rawBody` 读取
+  - `rawBody`
+  - `contentType`
+- `input.webhook`
+  - `id`
+  - `key`
+  - `name`
+
+输出必须直接返回：
+
+- `status`
+- `headers`
+- `body`
 
 Python 最小模板：
 
 ```python
-event = input.get("event", {})
-body = event.get("body", {})
-body_obj = body if isinstance(body, dict) else {}
+request = input.get("request", {})
+webhook = input.get("webhook", {})
 
 return {
-    # TODO: 返回目标脚本需要的字段
-    # "rawBody": event.get("rawBody"),
+    "status": 200,
+    "headers": {
+        "Content-Type": ["application/json;charset=UTF-8"]
+    },
+    "body": {
+        "ok": True,
+        "webhookId": webhook.get("id"),
+        "rawBody": request.get("rawBody")
+    }
 }
 ```
 
 Groovy 最小模板：
 
 ```groovy
-def event = input.event ?: [:]
-def body = event.body instanceof Map ? event.body : [:]
+def request = input.request instanceof Map ? input.request : [:]
+def webhook = input.webhook instanceof Map ? input.webhook : [:]
 
 return [
-  // TODO: 返回目标脚本需要的字段
-  // rawBody: event.rawBody
+  status : 200,
+  headers: [
+    "Content-Type": ["application/json;charset=UTF-8"]
+  ],
+  body   : [
+    ok       : true,
+    webhookId: webhook.id,
+    rawBody  : request.rawBody
+  ]
 ]
 ```
 
@@ -188,37 +197,6 @@ pydantic>=2.7,<3
     "title": "描述",
     "x-ui": {"widget": "textarea", "rows": 4}
   }
-}
-```
-
-### 事件框架处理器脚本约定
-
-当脚本作为 `event-trigger` 的 `SCRIPT_REF` Processor 使用时，优先按下面约定生成：
-
-- 输入使用 `input.event`，不要假设有平铺字段
-- 输出必须直接对应目标脚本的 `inputSchema`
-- 复杂事件字段先从 `event.body` / `event.headers` / `event.query` 里解包
-- 脚本名建议带上用途，例如 `processor-github-issue`、`processor-crm-customer-created`
-- 处理器脚本也要先 `publish`，再写回 `event-trigger`
-- 如果只是做 JSONPath 等价转换，返回值至少保留 `sourceKey`、`eventType`、`eventId`、`actor`、`subject` 这组核心字段，再按目标脚本需要补业务字段
-
-最小模板：
-
-Groovy：
-
-```groovy
-def event = input.event ?: [:]
-return [
-  // return target script input
-]
-```
-
-Python：
-
-```python
-event = input.get("event", {})
-return {
-    # return target script input
 }
 ```
 

@@ -28,7 +28,7 @@ public class ConfigValue {
 配置值主要用于：
 
 1. **存储 AI 模型的 API Key**（模型配置通过 Key 名引用）
-2. **事件源的 HMAC 密钥**（`secretConfigKey` 字段引用）
+2. **Webhook的 HMAC 密钥**（`secretConfigKey` 字段引用）
 3. **任何需要全局管理的配置**（如数据库连接字符串）
 
 ### 创建/编辑
@@ -251,7 +251,7 @@ POST   /api/access-tokens/{id}/disable
 
 ### 创建备份
 
-1. 概览表格显示各类型数据量：脚本、调度、事件源、事件触发、配置值、执行预设、仓库、插件、共享状态、AI 模型、AI Agent、AI Toolset、Skill 目标、Skills
+1. 概览表格显示各类型数据量：脚本、调度、Webhook、Webhook、配置值、执行预设、仓库、插件、共享状态、AI 模型、AI Agent、AI Toolset、Skill 目标、Skills
 2. 可勾选「包含 Secret 配置值和共享状态明文值」
 3. 点击「创建备份」下载 `.zip` 文件
 
@@ -306,7 +306,7 @@ POST /api/backup/restore
 
 ## 最佳实践
 
-- **API Key 安全第一**：AI 模型和事件源的密钥始终通过 Config Value 管理，勾选 Secret
+- **API Key 安全第一**：AI 模型和Webhook的密钥始终通过 Config Value 管理，勾选 Secret
 - **共享状态命名空间**：每个业务模块使用独立的 namespace，避免键名冲突
 - **CAS 用于并发写**：多脚本同时修改同一条共享状态时，使用 CAS 保证原子性
 - **多个访问令牌**：为不同用途创建不同令牌（开发、测试、生产），可以独立启用/禁用

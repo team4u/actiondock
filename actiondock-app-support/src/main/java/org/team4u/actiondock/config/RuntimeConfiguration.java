@@ -9,18 +9,14 @@ import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.application.ExecutionPresetApplicationService;
-import org.team4u.actiondock.application.ProcessorApplicationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
-import org.team4u.actiondock.domain.port.ProcessorEngine;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
-import org.team4u.actiondock.processor.DefaultProcessorEngine;
-import org.team4u.actiondock.application.ScriptInvocationService;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -81,17 +77,6 @@ public class RuntimeConfiguration {
                                                                    @Qualifier("executionExecutor") Executor executor,
                                                                    ConfigValueApplicationService configValueApplicationService) {
         return new ExecutionApplicationService(scriptRepository, executionRepository, scriptEngine, executor, configValueApplicationService);
-    }
-
-    @Bean
-    public ProcessorEngine processorEngine(ScriptInvocationService scriptInvocationService,
-                                           ConfigValueApplicationService configValueApplicationService) {
-        return new DefaultProcessorEngine(scriptInvocationService, configValueApplicationService);
-    }
-
-    @Bean
-    public ProcessorApplicationService processorApplicationService(ProcessorEngine processorEngine) {
-        return new ProcessorApplicationService(processorEngine);
     }
 
     @Bean

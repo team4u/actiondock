@@ -1,4 +1,4 @@
-import type { EventBody, ExecutionStatus } from "../shared/types";
+import type { ExecutionStatus } from "../shared/types";
 
 export function getExecutionStatusColor(status?: ExecutionStatus): string {
   switch (status) {
@@ -50,7 +50,7 @@ export function parseJsonText(value: string, fieldName: string): Record<string, 
   }
 }
 
-export function parseJsonValueOrText(value: string): EventBody {
+export function parseJsonValueOrText(value: string): Record<string, unknown> | string {
   if (!value.trim()) {
     return {};
   }

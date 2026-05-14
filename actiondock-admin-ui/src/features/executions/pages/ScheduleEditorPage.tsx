@@ -291,7 +291,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
         const detail = error instanceof ApiError || error instanceof Error ? error.message : "加载定时任务失败";
         messageApi.error(detail);
         if (mode === "edit") {
-          navigate("/triggers", { replace: true });
+          navigate("/webhooks", { replace: true });
         }
       } finally {
         if (!disposed) {
@@ -403,7 +403,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
     try {
       await deleteSchedule(currentSchedule.id);
       messageApi.success("定时任务已删除");
-      navigate("/triggers", { replace: true });
+      navigate("/webhooks", { replace: true });
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "删除定时任务失败";
       messageApi.error(detail);
@@ -523,7 +523,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                   type="link"
                   icon={<ArrowLeftOutlined />}
                   style={{ paddingInline: 0 }}
-                  onClick={() => navigate("/triggers")}
+                  onClick={() => navigate("/webhooks")}
                 >
                   返回列表
                 </Button>

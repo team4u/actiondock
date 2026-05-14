@@ -10,8 +10,7 @@ import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
-import org.team4u.actiondock.domain.port.EventSourceRepository;
-import org.team4u.actiondock.domain.port.EventTriggerRepository;
+import org.team4u.actiondock.domain.port.WebhookRepository;
 import org.team4u.actiondock.repository.*;
 
 import java.util.List;
@@ -47,8 +46,7 @@ public class RepositoryConfiguration {
                                                              ScriptScheduleRepository scriptScheduleRepository,
                                                              ExecutionPresetRepository executionPresetRepository,
                                                              ConfigValueRepository configValueRepository,
-                                                             EventSourceRepository eventSourceRepository,
-                                                             EventTriggerRepository eventTriggerRepository,
+                                                             WebhookRepository webhookRepository,
                                                              RepositoryLocalAssetRepository repositoryLocalAssetRepository,
                                                              AiModelProfileRepository aiModelProfileRepository,
                                                              AiAgentProfileRepository aiAgentProfileRepository,
@@ -68,8 +66,7 @@ public class RepositoryConfiguration {
                         scriptScheduleRepository,
                         executionPresetRepository,
                         configValueRepository,
-                        eventSourceRepository,
-                        eventTriggerRepository,
+                        webhookRepository,
                         repositoryLocalAssetRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
@@ -117,8 +114,7 @@ public class RepositoryConfiguration {
             ScriptRepository scriptRepository,
             ScriptScheduleRepository scriptScheduleRepository,
             ConfigValueRepository configValueRepository,
-            EventSourceRepository eventSourceRepository,
-            EventTriggerRepository eventTriggerRepository,
+            WebhookRepository webhookRepository,
             RepositoryLocalAssetRepository repositoryLocalAssetRepository,
             RepositoryDefinitionRepository repositoryDefinitionRepository,
             ManagedSkillRepository managedSkillRepository,
@@ -137,8 +133,7 @@ public class RepositoryConfiguration {
                         scriptScheduleRepository,
                         executionPresetRepository,
                         configValueRepository,
-                        eventSourceRepository,
-                        eventTriggerRepository,
+                        webhookRepository,
                         repositoryLocalAssetRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
@@ -194,9 +189,9 @@ public class RepositoryConfiguration {
     }
 
     @Bean
-    public RepositoryEventSourceService repositoryEventSourceService(RepositoryCatalogService repositoryCatalogService,
+    public RepositoryWebhookService repositoryWebhookService(RepositoryCatalogService repositoryCatalogService,
                                                                      RepositoryToolService repositoryToolService) {
-        return new RepositoryEventSourceService(
+        return new RepositoryWebhookService(
                 repositoryCatalogService,
                 repositoryCatalogService.getRepos(),
                 repositoryCatalogService.getConfigTemplateSyncService(),

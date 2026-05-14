@@ -70,21 +70,17 @@ import {
   updateSkillTarget
 } from "../../skills/api";
 import {
-  createEventSource,
-  createEventTrigger,
+  createWebhook,
   listSchedules,
-  listEventSources,
-  listEventTriggers,
+  listWebhooks,
   createSchedule,
   updateSchedule,
-  updateEventSource,
-  updateEventTrigger,
+  updateWebhook
 } from "../../triggers/api";
 import type {
   ScriptDefinition,
   ScriptSchedule,
-  EventSourceDefinition,
-  EventTrigger,
+  WebhookDefinition,
   ConfigValue,
   ExecutionPreset,
   RepositoryDefinition,
@@ -151,8 +147,7 @@ export function DataBackupPanel() {
   const [dataCounts, setDataCounts] = useState<{
     scripts: number;
     schedules: number;
-    eventSources: number;
-    eventTriggers: number;
+    webhooks: number;
     configValues: number;
     presets: number;
     repositories: number;
@@ -173,11 +168,10 @@ export function DataBackupPanel() {
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDataCounts = useCallback(async () => {
-    const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
+    const [scripts, schedules, webhooks, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
       listScripts(),
       listSchedules(),
-      listEventSources(),
-      listEventTriggers(),
+      listWebhooks(),
       listConfigValues(),
       listRepositories(),
       listPlugins(),
@@ -200,8 +194,7 @@ export function DataBackupPanel() {
     setDataCounts({
       scripts: scripts.length,
       schedules: schedules.length,
-      eventSources: eventSources.length,
-      eventTriggers: eventTriggers.length,
+      webhooks: webhooks.length,
       configValues: configValues.length,
       presets: presetCount,
       repositories: repositories.length,
@@ -224,11 +217,10 @@ export function DataBackupPanel() {
   const handleBackup = useCallback(async () => {
     setBackupLoading(true);
     try {
-      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
+      const [scripts, schedules, webhooks, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
         listScripts(),
         listSchedules(),
-        listEventSources(),
-        listEventTriggers(),
+        listWebhooks(),
         listConfigValues(),
         listRepositories(),
         listPlugins(),
@@ -285,8 +277,7 @@ export function DataBackupPanel() {
         {
           scripts,
           schedules,
-          eventSources,
-          eventTriggers,
+          webhooks,
           configValues,
           executionPresets: allPresets,
           repositories,
@@ -387,11 +378,10 @@ export function DataBackupPanel() {
       }
       setPendingSkillFiles(skillFiles);
 
-      const [scripts, schedules, eventSources, eventTriggers, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
+      const [scripts, schedules, webhooks, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
         listScripts(),
         listSchedules(),
-        listEventSources(),
-        listEventTriggers(),
+        listWebhooks(),
         listConfigValues(),
         listRepositories(),
         listPlugins(),
@@ -418,8 +408,7 @@ export function DataBackupPanel() {
       const analysisResult = analyzeBackupBundle(bundle, {
         scripts,
         schedules,
-        eventSources,
-        eventTriggers,
+        webhooks,
         configValues,
         executionPresets: allPresets,
         repositories,
@@ -454,11 +443,10 @@ export function DataBackupPanel() {
     const skillFiles = pendingSkillFiles ?? new Map<string, Blob>();
 
     try {
-      const [currentScripts, currentSchedules, currentEventSources, currentEventTriggers, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets, currentSkillTargets, currentSkills] = await Promise.all([
+      const [currentScripts, currentSchedules, currentWebhooks, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets, currentSkillTargets, currentSkills] = await Promise.all([
         listScripts(),
         listSchedules(),
-        listEventSources(),
-        listEventTriggers(),
+        listWebhooks(),
         listConfigValues(),
         listRepositories(),
         listPlugins(),
@@ -472,8 +460,7 @@ export function DataBackupPanel() {
 
       const currentScriptIds = new Set(currentScripts.map(s => s.id));
       const currentScheduleIds = new Set(currentSchedules.map(s => s.id));
-      const currentEventSourceIds = new Set(currentEventSources.map(s => s.id));
-      const currentEventTriggerIds = new Set(currentEventTriggers.map(t => t.id));
+      const currentWebhookIds = new Set(currentWebhooks.map(s => s.id));
       const currentConfigKeys = new Set(currentConfigValues.map(c => c.key));
       const currentRepoIds = new Set(currentRepositories.map(r => r.id));
       const currentPluginIds = new Set(currentPlugins.map(p => p.pluginId));
@@ -636,38 +623,19 @@ export function DataBackupPanel() {
       {
         let succeeded = 0;
         const errors: string[] = [];
-        for (const item of bundle.data.eventSources) {
+        for (const item of bundle.data.webhooks) {
           try {
-            if (currentEventSourceIds.has(item.id)) {
-              await updateEventSource(item.id, item);
+            if (currentWebhookIds.has(item.id)) {
+              await updateWebhook(item.id, item);
             } else {
-              await createEventSource(item);
+              await createWebhook(item);
             }
             succeeded++;
           } catch (e) {
             errors.push(`${item.name}: ${e instanceof Error ? e.message : "未知错误"}`);
           }
         }
-        results.push({ type: "事件源", succeeded, failed: errors.length, errors });
-      }
-
-      // 6.6 Event Triggers
-      {
-        let succeeded = 0;
-        const errors: string[] = [];
-        for (const item of bundle.data.eventTriggers) {
-          try {
-            if (currentEventTriggerIds.has(item.id)) {
-              await updateEventTrigger(item.id, item);
-            } else {
-              await createEventTrigger(item);
-            }
-            succeeded++;
-          } catch (e) {
-            errors.push(`${item.name}: ${e instanceof Error ? e.message : "未知错误"}`);
-          }
-        }
-        results.push({ type: "事件触发器", succeeded, failed: errors.length, errors });
+        results.push({ type: "Webhook", succeeded, failed: errors.length, errors });
       }
 
       // 7. Plugins (uninstall then install)
@@ -858,8 +826,7 @@ export function DataBackupPanel() {
             <Descriptions size="small" column={3} bordered>
               <Descriptions.Item label="脚本">{dataCounts.scripts}</Descriptions.Item>
               <Descriptions.Item label="定时任务">{dataCounts.schedules}</Descriptions.Item>
-              <Descriptions.Item label="事件源">{dataCounts.eventSources}</Descriptions.Item>
-              <Descriptions.Item label="事件触发器">{dataCounts.eventTriggers}</Descriptions.Item>
+              <Descriptions.Item label="Webhook">{dataCounts.webhooks}</Descriptions.Item>
               <Descriptions.Item label="配置值">{dataCounts.configValues}</Descriptions.Item>
               <Descriptions.Item label="执行预设">{dataCounts.presets}</Descriptions.Item>
               <Descriptions.Item label="仓库">{dataCounts.repositories}</Descriptions.Item>
@@ -993,19 +960,12 @@ export function DataBackupPanel() {
                 {" / "}
                 <Text type="warning">覆盖 {analysis.schedules.overwrite}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="事件源">
-                <Text>共 {analysis.eventSources.total} 条</Text>
+              <Descriptions.Item label="Webhook">
+                <Text>共 {analysis.webhooks.total} 条</Text>
                 <br />
-                <Text type="success">新建 {analysis.eventSources.create}</Text>
+                <Text type="success">新建 {analysis.webhooks.create}</Text>
                 {" / "}
-                <Text type="warning">覆盖 {analysis.eventSources.overwrite}</Text>
-              </Descriptions.Item>
-              <Descriptions.Item label="事件触发器">
-                <Text>共 {analysis.eventTriggers.total} 条</Text>
-                <br />
-                <Text type="success">新建 {analysis.eventTriggers.create}</Text>
-                {" / "}
-                <Text type="warning">覆盖 {analysis.eventTriggers.overwrite}</Text>
+                <Text type="warning">覆盖 {analysis.webhooks.overwrite}</Text>
               </Descriptions.Item>
               <Descriptions.Item label="配置值">
                 <Text>共 {analysis.configValues.total} 条</Text>

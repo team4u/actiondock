@@ -1,515 +1,115 @@
-# 事件框架
+# ActionDock CLI Webhook 参考
 
-当任务涉及下面命令时，读取本文件：
+## 当前模型
 
-- `event-source`
-- `event-trigger`
-- `event-record`
-- `processor test`
+当前版本只保留一对一 Webhook：
 
-## 加载顺序
+- 一个 `webhook`
+- 一个固定地址 `POST /api/webhooks/{id}`
+- 一个已发布脚本 `webhookScriptId`
 
-1. 如果要用 `SCRIPT_REF`，同时读取 `references/script-authoring.md`。
-2. 如果处理器脚本还会调用插件或脚本，再读取 `references/script-runtime-calls.md`。
-3. 优先用文件输入，不要把大段 JSON 直接内联进命令。
+平台不再负责：
 
-## 固定流程
+- 标准化
+- 分发记录
+- 一对多触发
+- 请求转换
 
-默认按下面顺序执行，除非用户明确要求改顺序：
-
-1. 如果目标脚本已存在，先执行：
-
-```bash
-actiondock script schema <target-script-id> --json
-```
-
-2. 如果要用 `SCRIPT_REF`，先创建并发布处理器脚本。
-3. 创建事件源。
-4. 测试标准化。
-5. 创建事件触发器。
-6. 测试触发器。
-7. 需要的话，用 `--execute` 连目标脚本一起试跑。
-8. 真实接收事件。
-9. 检查事件记录、分发记录和执行记录。
-
-## 文件清单
-
-使用下面这些文件：
-
-```text
-./processor.py
-./processor-input-schema.json
-./processor-output-schema.json
-./event-source.json
-./event-trigger.json
-./event.raw.json
-./event.normalized.json
-```
-
-可选文件：
-
-```text
-./processor-context.json
-./target-script-input-schema.json
-```
-
-## 契约规则
-
-### Event Source
-
-- `key` 由用户自定义，且必须唯一。
-- 第一版 transport 只支持 `HTTP_WEBHOOK`。
-- 鉴权模式包括：`NONE`、`HEADER_TOKEN`、`QUERY_TOKEN`、`HMAC_SHA256`。
-- `normalizationProcessor` 必须输出标准化事件对象。
-- `webhookResponse` 可选；如果填写，会覆盖默认 webhook 成功响应。
-
-### Event Trigger
-
-- `sourceId` 必须指向已存在的事件源。
-- `targetScriptId` 必须指向已发布脚本。
-- `filterProcessor` 输出里应包含 `matched`。
-- `idempotencyProcessor` 输出里应包含 `key`。
-- `inputProcessor` 输出必须匹配目标脚本的 `inputSchema`。
-
-### Processor
-
-第一版支持：
-
-- `JSON_PATH`
-- `TEMPLATE`
-- `SCRIPT_REF`
-
-建议：
-
-- `JSON_PATH` 用于字段提取
-- `TEMPLATE` 用于轻量拼装
-- `SCRIPT_REF` 用于复杂逻辑
-
-## 最小模板
-
-### 事件源
+## Webhook定义最小模板
 
 ```json
 {
-  "id": "source-github-issue",
+  "id": "github-webhook",
   "key": "github.issue",
   "name": "GitHub Issue",
   "enabled": true,
   "transport": {
     "type": "HTTP_WEBHOOK"
   },
-  "auth": {
-    "mode": "HMAC_SHA256",
-    "signatureHeader": "X-Hub-Signature-256",
-    "signaturePrefix": "sha256=",
-    "signaturePayload": "RAW_BODY",
-    "secretConfigKey": "github.webhook.secret"
-  },
-  "normalizationProcessor": {
-    "mode": "JSON_PATH",
-    "jsonPath": {
-      "fields": {
-        "eventType": "$.headers.X-GitHub-Event",
-        "eventId": "$.headers.X-GitHub-Delivery",
-        "actor": "$.body.sender.login",
-        "subject": "$.body.issue.title"
-      }
-    }
-  },
-  "webhookResponse": {
-    "successStatus": 202,
-    "successHeaders": {
-      "X-Ack": "ok"
+  "webhookScriptId": "script-github-webhook",
+  "sampleRequest": {
+    "method": "POST",
+    "headers": {
+      "X-GitHub-Event": ["issues"]
     },
-    "responseProcessor": {
-      "mode": "TEMPLATE",
-      "template": {
-        "engine": "MUSTACHE",
-        "template": {
-          "accepted": true,
-          "eventId": "{{event.eventId}}"
-        }
-      }
-    },
-    "errorResponse": {
-      "httpStatus": 503,
-      "msg": "响应生成失败",
-      "data": {
-        "code": "WEBHOOK_RESPONSE_FAILED"
-      }
-    }
+    "query": {},
+    "rawBody": "{\"action\":\"opened\"}",
+    "contentType": "application/json"
   }
 }
 ```
 
-说明：
-
-- 不写 `webhookResponse`：CLI 创建/更新后，服务端仍返回默认 `ApiResponse`
-- 写了 `webhookResponse`：CLI 会按定义文件原样透传给服务端
-- 如果 `responseProcessor` 要读取脚本输出，对应触发器必须是 `SYNC`
-
-### 事件源 webhookResponse 透传示例
-
-如果“投产触发器”本身已经是 `SYNC`，并且目标脚本输出就是外部想要的结果，那么可以在事件源里透传：
+## Webhook 请求模板
 
 ```json
 {
-  "webhookResponse": {
-    "successStatus": 200,
-    "responseProcessor": {
-      "mode": "SCRIPT_REF",
-      "scriptRef": {
-        "scriptId": "webhook-response-pass-through",
-        "versionMode": "PUBLISHED"
-      }
-    }
-  }
-}
-```
-
-响应脚本示例：
-
-```groovy
-def executions = (input.variables?.executions ?: []) as List
-if (executions.isEmpty()) {
-  return [
-    success: false,
-    code: "NO_SYNC_RESULT"
-  ]
-}
-
-return (executions[0].output ?: [:]) as Map
-```
-
-也就是把第一个同步触发器输出原样回给外部系统。
-
-### 事件触发器
-
-```json
-{
-  "id": "trigger-github-issue",
-  "name": "GitHub Issue Classifier",
-  "enabled": true,
-  "sourceId": "source-github-issue",
-  "targetScriptId": "github-issue-classifier",
-  "filterProcessor": {
-    "mode": "JSON_PATH",
-    "jsonPath": {
-      "fields": {
-        "matched": "$.body.action"
-      }
-    }
-  },
-  "idempotencyProcessor": {
-    "mode": "JSON_PATH",
-    "jsonPath": {
-      "fields": {
-        "key": "$.eventId"
-      }
-    }
-  },
-  "inputProcessor": {
-    "mode": "SCRIPT_REF",
-    "scriptRef": {
-      "scriptId": "processor-github-issue",
-      "versionMode": "PUBLISHED"
-    }
-  },
-  "submitMode": "ASYNC",
-  "responseView": "RESULT"
-}
-```
-
-### 原始事件
-
-```json
-{
+  "method": "POST",
+  "path": "/api/webhooks/github-webhook",
   "headers": {
-    "X-GitHub-Event": "issues",
-    "X-GitHub-Delivery": "delivery-001"
+    "X-GitHub-Event": ["issues"]
   },
-  "query": {},
-  "body": {
-    "action": "opened",
-    "issue": {
-      "title": "Login failed",
-      "body": "error details"
+  "query": {
+    "tenant": ["acme"]
+  },
+  "rawBody": "{\"action\":\"opened\"}",
+  "contentType": "application/json"
+}
+```
+
+## 脚本输入
+
+Webhook 脚本收到：
+
+```json
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/webhooks/github-webhook",
+    "headers": {
+      "X-GitHub-Event": ["issues"]
     },
-    "sender": {
-      "login": "octocat"
-    }
+    "query": {
+      "tenant": ["acme"]
+    },
+    "rawBody": "{\"action\":\"opened\"}",
+    "contentType": "application/json"
+  },
+  "webhook": {
+    "id": "github-webhook",
+    "key": "github.issue",
+    "name": "GitHub Issue"
   }
 }
 ```
 
-### 标准化事件
+## 脚本输出
+
+必须返回：
 
 ```json
 {
-  "sourceId": "source-github-issue",
-  "sourceKey": "github.issue",
-  "eventType": "issues",
-  "eventId": "delivery-001",
-  "actor": "octocat",
-  "subject": "Login failed",
-  "headers": {},
-  "query": {},
-  "body": {},
-  "rawBody": "{\"action\":\"opened\"}"
+  "status": 200,
+  "headers": {
+    "Content-Type": ["application/json;charset=UTF-8"]
+  },
+  "body": {
+    "ok": true
+  }
 }
 ```
 
-`body` 可以是对象，也可以是字符串；`rawBody` 保留原始请求体文本。
-
-### 处理器脚本
-
-Python：
-
-```python
-event = input.get("event", {})
-body = event.get("body", {})
-body_obj = body if isinstance(body, dict) else {}
-
-return {
-    "title": body_obj.get("issue", {}).get("title"),
-    "author": body_obj.get("sender", {}).get("login"),
-    "rawBody": event.get("rawBody"),
-}
-```
-
-Groovy：
-
-```groovy
-def event = input.event ?: [:]
-def body = event.body instanceof Map ? event.body : [:]
-
-return [
-  title: body.issue?.title,
-  author: body.sender?.login,
-  rawBody: event.rawBody
-]
-```
-
-## 命令集
+## CLI 命令
 
 ```bash
-actiondock event-source create --definition-file ./event-source.json --json
-actiondock event-source test-normalization <source-id> --payload-file ./event.raw.json --json
-actiondock event-trigger create --definition-file ./event-trigger.json --json
-actiondock event-trigger test <trigger-id> --event-file ./event.normalized.json --json
-actiondock event-trigger test <trigger-id> --event-file ./event.normalized.json --execute --json
-actiondock event-source ingest <source-id> --payload-file ./event.raw.json --json
-actiondock event-record list --source-id <source-id> --json
-actiondock event-record get <event-record-id> --json
-actiondock event-record dispatches <event-record-id> --json
-actiondock event-trigger dispatches <trigger-id> --json
+actiondock webhook create --definition-file ./webhook.json --json
+actiondock webhook get <webhook-id> --json
+actiondock webhook update <webhook-id> --definition-file ./webhook.json --json
+actiondock webhook invoke <webhook-id> --payload-file ./webhook-request.json --json
 actiondock execution get <execution-id> --json
 ```
 
-## 优先检查什么
+## 排查顺序
 
-- 标准化不对：看事件源 processor 或原始 payload
-- 没命中过滤：看 `matched`
-- 重复分发：看幂等 `key`
-- schema 校验失败：看 trigger 的 `inputProcessor` 输出和目标脚本 `inputSchema`
-- 没有事件进入：看 webhook 地址、鉴权配置、原始 body 格式
-- webhook 回包不对：看 `webhookResponse.responseProcessor`，以及 trigger 是否使用 `SYNC`
-
-## 不要做什么
-
-- 不要在代码里硬编码供应商类型。
-- 不要在第一版使用 inline code。
-- 使用 `SCRIPT_REF` 时不要跳过脚本发布步骤。
-- 除非用户要求完整重做，不要同时改 source 和 trigger。
-
----
-
-## 7. 可直接复用的模板
-
-### 7.1 通用 Header Token 事件源
-
-```json
-{
-  "id": "source-internal-crm",
-  "key": "internal.crm.customer-created",
-  "name": "Internal CRM Customer Created",
-  "enabled": true,
-  "transport": {
-    "type": "HTTP_WEBHOOK",
-    "contentTypes": ["application/json"]
-  },
-  "auth": {
-    "mode": "HEADER_TOKEN",
-    "tokenHeader": "X-ActionDock-Token",
-    "secretConfigKey": "internal.crm.webhook.token"
-  },
-  "normalizationProcessor": {
-    "mode": "JSON_PATH",
-    "jsonPath": {
-      "fields": {
-        "eventType": "$.body.type",
-        "eventId": "$.body.id",
-        "actor": "$.body.user.name",
-        "subject": "$.body.customer.name"
-      }
-    }
-  }
-}
-```
-
-### 7.2 GitHub Issue 事件源
-
-```json
-{
-  "id": "source-github-issue",
-  "key": "github.issue",
-  "name": "GitHub Issue",
-  "enabled": true,
-  "transport": {
-    "type": "HTTP_WEBHOOK"
-  },
-  "auth": {
-    "mode": "HMAC_SHA256",
-    "signatureHeader": "X-Hub-Signature-256",
-    "signaturePrefix": "sha256=",
-    "signaturePayload": "RAW_BODY",
-    "secretConfigKey": "github.webhook.secret"
-  },
-  "normalizationProcessor": {
-    "mode": "JSON_PATH",
-    "jsonPath": {
-      "fields": {
-        "eventType": "$.headers.X-GitHub-Event",
-        "eventId": "$.headers.X-GitHub-Delivery",
-        "actor": "$.body.sender.login",
-        "subject": "$.body.issue.title"
-      }
-    }
-  }
-}
-```
-
-### 7.3 最小事件触发器
-
-```json
-{
-  "id": "trigger-github-issue",
-  "name": "GitHub Issue 分类",
-  "enabled": true,
-  "sourceId": "source-github-issue",
-  "targetScriptId": "github-issue-classifier",
-  "filterProcessor": {
-    "mode": "JSON_PATH",
-    "jsonPath": {
-      "fields": {
-        "matched": "$.body.action"
-      }
-    }
-  },
-  "idempotencyProcessor": {
-    "mode": "JSON_PATH",
-    "jsonPath": {
-      "fields": {
-        "key": "$.eventId"
-      }
-    }
-  },
-  "inputProcessor": {
-    "mode": "SCRIPT_REF",
-    "scriptRef": {
-      "scriptId": "processor-github-issue",
-      "versionMode": "PUBLISHED"
-    }
-  },
-  "submitMode": "ASYNC",
-  "responseView": "RESULT"
-}
-```
-
-### 7.4 处理器脚本上下文
-
-`SCRIPT_REF` 处理器脚本默认拿到的是：
-
-```json
-{
-  "event": {
-    "sourceKey": "github.issue",
-    "eventType": "opened",
-    "eventId": "delivery-1",
-    "headers": {},
-    "query": {},
-    "body": {},
-    "rawBody": "{\"action\":\"opened\"}"
-  }
-}
-```
-
-返回值必须是目标脚本的入参对象，而不是整条事件对象。
-`event` 里的字段是“可取但可能为空”，不要默认每个字段都存在。
-
-`input.event` 的实际字段：
-
-- `id`：事件记录 ID，`ingest` 时通常有值，`test-normalization` 时可能为 `null`
-- `sourceId`
-- `sourceKey`
-- `eventType`：可选
-- `eventId`：可选
-- `actor`：可选
-- `subject`：可选
-- `timestamp`：可选
-- `headers`
-- `query`
-- `body`
-- `rawBody`
-- `receivedAt`
-
-`input.source` 的字段：
-
-- `id`
-- `key`
-- `name`
-
-`input.trigger` 的字段：
-
-- `id`
-- `name`
-- `targetScriptId`
-
-### 7.5 处理器脚本最小模板
-
-Groovy：
-
-```groovy
-def event = input.event ?: [:]
-def body = event.body instanceof Map ? event.body : [:]
-return [
-  sourceKey: event.sourceKey,
-  eventType: event.eventType,
-  eventId: event.eventId,
-  actor: event.actor,
-  subject: event.subject,
-  title: body.issue?.title,
-  author: body.sender?.login,
-  rawBody: event.rawBody
-]
-```
-
-Python：
-
-```python
-event = input.get("event", {})
-body = event.get("body", {})
-body_obj = body if isinstance(body, dict) else {}
-issue = body_obj.get("issue", {})
-
-return {
-    "sourceKey": event.get("sourceKey"),
-    "eventType": event.get("eventType"),
-    "eventId": event.get("eventId"),
-    "actor": event.get("actor"),
-    "subject": event.get("subject"),
-    "title": issue.get("title"),
-    "author": body_obj.get("sender", {}).get("login"),
-    "rawBody": event.get("rawBody"),
-}
-```
+1. 看 `webhook get <id>`，确认 `webhookScriptId`
+2. 看 `webhook invoke <id>` 的返回
+3. 看 `execution get <execution-id>`

@@ -9,5 +9,6 @@ public enum ExecutionTriggerSource {
     MANUAL,
     SCHEDULED,
     AI_TOOL,
-    EVENT
+    EVENT,
+    WEBHOOK
 }

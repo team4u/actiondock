@@ -13,11 +13,11 @@ actiondock repository tool working-copy <repositoryId> <toolId>
 actiondock repository tool working-copy <repositoryId> <toolId> --script-id <localScriptId>
 ```
 
-仓库事件源 -> 事件源工作副本：
+仓库 Webhook -> Webhook 工作副本：
 
 ```bash
-actiondock event-source repository-working-copy <repositoryId> <eventSourceId>
-actiondock event-source repository-working-copy <repositoryId> <eventSourceId> --sourceId <localSourceId>
+actiondock webhook repository-working-copy <repositoryId> <webhookId>
+actiondock webhook repository-working-copy <repositoryId> <webhookId> --webhook-id <localWebhookId>
 ```
 
 ### 查看上游同步状态
@@ -28,10 +28,10 @@ actiondock event-source repository-working-copy <repositoryId> <eventSourceId> -
 actiondock script upstream-status <scriptId>
 ```
 
-事件源工作副本：
+Webhook 工作副本：
 
 ```bash
-actiondock event-source upstream-status <sourceId>
+actiondock webhook upstream-status <webhookId>
 ```
 
 ### 从上游拉取更新
@@ -43,11 +43,11 @@ actiondock script upstream-pull <scriptId>
 actiondock script upstream-pull <scriptId> --force
 ```
 
-事件源工作副本：
+Webhook 工作副本：
 
 ```bash
-actiondock event-source upstream-pull <sourceId>
-actiondock event-source upstream-pull <sourceId> --force
+actiondock webhook upstream-pull <webhookId>
+actiondock webhook upstream-pull <webhookId> --force
 ```
 
 ### 说明

@@ -5,14 +5,12 @@ import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
 import org.team4u.actiondock.domain.model.AiDependency;
-import org.team4u.actiondock.domain.model.EventSourceAuthConfig;
-import org.team4u.actiondock.domain.model.EventSourceTransport;
+import org.team4u.actiondock.domain.model.WebhookTransport;
 import org.team4u.actiondock.domain.model.PluginDependency;
-import org.team4u.actiondock.domain.model.ProcessorDefinition;
-import org.team4u.actiondock.domain.model.RepositoryEventTriggerBinding;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
+import org.team4u.actiondock.domain.model.WebhookSampleRequest;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillTypes;
@@ -38,11 +36,11 @@ public final class RepositoryCatalogTypes {
     /** Tool 子目录名称。 */
     public static final String TOOLS_DIR = "tools";
     /** Event Source 子目录名称。 */
-    public static final String EVENT_SOURCES_DIR = "event-sources";
+    public static final String WEBHOOKS_DIR = "webhooks";
     /** Tool 描述文件名。 */
     public static final String TOOL_DESCRIPTOR_FILE = "tool.json";
     /** Event Source 描述文件名。 */
-    public static final String EVENT_SOURCE_DESCRIPTOR_FILE = "event-source.json";
+    public static final String WEBHOOK_DESCRIPTOR_FILE = "webhook.json";
     /** Plugin 子目录名称。 */
     public static final String PLUGINS_DIR = "plugins";
     /** Plugin 索引文件名。 */
@@ -58,7 +56,7 @@ public final class RepositoryCatalogTypes {
     /** 能力包子目录名称。 */
     public static final String CAPABILITY_PACKAGES_DIR = "packages";
     /** 仓库索引中的所有分节名称。 */
-    public static final List<String> REPO_INDEX_SECTIONS = List.of(TOOLS_DIR, EVENT_SOURCES_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
+    public static final List<String> REPO_INDEX_SECTIONS = List.of(TOOLS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
     /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
 
     /** 仓库类型：Git 仓库。 */
@@ -94,8 +92,8 @@ public final class RepositoryCatalogTypes {
     public static final String ENTRY_TYPE_SCRIPT = "SCRIPT";
     /** 资产类型：工具。 */
     public static final String ASSET_TYPE_TOOL = "TOOL";
-    /** 资产类型：事件源。 */
-    public static final String ASSET_TYPE_EVENT_SOURCE = "EVENT_SOURCE";
+    /** 资产类型：Webhook。 */
+    public static final String ASSET_TYPE_WEBHOOK = "WEBHOOK";
     /** 资产类型：插件。 */
     public static final String ASSET_TYPE_PLUGIN = "PLUGIN";
     /** 资产类型：能力包。 */
@@ -214,37 +212,35 @@ public final class RepositoryCatalogTypes {
     ) {
     }
 
-    public record RepositoryEventSourceDescriptor(
+    public record RepositoryWebhookDescriptor(
             String repositoryId,
-            String eventSourceId,
+            String webhookId,
             String displayName,
             String version,
             String description,
             String releaseNotes,
             String owner,
             List<String> tags,
-            String eventSourcePath,
+            String webhookPath,
             String configTemplatePath,
-            String triggerTemplatePath,
             String digest,
             List<ScriptDependency> scriptDependencies,
             boolean trusted,
             RepositoryLocalAssetState localState
     ) {
-        public RepositoryEventSourceDescriptor withLocalState(RepositoryLocalAssetState localState) {
-            return new RepositoryEventSourceDescriptor(
-                    repositoryId, eventSourceId, displayName, version,
-                    description, releaseNotes, owner, tags, eventSourcePath, configTemplatePath,
-                    triggerTemplatePath, digest, scriptDependencies, trusted, localState
+        public RepositoryWebhookDescriptor withLocalState(RepositoryLocalAssetState localState) {
+            return new RepositoryWebhookDescriptor(
+                    repositoryId, webhookId, displayName, version,
+                    description, releaseNotes, owner, tags, webhookPath, configTemplatePath,
+                    digest, scriptDependencies, trusted, localState
             );
         }
     }
 
-    public record RepositoryEventSourceDetail(
-            RepositoryEventSourceDescriptor descriptor,
-            EventSourceFile eventSource,
-            List<ConfigTemplateItem> configTemplate,
-            List<EventTriggerTemplateItem> triggerTemplate
+    public record RepositoryWebhookDetail(
+            RepositoryWebhookDescriptor descriptor,
+            WebhookFile webhook,
+            List<ConfigTemplateItem> configTemplate
     ) {
     }
 
@@ -276,31 +272,27 @@ public final class RepositoryCatalogTypes {
     ) {
     }
 
-    public record RepositoryEventSourcePublishRequest(
+    public record RepositoryWebhookPublishRequest(
             String sourceId,
-            String eventSourceId,
+            String webhookId,
             String displayName,
             String version,
             String owner,
             String releaseNotes,
             List<String> tags,
-            List<String> triggerIds,
             List<RepositoryPublishConfigItem> configItems,
-            List<RepositoryEventTriggerBinding> triggerBindings,
             boolean force
     ) {
     }
 
-    public record RepositoryEventSourcePublishPreviewRequest(
-            String sourceId,
-            List<String> triggerIds
+    public record RepositoryWebhookPublishPreviewRequest(
+            String sourceId
     ) {
     }
 
-    public record RepositoryEventSourcePublishPreview(
+    public record RepositoryWebhookPublishPreview(
             List<RepositoryPublishConfigCandidate> items,
             List<String> missingKeys,
-            List<EventTriggerTemplateItem> triggerTemplate,
             List<ScriptDependency> scriptDependencies
     ) {
     }
@@ -554,7 +546,7 @@ public final class RepositoryCatalogTypes {
                                       String name,
                                       String description,
                                       List<RepositoryIndexEntry> tools,
-                                      List<RepositoryEventSourceIndexEntry> eventSources,
+                                      List<RepositoryWebhookIndexEntry> webhooks,
                                       List<RepositoryPluginIndexEntry> plugins,
                                       List<CapabilityPackageIndexEntry> packages,
                                       List<RepositorySkillIndexEntry> skills) {
@@ -571,8 +563,8 @@ public final class RepositoryCatalogTypes {
             return tools == null ? List.of() : tools;
         }
 
-        public List<RepositoryEventSourceIndexEntry> safeEventSources() {
-            return eventSources == null ? List.of() : eventSources;
+        public List<RepositoryWebhookIndexEntry> safeWebhooks() {
+            return webhooks == null ? List.of() : webhooks;
         }
 
         public List<RepositoryPluginIndexEntry> safePlugins() {
@@ -597,12 +589,12 @@ public final class RepositoryCatalogTypes {
                                        String toolPath) {
     }
 
-    public record RepositoryEventSourceIndexEntry(String id,
+    public record RepositoryWebhookIndexEntry(String id,
                                                   String name,
                                                   String version,
                                                   String description,
                                                   String releaseNotes,
-                                                  String eventSourcePath) {
+                                                  String webhookPath) {
     }
 
     public record RepositoryPluginIndexEntry(String id,
@@ -731,8 +723,8 @@ public final class RepositoryCatalogTypes {
                            List<PluginDependency> pluginDependencies) {
     }
 
-    public record EventSourceFile(int schemaVersion,
-                                  String eventSourceId,
+    public record WebhookFile(int schemaVersion,
+                                  String webhookId,
                                   String displayName,
                                   String version,
                                   String description,
@@ -740,26 +732,11 @@ public final class RepositoryCatalogTypes {
                                   String owner,
                                   List<String> tags,
                                   String digest,
-                                  EventSourceTransport transport,
-                                  EventSourceAuthConfig auth,
-                                  ProcessorDefinition normalizationProcessor,
-                                  org.team4u.actiondock.domain.model.EventSourceWebhookResponse webhookResponse,
-                                  Map<String, Object> sampleContext,
+                                  WebhookTransport transport,
+                                  String webhookScriptId,
+                                  WebhookSampleRequest sampleRequest,
                                   List<ScriptDependency> scriptDependencies,
-                                  String configTemplatePath,
-                                  String triggerTemplatePath) {
-    }
-
-    public record EventTriggerTemplateItem(String id,
-                                           String name,
-                                           String description,
-                                           boolean enabledByDefault,
-                                           ScriptDependency targetScriptDependency,
-                                           ProcessorDefinition filterProcessor,
-                                           ProcessorDefinition idempotencyProcessor,
-                                           ProcessorDefinition inputProcessor,
-                                           String submitMode,
-                                           String responseView) {
+                                  String configTemplatePath) {
     }
 
     public record PluginFile(int pluginFileVersion,
@@ -918,11 +895,11 @@ public final class RepositoryCatalogTypes {
         assertVersionAvailable(ASSET_TYPE_SKILL, repositoryId, index == null ? null : index.skills(), skillId, version, RepositorySkillIndexEntry::id, RepositorySkillIndexEntry::version);
     }
 
-    static void assertEventSourceVersionAvailable(String repositoryId,
+    static void assertWebhookVersionAvailable(String repositoryId,
                                                   RepositoryIndexFile index,
-                                                  String eventSourceId,
+                                                  String webhookId,
                                                   String version) {
-        assertVersionAvailable(ASSET_TYPE_EVENT_SOURCE, repositoryId, index == null ? null : index.eventSources(), eventSourceId, version, RepositoryEventSourceIndexEntry::id, RepositoryEventSourceIndexEntry::version);
+        assertVersionAvailable(ASSET_TYPE_WEBHOOK, repositoryId, index == null ? null : index.webhooks(), webhookId, version, RepositoryWebhookIndexEntry::id, RepositoryWebhookIndexEntry::version);
     }
 
     private static <T> void assertVersionAvailable(String assetType,

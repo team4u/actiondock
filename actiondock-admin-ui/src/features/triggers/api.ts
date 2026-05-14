@@ -1,18 +1,11 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
 import type {
   UpstreamStatus,
-  EventDispatchRecord,
-  EventRecord,
-  EventSourceDefinition,
-  EventTrigger,
-  EventTriggerTestRequest,
-  EventTriggerTestResult,
-  IncomingEventPayload,
-  NormalizedEvent,
-  ProcessorTestRequest,
-  ProcessorTestResult,
+  WebhookDefinition,
   ScriptSchedule,
-  ScriptScheduleUpsertRequest
+  ScriptScheduleUpsertRequest,
+  WebhookRequest,
+  WebhookTestResult
 } from "../../shared/types";
 
 export function listSchedules(): Promise<ScriptSchedule[]> {
@@ -57,144 +50,62 @@ export function deleteSchedule(id: string): Promise<void> {
   });
 }
 
-export function listEventSources(): Promise<EventSourceDefinition[]> {
-  return request<EventSourceDefinition[]>("/api/event-sources");
+export function listWebhooks(): Promise<WebhookDefinition[]> {
+  return request<WebhookDefinition[]>("/api/webhooks");
 }
 
-export function getEventSource(id: string): Promise<EventSourceDefinition> {
-  return request<EventSourceDefinition>(`/api/event-sources/${id}`);
+export function getWebhook(id: string): Promise<WebhookDefinition> {
+  return request<WebhookDefinition>(`/api/webhooks/${id}`);
 }
 
-export function createEventSource(payload: Omit<EventSourceDefinition, "id"> | Partial<EventSourceDefinition>): Promise<EventSourceDefinition> {
-  return request<EventSourceDefinition>("/api/event-sources", {
+export function createWebhook(payload: Omit<WebhookDefinition, "id"> | Partial<WebhookDefinition>): Promise<WebhookDefinition> {
+  return request<WebhookDefinition>("/api/webhooks", {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
   });
 }
 
-export function updateEventSource(id: string, payload: Omit<EventSourceDefinition, "id"> | Partial<EventSourceDefinition>): Promise<EventSourceDefinition> {
-  return request<EventSourceDefinition>(`/api/event-sources/${id}`, {
+export function updateWebhook(id: string, payload: Omit<WebhookDefinition, "id"> | Partial<WebhookDefinition>): Promise<WebhookDefinition> {
+  return request<WebhookDefinition>(`/api/webhooks/${id}`, {
     method: "PUT",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
   });
 }
 
-export function deleteEventSource(id: string): Promise<void> {
-  return request<void>(`/api/event-sources/${id}`, {
+export function deleteWebhook(id: string): Promise<void> {
+  return request<void>(`/api/webhooks/${id}`, {
     method: "DELETE"
   });
 }
 
-export function enableEventSource(id: string): Promise<EventSourceDefinition> {
-  return request<EventSourceDefinition>(`/api/event-sources/${id}/enable`, {
+export function enableWebhook(id: string): Promise<WebhookDefinition> {
+  return request<WebhookDefinition>(`/api/webhooks/${id}/enable`, {
     method: "POST"
   });
 }
 
-export function disableEventSource(id: string): Promise<EventSourceDefinition> {
-  return request<EventSourceDefinition>(`/api/event-sources/${id}/disable`, {
+export function disableWebhook(id: string): Promise<WebhookDefinition> {
+  return request<WebhookDefinition>(`/api/webhooks/${id}/disable`, {
     method: "POST"
   });
 }
 
-export function testEventSourceNormalization(id: string, payload: IncomingEventPayload): Promise<NormalizedEvent> {
-  return request<NormalizedEvent>(`/api/event-sources/${id}/test-normalization`, {
+export function testWebhook(id: string, payload: WebhookRequest): Promise<WebhookTestResult> {
+  return request<WebhookTestResult>(`/api/webhooks/${id}/test-webhook`, {
     method: "POST",
     headers: JSON_HEADERS,
     body: JSON.stringify(payload)
   });
 }
 
-export function listEventSourceEvents(id: string): Promise<EventRecord[]> {
-  return request<EventRecord[]>(`/api/event-sources/${id}/events`);
+export function getWebhookUpstreamStatus(id: string): Promise<UpstreamStatus> {
+  return request<UpstreamStatus>(`/api/webhooks/${id}/upstream`);
 }
 
-export function getEventSourceUpstreamStatus(id: string): Promise<UpstreamStatus> {
-  return request<UpstreamStatus>(`/api/event-sources/${id}/upstream`);
-}
-
-export function pullUpstreamEventSource(id: string, force = false): Promise<EventSourceDefinition> {
-  return request<EventSourceDefinition>(`/api/event-sources/${id}/upstream/pull?force=${force}`, {
+export function pullUpstreamWebhook(id: string, force = false): Promise<WebhookDefinition> {
+  return request<WebhookDefinition>(`/api/webhooks/${id}/upstream/pull?force=${force}`, {
     method: "POST"
-  });
-}
-
-export function listEventTriggers(): Promise<EventTrigger[]> {
-  return request<EventTrigger[]>("/api/event-triggers");
-}
-
-export function getEventTrigger(id: string): Promise<EventTrigger> {
-  return request<EventTrigger>(`/api/event-triggers/${id}`);
-}
-
-export function createEventTrigger(payload: Omit<EventTrigger, "id"> | Partial<EventTrigger>): Promise<EventTrigger> {
-  return request<EventTrigger>("/api/event-triggers", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function updateEventTrigger(id: string, payload: Omit<EventTrigger, "id"> | Partial<EventTrigger>): Promise<EventTrigger> {
-  return request<EventTrigger>(`/api/event-triggers/${id}`, {
-    method: "PUT",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function deleteEventTrigger(id: string): Promise<void> {
-  return request<void>(`/api/event-triggers/${id}`, {
-    method: "DELETE"
-  });
-}
-
-export function enableEventTrigger(id: string): Promise<EventTrigger> {
-  return request<EventTrigger>(`/api/event-triggers/${id}/enable`, {
-    method: "POST"
-  });
-}
-
-export function disableEventTrigger(id: string): Promise<EventTrigger> {
-  return request<EventTrigger>(`/api/event-triggers/${id}/disable`, {
-    method: "POST"
-  });
-}
-
-export function testEventTrigger(id: string, payload: EventTriggerTestRequest): Promise<EventTriggerTestResult> {
-  return request<EventTriggerTestResult>(`/api/event-triggers/${id}/test`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function listEventTriggerDispatches(id: string): Promise<EventDispatchRecord[]> {
-  return request<EventDispatchRecord[]>(`/api/event-triggers/${id}/dispatches`);
-}
-
-export function listEventRecords(sourceId?: string): Promise<EventRecord[]> {
-  const params = new URLSearchParams();
-  if (sourceId) {
-    params.set("sourceId", sourceId);
-  }
-  return request<EventRecord[]>(params.size > 0 ? `/api/event-records?${params.toString()}` : "/api/event-records");
-}
-
-export function getEventRecord(id: string): Promise<EventRecord> {
-  return request<EventRecord>(`/api/event-records/${id}`);
-}
-
-export function listEventRecordDispatches(id: string): Promise<EventDispatchRecord[]> {
-  return request<EventDispatchRecord[]>(`/api/event-records/${id}/dispatches`);
-}
-
-export function testProcessor(payload: ProcessorTestRequest): Promise<ProcessorTestResult> {
-  return request<ProcessorTestResult>("/api/processors/test", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
   });
 }

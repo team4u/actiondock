@@ -2,13 +2,13 @@
 
 ## 一句话理解
 
-ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格式，通过 Bearer Token 认证（可配置为开放模式）。Webhook 接收接口 `POST /api/event-sources/{id}/events` 是例外：它不要求平台级 Bearer Token，且请求体既可以是 JSON 对象，也可以是原始字符串。所有 API 响应用 `ApiResponse<T>` 包装，包含 `code`、`message` 和 `data` 字段。
+ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格式，通过 Bearer Token 认证（可配置为开放模式）。Webhook 接收接口 `POST /api/webhooks/{id}` 是例外：它不要求平台级 Bearer Token，且请求体既可以是 JSON 对象，也可以是原始字符串。当前版本的 Webhook 语义是“一个固定地址对应一个脚本，请求和响应都由脚本自行处理”。
 
 ## API 访问基础
 
 - **Base URL**: `http://localhost:5177/api`
 - **Swagger UI**: `http://localhost:5177/swagger-ui.html`
-- **Content-Type**: 默认使用 `application/json`；Webhook 接收接口 `POST /api/event-sources/{id}/events` 也支持 `text/plain` 等原始字符串请求体
+- **Content-Type**: 默认使用 `application/json`；Webhook 接收接口 `POST /api/webhooks/{id}` 也支持 `text/plain` 等原始字符串请求体
 - **认证**: `Authorization: Bearer <token>` 请求头
 - **开放模式**: 如果没有配置任何访问令牌，所有 API 请求不需要认证
 
@@ -132,7 +132,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `MANUAL` | 手动执行 |
 | `SCHEDULED` | 定时任务触发 |
 | `AI_TOOL` | AI Agent 调用 |
-| `EVENT` | 事件触发 |
+| `WEBHOOK` | Webhook 触发 |
 
 ## 统一脚本执行入口
 
@@ -223,43 +223,19 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `POST` | `/api/access-tokens/{id}/enable` | 启用 |
 | `POST` | `/api/access-tokens/{id}/disable` | 禁用 |
 
-## 事件框架 API
-
-### 事件源
+## Webhook API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/event-sources` | 事件源列表 |
-| `POST` | `/api/event-sources` | 创建事件源 |
-| `GET` | `/api/event-sources/{id}` | 事件源详情 |
-| `PUT` | `/api/event-sources/{id}` | 更新事件源 |
-| `POST` | `/api/event-sources/{id}/test-normalization` | 测试标准化 |
-| `POST` | `/api/event-sources/{id}/events` | 接收外部事件（**不需要 Bearer Token**，请求体支持 JSON 对象或原始字符串） |
-
-### 事件触发
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/event-triggers` | 触发器列表 |
-| `POST` | `/api/event-triggers` | 创建触发器 |
-| `GET` | `/api/event-triggers/{id}` | 触发器详情 |
-| `PUT` | `/api/event-triggers/{id}` | 更新触发器 |
-| `POST` | `/api/event-triggers/{id}/test` | 测试触发器（不执行目标脚本） |
-| `GET` | `/api/event-triggers/{id}/dispatches` | 获取分发记录 |
-
-### 事件记录
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/event-records` | 事件记录列表 |
-| `GET` | `/api/event-records/{id}` | 事件记录详情 |
-| `GET` | `/api/event-records/{id}/dispatches` | 关联的分发记录 |
-
-### 处理器
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/processors/test` | 测试处理器 |
+| `GET` | `/api/webhooks` | Webhook 列表 |
+| `POST` | `/api/webhooks` | 创建 Webhook |
+| `GET` | `/api/webhooks/{id}` | Webhook 详情 |
+| `PUT` | `/api/webhooks/{id}` | 更新 Webhook |
+| `DELETE` | `/api/webhooks/{id}` | 删除 Webhook |
+| `POST` | `/api/webhooks/{id}/enable` | 启用 Webhook |
+| `POST` | `/api/webhooks/{id}/disable` | 停用 Webhook |
+| `POST` | `/api/webhooks/{id}/test-webhook` | Dry-run Webhook 脚本 |
+| `POST` | `/api/webhooks/{id}` | 调用固定 Webhook 地址（不需要 Bearer Token） |
 
 ## AI API
 
@@ -306,7 +282,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | API `POST /api/scripts/{id}/execute` | 已发布 |
 | API `POST /api/scripts/{id}/execute` + `draft: true` | 草稿 |
 | 定时任务 | 已发布 |
-| 事件触发 | 已发布 |
+| Webhook | 已发布 |
 | CLI `actiondock script run` | 已发布 |
 | CLI `actiondock script run --draft` | 草稿 |
 
@@ -324,20 +300,13 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 **Q: 版本冲突**
 更新时如果提示版本冲突，先卸载旧版本再安装新版本。
 
-### 事件框架相关
+### Webhook 相关
 
-**Q: 事件没进来**
-1. 检查 Webhook 地址是否正确（`POST /api/event-sources/{id}/events`）
-2. 检查鉴权配置是否匹配外部系统
-3. 外部系统是否发送了 JSON
-
-**Q: 触发器不命中**
-查看事件记录中的分发状态：
-- `FILTERED`：过滤处理器返回 `matched: false`
-- `DUPLICATE`：幂等处理器判定为重复
-
-**Q: 目标脚本必须已发布**
-保存事件触发时，目标脚本必须是 `PUBLISHED` 状态。先发布脚本。
+**Q: Webhook 没进来**
+1. 检查 Webhook 地址是否正确（`POST /api/webhooks/{id}`）
+2. 检查 Webhook 是否绑定了已发布脚本
+3. 检查脚本是否返回了合法的 `status`
+4. 如果需要验签或幂等，在 Webhook 脚本里用配置值和共享状态实现
 
 ### AI 相关
 
@@ -374,9 +343,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | Toolset | 工具集，Agent 可使用的一组工具 |
 | Agent Profile | Agent 配置，定义 AI Agent 的模型、提示词、工具 |
 | Model Profile | 模型配置，定义 AI 模型的供应商、名称、API Key |
-| Event Source | 事件源，外部系统的 Webhook 接入口 |
-| Event Trigger | 事件触发，事件到脚本的路由规则 |
-| Processor | 处理器，数据转换逻辑（`JSON_PATH` / `TEMPLATE` / `SCRIPT_REF`） |
+| Webhook | 外部系统的固定 HTTP 接入口，一个 Webhook 绑定一个已发布脚本 |
 | Config Value | 配置值，全局键值配置（如 API Key） |
 | Shared State | 共享状态，跨脚本的键值存储，支持 CAS 乐观锁 |
 | CAS | Compare-And-Swap，乐观锁机制 |

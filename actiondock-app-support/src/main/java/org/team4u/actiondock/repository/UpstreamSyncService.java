@@ -1,11 +1,8 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.exception.UpstreamConflictException;
-import org.team4u.actiondock.domain.model.EventSourceDefinition;
-import org.team4u.actiondock.domain.model.EventSourceScope;
-import org.team4u.actiondock.domain.model.EventTrigger;
-import org.team4u.actiondock.domain.model.EventTriggerScope;
-import org.team4u.actiondock.domain.model.ProcessorDefinition;
+import org.team4u.actiondock.domain.model.WebhookDefinition;
+import org.team4u.actiondock.domain.model.WebhookScope;
 import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
@@ -188,26 +185,26 @@ class UpstreamSyncService {
                 .setDirty(false);
     }
 
-    EventSourceDefinition createEventSourceWorkingCopy(String repositoryId,
-                                                       String eventSourceId,
+    WebhookDefinition createWebhookWorkingCopy(String repositoryId,
+                                                       String webhookId,
                                                        WorkingCopyRequest request) {
         RepositoryDefinition repository = catalog.getRepository(repositoryId);
         ensureTrackableRepository(repository);
-        if (repos.repositoryLocalAssetRepository().findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repositoryId, eventSourceId).isPresent()) {
-            throw new IllegalArgumentException("上游事件源已添加到本地: " + repositoryId + "/" + eventSourceId);
+        if (repos.repositoryLocalAssetRepository().findByUpstreamAsset(UpstreamAssetType.WEBHOOK, repositoryId, webhookId).isPresent()) {
+            throw new IllegalArgumentException("上游Webhook已添加到本地: " + repositoryId + "/" + webhookId);
         }
-        RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repositoryId, eventSourceId);
-        String sourceId = NormalizeUtils.normalizeOrDefault(request == null ? null : request.id(), detail.descriptor().eventSourceId());
-        if (repos.eventSourceRepository().findById(sourceId).isPresent()) {
-            throw new IllegalArgumentException("事件源 ID 已存在，请指定其他工作副本 ID: " + sourceId);
+        RepositoryWebhookDetail detail = catalog.getRepositoryWebhook(repositoryId, webhookId);
+        String sourceId = NormalizeUtils.normalizeOrDefault(request == null ? null : request.id(), detail.descriptor().webhookId());
+        if (repos.webhookRepository().findById(sourceId).isPresent()) {
+            throw new IllegalArgumentException("Webhook ID 已存在，请指定其他工作副本 ID: " + sourceId);
         }
-        ToolSourceState state = catalog.resolveEventSourceState(repository, detail);
-        EventSourceDefinition saved = saveWorkingCopyEventSource(sourceId, null, detail);
+        ToolSourceState state = catalog.resolveWebhookState(repository, detail);
+        WebhookDefinition saved = saveWorkingCopyWebhook(sourceId, null, detail);
         repos.repositoryLocalAssetRepository().save(newBinding(
-                UpstreamAssetType.EVENT_SOURCE,
+                UpstreamAssetType.WEBHOOK,
                 saved.getId(),
                 repositoryId,
-                eventSourceId,
+                webhookId,
                 detail.descriptor().displayName(),
                 detail.descriptor().version(),
                 state
@@ -215,14 +212,14 @@ class UpstreamSyncService {
         return saved;
     }
 
-    UpstreamStatus getEventSourceUpstreamStatus(String sourceId) {
-        EventSourceDefinition source = repos.eventSourceRepository().findById(sourceId)
-                .orElseThrow(() -> new IllegalArgumentException("事件源不存在: " + sourceId));
-        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, source.getId());
+    UpstreamStatus getWebhookUpstreamStatus(String sourceId) {
+        WebhookDefinition source = repos.webhookRepository().findById(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("Webhook不存在: " + sourceId));
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.WEBHOOK, source.getId());
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
-        RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repository.getId(), binding.getUpstreamAssetId());
-        ToolSourceState state = catalog.resolveEventSourceState(repository, detail);
-        String localDigest = catalog.computeEventSourceLocalDigest(source, repos.eventTriggerRepository().findBySourceId(sourceId));
+        RepositoryWebhookDetail detail = catalog.getRepositoryWebhook(repository.getId(), binding.getUpstreamAssetId());
+        ToolSourceState state = catalog.resolveWebhookState(repository, detail);
+        String localDigest = catalog.computeWebhookLocalDigest(source);
         UpstreamSyncState syncState = resolveSyncState(binding, localDigest, state);
         return new UpstreamStatus(
                 source.getId(),
@@ -242,15 +239,15 @@ class UpstreamSyncService {
         );
     }
 
-    EventSourceDefinition pullEventSource(String sourceId, boolean force) {
-        EventSourceDefinition source = repos.eventSourceRepository().findById(sourceId)
-                .orElseThrow(() -> new IllegalArgumentException("事件源不存在: " + sourceId));
-        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, source.getId());
+    WebhookDefinition pullWebhook(String sourceId, boolean force) {
+        WebhookDefinition source = repos.webhookRepository().findById(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("Webhook不存在: " + sourceId));
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.WEBHOOK, source.getId());
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         catalog.syncRepository(repository.getId());
-        RepositoryEventSourceDetail detail = catalog.getRepositoryEventSource(repository.getId(), binding.getUpstreamAssetId());
-        ToolSourceState state = catalog.resolveEventSourceState(repository, detail);
-        String localDigest = catalog.computeEventSourceLocalDigest(source, repos.eventTriggerRepository().findBySourceId(sourceId));
+        RepositoryWebhookDetail detail = catalog.getRepositoryWebhook(repository.getId(), binding.getUpstreamAssetId());
+        ToolSourceState state = catalog.resolveWebhookState(repository, detail);
+        String localDigest = catalog.computeWebhookLocalDigest(source);
         UpstreamSyncState syncState = resolveSyncState(binding, localDigest, state);
         if (syncState == UpstreamSyncState.SYNCED) {
             return source;
@@ -261,44 +258,41 @@ class UpstreamSyncService {
         if (syncState == UpstreamSyncState.DIVERGED && !force) {
             throw new UpstreamConflictException(source.getId(), binding.getRepositoryId(), binding.getUpstreamAssetId());
         }
-        EventSourceDefinition saved = saveWorkingCopyEventSource(source.getId(), source, detail);
+        WebhookDefinition saved = saveWorkingCopyWebhook(source.getId(), source, detail);
         repos.repositoryLocalAssetRepository().save(updateBinding(binding, detail.descriptor().version(), state));
         return saved;
     }
 
-    void detachEventSource(String sourceId) {
-        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.EVENT_SOURCE, sourceId);
+    void detachWebhook(String sourceId) {
+        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.WEBHOOK, sourceId);
         repos.repositoryLocalAssetRepository().deleteById(binding.getId());
     }
 
-    private EventSourceDefinition saveWorkingCopyEventSource(String sourceId,
-                                                            EventSourceDefinition existing,
-                                                            RepositoryEventSourceDetail detail) {
-        EventSourceDefinition source = buildWorkingCopyEventSource(sourceId, existing, detail);
-        repos.eventSourceRepository().save(source);
-        syncWorkingCopyTriggers(source, detail, existing == null ? List.of() : repos.eventTriggerRepository().findBySourceId(existing.getId()));
-        return repos.eventSourceRepository().findById(source.getId()).orElse(source);
+    private WebhookDefinition saveWorkingCopyWebhook(String sourceId,
+                                                            WebhookDefinition existing,
+                                                            RepositoryWebhookDetail detail) {
+        WebhookDefinition source = buildWorkingCopyWebhook(sourceId, existing, detail);
+        repos.webhookRepository().save(source);
+        return repos.webhookRepository().findById(source.getId()).orElse(source);
     }
 
-    private EventSourceDefinition buildWorkingCopyEventSource(String sourceId,
-                                                             EventSourceDefinition existing,
-                                                             RepositoryEventSourceDetail detail) {
+    private WebhookDefinition buildWorkingCopyWebhook(String sourceId,
+                                                             WebhookDefinition existing,
+                                                             RepositoryWebhookDetail detail) {
         LocalDateTime now = LocalDateTime.now();
-        RepositoryEventSourceDescriptor descriptor = detail.descriptor();
-        return new EventSourceDefinition()
+        RepositoryWebhookDescriptor descriptor = detail.descriptor();
+        return new WebhookDefinition()
                 .setId(sourceId)
                 .setKey(sourceId)
                 .setName(descriptor.displayName())
-                .setDescription(detail.eventSource().description())
-                .setScope(EventSourceScope.PERSONAL)
+                .setDescription(detail.webhook().description())
+                .setScope(WebhookScope.PERSONAL)
                 .setRepositoryId(descriptor.repositoryId())
-                .setRepositoryEventSourceId(descriptor.eventSourceId())
+                .setRepositoryWebhookId(descriptor.webhookId())
                 .setRepositoryVersion(descriptor.version())
-                .setTransport(detail.eventSource().transport())
-                .setAuth(detail.eventSource().auth())
-                .setNormalizationProcessor(detail.eventSource().normalizationProcessor())
-                .setWebhookResponse(detail.eventSource().webhookResponse())
-                .setSampleContext(detail.eventSource().sampleContext())
+                .setTransport(detail.webhook().transport())
+                .setWebhookScriptId(detail.webhook().webhookScriptId())
+                .setSampleRequest(detail.webhook().sampleRequest())
                 .setEditable(true)
                 .setEnabled(existing == null ? true : existing.isEnabled())
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())
@@ -307,49 +301,6 @@ class UpstreamSyncService {
                 .setDirty(false);
     }
 
-    private void syncWorkingCopyTriggers(EventSourceDefinition source,
-                                         RepositoryEventSourceDetail detail,
-                                         List<EventTrigger> existingTriggers) {
-        LocalDateTime now = LocalDateTime.now();
-        Map<String, EventTrigger> existingByTemplateId = existingTriggers.stream()
-                .filter(trigger -> trigger.getRepositoryTriggerId() != null)
-                .collect(java.util.stream.Collectors.toMap(EventTrigger::getRepositoryTriggerId, java.util.function.Function.identity(), (a, b) -> a, java.util.LinkedHashMap::new));
-        for (RepositoryCatalogTypes.EventTriggerTemplateItem template : detail.triggerTemplate()) {
-            EventTrigger existing = existingByTemplateId.get(template.id());
-            String targetScriptId = resolveWorkingCopyTriggerTargetScriptId(source.getRepositoryId(), template.targetScriptDependency(), existing);
-            EventTrigger trigger = new EventTrigger()
-                    .setId(existing == null ? source.getId() + "." + template.id() : existing.getId())
-                    .setName(template.name())
-                    .setDescription(template.description())
-                    .setScope(EventTriggerScope.PERSONAL)
-                    .setRepositoryId(source.getRepositoryId())
-                    .setRepositoryEventSourceId(source.getRepositoryEventSourceId())
-                    .setRepositoryVersion(source.getRepositoryVersion())
-                    .setRepositoryTriggerId(template.id())
-                    .setEditable(true)
-                    .setEnabled(existing == null ? template.enabledByDefault() : existing.isEnabled())
-                    .setSourceId(source.getId())
-                    .setTargetScriptId(targetScriptId)
-                    .setFilterProcessor(normalizeProcessor(template.filterProcessor()))
-                    .setIdempotencyProcessor(normalizeProcessor(template.idempotencyProcessor()))
-                    .setInputProcessor(normalizeProcessor(template.inputProcessor()))
-                    .setSubmitMode(template.submitMode() == null ? null : org.team4u.actiondock.domain.model.SubmitMode.valueOf(template.submitMode()))
-                    .setResponseView(template.responseView())
-                    .setCreatedAt(existing == null ? now : existing.getCreatedAt())
-                    .setUpdatedAt(now)
-                    .setLastEventId(existing == null ? null : existing.getLastEventId())
-                    .setLastTriggeredAt(existing == null ? null : existing.getLastTriggeredAt())
-                    .setLastExecutionId(existing == null ? null : existing.getLastExecutionId())
-                    .setLastExecutionStatus(existing == null ? null : existing.getLastExecutionStatus());
-            repos.eventTriggerRepository().save(trigger);
-        }
-        for (EventTrigger existing : existingByTemplateId.values()) {
-            boolean stillPresent = detail.triggerTemplate().stream().anyMatch(template -> template.id().equals(existing.getRepositoryTriggerId()));
-            if (!stillPresent) {
-                repos.eventTriggerRepository().deleteById(existing.getId());
-            }
-        }
-    }
 
     private void ensureTrackableRepository(RepositoryDefinition repository) {
         if (REPO_TYPE_HTTP.equals(repository.getType())) {
@@ -399,20 +350,5 @@ class UpstreamSyncService {
                 .findByLocalAsset(assetType, localAssetId)
                 .filter(asset -> asset.getMode() == RepositoryLocalAssetMode.TRACKED)
                 .orElseThrow(() -> new IllegalArgumentException("工作副本未绑定上游: " + localAssetId));
-    }
-
-    private String resolveWorkingCopyTriggerTargetScriptId(String repositoryId,
-                                                          org.team4u.actiondock.domain.model.ScriptDependency dependency,
-                                                          EventTrigger existing) {
-        if (existing != null && !NormalizeUtils.isBlank(existing.getTargetScriptId())) {
-            return existing.getTargetScriptId();
-        }
-        return repos.scriptRepository().findInstalledByRepositorySource(repositoryId, dependency.getToolId())
-                .map(ScriptDefinition::getId)
-                .orElse(repositoryId + "." + dependency.getToolId());
-    }
-
-    private static ProcessorDefinition normalizeProcessor(ProcessorDefinition processor) {
-        return processor == null || processor.isEmpty() ? null : processor;
     }
 }

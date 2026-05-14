@@ -58,10 +58,7 @@ export interface ExecutionResponse {
   scheduleId?: string;
   agentRunId?: string;
   agentStepId?: string;
-  eventSourceId?: string;
-  eventTriggerId?: string;
-  eventRecordId?: string;
-  eventDispatchId?: string;
+  webhookId?: string;
   input?: Record<string, unknown>;
   output?: unknown;
   errorMessage?: string;
@@ -118,91 +115,50 @@ export interface ExecutionPresetUpsertRequest {
   input: Record<string, unknown>;
 }
 
-export interface JsonPathProcessorConfig {
-  fields?: Record<string, string>;
-}
-
-export interface TemplateProcessorConfig {
-  engine?: string;
-  template?: Record<string, unknown>;
-}
-
-export interface ScriptRefProcessorConfig {
-  scriptId?: string;
-  versionMode?: string;
-}
-
-export interface ProcessorDefinition {
-  mode?: string;
-  jsonPath?: JsonPathProcessorConfig;
-  template?: TemplateProcessorConfig;
-  scriptRef?: ScriptRefProcessorConfig;
-  outputSchema?: Record<string, unknown>;
-  description?: string;
-}
-
-export interface EventSourceTransport {
+export interface WebhookTransport {
   type?: string;
   endpointPath?: string;
   contentTypes?: string[];
 }
 
-export interface EventSourceAuthConfig {
-  mode?: string;
-  tokenHeader?: string;
-  tokenQueryParam?: string;
-  signatureHeader?: string;
-  signaturePrefix?: string;
-  signaturePayload?: string;
-  timestampHeader?: string;
-  maxSkewSeconds?: number;
-  secretConfigKey?: string;
-}
-
-export interface EventSourceWebhookErrorResponse {
-  httpStatus?: number;
-  msg?: string;
-  data?: unknown;
-}
-
-export interface EventSourceWebhookResponse {
-  successStatus?: number;
-  successHeaders?: Record<string, unknown>;
-  responseProcessor?: ProcessorDefinition;
-  errorResponse?: EventSourceWebhookErrorResponse;
-}
-
-export interface IncomingEventPayload {
-  headers?: Record<string, unknown>;
-  query?: Record<string, unknown>;
-  body?: Record<string, unknown>;
+export interface WebhookSampleRequest {
+  method?: string;
+  headers?: Record<string, string[]>;
+  query?: Record<string, string[]>;
   rawBody?: string;
   contentType?: string;
 }
 
-export interface NormalizedEvent {
-  id?: string;
-  sourceId?: string;
-  sourceKey?: string;
-  eventType?: string;
-  eventId?: string;
-  actor?: string;
-  subject?: string;
-  timestamp?: string;
-  headers?: Record<string, unknown>;
-  query?: Record<string, unknown>;
-  body?: Record<string, unknown>;
-  receivedAt?: string;
+export interface WebhookRequest extends WebhookSampleRequest {
+  path?: string;
 }
 
-export interface EventSourceDefinition {
+export interface WebhookResponsePayload {
+  status: number;
+  headers?: Record<string, string[]>;
+  body?: unknown;
+}
+
+export interface WebhookExecutionResult {
+  request?: Record<string, unknown>;
+  execution?: ExecutionResponse;
+  webhookResponse?: WebhookResponsePayload;
+}
+
+export interface WebhookInvokeResult {
+  status: number;
+  headers: Record<string, string[]>;
+  body?: unknown;
+}
+
+export interface WebhookDefinition {
   id: string;
   key?: string;
   name?: string;
   description?: string;
   scope?: string;
   repositoryId?: string;
-  repositoryEventSourceId?: string;
+  repositoryWebhookId?: string;
   repositoryVersion?: string;
   sourcePath?: string;
   sourceCommit?: string;
@@ -211,72 +167,10 @@ export interface EventSourceDefinition {
   dirty?: boolean;
   editable?: boolean;
   enabled?: boolean;
-  transport?: EventSourceTransport;
-  auth?: EventSourceAuthConfig;
-  normalizationProcessor?: ProcessorDefinition;
-  webhookResponse?: EventSourceWebhookResponse;
-  sampleContext?: Record<string, unknown>;
+  transport?: WebhookTransport;
+  webhookScriptId?: string;
+  sampleRequest?: WebhookSampleRequest;
   lastReceivedAt?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface EventTrigger {
-  id: string;
-  name?: string;
-  description?: string;
-  scope?: string;
-  repositoryId?: string;
-  repositoryEventSourceId?: string;
-  repositoryVersion?: string;
-  repositoryTriggerId?: string;
-  editable?: boolean;
-  enabled?: boolean;
-  sourceId?: string;
-  targetScriptId?: string;
-  filterProcessor?: ProcessorDefinition;
-  idempotencyProcessor?: ProcessorDefinition;
-  inputProcessor?: ProcessorDefinition;
-  submitMode?: string;
-  responseView?: string;
-  lastEventId?: string;
-  lastTriggeredAt?: string;
-  lastExecutionId?: string;
-  lastExecutionStatus?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface EventRecord {
-  id: string;
-  sourceId?: string;
-  sourceKey?: string;
-  status?: string;
-  eventType?: string;
-  eventId?: string;
-  actor?: string;
-  subject?: string;
-  rawHeaders?: Record<string, unknown>;
-  rawQuery?: Record<string, unknown>;
-  rawBody?: Record<string, unknown>;
-  normalizedEvent?: NormalizedEvent;
-  errorMessage?: string;
-  createdAt?: string;
-}
-
-export interface EventDispatchRecord {
-  id: string;
-  eventId?: string;
-  sourceId?: string;
-  triggerId?: string;
-  targetScriptId?: string;
-  status?: string;
-  filterMatched?: boolean;
-  idempotencyKey?: string;
-  mappedInput?: Record<string, unknown>;
-  executionId?: string;
-  executionStatus?: string;
-  errorMessage?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -379,29 +273,32 @@ export interface UpstreamStatus {
   lastSyncedAt?: string;
 }
 
-export interface RepositoryEventSourceDescriptor {
+export interface RepositoryWebhookDescriptor {
   repositoryId: string;
-  eventSourceId: string;
-  installedSourceId: string;
+  webhookId: string;
   displayName: string;
   version: string;
   description?: string;
   releaseNotes?: string;
   owner?: string;
   tags: string[];
-  eventSourcePath: string;
+  webhookPath: string;
   configTemplatePath?: string;
-  triggerTemplatePath?: string;
   digest?: string;
   scriptDependencies: ScriptDependency[];
-  installed: boolean;
-  installedVersion?: string;
-  updateAvailable: boolean;
   trusted: boolean;
-  workingCopyId?: string;
-  upstreamDirty?: boolean;
-  upstreamRemoteChanged?: boolean;
-  upstreamSyncState?: string;
+  localState?: RepositoryLocalAssetState;
+}
+
+export interface RepositoryLocalAssetState {
+  mode: "LOCKED" | "TRACKED";
+  localAssetId: string;
+  version?: string;
+  latestVersion?: string;
+  updateAvailable: boolean;
+  syncState?: string;
+  dirty?: boolean;
+  remoteChanged?: boolean;
 }
 
 export interface RepositoryConfigTemplateItem {
@@ -413,24 +310,11 @@ export interface RepositoryConfigTemplateItem {
   defaultValue?: string;
 }
 
-export interface RepositoryEventTriggerTemplateItem {
-  id: string;
-  name: string;
-  description?: string;
-  enabledByDefault: boolean;
-  targetScriptDependency: ScriptDependency;
-  filterProcessor?: ProcessorDefinition;
-  idempotencyProcessor?: ProcessorDefinition;
-  inputProcessor?: ProcessorDefinition;
-  submitMode?: string;
-  responseView?: string;
-}
-
-export interface RepositoryEventSourceDetail {
-  descriptor: RepositoryEventSourceDescriptor;
-  eventSource: {
+export interface RepositoryWebhookDetail {
+  descriptor: RepositoryWebhookDescriptor;
+  webhook: {
     schemaVersion: number;
-    eventSourceId: string;
+    webhookId: string;
     displayName: string;
     version: string;
     description?: string;
@@ -438,78 +322,42 @@ export interface RepositoryEventSourceDetail {
     owner?: string;
     tags: string[];
     digest?: string;
-    transport?: EventSourceTransport;
-    auth?: EventSourceAuthConfig;
-    normalizationProcessor?: ProcessorDefinition;
-    sampleContext?: Record<string, unknown>;
+    transport?: WebhookTransport;
+    webhookScriptId?: string;
+    sampleRequest?: WebhookSampleRequest;
     scriptDependencies: ScriptDependency[];
     configTemplatePath?: string;
-    triggerTemplatePath?: string;
   };
   configTemplate: RepositoryConfigTemplateItem[];
-  triggerTemplate: RepositoryEventTriggerTemplateItem[];
 }
 
-export interface RepositoryEventSourceInstallation {
-  sourceId: string;
+export interface RepositoryLocalAsset {
+  id: string;
+  assetType: "SCRIPT" | "WEBHOOK";
+  localAssetId: string;
   repositoryId: string;
-  eventSourceId: string;
-  name: string;
-  version: string;
+  upstreamAssetId: string;
+  mode: "LOCKED" | "TRACKED";
+  version?: string;
   latestVersion?: string;
+  name?: string;
   owner?: string;
   description?: string;
-  installedAt?: string;
+  sourcePath?: string;
+  baseCommit?: string;
+  baseDigest?: string;
+  lastSyncedAt?: string;
+  createdAt?: string;
   updatedAt?: string;
 }
 
-export interface ProcessorContext {
-  event?: Record<string, unknown>;
-  headers?: Record<string, unknown>;
-  query?: Record<string, unknown>;
-  body?: Record<string, unknown>;
-  source?: Record<string, unknown>;
-  trigger?: Record<string, unknown>;
-  variables?: Record<string, unknown>;
-}
-
-export interface ProcessorTestRequest {
-  processor: ProcessorDefinition;
-  context?: ProcessorContext;
-  expectedOutputSchema?: Record<string, unknown>;
-}
-
-export interface ProcessorTestResult {
-  success?: boolean;
-  output?: Record<string, unknown>;
-  errorMessage?: string;
-  logs?: unknown[];
-  durationMs?: number;
-  schemaValid?: boolean;
-  fieldErrors?: unknown[];
-}
-
-export interface EventTriggerTestRequest {
-  event?: NormalizedEvent;
-  execute?: boolean;
-}
-
-export interface EventTriggerTestResult {
-  event?: NormalizedEvent;
-  filterMatched?: boolean;
-  filterResult?: ProcessorTestResult;
-  idempotencyResult?: ProcessorTestResult;
-  idempotencyKey?: string;
-  inputResult?: ProcessorTestResult;
-  mappedInput?: Record<string, unknown>;
-  schemaValid?: boolean;
-  fieldErrors?: unknown[];
-  execution?: ExecutionResponse;
-}
-
-export interface EventIngestionView {
-  event?: EventRecord;
-  dispatches?: EventDispatchRecord[];
+export interface ResourceLifecycleOperationView<TResult = unknown> {
+  resourceType: string;
+  operation: string;
+  repositoryId?: string;
+  resourceId?: string;
+  status: string;
+  result: TResult;
 }
 
 export interface PluginActionDefinition {

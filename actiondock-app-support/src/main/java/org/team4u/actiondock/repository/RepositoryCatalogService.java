@@ -7,9 +7,9 @@ import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.AiDependency;
-import org.team4u.actiondock.domain.model.EventSourceDefinition;
-import org.team4u.actiondock.domain.model.EventSourceScope;
-import org.team4u.actiondock.domain.model.EventTrigger;
+import org.team4u.actiondock.domain.model.WebhookDefinition;
+import org.team4u.actiondock.domain.model.WebhookScope;
+import org.team4u.actiondock.domain.model.WebhookResponsePayload;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
@@ -66,8 +66,7 @@ public class RepositoryCatalogService {
             ScriptScheduleRepository scriptScheduleRepository,
             ExecutionPresetRepository executionPresetRepository,
             ConfigValueRepository configValueRepository,
-            org.team4u.actiondock.domain.port.EventSourceRepository eventSourceRepository,
-            org.team4u.actiondock.domain.port.EventTriggerRepository eventTriggerRepository,
+            org.team4u.actiondock.domain.port.WebhookRepository webhookRepository,
             org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository repositoryLocalAssetRepository,
             AiModelProfileRepository aiModelProfileRepository,
             AiAgentProfileRepository aiAgentProfileRepository,
@@ -207,11 +206,11 @@ public class RepositoryCatalogService {
                         .thenComparing(RepositoryCatalogTypes.RepositoryToolDescriptor::toolId));
     }
 
-    public List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor> listAllRepositoryEventSources() {
+    public List<RepositoryCatalogTypes.RepositoryWebhookDescriptor> listAllRepositoryWebhooks() {
         return listAllFromEnabledRepositories(
-                this::listRepositoryEventSources,
-                Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::repositoryId)
-                        .thenComparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::eventSourceId));
+                this::listRepositoryWebhooks,
+                Comparator.comparing(RepositoryCatalogTypes.RepositoryWebhookDescriptor::repositoryId)
+                        .thenComparing(RepositoryCatalogTypes.RepositoryWebhookDescriptor::webhookId));
     }
 
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listRepositoryTools(String repositoryId) {
@@ -223,12 +222,12 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
-    public List<RepositoryCatalogTypes.RepositoryEventSourceDescriptor> listRepositoryEventSources(String repositoryId) {
+    public List<RepositoryCatalogTypes.RepositoryWebhookDescriptor> listRepositoryWebhooks(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        return index.safeEventSources().stream()
-                .map(entry -> toEventSourceDescriptor(repository, readEventSourceFile(repository, entry.eventSourcePath()), entry.eventSourcePath()))
-                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryEventSourceDescriptor::eventSourceId))
+        return index.safeWebhooks().stream()
+                .map(entry -> toWebhookDescriptor(repository, readWebhookFile(repository, entry.webhookPath()), entry.webhookPath()))
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryWebhookDescriptor::webhookId))
                 .toList();
     }
 
@@ -304,27 +303,21 @@ public class RepositoryCatalogService {
         return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
     }
 
-    public RepositoryCatalogTypes.RepositoryEventSourceDetail getRepositoryEventSource(String repositoryId, String eventSourceId) {
+    public RepositoryCatalogTypes.RepositoryWebhookDetail getRepositoryWebhook(String repositoryId, String webhookId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        RepositoryCatalogTypes.RepositoryEventSourceIndexEntry entry = findEntryById(
-                index.safeEventSources(), eventSourceId, RepositoryCatalogTypes.RepositoryEventSourceIndexEntry::id, "仓库事件源");
-        RepositoryCatalogTypes.EventSourceFile eventSource = readEventSourceFile(repository, entry.eventSourcePath());
+        RepositoryCatalogTypes.RepositoryWebhookIndexEntry entry = findEntryById(
+                index.safeWebhooks(), webhookId, RepositoryCatalogTypes.RepositoryWebhookIndexEntry::id, "仓库 Webhook");
+        RepositoryCatalogTypes.WebhookFile webhook = readWebhookFile(repository, entry.webhookPath());
         List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
-                parentDirectoryPath(entry.eventSourcePath()).resolveNullable(eventSource.configTemplatePath()),
+                parentDirectoryPath(entry.webhookPath()).resolveNullable(webhook.configTemplatePath()),
                 RepositoryCatalogTypes.ConfigTemplateItem.class
         );
-        List<RepositoryCatalogTypes.EventTriggerTemplateItem> triggerTemplate = readOptionalFile(
-                repository,
-                parentDirectoryPath(entry.eventSourcePath()).resolveNullable(eventSource.triggerTemplatePath()),
-                RepositoryCatalogTypes.EventTriggerTemplateItem.class
-        );
-        return new RepositoryCatalogTypes.RepositoryEventSourceDetail(
-                toEventSourceDescriptor(repository, eventSource, entry.eventSourcePath()),
-                eventSource,
-                configTemplate,
-                triggerTemplate
+        return new RepositoryCatalogTypes.RepositoryWebhookDetail(
+                toWebhookDescriptor(repository, webhook, entry.webhookPath()),
+                webhook,
+                configTemplate
         );
     }
 
@@ -430,16 +423,16 @@ public class RepositoryCatalogService {
         return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(toolPath).value(), commit, digest);
     }
 
-    RepositoryCatalogTypes.ToolSourceState resolveEventSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryEventSourceDetail detail) {
-        String eventSourceId = detail.descriptor().eventSourceId();
-        String eventSourcePath = readRepositoryIndex(repository).safeEventSources().stream()
-                .filter(item -> eventSourceId.equals(item.id()))
+    RepositoryCatalogTypes.ToolSourceState resolveWebhookState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryWebhookDetail detail) {
+        String webhookId = detail.descriptor().webhookId();
+        String webhookPath = readRepositoryIndex(repository).safeWebhooks().stream()
+                .filter(item -> webhookId.equals(item.id()))
                 .findFirst()
-                .map(RepositoryCatalogTypes.RepositoryEventSourceIndexEntry::eventSourcePath)
-                .orElseThrow(() -> new IllegalArgumentException("仓库事件源不存在: " + eventSourceId));
-        String digest = computeEventSourceDigest(detail);
+                .map(RepositoryCatalogTypes.RepositoryWebhookIndexEntry::webhookPath)
+                .orElseThrow(() -> new IllegalArgumentException("仓库 Webhook不存在: " + webhookId));
+        String digest = computeWebhookDigest(detail);
         String commit = REPO_TYPE_GIT.equals(repository.getType()) ? gitOps.gitHead(resolveRepositoryRoot(repository)) : null;
-        return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(eventSourcePath).value(), commit, digest);
+        return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(webhookPath).value(), commit, digest);
     }
 
     private String computeToolDigest(RepositoryCatalogTypes.RepositoryToolDetail detail) {
@@ -462,52 +455,30 @@ public class RepositoryCatalogService {
         return computeDigest(values);
     }
 
-    String computeEventSourceLocalDigest(EventSourceDefinition eventSource, List<EventTrigger> triggers) {
+    String computeWebhookLocalDigest(WebhookDefinition webhook) {
         LinkedHashMap<String, Object> values = new LinkedHashMap<>();
-        values.put("eventSourceId", eventSource.getRepositoryEventSourceId());
-        values.put("displayName", eventSource.getName());
-        values.put("version", eventSource.getRepositoryVersion());
-        values.put("description", eventSource.getDescription());
+        values.put("webhookId", webhook.getRepositoryWebhookId());
+        values.put("displayName", webhook.getName());
+        values.put("version", webhook.getRepositoryVersion());
+        values.put("description", webhook.getDescription());
         values.put("owner", null);
-        values.put("transport", eventSource.getTransport());
-        values.put("auth", eventSource.getAuth());
-        values.put("normalizationProcessor", eventSource.getNormalizationProcessor());
-        values.put("webhookResponse", eventSource.getWebhookResponse());
-        values.put("sampleContext", eventSource.getSampleContext());
-        values.put("triggers", triggers.stream()
-                .sorted(Comparator.comparing(EventTrigger::getRepositoryTriggerId, Comparator.nullsLast(String::compareTo)))
-                .map(trigger -> {
-                    LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-                    item.put("id", trigger.getRepositoryTriggerId());
-                    item.put("name", trigger.getName());
-                    item.put("description", trigger.getDescription());
-                    item.put("enabled", trigger.isEnabled());
-                    item.put("targetScriptId", trigger.getTargetScriptId());
-                    item.put("filterProcessor", trigger.getFilterProcessor());
-                    item.put("idempotencyProcessor", trigger.getIdempotencyProcessor());
-                    item.put("inputProcessor", trigger.getInputProcessor());
-                    item.put("submitMode", trigger.getSubmitMode() == null ? null : trigger.getSubmitMode().name());
-                    item.put("responseView", trigger.getResponseView());
-                    return item;
-                })
-                .toList());
+        values.put("transport", webhook.getTransport());
+        values.put("webhookScriptId", webhook.getWebhookScriptId());
+        values.put("sampleRequest", webhook.getSampleRequest());
         return computeDigest(values);
     }
 
-    private String computeEventSourceDigest(RepositoryCatalogTypes.RepositoryEventSourceDetail detail) {
+    private String computeWebhookDigest(RepositoryCatalogTypes.RepositoryWebhookDetail detail) {
         LinkedHashMap<String, Object> values = new LinkedHashMap<>();
-        values.put("eventSourceId", detail.descriptor().eventSourceId());
+        values.put("webhookId", detail.descriptor().webhookId());
         values.put("displayName", detail.descriptor().displayName());
         values.put("version", detail.descriptor().version());
         values.put("description", detail.descriptor().description());
         values.put("owner", detail.descriptor().owner());
-        values.put("transport", detail.eventSource().transport());
-        values.put("auth", detail.eventSource().auth());
-        values.put("normalizationProcessor", detail.eventSource().normalizationProcessor());
-        values.put("webhookResponse", detail.eventSource().webhookResponse());
-        values.put("sampleContext", detail.eventSource().sampleContext());
+        values.put("transport", detail.webhook().transport());
+        values.put("webhookScriptId", detail.webhook().webhookScriptId());
+        values.put("sampleRequest", detail.webhook().sampleRequest());
         values.put("scriptDependencies", detail.descriptor().scriptDependencies());
-        values.put("triggerTemplate", detail.triggerTemplate());
         return computeDigest(values);
     }
 
@@ -679,23 +650,23 @@ public class RepositoryCatalogService {
         ));
     }
 
-    private RepositoryCatalogTypes.RepositoryEventSourceDescriptor toEventSourceDescriptor(RepositoryDefinition repository,
-                                                                                           RepositoryCatalogTypes.EventSourceFile eventSource,
-                                                                                           String eventSourcePath) {
-        RepositoryCatalogTypes.RepositoryEventSourceDescriptor base = toEventSourceDescriptorWithoutUpstream(repository, eventSource, eventSourcePath);
+    private RepositoryCatalogTypes.RepositoryWebhookDescriptor toWebhookDescriptor(RepositoryDefinition repository,
+                                                                                           RepositoryCatalogTypes.WebhookFile webhook,
+                                                                                           String webhookPath) {
+        RepositoryCatalogTypes.RepositoryWebhookDescriptor base = toWebhookDescriptorWithoutUpstream(repository, webhook, webhookPath);
         RepositoryLocalAsset asset = repos.repositoryLocalAssetRepository()
-                .findByUpstreamAsset(UpstreamAssetType.EVENT_SOURCE, repository.getId(), eventSource.eventSourceId())
+                .findByUpstreamAsset(UpstreamAssetType.WEBHOOK, repository.getId(), webhook.webhookId())
                 .orElse(null);
         if (asset == null) {
             return base;
         }
         if (asset.getMode() == RepositoryLocalAssetMode.TRACKED) {
-            UpstreamInfo upstreamInfo = resolveEventSourceUpstreamInfo(repository, eventSource, eventSourcePath, asset, base);
+            UpstreamInfo upstreamInfo = resolveWebhookUpstreamInfo(repository, webhook, webhookPath, asset, base);
             return base.withLocalState(new RepositoryCatalogTypes.RepositoryLocalAssetState(
                     "TRACKED",
                     asset.getLocalAssetId(),
                     asset.getVersion(),
-                    eventSource.version(),
+                    webhook.version(),
                     upstreamInfo.remoteChanged(),
                     upstreamInfo.syncState(),
                     upstreamInfo.dirty(),
@@ -706,8 +677,8 @@ public class RepositoryCatalogService {
                 "LOCKED",
                 asset.getLocalAssetId(),
                 asset.getVersion(),
-                eventSource.version(),
-                !Objects.equals(asset.getVersion(), eventSource.version()),
+                webhook.version(),
+                !Objects.equals(asset.getVersion(), webhook.version()),
                 null,
                 false,
                 false
@@ -742,24 +713,22 @@ public class RepositoryCatalogService {
         );
     }
 
-    private UpstreamInfo resolveEventSourceUpstreamInfo(RepositoryDefinition repository,
-                                                        RepositoryCatalogTypes.EventSourceFile eventSource,
-                                                        String eventSourcePath,
+    private UpstreamInfo resolveWebhookUpstreamInfo(RepositoryDefinition repository,
+                                                        RepositoryCatalogTypes.WebhookFile webhook,
+                                                        String webhookPath,
                                                         RepositoryLocalAsset binding,
-                                                        RepositoryCatalogTypes.RepositoryEventSourceDescriptor base) {
-        EventSourceDefinition workingCopy = repos.eventSourceRepository().findById(binding.getLocalAssetId()).orElse(null);
+                                                        RepositoryCatalogTypes.RepositoryWebhookDescriptor base) {
+        WebhookDefinition workingCopy = repos.webhookRepository().findById(binding.getLocalAssetId()).orElse(null);
         if (workingCopy == null) {
             return new UpstreamInfo(false, true, RepositoryCatalogTypes.UpstreamSyncState.REMOTE_CHANGES.name());
         }
-        RepositoryCatalogTypes.RepositoryEventSourceDetail detail = new RepositoryCatalogTypes.RepositoryEventSourceDetail(
+        RepositoryCatalogTypes.RepositoryWebhookDetail detail = new RepositoryCatalogTypes.RepositoryWebhookDetail(
                 base,
-                eventSource,
-                readOptionalFile(repository, parentDirectoryPath(eventSourcePath).resolveNullable(eventSource.configTemplatePath()), RepositoryCatalogTypes.ConfigTemplateItem.class),
-                readOptionalFile(repository, parentDirectoryPath(eventSourcePath).resolveNullable(eventSource.triggerTemplatePath()), RepositoryCatalogTypes.EventTriggerTemplateItem.class)
+                webhook,
+                readOptionalFile(repository, parentDirectoryPath(webhookPath).resolveNullable(webhook.configTemplatePath()), RepositoryCatalogTypes.ConfigTemplateItem.class)
         );
-        RepositoryCatalogTypes.ToolSourceState state = resolveEventSourceState(repository, detail);
-        List<EventTrigger> triggers = repos.eventTriggerRepository().findBySourceId(workingCopy.getId());
-        String localDigest = computeEventSourceLocalDigest(workingCopy, triggers);
+        RepositoryCatalogTypes.ToolSourceState state = resolveWebhookState(repository, detail);
+        String localDigest = computeWebhookLocalDigest(workingCopy);
         RepositoryCatalogTypes.UpstreamSyncState syncState = UpstreamSyncService.resolveSyncState(binding, localDigest, state);
         return new UpstreamInfo(
                 UpstreamSyncService.isLocalChanged(binding, localDigest),
@@ -786,23 +755,22 @@ public class RepositoryCatalogService {
         );
     }
 
-    private RepositoryCatalogTypes.RepositoryEventSourceDescriptor toEventSourceDescriptorWithoutUpstream(RepositoryDefinition repository,
-                                                                                                          RepositoryCatalogTypes.EventSourceFile eventSource,
-                                                                                                          String eventSourcePath) {
-        return new RepositoryCatalogTypes.RepositoryEventSourceDescriptor(
+    private RepositoryCatalogTypes.RepositoryWebhookDescriptor toWebhookDescriptorWithoutUpstream(RepositoryDefinition repository,
+                                                                                                          RepositoryCatalogTypes.WebhookFile webhook,
+                                                                                                          String webhookPath) {
+        return new RepositoryCatalogTypes.RepositoryWebhookDescriptor(
                 repository.getId(),
-                eventSource.eventSourceId(),
-                eventSource.displayName(),
-                eventSource.version(),
-                eventSource.description(),
-                eventSource.releaseNotes(),
-                eventSource.owner(),
-                NormalizeUtils.nullSafeList(eventSource.tags()),
-                eventSourcePath,
-                resolveRelativeValue(eventSourcePath, eventSource.configTemplatePath()),
-                resolveRelativeValue(eventSourcePath, eventSource.triggerTemplatePath()),
-                eventSource.digest(),
-                NormalizeUtils.nullSafeList(eventSource.scriptDependencies()),
+                webhook.webhookId(),
+                webhook.displayName(),
+                webhook.version(),
+                webhook.description(),
+                webhook.releaseNotes(),
+                webhook.owner(),
+                NormalizeUtils.nullSafeList(webhook.tags()),
+                webhookPath,
+                resolveRelativeValue(webhookPath, webhook.configTemplatePath()),
+                webhook.digest(),
+                NormalizeUtils.nullSafeList(webhook.scriptDependencies()),
                 isTrusted(repository),
                 null
         );
@@ -909,8 +877,8 @@ public class RepositoryCatalogService {
         return readRepositoryJsonFile(repository, toolPath, RepositoryCatalogTypes.ToolFile.class);
     }
 
-    private RepositoryCatalogTypes.EventSourceFile readEventSourceFile(RepositoryDefinition repository, String eventSourcePath) {
-        return readRepositoryJsonFile(repository, eventSourcePath, RepositoryCatalogTypes.EventSourceFile.class);
+    private RepositoryCatalogTypes.WebhookFile readWebhookFile(RepositoryDefinition repository, String webhookPath) {
+        return readRepositoryJsonFile(repository, webhookPath, RepositoryCatalogTypes.WebhookFile.class);
     }
 
     RepositoryCatalogTypes.PluginFile readPluginFile(RepositoryDefinition repository, String pluginPath) {

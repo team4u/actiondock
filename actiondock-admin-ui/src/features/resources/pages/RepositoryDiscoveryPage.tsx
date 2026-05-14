@@ -26,7 +26,7 @@ export function RepositoryDiscoveryPage() {
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
           title="发现"
-          meta={<Text type="secondary">发现脚本、事件源、能力包、插件和 Skill，支持安装、升级与同步。</Text>}
+          meta={<Text type="secondary">发现脚本、Webhook、能力包、插件和 Skill，支持安装、升级与同步。</Text>}
           actions={(
             <Space>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/packages/publish")}>
@@ -61,19 +61,19 @@ export function RepositoryDiscoveryPage() {
             actionKey={discovery.actionKey}
             packageActionKey={discovery.packageActionKey}
             filteredTools={discovery.filteredTools}
-            filteredEventSources={discovery.filteredEventSources}
+            filteredWebhooks={discovery.filteredWebhooks}
             filteredPackages={discovery.filteredPackages}
             filteredSkills={discovery.filteredSkills}
             filteredPlugins={discovery.filteredPlugins}
             onOpenToolDetail={discovery.openDetail}
-            onOpenEventSourceDetail={discovery.openEventSourceDetail}
+            onOpenWebhookDetail={discovery.openWebhookDetail}
             onOpenPackageDetail={discovery.openPackageDetail}
             onOpenSkillDetail={discovery.openSkillDetail}
             onOpenSkillInstall={discovery.openSkillInstall}
             onToolLocalAssetAction={discovery.confirmToolLocalAssetAction}
             onAddToolToLocal={discovery.confirmAddToolToLocal}
-            onEventSourceLocalAssetAction={discovery.confirmEventSourceLocalAssetAction}
-            onAddEventSourceToLocal={discovery.confirmAddEventSourceToLocal}
+            onWebhookLocalAssetAction={discovery.confirmWebhookLocalAssetAction}
+            onAddWebhookToLocal={discovery.confirmAddWebhookToLocal}
             onPackageInstall={discovery.handlePackageInstall}
             onPackageUninstall={discovery.handlePackageUninstall}
             onPluginAction={discovery.handleRepositoryPluginAction}
@@ -91,9 +91,9 @@ export function RepositoryDiscoveryPage() {
         detail={discovery.detail}
         availableTools={discovery.tools}
         availablePlugins={discovery.plugins}
-        eventSourceDetailOpen={discovery.eventSourceDetailOpen}
-        eventSourceDetailLoading={discovery.eventSourceDetailLoading}
-        eventSourceDetail={discovery.eventSourceDetail}
+        webhookDetailOpen={discovery.webhookDetailOpen}
+        webhookDetailLoading={discovery.webhookDetailLoading}
+        webhookDetail={discovery.webhookDetail}
         packageDetailOpen={discovery.packageDetailOpen}
         packageDetailLoading={discovery.packageDetailLoading}
         packageDetail={discovery.packageDetail}
@@ -101,14 +101,14 @@ export function RepositoryDiscoveryPage() {
         skillDetailLoading={discovery.skillDetailLoading}
         skillDetail={discovery.skillDetail}
         onCloseToolDetail={discovery.closeDetail}
-        onCloseEventSourceDetail={discovery.closeEventSourceDetail}
+        onCloseWebhookDetail={discovery.closeWebhookDetail}
         onClosePackageDetail={discovery.closePackageDetail}
         onCloseSkillDetail={discovery.closeSkillDetail}
         onOpenSkillInstall={discovery.openSkillInstall}
         onToolLocalAssetAction={discovery.confirmToolLocalAssetAction}
         onAddToolToLocal={discovery.confirmAddToolToLocal}
-        onEventSourceLocalAssetAction={discovery.confirmEventSourceLocalAssetAction}
-        onAddEventSourceToLocal={discovery.confirmAddEventSourceToLocal}
+        onWebhookLocalAssetAction={discovery.confirmWebhookLocalAssetAction}
+        onAddWebhookToLocal={discovery.confirmAddWebhookToLocal}
         onPackageInstall={discovery.handlePackageInstall}
         onPackageUninstall={discovery.handlePackageUninstall}
         onNavigate={(path) => navigate(path)}
