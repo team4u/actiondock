@@ -32,6 +32,7 @@ actiondock-plugin-api          插件 API（接口定义 + 工具类）
     <groupId>org.team4u</groupId>
     <artifactId>actiondock-plugin-api</artifactId>
     <version>${project.version}</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.pf4j</groupId>
