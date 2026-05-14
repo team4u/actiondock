@@ -161,16 +161,24 @@ beforeAll(async () => {
         status: 0,
         msg: "ok",
         data: {
-          scriptId: "published-tool",
+          localAssetId: "published-tool",
           repositoryId: "repo-1",
-          repositoryToolId: "tool-1",
-          repositoryVersion: "1.0.0",
+          upstreamAssetId: "tool-1",
+          upstreamVersion: "1.0.0",
           dirty: false,
           remoteChanged: true,
           syncState: "REMOTE_CHANGES",
           remoteVersion: "1.0.1",
-          sourceSyncedAt: "2026-05-01T00:00:00"
+          lastSyncedAt: "2026-05-01T00:00:00"
         }
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/scripts/local-only/upstream") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: null
       });
     }
 
@@ -525,6 +533,14 @@ beforeAll(async () => {
         request: body
       }));
       return;
+    }
+
+    if (req.method === "GET" && req.url === "/api/webhooks/source-1/upstream") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: null
+      });
     }
 
     if (req.method === "GET" && req.url === "/api/plugins") {
@@ -1288,10 +1304,14 @@ describe("CLI integration", () => {
     expect(status.status).toBe(0);
     expect(JSON.parse(status.stdout)).toEqual(
       expect.objectContaining({
-        scriptId: "published-tool",
+        localAssetId: "published-tool",
         syncState: "REMOTE_CHANGES"
       })
     );
+
+    const localOnlyStatus = await runCli(["script", "upstream-status", "local-only", "--server", baseUrl]);
+    expect(localOnlyStatus.status).toBe(0);
+    expect(localOnlyStatus.stdout.trim()).toBe("No upstream binding");
 
     const pull = await runCli(["script", "upstream-pull", "published-tool", "--force", "--server", baseUrl, "--json"]);
     expect(pull.status).toBe(0);
@@ -1552,6 +1572,10 @@ describe("CLI integration", () => {
 
     expect((await runCli(["webhook", "enable", "source-1", "--server", baseUrl, "--json"])).status).toBe(0);
     expect((await runCli(["webhook", "disable", "source-1", "--server", baseUrl, "--json"])).status).toBe(0);
+
+    const upstreamStatus = await runCli(["webhook", "upstream-status", "source-1", "--server", baseUrl]);
+    expect(upstreamStatus.status).toBe(0);
+    expect(upstreamStatus.stdout.trim()).toBe("No upstream binding");
 
     const webhook = await runCli([
       "webhook",

@@ -86,7 +86,10 @@ class UpstreamSyncService {
 
     UpstreamStatus getScriptUpstreamStatus(String scriptId) {
         ScriptDefinition script = services.scriptApplicationService().get(scriptId);
-        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.SCRIPT, script.getId());
+        RepositoryLocalAsset binding = findTrackedBinding(UpstreamAssetType.SCRIPT, script.getId()).orElse(null);
+        if (binding == null) {
+            return null;
+        }
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
@@ -215,7 +218,10 @@ class UpstreamSyncService {
     UpstreamStatus getWebhookUpstreamStatus(String sourceId) {
         WebhookDefinition source = repos.webhookRepository().findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("Webhook不存在: " + sourceId));
-        RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.WEBHOOK, source.getId());
+        RepositoryLocalAsset binding = findTrackedBinding(UpstreamAssetType.WEBHOOK, source.getId()).orElse(null);
+        if (binding == null) {
+            return null;
+        }
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         RepositoryWebhookDetail detail = catalog.getRepositoryWebhook(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveWebhookState(repository, detail);
@@ -346,9 +352,13 @@ class UpstreamSyncService {
     }
 
     private RepositoryLocalAsset requireBinding(UpstreamAssetType assetType, String localAssetId) {
+        return findTrackedBinding(assetType, localAssetId)
+                .orElseThrow(() -> new IllegalArgumentException("工作副本未绑定上游: " + localAssetId));
+    }
+
+    private java.util.Optional<RepositoryLocalAsset> findTrackedBinding(UpstreamAssetType assetType, String localAssetId) {
         return repos.repositoryLocalAssetRepository()
                 .findByLocalAsset(assetType, localAssetId)
-                .filter(asset -> asset.getMode() == RepositoryLocalAssetMode.TRACKED)
-                .orElseThrow(() -> new IllegalArgumentException("工作副本未绑定上游: " + localAssetId));
+                .filter(asset -> asset.getMode() == RepositoryLocalAssetMode.TRACKED);
     }
 }

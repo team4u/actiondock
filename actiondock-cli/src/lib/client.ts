@@ -166,8 +166,8 @@ export class ActionDockClient {
     }).then(normalizeScriptDefinition);
   }
 
-  async getScriptUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {
-    return this.requestJson<UpstreamStatus>(`/api/scripts/${scriptId}/upstream`);
+  async getScriptUpstreamStatus(scriptId: string): Promise<UpstreamStatus | null> {
+    return this.requestJson<UpstreamStatus | null>(`/api/scripts/${scriptId}/upstream`);
   }
 
   async pullUpstreamScript(scriptId: string, force = false): Promise<ScriptDefinition> {
@@ -287,8 +287,8 @@ export class ActionDockClient {
     return this.requestJson<WebhookDefinition[]>("/api/webhooks");
   }
 
-  async getWebhookUpstreamStatus(webhookId: string): Promise<UpstreamStatus> {
-    return this.requestJson<UpstreamStatus>(`/api/webhooks/${webhookId}/upstream`);
+  async getWebhookUpstreamStatus(webhookId: string): Promise<UpstreamStatus | null> {
+    return this.requestJson<UpstreamStatus | null>(`/api/webhooks/${webhookId}/upstream`);
   }
 
   async pullUpstreamWebhook(webhookId: string, force = false): Promise<WebhookDefinition> {

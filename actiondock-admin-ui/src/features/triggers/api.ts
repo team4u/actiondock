@@ -100,8 +100,8 @@ export function testWebhook(id: string, payload: WebhookRequest): Promise<Webhoo
   });
 }
 
-export function getWebhookUpstreamStatus(id: string): Promise<UpstreamStatus> {
-  return request<UpstreamStatus>(`/api/webhooks/${id}/upstream`);
+export function getWebhookUpstreamStatus(id: string): Promise<UpstreamStatus | null> {
+  return request<UpstreamStatus | null>(`/api/webhooks/${id}/upstream`);
 }
 
 export function pullUpstreamWebhook(id: string, force = false): Promise<WebhookDefinition> {

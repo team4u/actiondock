@@ -20,6 +20,7 @@ import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
+import org.team4u.actiondock.repository.RepositoryToolService;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -70,6 +71,9 @@ class ScriptControllerTest {
     @MockBean
     private RepositoryCatalogService repositoryCatalogService;
 
+    @MockBean
+    private RepositoryToolService repositoryToolService;
+
     @Test
     void detailReturnsWrappedScriptDefinition() throws Exception {
         when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
@@ -96,6 +100,16 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.data.scriptId").value("script-1"))
                 .andExpect(jsonPath("$.data.name").value("Live"))
                 .andExpect(jsonPath("$.data.source").value("return [message: 'live']"));
+    }
+
+    @Test
+    void upstreamStatusReturnsNullWhenScriptHasNoBinding() throws Exception {
+        when(repositoryToolService.getUpstreamStatus("script-1")).thenReturn(null);
+
+        mockMvc.perform(get("/api/scripts/script-1/upstream"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(0))
+                .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     @Test

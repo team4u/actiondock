@@ -425,7 +425,10 @@ export function renderRepositoryToolDetail(item: RepositoryToolDetail): string {
   return lines.join("\n");
 }
 
-export function renderUpstreamStatus(item: UpstreamStatus): string {
+export function renderUpstreamStatus(item: UpstreamStatus | null): string {
+  if (!item) {
+    return "No upstream binding";
+  }
   const lines = [
     `ResourceId: ${item.localAssetId}`,
     `Repository: ${item.repositoryId}`,

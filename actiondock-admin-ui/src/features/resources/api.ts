@@ -183,8 +183,8 @@ export function updateRepositoryWebhookLocalAsset(
   }).then((operation) => operation.result);
 }
 
-export function getUpstreamStatus(scriptId: string): Promise<UpstreamStatus> {
-  return request<UpstreamStatus>(`/api/scripts/${encodeURIComponent(scriptId)}/upstream`);
+export function getUpstreamStatus(scriptId: string): Promise<UpstreamStatus | null> {
+  return request<UpstreamStatus | null>(`/api/scripts/${encodeURIComponent(scriptId)}/upstream`);
 }
 
 export function pullUpstreamScript(scriptId: string, force = false): Promise<ScriptDefinition> {
