@@ -128,8 +128,10 @@ public class RepositoryDefinition {
 # 列出仓库中的可用工具
 curl http://localhost:5177/api/repositories/{repoId}/tools
 
-# 安装工具
-curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/install
+# 安装工具为本地只读资产
+curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/local-assets \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"LOCKED"}'
 ```
 
 ### 依赖处理
@@ -174,7 +176,9 @@ curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/inst
 
 ```bash
 # 从仓库工具创建脚本工作副本
-curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/working-copy
+curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/local-assets \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"TRACKED"}'
 
 # 查看脚本工作副本的上游状态
 curl http://localhost:5177/api/scripts/{id}/upstream
@@ -251,7 +255,8 @@ DELETE /api/repositories/{id}                   # 删除
 # 仓库操作
 POST   /api/repositories/{id}/sync              # 同步仓库
 GET    /api/repositories/{id}/tools             # 列出可用工具
-POST   /api/repositories/{id}/tools/{toolId}/install  # 安装工具
+POST   /api/repositories/{id}/tools/{toolId}/local-assets         # 添加仓库工具到本地
+POST   /api/repositories/{id}/tools/{toolId}/local-assets/update  # 更新本地仓库工具
 ```
 
 ## 常见问题
