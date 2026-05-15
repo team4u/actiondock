@@ -130,6 +130,12 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.listAllRepositoryTools());
     }
 
+    @GetMapping("/tools")
+    @Deprecated
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listAllToolsCompatibility() {
+        return listAllTools();
+    }
+
     /**
      * 查询指定仓库的脚本列表。
      *
@@ -139,6 +145,12 @@ public class RepositoryController {
     @GetMapping("/{id}/scripts")
     public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listRepositoryTools(@PathVariable String id) {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
+    }
+
+    @GetMapping("/{id}/tools")
+    @Deprecated
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listRepositoryToolsCompatibility(@PathVariable String id) {
+        return listRepositoryTools(id);
     }
 
     @GetMapping("/webhooks")
@@ -240,6 +252,13 @@ public class RepositoryController {
     public ApiResponse<RepositoryCatalogTypes.RepositoryToolDetail> detail(@PathVariable String id,
                                                                              @PathVariable String toolId) {
         return ApiResponse.success(repositoryCatalogService.getRepositoryTool(id, toolId));
+    }
+
+    @GetMapping("/{id}/tools/{toolId}")
+    @Deprecated
+    public ApiResponse<RepositoryCatalogTypes.RepositoryToolDetail> detailCompatibility(@PathVariable String id,
+                                                                                       @PathVariable String toolId) {
+        return detail(id, toolId);
     }
 
     @PostMapping("/{id}/scripts/{toolId}/local-assets")

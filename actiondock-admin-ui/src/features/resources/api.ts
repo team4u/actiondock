@@ -72,7 +72,7 @@ export function resolveProjectRepository(repositoryId: string): Promise<ProjectR
 }
 
 export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>("/api/repositories/tools");
+  return request<RepositoryToolDescriptor[]>("/api/repositories/scripts");
 }
 
 export function listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
@@ -92,7 +92,7 @@ export function listRepositorySkills(): Promise<RepositorySkillDescriptor[]> {
 }
 
 export function listToolsByRepository(id: string): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/tools`);
+  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`);
 }
 
 export function listWebhooksByRepository(id: string): Promise<RepositoryWebhookDescriptor[]> {
@@ -112,7 +112,7 @@ export function listCapabilityPackagesByRepository(id: string): Promise<Capabili
 }
 
 export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
-  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/tools/${encodeURIComponent(toolId)}`);
+  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/scripts/${encodeURIComponent(toolId)}`);
 }
 
 export function getRepositoryWebhook(repositoryId: string, webhookId: string): Promise<RepositoryWebhookDetail> {
