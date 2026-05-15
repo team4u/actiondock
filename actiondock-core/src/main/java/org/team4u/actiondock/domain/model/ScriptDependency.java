@@ -1,5 +1,7 @@
 package org.team4u.actiondock.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.util.Objects;
 
 /**
@@ -10,6 +12,7 @@ import java.util.Objects;
 public class ScriptDependency {
     private String scriptId;
     private String repositoryId;
+    @JsonAlias("toolId")
     private String repositoryScriptId;
     private String versionRange;
 
@@ -38,11 +41,6 @@ public class ScriptDependency {
     public ScriptDependency setRepositoryScriptId(String repositoryScriptId) {
         this.repositoryScriptId = repositoryScriptId;
         return this;
-    }
-
-    @Deprecated
-    public String getToolId() {
-        return getRepositoryScriptId();
     }
 
     @Deprecated

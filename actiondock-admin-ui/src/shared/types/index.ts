@@ -64,7 +64,7 @@ export interface ScriptDefinition {
   version: number;
   scope?: ScriptScope;
   repositoryId?: string;
-  repositoryToolId?: string;
+  repositoryScriptId?: string;
   repositoryVersion?: string;
   sourcePath?: string;
   sourceCommit?: string;
@@ -93,7 +93,7 @@ export interface PluginDependency {
 export interface ScriptDependency {
   scriptId: string;
   repositoryId: string;
-  toolId: string;
+  repositoryScriptId: string;
   versionRange?: string;
 }
 
@@ -328,7 +328,7 @@ export interface ScriptSchedule {
   enabled: boolean;
   editable?: boolean;
   repositoryId?: string;
-  repositoryToolId?: string;
+  repositoryScriptId?: string;
   repositoryVersion?: string;
   nextRunAt?: string;
   lastTriggeredAt?: string;
@@ -506,7 +506,7 @@ export interface ConfigValue {
   description?: string;
   secret?: boolean;
   repositoryId?: string;
-  repositoryToolId?: string;
+  repositoryScriptId?: string;
   repositoryVersion?: string;
   publishMode?: string;
   managed?: boolean;
@@ -541,7 +541,7 @@ export interface ConfigValueScriptReference {
   scriptName: string;
   scope?: string | null;
   repositoryId?: string | null;
-  repositoryToolId?: string | null;
+  repositoryScriptId?: string | null;
   repositoryVersion?: string | null;
 }
 
@@ -568,8 +568,8 @@ export interface ConfigValueModelReference {
 export interface ConfigValueTemplateDeclaration {
   repositoryId: string;
   repositoryName?: string | null;
-  toolId: string;
-  toolName: string;
+  repositoryScriptId: string;
+  scriptName: string;
   version?: string | null;
   label?: string | null;
   secret: boolean;
@@ -582,7 +582,7 @@ export interface ConfigValueImpactScript {
   scriptName: string;
   scope?: string | null;
   repositoryId?: string | null;
-  repositoryToolId?: string | null;
+  repositoryScriptId?: string | null;
   repositoryVersion?: string | null;
   reasons: string[];
 }
@@ -590,8 +590,8 @@ export interface ConfigValueImpactScript {
 export interface ConfigValueOrigin {
   repositoryId?: string | null;
   repositoryName?: string | null;
-  toolId?: string | null;
-  toolName?: string | null;
+  repositoryScriptId?: string | null;
+  scriptName?: string | null;
   version?: string | null;
 }
 
@@ -683,7 +683,7 @@ export interface ProjectRepositoryResolution {
   content: string;
 }
 
-export interface RepositoryToolDescriptor {
+export interface RepositoryScriptDescriptor {
   repositoryId: string;
   scriptId: string;
   displayName: string;
@@ -738,8 +738,8 @@ export interface RepositoryScheduleTemplateItem {
   enabledByDefault: boolean;
 }
 
-export interface RepositoryToolDetail {
-  descriptor: RepositoryToolDescriptor;
+export interface RepositoryScriptDetail {
+  descriptor: RepositoryScriptDescriptor;
   source: string;
   pythonRequirements?: string;
   configTemplate: RepositoryConfigTemplateItem[];
@@ -1023,7 +1023,7 @@ export interface RepositoryLocalAsset {
   updatedAt?: string;
 }
 
-export type ResourceLifecycleResourceType = "REPOSITORY_TOOL" | "REPOSITORY_WEBHOOK" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
+export type ResourceLifecycleResourceType = "REPOSITORY_SCRIPT" | "REPOSITORY_WEBHOOK" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
 export type ResourceLifecycleOperation = "install" | "update" | "add-local" | "update-local" | "publish" | "preview" | "uninstall";
 
 export interface ResourceLifecycleRequest<TPayload = Record<string, unknown>> {

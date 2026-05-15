@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.team4u.actiondock.repository.RepositoryCatalogTypes.RepositoryToolDescriptor;
+import static org.team4u.actiondock.repository.RepositoryCatalogTypes.RepositoryScriptDescriptor;
 
 /**
  * 配置值变更影响分析器，计算受影响的脚本列表。
@@ -37,12 +37,12 @@ final class ScriptImpactAnalyzer {
                                              Map<String, Set<String>> pluginCascadeMatches,
                                              List<TemplateDeclaration> templateDeclarations,
                                              Map<String, ScriptDefinition> scriptsById,
-                                             List<RepositoryToolDescriptor> allToolDescriptors) {
+                                             List<RepositoryScriptDescriptor> allScriptDescriptors) {
         Map<String, ImpactScriptAccumulator> impacts = new LinkedHashMap<>();
         collectScriptSourceImpacts(impacts, scripts, cascadingConfigKeys, key);
         collectScheduleImpacts(impacts, schedules, scriptsById, cascadingConfigKeys, key);
         collectPluginCascadeImpacts(impacts, scripts, pluginCascadeMatches, key);
-        collectTemplateDeclarationImpacts(impacts, templateDeclarations, scriptsById, allToolDescriptors);
+        collectTemplateDeclarationImpacts(impacts, templateDeclarations, scriptsById, allScriptDescriptors);
         return impacts.values().stream()
                 .map(ImpactScriptAccumulator::toView)
                 .sorted(Comparator.comparing(ImpactScript::scriptId))
@@ -95,14 +95,14 @@ final class ScriptImpactAnalyzer {
     private static void collectTemplateDeclarationImpacts(Map<String, ImpactScriptAccumulator> impacts,
                                                           List<TemplateDeclaration> templateDeclarations,
                                                           Map<String, ScriptDefinition> scriptsById,
-                                                          List<RepositoryToolDescriptor> allToolDescriptors) {
-        Map<String, RepositoryToolDescriptor> descriptorsBySource = new LinkedHashMap<>();
-        for (RepositoryToolDescriptor descriptor : allToolDescriptors) {
+                                                          List<RepositoryScriptDescriptor> allScriptDescriptors) {
+        Map<String, RepositoryScriptDescriptor> descriptorsBySource = new LinkedHashMap<>();
+        for (RepositoryScriptDescriptor descriptor : allScriptDescriptors) {
             descriptorsBySource.put(descriptor.repositoryId() + ":" + descriptor.scriptId(), descriptor);
         }
         for (TemplateDeclaration declaration : templateDeclarations) {
-            RepositoryToolDescriptor descriptor = descriptorsBySource.get(
-                    declaration.repositoryId() + ":" + declaration.toolId()
+            RepositoryScriptDescriptor descriptor = descriptorsBySource.get(
+                    declaration.repositoryId() + ":" + declaration.repositoryScriptId()
             );
             if (descriptor == null) {
                 continue;
@@ -190,7 +190,7 @@ final class ScriptImpactAnalyzer {
                     script.getName(),
                     script.getScope() == null ? null : script.getScope().name(),
                     script.getRepositoryId(),
-                    script.getRepositoryToolId(),
+                    script.getRepositoryScriptId(),
                     script.getRepositoryVersion(),
                     new ArrayList<>(reasons)
             );

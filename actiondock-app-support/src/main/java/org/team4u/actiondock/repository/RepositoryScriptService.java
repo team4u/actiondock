@@ -21,22 +21,22 @@ import java.util.UUID;
  * <p>
  * 负责工具从仓库的安装、升级、卸载和发布配置预览。
  * 上游工作副本同步逻辑由 {@link UpstreamSyncService} 处理，
- * 工具发布逻辑由 {@link ToolRepositoryPublisher} 处理。
+ * 工具发布逻辑由 {@link ScriptRepositoryPublisher} 处理。
  *
  * @author jay.wu
  */
-public class RepositoryToolService {
+public class RepositoryScriptService {
 
     private final RepositoryCatalogService catalog;
     private final RepositoryPluginService pluginService;
     private final RepositoryCatalogService.Repositories repos;
     private final RepositoryCatalogService.ApplicationServices services;
     private final UpstreamSyncService upstreamSync;
-    private final ToolRepositoryPublisher toolRepositoryPublisher;
+    private final ScriptRepositoryPublisher toolRepositoryPublisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
     private final RepositoryDependencyResolver dependencyResolver;
 
-    public RepositoryToolService(RepositoryCatalogService catalog,
+    public RepositoryScriptService(RepositoryCatalogService catalog,
                                  RepositoryPluginService pluginService,
                                  RepositoryCatalogService.Repositories repos,
                                  RepositoryCatalogService.ApplicationServices services,
@@ -47,7 +47,7 @@ public class RepositoryToolService {
         this.services = services;
         this.upstreamSync = new UpstreamSyncService(catalog, repos, services);
         this.configTemplateSyncService = configTemplateSyncService;
-        this.toolRepositoryPublisher = new ToolRepositoryPublisher(catalog, repos, services);
+        this.toolRepositoryPublisher = new ScriptRepositoryPublisher(catalog, repos, services);
         this.dependencyResolver = new RepositoryDependencyResolver(catalog);
     }
 
@@ -86,7 +86,7 @@ public class RepositoryToolService {
         upstreamSync.detachScript(scriptId);
     }
 
-    public void uninstallTool(String localAssetId) {
+    public void uninstallScript(String localAssetId) {
         ScriptDefinition definition = repos.scriptRepository().findById(localAssetId)
                 .orElseThrow(() -> new IllegalArgumentException("本地工具不存在: " + localAssetId));
         if (definition.getScope() != ScriptScope.REPOSITORY) {
@@ -119,8 +119,8 @@ public class RepositoryToolService {
         );
     }
 
-    public RepositoryToolDescriptor publishTool(String repositoryId, RepositoryPublishRequest request) {
-        RepositoryToolDescriptor descriptor = toolRepositoryPublisher.publish(repositoryId, request);
+    public RepositoryScriptDescriptor publishScript(String repositoryId, RepositoryPublishRequest request) {
+        RepositoryScriptDescriptor descriptor = toolRepositoryPublisher.publish(repositoryId, request);
         catalog.refreshRepositoryCache(repositoryId);
         return descriptor;
     }
@@ -135,7 +135,7 @@ public class RepositoryToolService {
             throw new IllegalStateException("检测到脚本循环依赖: " + String.join(" -> ", visiting) + " -> " + installationKey);
         }
         try {
-            RepositoryToolDetail detail = catalog.getRepositoryTool(repositoryId, toolId);
+            RepositoryScriptDetail detail = catalog.getRepositoryScript(repositoryId, toolId);
             RepositoryLocalAsset existingAsset = repos.repositoryLocalAssetRepository()
                     .findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, toolId)
                     .orElse(null);
@@ -161,7 +161,7 @@ public class RepositoryToolService {
     }
 
     private void resolveAllDependencies(String repositoryId,
-                                        RepositoryToolDetail detail,
+                                        RepositoryScriptDetail detail,
                                         ToolInstallationOptions options,
                                         LinkedHashSet<String> visiting) {
         resolveScriptDependencies(
@@ -176,7 +176,7 @@ public class RepositoryToolService {
     }
 
     private RepositoryLocalAsset persistLockedLocalAsset(String repositoryId,
-                                                         RepositoryToolDetail detail,
+                                                         RepositoryScriptDetail detail,
                                                          String localAssetId,
                                                          ScriptDefinition existing,
                                                          ToolInstallationOptions options) {
@@ -191,7 +191,7 @@ public class RepositoryToolService {
     }
 
     private ScriptDefinition buildLockedScriptDefinition(String repositoryId,
-                                                         RepositoryToolDetail detail,
+                                                         RepositoryScriptDetail detail,
                                                          String localAssetId,
                                                          ScriptDefinition existing,
                                                          LocalDateTime now) {
@@ -233,7 +233,7 @@ public class RepositoryToolService {
     }
 
     private void ensureRemoteVersionSatisfies(String scriptId, String depRepositoryId, String depToolId, String versionRange) {
-        RepositoryToolDescriptor descriptor = catalog.getRepositoryTool(depRepositoryId, depToolId).descriptor();
+        RepositoryScriptDescriptor descriptor = catalog.getRepositoryScript(depRepositoryId, depToolId).descriptor();
         if (!RepositoryVersionUtils.versionSatisfies(descriptor.version(), versionRange)) {
             throw new IllegalArgumentException(
                     "仓库工具版本不满足脚本依赖: " + scriptId + " -> " + depRepositoryId + "/" + depToolId + " "
@@ -244,7 +244,7 @@ public class RepositoryToolService {
 
     private RepositoryLocalAsset saveLockedLocalAsset(ScriptDefinition definition,
                                                       ScriptDefinition existing,
-                                                      RepositoryToolDetail detail,
+                                                      RepositoryScriptDetail detail,
                                                       LocalDateTime now) {
         String localAssetId = definition.getId();
         RepositoryLocalAsset previous = repos.repositoryLocalAssetRepository()

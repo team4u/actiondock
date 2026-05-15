@@ -6,7 +6,7 @@ import type {
   PluginReferenceView,
   PluginView,
   UpstreamStatus,
-  RepositoryToolDescriptor,
+  RepositoryScriptDescriptor,
   ScriptDefinition,
   ScriptPackaging,
   ScriptType
@@ -30,7 +30,7 @@ export interface ScriptEditorFormValues {
 
 export interface PublishToRepositoryFormValues {
   repositoryId: string;
-  toolId: string;
+  repositoryScriptId: string;
   displayName: string;
   version: string;
   owner?: string;
@@ -42,7 +42,7 @@ export interface PublishToRepositoryFormValues {
 export interface PublishScriptDependencyDraft {
   scriptId: string;
   repositoryId?: string;
-  toolId?: string;
+  repositoryScriptId?: string;
   versionRange?: string;
   state: "AUTO" | "MANUAL" | "UNRESOLVED";
 }
@@ -116,10 +116,10 @@ export type RepositoryPublishVersionSuggestion =
   | { status: "ERROR"; message: string };
 
 export function resolveRepositoryPublishVersion(
-  tools: Pick<RepositoryToolDescriptor, "scriptId" | "version">[],
-  toolId: string
+  tools: Pick<RepositoryScriptDescriptor, "scriptId" | "version">[],
+  repositoryScriptId: string
 ): RepositoryPublishVersionResolution {
-  const normalizedToolId = toolId.trim();
+  const normalizedToolId = repositoryScriptId.trim();
   if (!normalizedToolId) {
     return { status: "NOT_FOUND" };
   }

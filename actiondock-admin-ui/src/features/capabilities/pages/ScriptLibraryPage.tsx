@@ -35,9 +35,9 @@ import { listCapabilities } from "../api";
 import { listPlugins } from "../../plugins/api";
 import { createScript, updateScript } from "../../scripts/api";
 import {
-  getRepositoryTool,
+  getRepositoryScript,
   listRepositories,
-  listRepositoryTools,
+  listRepositoryScripts,
   listToolsByRepository,
   pullUpstreamScript,
   syncRepository,
@@ -58,7 +58,7 @@ import {
 } from "../../../services/scriptTransfer";
 import { buildScriptDiff, toDiffTarget } from "../../../services/scriptDiff";
 import { ApiError } from "../../../shared/api/httpClient";
-import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptType } from "../../../shared/types";
+import type { PluginDependency, PluginView, RepositoryScriptDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptType } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
 import { UpstreamSyncTag } from "../../../components/domain/UpstreamSyncTag";
 import { ForkScriptModal } from "../../../components/common/ForkScriptModal";
@@ -107,9 +107,9 @@ function renderScriptDependencies(dependencies: ScriptDependency[]) {
   return (
     <Space direction="vertical" size={6} style={{ width: "100%" }}>
       {dependencies.map((dependency) => (
-        <Space key={`${dependency.scriptId}:${dependency.repositoryId}:${dependency.toolId}`} wrap size={[6, 6]}>
+        <Space key={`${dependency.scriptId}:${dependency.repositoryId}:${dependency.repositoryScriptId}`} wrap size={[6, 6]}>
           <Text code>{dependency.scriptId}</Text>
-          <Text code>{`${dependency.repositoryId}/${dependency.toolId}`}</Text>
+          <Text code>{`${dependency.repositoryId}/${dependency.repositoryScriptId}`}</Text>
           {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>未锁定版本</Tag>}
         </Space>
       ))}
@@ -126,7 +126,7 @@ export function ScriptLibraryPage() {
   const [importing, setImporting] = useState(false);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
-  const [toolDescriptors, setToolDescriptors] = useState<RepositoryToolDescriptor[]>([]);
+  const [toolDescriptors, setToolDescriptors] = useState<RepositoryScriptDescriptor[]>([]);
   const [plugins, setPlugins] = useState<PluginView[]>([]);
   const [selectedScriptIds, setSelectedScriptIds] = useState<Key[]>([]);
   const [searchText, setSearchText] = useState("");
@@ -148,7 +148,7 @@ export function ScriptLibraryPage() {
     try {
       const [capabilityData, descriptorData, pluginData] = await Promise.all([
         listCapabilities(),
-        listRepositoryTools(),
+        listRepositoryScripts(),
         listPlugins().catch(() => [])
       ]);
       const sortedScripts = [...capabilityData].sort((left, right) =>
@@ -174,7 +174,7 @@ export function ScriptLibraryPage() {
   }, []);
 
   const descriptorMap = useMemo(() => {
-    const next = new Map<string, RepositoryToolDescriptor>();
+    const next = new Map<string, RepositoryScriptDescriptor>();
     toolDescriptors.forEach((item) => {
       if (item.localState) {
         next.set(item.localState.localAssetId, item);
@@ -224,7 +224,7 @@ export function ScriptLibraryPage() {
         script.description ?? "",
         script.owner ?? "",
         script.repositoryId ?? "",
-        script.repositoryToolId ?? "",
+        script.repositoryScriptId ?? "",
         descriptor?.repositoryId ?? "",
         descriptor?.scriptId ?? ""
       ]
@@ -370,7 +370,7 @@ export function ScriptLibraryPage() {
       return;
     }
     const descriptor = descriptorMap.get(tool.id);
-    if (!descriptor || !tool.repositoryId || !tool.repositoryToolId) {
+    if (!descriptor || !tool.repositoryId || !tool.repositoryScriptId) {
       messageApi.warning("缺少仓库来源信息，无法更新");
       return;
     }
@@ -381,7 +381,7 @@ export function ScriptLibraryPage() {
     let scheduleCount = 0;
 
     try {
-      const detail = await getRepositoryTool(tool.repositoryId, tool.repositoryToolId);
+      const detail = await getRepositoryScript(tool.repositoryId, tool.repositoryScriptId);
       scheduleCount = detail.scheduleTemplate.length;
     } catch {
       scheduleCount = 0;
@@ -443,7 +443,7 @@ export function ScriptLibraryPage() {
 
     setActionKey(`update:${tool.id}`);
     try {
-      await updateRepositoryToolLocalAsset(tool.repositoryId, tool.repositoryToolId, {
+      await updateRepositoryToolLocalAsset(tool.repositoryId, tool.repositoryScriptId, {
         installSchedules,
         installScriptDependencies,
         installPluginDependencies
@@ -483,8 +483,8 @@ export function ScriptLibraryPage() {
         }
       }
 
-      const updateTargets: RepositoryToolDescriptor[] = [];
-      const upstreamPullTargets: RepositoryToolDescriptor[] = [];
+      const updateTargets: RepositoryScriptDescriptor[] = [];
+      const upstreamPullTargets: RepositoryScriptDescriptor[] = [];
       for (const repositoryId of syncedRepositoryIds) {
         try {
           const repositoryTools = await listToolsByRepository(repositoryId);

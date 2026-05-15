@@ -93,7 +93,7 @@ class RepositoryControllerTest {
 
     @Test
     void repositoryScriptRoutesReturnScriptDescriptor() throws Exception {
-        RepositoryCatalogTypes.RepositoryToolDescriptor descriptor = new RepositoryCatalogTypes.RepositoryToolDescriptor(
+        RepositoryCatalogTypes.RepositoryScriptDescriptor descriptor = new RepositoryCatalogTypes.RepositoryScriptDescriptor(
                 "repo-1",
                 "hello-groovy",
                 "Hello Groovy",
@@ -117,10 +117,10 @@ class RepositoryControllerTest {
                 true,
                 null
         );
-        when(repositoryCatalogService.listAllRepositoryTools()).thenReturn(List.of(descriptor));
-        when(repositoryCatalogService.listRepositoryTools("repo-1")).thenReturn(List.of(descriptor));
-        when(repositoryCatalogService.getRepositoryTool("repo-1", "hello-groovy"))
-                .thenReturn(new RepositoryCatalogTypes.RepositoryToolDetail(descriptor, "return [message: 'ok']", null, List.of(), List.of()));
+        when(repositoryCatalogService.listAllRepositoryScripts()).thenReturn(List.of(descriptor));
+        when(repositoryCatalogService.listRepositoryScripts("repo-1")).thenReturn(List.of(descriptor));
+        when(repositoryCatalogService.getRepositoryScript("repo-1", "hello-groovy"))
+                .thenReturn(new RepositoryCatalogTypes.RepositoryScriptDetail(descriptor, "return [message: 'ok']", null, List.of(), List.of()));
 
         mockMvc.perform(get("/api/repositories/scripts"))
                 .andExpect(status().isOk())

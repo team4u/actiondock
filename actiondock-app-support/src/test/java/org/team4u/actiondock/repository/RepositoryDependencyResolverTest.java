@@ -19,7 +19,7 @@ class RepositoryDependencyResolverTest {
                 repository("current", "GIT", true),
                 repository("publisher", "GIT", true)
         ));
-        when(catalog.listRepositoryTools("publisher")).thenReturn(List.of(tool("publisher", "child")));
+        when(catalog.listRepositoryScripts("publisher")).thenReturn(List.of(tool("publisher", "child")));
 
         RepositoryDependencyResolver resolver = new RepositoryDependencyResolver(catalog);
 
@@ -33,8 +33,8 @@ class RepositoryDependencyResolverTest {
                 repository("current", "GIT", true),
                 repository("publisher", "GIT", true)
         ));
-        when(catalog.listRepositoryTools("publisher")).thenReturn(List.of());
-        when(catalog.listRepositoryTools("current")).thenReturn(List.of(tool("current", "child")));
+        when(catalog.listRepositoryScripts("publisher")).thenReturn(List.of());
+        when(catalog.listRepositoryScripts("current")).thenReturn(List.of(tool("current", "child")));
 
         RepositoryDependencyResolver resolver = new RepositoryDependencyResolver(catalog);
 
@@ -49,9 +49,9 @@ class RepositoryDependencyResolverTest {
                 repository("publisher", "GIT", true),
                 repository("consumer", "LOCAL_DIR", true)
         ));
-        when(catalog.listRepositoryTools("publisher")).thenReturn(List.of());
-        when(catalog.listRepositoryTools("current")).thenReturn(List.of());
-        when(catalog.listRepositoryTools("consumer")).thenReturn(List.of(tool("consumer", "child")));
+        when(catalog.listRepositoryScripts("publisher")).thenReturn(List.of());
+        when(catalog.listRepositoryScripts("current")).thenReturn(List.of());
+        when(catalog.listRepositoryScripts("consumer")).thenReturn(List.of(tool("consumer", "child")));
 
         RepositoryDependencyResolver resolver = new RepositoryDependencyResolver(catalog);
 
@@ -67,10 +67,10 @@ class RepositoryDependencyResolverTest {
                 repository("repo-a", "GIT", true),
                 repository("repo-b", "LOCAL_DIR", true)
         ));
-        when(catalog.listRepositoryTools("publisher")).thenReturn(List.of());
-        when(catalog.listRepositoryTools("current")).thenReturn(List.of());
-        when(catalog.listRepositoryTools("repo-a")).thenReturn(List.of(tool("repo-a", "child")));
-        when(catalog.listRepositoryTools("repo-b")).thenReturn(List.of(tool("repo-b", "child")));
+        when(catalog.listRepositoryScripts("publisher")).thenReturn(List.of());
+        when(catalog.listRepositoryScripts("current")).thenReturn(List.of());
+        when(catalog.listRepositoryScripts("repo-a")).thenReturn(List.of(tool("repo-a", "child")));
+        when(catalog.listRepositoryScripts("repo-b")).thenReturn(List.of(tool("repo-b", "child")));
 
         RepositoryDependencyResolver resolver = new RepositoryDependencyResolver(catalog);
 
@@ -90,8 +90,8 @@ class RepositoryDependencyResolverTest {
                 repository("http-repo", "HTTP", true),
                 repository("disabled-repo", "LOCAL_DIR", false)
         ));
-        when(catalog.listRepositoryTools("publisher")).thenReturn(List.of());
-        when(catalog.listRepositoryTools("current")).thenReturn(List.of());
+        when(catalog.listRepositoryScripts("publisher")).thenReturn(List.of());
+        when(catalog.listRepositoryScripts("current")).thenReturn(List.of());
 
         RepositoryDependencyResolver resolver = new RepositoryDependencyResolver(catalog);
 
@@ -108,8 +108,8 @@ class RepositoryDependencyResolverTest {
                 .setUrl("https://example.com/" + id);
     }
 
-    private static RepositoryCatalogTypes.RepositoryToolDescriptor tool(String repositoryId, String toolId) {
-        return new RepositoryCatalogTypes.RepositoryToolDescriptor(
+    private static RepositoryCatalogTypes.RepositoryScriptDescriptor tool(String repositoryId, String toolId) {
+        return new RepositoryCatalogTypes.RepositoryScriptDescriptor(
                 repositoryId,
                 toolId,
                 toolId,

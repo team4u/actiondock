@@ -81,7 +81,7 @@ class RepositoryCatalogServiceTest {
                 return plugins.invoke("plugin-b", "run")
                 """;
 
-        var dependencies = ToolRepositoryPublisher.extractPluginDependenciesFromSource(
+        var dependencies = ScriptRepositoryPublisher.extractPluginDependenciesFromSource(
                 source,
                 Map.of("plugin-a", "1.2.3", "plugin-b", "0.4.0")
         );
@@ -104,7 +104,7 @@ class RepositoryCatalogServiceTest {
                 return plugins.invoke("plugin-b", "run")
                 """;
 
-        var dependencies = ToolRepositoryPublisher.extractPluginDependenciesFromSource(
+        var dependencies = ScriptRepositoryPublisher.extractPluginDependenciesFromSource(
                 source,
                 Map.of("plugin-a", "1.2.3", "plugin-b", "0.4.0")
         );
@@ -197,7 +197,7 @@ class RepositoryCatalogServiceTest {
                 .satisfies(item -> {
                     assertThat(item.getScriptId()).isEqualTo("child");
                     assertThat(item.getRepositoryId()).isEqualTo("repo-a");
-                    assertThat(item.getToolId()).isEqualTo("child-tool");
+                    assertThat(item.getRepositoryScriptId()).isEqualTo("child-tool");
                     assertThat(item.getVersionRange()).isEqualTo(">= 1.2.0");
                 });
     }
@@ -408,8 +408,8 @@ class RepositoryCatalogServiceTest {
                 null
         );
 
-        List<RepositoryToolDescriptor> scripts = service.listRepositoryTools("script-repo");
-        RepositoryToolDetail detail = service.getRepositoryTool("script-repo", "demo-script");
+        List<RepositoryScriptDescriptor> scripts = service.listRepositoryScripts("script-repo");
+        RepositoryScriptDetail detail = service.getRepositoryScript("script-repo", "demo-script");
 
         assertThat(scripts).singleElement().satisfies(item -> {
             assertThat(item.scriptId()).isEqualTo("demo-script");
@@ -467,10 +467,10 @@ class RepositoryCatalogServiceTest {
                 null
         );
 
-        List<RepositoryToolDescriptor> scripts = service.listRepositoryTools("legacy-tool-repo");
+        List<RepositoryScriptDescriptor> scripts = service.listRepositoryScripts("legacy-tool-repo");
 
         assertThat(scripts).isEmpty();
-        assertThatThrownBy(() -> service.getRepositoryTool("legacy-tool-repo", "demo-tool"))
+        assertThatThrownBy(() -> service.getRepositoryScript("legacy-tool-repo", "demo-tool"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("仓库工具不存在: demo-tool");
     }
@@ -494,7 +494,7 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatThrownBy(() -> ToolRepositoryPublisher.assertToolVersionAvailable(
+        assertThatThrownBy(() -> ScriptRepositoryPublisher.assertToolVersionAvailable(
                 "repo-1",
                 index,
                 "demo-tool",
@@ -525,9 +525,9 @@ class RepositoryCatalogServiceTest {
                 List.of()
         );
 
-        assertThatCode(() -> ToolRepositoryPublisher.assertToolVersionAvailable("repo-1", index, "demo-tool", "1.0.1"))
+        assertThatCode(() -> ScriptRepositoryPublisher.assertToolVersionAvailable("repo-1", index, "demo-tool", "1.0.1"))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> ToolRepositoryPublisher.assertToolVersionAvailable("repo-1", index, "other-tool", "1.0.0"))
+        assertThatCode(() -> ScriptRepositoryPublisher.assertToolVersionAvailable("repo-1", index, "other-tool", "1.0.0"))
                 .doesNotThrowAnyException();
     }
 

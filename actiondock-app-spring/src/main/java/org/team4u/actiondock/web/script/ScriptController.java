@@ -6,7 +6,7 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
-import org.team4u.actiondock.repository.RepositoryToolService;
+import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.schedule.ScriptScheduleDispatcher;
 import org.team4u.actiondock.web.common.ApiResponse;
 import org.team4u.actiondock.web.execution.ExecuteRequest;
@@ -30,13 +30,13 @@ public class ScriptController {
     private final ExecutionApplicationService executionApplicationService;
     private final ScriptScheduleDispatcher scriptScheduleDispatcher;
     private final ExecutionResponseMapper executionResponseMapper;
-    private final RepositoryToolService repositoryToolService;
+    private final RepositoryScriptService repositoryToolService;
     private final ScriptPatchService scriptPatchService;
 
     public ScriptController(ScriptApplicationService scriptApplicationService,
                             ExecutionApplicationService executionApplicationService,
                             ScriptScheduleDispatcher scriptScheduleDispatcher,
-                            RepositoryToolService repositoryToolService,
+                            RepositoryScriptService repositoryToolService,
                             ExecutionResponseMapper executionResponseMapper,
                             ScriptPatchService scriptPatchService) {
         this.scriptApplicationService = scriptApplicationService;

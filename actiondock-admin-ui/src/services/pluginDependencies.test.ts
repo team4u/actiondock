@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractPluginDependenciesFromSource, resolveEffectivePluginDependencies } from "./pluginDependencies";
-import type { PluginDependency, PluginView, RepositoryToolDescriptor, ScriptDefinition } from "../shared/types";
+import type { PluginDependency, PluginView, RepositoryScriptDescriptor, ScriptDefinition } from "../shared/types";
 
 function plugin(pluginId: string, version: string): PluginView {
   return {
@@ -34,7 +34,7 @@ function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
   };
 }
 
-function descriptor(pluginDependencies: PluginDependency[]): RepositoryToolDescriptor {
+function descriptor(pluginDependencies: PluginDependency[]): RepositoryScriptDescriptor {
   return {
     repositoryId: "repo",
     scriptId: "tool",

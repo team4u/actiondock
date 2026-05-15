@@ -8,9 +8,9 @@ import {
   renderPluginDependencies,
   renderScriptDependencies
 } from "./discoveryHelpers";
-import type { RepositoryPluginDescriptor, RepositoryToolDescriptor } from "../../../../shared/types";
+import type { RepositoryPluginDescriptor, RepositoryScriptDescriptor } from "../../../../shared/types";
 
-function createTool(overrides: Partial<RepositoryToolDescriptor> = {}): RepositoryToolDescriptor {
+function createTool(overrides: Partial<RepositoryScriptDescriptor> = {}): RepositoryScriptDescriptor {
   return {
     repositoryId: "repo-a",
     scriptId: "tool-a",
@@ -104,8 +104,8 @@ describe("discoveryHelpers", () => {
   it("renders script dependencies with resolved names and fallback ids", () => {
     const html = renderToStaticMarkup(
       renderScriptDependencies([
-        { scriptId: "billing-sync", repositoryId: "repo-a", toolId: "billing-sync", versionRange: ">= 1.2.0" },
-        { scriptId: "orphan-task", repositoryId: "repo-b", toolId: "orphan-task" }
+        { scriptId: "billing-sync", repositoryId: "repo-a", repositoryScriptId: "billing-sync", versionRange: ">= 1.2.0" },
+        { scriptId: "orphan-task", repositoryId: "repo-b", repositoryScriptId: "orphan-task" }
       ], {
         currentRepositoryId: "repo-a",
         availableTools: [

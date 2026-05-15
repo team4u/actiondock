@@ -160,7 +160,7 @@ public final class RepositoryCatalogTypes {
         return null;
     }
 
-    public record RepositoryToolDescriptor(
+    public record RepositoryScriptDescriptor(
             String repositoryId,
             String scriptId,
             String displayName,
@@ -184,8 +184,8 @@ public final class RepositoryCatalogTypes {
             boolean trusted,
             RepositoryLocalAssetState localState
     ) {
-        public RepositoryToolDescriptor withLocalState(RepositoryLocalAssetState localState) {
-            return new RepositoryToolDescriptor(
+        public RepositoryScriptDescriptor withLocalState(RepositoryLocalAssetState localState) {
+            return new RepositoryScriptDescriptor(
                     repositoryId, scriptId, displayName, version,
                     description, releaseNotes, owner, tags, type, packaging,
                     sourcePath, pythonRequirementsPath, inputSchemaPath, outputSchemaPath,
@@ -207,8 +207,8 @@ public final class RepositoryCatalogTypes {
     ) {
     }
 
-    public record RepositoryToolDetail(
-            RepositoryToolDescriptor descriptor,
+    public record RepositoryScriptDetail(
+            RepositoryScriptDescriptor descriptor,
             String source,
             String pythonRequirements,
             List<ConfigTemplateItem> configTemplate,

@@ -24,7 +24,7 @@ describe("parseScriptImportBundle", () => {
               {
                 scriptId: "child",
                 repositoryId: "repo-a",
-                toolId: "child-tool",
+                repositoryScriptId: "child-tool",
                 versionRange: ">= 1.0.0"
               }
             ],
@@ -51,7 +51,7 @@ describe("parseScriptImportBundle", () => {
           {
             scriptId: "child",
             repositoryId: "repo-a",
-            toolId: "child-tool",
+            repositoryScriptId: "child-tool",
             versionRange: ">= 1.0.0"
           }
         ],

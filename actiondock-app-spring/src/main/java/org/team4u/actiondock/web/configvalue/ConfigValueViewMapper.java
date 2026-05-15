@@ -77,7 +77,7 @@ class ConfigValueViewMapper {
                 insight.scriptReferences().stream()
                         .map(item -> new ConfigValueDetailView.ScriptReference(
                                 item.scriptId(), item.scriptName(), item.scope(),
-                                item.repositoryId(), item.repositoryToolId(), item.repositoryVersion()))
+                                item.repositoryId(), item.repositoryScriptId(), item.repositoryVersion()))
                         .toList(),
                 insight.scheduleReferences().stream()
                         .map(item -> new ConfigValueDetailView.ScheduleReference(
@@ -89,7 +89,7 @@ class ConfigValueViewMapper {
                         .toList(),
                 insight.templateDeclarations().stream()
                         .map(item -> new ConfigValueDetailView.TemplateDeclaration(
-                                item.repositoryId(), item.repositoryName(), item.toolId(), item.toolName(),
+                                item.repositoryId(), item.repositoryName(), item.repositoryScriptId(), item.scriptName(),
                                 item.version(), item.label(), item.secret(), item.publishMode(), item.defaultValue()))
                         .toList(),
                 insight.modelReferences().stream()
@@ -103,13 +103,13 @@ class ConfigValueViewMapper {
         return impacts.stream()
                 .map(item -> new ConfigValueDetailView.ImpactScript(
                         item.scriptId(), item.scriptName(), item.scope(),
-                        item.repositoryId(), item.repositoryToolId(), item.repositoryVersion(), item.reasons()))
+                        item.repositoryId(), item.repositoryScriptId(), item.repositoryVersion(), item.reasons()))
                 .toList();
     }
 
     private static ConfigValueDetailView.Origin toOrigin(ConfigValueUsageAnalysisService.ConfigValueOrigin origin) {
         return new ConfigValueDetailView.Origin(
                 origin.repositoryId(), origin.repositoryName(),
-                origin.toolId(), origin.toolName(), origin.version());
+                origin.repositoryScriptId(), origin.scriptName(), origin.version());
     }
 }

@@ -18,7 +18,7 @@ import type {
   PluginDependency,
   RepositoryDefinition,
   RepositoryPublishConfigPreview,
-  RepositoryToolDescriptor,
+  RepositoryScriptDescriptor,
   ScriptSchedule,
   ScriptType
 } from "../../../../shared/types";
@@ -57,7 +57,7 @@ function renderPluginDependencyList(dependencies: PluginDependency[]) {
 function renderScriptDependencyList(
   dependencies: PublishScriptDependencyDraft[],
   repositories: RepositoryDefinition[],
-  repositoryTools: RepositoryToolDescriptor[],
+  repositoryTools: RepositoryScriptDescriptor[],
   onChange: (scriptId: string, changedValues: Partial<PublishScriptDependencyDraft>) => void
 ) {
   if (dependencies.length === 0) {
@@ -82,8 +82,8 @@ function renderScriptDependencyList(
                 {dependency.state === "UNRESOLVED" ? <Tag color="orange">未匹配</Tag> : null}
                 {dependency.versionRange ? <Tag color="blue">{dependency.versionRange}</Tag> : <Tag>待补全版本</Tag>}
               </Space>
-              {dependency.state === "AUTO" && dependency.repositoryId && dependency.toolId ? (
-                <Text type="secondary">已自动匹配到 {dependency.repositoryId} / {dependency.toolId}</Text>
+              {dependency.state === "AUTO" && dependency.repositoryId && dependency.repositoryScriptId ? (
+                <Text type="secondary">已自动匹配到 {dependency.repositoryId} / {dependency.repositoryScriptId}</Text>
               ) : null}
               <Space size={12} style={{ width: "100%" }} wrap>
                 <Select
@@ -96,17 +96,17 @@ function renderScriptDependencyList(
                   }))}
                   onChange={(value) => onChange(dependency.scriptId, {
                     repositoryId: value,
-                    toolId: undefined,
+                    repositoryScriptId: undefined,
                     versionRange: undefined
                   })}
                 />
                 <Select
-                  value={dependency.toolId}
+                  value={dependency.repositoryScriptId}
                   placeholder="选择依赖脚本"
                   style={{ flex: "2 1 260px", minWidth: 260 }}
                   options={toolOptions}
                   disabled={!dependency.repositoryId}
-                  onChange={(value) => onChange(dependency.scriptId, { toolId: value, versionRange: undefined })}
+                  onChange={(value) => onChange(dependency.scriptId, { repositoryScriptId: value, versionRange: undefined })}
                 />
                 <Input
                   value={dependency.versionRange}
@@ -141,7 +141,7 @@ interface PublishToRepositoryModalProps {
   repositoryContentUnchanged: boolean;
   theme: "vs-light" | "vs-dark";
   targetType?: ScriptType;
-  repositoryTools: RepositoryToolDescriptor[];
+  repositoryTools: RepositoryScriptDescriptor[];
   scriptDependencies: PublishScriptDependencyDraft[];
   hasDynamicScriptDependencies: boolean;
   configModes: Record<string, "INLINE" | "PLACEHOLDER">;
@@ -209,7 +209,7 @@ export function PublishToRepositoryModal({
 }: PublishToRepositoryModalProps) {
   const hasMissingConfigKeys = Boolean(configPreview?.missingKeys.length);
   const detectedConfigItems = configPreview?.items ?? [];
-  const hasIncompleteScriptDependencies = scriptDependencies.some((item) => !item.repositoryId || !item.toolId);
+  const hasIncompleteScriptDependencies = scriptDependencies.some((item) => !item.repositoryId || !item.repositoryScriptId);
   const hasNoRepositoryChanges = repositoryDiff?.hasChanges === false;
 
   return (
@@ -249,7 +249,7 @@ export function PublishToRepositoryModal({
               afterRepository={(
                 <Form.Item
                   label="仓库脚本 ID"
-                  name="toolId"
+                  name="repositoryScriptId"
                   rules={[{ required: true, message: "请输入仓库脚本 ID" }]}
                 >
                   <Input placeholder="例如 clear-cache" />

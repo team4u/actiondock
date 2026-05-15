@@ -9,8 +9,8 @@
 仓库脚本 -> 脚本工作副本：
 
 ```bash
-actiondock script repository-working-copy <repositoryId> <toolId>
-actiondock script repository-working-copy <repositoryId> <toolId> --script-id <localScriptId>
+actiondock script repository-working-copy <repositoryId> <scriptId>
+actiondock script repository-working-copy <repositoryId> <scriptId> --script-id <localScriptId>
 ```
 
 仓库 Webhook -> Webhook 工作副本：

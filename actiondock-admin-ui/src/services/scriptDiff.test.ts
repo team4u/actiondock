@@ -270,7 +270,7 @@ describe("buildScriptDiff", () => {
             {
               scriptId: "child",
               repositoryId: "repo-a",
-              toolId: "child-tool",
+              repositoryScriptId: "child-tool",
               versionRange: ">= 1.0.0"
             }
           ]
@@ -287,7 +287,7 @@ describe("buildScriptDiff", () => {
           {
             scriptId: "repo-a.child-tool",
             repositoryId: "repo-a",
-            toolId: "child-tool",
+            repositoryScriptId: "child-tool",
             versionRange: ">= 1.0.0"
           }
         ]

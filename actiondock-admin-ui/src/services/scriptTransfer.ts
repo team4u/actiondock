@@ -127,13 +127,13 @@ function parseScriptDependency(value: unknown, fieldName: string): ScriptDepende
   if (!isNonEmptyString(value.repositoryId)) {
     throw new Error(`${fieldName}.repositoryId 缺少合法值`);
   }
-  if (!isNonEmptyString(value.toolId)) {
-    throw new Error(`${fieldName}.toolId 缺少合法值`);
+  if (!isNonEmptyString(value.repositoryScriptId)) {
+    throw new Error(`${fieldName}.repositoryScriptId 缺少合法值`);
   }
   return {
     scriptId: value.scriptId.trim(),
     repositoryId: value.repositoryId.trim(),
-    toolId: value.toolId.trim(),
+    repositoryScriptId: value.repositoryScriptId.trim(),
     versionRange: assertOptionalString(value.versionRange, `${fieldName}.versionRange`)
   };
 }

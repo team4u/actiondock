@@ -45,7 +45,7 @@ public class RepositoryCapabilityPackageService {
     private final RepositoryCatalogService.Repositories repos;
     private final RepositoryCatalogService.ApplicationServices services;
     private final RepositoryPluginService pluginService;
-    private final RepositoryToolService toolService;
+    private final RepositoryScriptService toolService;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
     private final RepositoryAiPackageService aiPackageService;
     private final RepositoryDependencyResolver dependencyResolver;
@@ -54,7 +54,7 @@ public class RepositoryCapabilityPackageService {
                                                RepositoryCatalogService.Repositories repos,
                                                RepositoryCatalogService.ApplicationServices services,
                                                RepositoryPluginService pluginService,
-                                               RepositoryToolService toolService,
+                                               RepositoryScriptService toolService,
                                                RepositoryConfigTemplateSyncService configTemplateSyncService,
                                                RepositoryAiPackageService aiPackageService) {
         this.catalog = catalog;

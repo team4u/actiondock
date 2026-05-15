@@ -266,7 +266,7 @@ export function renderRepositoryWebhookDetail(item) {
     if (descriptor.scriptDependencies.length > 0) {
         lines.push("ScriptDependencies:");
         for (const dependency of descriptor.scriptDependencies) {
-            lines.push(`  - ${dependency.scriptId} => ${dependency.repositoryId}/${dependency.repositoryScriptId ?? dependency.toolId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`);
+            lines.push(`  - ${dependency.scriptId} => ${dependency.repositoryId}/${dependency.repositoryScriptId ?? dependency.repositoryScriptId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`);
         }
     }
     if (item.configTemplate.length > 0) {
@@ -337,7 +337,7 @@ export function renderProjectRepositoryResolution(item) {
     ];
     return lines.join("\n");
 }
-export function renderRepositoryToolList(items) {
+export function renderRepositoryScriptList(items) {
     if (items.length === 0) {
         return "没有仓库脚本。";
     }
@@ -350,7 +350,7 @@ export function renderRepositoryToolList(items) {
     })
         .join("\n");
 }
-export function renderRepositoryToolDetail(item) {
+export function renderRepositoryScriptDetail(item) {
     const descriptor = item.descriptor;
     const lines = [
         `RepositoryScript: ${descriptor.repositoryId}/${descriptor.scriptId}`,
@@ -497,7 +497,7 @@ export function renderConfigValueDetail(item) {
         lines.push(`Description: ${item.description}`);
     }
     if (item.repositoryId) {
-        lines.push(`Repository: ${item.repositoryId}${(item.repositoryScriptId ?? item.repositoryToolId) ? `/${item.repositoryScriptId ?? item.repositoryToolId}` : ""}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
+        lines.push(`Repository: ${item.repositoryId}${(item.repositoryScriptId ?? item.repositoryScriptId) ? `/${item.repositoryScriptId ?? item.repositoryScriptId}` : ""}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
     }
     if ("impactedScripts" in item && item.impactedScripts) {
         lines.push(`ImpactedScripts: ${item.impactedScripts.length}`);

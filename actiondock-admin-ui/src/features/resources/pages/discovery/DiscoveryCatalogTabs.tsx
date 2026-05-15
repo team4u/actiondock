@@ -9,7 +9,7 @@ import type {
   RepositoryWebhookDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
-  RepositoryToolDescriptor
+  RepositoryScriptDescriptor
 } from "../../../../shared/types";
 import {
   getSkillInstallLabel,
@@ -28,23 +28,23 @@ interface DiscoveryCatalogTabsProps {
   loading: boolean;
   actionKey: string | null;
   packageActionKey: string | null;
-  filteredTools: RepositoryToolDescriptor[];
+  filteredTools: RepositoryScriptDescriptor[];
   filteredWebhooks: RepositoryWebhookDescriptor[];
   filteredPackages: CapabilityPackageDescriptor[];
   filteredSkills: RepositorySkillDescriptor[];
   filteredPlugins: RepositoryPluginDescriptor[];
-  onOpenToolDetail: (descriptor: RepositoryToolDescriptor) => void | Promise<void>;
+  onOpenToolDetail: (descriptor: RepositoryScriptDescriptor) => void | Promise<void>;
   onOpenWebhookDetail: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
   onOpenPackageDetail: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onOpenSkillDetail: (descriptor: RepositorySkillDescriptor) => void | Promise<void>;
   onOpenSkillInstall: (descriptor: RepositorySkillDescriptor) => void;
   onToolLocalAssetAction: (
-    descriptor: RepositoryToolDescriptor,
+    descriptor: RepositoryScriptDescriptor,
     action: LocalAssetAction,
     mode?: AddMode,
     customLocalAssetId?: string
   ) => void | Promise<void>;
-  onAddToolToLocal: (descriptor: RepositoryToolDescriptor) => void | Promise<void>;
+  onAddToolToLocal: (descriptor: RepositoryScriptDescriptor) => void | Promise<void>;
   onWebhookLocalAssetAction: (
     descriptor: RepositoryWebhookDescriptor,
     action: LocalAssetAction,
@@ -81,7 +81,7 @@ export function DiscoveryCatalogTabs({
   onPluginAction,
   onNavigate
 }: DiscoveryCatalogTabsProps) {
-  const toolColumns: ColumnsType<RepositoryToolDescriptor> = [
+  const toolColumns: ColumnsType<RepositoryScriptDescriptor> = [
     {
       title: "脚本资产",
       key: "tool",
@@ -375,7 +375,7 @@ export function DiscoveryCatalogTabs({
           key: "scripts",
           label: `脚本 (${filteredTools.length})`,
           children: (
-            <Table<RepositoryToolDescriptor>
+            <Table<RepositoryScriptDescriptor>
               rowKey={(item) => `${item.repositoryId}:${item.scriptId}`}
               loading={loading}
               columns={toolColumns}

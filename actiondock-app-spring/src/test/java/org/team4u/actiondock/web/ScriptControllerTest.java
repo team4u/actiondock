@@ -20,7 +20,7 @@ import org.team4u.actiondock.domain.model.PublishedScriptRevision;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
-import org.team4u.actiondock.repository.RepositoryToolService;
+import org.team4u.actiondock.repository.RepositoryScriptService;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -72,7 +72,7 @@ class ScriptControllerTest {
     private RepositoryCatalogService repositoryCatalogService;
 
     @MockBean
-    private RepositoryToolService repositoryToolService;
+    private RepositoryScriptService repositoryToolService;
 
     @Test
     void detailReturnsWrappedScriptDefinition() throws Exception {

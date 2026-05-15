@@ -166,7 +166,7 @@ class ConfigValueApplicationServiceTest {
                     .setDescription(source.getDescription())
                     .setSecret(source.isSecret())
                     .setRepositoryId(source.getRepositoryId())
-                    .setRepositoryToolId(source.getRepositoryToolId())
+                    .setRepositoryToolId(source.getRepositoryScriptId())
                     .setRepositoryVersion(source.getRepositoryVersion())
                     .setPublishMode(source.getPublishMode())
                     .setManaged(source.isManaged())

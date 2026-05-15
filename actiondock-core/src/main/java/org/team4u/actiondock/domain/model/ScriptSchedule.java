@@ -1,5 +1,7 @@
 package org.team4u.actiondock.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -22,6 +24,7 @@ public class ScriptSchedule {
     private boolean enabled = true;
     private boolean editable = true;
     private String repositoryId;
+    @JsonAlias("repositoryToolId")
     private String repositoryScriptId;
     private String repositoryPackageId;
     private String repositoryVersion;
@@ -109,11 +112,6 @@ public class ScriptSchedule {
     public ScriptSchedule setRepositoryScriptId(String repositoryScriptId) {
         this.repositoryScriptId = repositoryScriptId;
         return this;
-    }
-
-    @Deprecated
-    public String getRepositoryToolId() {
-        return getRepositoryScriptId();
     }
 
     @Deprecated

@@ -22,7 +22,7 @@ import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositorySkillService;
-import org.team4u.actiondock.repository.RepositoryToolService;
+import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.io.IOException;
@@ -39,14 +39,14 @@ import java.util.function.Function;
 public class RepositoryController {
     private final RepositoryCatalogService repositoryCatalogService;
     private final RepositoryPluginService repositoryPluginService;
-    private final RepositoryToolService repositoryToolService;
+    private final RepositoryScriptService repositoryToolService;
     private final RepositoryWebhookService repositoryWebhookService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final RepositorySkillService repositorySkillService;
 
     public RepositoryController(RepositoryCatalogService repositoryCatalogService,
                                 RepositoryPluginService repositoryPluginService,
-                                RepositoryToolService repositoryToolService,
+                                RepositoryScriptService repositoryToolService,
                                 RepositoryWebhookService repositoryWebhookService,
                                 RepositoryCapabilityPackageService repositoryCapabilityPackageService,
                                 RepositorySkillService repositorySkillService) {
@@ -126,8 +126,8 @@ public class RepositoryController {
      * @return API 响应，包含脚本描述符列表
      */
     @GetMapping("/scripts")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listAllTools() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositoryTools());
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryScriptDescriptor>> listAllTools() {
+        return ApiResponse.success(repositoryCatalogService.listAllRepositoryScripts());
     }
 
     /**
@@ -137,8 +137,8 @@ public class RepositoryController {
      * @return API 响应，包含脚本描述符列表
      */
     @GetMapping("/{id}/scripts")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listRepositoryTools(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryScriptDescriptor>> listRepositoryScripts(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listRepositoryScripts(id));
     }
 
     @GetMapping("/webhooks")
@@ -237,9 +237,9 @@ public class RepositoryController {
      * @return API 响应，包含脚本详情
      */
     @GetMapping("/{id}/scripts/{toolId}")
-    public ApiResponse<RepositoryCatalogTypes.RepositoryToolDetail> detail(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositoryScriptDetail> detail(@PathVariable String id,
                                                                              @PathVariable String toolId) {
-        return ApiResponse.success(repositoryCatalogService.getRepositoryTool(id, toolId));
+        return ApiResponse.success(repositoryCatalogService.getRepositoryScript(id, toolId));
     }
 
     @PostMapping("/{id}/scripts/{toolId}/local-assets")
@@ -280,9 +280,9 @@ public class RepositoryController {
      * @return API 响应，包含发布后的脚本描述符
      */
     @PostMapping("/{id}/publish")
-    public ApiResponse<RepositoryCatalogTypes.RepositoryToolDescriptor> publish(@PathVariable String id,
+    public ApiResponse<RepositoryCatalogTypes.RepositoryScriptDescriptor> publish(@PathVariable String id,
                                                                                   @RequestBody RepositoryCatalogTypes.RepositoryPublishRequest request) {
-        return ApiResponse.success(repositoryToolService.publishTool(id, request), "发布完成");
+        return ApiResponse.success(repositoryToolService.publishScript(id, request), "发布完成");
     }
 
     @PostMapping("/{id}/packages/preview")

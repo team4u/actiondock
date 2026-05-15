@@ -81,7 +81,7 @@ function detailToSummary(detail: ConfigValueDetail): ConfigValue {
     description: detail.description,
     secret: detail.secret,
     repositoryId: detail.repositoryId,
-    repositoryToolId: detail.repositoryToolId,
+    repositoryScriptId: detail.repositoryScriptId,
     repositoryVersion: detail.repositoryVersion,
     publishMode: detail.publishMode,
     managed: detail.managed,
@@ -271,7 +271,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
         item.value ?? "",
         item.valueMasked ?? "",
         item.repositoryId ?? "",
-        item.repositoryToolId ?? ""
+        item.repositoryScriptId ?? ""
       ].some((field) => field.toLowerCase().includes(keyword))
     );
   }, [items, searchText]);
@@ -1019,7 +1019,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                             <Space wrap>
                               <Text>{detail.origin.repositoryName || detail.origin.repositoryId || "-"}</Text>
                               <Text type="secondary">/</Text>
-                              <Text>{detail.origin.toolName || detail.origin.toolId || "-"}</Text>
+                              <Text>{detail.origin.scriptName || detail.origin.repositoryScriptId || "-"}</Text>
                               <Text type="secondary">/</Text>
                               <Text>{detail.origin.version || detail.repositoryVersion || "-"}</Text>
                             </Space>
@@ -1229,7 +1229,7 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
                                 <Space wrap>
                                   <Text>{item.repositoryName || item.repositoryId}</Text>
                                   <Text type="secondary">/</Text>
-                                  <Text>{item.toolName}</Text>
+                                  <Text>{item.scriptName}</Text>
                                   <Text type="secondary">{item.version || "-"}</Text>
                                 </Space>
                                 <Space wrap>

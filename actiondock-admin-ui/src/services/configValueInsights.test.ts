@@ -13,8 +13,8 @@ const detail: ConfigValueDetail = {
     templateDeclarations: [{
       repositoryId: "repo-a",
       repositoryName: "Repo A",
-      toolId: "tool-a",
-      toolName: "Tool A",
+      repositoryScriptId: "tool-a",
+      scriptName: "Tool A",
       version: "1.0.0",
       secret: false,
       publishMode: "INLINE"

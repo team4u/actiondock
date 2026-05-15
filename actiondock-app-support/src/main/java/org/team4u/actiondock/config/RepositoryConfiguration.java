@@ -92,9 +92,9 @@ public class RepositoryConfiguration {
     }
 
     @Bean
-    public RepositoryToolService repositoryToolService(RepositoryCatalogService repositoryCatalogService,
+    public RepositoryScriptService repositoryToolService(RepositoryCatalogService repositoryCatalogService,
                                                         RepositoryPluginService repositoryPluginService) {
-        return new RepositoryToolService(
+        return new RepositoryScriptService(
                 repositoryCatalogService,
                 repositoryPluginService,
                 repositoryCatalogService.getRepos(),
@@ -122,7 +122,7 @@ public class RepositoryConfiguration {
             ConfigValueApplicationService configValueApplicationService,
             PluginRuntimeService pluginRuntimeService,
             RepositoryPluginService repositoryPluginService,
-            RepositoryToolService repositoryToolService) {
+            RepositoryScriptService repositoryToolService) {
         return new RepositoryCapabilityPackageService(
                 repositoryCatalogService,
                 new RepositoryCatalogService.Repositories(
@@ -169,9 +169,9 @@ public class RepositoryConfiguration {
                 new ConfigValueUsageAnalysisService.ApplicationServices(
                         pluginId -> pluginRuntimeService.getConfig(pluginId).getConfig(),
                         repositoryCatalogService::listRepositories,
-                        repositoryCatalogService::listRepositoryTools,
-                        repositoryCatalogService::listAllRepositoryTools,
-                        repositoryCatalogService::getRepositoryTool,
+                        repositoryCatalogService::listRepositoryScripts,
+                        repositoryCatalogService::listAllRepositoryScripts,
+                        repositoryCatalogService::getRepositoryScript,
                         aiModelProfileRepository::findAll
                 )
         );
@@ -190,7 +190,7 @@ public class RepositoryConfiguration {
 
     @Bean
     public RepositoryWebhookService repositoryWebhookService(RepositoryCatalogService repositoryCatalogService,
-                                                                     RepositoryToolService repositoryToolService) {
+                                                                     RepositoryScriptService repositoryToolService) {
         return new RepositoryWebhookService(
                 repositoryCatalogService,
                 repositoryCatalogService.getRepos(),

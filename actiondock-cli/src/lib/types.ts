@@ -179,7 +179,6 @@ export interface ScriptDependency {
   scriptId: string;
   repositoryId: string;
   repositoryScriptId: string;
-  toolId?: string;
   versionRange?: string;
 }
 
@@ -216,7 +215,7 @@ export interface RepositoryInstallRequest {
   forcePluginUpgrade?: boolean;
 }
 
-export interface RepositoryToolDescriptor {
+export interface RepositoryScriptDescriptor {
   repositoryId: string;
   scriptId: string;
   installedScriptId?: string;
@@ -248,8 +247,8 @@ export interface RepositoryToolDescriptor {
   upstreamSyncState?: string;
 }
 
-export interface RepositoryToolDetail {
-  descriptor: RepositoryToolDescriptor;
+export interface RepositoryScriptDetail {
+  descriptor: RepositoryScriptDescriptor;
   source?: string;
   pythonRequirements?: string;
   configTemplate: RepositoryConfigTemplateItem[];
@@ -471,7 +470,6 @@ export interface ConfigValueView {
   secret?: boolean;
   repositoryId?: string | null;
   repositoryScriptId?: string | null;
-  repositoryToolId?: string | null;
   repositoryVersion?: string | null;
   publishMode?: string | null;
   managed?: boolean;

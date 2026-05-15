@@ -1,4 +1,4 @@
-import type { RepositoryDefinition, RepositoryToolDescriptor, ScriptDependency } from "../shared/types";
+import type { RepositoryDefinition, RepositoryScriptDescriptor, ScriptDependency } from "../shared/types";
 
 const SCRIPT_INVOKE_PATTERN = /scripts\s*\.\s*invoke\s*\(\s*(["'`])([^"'`]+)\1/g;
 const SCRIPT_INVOKE_ANY_PATTERN = /scripts\s*\.\s*invoke\s*\(/g;
@@ -39,10 +39,10 @@ export function normalizeScriptDependencies(dependencies: ScriptDependency[]): S
     .map((item) => ({
       scriptId: item.scriptId.trim(),
       repositoryId: item.repositoryId.trim(),
-      toolId: item.toolId.trim(),
+      repositoryScriptId: item.repositoryScriptId.trim(),
       versionRange: item.versionRange?.trim() || undefined
     }))
-    .filter((item) => item.scriptId && item.repositoryId && item.toolId);
+    .filter((item) => item.scriptId && item.repositoryId && item.repositoryScriptId);
 }
 
 function getPreferredRepositoryIds(
@@ -62,7 +62,7 @@ function getPreferredRepositoryIds(
 export function autoMatchScriptDependency(
   scriptId: string,
   repositories: Pick<RepositoryDefinition, "id">[],
-  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "scriptId" | "version">[],
+  repositoryTools: Pick<RepositoryScriptDescriptor, "repositoryId" | "scriptId" | "version">[],
   preferredRepositoryId?: string
 ): ScriptDependency | undefined {
   const normalizedScriptId = scriptId.trim();
@@ -81,7 +81,7 @@ export function autoMatchScriptDependency(
     return {
       scriptId: normalizedScriptId,
       repositoryId,
-      toolId: matched.scriptId,
+      repositoryScriptId: matched.scriptId,
       versionRange: matched.version ? `>= ${matched.version}` : undefined
     };
   }
@@ -90,16 +90,16 @@ export function autoMatchScriptDependency(
 
 export interface ScriptDependencyLocalSource {
   repositoryId?: string | null;
-  repositoryToolId?: string | null;
+  repositoryScriptId?: string | null;
   repositoryVersion?: string | null;
 }
 
 export interface ResolveAutoScriptDependencyOptions {
   scriptId: string;
   repositories: Pick<RepositoryDefinition, "id">[];
-  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "scriptId" | "version">[];
+  repositoryTools: Pick<RepositoryScriptDescriptor, "repositoryId" | "scriptId" | "version">[];
   preferredRepositoryId?: string;
-  declaredDependency?: Pick<ScriptDependency, "repositoryId" | "toolId" | "versionRange"> | null;
+  declaredDependency?: Pick<ScriptDependency, "repositoryId" | "repositoryScriptId" | "versionRange"> | null;
   localScriptSource?: ScriptDependencyLocalSource | null;
 }
 
@@ -116,20 +116,20 @@ function resolveRepositoryToolVersionRange(
 function toMatchedDependency(
   scriptId: string,
   repositoryId: string | undefined | null,
-  toolId: string | undefined | null,
+  repositoryScriptId: string | undefined | null,
   versionRange?: string,
   repositoryVersion?: string | null
 ): ScriptDependency | undefined {
   const normalizedScriptId = scriptId.trim();
   const normalizedRepositoryId = repositoryId?.trim();
-  const normalizedToolId = toolId?.trim();
+  const normalizedToolId = repositoryScriptId?.trim();
   if (!normalizedScriptId || !normalizedRepositoryId || !normalizedToolId) {
     return undefined;
   }
   return {
     scriptId: normalizedScriptId,
     repositoryId: normalizedRepositoryId,
-    toolId: normalizedToolId,
+    repositoryScriptId: normalizedToolId,
     versionRange: resolveRepositoryToolVersionRange(versionRange, repositoryVersion)
   };
 }
@@ -168,7 +168,7 @@ export function resolveAutoScriptDependency({
   const declaredMatch = toMatchedDependency(
     normalizedScriptId,
     declaredDependency?.repositoryId,
-    declaredDependency?.toolId,
+    declaredDependency?.repositoryScriptId,
     declaredDependency?.versionRange
   );
   if (declaredMatch) {
@@ -178,7 +178,7 @@ export function resolveAutoScriptDependency({
   const localSourceMatch = toMatchedDependency(
     normalizedScriptId,
     localScriptSource?.repositoryId,
-    localScriptSource?.repositoryToolId,
+    localScriptSource?.repositoryScriptId,
     undefined,
     localScriptSource?.repositoryVersion
   );

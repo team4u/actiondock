@@ -1,5 +1,7 @@
 package org.team4u.actiondock.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +27,7 @@ public class ScriptDefinition {
     private PublishedScriptRevision publishedRevision;
     private ScriptScope scope = ScriptScope.PERSONAL;
     private String repositoryId;
+    @JsonAlias("repositoryToolId")
     private String repositoryScriptId;
     private String repositoryVersion;
     private ScriptSourceMetadata sourceMetadata = new ScriptSourceMetadata();
@@ -179,11 +182,6 @@ public class ScriptDefinition {
     public ScriptDefinition setRepositoryScriptId(String repositoryScriptId) {
         this.repositoryScriptId = repositoryScriptId;
         return this;
-    }
-
-    @Deprecated
-    public String getRepositoryToolId() {
-        return getRepositoryScriptId();
     }
 
     @Deprecated

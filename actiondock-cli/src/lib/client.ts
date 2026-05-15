@@ -28,8 +28,8 @@ import type {
   RepositoryLocalAsset,
   RepositoryInstallRequest,
   ResourceLifecycleOperationView,
-  RepositoryToolDescriptor,
-  RepositoryToolDetail,
+  RepositoryScriptDescriptor,
+  RepositoryScriptDetail,
   PublishedScriptRevision,
   ScriptScheduleUpsertRequest,
   ScriptScheduleView,
@@ -380,15 +380,15 @@ export class ActionDockClient {
     return this.requestJson<ProjectRepositoryResolution>(`/api/repositories/resolve?${new URLSearchParams({ repositoryId }).toString()}`);
   }
 
-  async listRepositoryTools(repositoryId?: string): Promise<RepositoryToolDescriptor[]> {
+  async listRepositoryScripts(repositoryId?: string): Promise<RepositoryScriptDescriptor[]> {
     if (repositoryId) {
-      return this.requestJson<RepositoryToolDescriptor[]>(`/api/repositories/${repositoryId}/scripts`);
+      return this.requestJson<RepositoryScriptDescriptor[]>(`/api/repositories/${repositoryId}/scripts`);
     }
-    return this.requestJson<RepositoryToolDescriptor[]>("/api/repositories/scripts");
+    return this.requestJson<RepositoryScriptDescriptor[]>("/api/repositories/scripts");
   }
 
-  async getRepositoryTool(repositoryId: string, scriptId: string): Promise<RepositoryToolDetail> {
-    return this.requestJson<RepositoryToolDetail>(`/api/repositories/${repositoryId}/scripts/${scriptId}`);
+  async getRepositoryScript(repositoryId: string, scriptId: string): Promise<RepositoryScriptDetail> {
+    return this.requestJson<RepositoryScriptDetail>(`/api/repositories/${repositoryId}/scripts/${scriptId}`);
   }
 
   async installRepositoryTool(

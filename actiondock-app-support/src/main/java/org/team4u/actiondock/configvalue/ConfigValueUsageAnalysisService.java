@@ -57,9 +57,9 @@ public class ConfigValueUsageAnalysisService {
     public record ApplicationServices(
             Function<String, Map<String, Object>> loadPluginConfig,
             Supplier<List<RepositoryDefinition>> listRepositories,
-            Function<String, List<RepositoryToolDescriptor>> listRepositoryTools,
-            Supplier<List<RepositoryToolDescriptor>> listAllRepositoryTools,
-            BiFunction<String, String, RepositoryToolDetail> getRepositoryTool,
+            Function<String, List<RepositoryScriptDescriptor>> listRepositoryScripts,
+            Supplier<List<RepositoryScriptDescriptor>> listAllRepositoryScripts,
+            BiFunction<String, String, RepositoryScriptDetail> getRepositoryScript,
             Supplier<List<AiModelProfile>> listModelProfiles
     ) {
     }
@@ -85,7 +85,7 @@ public class ConfigValueUsageAnalysisService {
         List<ImpactScript> impactedScripts = ScriptImpactAnalyzer.buildImpactMap(
                 key, cascadingConfigKeys, ctx.scripts, ctx.schedules,
                 refs.pluginCascadeMatches, refs.templateDeclarations,
-                ctx.scriptsById, ctx.allToolDescriptors
+                ctx.scriptsById, ctx.allScriptDescriptors
         );
 
         return new ConfigValueInsight(
@@ -107,14 +107,14 @@ public class ConfigValueUsageAnalysisService {
         List<ScriptDefinition> scripts = repos.script().findAll();
         List<ScriptSchedule> schedules = repos.scriptSchedule().findAll();
         List<PluginRegistration> plugins = repos.pluginRegistry().findAll();
-        List<RepositoryToolDescriptor> allToolDescriptors = services.listAllRepositoryTools().get();
+        List<RepositoryScriptDescriptor> allScriptDescriptors = services.listAllRepositoryScripts().get();
         Map<String, Set<String>> configDependencies = buildConfigDependencies(configValues);
         Map<String, ScriptDefinition> scriptsById = buildScriptsById(scripts);
         Map<String, String> repositoryNameById = services.listRepositories().get().stream()
                 .filter(r -> r.getId() != null && r.getName() != null)
                 .collect(Collectors.toMap(RepositoryDefinition::getId, RepositoryDefinition::getName, (a, b) -> a));
         return new AnalysisContext(configValues, scripts, schedules, plugins,
-                allToolDescriptors, configDependencies, scriptsById, repositoryNameById);
+                allScriptDescriptors, configDependencies, scriptsById, repositoryNameById);
     }
 
     private AnalysisReferences collectAnalysisReferences(String key,
@@ -136,7 +136,7 @@ public class ConfigValueUsageAnalysisService {
             List<ScriptDefinition> scripts,
             List<ScriptSchedule> schedules,
             List<PluginRegistration> plugins,
-            List<RepositoryToolDescriptor> allToolDescriptors,
+            List<RepositoryScriptDescriptor> allScriptDescriptors,
             Map<String, Set<String>> configDependencies,
             Map<String, ScriptDefinition> scriptsById,
             Map<String, String> repositoryNameById
@@ -183,7 +183,7 @@ public class ConfigValueUsageAnalysisService {
                         script.getName(),
                         script.getScope() == null ? null : script.getScope().name().toUpperCase(Locale.ROOT),
                         script.getRepositoryId(),
-                        script.getRepositoryToolId(),
+                        script.getRepositoryScriptId(),
                         script.getRepositoryVersion()
                 ))
                 .sorted(Comparator.comparing(ScriptReference::scriptId))
@@ -272,10 +272,10 @@ public class ConfigValueUsageAnalysisService {
     }
 
     private Optional<ManagedTemplate> resolveManagedTemplate(ConfigValue value, Map<String, String> repositoryNameById) {
-        if (!value.isManaged() || value.getRepositoryId() == null || value.getRepositoryToolId() == null) {
+        if (!value.isManaged() || value.getRepositoryId() == null || value.getRepositoryScriptId() == null) {
             return Optional.empty();
         }
-        RepositoryToolDetail detail = services.getRepositoryTool().apply(value.getRepositoryId(), value.getRepositoryToolId());
+        RepositoryScriptDetail detail = services.getRepositoryScript().apply(value.getRepositoryId(), value.getRepositoryScriptId());
         ConfigTemplateItem template = detail.configTemplate().stream()
                 .filter(item -> value.getKey().equals(item.key()))
                 .findFirst()
@@ -301,28 +301,28 @@ public class ConfigValueUsageAnalysisService {
     private static ConfigValueOrigin resolveOrigin(ConfigValue value,
                                                    ManagedTemplate managedTemplate,
                                                    List<TemplateDeclaration> templateDeclarations) {
-        if (value.getRepositoryId() == null && value.getRepositoryToolId() == null && value.getRepositoryVersion() == null) {
+        if (value.getRepositoryId() == null && value.getRepositoryScriptId() == null && value.getRepositoryVersion() == null) {
             return null;
         }
         if (managedTemplate != null) {
             return new ConfigValueOrigin(
                     managedTemplate.repositoryId(),
                     managedTemplate.repositoryName(),
-                    managedTemplate.toolId(),
-                    managedTemplate.toolName(),
+                    managedTemplate.repositoryScriptId(),
+                    managedTemplate.scriptName(),
                     managedTemplate.version()
             );
         }
         TemplateDeclaration fallback = templateDeclarations.stream()
                 .filter(item -> Objects.equals(item.repositoryId(), value.getRepositoryId())
-                        && Objects.equals(item.toolId(), value.getRepositoryToolId()))
+                        && Objects.equals(item.repositoryScriptId(), value.getRepositoryScriptId()))
                 .findFirst()
                 .orElse(null);
         return new ConfigValueOrigin(
                 value.getRepositoryId(),
                 fallback == null ? null : fallback.repositoryName(),
-                value.getRepositoryToolId(),
-                fallback == null ? null : fallback.toolName(),
+                value.getRepositoryScriptId(),
+                fallback == null ? null : fallback.scriptName(),
                 value.getRepositoryVersion()
         );
     }
@@ -336,23 +336,23 @@ public class ConfigValueUsageAnalysisService {
             declarations.addAll(collectDeclarationsFromRepository(repository, key));
         }
         return declarations.stream()
-                .sorted(Comparator.comparing(TemplateDeclaration::repositoryId).thenComparing(TemplateDeclaration::toolId))
+                .sorted(Comparator.comparing(TemplateDeclaration::repositoryId).thenComparing(TemplateDeclaration::repositoryScriptId))
                 .toList();
     }
 
     private List<TemplateDeclaration> collectDeclarationsFromRepository(RepositoryDefinition repository, String key) {
         List<TemplateDeclaration> declarations = new ArrayList<>();
-        List<RepositoryToolDescriptor> tools;
+        List<RepositoryScriptDescriptor> scripts;
         try {
-            tools = services.listRepositoryTools().apply(repository.getId());
+            scripts = services.listRepositoryScripts().apply(repository.getId());
         } catch (RuntimeException exception) {
             log.log(System.Logger.Level.DEBUG, "扫描跳过: {0}", exception.getMessage());
             return declarations;
         }
-        for (RepositoryToolDescriptor tool : tools) {
-            RepositoryToolDetail detail;
+        for (RepositoryScriptDescriptor script : scripts) {
+            RepositoryScriptDetail detail;
             try {
-                detail = services.getRepositoryTool().apply(repository.getId(), tool.scriptId());
+                detail = services.getRepositoryScript().apply(repository.getId(), script.scriptId());
             } catch (RuntimeException exception) {
                 log.log(System.Logger.Level.DEBUG, "扫描跳过: {0}", exception.getMessage());
                 continue;
@@ -360,20 +360,20 @@ public class ConfigValueUsageAnalysisService {
             detail.configTemplate().stream()
                     .filter(item -> key.equals(item.key()))
                     .findFirst()
-                    .ifPresent(item -> declarations.add(toTemplateDeclaration(repository, tool, item)));
+                    .ifPresent(item -> declarations.add(toTemplateDeclaration(repository, script, item)));
         }
         return declarations;
     }
 
     private static TemplateDeclaration toTemplateDeclaration(RepositoryDefinition repository,
-                                                              RepositoryToolDescriptor tool,
+                                                              RepositoryScriptDescriptor script,
                                                               ConfigTemplateItem item) {
         return new TemplateDeclaration(
                 repository.getId(),
                 repository.getName(),
-                tool.scriptId(),
-                tool.displayName(),
-                tool.version(),
+                script.scriptId(),
+                script.displayName(),
+                script.version(),
                 NormalizeUtils.normalizeNullable(item.label()),
                 item.secret(),
                 item.resolvePublishMode(),
@@ -443,7 +443,7 @@ public class ConfigValueUsageAnalysisService {
                                   String scriptName,
                                   String scope,
                                   String repositoryId,
-                                  String repositoryToolId,
+                                  String repositoryScriptId,
                                   String repositoryVersion) {
     }
 
@@ -455,8 +455,8 @@ public class ConfigValueUsageAnalysisService {
 
     public record TemplateDeclaration(String repositoryId,
                                       String repositoryName,
-                                      String toolId,
-                                      String toolName,
+                                      String repositoryScriptId,
+                                      String scriptName,
                                       String version,
                                       String label,
                                       boolean secret,
@@ -468,15 +468,15 @@ public class ConfigValueUsageAnalysisService {
                                String scriptName,
                                String scope,
                                String repositoryId,
-                               String repositoryToolId,
+                               String repositoryScriptId,
                                String repositoryVersion,
                                List<String> reasons) {
     }
 
     public record ConfigValueOrigin(String repositoryId,
                                     String repositoryName,
-                                    String toolId,
-                                    String toolName,
+                                    String repositoryScriptId,
+                                    String scriptName,
                                     String version) {
     }
 
@@ -490,8 +490,8 @@ public class ConfigValueUsageAnalysisService {
     public record ManagedTemplate(String key,
                                   String repositoryId,
                                   String repositoryName,
-                                  String toolId,
-                                  String toolName,
+                                  String repositoryScriptId,
+                                  String scriptName,
                                   String version,
                                   String label,
                                   boolean secret,
@@ -504,7 +504,7 @@ public class ConfigValueUsageAnalysisService {
                     .setDescription(label)
                     .setSecret(secret)
                     .setRepositoryId(repositoryId)
-                    .setRepositoryToolId(toolId)
+                    .setRepositoryScriptId(repositoryScriptId)
                     .setRepositoryVersion(version)
                     .setPublishMode(publishMode)
                     .setManaged(true)

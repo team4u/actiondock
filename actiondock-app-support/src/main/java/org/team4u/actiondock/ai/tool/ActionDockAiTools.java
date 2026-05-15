@@ -261,7 +261,7 @@ public final class ActionDockAiTools {
                 "inputSchema", script.getInputSchema(),
                 "outputSchema", script.getOutputSchema(),
                 "repositoryId", script.getRepositoryId(),
-                "repositoryToolId", script.getRepositoryToolId(),
+                "repositoryScriptId", script.getRepositoryScriptId(),
                 "updatedAt", time(script.getUpdatedAt())
         );
         if (includeSource) {

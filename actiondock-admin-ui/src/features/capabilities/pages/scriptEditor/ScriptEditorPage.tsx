@@ -749,7 +749,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                 <Descriptions.Item label="版本">{editor.currentScript.version}</Descriptions.Item>
               )}
               <Descriptions.Item label="来源仓库">{editor.currentScript.repositoryId || "-"}</Descriptions.Item>
-              <Descriptions.Item label="来源脚本">{editor.currentScript.repositoryToolId || "-"}</Descriptions.Item>
+              <Descriptions.Item label="来源脚本">{editor.currentScript.repositoryScriptId || "-"}</Descriptions.Item>
               <Descriptions.Item label={editor.developmentStatus ? "上次同步仓库版本" : "仓库版本"}>
                 {editor.currentScript.repositoryVersion || "-"}
               </Descriptions.Item>

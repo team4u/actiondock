@@ -14,8 +14,8 @@ import type {
   RepositoryWebhookDescriptor,
   RepositoryWebhookDetail,
   RepositoryLocalAsset,
-  RepositoryToolDescriptor,
-  RepositoryToolDetail,
+  RepositoryScriptDescriptor,
+  RepositoryScriptDetail,
   SchemaFieldDescriptor,
   ExecutionPresetView,
   ScriptScheduleView,
@@ -316,7 +316,7 @@ export function renderRepositoryWebhookDetail(item: RepositoryWebhookDetail): st
   if (descriptor.scriptDependencies.length > 0) {
     lines.push("ScriptDependencies:");
     for (const dependency of descriptor.scriptDependencies) {
-      lines.push(`  - ${dependency.scriptId} => ${dependency.repositoryId}/${dependency.repositoryScriptId ?? dependency.toolId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`);
+      lines.push(`  - ${dependency.scriptId} => ${dependency.repositoryId}/${dependency.repositoryScriptId ?? dependency.repositoryScriptId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`);
     }
   }
   if (item.configTemplate.length > 0) {
@@ -393,7 +393,7 @@ export function renderProjectRepositoryResolution(item: ProjectRepositoryResolut
   return lines.join("\n");
 }
 
-export function renderRepositoryToolList(items: RepositoryToolDescriptor[]): string {
+export function renderRepositoryScriptList(items: RepositoryScriptDescriptor[]): string {
   if (items.length === 0) {
     return "没有仓库脚本。";
   }
@@ -407,7 +407,7 @@ export function renderRepositoryToolList(items: RepositoryToolDescriptor[]): str
     .join("\n");
 }
 
-export function renderRepositoryToolDetail(item: RepositoryToolDetail): string {
+export function renderRepositoryScriptDetail(item: RepositoryScriptDetail): string {
   const descriptor = item.descriptor;
   const lines = [
     `RepositoryScript: ${descriptor.repositoryId}/${descriptor.scriptId}`,
@@ -562,7 +562,7 @@ export function renderConfigValueDetail(item: ConfigValueDetailView | ConfigValu
     lines.push(`Description: ${item.description}`);
   }
   if (item.repositoryId) {
-    lines.push(`Repository: ${item.repositoryId}${(item.repositoryScriptId ?? item.repositoryToolId) ? `/${item.repositoryScriptId ?? item.repositoryToolId}` : ""}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
+    lines.push(`Repository: ${item.repositoryId}${(item.repositoryScriptId ?? item.repositoryScriptId) ? `/${item.repositoryScriptId ?? item.repositoryScriptId}` : ""}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
   }
   if ("impactedScripts" in item && item.impactedScripts) {
     lines.push(`ImpactedScripts: ${item.impactedScripts.length}`);

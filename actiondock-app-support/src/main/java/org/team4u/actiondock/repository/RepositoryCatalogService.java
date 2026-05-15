@@ -310,11 +310,11 @@ public class RepositoryCatalogService {
         }
     }
 
-    public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listAllRepositoryTools() {
+    public List<RepositoryCatalogTypes.RepositoryScriptDescriptor> listAllRepositoryScripts() {
         return listAllFromEnabledRepositories(
-                this::listRepositoryTools,
-                Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::repositoryId)
-                        .thenComparing(RepositoryCatalogTypes.RepositoryToolDescriptor::scriptId));
+                this::listRepositoryScripts,
+                Comparator.comparing(RepositoryCatalogTypes.RepositoryScriptDescriptor::repositoryId)
+                        .thenComparing(RepositoryCatalogTypes.RepositoryScriptDescriptor::scriptId));
     }
 
     public List<RepositoryCatalogTypes.RepositoryWebhookDescriptor> listAllRepositoryWebhooks() {
@@ -324,7 +324,7 @@ public class RepositoryCatalogService {
                         .thenComparing(RepositoryCatalogTypes.RepositoryWebhookDescriptor::webhookId));
     }
 
-    public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listRepositoryTools(String repositoryId) {
+    public List<RepositoryCatalogTypes.RepositoryScriptDescriptor> listRepositoryScripts(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         return index.safeScripts().stream()
@@ -332,7 +332,7 @@ public class RepositoryCatalogService {
                     String scriptPath = entry.scriptPath();
                     return toDescriptor(repository, readToolFile(repository, scriptPath), scriptPath);
                 })
-                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::scriptId))
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryScriptDescriptor::scriptId))
                 .toList();
     }
 
@@ -394,7 +394,7 @@ public class RepositoryCatalogService {
         return new RepositoryCatalogTypes.RepositorySkillDetail(skillService().toSkillDescriptor(repository, skill, entry.skillPath()), content);
     }
 
-    public RepositoryCatalogTypes.RepositoryToolDetail getRepositoryTool(String repositoryId, String toolId) {
+    public RepositoryCatalogTypes.RepositoryScriptDetail getRepositoryScript(String repositoryId, String toolId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.RepositoryIndexEntry entry = findEntryById(
@@ -415,7 +415,7 @@ public class RepositoryCatalogService {
         String pythonRequirements = NormalizeUtils.isBlank(tool.pythonRequirementsPath())
                 ? null
                 : readRepositoryFile(repository, parentDirectoryPath(scriptPath).resolve(tool.pythonRequirementsPath()));
-        return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, scriptPath), source, pythonRequirements, configTemplate, scheduleTemplate);
+        return new RepositoryCatalogTypes.RepositoryScriptDetail(toDescriptor(repository, tool, scriptPath), source, pythonRequirements, configTemplate, scheduleTemplate);
     }
 
     public RepositoryCatalogTypes.RepositoryWebhookDetail getRepositoryWebhook(String repositoryId, String webhookId) {
@@ -530,7 +530,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    RepositoryCatalogTypes.ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryToolDetail detail) {
+    RepositoryCatalogTypes.ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryScriptDetail detail) {
         String toolId = detail.descriptor().scriptId();
         String toolPath = readRepositoryIndex(repository).safeScripts().stream()
                 .filter(item -> toolId.equals(item.id()))
@@ -554,8 +554,8 @@ public class RepositoryCatalogService {
         return new RepositoryCatalogTypes.ToolSourceState(parentDirectoryPath(webhookPath).value(), commit, digest);
     }
 
-    private String computeToolDigest(RepositoryCatalogTypes.RepositoryToolDetail detail) {
-        RepositoryCatalogTypes.RepositoryToolDescriptor d = detail.descriptor();
+    private String computeToolDigest(RepositoryCatalogTypes.RepositoryScriptDetail detail) {
+        RepositoryCatalogTypes.RepositoryScriptDescriptor d = detail.descriptor();
         LinkedHashMap<String, Object> values = new LinkedHashMap<>();
         values.put("scriptId", d.scriptId());
         values.put("displayName", d.displayName());
@@ -716,8 +716,8 @@ public class RepositoryCatalogService {
         return jsonCodec.readMap(readRepositoryFile(getRepository(repositoryId), Path.of(schemaPath)));
     }
 
-    private RepositoryCatalogTypes.RepositoryToolDescriptor toDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.ToolFile tool, String toolPath) {
-        RepositoryCatalogTypes.RepositoryToolDescriptor base = toDescriptorWithoutUpstream(repository, tool, toolPath);
+    private RepositoryCatalogTypes.RepositoryScriptDescriptor toDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.ToolFile tool, String toolPath) {
+        RepositoryCatalogTypes.RepositoryScriptDescriptor base = toDescriptorWithoutUpstream(repository, tool, toolPath);
         RepositoryLocalAsset asset = repos.repositoryLocalAssetRepository()
                 .findByUpstreamAsset(UpstreamAssetType.SCRIPT, repository.getId(), tool.id())
                 .orElse(null);
@@ -791,12 +791,12 @@ public class RepositoryCatalogService {
                                              RepositoryCatalogTypes.ToolFile tool,
                                              String toolPath,
                                              RepositoryLocalAsset binding,
-                                             RepositoryCatalogTypes.RepositoryToolDescriptor base) {
+                                             RepositoryCatalogTypes.RepositoryScriptDescriptor base) {
         ScriptDefinition workingCopy = repos.scriptRepository().findById(binding.getLocalAssetId()).orElse(null);
         if (workingCopy == null) {
             return new UpstreamInfo(false, true, RepositoryCatalogTypes.UpstreamSyncState.REMOTE_CHANGES.name());
         }
-        RepositoryCatalogTypes.ToolSourceState state = resolveToolSourceState(repository, new RepositoryCatalogTypes.RepositoryToolDetail(
+        RepositoryCatalogTypes.ToolSourceState state = resolveToolSourceState(repository, new RepositoryCatalogTypes.RepositoryScriptDetail(
                 base,
                 readRepositoryFile(repository, parentDirectoryPath(toolPath).resolve(tool.sourcePath())),
                 tool.pythonRequirementsPath() == null ? null : readRepositoryFile(repository, parentDirectoryPath(toolPath).resolve(tool.pythonRequirementsPath())),
@@ -836,8 +836,8 @@ public class RepositoryCatalogService {
         );
     }
 
-    private RepositoryCatalogTypes.RepositoryToolDescriptor toDescriptorWithoutUpstream(RepositoryDefinition repository, RepositoryCatalogTypes.ToolFile tool, String toolPath) {
-        return new RepositoryCatalogTypes.RepositoryToolDescriptor(
+    private RepositoryCatalogTypes.RepositoryScriptDescriptor toDescriptorWithoutUpstream(RepositoryDefinition repository, RepositoryCatalogTypes.ToolFile tool, String toolPath) {
+        return new RepositoryCatalogTypes.RepositoryScriptDescriptor(
                 repository.getId(), tool.id(),
                 tool.name(), tool.version(), tool.description(), tool.releaseNotes(), tool.owner(),
                 NormalizeUtils.nullSafeList(tool.tags()),

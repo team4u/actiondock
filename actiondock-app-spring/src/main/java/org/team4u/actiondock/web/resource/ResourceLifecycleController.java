@@ -11,7 +11,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
-import org.team4u.actiondock.repository.RepositoryToolService;
+import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
 import org.team4u.actiondock.shared.NormalizeUtils;
 import org.team4u.actiondock.web.common.ApiResponse;
@@ -28,7 +28,7 @@ import java.util.Locale;
 @RestController
 @RequestMapping("/api/resource-lifecycle")
 public class ResourceLifecycleController {
-    private static final String RESOURCE_REPOSITORY_TOOL = "REPOSITORY_TOOL";
+    private static final String RESOURCE_REPOSITORY_SCRIPT = "REPOSITORY_SCRIPT";
     private static final String RESOURCE_REPOSITORY_WEBHOOK = "REPOSITORY_WEBHOOK";
     private static final String RESOURCE_REPOSITORY_PLUGIN = "REPOSITORY_PLUGIN";
     private static final String RESOURCE_CAPABILITY_PACKAGE = "CAPABILITY_PACKAGE";
@@ -42,14 +42,14 @@ public class ResourceLifecycleController {
     private static final String OP_UNINSTALL = "uninstall";
 
     private final RepositoryCatalogService repositoryCatalogService;
-    private final RepositoryToolService repositoryToolService;
+    private final RepositoryScriptService repositoryToolService;
     private final RepositoryWebhookService repositoryWebhookService;
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final ObjectMapper objectMapper;
 
     public ResourceLifecycleController(RepositoryCatalogService repositoryCatalogService,
-                                       RepositoryToolService repositoryToolService,
+                                       RepositoryScriptService repositoryToolService,
                                        RepositoryWebhookService repositoryWebhookService,
                                        RepositoryPluginService repositoryPluginService,
                                        RepositoryCapabilityPackageService repositoryCapabilityPackageService,
@@ -68,7 +68,7 @@ public class ResourceLifecycleController {
         String resourceType = normalizeType(safeRequest.getResourceType());
         String operation = normalizeOperation(safeRequest.getOperation());
         Object result = switch (resourceType) {
-            case RESOURCE_REPOSITORY_TOOL -> executeRepositoryTool(operation, safeRequest);
+            case RESOURCE_REPOSITORY_SCRIPT -> executeRepositoryTool(operation, safeRequest);
             case RESOURCE_REPOSITORY_WEBHOOK -> executeRepositoryWebhook(operation, safeRequest);
             case RESOURCE_REPOSITORY_PLUGIN -> executeRepositoryPlugin(operation, safeRequest);
             case RESOURCE_CAPABILITY_PACKAGE -> executeCapabilityPackage(operation, safeRequest);
@@ -94,16 +94,16 @@ public class ResourceLifecycleController {
                     convertPayload(request.getPayload(), RepositoryCatalogTypes.RepositoryLocalAssetRequest.class));
             case OP_UPDATE_LOCAL -> repositoryToolService.updateLocalAsset(normalizeRepositoryId(request),
                     normalizeResourceId(request, "scriptId 不能为空"), toolOptions(request.getPayload()));
-            case OP_PUBLISH -> repositoryToolService.publishTool(normalizeRepositoryId(request),
+            case OP_PUBLISH -> repositoryToolService.publishScript(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPublishRequest.class));
             case OP_PREVIEW -> repositoryToolService.previewPublishConfig(
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPublishConfigPreviewRequest.class));
             case OP_UNINSTALL -> {
                 String installedResourceId = NormalizeUtils.normalize(request.getInstalledResourceId(), "installedResourceId 不能为空");
-                repositoryToolService.uninstallTool(installedResourceId);
+                repositoryToolService.uninstallScript(installedResourceId);
                 yield null;
             }
-            default -> throw unsupported(operation, RESOURCE_REPOSITORY_TOOL);
+            default -> throw unsupported(operation, RESOURCE_REPOSITORY_SCRIPT);
         };
     }
 

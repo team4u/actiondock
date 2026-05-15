@@ -208,7 +208,7 @@ describe("api request auth handling", () => {
         status: 0,
         msg: "ok",
         data: {
-          resourceType: "REPOSITORY_TOOL",
+          resourceType: "REPOSITORY_SCRIPT",
           operation: "publish",
           repositoryId: "main",
           resourceId: null,
@@ -242,7 +242,7 @@ describe("api request auth handling", () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.method).toBe("POST");
     expect(JSON.parse(init?.body as string)).toEqual({
-      resourceType: "REPOSITORY_TOOL",
+      resourceType: "REPOSITORY_SCRIPT",
       operation: "publish",
       repositoryId: "main",
       payload: {
@@ -277,8 +277,8 @@ describe("api request auth handling", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { listRepositoryTools } = await import("./api");
-    const result = await listRepositoryTools();
+    const { listRepositoryScripts } = await import("./api");
+    const result = await listRepositoryScripts();
 
     expect(result[0]).toEqual(expect.objectContaining({
       repositoryId: "main",
@@ -307,8 +307,8 @@ describe("api request auth handling", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { getRepositoryTool } = await import("./api");
-    const result = await getRepositoryTool("main", "hello");
+    const { getRepositoryScript } = await import("./api");
+    const result = await getRepositoryScript("main", "hello");
 
     expect(result.descriptor).toEqual(expect.objectContaining({
       repositoryId: "main",

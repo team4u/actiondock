@@ -273,13 +273,13 @@ export class ActionDockClient {
     async resolveProjectRepository(repositoryId) {
         return this.requestJson(`/api/repositories/resolve?${new URLSearchParams({ repositoryId }).toString()}`);
     }
-    async listRepositoryTools(repositoryId) {
+    async listRepositoryScripts(repositoryId) {
         if (repositoryId) {
             return this.requestJson(`/api/repositories/${repositoryId}/scripts`);
         }
         return this.requestJson("/api/repositories/scripts");
     }
-    async getRepositoryTool(repositoryId, scriptId) {
+    async getRepositoryScript(repositoryId, scriptId) {
         return this.requestJson(`/api/repositories/${repositoryId}/scripts/${scriptId}`);
     }
     async installRepositoryTool(repositoryId, scriptId, payload) {

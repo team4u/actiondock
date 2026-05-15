@@ -123,7 +123,7 @@ class ScriptApplicationServiceTest {
 
         assertThat(saved.isDirty()).isTrue();
         assertThat(saved.getRepositoryId()).isEqualTo("repo");
-        assertThat(saved.getRepositoryToolId()).isEqualTo("tool");
+        assertThat(saved.getRepositoryScriptId()).isEqualTo("tool");
         assertThat(saved.getSourcePath()).isEqualTo("tools/tool");
         assertThat(saved.getSourceCommit()).isEqualTo("abc123");
         assertThat(saved.getSourceDigest()).isEqualTo("digest");
@@ -379,7 +379,7 @@ class ScriptApplicationServiceTest {
         assertThat(fork.getScope()).isEqualTo(ScriptScope.PERSONAL);
         assertThat(fork.isEditable()).isTrue();
         assertThat(fork.getRepositoryId()).isEqualTo("repo");
-        assertThat(fork.getRepositoryToolId()).isEqualTo("tool");
+        assertThat(fork.getRepositoryScriptId()).isEqualTo("tool");
         assertThat(fork.getRepositoryVersion()).isEqualTo("1.0.0");
         assertThat(fork.getSource()).isEqualTo("return {'message': 'live'}");
         assertThat(fork.getPublishedRevision()).isNotNull();
@@ -395,7 +395,7 @@ class ScriptApplicationServiceTest {
         assertThat(forkSchedule.isEnabled()).isFalse();
         assertThat(forkSchedule.isEditable()).isTrue();
         assertThat(forkSchedule.getRepositoryId()).isNull();
-        assertThat(forkSchedule.getRepositoryToolId()).isNull();
+        assertThat(forkSchedule.getRepositoryScriptId()).isNull();
         assertThat(forkSchedule.getRepositoryVersion()).isNull();
         assertThat(forkSchedule.getLastTriggeredAt()).isNull();
         assertThat(forkSchedule.getLastExecutionId()).isNull();

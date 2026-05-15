@@ -23,7 +23,7 @@ public class ScriptDefinition {
     private PublishedScriptSnapshot publishedSnapshot;  // 发布快照
     private ScriptScope scope;            // PERSONAL / REPOSITORY / SAMPLE
     private String repositoryId;          // 来源仓库（仓库安装脚本或工作副本）
-    private String repositoryToolId;
+    private String repositoryScriptId;   // 来源仓库中的脚本 ID
     private String repositoryVersion;
     private boolean editable;
     private String description;

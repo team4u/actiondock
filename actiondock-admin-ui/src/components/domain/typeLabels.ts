@@ -1,4 +1,4 @@
-import type { RepositoryDefinition, RepositoryToolDescriptor } from "../../shared/types";
+import type { RepositoryDefinition, RepositoryScriptDescriptor } from "../../shared/types";
 
 export function getRepositoryTypeLabel(type: RepositoryDefinition["type"]): string {
   switch (type) {
@@ -11,6 +11,6 @@ export function getRepositoryTypeLabel(type: RepositoryDefinition["type"]): stri
   }
 }
 
-export function getScriptTypeLabel(type: RepositoryToolDescriptor["type"]): string {
+export function getScriptTypeLabel(type: RepositoryScriptDescriptor["type"]): string {
   return type === "PYTHON" ? "Python" : "Groovy";
 }

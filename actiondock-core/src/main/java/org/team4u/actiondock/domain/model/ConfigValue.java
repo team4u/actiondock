@@ -1,5 +1,7 @@
 package org.team4u.actiondock.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.time.LocalDateTime;
 
 /**
@@ -15,6 +17,7 @@ public class ConfigValue {
     private String description;
     private boolean secret;
     private String repositoryId;
+    @JsonAlias("repositoryToolId")
     private String repositoryScriptId;
     private String repositoryVersion;
     private String publishMode;
@@ -75,11 +78,6 @@ public class ConfigValue {
     public ConfigValue setRepositoryScriptId(String repositoryScriptId) {
         this.repositoryScriptId = repositoryScriptId;
         return this;
-    }
-
-    @Deprecated
-    public String getRepositoryToolId() {
-        return getRepositoryScriptId();
     }
 
     @Deprecated

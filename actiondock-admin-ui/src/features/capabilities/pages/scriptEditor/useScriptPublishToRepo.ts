@@ -3,9 +3,9 @@ import type { FormInstance } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  getRepositoryTool,
+  getRepositoryScript,
   listRepositories,
-  listRepositoryTools,
+  listRepositoryScripts,
   listToolsByRepository,
   previewRepositoryPublishConfig,
   publishRepositoryTool,
@@ -17,7 +17,7 @@ import {
 import type {
   RepositoryDefinition,
   RepositoryPublishConfigPreview,
-  RepositoryToolDescriptor,
+  RepositoryScriptDescriptor,
   ScriptDefinition,
   ScriptSchedule
 } from "../../../../shared/types";
@@ -27,7 +27,7 @@ import { getEnabledRepositories, getPublishableRepositories } from "../../../../
 import {
   buildRepositoryPublishDiffTarget,
   buildScriptDiff,
-  toRepositoryToolDiffTarget
+  toRepositoryScriptDiffTarget
 } from "../../../../services/scriptDiff";
 import type { PublishScriptDependencyDraft, PublishToRepositoryFormValues } from "./types";
 import {
@@ -44,7 +44,7 @@ function normalizeTagValues(tags: string[] | undefined): string[] {
 }
 
 function buildRepositoryToolDigestPayload(params: {
-  toolId: string;
+  repositoryScriptId: string;
   displayName: string;
   version: string;
   source?: string;
@@ -59,7 +59,7 @@ function buildRepositoryToolDigestPayload(params: {
   pluginDependencies?: Array<Record<string, unknown>>;
 }) {
   return {
-    toolId: params.toolId,
+    repositoryScriptId: params.repositoryScriptId,
     displayName: params.displayName,
     version: params.version,
     type: params.type ?? null,
@@ -106,7 +106,7 @@ export interface ScriptPublishToRepoContext {
   publishRepositoryDiffLoading: boolean;
   publishRepositoryContentUnchanged: boolean;
   publishVersionSuggestion: RepositoryPublishVersionSuggestion;
-  publishRepositoryTools: RepositoryToolDescriptor[];
+  publishRepositoryTools: RepositoryScriptDescriptor[];
   publishScriptDependencies: PublishScriptDependencyDraft[];
   publishHasDynamicScriptDependencies: boolean;
   publishConfigModes: Record<string, "INLINE" | "PLACEHOLDER">;
@@ -139,7 +139,7 @@ export function useScriptPublishToRepo({
   const [publishRepositoryDiffLoading, setPublishRepositoryDiffLoading] = useState(false);
   const [publishRepositoryContentUnchanged, setPublishRepositoryContentUnchanged] = useState(false);
   const [publishVersionSuggestion, setPublishVersionSuggestion] = useState<RepositoryPublishVersionSuggestion>({ status: "IDLE" });
-  const [publishRepositoryTools, setPublishRepositoryTools] = useState<RepositoryToolDescriptor[]>([]);
+  const [publishRepositoryTools, setPublishRepositoryTools] = useState<RepositoryScriptDescriptor[]>([]);
   const [publishScriptDependencies, setPublishScriptDependencies] = useState<PublishScriptDependencyDraft[]>([]);
   const [publishHasDynamicScriptDependencies, setPublishHasDynamicScriptDependencies] = useState(false);
   const [publishConfigModes, setPublishConfigModes] = useState<Record<string, "INLINE" | "PLACEHOLDER">>({});
@@ -149,7 +149,7 @@ export function useScriptPublishToRepo({
   const versionManuallyEditedRef = useRef(false);
   const defaultOwner = useDefaultOwner();
   const selectedRepositoryId = Form.useWatch("repositoryId", publishForm);
-  const selectedToolId = Form.useWatch("toolId", publishForm);
+  const selectedToolId = Form.useWatch("repositoryScriptId", publishForm);
   const selectedVersion = Form.useWatch("version", publishForm);
   const selectedDisplayName = Form.useWatch("displayName", publishForm);
   const selectedOwner = Form.useWatch("owner", publishForm);
@@ -168,15 +168,15 @@ export function useScriptPublishToRepo({
 
   const resolveDependencyVersionRange = (
     repositoryId: string | undefined,
-    toolId: string | undefined,
+    repositoryScriptId: string | undefined,
     currentValue?: string,
-    repositoryTools: RepositoryToolDescriptor[] = publishRepositoryTools
+    repositoryTools: RepositoryScriptDescriptor[] = publishRepositoryTools
   ): string | undefined => {
     if (currentValue?.trim()) {
       return currentValue.trim();
     }
     const descriptor = repositoryTools.find(
-      (item) => item.repositoryId === repositoryId && item.scriptId === toolId
+      (item) => item.repositoryId === repositoryId && item.scriptId === repositoryScriptId
     );
     return descriptor?.version ? `>= ${descriptor.version}` : undefined;
   };
@@ -184,7 +184,7 @@ export function useScriptPublishToRepo({
   const buildScriptDependencyDrafts = (
     script: ScriptDefinition,
     repositories: RepositoryDefinition[],
-    repositoryTools: RepositoryToolDescriptor[],
+    repositoryTools: RepositoryScriptDescriptor[],
     preferredRepositoryId?: string,
     previousDrafts: PublishScriptDependencyDraft[] = []
   ): PublishScriptDependencyDraft[] => {
@@ -202,21 +202,21 @@ export function useScriptPublishToRepo({
     const toDraft = (
       scriptId: string,
       repositoryId: string | undefined,
-      toolId: string | undefined,
+      repositoryScriptId: string | undefined,
       versionRange: string | undefined,
       state: PublishScriptDependencyDraft["state"]
     ): PublishScriptDependencyDraft => ({
       scriptId,
       repositoryId,
-      toolId,
-      versionRange: resolveDependencyVersionRange(repositoryId, toolId, versionRange, repositoryTools),
+      repositoryScriptId,
+      versionRange: resolveDependencyVersionRange(repositoryId, repositoryScriptId, versionRange, repositoryTools),
       state
     });
 
     return extractScriptDependenciesFromSource(sourceText).map(({ scriptId }) => {
       const previous = previousDraftsByScriptId.get(scriptId);
       if (previous?.state === "MANUAL") {
-        return toDraft(scriptId, previous.repositoryId, previous.toolId, previous.versionRange, "MANUAL");
+        return toDraft(scriptId, previous.repositoryId, previous.repositoryScriptId, previous.versionRange, "MANUAL");
       }
 
       const declared = declaredDependencies.get(scriptId);
@@ -230,13 +230,13 @@ export function useScriptPublishToRepo({
         localScriptSource: localScript
           ? {
               repositoryId: localScript.repositoryId,
-              repositoryToolId: localScript.repositoryToolId,
+              repositoryScriptId: localScript.repositoryScriptId,
               repositoryVersion: localScript.repositoryVersion
             }
           : undefined
       });
       if (matched) {
-        return toDraft(scriptId, matched.repositoryId, matched.toolId, matched.versionRange, "AUTO");
+        return toDraft(scriptId, matched.repositoryId, matched.repositoryScriptId, matched.versionRange, "AUTO");
       }
 
       return toDraft(scriptId, undefined, undefined, undefined, "UNRESOLVED");
@@ -252,7 +252,7 @@ export function useScriptPublishToRepo({
       const [repositories, schedules, repositoryTools] = await Promise.all([
         listRepositories(),
         listSchedules(),
-        listRepositoryTools()
+        listRepositoryScripts()
       ]);
       const enabledRepositories = getEnabledRepositories(repositories);
       const publishableRepositories = getPublishableRepositories(repositories);
@@ -286,7 +286,7 @@ export function useScriptPublishToRepo({
       versionManuallyEditedRef.current = false;
       publishForm.setFieldsValue({
         repositoryId: initialRepositoryId,
-        toolId: script.repositoryToolId || script.id,
+        repositoryScriptId: script.repositoryScriptId || script.id,
         displayName: script.name,
         version: suggestNextRepositoryVersion(script.repositoryVersion),
         owner: script.owner ?? defaultOwner,
@@ -345,7 +345,7 @@ export function useScriptPublishToRepo({
             return;
           }
 
-          const detail = await getRepositoryTool(selectedRepositoryId, selectedToolId);
+          const detail = await getRepositoryScript(selectedRepositoryId, selectedToolId);
           if (versionSuggestionRequestRef.current !== requestId) {
             return;
           }
@@ -369,12 +369,12 @@ export function useScriptPublishToRepo({
           }
           const diffTarget = publishRepositoryTarget;
           setPublishRepositoryDiff(buildScriptDiff(
-            toRepositoryToolDiffTarget(detail),
+            toRepositoryScriptDiffTarget(detail),
             diffTarget,
             { context: "publish" }
           ));
           const digestPayload = buildRepositoryToolDigestPayload({
-            toolId: selectedToolId,
+            repositoryScriptId: selectedToolId,
             displayName: diffTarget.name || "",
             version: selectedVersion === undefined ? "" : selectedVersion.trim(),
             source: diffTarget.source,
@@ -511,7 +511,7 @@ export function useScriptPublishToRepo({
       const next = { ...item, ...changedValues };
       return {
         ...next,
-        versionRange: resolveDependencyVersionRange(next.repositoryId, next.toolId, next.versionRange),
+        versionRange: resolveDependencyVersionRange(next.repositoryId, next.repositoryScriptId, next.versionRange),
         state: "MANUAL"
       };
     }));
@@ -564,7 +564,7 @@ export function useScriptPublishToRepo({
         return;
       }
       const incompleteScriptDependency = publishScriptDependencies.find(
-        (item) => !item.repositoryId?.trim() || !item.toolId?.trim()
+        (item) => !item.repositoryId?.trim() || !item.repositoryScriptId?.trim()
       );
       if (incompleteScriptDependency) {
         messageApi.error(`脚本依赖 ${incompleteScriptDependency.scriptId} 缺少仓库映射`);
@@ -573,8 +573,8 @@ export function useScriptPublishToRepo({
       const scriptDependencies = normalizeScriptDependencies(publishScriptDependencies.map((item) => ({
         scriptId: item.scriptId,
         repositoryId: item.repositoryId ?? "",
-        toolId: item.toolId ?? "",
-        versionRange: resolveDependencyVersionRange(item.repositoryId, item.toolId, item.versionRange)
+        repositoryScriptId: item.repositoryScriptId ?? "",
+        versionRange: resolveDependencyVersionRange(item.repositoryId, item.repositoryScriptId, item.versionRange)
       })));
       setPublishingToRepository(true);
       const publishedScript = await ensureCurrentScriptPublished();
@@ -584,7 +584,7 @@ export function useScriptPublishToRepo({
       }));
       const payload = {
         scriptId: publishedScript.id,
-        repositoryScriptId: values.toolId.trim(),
+        repositoryScriptId: values.repositoryScriptId.trim(),
         displayName: values.displayName.trim(),
         version: values.version.trim(),
         owner: values.owner?.trim() || undefined,

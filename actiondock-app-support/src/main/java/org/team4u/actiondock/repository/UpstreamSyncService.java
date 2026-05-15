@@ -65,7 +65,7 @@ class UpstreamSyncService {
         if (repos.repositoryLocalAssetRepository().findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, toolId).isPresent()) {
             throw new IllegalArgumentException("上游脚本已添加到本地: " + repositoryId + "/" + toolId);
         }
-        RepositoryToolDetail detail = catalog.getRepositoryTool(repositoryId, toolId);
+        RepositoryScriptDetail detail = catalog.getRepositoryScript(repositoryId, toolId);
         String scriptId = NormalizeUtils.normalizeOrDefault(request == null ? null : request.id(), detail.descriptor().scriptId());
         if (repos.scriptRepository().findById(scriptId).isPresent()) {
             throw new IllegalArgumentException("脚本 ID 已存在，请指定其他工作副本 ID: " + scriptId);
@@ -91,7 +91,7 @@ class UpstreamSyncService {
             return null;
         }
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
-        RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
+        RepositoryScriptDetail detail = catalog.getRepositoryScript(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
         String localDigest = catalog.computeWorkingCopyLocalDigest(script);
         UpstreamSyncState syncState = resolveSyncState(binding, localDigest, state);
@@ -118,7 +118,7 @@ class UpstreamSyncService {
         RepositoryLocalAsset binding = requireBinding(UpstreamAssetType.SCRIPT, script.getId());
         RepositoryDefinition repository = catalog.getRepository(binding.getRepositoryId());
         catalog.syncRepository(repository.getId());
-        RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
+        RepositoryScriptDetail detail = catalog.getRepositoryScript(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
         String localDigest = catalog.computeWorkingCopyLocalDigest(script);
         UpstreamSyncState syncState = resolveSyncState(binding, localDigest, state);
@@ -141,8 +141,8 @@ class UpstreamSyncService {
         repos.repositoryLocalAssetRepository().deleteById(binding.getId());
     }
 
-    ScriptDefinition buildBaseScriptDefinition(String scriptId, RepositoryToolDetail detail, String repositoryId) {
-        RepositoryCatalogTypes.RepositoryToolDescriptor d = detail.descriptor();
+    ScriptDefinition buildBaseScriptDefinition(String scriptId, RepositoryScriptDetail detail, String repositoryId) {
+        RepositoryCatalogTypes.RepositoryScriptDescriptor d = detail.descriptor();
         ScriptPackaging packaging = ScriptPackaging.fromNullableName(d.packaging());
         Map<String, Object> inputSchema = catalog.readSchema(repositoryId, d.inputSchemaPath());
         Map<String, Object> outputSchema = catalog.readSchema(repositoryId, d.outputSchemaPath());
@@ -180,7 +180,7 @@ class UpstreamSyncService {
                 .setUpdatedAt(now);
     }
 
-    private ScriptDefinition buildWorkingCopyScript(String scriptId, ScriptDefinition existing, RepositoryToolDetail detail) {
+    private ScriptDefinition buildWorkingCopyScript(String scriptId, ScriptDefinition existing, RepositoryScriptDetail detail) {
         LocalDateTime now = LocalDateTime.now();
         return applyLifecycle(buildBaseScriptDefinition(scriptId, detail, detail.descriptor().repositoryId()),
                 existing, ScriptScope.PERSONAL, true, now)

@@ -57,7 +57,7 @@ export ACTIONDOCK_PROFILE=local
 
 - `repository` 命令管理仓库本身：连接、同步、删除、项目知识入口解析。
 - `script repository-*` 命令管理“仓库里的脚本”：查看、安装、更新、卸载和创建工作副本。
-- 仓库脚本 ID 在 CLI 参数里仍表现为第二个位置参数，例如 `team-tools hello-groovy`。旧文档或旧响应里出现的 `toolId` 与这里的仓库脚本 ID 等价。
+- 仓库脚本 ID 在 CLI 参数里仍表现为第二个位置参数，例如 `team-tools hello-groovy`。旧文档或旧响应里出现的 `repositoryScriptId` 与这里的仓库脚本 ID 等价。
 
 ### 查看脚本列表
 

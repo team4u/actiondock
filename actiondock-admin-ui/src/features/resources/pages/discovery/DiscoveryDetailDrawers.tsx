@@ -12,8 +12,8 @@ import type {
   RepositoryWebhookDetail,
   RepositoryPluginDescriptor,
   RepositorySkillDetail,
-  RepositoryToolDescriptor,
-  RepositoryToolDetail
+  RepositoryScriptDescriptor,
+  RepositoryScriptDetail
 } from "../../../../shared/types";
 import { getScriptTypeLabel } from "../../../../components/domain/typeLabels";
 import {
@@ -37,8 +37,8 @@ interface DiscoveryDetailDrawersProps {
   packageActionKey: string | null;
   detailOpen: boolean;
   detailLoading: boolean;
-  detail: RepositoryToolDetail | null;
-  availableTools: RepositoryToolDescriptor[];
+  detail: RepositoryScriptDetail | null;
+  availableTools: RepositoryScriptDescriptor[];
   availablePlugins: RepositoryPluginDescriptor[];
   webhookDetailOpen: boolean;
   webhookDetailLoading: boolean;
@@ -55,12 +55,12 @@ interface DiscoveryDetailDrawersProps {
   onCloseSkillDetail: () => void;
   onOpenSkillInstall: (descriptor: RepositorySkillDetail["descriptor"]) => void;
   onToolLocalAssetAction: (
-    descriptor: RepositoryToolDetail["descriptor"],
+    descriptor: RepositoryScriptDetail["descriptor"],
     action: LocalAssetAction,
     mode?: AddMode,
     customLocalAssetId?: string
   ) => void | Promise<void>;
-  onAddToolToLocal: (descriptor: RepositoryToolDetail["descriptor"]) => void | Promise<void>;
+  onAddToolToLocal: (descriptor: RepositoryScriptDetail["descriptor"]) => void | Promise<void>;
   onWebhookLocalAssetAction: (
     descriptor: RepositoryWebhookDetail["descriptor"],
     action: LocalAssetAction,
@@ -291,7 +291,7 @@ export function DiscoveryDetailDrawers({
                           title: "默认值",
                           dataIndex: "defaultValue",
                           key: "defaultValue",
-                          render: (value: string | undefined, record: RepositoryToolDetail["configTemplate"][number]) =>
+                          render: (value: string | undefined, record: RepositoryScriptDetail["configTemplate"][number]) =>
                             record.secret ? <Tag color="volcano">仅占位，不带值</Tag> : (value || "-")
                         }
                       ]}

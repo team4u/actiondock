@@ -8,7 +8,7 @@ import {
   getCapabilityPackage,
   getRepositoryWebhook,
   getRepositorySkill,
-  getRepositoryTool,
+  getRepositoryScript,
   installCapabilityPackage,
   installRepositoryPlugin,
   listCapabilityPackages,
@@ -16,7 +16,7 @@ import {
   listRepositoryWebhooks,
   listRepositoryPlugins,
   listRepositorySkills,
-  listRepositoryTools,
+  listRepositoryScripts,
   uninstallCapabilityPackage,
   updateCapabilityPackage,
   updateRepositoryWebhookLocalAsset,
@@ -33,8 +33,8 @@ import type {
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
   RepositorySkillDetail,
-  RepositoryToolDescriptor,
-  RepositoryToolDetail
+  RepositoryScriptDescriptor,
+  RepositoryScriptDetail
 } from "../../../../shared/types";
 import { getErrorMessage } from "../../../../services/utils";
 import {
@@ -69,7 +69,7 @@ interface UseRepositoryDiscoveryParams {
 
 export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepositoryDiscoveryParams) {
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
-  const [tools, setTools] = useState<RepositoryToolDescriptor[]>([]);
+  const [tools, setTools] = useState<RepositoryScriptDescriptor[]>([]);
   const [webhooks, setWebhooks] = useState<RepositoryWebhookDescriptor[]>([]);
   const [packages, setPackages] = useState<CapabilityPackageDescriptor[]>([]);
   const [skills, setSkills] = useState<RepositorySkillDescriptor[]>([]);
@@ -80,7 +80,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [detail, setDetail] = useState<RepositoryToolDetail | null>(null);
+  const [detail, setDetail] = useState<RepositoryScriptDetail | null>(null);
 
   const [webhookDetailOpen, setWebhookDetailOpen] = useState(false);
   const [webhookDetailLoading, setWebhookDetailLoading] = useState(false);
@@ -106,7 +106,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     try {
       const [repositoryData, toolData, webhookData, packageData, skillData] = await Promise.all([
         listRepositories(),
-        listRepositoryTools(),
+        listRepositoryScripts(),
         listRepositoryWebhooks(),
         listCapabilityPackages(),
         listRepositorySkills()
@@ -164,11 +164,11 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     trustFilter
   }), [installFilter, plugins, repositoryFilter, searchText, trustFilter]);
 
-  const openDetail = useCallback(async (descriptor: RepositoryToolDescriptor) => {
+  const openDetail = useCallback(async (descriptor: RepositoryScriptDescriptor) => {
     setDetailOpen(true);
     setDetailLoading(true);
     try {
-      setDetail(await getRepositoryTool(descriptor.repositoryId, descriptor.scriptId));
+      setDetail(await getRepositoryScript(descriptor.repositoryId, descriptor.scriptId));
     } catch (error) {
       setDetail(null);
       messageApi.error(getErrorMessage(error, "加载脚本详情失败"));
@@ -258,7 +258,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   }, [loadData, messageApi]);
 
   const confirmToolLocalAssetAction = useCallback(async (
-    descriptor: RepositoryToolDescriptor,
+    descriptor: RepositoryScriptDescriptor,
     action: LocalAssetAction,
     mode: AddMode = "LOCKED",
     customLocalAssetId?: string
@@ -273,7 +273,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
 
     if (!detailForAction) {
       try {
-        detailForAction = await getRepositoryTool(descriptor.repositoryId, descriptor.scriptId);
+        detailForAction = await getRepositoryScript(descriptor.repositoryId, descriptor.scriptId);
       } catch (error) {
         messageApi.error(getErrorMessage(error, "读取脚本模板失败"));
         return;
@@ -368,7 +368,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     }
   }, [detail, detailOpen, loadData, messageApi, modal, navigate, openDetail]);
 
-  const confirmAddToolToLocal = useCallback(async (descriptor: RepositoryToolDescriptor) => {
+  const confirmAddToolToLocal = useCallback(async (descriptor: RepositoryScriptDescriptor) => {
     const selection: { mode: AddMode; localAssetId: string } = {
       mode: "LOCKED",
       localAssetId: localAssetId(descriptor)

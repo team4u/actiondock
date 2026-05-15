@@ -192,7 +192,7 @@ beforeAll(async () => {
           type: "GROOVY",
           version: 8,
           repositoryId: "repo-1",
-          repositoryToolId: "tool-1",
+          repositoryScriptId: "tool-1",
           repositoryVersion: "1.0.1",
           publication: { published: false, dirty: false },
           published: null

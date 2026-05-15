@@ -23,13 +23,13 @@ public class RepositoryWebhookService {
     private final UpstreamSyncService upstreamSync;
     private final WebhookRepositoryPublisher publisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
-    private final RepositoryToolService repositoryToolService;
+    private final RepositoryScriptService repositoryToolService;
     private final RepositoryDependencyResolver dependencyResolver;
 
     public RepositoryWebhookService(RepositoryCatalogService catalog,
                                         RepositoryCatalogService.Repositories repos,
                                         RepositoryConfigTemplateSyncService configTemplateSyncService,
-                                        RepositoryToolService repositoryToolService) {
+                                        RepositoryScriptService repositoryToolService) {
         this.catalog = catalog;
         this.repos = repos;
         this.configTemplateSyncService = configTemplateSyncService;
@@ -134,7 +134,7 @@ public class RepositoryWebhookService {
                                            ToolInstallationOptions options,
                                            LinkedHashSet<String> visiting) {
         for (ScriptDependency dependency : NormalizeUtils.nullSafeList(detail.descriptor().scriptDependencies())) {
-            String dependencyToolId = NormalizeUtils.normalize(dependency.getToolId(), "toolId 不能为空");
+            String dependencyToolId = NormalizeUtils.normalize(dependency.getRepositoryScriptId(), "repositoryScriptId 不能为空");
             String dependencyRepositoryId = dependencyResolver.resolveToolRepositoryId(repositoryId, dependency.getRepositoryId(), dependencyToolId);
             ScriptDefinition installed = repos.scriptRepository()
                     .findInstalledByRepositorySource(

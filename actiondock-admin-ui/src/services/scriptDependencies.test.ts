@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { autoMatchScriptDependency, extractScriptDependenciesFromSource, hasDynamicScriptDependencies, normalizeScriptDependencies, resolveAutoScriptDependency } from "./scriptDependencies";
-import type { RepositoryDefinition, RepositoryToolDescriptor } from "../shared/types";
+import type { RepositoryDefinition, RepositoryScriptDescriptor } from "../shared/types";
 
 function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinition {
   return {
@@ -14,7 +14,7 @@ function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinit
   };
 }
 
-function repositoryTool(overrides: Partial<RepositoryToolDescriptor>): RepositoryToolDescriptor {
+function repositoryTool(overrides: Partial<RepositoryScriptDescriptor>): RepositoryScriptDescriptor {
   return {
     repositoryId: "repo",
     scriptId: "child",
@@ -56,10 +56,10 @@ describe("hasDynamicScriptDependencies", () => {
 describe("normalizeScriptDependencies", () => {
   it("trims and removes incomplete items", () => {
     expect(normalizeScriptDependencies([
-      { scriptId: " child ", repositoryId: " repo ", toolId: " tool ", versionRange: " >= 1.0.0 " },
-      { scriptId: "missing", repositoryId: "", toolId: "tool" }
+      { scriptId: " child ", repositoryId: " repo ", repositoryScriptId: " tool ", versionRange: " >= 1.0.0 " },
+      { scriptId: "missing", repositoryId: "", repositoryScriptId: "tool" }
     ])).toEqual([
-      { scriptId: "child", repositoryId: "repo", toolId: "tool", versionRange: ">= 1.0.0" }
+      { scriptId: "child", repositoryId: "repo", repositoryScriptId: "tool", versionRange: ">= 1.0.0" }
     ]);
   });
 });
@@ -75,7 +75,7 @@ describe("autoMatchScriptDependency", () => {
     expect(autoMatchScriptDependency("child", repositories, repositoryTools, "b")).toEqual({
       scriptId: "child",
       repositoryId: "b",
-      toolId: "child",
+      repositoryScriptId: "child",
       versionRange: ">= 2.0.0"
     });
   });
@@ -90,7 +90,7 @@ describe("autoMatchScriptDependency", () => {
     expect(autoMatchScriptDependency("child", repositories, repositoryTools, "a")).toEqual({
       scriptId: "child",
       repositoryId: "c",
-      toolId: "child",
+      repositoryScriptId: "child",
       versionRange: ">= 3.0.0"
     });
   });
@@ -118,13 +118,13 @@ describe("resolveAutoScriptDependency", () => {
       preferredRepositoryId: "target",
       declaredDependency: {
         repositoryId: "publisher",
-        toolId: "child",
+        repositoryScriptId: "child",
         versionRange: ">= 1.0.0"
       }
     })).toEqual({
       scriptId: "child",
       repositoryId: "target",
-      toolId: "child",
+      repositoryScriptId: "child",
       versionRange: ">= 3.0.0"
     });
   });
@@ -142,13 +142,13 @@ describe("resolveAutoScriptDependency", () => {
       preferredRepositoryId: "target",
       declaredDependency: {
         repositoryId: "publisher",
-        toolId: "child",
+        repositoryScriptId: "child",
         versionRange: ">= 1.0.0"
       }
     })).toEqual({
       scriptId: "child",
       repositoryId: "publisher",
-      toolId: "child",
+      repositoryScriptId: "child",
       versionRange: ">= 1.0.0"
     });
   });
@@ -166,13 +166,13 @@ describe("resolveAutoScriptDependency", () => {
       preferredRepositoryId: "target",
       localScriptSource: {
         repositoryId: "publisher",
-        repositoryToolId: "child",
+        repositoryScriptId: "child",
         repositoryVersion: "2.0.0"
       }
     })).toEqual({
       scriptId: "child",
       repositoryId: "publisher",
-      toolId: "child",
+      repositoryScriptId: "child",
       versionRange: ">= 2.0.0"
     });
   });

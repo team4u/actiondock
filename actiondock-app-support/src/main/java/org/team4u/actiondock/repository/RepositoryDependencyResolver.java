@@ -78,7 +78,7 @@ class RepositoryDependencyResolver {
     }
 
     private boolean repositoryContainsTool(String repositoryId, String toolId) {
-        return catalog.listRepositoryTools(repositoryId).stream()
+        return catalog.listRepositoryScripts(repositoryId).stream()
                 .anyMatch(item -> Objects.equals(item.scriptId(), toolId));
     }
 

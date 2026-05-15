@@ -11,7 +11,7 @@ public record ConfigValueDetailView(
         String description,
         boolean secret,
         String repositoryId,
-        String repositoryToolId,
+        String repositoryScriptId,
         String repositoryVersion,
         String publishMode,
         boolean managed,
@@ -43,7 +43,7 @@ public record ConfigValueDetailView(
                                   String scriptName,
                                   String scope,
                                   String repositoryId,
-                                  String repositoryToolId,
+                                  String repositoryScriptId,
                                   String repositoryVersion) {
     }
 
@@ -55,8 +55,8 @@ public record ConfigValueDetailView(
 
     public record TemplateDeclaration(String repositoryId,
                                       String repositoryName,
-                                      String toolId,
-                                      String toolName,
+                                      String repositoryScriptId,
+                                      String scriptName,
                                       String version,
                                       String label,
                                       boolean secret,
@@ -68,15 +68,15 @@ public record ConfigValueDetailView(
                                String scriptName,
                                String scope,
                                String repositoryId,
-                               String repositoryToolId,
+                               String repositoryScriptId,
                                String repositoryVersion,
                                List<String> reasons) {
     }
 
     public record Origin(String repositoryId,
                          String repositoryName,
-                         String toolId,
-                         String toolName,
+                         String repositoryScriptId,
+                         String scriptName,
                          String version) {
     }
 

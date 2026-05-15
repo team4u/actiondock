@@ -39,7 +39,7 @@ import java.util.regex.Pattern;
  *
  * @author jay.wu
  */
-final class ToolRepositoryPublisher {
+final class ScriptRepositoryPublisher {
     private static final Pattern PLUGIN_INVOKE_PATTERN = Pattern.compile(
             "plugins\\s*\\.\\s*invoke\\s*\\(\\s*([\"'`])([^\"'`]+)\\1\\s*,\\s*([\"'`])([^\"'`]+)\\3"
     );
@@ -58,7 +58,7 @@ final class ToolRepositoryPublisher {
     private final RepositoryCatalogService.Repositories repos;
     private final RepositoryCatalogService.ApplicationServices services;
 
-    ToolRepositoryPublisher(RepositoryCatalogService catalog,
+    ScriptRepositoryPublisher(RepositoryCatalogService catalog,
                             RepositoryCatalogService.Repositories repos,
                             RepositoryCatalogService.ApplicationServices services) {
         this.catalog = catalog;
@@ -66,7 +66,7 @@ final class ToolRepositoryPublisher {
         this.services = services;
     }
 
-    RepositoryToolDescriptor publish(String repositoryId, RepositoryPublishRequest request) {
+    RepositoryScriptDescriptor publish(String repositoryId, RepositoryPublishRequest request) {
         WritableRepositorySession session = catalog.openWritableRepositorySession(repositoryId);
         RepositoryDefinition repository = session.repository();
 
@@ -100,7 +100,7 @@ final class ToolRepositoryPublisher {
         session.commitPublishedAsset(toolId, version, request.releaseNotes());
         catalog.refreshRepositoryCache(repositoryId);
 
-        RepositoryToolDetail publishedDetail = catalog.getRepositoryTool(repositoryId, toolId);
+        RepositoryScriptDetail publishedDetail = catalog.getRepositoryScript(repositoryId, toolId);
         if (upstreamBinding != null
                 && Objects.equals(upstreamBinding.getRepositoryId(), repositoryId)
                 && Objects.equals(upstreamBinding.getUpstreamAssetId(), toolId)) {
@@ -110,7 +110,7 @@ final class ToolRepositoryPublisher {
     }
 
     private void assertUpstreamPublishSafe(ScriptDefinition script, RepositoryDefinition repository, RepositoryLocalAsset binding) {
-        RepositoryToolDetail detail = catalog.getRepositoryTool(repository.getId(), binding.getUpstreamAssetId());
+        RepositoryScriptDetail detail = catalog.getRepositoryScript(repository.getId(), binding.getUpstreamAssetId());
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
         UpstreamSyncState syncState = UpstreamSyncService.resolveSyncState(binding, catalog.computeWorkingCopyLocalDigest(script), state);
         if (syncState == UpstreamSyncState.REMOTE_CHANGES || syncState == UpstreamSyncState.DIVERGED) {
@@ -118,7 +118,7 @@ final class ToolRepositoryPublisher {
         }
     }
 
-    private void updateTrackedLocalAsset(RepositoryLocalAsset binding, RepositoryToolDetail detail) {
+    private void updateTrackedLocalAsset(RepositoryLocalAsset binding, RepositoryScriptDetail detail) {
         ToolSourceState state = catalog.resolveToolSourceState(catalog.getRepository(binding.getRepositoryId()), detail);
         repos.repositoryLocalAssetRepository().save(binding
                 .setVersion(detail.descriptor().version())
@@ -266,7 +266,7 @@ final class ToolRepositoryPublisher {
             }
             String repositoryId = NormalizeUtils.normalizeOrDefault(item.getRepositoryId(), defaultRepositoryId);
             String toolId = NormalizeUtils.normalize(item.getRepositoryScriptId(), "脚本依赖 scriptId 不能为空: " + scriptId);
-            RepositoryToolDescriptor descriptor = catalog.getRepositoryTool(repositoryId, toolId).descriptor();
+            RepositoryScriptDescriptor descriptor = catalog.getRepositoryScript(repositoryId, toolId).descriptor();
             declaredByScriptId.put(scriptId, new ScriptDependency()
                     .setScriptId(scriptId)
                     .setRepositoryId(repositoryId)

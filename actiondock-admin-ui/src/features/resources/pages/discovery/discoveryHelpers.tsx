@@ -8,13 +8,13 @@ import type {
   RepositoryWebhookDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
-  RepositoryToolDescriptor,
+  RepositoryScriptDescriptor,
   ScriptDependency
 } from "../../../../shared/types";
 import type { InstallFilter, TrustFilter, TypeFilter } from "./types";
 
 const { Text } = Typography;
-export type DependencyToolLookup = Pick<RepositoryToolDescriptor, "repositoryId" | "scriptId" | "displayName">;
+export type DependencyToolLookup = Pick<RepositoryScriptDescriptor, "repositoryId" | "scriptId" | "displayName">;
 export type DependencyPluginLookup = Pick<RepositoryPluginDescriptor, "repositoryId" | "pluginId" | "displayName">;
 
 interface DependencyRenderOptions {
@@ -36,7 +36,7 @@ function resolveScriptDependencyName(
 ): string | undefined {
   const repositoryId = resolveScriptDependencyRepositoryId(dependency, options?.currentRepositoryId);
   return options?.availableTools?.find(
-    (tool) => tool.repositoryId === repositoryId && tool.scriptId === dependency.toolId
+    (tool) => tool.repositoryId === repositoryId && tool.scriptId === dependency.repositoryScriptId
   )?.displayName;
 }
 
@@ -52,7 +52,7 @@ function resolvePluginDependencyName(
   )?.displayName;
 }
 
-export function isLocalTool(record: RepositoryToolDescriptor): boolean {
+export function isLocalTool(record: RepositoryScriptDescriptor): boolean {
   return Boolean(record.localState);
 }
 
@@ -60,15 +60,15 @@ export function isLocalWebhook(record: RepositoryWebhookDescriptor): boolean {
   return Boolean(record.localState);
 }
 
-export function localAssetId(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): string {
+export function localAssetId(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor): string {
   return record.localState?.localAssetId ?? ("scriptId" in record ? record.scriptId : record.webhookId);
 }
 
-export function isTrackedLocal(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): boolean {
+export function isTrackedLocal(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor): boolean {
   return record.localState?.mode === "TRACKED";
 }
 
-export function isLockedLocal(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): boolean {
+export function isLockedLocal(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor): boolean {
   return record.localState?.mode === "LOCKED";
 }
 
@@ -128,7 +128,7 @@ function matchesTypeFilter(type: string, typeFilter: TypeFilter): boolean {
 }
 
 export function filterRepositoryTools(
-  tools: RepositoryToolDescriptor[],
+  tools: RepositoryScriptDescriptor[],
   filters: {
     searchText: string;
     repositoryFilter: string;
@@ -136,7 +136,7 @@ export function filterRepositoryTools(
     installFilter: InstallFilter;
     trustFilter: TrustFilter;
   }
-): RepositoryToolDescriptor[] {
+): RepositoryScriptDescriptor[] {
   return tools.filter((tool) => {
     if (!matchesRepositoryFilter(tool.repositoryId, filters.repositoryFilter)) {
       return false;
@@ -335,7 +335,7 @@ export function renderScriptDependencies(
 
   return (
     <Table<ScriptDependency>
-      rowKey={(item) => `${item.scriptId}:${item.repositoryId}:${item.toolId}`}
+      rowKey={(item) => `${item.scriptId}:${item.repositoryId}:${item.repositoryScriptId}`}
       size="small"
       pagination={false}
       dataSource={dependencies}
@@ -358,7 +358,7 @@ export function renderScriptDependencies(
           key: "target",
           render: (_value: unknown, record) => {
             const repositoryId = resolveScriptDependencyRepositoryId(record, options?.currentRepositoryId);
-            return <Text code>{`${repositoryId}/${record.toolId}`}</Text>;
+            return <Text code>{`${repositoryId}/${record.repositoryScriptId}`}</Text>;
           }
         },
         {

@@ -26,8 +26,8 @@ import type {
   RepositoryPublishRequest,
   RepositorySkillDescriptor,
   RepositorySkillDetail,
-  RepositoryToolDescriptor,
-  RepositoryToolDetail,
+  RepositoryScriptDescriptor,
+  RepositoryScriptDetail,
   ResourceLifecycleOperationView,
   ResourceLifecycleRequest,
   ScriptDefinition
@@ -71,8 +71,8 @@ export function resolveProjectRepository(repositoryId: string): Promise<ProjectR
   return request<ProjectRepositoryResolution>(`/api/repositories/resolve?repositoryId=${encodeURIComponent(repositoryId)}`);
 }
 
-export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>("/api/repositories/scripts");
+export function listRepositoryScripts(): Promise<RepositoryScriptDescriptor[]> {
+  return request<RepositoryScriptDescriptor[]>("/api/repositories/scripts");
 }
 
 export function listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
@@ -91,8 +91,8 @@ export function listRepositorySkills(): Promise<RepositorySkillDescriptor[]> {
   return request<RepositorySkillDescriptor[]>("/api/repositories/skills");
 }
 
-export function listToolsByRepository(id: string): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`);
+export function listToolsByRepository(id: string): Promise<RepositoryScriptDescriptor[]> {
+  return request<RepositoryScriptDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`);
 }
 
 export function listWebhooksByRepository(id: string): Promise<RepositoryWebhookDescriptor[]> {
@@ -111,8 +111,8 @@ export function listCapabilityPackagesByRepository(id: string): Promise<Capabili
   return request<CapabilityPackageDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/packages`);
 }
 
-export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
-  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/scripts/${encodeURIComponent(toolId)}`);
+export function getRepositoryScript(repositoryId: string, repositoryScriptId: string): Promise<RepositoryScriptDetail> {
+  return request<RepositoryScriptDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/scripts/${encodeURIComponent(repositoryScriptId)}`);
 }
 
 export function getRepositoryWebhook(repositoryId: string, webhookId: string): Promise<RepositoryWebhookDetail> {
@@ -141,22 +141,22 @@ export function runResourceLifecycleOperation<TResult = unknown, TPayload = Reco
   });
 }
 
-export function addRepositoryToolLocalAsset(repositoryId: string, toolId: string, payload: RepositoryLocalAssetRequest): Promise<RepositoryLocalAsset> {
+export function addRepositoryToolLocalAsset(repositoryId: string, repositoryScriptId: string, payload: RepositoryLocalAssetRequest): Promise<RepositoryLocalAsset> {
   return runResourceLifecycleOperation({
-    resourceType: "REPOSITORY_TOOL",
+    resourceType: "REPOSITORY_SCRIPT",
     operation: "add-local",
     repositoryId,
-    resourceId: toolId,
+    resourceId: repositoryScriptId,
     payload
   }).then((operation) => operation.result as RepositoryLocalAsset);
 }
 
-export function updateRepositoryToolLocalAsset(repositoryId: string, toolId: string, payload: RepositoryInstallRequest): Promise<RepositoryLocalAsset> {
+export function updateRepositoryToolLocalAsset(repositoryId: string, repositoryScriptId: string, payload: RepositoryInstallRequest): Promise<RepositoryLocalAsset> {
   return runResourceLifecycleOperation({
-    resourceType: "REPOSITORY_TOOL",
+    resourceType: "REPOSITORY_SCRIPT",
     operation: "update-local",
     repositoryId,
-    resourceId: toolId,
+    resourceId: repositoryScriptId,
     payload
   }).then((operation) => operation.result as RepositoryLocalAsset);
 }
@@ -241,9 +241,9 @@ export function forkRepositoryTool(scriptId: string, payload: { id: string; name
   }).then(normalizeScriptDefinition);
 }
 
-export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryToolDescriptor> {
-  return runResourceLifecycleOperation<RepositoryToolDescriptor, RepositoryPublishRequest>({
-    resourceType: "REPOSITORY_TOOL",
+export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryScriptDescriptor> {
+  return runResourceLifecycleOperation<RepositoryScriptDescriptor, RepositoryPublishRequest>({
+    resourceType: "REPOSITORY_SCRIPT",
     operation: "publish",
     repositoryId,
     payload
@@ -300,7 +300,7 @@ export function previewRepositoryPublishConfig(
   payload: RepositoryPublishConfigPreviewRequest
 ): Promise<RepositoryPublishConfigPreview> {
   return runResourceLifecycleOperation<RepositoryPublishConfigPreview, RepositoryPublishConfigPreviewRequest>({
-    resourceType: "REPOSITORY_TOOL",
+    resourceType: "REPOSITORY_SCRIPT",
     operation: "preview",
     payload
   }).then((operation) => operation.result);

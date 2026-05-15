@@ -2,7 +2,7 @@ import { diffLines } from "diff";
 import { prettyJson } from "./utils";
 import type {
   PluginDependency,
-  RepositoryToolDetail,
+  RepositoryScriptDetail,
   ScriptDefinition,
   ScriptDependency,
   ScriptPackaging,
@@ -553,7 +553,7 @@ function normalizePluginDependencyChange(
 }
 
 function normalizeScriptDependencyKey(dependency: ScriptDependency): string {
-  return `script:${dependency.repositoryId}:${dependency.toolId}`;
+  return `script:${dependency.repositoryId}:${dependency.repositoryScriptId}`;
 }
 
 function normalizeScriptDependencyChange(
@@ -563,7 +563,7 @@ function normalizeScriptDependencyChange(
   return {
     dependencyType: "SCRIPT",
     dependencyId: dependency.scriptId,
-    target: `${dependency.repositoryId}/${dependency.toolId}`,
+    target: `${dependency.repositoryId}/${dependency.repositoryScriptId}`,
     versionRange: dependency.versionRange,
     requiredActions: [],
     risk
@@ -662,8 +662,8 @@ function diffDependencies(
       }
 
       const changes: DependencyModification["changes"] = [];
-      const beforeTarget = `${beforeDependency.repositoryId}/${beforeDependency.toolId}`;
-      const afterTarget = `${afterDependency.repositoryId}/${afterDependency.toolId}`;
+      const beforeTarget = `${beforeDependency.repositoryId}/${beforeDependency.repositoryScriptId}`;
+      const afterTarget = `${afterDependency.repositoryId}/${afterDependency.repositoryScriptId}`;
       if (!sameValue(beforeTarget, afterTarget)) {
         changes.push({
           field: "target",
@@ -886,7 +886,7 @@ export function buildRepositoryPublishDiffTarget(target: ScriptDiffTarget): Scri
   };
 }
 
-export function toRepositoryToolDiffTarget(detail: RepositoryToolDetail): ScriptDiffTarget {
+export function toRepositoryScriptDiffTarget(detail: RepositoryScriptDetail): ScriptDiffTarget {
   return {
     name: normalizeString(detail.descriptor.displayName),
     type: detail.descriptor.type,

@@ -95,16 +95,6 @@ public class ConfigValueView {
         return this;
     }
 
-    @Deprecated
-    public String getRepositoryToolId() {
-        return getRepositoryScriptId();
-    }
-
-    @Deprecated
-    public ConfigValueView setRepositoryToolId(String repositoryToolId) {
-        return setRepositoryScriptId(repositoryToolId);
-    }
-
     public String getRepositoryVersion() {
         return repositoryVersion;
     }

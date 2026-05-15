@@ -23,7 +23,7 @@ export function useForkScript({ messageApi }: { messageApi: MessageInstance }): 
 
   const openForkModal = (target: ScriptDefinition) => {
     forkForm.setFieldsValue({
-      id: `${target.repositoryToolId || target.id}-fork`,
+      id: `${target.repositoryScriptId || target.id}-fork`,
       name: `${target.name} Fork`
     });
     setForkTarget(target);
