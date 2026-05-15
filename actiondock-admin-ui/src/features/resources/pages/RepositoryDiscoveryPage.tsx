@@ -1,5 +1,5 @@
 import { Button, Card, Modal, Space, Typography, message } from "antd";
-import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { PlusOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { RepositorySkillInstallDrawer } from "../../../components/repository/RepositorySkillInstallDrawer";
@@ -31,9 +31,6 @@ export function RepositoryDiscoveryPage() {
             <Space>
               <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/packages/publish")}>
                 发布能力包
-              </Button>
-              <Button icon={<ReloadOutlined />} onClick={() => void discovery.loadData()} loading={discovery.loading}>
-                刷新目录
               </Button>
             </Space>
           )}

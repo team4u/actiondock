@@ -208,6 +208,26 @@ export function RepositoryManagementPage() {
     }
   };
 
+  const handleSyncAll = async () => {
+    setLoading(true);
+    try {
+      const syncedRepositories: RepositoryDefinition[] = [];
+      for (const repository of repositories) {
+        const synced = await syncRepository(repository.id);
+        syncedRepositories.push(synced);
+      }
+      setRepositories(
+        syncedRepositories.sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""))
+      );
+      messageApi.success("全部仓库同步完成");
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "批量同步仓库失败"));
+      await loadData();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleResolve = async (repositoryId: string) => {
     setResolvingId(repositoryId);
     try {
@@ -390,8 +410,8 @@ export function RepositoryManagementPage() {
           )}
           actions={
             <>
-              <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
-                刷新
+              <Button icon={<ReloadOutlined />} onClick={() => void handleSyncAll()} loading={loading}>
+                全部同步
               </Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 添加仓库
