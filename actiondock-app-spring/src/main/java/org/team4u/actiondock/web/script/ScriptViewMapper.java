@@ -32,7 +32,7 @@ public final class ScriptViewMapper {
                 source.getVersion(),
                 source.getScope(),
                 source.getRepositoryId(),
-                source.getRepositoryToolId(),
+                source.getRepositoryScriptId(),
                 source.getRepositoryVersion(),
                 source.getSourcePath(),
                 source.getSourceCommit(),

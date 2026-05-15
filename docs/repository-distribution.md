@@ -75,7 +75,7 @@ ActionDock 当前不会把正文拆成复杂结构，也不会做向量检索。
 | 形态 | 说明 | 编辑状态 |
 |------|------|----------|
 | 仓库安装 | 直接把仓库中的工具安装到本地，作用域为 `REPOSITORY` | 只读 |
-| 工作副本 | 基于仓库工具或Webhook创建本地可编辑副本，并建立 `upstream_binding` | 可编辑，可拉取上游更新 |
+| 工作副本 | 基于仓库脚本或Webhook创建本地可编辑副本，并建立 `upstream_binding` | 可编辑，可拉取上游更新 |
 
 ## 仓库发现
 
@@ -218,7 +218,7 @@ curl "http://localhost:5177/api/repositories/resolve?repositoryId=billing-servic
 
 创建后，本地副本仍然是脚本库里的 `PERSONAL` 脚本，但会额外带有上游绑定和同步状态。
 
-## 安装仓库工具
+## 安装仓库脚本
 
 ### 通过管理台
 
@@ -228,10 +228,10 @@ curl "http://localhost:5177/api/repositories/resolve?repositoryId=billing-servic
 
 ```bash
 # 列出仓库中的可用工具
-curl http://localhost:5177/api/repositories/{repoId}/tools
+curl http://localhost:5177/api/repositories/{repoId}/scripts
 
 # 安装工具为本地只读资产
-curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/local-assets \
+curl -X POST http://localhost:5177/api/repositories/{repoId}/scripts/{scriptId}/local-assets \
   -H 'Content-Type: application/json' \
   -d '{"mode":"LOCKED"}'
 ```
@@ -277,8 +277,8 @@ curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/loca
 通过 REST API 创建工作副本、查看状态和拉取更新：
 
 ```bash
-# 从仓库工具创建脚本工作副本
-curl -X POST http://localhost:5177/api/repositories/{repoId}/tools/{toolId}/local-assets \
+# 从仓库脚本创建脚本工作副本
+curl -X POST http://localhost:5177/api/repositories/{repoId}/scripts/{scriptId}/local-assets \
   -H 'Content-Type: application/json' \
   -d '{"mode":"TRACKED"}'
 
@@ -357,9 +357,9 @@ DELETE /api/repositories/{id}                   # 删除
 # 仓库操作
 GET    /api/repositories/resolve?repositoryId=...    # 解析项目仓库并返回 ACTIONDOCK.md 原文
 POST   /api/repositories/{id}/sync              # 同步仓库
-GET    /api/repositories/{id}/tools             # 列出可用工具
-POST   /api/repositories/{id}/tools/{toolId}/local-assets         # 添加仓库工具到本地
-POST   /api/repositories/{id}/tools/{toolId}/local-assets/update  # 更新本地仓库工具
+GET    /api/repositories/{id}/scripts             # 列出可用工具
+POST   /api/repositories/{id}/scripts/{scriptId}/local-assets         # 添加仓库脚本到本地
+POST   /api/repositories/{id}/scripts/{scriptId}/local-assets/update  # 更新本地仓库脚本
 ```
 
 ## 常见问题

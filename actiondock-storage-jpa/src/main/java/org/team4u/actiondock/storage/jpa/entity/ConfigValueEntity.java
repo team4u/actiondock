@@ -28,7 +28,8 @@ public class ConfigValueEntity {
     private String description;
     private boolean secret;
     private String repositoryId;
-    private String repositoryToolId;
+    @Column(name = "repository_script_id")
+    private String repositoryScriptId;
     private String repositoryVersion;
     private String publishMode;
     private boolean managed;
@@ -76,12 +77,12 @@ public class ConfigValueEntity {
         this.repositoryId = repositoryId;
     }
 
-    public String getRepositoryToolId() {
-        return repositoryToolId;
+    public String getRepositoryScriptId() {
+        return repositoryScriptId;
     }
 
-    public void setRepositoryToolId(String repositoryToolId) {
-        this.repositoryToolId = repositoryToolId;
+    public void setRepositoryScriptId(String repositoryScriptId) {
+        this.repositoryScriptId = repositoryScriptId;
     }
 
     public String getRepositoryVersion() {

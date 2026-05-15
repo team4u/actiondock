@@ -23,10 +23,17 @@ final class RepositoryIndexUtils {
     private RepositoryIndexUtils() {
     }
 
+    static RepositoryCatalogTypes.RepositoryIndexFile withScripts(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                                  RepositoryDefinition repository,
+                                                                  List<RepositoryCatalogTypes.RepositoryIndexEntry> scripts) {
+        return withReplaced(current, repository, scripts, null, null, null, null);
+    }
+
+    @Deprecated
     static RepositoryCatalogTypes.RepositoryIndexFile withTools(RepositoryCatalogTypes.RepositoryIndexFile current,
-                                                 RepositoryDefinition repository,
-                                                 List<RepositoryCatalogTypes.RepositoryIndexEntry> tools) {
-        return withReplaced(current, repository, tools, null, null, null, null);
+                                                                RepositoryDefinition repository,
+                                                                List<RepositoryCatalogTypes.RepositoryIndexEntry> tools) {
+        return withScripts(current, repository, tools);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withWebhooks(RepositoryCatalogTypes.RepositoryIndexFile current,
@@ -56,7 +63,7 @@ final class RepositoryIndexUtils {
     @SuppressWarnings("unchecked")
     private static <T extends Record> RepositoryCatalogTypes.RepositoryIndexFile withReplaced(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                         RepositoryDefinition repository,
-                                                                        List<RepositoryCatalogTypes.RepositoryIndexEntry> tools,
+                                                                        List<RepositoryCatalogTypes.RepositoryIndexEntry> scripts,
                                                                         List<RepositoryCatalogTypes.RepositoryWebhookIndexEntry> webhooks,
                                                                         List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins,
                                                                         List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages,
@@ -65,7 +72,7 @@ final class RepositoryIndexUtils {
                 DEFAULT_VERSION,
                 repository.getName(),
                 NormalizeUtils.normalizeNullable(repository.getDescription()),
-                tools != null ? tools : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.tools())),
+                scripts != null ? scripts : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.scripts())),
                 webhooks != null ? webhooks : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.webhooks())),
                 plugins != null ? plugins : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.plugins())),
                 packages != null ? packages : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.packages())),

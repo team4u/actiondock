@@ -1,5 +1,7 @@
 package org.team4u.actiondock.repository;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
@@ -33,11 +35,17 @@ public final class RepositoryCatalogTypes {
 
     /** 仓库索引文件名。 */
     public static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
-    /** Tool 子目录名称。 */
+    /** Script 子目录名称。 */
+    public static final String SCRIPTS_DIR = "scripts";
+    /** @deprecated 兼容旧仓库目录结构。 */
+    @Deprecated
     public static final String TOOLS_DIR = "tools";
     /** Event Source 子目录名称。 */
     public static final String WEBHOOKS_DIR = "webhooks";
-    /** Tool 描述文件名。 */
+    /** Script 描述文件名。 */
+    public static final String SCRIPT_DESCRIPTOR_FILE = "script.json";
+    /** @deprecated 兼容旧仓库描述文件名。 */
+    @Deprecated
     public static final String TOOL_DESCRIPTOR_FILE = "tool.json";
     /** Event Source 描述文件名。 */
     public static final String WEBHOOK_DESCRIPTOR_FILE = "webhook.json";
@@ -56,7 +64,7 @@ public final class RepositoryCatalogTypes {
     /** 能力包子目录名称。 */
     public static final String CAPABILITY_PACKAGES_DIR = "packages";
     /** 仓库索引中的所有分节名称。 */
-    public static final List<String> REPO_INDEX_SECTIONS = List.of(TOOLS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
+    public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
     /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
 
     /** 仓库类型：Git 仓库。 */
@@ -164,7 +172,7 @@ public final class RepositoryCatalogTypes {
 
     public record RepositoryToolDescriptor(
             String repositoryId,
-            String toolId,
+            String scriptId,
             String displayName,
             String version,
             String description,
@@ -188,12 +196,17 @@ public final class RepositoryCatalogTypes {
     ) {
         public RepositoryToolDescriptor withLocalState(RepositoryLocalAssetState localState) {
             return new RepositoryToolDescriptor(
-                    repositoryId, toolId, displayName, version,
+                    repositoryId, scriptId, displayName, version,
                     description, releaseNotes, owner, tags, type, packaging,
                     sourcePath, pythonRequirementsPath, inputSchemaPath, outputSchemaPath,
                     configTemplatePath, scheduleTemplatePath, digest, riskLevel,
                     scriptDependencies, pluginDependencies, trusted, localState
             );
+        }
+
+        @Deprecated
+        public String toolId() {
+            return scriptId;
         }
     }
 
@@ -252,7 +265,7 @@ public final class RepositoryCatalogTypes {
 
     public record RepositoryPublishRequest(
             String scriptId,
-            String toolId,
+            @JsonAlias("toolId") String repositoryScriptId,
             String displayName,
             String version,
             String owner,
@@ -263,6 +276,10 @@ public final class RepositoryCatalogTypes {
             List<ScriptDependency> scriptDependencies,
             boolean force
     ) {
+        @Deprecated
+        public String toolId() {
+            return repositoryScriptId;
+        }
     }
 
     public record RepositoryPublishConfigPreviewRequest(
@@ -551,7 +568,7 @@ public final class RepositoryCatalogTypes {
     public record RepositoryIndexFile(int repositoryVersion,
                                       String name,
                                       String description,
-                                      List<RepositoryIndexEntry> tools,
+                                      @JsonAlias("tools") List<RepositoryIndexEntry> scripts,
                                       List<RepositoryWebhookIndexEntry> webhooks,
                                       List<RepositoryPluginIndexEntry> plugins,
                                       List<CapabilityPackageIndexEntry> packages,
@@ -559,14 +576,19 @@ public final class RepositoryCatalogTypes {
         public RepositoryIndexFile(int repositoryVersion,
                                    String name,
                                    String description,
-                                   List<RepositoryIndexEntry> tools,
+                                   List<RepositoryIndexEntry> scripts,
                                    List<RepositoryPluginIndexEntry> plugins,
                                    List<CapabilityPackageIndexEntry> packages) {
-            this(repositoryVersion, name, description, tools, List.of(), plugins, packages, List.of());
+            this(repositoryVersion, name, description, scripts, List.of(), plugins, packages, List.of());
         }
 
+        public List<RepositoryIndexEntry> safeScripts() {
+            return scripts == null ? List.of() : scripts;
+        }
+
+        @Deprecated
         public List<RepositoryIndexEntry> safeTools() {
-            return tools == null ? List.of() : tools;
+            return safeScripts();
         }
 
         public List<RepositoryWebhookIndexEntry> safeWebhooks() {
@@ -592,7 +614,11 @@ public final class RepositoryCatalogTypes {
                                        String type,
                                        String description,
                                        String releaseNotes,
-                                       String toolPath) {
+                                       @JsonAlias("toolPath") String scriptPath) {
+        @Deprecated
+        public String toolPath() {
+            return scriptPath;
+        }
     }
 
     public record RepositoryWebhookIndexEntry(String id,
@@ -707,7 +733,7 @@ public final class RepositoryCatalogTypes {
                                           List<CapabilityPackagePresetTemplate> presetTemplate) {
     }
 
-    public record ToolFile(int toolVersion,
+    public record ToolFile(@JsonProperty("scriptVersion") @JsonAlias("toolVersion") int toolVersion,
                            String id,
                            String name,
                            String version,

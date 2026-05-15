@@ -23,16 +23,16 @@ class RepositoryConfigTemplateSyncService {
         this.configValueRepository = configValueRepository;
     }
 
-    void syncConfigTemplates(String repositoryId, String toolId, String repositoryVersion,
+    void syncConfigTemplates(String repositoryId, String repositoryScriptId, String repositoryVersion,
                              List<RepositoryCatalogTypes.ConfigTemplateItem> templates) {
         for (RepositoryCatalogTypes.ConfigTemplateItem template : templates) {
             ConfigValue existing = configValueRepository.findByKey(template.key()).orElse(null);
             String publishMode = template.resolvePublishMode();
             if (existing == null) {
-                configValueRepository.save(createManagedConfigValue(template, repositoryId, toolId, repositoryVersion, publishMode));
+                configValueRepository.save(createManagedConfigValue(template, repositoryId, repositoryScriptId, repositoryVersion, publishMode));
                 continue;
             }
-            if (isSameSource(existing, repositoryId, toolId)) {
+            if (isSameSource(existing, repositoryId, repositoryScriptId)) {
                 updateManagedConfigValue(existing, template, repositoryVersion, publishMode);
                 configValueRepository.save(existing);
             }
@@ -43,14 +43,14 @@ class RepositoryConfigTemplateSyncService {
         for (ConfigValue configValue : configValueRepository.findAll()) {
             if (configValue.isManaged()
                     && Objects.equals(repositoryId, configValue.getRepositoryId())
-                    && Objects.equals(packageId, configValue.getRepositoryToolId())) {
+                    && Objects.equals(packageId, configValue.getRepositoryScriptId())) {
                 configValueRepository.deleteByKey(configValue.getKey());
             }
         }
     }
 
     private static ConfigValue createManagedConfigValue(RepositoryCatalogTypes.ConfigTemplateItem template,
-                                                        String repositoryId, String toolId,
+                                                        String repositoryId, String repositoryScriptId,
                                                         String repositoryVersion, String publishMode) {
         return new ConfigValue()
                 .setKey(template.key())
@@ -58,7 +58,7 @@ class RepositoryConfigTemplateSyncService {
                 .setDescription(NormalizeUtils.normalizeNullable(template.label()))
                 .setSecret(template.secret())
                 .setRepositoryId(repositoryId)
-                .setRepositoryToolId(toolId)
+                .setRepositoryScriptId(repositoryScriptId)
                 .setRepositoryVersion(repositoryVersion)
                 .setPublishMode(publishMode)
                 .setManaged(true)
@@ -67,9 +67,9 @@ class RepositoryConfigTemplateSyncService {
                 .setUpdatedAt(LocalDateTime.now());
     }
 
-    private static boolean isSameSource(ConfigValue existing, String repositoryId, String toolId) {
+    private static boolean isSameSource(ConfigValue existing, String repositoryId, String repositoryScriptId) {
         return Objects.equals(existing.getRepositoryId(), repositoryId)
-                && Objects.equals(existing.getRepositoryToolId(), toolId);
+                && Objects.equals(existing.getRepositoryScriptId(), repositoryScriptId);
     }
 
     private static void updateManagedConfigValue(ConfigValue existing,

@@ -56,7 +56,7 @@ public class JpaConfigValueRepositoryAdapter implements ConfigValueRepository {
         entity.setDescription(configValue.getDescription());
         entity.setSecret(configValue.isSecret());
         entity.setRepositoryId(configValue.getRepositoryId());
-        entity.setRepositoryToolId(configValue.getRepositoryToolId());
+        entity.setRepositoryScriptId(configValue.getRepositoryScriptId());
         entity.setRepositoryVersion(configValue.getRepositoryVersion());
         entity.setPublishMode(configValue.getPublishMode());
         entity.setManaged(configValue.isManaged());
@@ -79,7 +79,7 @@ public class JpaConfigValueRepositoryAdapter implements ConfigValueRepository {
                 .setDescription(entity.getDescription())
                 .setSecret(entity.isSecret())
                 .setRepositoryId(entity.getRepositoryId())
-                .setRepositoryToolId(entity.getRepositoryToolId())
+                .setRepositoryScriptId(entity.getRepositoryScriptId())
                 .setRepositoryVersion(entity.getRepositoryVersion())
                 .setPublishMode(entity.getPublishMode())
                 .setManaged(entity.isManaged())

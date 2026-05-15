@@ -15,7 +15,7 @@ public class ConfigValueView {
     private String description;
     private boolean secret;
     private String repositoryId;
-    private String repositoryToolId;
+    private String repositoryScriptId;
     private String repositoryVersion;
     private String publishMode;
     private boolean managed;
@@ -86,13 +86,23 @@ public class ConfigValueView {
         return this;
     }
 
-    public String getRepositoryToolId() {
-        return repositoryToolId;
+    public String getRepositoryScriptId() {
+        return repositoryScriptId;
     }
 
-    public ConfigValueView setRepositoryToolId(String repositoryToolId) {
-        this.repositoryToolId = repositoryToolId;
+    public ConfigValueView setRepositoryScriptId(String repositoryScriptId) {
+        this.repositoryScriptId = repositoryScriptId;
         return this;
+    }
+
+    @Deprecated
+    public String getRepositoryToolId() {
+        return getRepositoryScriptId();
+    }
+
+    @Deprecated
+    public ConfigValueView setRepositoryToolId(String repositoryToolId) {
+        return setRepositoryScriptId(repositoryToolId);
     }
 
     public String getRepositoryVersion() {

@@ -79,7 +79,7 @@ class RepositoryDependencyResolver {
 
     private boolean repositoryContainsTool(String repositoryId, String toolId) {
         return catalog.listRepositoryTools(repositoryId).stream()
-                .anyMatch(item -> Objects.equals(item.toolId(), toolId));
+                .anyMatch(item -> Objects.equals(item.scriptId(), toolId));
     }
 
     private boolean repositoryContainsPlugin(String repositoryId, String pluginId) {

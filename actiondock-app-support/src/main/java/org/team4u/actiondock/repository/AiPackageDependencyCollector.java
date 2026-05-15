@@ -176,7 +176,7 @@ class AiPackageDependencyCollector {
             return false;
         }
         String sourceRepositoryId = NormalizeUtils.normalizeNullable(script.getRepositoryId());
-        String sourceToolId = NormalizeUtils.normalizeNullable(script.getRepositoryToolId());
+        String sourceToolId = NormalizeUtils.normalizeNullable(script.getRepositoryScriptId());
         String sourceVersion = NormalizeUtils.normalizeNullable(script.getRepositoryVersion());
         if (sourceRepositoryId != null && sourceToolId != null && sourceVersion != null) {
             builder.addExternalDependency(new RepositoryAiPackageDependency(

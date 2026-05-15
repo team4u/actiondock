@@ -178,9 +178,9 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `DELETE` | `/api/repositories/{id}` | 删除仓库 |
 | `GET` | `/api/repositories/resolve?repositoryId={value}` | 解析项目仓库并返回 `ACTIONDOCK.md` 原文 |
 | `POST` | `/api/repositories/{id}/sync` | 同步仓库 |
-| `GET` | `/api/repositories/{id}/tools` | 列出仓库中的可用工具 |
-| `POST` | `/api/repositories/{id}/tools/{toolId}/local-assets` | 添加仓库工具到本地 |
-| `POST` | `/api/repositories/{id}/tools/{toolId}/local-assets/update` | 更新本地仓库工具 |
+| `GET` | `/api/repositories/{id}/scripts` | 列出仓库中的可用工具 |
+| `POST` | `/api/repositories/{id}/scripts/{scriptId}/local-assets` | 添加仓库脚本到本地 |
+| `POST` | `/api/repositories/{id}/scripts/{scriptId}/local-assets/update` | 更新本地仓库脚本 |
 
 ### RepositoryDefinition
 

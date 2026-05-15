@@ -178,7 +178,8 @@ export interface WebhookDefinition {
 export interface ScriptDependency {
   scriptId: string;
   repositoryId: string;
-  toolId: string;
+  repositoryScriptId: string;
+  toolId?: string;
   versionRange?: string;
 }
 
@@ -217,7 +218,8 @@ export interface RepositoryInstallRequest {
 
 export interface RepositoryToolDescriptor {
   repositoryId: string;
-  toolId: string;
+  scriptId: string;
+  toolId?: string;
   installedScriptId?: string;
   displayName: string;
   version: string;
@@ -469,6 +471,7 @@ export interface ConfigValueView {
   description?: string | null;
   secret?: boolean;
   repositoryId?: string | null;
+  repositoryScriptId?: string | null;
   repositoryToolId?: string | null;
   repositoryVersion?: string | null;
   publishMode?: string | null;

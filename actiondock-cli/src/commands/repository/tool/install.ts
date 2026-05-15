@@ -5,7 +5,7 @@ import { buildRepositoryInstallRequest, createClient, serverTokenFlags } from ".
 import { renderRepositoryLocalAsset } from "../../../lib/render.js";
 
 export default class RepositoryToolInstallCommand extends BaseCommand {
-  static description = "Install a repository tool";
+  static description = "Install a repository script";
 
   static args = {
     repositoryId: Args.string({ required: true }),

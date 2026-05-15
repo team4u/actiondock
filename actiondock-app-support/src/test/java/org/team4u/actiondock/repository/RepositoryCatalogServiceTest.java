@@ -48,7 +48,7 @@ class RepositoryCatalogServiceTest {
 
         RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
 
-        assertThat(Files.isDirectory(root.resolve("tools"))).isTrue();
+        assertThat(Files.isDirectory(root.resolve("scripts"))).isTrue();
         assertThat(Files.isDirectory(root.resolve("plugins"))).isTrue();
         assertThat(Files.isRegularFile(root.resolve("actiondock.repository.json"))).isTrue();
 
@@ -58,7 +58,7 @@ class RepositoryCatalogServiceTest {
         );
         assertThat(index.name()).isEqualTo("Demo Repository");
         assertThat(index.description()).isEqualTo("Demo description");
-        assertThat(index.tools()).isEmpty();
+        assertThat(index.scripts()).isEmpty();
         assertThat(index.plugins()).isEmpty();
     }
 

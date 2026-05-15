@@ -277,7 +277,7 @@ public class RepositoryCatalogService {
         return listAllFromEnabledRepositories(
                 this::listRepositoryTools,
                 Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::repositoryId)
-                        .thenComparing(RepositoryCatalogTypes.RepositoryToolDescriptor::toolId));
+                        .thenComparing(RepositoryCatalogTypes.RepositoryToolDescriptor::scriptId));
     }
 
     public List<RepositoryCatalogTypes.RepositoryWebhookDescriptor> listAllRepositoryWebhooks() {
@@ -290,9 +290,9 @@ public class RepositoryCatalogService {
     public List<RepositoryCatalogTypes.RepositoryToolDescriptor> listRepositoryTools(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        return index.safeTools().stream()
-                .map(entry -> toDescriptor(repository, readToolFile(repository, entry.toolPath()), entry.toolPath()))
-                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::toolId))
+        return index.safeScripts().stream()
+                .map(entry -> toDescriptor(repository, readToolFile(repository, entry.scriptPath()), entry.scriptPath()))
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::scriptId))
                 .toList();
     }
 
@@ -358,23 +358,23 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.RepositoryIndexEntry entry = findEntryById(
-                index.safeTools(), toolId, RepositoryCatalogTypes.RepositoryIndexEntry::id, "仓库工具");
-        RepositoryCatalogTypes.ToolFile tool = readToolFile(repository, entry.toolPath());
+                index.safeScripts(), toolId, RepositoryCatalogTypes.RepositoryIndexEntry::id, "仓库工具");
+        RepositoryCatalogTypes.ToolFile tool = readToolFile(repository, entry.scriptPath());
         List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
-                parentDirectoryPath(entry.toolPath()).resolveNullable(tool.configTemplatePath()),
+                parentDirectoryPath(entry.scriptPath()).resolveNullable(tool.configTemplatePath()),
                 RepositoryCatalogTypes.ConfigTemplateItem.class
         );
         List<RepositoryCatalogTypes.ScheduleTemplateItem> scheduleTemplate = readOptionalFile(
                 repository,
-                parentDirectoryPath(entry.toolPath()).resolveNullable(tool.scheduleTemplatePath()),
+                parentDirectoryPath(entry.scriptPath()).resolveNullable(tool.scheduleTemplatePath()),
                 RepositoryCatalogTypes.ScheduleTemplateItem.class
         );
-        String source = readRepositoryFile(repository, parentDirectoryPath(entry.toolPath()).resolve(tool.sourcePath()));
+        String source = readRepositoryFile(repository, parentDirectoryPath(entry.scriptPath()).resolve(tool.sourcePath()));
         String pythonRequirements = NormalizeUtils.isBlank(tool.pythonRequirementsPath())
                 ? null
-                : readRepositoryFile(repository, parentDirectoryPath(entry.toolPath()).resolve(tool.pythonRequirementsPath()));
-        return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, entry.toolPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
+                : readRepositoryFile(repository, parentDirectoryPath(entry.scriptPath()).resolve(tool.pythonRequirementsPath()));
+        return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, entry.scriptPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
     }
 
     public RepositoryCatalogTypes.RepositoryWebhookDetail getRepositoryWebhook(String repositoryId, String webhookId) {
@@ -486,11 +486,11 @@ public class RepositoryCatalogService {
     }
 
     RepositoryCatalogTypes.ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryToolDetail detail) {
-        String toolId = detail.descriptor().toolId();
-        String toolPath = readRepositoryIndex(repository).safeTools().stream()
+        String toolId = detail.descriptor().scriptId();
+        String toolPath = readRepositoryIndex(repository).safeScripts().stream()
                 .filter(item -> toolId.equals(item.id()))
                 .findFirst()
-                .map(RepositoryCatalogTypes.RepositoryIndexEntry::toolPath)
+                .map(RepositoryCatalogTypes.RepositoryIndexEntry::scriptPath)
                 .orElseThrow(() -> new IllegalArgumentException("仓库工具不存在: " + toolId));
         String digest = computeToolDigest(detail);
         String commit = REPO_TYPE_GIT.equals(repository.getType()) ? gitOps.gitHead(resolveRepositoryRoot(repository)) : null;
@@ -512,7 +512,7 @@ public class RepositoryCatalogService {
     private String computeToolDigest(RepositoryCatalogTypes.RepositoryToolDetail detail) {
         RepositoryCatalogTypes.RepositoryToolDescriptor d = detail.descriptor();
         LinkedHashMap<String, Object> values = new LinkedHashMap<>();
-        values.put("toolId", d.toolId());
+        values.put("scriptId", d.scriptId());
         values.put("displayName", d.displayName());
         values.put("version", d.version());
         values.put("type", d.type());
@@ -558,7 +558,7 @@ public class RepositoryCatalogService {
 
     String computeWorkingCopyLocalDigest(ScriptDefinition script) {
         LinkedHashMap<String, Object> values = new LinkedHashMap<>();
-        values.put("toolId", script.getRepositoryToolId());
+        values.put("scriptId", script.getRepositoryScriptId());
         values.put("displayName", script.getName());
         values.put("version", script.getRepositoryVersion());
         values.put("type", script.getType() == null ? null : script.getType().name());

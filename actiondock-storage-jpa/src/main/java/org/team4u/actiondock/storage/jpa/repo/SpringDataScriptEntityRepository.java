@@ -11,5 +11,5 @@ import java.util.Optional;
  * @author jay.wu
  */
 public interface SpringDataScriptEntityRepository extends JpaRepository<ScriptEntity, String> {
-    Optional<ScriptEntity> findByScopeAndRepositoryIdAndRepositoryToolId(String scope, String repositoryId, String repositoryToolId);
+    Optional<ScriptEntity> findByScopeAndRepositoryIdAndRepositoryScriptId(String scope, String repositoryId, String repositoryScriptId);
 }

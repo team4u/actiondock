@@ -48,7 +48,8 @@ public class ScriptEntity {
     private LocalDateTime publishedAt;
     private String scope;
     private String repositoryId;
-    private String repositoryToolId;
+    @Column(name = "repository_script_id")
+    private String repositoryScriptId;
     private String repositoryVersion;
     private String sourcePath;
     private String sourceCommit;
@@ -96,8 +97,8 @@ public class ScriptEntity {
     public void setScope(String scope) { this.scope = scope; }
     public String getRepositoryId() { return repositoryId; }
     public void setRepositoryId(String repositoryId) { this.repositoryId = repositoryId; }
-    public String getRepositoryToolId() { return repositoryToolId; }
-    public void setRepositoryToolId(String repositoryToolId) { this.repositoryToolId = repositoryToolId; }
+    public String getRepositoryScriptId() { return repositoryScriptId; }
+    public void setRepositoryScriptId(String repositoryScriptId) { this.repositoryScriptId = repositoryScriptId; }
     public String getRepositoryVersion() { return repositoryVersion; }
     public void setRepositoryVersion(String repositoryVersion) { this.repositoryVersion = repositoryVersion; }
     public String getSourcePath() { return sourcePath; }

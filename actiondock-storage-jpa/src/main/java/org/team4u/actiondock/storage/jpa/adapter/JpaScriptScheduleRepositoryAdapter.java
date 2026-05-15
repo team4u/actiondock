@@ -79,7 +79,7 @@ public class JpaScriptScheduleRepositoryAdapter implements ScriptScheduleReposit
         entity.setEnabled(schedule.isEnabled());
         entity.setEditable(schedule.isEditable());
         entity.setRepositoryId(schedule.getRepositoryId());
-        entity.setRepositoryToolId(schedule.getRepositoryToolId());
+        entity.setRepositoryScriptId(schedule.getRepositoryScriptId());
         entity.setRepositoryPackageId(schedule.getRepositoryPackageId());
         entity.setRepositoryVersion(schedule.getRepositoryVersion());
         entity.setLastTriggeredAt(schedule.getLastTriggeredAt());
@@ -107,7 +107,7 @@ public class JpaScriptScheduleRepositoryAdapter implements ScriptScheduleReposit
                 .setEnabled(entity.isEnabled())
                 .setEditable(entity.isEditable())
                 .setRepositoryId(entity.getRepositoryId())
-                .setRepositoryToolId(entity.getRepositoryToolId())
+                .setRepositoryScriptId(entity.getRepositoryScriptId())
                 .setRepositoryPackageId(entity.getRepositoryPackageId())
                 .setRepositoryVersion(entity.getRepositoryVersion())
                 .setLastTriggeredAt(entity.getLastTriggeredAt())

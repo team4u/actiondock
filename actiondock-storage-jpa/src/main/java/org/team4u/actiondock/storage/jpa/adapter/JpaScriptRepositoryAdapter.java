@@ -58,11 +58,11 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
     }
 
     @Override
-    public Optional<ScriptDefinition> findInstalledByRepositorySource(String repositoryId, String repositoryToolId) {
-        return repository.findByScopeAndRepositoryIdAndRepositoryToolId(
+    public Optional<ScriptDefinition> findInstalledByRepositorySource(String repositoryId, String repositoryScriptId) {
+        return repository.findByScopeAndRepositoryIdAndRepositoryScriptId(
                 ScriptScope.REPOSITORY.name(),
                 repositoryId,
-                repositoryToolId
+                repositoryScriptId
         ).map(this::toDomain);
     }
 
@@ -93,7 +93,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setPublishedAt(definition.getPublishedAt());
         entity.setScope(definition.getScope().name());
         entity.setRepositoryId(definition.getRepositoryId());
-        entity.setRepositoryToolId(definition.getRepositoryToolId());
+        entity.setRepositoryScriptId(definition.getRepositoryScriptId());
         entity.setRepositoryVersion(definition.getRepositoryVersion());
         entity.setSourcePath(definition.getSourcePath());
         entity.setSourceCommit(definition.getSourceCommit());
@@ -128,7 +128,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setPublishedRevision(resolvePublishedRevision(entity))
                 .setScope(entity.getScope() == null ? ScriptScope.PERSONAL : ScriptScope.valueOf(entity.getScope()))
                 .setRepositoryId(entity.getRepositoryId())
-                .setRepositoryToolId(entity.getRepositoryToolId())
+                .setRepositoryScriptId(entity.getRepositoryScriptId())
                 .setRepositoryVersion(entity.getRepositoryVersion())
                 .setSourcePath(entity.getSourcePath())
                 .setSourceCommit(entity.getSourceCommit())

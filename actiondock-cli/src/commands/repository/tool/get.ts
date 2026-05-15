@@ -5,7 +5,7 @@ import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js"
 import { renderRepositoryToolDetail } from "../../../lib/render.js";
 
 export default class RepositoryToolGetCommand extends BaseCommand {
-  static description = "Show a repository tool";
+  static description = "Show a repository script";
 
   static args = {
     repositoryId: Args.string({ required: true }),

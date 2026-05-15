@@ -289,57 +289,57 @@ actiondock repository resolve --repository-id billing-service --json
 2. 再按正文中描述的入口文件、目录和关键词去 `read` / `grep`
 3. 只有在 Markdown 不足时再读源码
 
-### 仓库工具
+### 仓库脚本
 
-#### 列出仓库工具
+#### 列出仓库脚本
 
 ```bash
-actiondock repository tool list
-actiondock repository tool list --repository team-tools
-actiondock repository tool list --repository team-tools --json
+actiondock repository script list
+actiondock repository script list --repository team-tools
+actiondock repository script list --repository team-tools --json
 ```
 
-#### 查看仓库工具详情
+#### 查看仓库脚本详情
 
 ```bash
-actiondock repository tool get team-tools hello-groovy
-actiondock repository tool get team-tools hello-groovy --json
+actiondock repository script get team-tools hello-groovy
+actiondock repository script get team-tools hello-groovy --json
 ```
 
-#### 安装仓库工具
+#### 安装仓库脚本
 
 ```bash
-actiondock repository tool install team-tools hello-groovy
-actiondock repository tool install team-tools hello-groovy \
+actiondock repository script install team-tools hello-groovy
+actiondock repository script install team-tools hello-groovy \
   --install-script-dependencies \
   --install-plugin-dependencies \
   --install-schedules
 ```
 
-#### 更新已安装的仓库工具
+#### 更新已安装的仓库脚本
 
 ```bash
-actiondock repository tool update team-tools hello-groovy
-actiondock repository tool update team-tools hello-groovy \
+actiondock repository script update team-tools hello-groovy
+actiondock repository script update team-tools hello-groovy \
   --install-script-dependencies \
   --install-plugin-dependencies \
   --install-schedules
 ```
 
-#### 卸载仓库工具
+#### 卸载仓库脚本
 
 ```bash
-actiondock repository tool uninstall hello-groovy
-actiondock repository tool uninstall hello-groovy --json
+actiondock repository script uninstall hello-groovy
+actiondock repository script uninstall hello-groovy --json
 ```
 
-这里传的是本地脚本 ID，不是仓库里的 `toolId`。
+这里传的是本地脚本 ID，不是仓库里的 `scriptId`。
 
 #### 创建脚本工作副本
 
 ```bash
-actiondock repository tool working-copy team-tools hello-groovy
-actiondock repository tool working-copy team-tools hello-groovy --script-id hello-groovy-copy
+actiondock repository script working-copy team-tools hello-groovy
+actiondock repository script working-copy team-tools hello-groovy --script-id hello-groovy-copy
 ```
 
 ### 仓库 Webhook

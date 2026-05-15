@@ -123,10 +123,10 @@ public class ScriptInvocationService extends OptionalServiceSupport {
                 .findFirst()
                 .map(dependency -> scriptRepository.findInstalledByRepositorySource(
                         dependency.getRepositoryId(),
-                        dependency.getToolId()
+                        dependency.getRepositoryScriptId()
                 ).map(ScriptDefinition::getId).orElseGet(() -> defaultInstalledScriptId(
                         dependency.getRepositoryId(),
-                        dependency.getToolId()
+                        dependency.getRepositoryScriptId()
                 )))
                 .orElse(scriptId);
     }
@@ -139,13 +139,13 @@ public class ScriptInvocationService extends OptionalServiceSupport {
                 .filter(dependency -> requestedScriptId.equals(dependency.getScriptId()))
                 .findFirst()
                 .map(dependency -> "缺少脚本依赖: " + requestedScriptId
-                        + " -> " + defaultInstalledScriptId(dependency.getRepositoryId(), dependency.getToolId())
+                        + " -> " + defaultInstalledScriptId(dependency.getRepositoryId(), dependency.getRepositoryScriptId())
                         + " " + dependency.getVersionRange())
                 .orElse("脚本不存在: " + requestedScriptId);
     }
 
-    private static String defaultInstalledScriptId(String repositoryId, String toolId) {
-        return repositoryId + "." + toolId;
+    private static String defaultInstalledScriptId(String repositoryId, String repositoryScriptId) {
+        return repositoryId + "." + repositoryScriptId;
     }
 
     private static ScriptExecutionContext childContext(ScriptDefinition callerDefinition,

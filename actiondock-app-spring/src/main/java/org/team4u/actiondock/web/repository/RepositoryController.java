@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * 工具仓库 REST 控制器。
+ * 仓库脚本 REST 控制器。
  *
  * @author jay.wu
  */
@@ -110,7 +110,7 @@ public class RepositoryController {
     }
 
     /**
-     * 同步仓库工具列表。
+     * 同步仓库脚本列表。
      *
      * @param id 仓库 ID
      * @return API 响应，包含同步后的仓库定义
@@ -121,22 +121,22 @@ public class RepositoryController {
     }
 
     /**
-     * 查询所有仓库的工具列表。
+     * 查询所有仓库的脚本列表。
      *
-     * @return API 响应，包含工具描述符列表
+     * @return API 响应，包含脚本描述符列表
      */
-    @GetMapping("/tools")
+    @GetMapping("/scripts")
     public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listAllTools() {
         return ApiResponse.success(repositoryCatalogService.listAllRepositoryTools());
     }
 
     /**
-     * 查询指定仓库的工具列表。
+     * 查询指定仓库的脚本列表。
      *
      * @param id 仓库 ID
-     * @return API 响应，包含工具描述符列表
+     * @return API 响应，包含脚本描述符列表
      */
-    @GetMapping("/{id}/tools")
+    @GetMapping("/{id}/scripts")
     public ApiResponse<List<RepositoryCatalogTypes.RepositoryToolDescriptor>> listRepositoryTools(@PathVariable String id) {
         return ApiResponse.success(repositoryCatalogService.listRepositoryTools(id));
     }
@@ -230,26 +230,26 @@ public class RepositoryController {
     }
 
     /**
-     * 查询仓库中指定工具的详情。
+     * 查询仓库中指定脚本的详情。
      *
      * @param id 仓库 ID
-     * @param toolId 工具 ID
-     * @return API 响应，包含工具详情
+     * @param toolId 仓库脚本 ID
+     * @return API 响应，包含脚本详情
      */
-    @GetMapping("/{id}/tools/{toolId}")
+    @GetMapping("/{id}/scripts/{toolId}")
     public ApiResponse<RepositoryCatalogTypes.RepositoryToolDetail> detail(@PathVariable String id,
                                                                              @PathVariable String toolId) {
         return ApiResponse.success(repositoryCatalogService.getRepositoryTool(id, toolId));
     }
 
-    @PostMapping("/{id}/tools/{toolId}/local-assets")
+    @PostMapping("/{id}/scripts/{toolId}/local-assets")
     public ApiResponse<RepositoryLocalAsset> addToolLocalAsset(@PathVariable String id,
                                                                @PathVariable String toolId,
                                                                @RequestBody(required = false) RepositoryCatalogTypes.RepositoryLocalAssetRequest request) {
         return ApiResponse.success(repositoryToolService.addLocalAsset(id, toolId, request), "已添加到本地");
     }
 
-    @PostMapping("/{id}/tools/{toolId}/local-assets/update")
+    @PostMapping("/{id}/scripts/{toolId}/local-assets/update")
     public ApiResponse<RepositoryLocalAsset> updateToolLocalAsset(@PathVariable String id,
                                                                   @PathVariable String toolId,
                                                                   @RequestBody(required = false) RepositoryInstallRequest request) {
@@ -277,7 +277,7 @@ public class RepositoryController {
      *
      * @param id 仓库 ID
      * @param request 发布请求，包含待发布的脚本信息
-     * @return API 响应，包含发布后的工具描述符
+     * @return API 响应，包含发布后的脚本描述符
      */
     @PostMapping("/{id}/publish")
     public ApiResponse<RepositoryCatalogTypes.RepositoryToolDescriptor> publish(@PathVariable String id,

@@ -25,7 +25,7 @@ public class ScriptDefinition {
     private PublishedScriptRevision publishedRevision;
     private ScriptScope scope = ScriptScope.PERSONAL;
     private String repositoryId;
-    private String repositoryToolId;
+    private String repositoryScriptId;
     private String repositoryVersion;
     private ScriptSourceMetadata sourceMetadata = new ScriptSourceMetadata();
     private boolean editable = true;
@@ -172,13 +172,23 @@ public class ScriptDefinition {
         return this;
     }
 
-    public String getRepositoryToolId() {
-        return repositoryToolId;
+    public String getRepositoryScriptId() {
+        return repositoryScriptId;
     }
 
-    public ScriptDefinition setRepositoryToolId(String repositoryToolId) {
-        this.repositoryToolId = repositoryToolId;
+    public ScriptDefinition setRepositoryScriptId(String repositoryScriptId) {
+        this.repositoryScriptId = repositoryScriptId;
         return this;
+    }
+
+    @Deprecated
+    public String getRepositoryToolId() {
+        return getRepositoryScriptId();
+    }
+
+    @Deprecated
+    public ScriptDefinition setRepositoryToolId(String repositoryToolId) {
+        return setRepositoryScriptId(repositoryToolId);
     }
 
     public String getRepositoryVersion() {
@@ -341,7 +351,7 @@ public class ScriptDefinition {
                 .setPublishedRevision(publishedRevision)
                 .setScope(scope)
                 .setRepositoryId(repositoryId)
-                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryScriptId(repositoryScriptId)
                 .setRepositoryVersion(repositoryVersion)
                 .setSourcePath(getSourcePath())
                 .setSourceCommit(getSourceCommit())
@@ -437,7 +447,7 @@ public class ScriptDefinition {
         if (pythonRequirements == null) setPythonRequirements(existing.getPythonRequirements());
         if (scope == null) setScope(existing.getScope());
         if (repositoryId == null) setRepositoryId(existing.getRepositoryId());
-        if (repositoryToolId == null) setRepositoryToolId(existing.getRepositoryToolId());
+        if (repositoryScriptId == null) setRepositoryScriptId(existing.getRepositoryScriptId());
         if (repositoryVersion == null) setRepositoryVersion(existing.getRepositoryVersion());
         if (getSourcePath() == null) setSourcePath(existing.getSourcePath());
         if (getSourceCommit() == null) setSourceCommit(existing.getSourceCommit());

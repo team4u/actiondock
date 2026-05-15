@@ -15,7 +15,7 @@ public class ConfigValue {
     private String description;
     private boolean secret;
     private String repositoryId;
-    private String repositoryToolId;
+    private String repositoryScriptId;
     private String repositoryVersion;
     private String publishMode;
     private boolean managed;
@@ -68,13 +68,23 @@ public class ConfigValue {
         return this;
     }
 
-    public String getRepositoryToolId() {
-        return repositoryToolId;
+    public String getRepositoryScriptId() {
+        return repositoryScriptId;
     }
 
-    public ConfigValue setRepositoryToolId(String repositoryToolId) {
-        this.repositoryToolId = repositoryToolId;
+    public ConfigValue setRepositoryScriptId(String repositoryScriptId) {
+        this.repositoryScriptId = repositoryScriptId;
         return this;
+    }
+
+    @Deprecated
+    public String getRepositoryToolId() {
+        return getRepositoryScriptId();
+    }
+
+    @Deprecated
+    public ConfigValue setRepositoryToolId(String repositoryToolId) {
+        return setRepositoryScriptId(repositoryToolId);
     }
 
     public String getRepositoryVersion() {
@@ -138,7 +148,7 @@ public class ConfigValue {
                 .setDescription(description)
                 .setSecret(secret)
                 .setRepositoryId(repositoryId)
-                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryScriptId(repositoryScriptId)
                 .setRepositoryVersion(repositoryVersion)
                 .setPublishMode(publishMode)
                 .setManaged(managed)

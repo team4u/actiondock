@@ -23,7 +23,7 @@ public record ScriptDocumentView(
         Integer version,
         ScriptScope scope,
         String repositoryId,
-        String repositoryToolId,
+        String repositoryScriptId,
         String repositoryVersion,
         String sourcePath,
         String sourceCommit,

@@ -23,7 +23,7 @@ import java.util.Locale;
 /**
  * 统一资源生命周期 facade。
  * <p>
- * 首批覆盖仓库工具、仓库插件和能力包；底层仍复用现有资源服务。
+ * 首批覆盖仓库脚本、仓库插件和能力包；底层仍复用现有资源服务。
  */
 @RestController
 @RequestMapping("/api/resource-lifecycle")
@@ -90,10 +90,10 @@ public class ResourceLifecycleController {
     private Object executeRepositoryTool(String operation, ResourceLifecycleRequest request) {
         return switch (operation) {
             case OP_ADD_LOCAL -> repositoryToolService.addLocalAsset(normalizeRepositoryId(request),
-                    normalizeResourceId(request, "toolId 不能为空"),
+                    normalizeResourceId(request, "scriptId 不能为空"),
                     convertPayload(request.getPayload(), RepositoryCatalogTypes.RepositoryLocalAssetRequest.class));
             case OP_UPDATE_LOCAL -> repositoryToolService.updateLocalAsset(normalizeRepositoryId(request),
-                    normalizeResourceId(request, "toolId 不能为空"), toolOptions(request.getPayload()));
+                    normalizeResourceId(request, "scriptId 不能为空"), toolOptions(request.getPayload()));
             case OP_PUBLISH -> repositoryToolService.publishTool(normalizeRepositoryId(request),
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPublishRequest.class));
             case OP_PREVIEW -> repositoryToolService.previewPublishConfig(

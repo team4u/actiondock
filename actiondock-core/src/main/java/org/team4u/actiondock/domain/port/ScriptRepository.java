@@ -33,17 +33,17 @@ public interface ScriptRepository {
     Optional<ScriptDefinition> findById(String id);
 
     /**
-     * 根据来源仓库与工具标识查找已安装的仓库脚本。
+     * 根据来源仓库与仓库脚本标识查找已安装的仓库脚本。
      *
      * @param repositoryId 来源仓库 ID
-     * @param repositoryToolId 来源工具 ID
+     * @param repositoryScriptId 来源仓库脚本 ID
      * @return 匹配的已安装脚本，不存在时返回空的 Optional
      */
-    default Optional<ScriptDefinition> findInstalledByRepositorySource(String repositoryId, String repositoryToolId) {
+    default Optional<ScriptDefinition> findInstalledByRepositorySource(String repositoryId, String repositoryScriptId) {
         return findAll().stream()
                 .filter(item -> item.getScope() == ScriptScope.REPOSITORY)
                 .filter(item -> Objects.equals(repositoryId, item.getRepositoryId()))
-                .filter(item -> Objects.equals(repositoryToolId, item.getRepositoryToolId()))
+                .filter(item -> Objects.equals(repositoryScriptId, item.getRepositoryScriptId()))
                 .findFirst();
     }
 

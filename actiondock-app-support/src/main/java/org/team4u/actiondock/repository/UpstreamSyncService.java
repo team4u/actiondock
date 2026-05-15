@@ -66,7 +66,7 @@ class UpstreamSyncService {
             throw new IllegalArgumentException("上游脚本已添加到本地: " + repositoryId + "/" + toolId);
         }
         RepositoryToolDetail detail = catalog.getRepositoryTool(repositoryId, toolId);
-        String scriptId = NormalizeUtils.normalizeOrDefault(request == null ? null : request.id(), detail.descriptor().toolId());
+        String scriptId = NormalizeUtils.normalizeOrDefault(request == null ? null : request.id(), detail.descriptor().scriptId());
         if (repos.scriptRepository().findById(scriptId).isPresent()) {
             throw new IllegalArgumentException("脚本 ID 已存在，请指定其他工作副本 ID: " + scriptId);
         }
@@ -156,7 +156,7 @@ class UpstreamSyncService {
                 .setInputSchema(inputSchema)
                 .setOutputSchema(outputSchema)
                 .setRepositoryId(repositoryId)
-                .setRepositoryToolId(d.toolId())
+                .setRepositoryScriptId(d.scriptId())
                 .setRepositoryVersion(d.version())
                 .setOwner(d.owner())
                 .setDescription(d.description())

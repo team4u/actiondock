@@ -316,7 +316,7 @@ export function renderRepositoryWebhookDetail(item: RepositoryWebhookDetail): st
   if (descriptor.scriptDependencies.length > 0) {
     lines.push("ScriptDependencies:");
     for (const dependency of descriptor.scriptDependencies) {
-      lines.push(`  - ${dependency.scriptId} => ${dependency.repositoryId}/${dependency.toolId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`);
+      lines.push(`  - ${dependency.scriptId} => ${dependency.repositoryId}/${dependency.repositoryScriptId ?? dependency.toolId}${dependency.versionRange ? ` ${dependency.versionRange}` : ""}`);
     }
   }
   if (item.configTemplate.length > 0) {
@@ -395,14 +395,14 @@ export function renderProjectRepositoryResolution(item: ProjectRepositoryResolut
 
 export function renderRepositoryToolList(items: RepositoryToolDescriptor[]): string {
   if (items.length === 0) {
-    return "没有仓库工具。";
+    return "没有仓库脚本。";
   }
   return items
     .map((item) => {
       const installed = item.installed ? ` installed=${item.installedVersion ?? item.version}` : " not-installed";
       const workingCopy = item.workingCopyId ? ` working-copy=${item.workingCopyId}` : "";
       const type = item.type ? ` ${item.type}` : "";
-      return `${item.repositoryId}/${item.toolId} ${item.displayName}@${item.version}${type}${installed}${workingCopy}`;
+      return `${item.repositoryId}/${item.scriptId ?? item.toolId} ${item.displayName}@${item.version}${type}${installed}${workingCopy}`;
     })
     .join("\n");
 }
@@ -410,7 +410,7 @@ export function renderRepositoryToolList(items: RepositoryToolDescriptor[]): str
 export function renderRepositoryToolDetail(item: RepositoryToolDetail): string {
   const descriptor = item.descriptor;
   const lines = [
-    `RepositoryTool: ${descriptor.repositoryId}/${descriptor.toolId}`,
+    `RepositoryScript: ${descriptor.repositoryId}/${descriptor.scriptId ?? descriptor.toolId}`,
     `InstalledScript: ${descriptor.installedScriptId ?? "-"}`,
     `Name: ${descriptor.displayName}`,
     `Version: ${descriptor.version}`,
@@ -562,7 +562,7 @@ export function renderConfigValueDetail(item: ConfigValueDetailView | ConfigValu
     lines.push(`Description: ${item.description}`);
   }
   if (item.repositoryId) {
-    lines.push(`Repository: ${item.repositoryId}${item.repositoryToolId ? `/${item.repositoryToolId}` : ""}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
+    lines.push(`Repository: ${item.repositoryId}${(item.repositoryScriptId ?? item.repositoryToolId) ? `/${item.repositoryScriptId ?? item.repositoryToolId}` : ""}${item.repositoryVersion ? `@${item.repositoryVersion}` : ""}`);
   }
   if ("impactedScripts" in item && item.impactedScripts) {
     lines.push(`ImpactedScripts: ${item.impactedScripts.length}`);

@@ -382,13 +382,13 @@ export class ActionDockClient {
 
   async listRepositoryTools(repositoryId?: string): Promise<RepositoryToolDescriptor[]> {
     if (repositoryId) {
-      return this.requestJson<RepositoryToolDescriptor[]>(`/api/repositories/${repositoryId}/tools`);
+      return this.requestJson<RepositoryToolDescriptor[]>(`/api/repositories/${repositoryId}/scripts`);
     }
-    return this.requestJson<RepositoryToolDescriptor[]>("/api/repositories/tools");
+    return this.requestJson<RepositoryToolDescriptor[]>("/api/repositories/scripts");
   }
 
   async getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
-    return this.requestJson<RepositoryToolDetail>(`/api/repositories/${repositoryId}/tools/${toolId}`);
+    return this.requestJson<RepositoryToolDetail>(`/api/repositories/${repositoryId}/scripts/${toolId}`);
   }
 
   async installRepositoryTool(
@@ -396,7 +396,7 @@ export class ActionDockClient {
     toolId: string,
     payload: RepositoryInstallRequest
   ): Promise<RepositoryLocalAsset> {
-    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
       method: "POST",
       body: JSON.stringify({ mode: "LOCKED", ...payload })
     });
@@ -407,14 +407,14 @@ export class ActionDockClient {
     toolId: string,
     payload: RepositoryInstallRequest
   ): Promise<RepositoryLocalAsset> {
-    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets/update`, {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets/update`, {
       method: "POST",
       body: JSON.stringify(payload)
     });
   }
 
   async createRepositoryToolWorkingCopy(repositoryId: string, toolId: string, localAssetId?: string): Promise<RepositoryLocalAsset> {
-    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
       method: "POST",
       body: JSON.stringify({
         mode: "TRACKED",
@@ -428,7 +428,7 @@ export class ActionDockClient {
   }
 
   async uninstallRepositoryTool(scriptId: string): Promise<void> {
-    await this.requestJson<null>(`/api/installed-tools/${scriptId}`, {
+    await this.requestJson<null>(`/api/installed-scripts/${scriptId}`, {
       method: "DELETE"
     });
   }

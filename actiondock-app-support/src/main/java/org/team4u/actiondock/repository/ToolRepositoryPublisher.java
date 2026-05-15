@@ -82,7 +82,7 @@ final class ToolRepositoryPublisher {
         ScriptDefinition script = catalog.scriptApplicationService().getPublished(sourceScript.getId());
         catalog.assertPackagingConstraints(script);
 
-        String toolId = NormalizeUtils.normalize(request.toolId(), "toolId 不能为空");
+        String toolId = NormalizeUtils.normalize(request.repositoryScriptId(), "scriptId 不能为空");
         String version = NormalizeUtils.normalize(request.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
         List<ScriptSchedule> selectedSchedules = RepositoryCatalogTypes.resolvePublishSchedules(script.getId(), request.scheduleIds(), repos.scriptScheduleRepository());
         List<ScriptDependency> scriptDependencies = resolveToolScriptDependencies(repositoryId, script, request);
@@ -95,7 +95,7 @@ final class ToolRepositoryPublisher {
         List<ScheduleTemplateItem> scheduleTemplates = buildScheduleTemplate(selectedSchedules);
 
         assertToolVersionAvailable(repositoryId, session.index(), toolId, version);
-        Path toolDir = session.root().resolve(TOOLS_DIR).resolve(toolId);
+        Path toolDir = session.root().resolve(SCRIPTS_DIR).resolve(toolId);
         writeToolFiles(toolDir, toolId, script, request, configTemplates, scheduleTemplates, scriptDependencies);
         updateRepositoryIndex(session.root(), repository, toolId, script, request);
         session.commitPublishedAsset(toolId, version, request.releaseNotes());
@@ -165,7 +165,7 @@ final class ToolRepositoryPublisher {
                                           List<ScheduleTemplateItem> scheduleTemplates,
                                           List<ScriptDependency> scriptDependencies,
                                           List<PluginDependency> pluginDeps) {
-        catalog.writeJson(toolDir.resolve(TOOL_DESCRIPTOR_FILE), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies, pluginDeps));
+        catalog.writeJson(toolDir.resolve(SCRIPT_DESCRIPTOR_FILE), buildToolFile(script, request, sourceFileName, configTemplates, scheduleTemplates, scriptDependencies, pluginDeps));
         catalog.writeJson(toolDir.resolve(TOOL_INPUT_SCHEMA_FILE), script.getInputSchema());
         catalog.writeJson(toolDir.resolve(TOOL_OUTPUT_SCHEMA_FILE), script.getOutputSchema());
     }
@@ -190,7 +190,7 @@ final class ToolRepositoryPublisher {
                                           List<PluginDependency> pluginDependencies) {
         return new ToolFile(
                 RepositoryIndexUtils.DEFAULT_VERSION,
-                NormalizeUtils.normalize(request.toolId(), "toolId 不能为空"),
+                NormalizeUtils.normalize(request.repositoryScriptId(), "scriptId 不能为空"),
                 NormalizeUtils.normalizeOrDefault(request.displayName(), script.getName()),
                 NormalizeUtils.normalize(request.version(), SkillFileUtils.ERR_VERSION_REQUIRED),
                 script.getType().name(),
@@ -265,12 +265,12 @@ final class ToolRepositoryPublisher {
                 throw new IllegalArgumentException("脚本依赖重复声明: " + scriptId);
             }
             String repositoryId = NormalizeUtils.normalizeOrDefault(item.getRepositoryId(), defaultRepositoryId);
-            String toolId = NormalizeUtils.normalize(item.getToolId(), "脚本依赖 toolId 不能为空: " + scriptId);
+            String toolId = NormalizeUtils.normalize(item.getRepositoryScriptId(), "脚本依赖 scriptId 不能为空: " + scriptId);
             RepositoryToolDescriptor descriptor = catalog.getRepositoryTool(repositoryId, toolId).descriptor();
             declaredByScriptId.put(scriptId, new ScriptDependency()
                     .setScriptId(scriptId)
                     .setRepositoryId(repositoryId)
-                    .setToolId(toolId)
+                    .setRepositoryScriptId(toolId)
                     .setVersionRange(NormalizeUtils.normalizeOrDefault(item.getVersionRange(), ">= " + descriptor.version())));
         }
         return declaredByScriptId;
@@ -359,18 +359,18 @@ final class ToolRepositoryPublisher {
                 script.getType().name(),
                 NormalizeUtils.normalizeNullable(script.getDescription()),
                 NormalizeUtils.normalizeNullable(request.releaseNotes()),
-                TOOLS_DIR + "/" + toolId + "/" + TOOL_DESCRIPTOR_FILE
+                SCRIPTS_DIR + "/" + toolId + "/" + SCRIPT_DESCRIPTOR_FILE
         );
         List<RepositoryIndexEntry> entries =
-                RepositoryIndexUtils.upsertSorted(current.safeTools(), next, RepositoryIndexEntry::id);
-        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withTools(current, repository, entries));
+                RepositoryIndexUtils.upsertSorted(current.safeScripts(), next, RepositoryIndexEntry::id);
+        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withScripts(current, repository, entries));
     }
 
     static void assertToolVersionAvailable(String repositoryId,
                                            RepositoryIndexFile index,
                                            String toolId,
                                            String version) {
-        NormalizeUtils.nullSafeList(index == null ? null : index.tools()).stream()
+        NormalizeUtils.nullSafeList(index == null ? null : index.scripts()).stream()
                 .filter(entry -> Objects.equals(toolId, entry.id()) && Objects.equals(version, entry.version()))
                 .findFirst()
                 .ifPresent(entry -> { throw new RepositoryVersionExistsException(ASSET_TYPE_TOOL, repositoryId, toolId, version); });

@@ -8,12 +8,12 @@ import org.team4u.actiondock.repository.RepositoryToolService;
 import org.team4u.actiondock.web.common.ApiResponse;
 
 /**
- * 已安装仓库工具控制器。
+ * 已安装仓库脚本控制器。
  *
  * @author jay.wu
  */
 @RestController
-@RequestMapping("/api/installed-tools")
+@RequestMapping("/api/installed-scripts")
 public class InstalledToolController {
     private final RepositoryToolService repositoryToolService;
 

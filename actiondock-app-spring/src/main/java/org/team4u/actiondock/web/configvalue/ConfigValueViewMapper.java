@@ -32,7 +32,7 @@ class ConfigValueViewMapper {
                 .setDescription(value.getDescription())
                 .setSecret(value.isSecret())
                 .setRepositoryId(value.getRepositoryId())
-                .setRepositoryToolId(value.getRepositoryToolId())
+                .setRepositoryScriptId(value.getRepositoryScriptId())
                 .setRepositoryVersion(value.getRepositoryVersion())
                 .setPublishMode(value.getPublishMode())
                 .setManaged(value.isManaged())
@@ -52,7 +52,7 @@ class ConfigValueViewMapper {
                 value.getDescription(),
                 value.isSecret(),
                 value.getRepositoryId(),
-                value.getRepositoryToolId(),
+                value.getRepositoryScriptId(),
                 value.getRepositoryVersion(),
                 value.getPublishMode(),
                 value.isManaged(),

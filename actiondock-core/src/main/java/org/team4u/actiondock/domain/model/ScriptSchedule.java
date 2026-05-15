@@ -22,7 +22,7 @@ public class ScriptSchedule {
     private boolean enabled = true;
     private boolean editable = true;
     private String repositoryId;
-    private String repositoryToolId;
+    private String repositoryScriptId;
     private String repositoryPackageId;
     private String repositoryVersion;
     private LocalDateTime lastTriggeredAt;
@@ -102,13 +102,23 @@ public class ScriptSchedule {
         return this;
     }
 
-    public String getRepositoryToolId() {
-        return repositoryToolId;
+    public String getRepositoryScriptId() {
+        return repositoryScriptId;
     }
 
-    public ScriptSchedule setRepositoryToolId(String repositoryToolId) {
-        this.repositoryToolId = repositoryToolId;
+    public ScriptSchedule setRepositoryScriptId(String repositoryScriptId) {
+        this.repositoryScriptId = repositoryScriptId;
         return this;
+    }
+
+    @Deprecated
+    public String getRepositoryToolId() {
+        return getRepositoryScriptId();
+    }
+
+    @Deprecated
+    public ScriptSchedule setRepositoryToolId(String repositoryToolId) {
+        return setRepositoryScriptId(repositoryToolId);
     }
 
     public String getRepositoryPackageId() {
@@ -175,7 +185,7 @@ public class ScriptSchedule {
                 .setEnabled(enabled)
                 .setEditable(editable)
                 .setRepositoryId(repositoryId)
-                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryScriptId(repositoryScriptId)
                 .setRepositoryPackageId(repositoryPackageId)
                 .setRepositoryVersion(repositoryVersion)
                 .setLastTriggeredAt(lastTriggeredAt)

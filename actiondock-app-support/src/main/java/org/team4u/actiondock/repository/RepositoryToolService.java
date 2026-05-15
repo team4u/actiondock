@@ -93,7 +93,7 @@ public class RepositoryToolService {
             throw new IllegalArgumentException("仅支持卸载仓库工具");
         }
         repos.scriptScheduleRepository().findAll().stream()
-                .filter(item -> localAssetId.equals(item.getRepositoryToolId()))
+                .filter(item -> localAssetId.equals(item.getRepositoryScriptId()))
                 .map(ScriptSchedule::getId)
                 .toList()
                 .forEach(repos.scriptScheduleRepository()::deleteById);
@@ -181,7 +181,7 @@ public class RepositoryToolService {
         LocalDateTime now = LocalDateTime.now();
         ScriptDefinition definition = buildLockedScriptDefinition(repositoryId, detail, localAssetId, existing, now);
         repos.scriptRepository().save(definition);
-        configTemplateSyncService.syncConfigTemplates(repositoryId, detail.descriptor().toolId(), detail.descriptor().version(), detail.configTemplate());
+        configTemplateSyncService.syncConfigTemplates(repositoryId, detail.descriptor().scriptId(), detail.descriptor().version(), detail.configTemplate());
         if (options.installSchedules()) {
             syncScheduleTemplates(definition, detail.scheduleTemplate(), now);
         }
@@ -207,7 +207,7 @@ public class RepositoryToolService {
                                            LinkedHashSet<String> visiting) {
         for (ScriptDependency dependency : NormalizeUtils.nullSafeList(dependencies)) {
             String scriptId = NormalizeUtils.normalize(dependency.getScriptId(), "脚本依赖 scriptId 不能为空");
-            String depToolId = NormalizeUtils.normalize(dependency.getToolId(), "脚本依赖 toolId 不能为空: " + scriptId);
+            String depToolId = NormalizeUtils.normalize(dependency.getRepositoryScriptId(), "脚本依赖 scriptId 不能为空: " + scriptId);
             String depRepositoryId = dependencyResolver.resolveToolRepositoryId(repositoryId, dependency.getRepositoryId(), depToolId);
             ScriptDefinition installed = repos.scriptRepository().findInstalledByRepositorySource(depRepositoryId, depToolId).orElse(null);
             if (installed != null && RepositoryVersionUtils.versionSatisfies(installed.getRepositoryVersion(), dependency.getVersionRange())) {
@@ -253,7 +253,7 @@ public class RepositoryToolService {
                 .setAssetType(UpstreamAssetType.SCRIPT)
                 .setLocalAssetId(localAssetId)
                 .setRepositoryId(definition.getRepositoryId())
-                .setUpstreamAssetId(definition.getRepositoryToolId())
+                .setUpstreamAssetId(definition.getRepositoryScriptId())
                 .setMode(RepositoryLocalAssetMode.LOCKED)
                 .setVersion(detail.descriptor().version())
                 .setLatestVersion(detail.descriptor().version())
@@ -277,7 +277,7 @@ public class RepositoryToolService {
             ScriptSchedule existing = all.stream()
                     .filter(item -> definition.getId().equals(item.getScriptId())
                             && definition.getRepositoryId().equals(item.getRepositoryId())
-                            && definition.getId().equals(item.getRepositoryToolId())
+                            && definition.getId().equals(item.getRepositoryScriptId())
                             && item.getName().equals(template.name()))
                     .findFirst()
                     .orElse(null);
@@ -290,7 +290,7 @@ public class RepositoryToolService {
                     .setEnabled(false)
                     .setEditable(false)
                     .setRepositoryId(definition.getRepositoryId())
-                    .setRepositoryToolId(definition.getId())
+                    .setRepositoryScriptId(definition.getId())
                     .setRepositoryVersion(definition.getRepositoryVersion())
                     .setCreatedAt(existing == null ? now : existing.getCreatedAt())
                     .setUpdatedAt(now);

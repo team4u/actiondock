@@ -130,7 +130,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         normalized.setCreatedAt(existing.getCreatedAt())
                 .setUpdatedAt(LocalDateTime.now())
                 .setRepositoryId(existing.getRepositoryId())
-                .setRepositoryToolId(existing.getRepositoryToolId())
+                .setRepositoryScriptId(existing.getRepositoryScriptId())
                 .setRepositoryVersion(existing.getRepositoryVersion())
                 .setPublishMode(existing.getPublishMode())
                 .setManaged(existing.isManaged())
@@ -269,7 +269,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
                 key, value, normalizeDescription(source.getDescription()),
                 new ConfigValueFlags(source.isSecret(), source.isManaged(), source.isOverridden()),
                 coalesce(source.getRepositoryId(), fallback, ConfigValue::getRepositoryId),
-                coalesce(source.getRepositoryToolId(), fallback, ConfigValue::getRepositoryToolId),
+                coalesce(source.getRepositoryScriptId(), fallback, ConfigValue::getRepositoryScriptId),
                 coalesce(source.getRepositoryVersion(), fallback, ConfigValue::getRepositoryVersion),
                 coalesce(source.getPublishMode(), fallback, ConfigValue::getPublishMode),
                 null, null
@@ -299,7 +299,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
 
     private static ConfigValue buildConfigValue(String key, String value,
                                                 String description, ConfigValueFlags flags,
-                                                String repositoryId, String repositoryToolId,
+                                                String repositoryId, String repositoryScriptId,
                                                 String repositoryVersion, String publishMode,
                                                 LocalDateTime createdAt, LocalDateTime updatedAt) {
         return new ConfigValue()
@@ -308,7 +308,7 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
                 .setDescription(description)
                 .setSecret(flags.secret())
                 .setRepositoryId(repositoryId)
-                .setRepositoryToolId(repositoryToolId)
+                .setRepositoryScriptId(repositoryScriptId)
                 .setRepositoryVersion(repositoryVersion)
                 .setPublishMode(publishMode)
                 .setManaged(flags.managed())

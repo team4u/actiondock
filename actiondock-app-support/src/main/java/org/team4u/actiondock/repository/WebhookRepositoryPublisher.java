@@ -121,13 +121,13 @@ final class WebhookRepositoryPublisher {
         if (!script.hasPublishedRevision() && NormalizeUtils.isBlank(script.getRepositoryId())) {
             throw new IllegalArgumentException("Webhook 脚本尚未发布: " + script.getId());
         }
-        if (NormalizeUtils.isBlank(script.getRepositoryId()) || NormalizeUtils.isBlank(script.getRepositoryToolId())) {
+        if (NormalizeUtils.isBlank(script.getRepositoryId()) || NormalizeUtils.isBlank(script.getRepositoryScriptId())) {
             return List.of();
         }
         return List.of(new ScriptDependency()
                 .setScriptId(script.getId())
                 .setRepositoryId(script.getRepositoryId())
-                .setToolId(script.getRepositoryToolId())
+                .setRepositoryScriptId(script.getRepositoryScriptId())
                 .setVersionRange(script.getRepositoryVersion() == null ? null : ">= " + script.getRepositoryVersion()));
     }
 

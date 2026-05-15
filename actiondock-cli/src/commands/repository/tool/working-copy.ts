@@ -5,7 +5,7 @@ import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js"
 import { renderRepositoryLocalAsset } from "../../../lib/render.js";
 
 export default class RepositoryToolWorkingCopyCommand extends BaseCommand {
-  static description = "Create a script working copy from a repository tool";
+  static description = "Create a script working copy from a repository script";
 
   static examples = [
     "<%= config.bin %> <%= command.id %> demo-repo hello-groovy",
