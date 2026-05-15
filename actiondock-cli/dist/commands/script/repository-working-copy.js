@@ -1,9 +1,9 @@
 import { Args, Flags } from "@oclif/core";
-import { BaseCommand } from "../../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
-import { renderRepositoryLocalAsset } from "../../../lib/render.js";
-export default class RepositoryToolWorkingCopyCommand extends BaseCommand {
-    static description = "Create a script working copy from a repository tool";
+import { BaseCommand } from "../../lib/command.js";
+import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
+import { renderRepositoryLocalAsset } from "../../lib/render.js";
+export default class ScriptRepositoryWorkingCopyCommand extends BaseCommand {
+    static description = "Create a script working copy from a repository script";
     static examples = [
         "<%= config.bin %> <%= command.id %> demo-repo hello-groovy",
         "<%= config.bin %> <%= command.id %> demo-repo hello-groovy --script-id hello-groovy-copy"
@@ -19,7 +19,7 @@ export default class RepositoryToolWorkingCopyCommand extends BaseCommand {
         help: Flags.help({ char: "h" })
     };
     async run() {
-        const { args, flags } = await this.parse(RepositoryToolWorkingCopyCommand);
+        const { args, flags } = await this.parse(ScriptRepositoryWorkingCopyCommand);
         try {
             const item = await createClient(flags).createRepositoryToolWorkingCopy(args.repositoryId, args.toolId, flags["script-id"]);
             flags.json ? this.printJson(item) : this.log(renderRepositoryLocalAsset(item));

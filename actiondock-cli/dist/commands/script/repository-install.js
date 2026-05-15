@@ -1,9 +1,9 @@
 import { Args, Flags } from "@oclif/core";
-import { BaseCommand } from "../../../lib/command.js";
-import { buildRepositoryInstallRequest, createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
-import { renderRepositoryLocalAsset } from "../../../lib/render.js";
-export default class RepositoryToolInstallCommand extends BaseCommand {
-    static description = "Install a repository tool";
+import { BaseCommand } from "../../lib/command.js";
+import { buildRepositoryInstallRequest, createClient, serverTokenFlags } from "../../lib/command-helpers.js";
+import { renderRepositoryLocalAsset } from "../../lib/render.js";
+export default class ScriptRepositoryInstallCommand extends BaseCommand {
+    static description = "Install a repository script";
     static args = {
         repositoryId: Args.string({ required: true }),
         toolId: Args.string({ required: true })
@@ -18,7 +18,7 @@ export default class RepositoryToolInstallCommand extends BaseCommand {
         help: Flags.help({ char: "h" })
     };
     async run() {
-        const { args, flags } = await this.parse(RepositoryToolInstallCommand);
+        const { args, flags } = await this.parse(ScriptRepositoryInstallCommand);
         try {
             const item = await createClient(flags).installRepositoryTool(args.repositoryId, args.toolId, buildRepositoryInstallRequest(flags));
             flags.json ? this.printJson(item) : this.log(renderRepositoryLocalAsset(item));

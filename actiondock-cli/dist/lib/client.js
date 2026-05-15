@@ -275,27 +275,27 @@ export class ActionDockClient {
     }
     async listRepositoryTools(repositoryId) {
         if (repositoryId) {
-            return this.requestJson(`/api/repositories/${repositoryId}/tools`);
+            return this.requestJson(`/api/repositories/${repositoryId}/scripts`);
         }
-        return this.requestJson("/api/repositories/tools");
+        return this.requestJson("/api/repositories/scripts");
     }
     async getRepositoryTool(repositoryId, toolId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}`);
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}`);
     }
     async installRepositoryTool(repositoryId, toolId, payload) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
             method: "POST",
             body: JSON.stringify({ mode: "LOCKED", ...payload })
         });
     }
     async updateRepositoryTool(repositoryId, toolId, payload) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets/update`, {
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets/update`, {
             method: "POST",
             body: JSON.stringify(payload)
         });
     }
     async createRepositoryToolWorkingCopy(repositoryId, toolId, localAssetId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/tools/${toolId}/local-assets`, {
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
             method: "POST",
             body: JSON.stringify({
                 mode: "TRACKED",
@@ -308,7 +308,7 @@ export class ActionDockClient {
         });
     }
     async uninstallRepositoryTool(scriptId) {
-        await this.requestJson(`/api/installed-tools/${scriptId}`, {
+        await this.requestJson(`/api/installed-scripts/${scriptId}`, {
             method: "DELETE"
         });
     }

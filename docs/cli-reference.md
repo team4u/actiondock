@@ -51,6 +51,8 @@ export ACTIONDOCK_PROFILE=local
 
 ## 脚本命令
 
+脚本是 ActionDock 的主要资产对象。本节覆盖本地脚本的完整生命周期，以及来自仓库的脚本安装与管理。
+
 ### 查看脚本列表
 
 ```bash
@@ -167,16 +169,200 @@ actiondock script validate <id>
 actiondock script publish <id>
 ```
 
-## 服务管理
+### 来自仓库的脚本
 
-### 服务器命令
+命令前缀：`actiondock script repository-*`
+
+脚本是主对象，仓库只是来源；因此本节将仓库脚本操作放在脚本章节里。
+
+#### 列出仓库脚本
 
 ```bash
-actiondock server        # 前台启动服务
-actiondock server -p 8080  # 指定端口启动
+actiondock script repository-list
+actiondock script repository-list --repository team-tools
+actiondock script repository-list --repository team-tools --json
 ```
 
-## 仓库命令
+#### 查看仓库脚本详情
+
+```bash
+actiondock script repository-get team-tools hello-groovy
+actiondock script repository-get team-tools hello-groovy --json
+```
+
+#### 安装仓库脚本
+
+```bash
+actiondock script repository-install team-tools hello-groovy
+actiondock script repository-install team-tools hello-groovy \
+  --install-script-dependencies \
+  --install-plugin-dependencies \
+  --install-schedules
+```
+
+#### 更新已安装的仓库脚本
+
+```bash
+actiondock script repository-update team-tools hello-groovy
+actiondock script repository-update team-tools hello-groovy \
+  --install-script-dependencies \
+  --install-plugin-dependencies \
+  --install-schedules
+```
+
+#### 卸载仓库脚本
+
+```bash
+actiondock script repository-uninstall hello-groovy
+actiondock script repository-uninstall hello-groovy --json
+```
+
+这里传的是本地脚本 ID，不是仓库里的 `scriptId`。
+
+#### 创建脚本工作副本
+
+```bash
+actiondock script repository-working-copy team-tools hello-groovy
+actiondock script repository-working-copy team-tools hello-groovy --script-id hello-groovy-copy
+```
+
+### 上游同步
+
+查看或拉取脚本工作副本的上游更新：
+
+```bash
+actiondock script upstream-status hello-groovy
+actiondock script upstream-pull hello-groovy
+actiondock script upstream-pull hello-groovy --force
+```
+
+## Webhook 命令
+
+### 本地 Webhook
+
+#### 列出 Webhook
+
+```bash
+actiondock webhook list --json
+```
+
+#### 查看 Webhook 详情
+
+```bash
+actiondock webhook get <webhook-id>
+actiondock webhook get <webhook-id> --json
+```
+
+#### 创建 Webhook
+
+```bash
+actiondock webhook create --definition-json '{"key": "order-created", "transportType": "HTTP"}'
+
+actiondock webhook create \
+  --definition-file ./webhook.json \
+  --webhook-id my-webhook \
+  --name "Order Created"
+```
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--definition-json` | 是 | Webhook 定义的 JSON 字符串 |
+| `--definition-file` | 否 | Webhook 定义文件路径（替代 `--definition-json`） |
+| `--webhook-id` | 否 | Webhook ID 覆盖 |
+| `--name` | 否 | Webhook 名称 |
+| `--key` | 否 | Webhook key |
+| `--transport-type` | 否 | 传输类型 |
+
+#### 更新 Webhook
+
+```bash
+actiondock webhook update <webhook-id> --name "New Name" --enabled
+actiondock webhook update <webhook-id> --definition-json '{"key": "updated-key"}'
+```
+
+#### 删除 Webhook
+
+```bash
+actiondock webhook delete <webhook-id>
+actiondock webhook delete <webhook-id> --json
+```
+
+#### 启用 / 禁用 Webhook
+
+```bash
+actiondock webhook enable <webhook-id>
+actiondock webhook disable <webhook-id>
+```
+
+#### 触发 Webhook
+
+```bash
+actiondock webhook invoke <webhook-id>
+actiondock webhook invoke <webhook-id> --payload-json '{"event": "test"}'
+actiondock webhook invoke <webhook-id> --payload-file ./payload.json
+```
+
+### 来自仓库的 Webhook
+
+命令前缀：`actiondock webhook repository-*`
+
+虽然命令名挂在 `webhook repository-*`，但语义上仍属于 Webhook 生命周期。
+
+#### 列出仓库 Webhook
+
+```bash
+actiondock webhook repository-list
+actiondock webhook repository-list --repository team-tools
+actiondock webhook repository-list --repository team-tools --json
+```
+
+#### 查看仓库 Webhook 详情
+
+```bash
+actiondock webhook repository-get team-tools order-created
+actiondock webhook repository-get team-tools order-created --json
+```
+
+#### 安装仓库 Webhook
+
+```bash
+actiondock webhook repository-install team-tools order-created
+actiondock webhook repository-install team-tools order-created --install-script-dependencies
+```
+
+#### 更新已安装的仓库 Webhook
+
+```bash
+actiondock webhook repository-update team-tools order-created
+actiondock webhook repository-update team-tools order-created --install-script-dependencies
+```
+
+#### 创建 Webhook 工作副本
+
+```bash
+actiondock webhook repository-working-copy team-tools order-created
+actiondock webhook repository-working-copy team-tools order-created --webhook-id order-created-copy
+```
+
+### 上游同步
+
+查看或拉取 Webhook 工作副本的上游更新：
+
+```bash
+actiondock webhook upstream-status order-created
+actiondock webhook upstream-pull order-created
+actiondock webhook upstream-pull order-created --force
+```
+
+## 仓库定义与项目知识
+
+本节只覆盖仓库定义的管理操作和项目知识入口。仓库中的脚本和 Webhook 安装操作，分别在各自的章节中说明。
+
+| 你要做的事 | 去哪里看 |
+|---|---|
+| 从仓库查找/安装脚本 | 脚本 → 来自仓库的脚本 |
+| 从仓库查找/安装 Webhook | Webhook → 来自仓库的 Webhook |
+| 管理仓库定义 / 同步仓库 / 解析项目知识 | 本节 |
 
 ### 仓库定义管理
 
@@ -289,109 +475,6 @@ actiondock repository resolve --repository-id billing-service --json
 2. 再按正文中描述的入口文件、目录和关键词去 `read` / `grep`
 3. 只有在 Markdown 不足时再读源码
 
-### 仓库脚本
-
-#### 列出仓库脚本
-
-```bash
-actiondock repository script list
-actiondock repository script list --repository team-tools
-actiondock repository script list --repository team-tools --json
-```
-
-#### 查看仓库脚本详情
-
-```bash
-actiondock repository script get team-tools hello-groovy
-actiondock repository script get team-tools hello-groovy --json
-```
-
-#### 安装仓库脚本
-
-```bash
-actiondock repository script install team-tools hello-groovy
-actiondock repository script install team-tools hello-groovy \
-  --install-script-dependencies \
-  --install-plugin-dependencies \
-  --install-schedules
-```
-
-#### 更新已安装的仓库脚本
-
-```bash
-actiondock repository script update team-tools hello-groovy
-actiondock repository script update team-tools hello-groovy \
-  --install-script-dependencies \
-  --install-plugin-dependencies \
-  --install-schedules
-```
-
-#### 卸载仓库脚本
-
-```bash
-actiondock repository script uninstall hello-groovy
-actiondock repository script uninstall hello-groovy --json
-```
-
-这里传的是本地脚本 ID，不是仓库里的 `scriptId`。
-
-#### 创建脚本工作副本
-
-```bash
-actiondock repository script working-copy team-tools hello-groovy
-actiondock repository script working-copy team-tools hello-groovy --script-id hello-groovy-copy
-```
-
-### 仓库 Webhook
-
-#### 列出仓库 Webhook
-
-```bash
-actiondock webhook repository-list
-actiondock webhook repository-list --repository team-tools
-actiondock webhook repository-list --repository team-tools --json
-```
-
-#### 查看仓库 Webhook 详情
-
-```bash
-actiondock webhook repository-get team-tools order-created
-actiondock webhook repository-get team-tools order-created --json
-```
-
-#### 安装仓库 Webhook
-
-```bash
-actiondock webhook repository-install team-tools order-created
-actiondock webhook repository-install team-tools order-created --install-script-dependencies
-```
-
-#### 更新已安装的仓库 Webhook
-
-```bash
-actiondock webhook repository-update team-tools order-created
-actiondock webhook repository-update team-tools order-created --install-script-dependencies
-```
-
-#### 创建 Webhook 工作副本
-
-```bash
-actiondock webhook repository-working-copy team-tools order-created
-actiondock webhook repository-working-copy team-tools order-created --webhook-id order-created-copy
-```
-
-#### 查看上游状态与拉取更新
-
-```bash
-actiondock script upstream-status hello-groovy
-actiondock script upstream-pull hello-groovy
-actiondock script upstream-pull hello-groovy --force
-
-actiondock webhook upstream-status order-created
-actiondock webhook upstream-pull order-created
-actiondock webhook upstream-pull order-created --force
-```
-
 ## 配置命令参考
 
 ```bash
@@ -403,6 +486,13 @@ actiondock config set server <url> [--profile <name>]          # 更新服务器
 actiondock config set token <token> [--profile <name>]         # 更新访问令牌
 actiondock config clear token [--profile <name>]               # 清除访问令牌
 actiondock config remove <name>                                # 删除 profile
+```
+
+## 服务管理
+
+```bash
+actiondock server        # 前台启动服务
+actiondock server -p 8080  # 指定端口启动
 ```
 
 ## 完整示例流程

@@ -1,10 +1,10 @@
 import { Args, Flags } from "@oclif/core";
 
-import { BaseCommand } from "../../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
-import { renderRepositoryToolDetail } from "../../../lib/render.js";
+import { BaseCommand } from "../../lib/command.js";
+import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
+import { renderRepositoryToolDetail } from "../../lib/render.js";
 
-export default class RepositoryToolGetCommand extends BaseCommand {
+export default class ScriptRepositoryGetCommand extends BaseCommand {
   static description = "Show a repository script";
 
   static args = {
@@ -19,7 +19,7 @@ export default class RepositoryToolGetCommand extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(RepositoryToolGetCommand);
+    const { args, flags } = await this.parse(ScriptRepositoryGetCommand);
     try {
       const item = await createClient(flags).getRepositoryTool(args.repositoryId, args.toolId);
       flags.json ? this.printJson(item) : this.log(renderRepositoryToolDetail(item));
