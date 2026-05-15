@@ -358,7 +358,7 @@ export function RepositoryManagementPage() {
             loading={resolvingId === record.id}
             onClick={() => void handleResolve(record.id)}
           >
-            Resolve
+            解析
           </Button>
           <Button
             size="small"
