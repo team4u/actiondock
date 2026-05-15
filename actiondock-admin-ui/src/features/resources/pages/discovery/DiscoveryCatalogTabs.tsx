@@ -139,7 +139,7 @@ export function DiscoveryCatalogTabs({
               ghost={record.localState?.updateAvailable}
               icon={<SyncOutlined />}
               disabled={!record.localState?.updateAvailable}
-              loading={actionKey === `update-local:${record.repositoryId}:${record.toolId}`}
+              loading={actionKey === `update-local:${record.repositoryId}:${record.scriptId}`}
               onClick={() => void onToolLocalAssetAction(record, "update-local")}
             >
               {record.localState?.updateAvailable ? "更新" : "已添加"}
@@ -149,7 +149,7 @@ export function DiscoveryCatalogTabs({
               size="small"
               type="primary"
               icon={<DownloadOutlined />}
-              loading={actionKey === `add-local:${record.repositoryId}:${record.toolId}`}
+              loading={actionKey === `add-local:${record.repositoryId}:${record.scriptId}`}
               onClick={() => void onAddToolToLocal(record)}
             >
               添加到本地
@@ -376,7 +376,7 @@ export function DiscoveryCatalogTabs({
           label: `脚本 (${filteredTools.length})`,
           children: (
             <Table<RepositoryToolDescriptor>
-              rowKey={(item) => `${item.repositoryId}:${item.toolId}`}
+              rowKey={(item) => `${item.repositoryId}:${item.scriptId}`}
               loading={loading}
               columns={toolColumns}
               dataSource={filteredTools}

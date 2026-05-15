@@ -37,7 +37,7 @@ function script(overrides: Partial<ScriptDefinition> = {}): ScriptDefinition {
 function descriptor(pluginDependencies: PluginDependency[]): RepositoryToolDescriptor {
   return {
     repositoryId: "repo",
-    toolId: "tool",
+    scriptId: "tool",
     displayName: "Repository Tool",
     version: "1.0.0",
     tags: [],

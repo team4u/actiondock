@@ -9,6 +9,7 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
+import org.team4u.actiondock.repository.RepositoryCatalogService;
 
 import java.util.Map;
 
@@ -19,19 +20,24 @@ import java.util.Map;
  */
 @Component
 public class SampleDataInitializer implements CommandLineRunner {
+    private static final System.Logger LOGGER = System.getLogger(SampleDataInitializer.class.getName());
+
     private final ScriptApplicationService scriptApplicationService;
     private final ConfigValueApplicationService configValueApplicationService;
     private final ScriptRepository scriptRepository;
     private final ConfigValueRepository configValueRepository;
+    private final RepositoryCatalogService repositoryCatalogService;
 
     public SampleDataInitializer(ScriptApplicationService scriptApplicationService,
                                  ConfigValueApplicationService configValueApplicationService,
                                  ScriptRepository scriptRepository,
-                                 ConfigValueRepository configValueRepository) {
+                                 ConfigValueRepository configValueRepository,
+                                 RepositoryCatalogService repositoryCatalogService) {
         this.scriptApplicationService = scriptApplicationService;
         this.configValueApplicationService = configValueApplicationService;
         this.scriptRepository = scriptRepository;
         this.configValueRepository = configValueRepository;
+        this.repositoryCatalogService = repositoryCatalogService;
     }
 
     /**
@@ -74,6 +80,12 @@ public class SampleDataInitializer implements CommandLineRunner {
                     .setKey("system.default-owner")
                     .setValue("")
                     .setDescription("发布到仓库时默认的维护人/作者名称"));
+        }
+
+        try {
+            repositoryCatalogService.refreshRepositoryCache();
+        } catch (RuntimeException exception) {
+            LOGGER.log(System.Logger.Level.WARNING, "启动时刷新仓库缓存失败", exception);
         }
     }
 }

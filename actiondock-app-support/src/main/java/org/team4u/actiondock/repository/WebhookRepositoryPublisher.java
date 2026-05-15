@@ -55,8 +55,8 @@ final class WebhookRepositoryPublisher {
         if (!configTemplates.isEmpty()) {
             catalog.writeJson(webhookDir.resolve(WEBHOOK_CONFIG_TEMPLATE_FILE), configTemplates);
         }
-        updateRepositoryIndex(session.root(), repository, file);
         session.commitPublishedAsset(webhookId, version, request.releaseNotes());
+        catalog.refreshRepositoryCache(repositoryId);
 
         RepositoryWebhookDetail publishedDetail = catalog.getRepositoryWebhook(repositoryId, webhookId);
         if (upstreamBinding != null
@@ -187,23 +187,6 @@ final class WebhookRepositoryPublisher {
                 initial.scriptDependencies(),
                 initial.configTemplatePath()
         );
-    }
-
-    private void updateRepositoryIndex(Path root,
-                                       RepositoryDefinition repository,
-                                       WebhookFile webhook) {
-        RepositoryIndexFile current = catalog.readRepositoryIndexFile(root, repository);
-        RepositoryWebhookIndexEntry next = new RepositoryWebhookIndexEntry(
-                webhook.webhookId(),
-                webhook.displayName(),
-                webhook.version(),
-                webhook.description(),
-                webhook.releaseNotes(),
-                WEBHOOKS_DIR + "/" + webhook.webhookId() + "/" + WEBHOOK_DESCRIPTOR_FILE
-        );
-        List<RepositoryWebhookIndexEntry> entries =
-                RepositoryIndexUtils.upsertSorted(current.safeWebhooks(), next, RepositoryWebhookIndexEntry::id);
-        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withWebhooks(current, repository, entries));
     }
 
     private void updateWorkingCopySourceMetadata(WebhookDefinition source,

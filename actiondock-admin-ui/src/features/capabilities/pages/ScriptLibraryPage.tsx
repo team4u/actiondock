@@ -226,7 +226,7 @@ export function ScriptLibraryPage() {
         script.repositoryId ?? "",
         script.repositoryToolId ?? "",
         descriptor?.repositoryId ?? "",
-        descriptor?.toolId ?? ""
+        descriptor?.scriptId ?? ""
       ]
         .join(" ")
         .toLowerCase();
@@ -506,14 +506,14 @@ export function ScriptLibraryPage() {
 
       for (const tool of updateTargets) {
         try {
-          await updateRepositoryToolLocalAsset(tool.repositoryId, tool.toolId, {
+          await updateRepositoryToolLocalAsset(tool.repositoryId, tool.scriptId, {
             installSchedules: true,
             installScriptDependencies: true,
             installPluginDependencies: true
           });
           updatedCount += 1;
         } catch (error) {
-          toolFailures.push(`${tool.localState?.localAssetId ?? tool.toolId}: ${getErrorMessage(error, "更新失败")}`);
+          toolFailures.push(`${tool.localState?.localAssetId ?? tool.scriptId}: ${getErrorMessage(error, "更新失败")}`);
         }
       }
 
@@ -523,7 +523,7 @@ export function ScriptLibraryPage() {
           await pullUpstreamScript(tool.localState!.localAssetId);
           pulledCount += 1;
         } catch (error) {
-          toolFailures.push(`${tool.localState?.localAssetId ?? tool.toolId}: ${getErrorMessage(error, "拉取失败")}`);
+          toolFailures.push(`${tool.localState?.localAssetId ?? tool.scriptId}: ${getErrorMessage(error, "拉取失败")}`);
         }
       }
 
@@ -634,7 +634,7 @@ export function ScriptLibraryPage() {
                 更新
               </Button>
               <ConfirmDangerAction
-                title="确认卸载这个仓库工具？"
+                title="确认卸载这个仓库脚本？"
                 description="将删除本地的脚本定义及相关定时任务配置。"
                 okText="卸载"
                 onConfirm={() => void handleUninstall(record)}

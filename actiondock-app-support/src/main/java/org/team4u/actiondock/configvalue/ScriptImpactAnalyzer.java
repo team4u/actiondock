@@ -98,7 +98,7 @@ final class ScriptImpactAnalyzer {
                                                           List<RepositoryToolDescriptor> allToolDescriptors) {
         Map<String, RepositoryToolDescriptor> descriptorsBySource = new LinkedHashMap<>();
         for (RepositoryToolDescriptor descriptor : allToolDescriptors) {
-            descriptorsBySource.put(descriptor.repositoryId() + ":" + descriptor.toolId(), descriptor);
+            descriptorsBySource.put(descriptor.repositoryId() + ":" + descriptor.scriptId(), descriptor);
         }
         for (TemplateDeclaration declaration : templateDeclarations) {
             RepositoryToolDescriptor descriptor = descriptorsBySource.get(

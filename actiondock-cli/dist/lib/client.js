@@ -279,23 +279,23 @@ export class ActionDockClient {
         }
         return this.requestJson("/api/repositories/scripts");
     }
-    async getRepositoryTool(repositoryId, toolId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}`);
+    async getRepositoryTool(repositoryId, scriptId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${scriptId}`);
     }
-    async installRepositoryTool(repositoryId, toolId, payload) {
-        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
+    async installRepositoryTool(repositoryId, scriptId, payload) {
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${scriptId}/local-assets`, {
             method: "POST",
             body: JSON.stringify({ mode: "LOCKED", ...payload })
         });
     }
-    async updateRepositoryTool(repositoryId, toolId, payload) {
-        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets/update`, {
+    async updateRepositoryTool(repositoryId, scriptId, payload) {
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${scriptId}/local-assets/update`, {
             method: "POST",
             body: JSON.stringify(payload)
         });
     }
-    async createRepositoryToolWorkingCopy(repositoryId, toolId, localAssetId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
+    async createRepositoryToolWorkingCopy(repositoryId, scriptId, localAssetId) {
+        return this.requestJson(`/api/repositories/${repositoryId}/scripts/${scriptId}/local-assets`, {
             method: "POST",
             body: JSON.stringify({
                 mode: "TRACKED",

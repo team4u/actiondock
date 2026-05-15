@@ -14,7 +14,7 @@ export default class ScriptRepositoryWorkingCopyCommand extends BaseCommand {
 
   static args = {
     repositoryId: Args.string({ required: true }),
-    toolId: Args.string({ required: true })
+    scriptId: Args.string({ required: true })
   };
 
   static flags = {
@@ -27,7 +27,7 @@ export default class ScriptRepositoryWorkingCopyCommand extends BaseCommand {
   async run(): Promise<void> {
     const { args, flags } = await this.parse(ScriptRepositoryWorkingCopyCommand);
     try {
-      const item = await createClient(flags).createRepositoryToolWorkingCopy(args.repositoryId, args.toolId, flags["script-id"]);
+      const item = await createClient(flags).createRepositoryToolWorkingCopy(args.repositoryId, args.scriptId, flags["script-id"]);
       flags.json ? this.printJson(item) : this.log(renderRepositoryLocalAsset(item));
     } catch (error) {
       this.handleError(error, flags.json);

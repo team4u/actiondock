@@ -42,7 +42,7 @@ class RepositoryCatalogServiceTest {
     Path tempDir;
 
     @Test
-    void ensureRepositoryWorkspaceCreatesMissingIndexAndDirectories() throws Exception {
+    void ensureRepositoryWorkspaceCreatesFixedAssetDirectoriesOnly() throws Exception {
         Path root = tempDir.resolve("repo-root");
         RepositoryDefinition repository = new RepositoryDefinition()
                 .setId("repo-1")
@@ -52,21 +52,15 @@ class RepositoryCatalogServiceTest {
         RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
 
         assertThat(Files.isDirectory(root.resolve("scripts"))).isTrue();
+        assertThat(Files.isDirectory(root.resolve("webhooks"))).isTrue();
         assertThat(Files.isDirectory(root.resolve("plugins"))).isTrue();
-        assertThat(Files.isRegularFile(root.resolve("actiondock.repository.json"))).isTrue();
-
-        RepositoryIndexFile index = objectMapper.readValue(
-                Files.readString(root.resolve("actiondock.repository.json")),
-                RepositoryIndexFile.class
-        );
-        assertThat(index.name()).isEqualTo("Demo Repository");
-        assertThat(index.description()).isEqualTo("Demo description");
-        assertThat(index.scripts()).isEmpty();
-        assertThat(index.plugins()).isEmpty();
+        assertThat(Files.isDirectory(root.resolve("packages"))).isTrue();
+        assertThat(Files.isDirectory(root.resolve("skills"))).isTrue();
+        assertThat(Files.exists(root.resolve("actiondock.repository.json"))).isFalse();
     }
 
     @Test
-    void ensureRepositoryWorkspaceFallsBackToRepositoryIdWhenNameMissing() throws Exception {
+    void ensureRepositoryWorkspaceDoesNotWriteRootIndexWhenNameMissing() throws Exception {
         Path root = tempDir.resolve("repo-without-name");
         RepositoryDefinition repository = new RepositoryDefinition()
                 .setId("repo-2")
@@ -74,12 +68,8 @@ class RepositoryCatalogServiceTest {
 
         RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
 
-        RepositoryIndexFile index = objectMapper.readValue(
-                Files.readString(root.resolve("actiondock.repository.json")),
-                RepositoryIndexFile.class
-        );
-        assertThat(index.name()).isEqualTo("repo-2");
-        assertThat(index.description()).isEqualTo("Only description");
+        assertThat(Files.exists(root.resolve("actiondock.repository.json"))).isFalse();
+        assertThat(Files.isDirectory(root.resolve("scripts"))).isTrue();
     }
 
     @Test
@@ -130,7 +120,7 @@ class RepositoryCatalogServiceTest {
     void repositoryMetadataKeepsAssetDescriptionSeparateFromReleaseNotes() throws Exception {
         String toolJson = """
                 {
-                  "toolVersion": 1,
+                  "scriptVersion": 1,
                   "id": "demo-tool",
                   "name": "Demo Tool",
                   "version": "1.0.0",
@@ -213,10 +203,10 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
-    void toolMetadataAcceptsLegacyToolIdField() throws Exception {
+    void toolMetadataRejectsLegacyToolIdField() {
         String toolJson = """
                 {
-                  "toolVersion": 1,
+                  "scriptVersion": 1,
                   "toolId": "legacy-tool",
                   "name": "Legacy Tool",
                   "version": "1.0.0",
@@ -227,9 +217,8 @@ class RepositoryCatalogServiceTest {
                 }
                 """;
 
-        ToolFile tool = objectMapper.readValue(toolJson, ToolFile.class);
-
-        assertThat(tool.id()).isEqualTo("legacy-tool");
+        assertThatThrownBy(() -> objectMapper.readValue(toolJson, ToolFile.class))
+                .isInstanceOf(Exception.class);
     }
 
     @Test
@@ -238,14 +227,14 @@ class RepositoryCatalogServiceTest {
                 {
                   "repositoryVersion": 1,
                   "name": "Demo Repository",
-                  "tools": [
+                  "scripts": [
                     {
                       "id": "demo-tool",
                       "name": "Demo Tool",
                       "version": "1.0.0",
                       "type": "GROOVY",
                       "description": "Asset docs",
-                      "toolPath": "tools/demo-tool/tool.json"
+                      "scriptPath": "scripts/demo-tool/script.json"
                     }
                   ],
                   "plugins": []
@@ -253,7 +242,7 @@ class RepositoryCatalogServiceTest {
                 """;
         String toolJson = """
                 {
-                  "toolVersion": 1,
+                  "scriptVersion": 1,
                   "id": "demo-tool",
                   "name": "Demo Tool",
                   "version": "1.0.0",
@@ -290,7 +279,7 @@ class RepositoryCatalogServiceTest {
         assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 toolJson,
                 ToolFile.class,
-                "tool.json"
+                "script.json"
         )).doesNotThrowAnyException();
         assertThatCode(() -> RepositoryWorkspaceHelper.assertLatestRepositoryMetadata(
                 pluginJson,
@@ -305,7 +294,7 @@ class RepositoryCatalogServiceTest {
                 {
                   "repositoryVersion": 1,
                   "name": "Demo Repository",
-                  "tools": [
+                  "scripts": [
                     {
                       "id": "demo-tool",
                       "name": "Demo Tool",
@@ -313,7 +302,7 @@ class RepositoryCatalogServiceTest {
                       "type": "GROOVY",
                       "description": "Asset docs",
                       "releaseNotes": null,
-                      "toolPath": "tools/demo-tool/tool.json"
+                      "scriptPath": "scripts/demo-tool/script.json"
                     }
                   ],
                   "plugins": []
@@ -327,12 +316,12 @@ class RepositoryCatalogServiceTest {
                   "type": "GROOVY",
                   "description": "Asset docs",
                   "releaseNotes": null,
-                  "toolPath": "tools/demo-tool/tool.json"
+                  "scriptPath": "scripts/demo-tool/script.json"
                 }
                 """;
         String toolJson = """
                 {
-                  "toolVersion": 1,
+                  "scriptVersion": 1,
                   "id": "demo-tool",
                   "name": "Demo Tool",
                   "version": "1.0.0",
@@ -388,10 +377,53 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
-    void readsLegacyToolDescriptorWhenScriptDescriptorIsMissing() throws Exception {
+    void scansScriptDescriptorWithoutRootRepositoryIndex() throws Exception {
+        Path repositoryRoot = tempDir.resolve("script-repo");
+        Files.createDirectories(repositoryRoot.resolve("scripts/demo-script"));
+        Files.writeString(repositoryRoot.resolve("scripts/demo-script/script.json"), """
+                {
+                  "scriptVersion": 1,
+                  "id": "demo-script",
+                  "name": "Demo Script",
+                  "version": "1.0.0",
+                  "type": "GROOVY",
+                  "sourcePath": "source.groovy",
+                  "tags": [],
+                  "pluginDependencies": []
+                }
+                """);
+        Files.writeString(repositoryRoot.resolve("scripts/demo-script/source.groovy"), "return [message: 'ok']");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("script-repo")
+                .setName("Script Repository")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_CAPABILITY)
+                .setUrl(repositoryRoot.toString())
+                .setEnabled(true);
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        List<RepositoryToolDescriptor> scripts = service.listRepositoryTools("script-repo");
+        RepositoryToolDetail detail = service.getRepositoryTool("script-repo", "demo-script");
+
+        assertThat(scripts).singleElement().satisfies(item -> {
+            assertThat(item.scriptId()).isEqualTo("demo-script");
+            assertThat(item.sourcePath()).isEqualTo("source.groovy");
+        });
+        assertThat(detail.descriptor().scriptId()).isEqualTo("demo-script");
+        assertThat(detail.source()).isEqualTo("return [message: 'ok']");
+    }
+
+    @Test
+    void ignoresLegacyToolDescriptorWhenScriptDescriptorIsMissing() throws Exception {
         Path repositoryRoot = tempDir.resolve("legacy-tool-repo");
         Files.createDirectories(repositoryRoot.resolve("scripts/demo-tool"));
-        Files.writeString(repositoryRoot.resolve(REPOSITORY_INDEX_FILE), """
+        Files.writeString(repositoryRoot.resolve("actiondock.repository.json"), """
                 {
                   "repositoryVersion": 1,
                   "name": "Legacy Tool Repository",
@@ -409,7 +441,7 @@ class RepositoryCatalogServiceTest {
                 """);
         Files.writeString(repositoryRoot.resolve("scripts/demo-tool/tool.json"), """
                 {
-                  "toolVersion": 1,
+                  "scriptVersion": 1,
                   "id": "demo-tool",
                   "name": "Demo Tool",
                   "version": "1.0.0",
@@ -435,15 +467,12 @@ class RepositoryCatalogServiceTest {
                 null
         );
 
-        List<RepositoryToolDescriptor> tools = service.listRepositoryTools("legacy-tool-repo");
-        RepositoryToolDetail detail = service.getRepositoryTool("legacy-tool-repo", "demo-tool");
+        List<RepositoryToolDescriptor> scripts = service.listRepositoryTools("legacy-tool-repo");
 
-        assertThat(tools).singleElement().satisfies(item -> {
-            assertThat(item.scriptId()).isEqualTo("demo-tool");
-            assertThat(item.sourcePath()).isEqualTo("source.groovy");
-        });
-        assertThat(detail.descriptor().scriptId()).isEqualTo("demo-tool");
-        assertThat(detail.source()).isEqualTo("return [message: 'ok']");
+        assertThat(scripts).isEmpty();
+        assertThatThrownBy(() -> service.getRepositoryTool("legacy-tool-repo", "demo-tool"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("仓库工具不存在: demo-tool");
     }
 
     @Test
@@ -718,8 +747,8 @@ class RepositoryCatalogServiceTest {
                 .setEnabled(true));
 
         assertThat(saved.getPurpose()).isEqualTo(REPO_PURPOSE_PROJECT);
-        assertThat(Files.exists(projectRoot.resolve(REPOSITORY_INDEX_FILE))).isFalse();
-        assertThat(Files.exists(projectRoot.resolve(TOOLS_DIR))).isFalse();
+        assertThat(Files.exists(projectRoot.resolve("actiondock.repository.json"))).isFalse();
+        assertThat(Files.exists(projectRoot.resolve("tools"))).isFalse();
     }
 
     private RepositoryDefinition localRepository() {

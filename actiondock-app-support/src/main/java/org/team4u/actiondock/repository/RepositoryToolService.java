@@ -120,7 +120,9 @@ public class RepositoryToolService {
     }
 
     public RepositoryToolDescriptor publishTool(String repositoryId, RepositoryPublishRequest request) {
-        return toolRepositoryPublisher.publish(repositoryId, request);
+        RepositoryToolDescriptor descriptor = toolRepositoryPublisher.publish(repositoryId, request);
+        catalog.refreshRepositoryCache(repositoryId);
+        return descriptor;
     }
 
     private RepositoryLocalAsset installOrUpdateTool(String repositoryId,

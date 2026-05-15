@@ -17,8 +17,8 @@ describe("suggestNextRepositoryVersion", () => {
 
 describe("resolveRepositoryPublishVersion", () => {
   const tools = [
-    { toolId: "demo-tool", version: "1.0.0" },
-    { toolId: "manual-tool", version: "1.0.0-beta" }
+    { scriptId: "demo-tool", version: "1.0.0" },
+    { scriptId: "manual-tool", version: "1.0.0-beta" }
   ];
 
   it("suggests the next patch version for an existing repository tool", () => {

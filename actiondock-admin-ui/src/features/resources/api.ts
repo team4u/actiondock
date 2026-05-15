@@ -34,18 +34,6 @@ import type {
 } from "../../shared/types";
 import { normalizeScriptDefinition } from "../../services/scriptPublication";
 
-function normalizeRepositoryToolDescriptor<T extends { scriptId?: string; toolId?: string }>(descriptor: T): T {
-  return {
-    ...descriptor,
-    scriptId: descriptor.scriptId ?? descriptor.toolId ?? "",
-    toolId: descriptor.toolId ?? descriptor.scriptId ?? ""
-  };
-}
-
-function normalizeRepositoryToolDescriptorList<T extends { scriptId?: string; toolId?: string }>(items: T[]): T[] {
-  return items.map((item) => normalizeRepositoryToolDescriptor(item));
-}
-
 export function listRepositories(purpose?: "CAPABILITY" | "PROJECT"): Promise<RepositoryDefinition[]> {
   const suffix = purpose ? `?purpose=${encodeURIComponent(purpose)}` : "";
   return request<RepositoryDefinition[]>(`/api/repositories${suffix}`);
@@ -84,7 +72,7 @@ export function resolveProjectRepository(repositoryId: string): Promise<ProjectR
 }
 
 export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>("/api/repositories/scripts").then(normalizeRepositoryToolDescriptorList);
+  return request<RepositoryToolDescriptor[]>("/api/repositories/scripts");
 }
 
 export function listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
@@ -104,7 +92,7 @@ export function listRepositorySkills(): Promise<RepositorySkillDescriptor[]> {
 }
 
 export function listToolsByRepository(id: string): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`).then(normalizeRepositoryToolDescriptorList);
+  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`);
 }
 
 export function listWebhooksByRepository(id: string): Promise<RepositoryWebhookDescriptor[]> {
@@ -124,10 +112,7 @@ export function listCapabilityPackagesByRepository(id: string): Promise<Capabili
 }
 
 export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
-  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/scripts/${encodeURIComponent(toolId)}`).then((detail) => ({
-    ...detail,
-    descriptor: normalizeRepositoryToolDescriptor(detail.descriptor)
-  }));
+  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/scripts/${encodeURIComponent(toolId)}`);
 }
 
 export function getRepositoryWebhook(repositoryId: string, webhookId: string): Promise<RepositoryWebhookDetail> {
@@ -243,7 +228,7 @@ export function updateRepositoryPlugin(
 }
 
 export function uninstallInstalledTool(scriptId: string): Promise<void> {
-  return request<void>(`/api/installed-tools/${encodeURIComponent(scriptId)}`, {
+  return request<void>(`/api/installed-scripts/${encodeURIComponent(scriptId)}`, {
     method: "DELETE"
   });
 }
@@ -262,7 +247,7 @@ export function publishRepositoryTool(repositoryId: string, payload: RepositoryP
     operation: "publish",
     repositoryId,
     payload
-  }).then((operation) => normalizeRepositoryToolDescriptor(operation.result));
+  }).then((operation) => operation.result);
 }
 
 export function previewRepositoryWebhookPublish(

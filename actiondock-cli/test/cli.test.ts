@@ -941,14 +941,14 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "GET" && req.url === "/api/repositories/tools") {
+    if (req.method === "GET" && req.url === "/api/repositories/scripts") {
       return json(res, {
         status: 0,
         msg: "ok",
         data: [
           {
             repositoryId: "repo-1",
-            toolId: "tool-1",
+            scriptId: "tool-1",
             installedScriptId: "published-tool",
             displayName: "Tool 1",
             version: "1.0.0",
@@ -965,14 +965,14 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "GET" && req.url === "/api/repositories/repo-1/tools/tool-1") {
+    if (req.method === "GET" && req.url === "/api/repositories/repo-1/scripts/tool-1") {
       return json(res, {
         status: 0,
         msg: "ok",
         data: {
           descriptor: {
             repositoryId: "repo-1",
-            toolId: "tool-1",
+            scriptId: "tool-1",
             installedScriptId: "published-tool",
             displayName: "Tool 1",
             version: "1.0.0",
@@ -992,7 +992,7 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/local-assets") {
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/scripts/tool-1/local-assets") {
       return json(res, {
         status: 0,
         msg: "installed",
@@ -1010,7 +1010,7 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "POST" && req.url === "/api/repositories/repo-1/tools/tool-1/local-assets/update") {
+    if (req.method === "POST" && req.url === "/api/repositories/repo-1/scripts/tool-1/local-assets/update") {
       return json(res, {
         status: 0,
         msg: "updated",
@@ -1028,7 +1028,7 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "DELETE" && req.url === "/api/installed-tools/published-tool") {
+    if (req.method === "DELETE" && req.url === "/api/installed-scripts/published-tool") {
       return json(res, {
         status: 0,
         msg: "uninstalled",
@@ -1880,27 +1880,26 @@ describe("CLI integration", () => {
     expect((await runCli(["repository", "sync", "repo-1", "--server", baseUrl, "--json"])).status).toBe(0);
     expect((await runCli(["repository", "delete", "repo-1", "--server", baseUrl, "--json"])).status).toBe(0);
 
-    const toolList = await runCli(["repository", "tool", "list", "--server", baseUrl, "--json"]);
+    const toolList = await runCli(["script", "repository-list", "--server", baseUrl, "--json"]);
     expect(toolList.status).toBe(0);
     expect(JSON.parse(toolList.stdout)).toEqual([
       expect.objectContaining({
         repositoryId: "repo-1",
-        toolId: "tool-1"
+        scriptId: "tool-1"
       })
     ]);
 
-    const toolDetail = await runCli(["repository", "tool", "get", "repo-1", "tool-1", "--server", baseUrl, "--json"]);
+    const toolDetail = await runCli(["script", "repository-get", "repo-1", "tool-1", "--server", baseUrl, "--json"]);
     expect(toolDetail.status).toBe(0);
     expect(JSON.parse(toolDetail.stdout)).toEqual(
       expect.objectContaining({
-        descriptor: expect.objectContaining({ toolId: "tool-1" })
+        descriptor: expect.objectContaining({ scriptId: "tool-1" })
       })
     );
 
     const install = await runCli([
-      "repository",
-      "tool",
-      "install",
+      "script",
+      "repository-install",
       "repo-1",
       "tool-1",
       "--install-schedules",
@@ -1910,7 +1909,7 @@ describe("CLI integration", () => {
       "--json"
     ]);
     expect(install.status).toBe(0);
-    const installRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/tools/tool-1/local-assets");
+    const installRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/scripts/tool-1/local-assets");
     expect(installRequest?.body).toEqual({
       mode: "LOCKED",
       installSchedules: true,
@@ -1919,8 +1918,8 @@ describe("CLI integration", () => {
       forcePluginUpgrade: false
     });
 
-    expect((await runCli(["repository", "tool", "update", "repo-1", "tool-1", "--server", baseUrl, "--json"])).status).toBe(0);
-    const updateRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/tools/tool-1/local-assets/update");
+    expect((await runCli(["script", "repository-update", "repo-1", "tool-1", "--server", baseUrl, "--json"])).status).toBe(0);
+    const updateRequest = requests.find((item) => item.method === "POST" && item.url === "/api/repositories/repo-1/scripts/tool-1/local-assets/update");
     expect(updateRequest?.body).toEqual({
       installSchedules: false,
       installScriptDependencies: false,
@@ -1928,7 +1927,7 @@ describe("CLI integration", () => {
       forcePluginUpgrade: false
     });
 
-    const develop = await runCli(["repository", "tool", "working-copy", "repo-1", "tool-1", "--script-id", "tool-dev", "--server", baseUrl, "--json"]);
+    const develop = await runCli(["script", "repository-working-copy", "repo-1", "tool-1", "--script-id", "tool-dev", "--server", baseUrl, "--json"]);
     expect(develop.status).toBe(0);
     expect(JSON.parse(develop.stdout)).toEqual(
       expect.objectContaining({
@@ -1939,7 +1938,7 @@ describe("CLI integration", () => {
     );
     const workingCopyRequest = requests.find((item) =>
       item.method === "POST" &&
-      item.url === "/api/repositories/repo-1/tools/tool-1/local-assets" &&
+      item.url === "/api/repositories/repo-1/scripts/tool-1/local-assets" &&
       item.body?.mode === "TRACKED"
     );
     expect(workingCopyRequest?.body).toEqual({
@@ -1951,13 +1950,13 @@ describe("CLI integration", () => {
       localAssetId: "tool-dev"
     });
 
-    const uninstall = await runCli(["repository", "tool", "uninstall", "published-tool", "--server", baseUrl, "--json"]);
+    const uninstall = await runCli(["script", "repository-uninstall", "published-tool", "--server", baseUrl, "--json"]);
     expect(uninstall.status).toBe(0);
     expect(JSON.parse(uninstall.stdout)).toEqual({
       uninstalled: true,
       scriptId: "published-tool"
     });
-    expect(requests.some((item) => item.method === "DELETE" && item.url === "/api/installed-tools/published-tool")).toBe(true);
+    expect(requests.some((item) => item.method === "DELETE" && item.url === "/api/installed-scripts/published-tool")).toBe(true);
   }, 20_000);
 
   it("manages script execution presets", async () => {

@@ -213,7 +213,7 @@ describe("api request auth handling", () => {
           repositoryId: "main",
           resourceId: null,
           status: "COMPLETED",
-          result: { repositoryId: "main", toolId: "hello", displayName: "Hello", version: "1.0.0" }
+          result: { repositoryId: "main", scriptId: "hello", displayName: "Hello", version: "1.0.0" }
         }
       }), {
         status: 200,
@@ -225,7 +225,7 @@ describe("api request auth handling", () => {
     const { publishRepositoryTool } = await import("./api");
     const result = await publishRepositoryTool("main", {
       scriptId: "script-1",
-      toolId: "hello",
+      repositoryScriptId: "hello",
       displayName: "Hello",
       version: "1.0.0",
       owner: "team",
@@ -237,7 +237,7 @@ describe("api request auth handling", () => {
       force: false
     });
 
-    expect(result).toEqual({ repositoryId: "main", scriptId: "hello", toolId: "hello", displayName: "Hello", version: "1.0.0" });
+    expect(result).toEqual({ repositoryId: "main", scriptId: "hello", displayName: "Hello", version: "1.0.0" });
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/resource-lifecycle/operations");
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.method).toBe("POST");
@@ -247,7 +247,7 @@ describe("api request auth handling", () => {
       repositoryId: "main",
       payload: {
         scriptId: "script-1",
-        toolId: "hello",
+        repositoryScriptId: "hello",
         displayName: "Hello",
         version: "1.0.0",
         owner: "team",
@@ -261,7 +261,7 @@ describe("api request auth handling", () => {
     });
   });
 
-  it("normalizes repository script descriptors returned with scriptId only", async () => {
+  it("returns repository script descriptors with scriptId", async () => {
     getApiKeyMock.mockReturnValue("secret-token");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
@@ -282,20 +282,19 @@ describe("api request auth handling", () => {
 
     expect(result[0]).toEqual(expect.objectContaining({
       repositoryId: "main",
-      scriptId: "hello",
-      toolId: "hello"
+      scriptId: "hello"
     }));
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/repositories/scripts");
   });
 
-  it("normalizes repository script detail returned with legacy toolId only", async () => {
+  it("returns repository script detail descriptors with scriptId", async () => {
     getApiKeyMock.mockReturnValue("secret-token");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         status: 0,
         msg: "ok",
         data: {
-          descriptor: { repositoryId: "main", toolId: "hello", displayName: "Hello", version: "1.0.0" },
+          descriptor: { repositoryId: "main", scriptId: "hello", displayName: "Hello", version: "1.0.0" },
           source: "return [:]",
           pythonRequirements: null,
           configTemplate: [],
@@ -313,8 +312,7 @@ describe("api request auth handling", () => {
 
     expect(result.descriptor).toEqual(expect.objectContaining({
       repositoryId: "main",
-      scriptId: "hello",
-      toolId: "hello"
+      scriptId: "hello"
     }));
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/repositories/main/scripts/hello");
   });

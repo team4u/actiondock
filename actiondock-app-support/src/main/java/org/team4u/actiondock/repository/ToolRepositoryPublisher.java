@@ -97,8 +97,8 @@ final class ToolRepositoryPublisher {
         assertToolVersionAvailable(repositoryId, session.index(), toolId, version);
         Path toolDir = session.root().resolve(SCRIPTS_DIR).resolve(toolId);
         writeToolFiles(toolDir, toolId, script, request, configTemplates, scheduleTemplates, scriptDependencies);
-        updateRepositoryIndex(session.root(), repository, toolId, script, request);
         session.commitPublishedAsset(toolId, version, request.releaseNotes());
+        catalog.refreshRepositoryCache(repositoryId);
 
         RepositoryToolDetail publishedDetail = catalog.getRepositoryTool(repositoryId, toolId);
         if (upstreamBinding != null
@@ -344,26 +344,6 @@ final class ToolRepositoryPublisher {
             templates.add(new ScheduleTemplateItem(schedule.getId(), schedule.getScriptId(), schedule.getName(), schedule.getCronExpression(), schedule.getInput(), false));
         }
         return templates;
-    }
-
-    private void updateRepositoryIndex(Path root,
-                                       RepositoryDefinition repository,
-                                       String toolId,
-                                       ScriptDefinition script,
-                                       RepositoryPublishRequest request) {
-        RepositoryIndexFile current = catalog.readRepositoryIndexFile(root, repository);
-        RepositoryIndexEntry next = new RepositoryIndexEntry(
-                toolId,
-                NormalizeUtils.normalizeOrDefault(request.displayName(), script.getName()),
-                NormalizeUtils.normalize(request.version(), SkillFileUtils.ERR_VERSION_REQUIRED),
-                script.getType().name(),
-                NormalizeUtils.normalizeNullable(script.getDescription()),
-                NormalizeUtils.normalizeNullable(request.releaseNotes()),
-                SCRIPTS_DIR + "/" + toolId + "/" + SCRIPT_DESCRIPTOR_FILE
-        );
-        List<RepositoryIndexEntry> entries =
-                RepositoryIndexUtils.upsertSorted(current.safeScripts(), next, RepositoryIndexEntry::id);
-        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withScripts(current, repository, entries));
     }
 
     static void assertToolVersionAvailable(String repositoryId,

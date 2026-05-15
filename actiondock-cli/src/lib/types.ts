@@ -219,7 +219,6 @@ export interface RepositoryInstallRequest {
 export interface RepositoryToolDescriptor {
   repositoryId: string;
   scriptId: string;
-  toolId?: string;
   installedScriptId?: string;
   displayName: string;
   version: string;

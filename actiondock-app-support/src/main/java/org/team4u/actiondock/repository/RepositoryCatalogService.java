@@ -46,7 +46,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * 仓库发现、安装、更新和发布服务。
@@ -54,6 +56,8 @@ import java.util.function.Function;
  * @author jay.wu
  */
 public class RepositoryCatalogService {
+    private static final System.Logger LOGGER = System.getLogger(RepositoryCatalogService.class.getName());
+    private static final String CAPABILITY_PACKAGE_MANIFEST_FILE = "package.json";
 
     public record ProjectRepositoryResolution(
             String repositoryId,
@@ -107,6 +111,7 @@ public class RepositoryCatalogService {
     private final SkillRepositoryPublisher skillPublisher;
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
     private final RepositoryPluginService pluginService;
+    private final Map<String, RepositoryCatalogTypes.RepositoryIndexFile> repositoryCache = new ConcurrentHashMap<>();
     private RepositoryCapabilityPackageService capabilityPackageService;
     private RepositoryAiPackageService aiPackageService;
 
@@ -201,11 +206,40 @@ public class RepositoryCatalogService {
     }
 
     public RepositoryDefinition saveRepository(RepositoryDefinition definition) {
-        return definitionService.saveRepository(definition);
+        RepositoryDefinition saved = definitionService.saveRepository(definition);
+        refreshRepositoryCache(saved);
+        return saved;
     }
 
     public void deleteRepository(String repositoryId) {
         definitionService.deleteRepository(repositoryId);
+        repositoryCache.remove(repositoryId);
+    }
+
+    public void refreshRepositoryCache() {
+        repositoryCache.clear();
+        for (RepositoryDefinition repository : listEnabledDiscoveryRepositories()) {
+            refreshRepositoryCache(repository);
+        }
+    }
+
+    public void refreshRepositoryCache(String repositoryId) {
+        refreshRepositoryCache(getRepository(repositoryId));
+    }
+
+    public void refreshRepositoryCache(RepositoryDefinition repository) {
+        if (!isDiscoveryRepository(repository)) {
+            if (repository != null) {
+                repositoryCache.remove(repository.getId());
+            }
+            return;
+        }
+        try {
+            repositoryCache.put(repository.getId(), scanRepositoryIndex(repository));
+        } catch (RuntimeException exception) {
+            repositoryCache.remove(repository.getId());
+            LOGGER.log(System.Logger.Level.WARNING, "刷新仓库缓存失败: " + repository.getId(), exception);
+        }
     }
 
     public RepositoryDefinition syncRepository(String repositoryId) {
@@ -231,10 +265,13 @@ public class RepositoryCatalogService {
                 RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
             }
             case REPO_TYPE_LOCAL_DIR -> ensureLocalDirRepository(repository);
-            default -> readRepositoryIndex(repository);
+            default -> {
+            }
         }
         repository.setLastSyncedAt(LocalDateTime.now()).setUpdatedAt(LocalDateTime.now());
-        return repos.repositoryDefinitionRepository().save(repository);
+        RepositoryDefinition saved = repos.repositoryDefinitionRepository().save(repository);
+        refreshRepositoryCache(saved);
+        return saved;
     }
 
     public ProjectRepositoryResolution resolveProjectRepository(String repositoryId) {
@@ -292,7 +329,7 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         return index.safeScripts().stream()
                 .map(entry -> {
-                    String scriptPath = resolveToolDescriptorPath(repository, entry.scriptPath());
+                    String scriptPath = entry.scriptPath();
                     return toDescriptor(repository, readToolFile(repository, scriptPath), scriptPath);
                 })
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::scriptId))
@@ -362,7 +399,7 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.RepositoryIndexEntry entry = findEntryById(
                 index.safeScripts(), toolId, RepositoryCatalogTypes.RepositoryIndexEntry::id, "仓库工具");
-        String scriptPath = resolveToolDescriptorPath(repository, entry.scriptPath());
+        String scriptPath = entry.scriptPath();
         RepositoryCatalogTypes.ToolFile tool = readToolFile(repository, scriptPath);
         List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
@@ -431,14 +468,18 @@ public class RepositoryCatalogService {
     }
 
     public RepositoryCatalogTypes.RepositoryPluginDescriptor publishPlugin(String repositoryId, RepositoryCatalogTypes.RepositoryPluginPublishRequest request) {
-        return pluginRepositoryPublisher.publish(repositoryId, request);
+        RepositoryCatalogTypes.RepositoryPluginDescriptor descriptor = pluginRepositoryPublisher.publish(repositoryId, request);
+        refreshRepositoryCache(repositoryId);
+        return descriptor;
     }
 
     public RepositoryCatalogTypes.RepositorySkillDescriptor publishSkillArchive(String repositoryId,
                                                          String releaseNotes,
                                                          String fileName,
                                                          byte[] content) {
-        return skillPublisher.publish(repositoryId, releaseNotes, fileName, content);
+        RepositoryCatalogTypes.RepositorySkillDescriptor descriptor = skillPublisher.publish(repositoryId, releaseNotes, fileName, content);
+        refreshRepositoryCache(repositoryId);
+        return descriptor;
     }
 
     WritableRepositorySession openWritableRepositorySession(String repositoryId) {
@@ -452,7 +493,7 @@ public class RepositoryCatalogService {
             ensureLocalDirRepository(repository);
         }
         Path root = resolveRepositoryRoot(repository);
-        return new WritableRepositorySession(this, repository, root, readRepositoryIndexFile(root, repository));
+        return new WritableRepositorySession(this, repository, root, readRepositoryIndex(repository));
     }
 
     ScriptApplicationService scriptApplicationService() {
@@ -662,26 +703,6 @@ public class RepositoryCatalogService {
                 NormalizeUtils.normalizeNullable(artifact.fileName()),
                 artifact.size()
         );
-    }
-
-    void updateRepositoryPluginIndex(Path root,
-                                     RepositoryDefinition repository,
-                                     String pluginId,
-                                     String displayName,
-                                     RepositoryCatalogTypes.RepositoryPluginPublishRequest request,
-                                     String version) {
-        RepositoryCatalogTypes.RepositoryIndexFile current = readRepositoryIndexFile(root, repository);
-        RepositoryCatalogTypes.RepositoryPluginIndexEntry next = new RepositoryCatalogTypes.RepositoryPluginIndexEntry(
-                pluginId,
-                displayName,
-                version,
-                NormalizeUtils.normalizeNullable(request.description()),
-                NormalizeUtils.normalizeNullable(request.releaseNotes()),
-                PLUGINS_DIR + "/" + pluginId + "/" + PLUGIN_INDEX_FILE
-        );
-        List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> entries =
-                RepositoryIndexUtils.upsertSorted(current.safePlugins(), next, RepositoryCatalogTypes.RepositoryPluginIndexEntry::id);
-        writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withPlugins(current, repository, entries));
     }
 
     void commitAndPush(RepositoryDefinition repository, String toolId, String version, String releaseNotes) {
@@ -928,20 +949,143 @@ public class RepositoryCatalogService {
     }
 
     RepositoryCatalogTypes.RepositoryIndexFile readRepositoryIndex(RepositoryDefinition repository) {
-        if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            return httpReader.readHttpJson(httpReader.joinHttpPath(repository.getUrl(), REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class);
+        if (!isDiscoveryRepository(repository)) {
+            return RepositoryWorkspaceHelper.emptyRepositoryIndex(repository);
+        }
+        return repositoryCache.computeIfAbsent(repository.getId(), ignored -> scanRepositoryIndex(repository));
+    }
+
+    private RepositoryCatalogTypes.RepositoryIndexFile scanRepositoryIndex(RepositoryDefinition repository) {
+        if (repository == null || REPO_TYPE_HTTP.equals(repository.getType())) {
+            return RepositoryWorkspaceHelper.emptyRepositoryIndex(repository);
         }
         Path root = resolveRepositoryRoot(repository);
         if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
             ensureLocalDirRepository(repository);
         }
-        if (REPO_TYPE_GIT.equals(repository.getType())) {
-            if (Files.notExists(root)) {
-                gitOps.syncGitRepository(repository, root);
-            }
+        if (REPO_TYPE_GIT.equals(repository.getType()) && Files.notExists(root)) {
+            gitOps.syncGitRepository(repository, root);
             RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
         }
-        return readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class);
+        return new RepositoryCatalogTypes.RepositoryIndexFile(
+                RepositoryIndexUtils.DEFAULT_VERSION,
+                NormalizeUtils.normalizeNullable(repository.getName()),
+                NormalizeUtils.normalizeNullable(repository.getDescription()),
+                scanScripts(repository, root),
+                scanWebhooks(repository, root),
+                scanPlugins(repository, root),
+                scanCapabilityPackages(repository, root),
+                scanSkills(repository, root)
+        );
+    }
+
+    private List<RepositoryCatalogTypes.RepositoryIndexEntry> scanScripts(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, SCRIPTS_DIR, SCRIPT_DESCRIPTOR_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.ToolFile.class)
+                        .map(file -> new RepositoryCatalogTypes.RepositoryIndexEntry(
+                                file.id(),
+                                file.name(),
+                                file.version(),
+                                file.type(),
+                                file.description(),
+                                file.releaseNotes(),
+                                path))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryIndexEntry::id))
+                .toList();
+    }
+
+    private List<RepositoryCatalogTypes.RepositoryWebhookIndexEntry> scanWebhooks(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, WEBHOOKS_DIR, WEBHOOK_DESCRIPTOR_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.WebhookFile.class)
+                        .map(file -> new RepositoryCatalogTypes.RepositoryWebhookIndexEntry(
+                                file.webhookId(),
+                                file.displayName(),
+                                file.version(),
+                                file.description(),
+                                file.releaseNotes(),
+                                path))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryWebhookIndexEntry::id))
+                .toList();
+    }
+
+    private List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> scanPlugins(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, PLUGINS_DIR, PLUGIN_INDEX_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.PluginFile.class)
+                        .map(file -> new RepositoryCatalogTypes.RepositoryPluginIndexEntry(
+                                file.pluginId(),
+                                file.name(),
+                                file.version(),
+                                file.description(),
+                                file.releaseNotes(),
+                                path))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPluginIndexEntry::id))
+                .toList();
+    }
+
+    private List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> scanCapabilityPackages(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, CAPABILITY_PACKAGES_DIR, CAPABILITY_PACKAGE_MANIFEST_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.CapabilityPackageManifestFile.class)
+                        .map(file -> new RepositoryCatalogTypes.CapabilityPackageIndexEntry(
+                                file.packageId(),
+                                file.displayName(),
+                                file.latestVersion(),
+                                file.description(),
+                                file.releaseNotes(),
+                                path))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.CapabilityPackageIndexEntry::id))
+                .toList();
+    }
+
+    private List<RepositoryCatalogTypes.RepositorySkillIndexEntry> scanSkills(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, SKILLS_DIR, SKILL_MANIFEST_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.SkillFile.class)
+                        .map(file -> new RepositoryCatalogTypes.RepositorySkillIndexEntry(
+                                file.skillId(),
+                                file.displayName(),
+                                file.version(),
+                                file.description(),
+                                null,
+                                path))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositorySkillIndexEntry::id))
+                .toList();
+    }
+
+    private List<String> scanFixedDirectory(Path root, String directory, String manifestFile) {
+        Path base = root.resolve(directory);
+        if (!Files.isDirectory(base)) {
+            return List.of();
+        }
+        try (Stream<Path> stream = Files.list(base)) {
+            return stream
+                    .filter(Files::isDirectory)
+                    .map(path -> base.relativize(path.resolve(manifestFile)))
+                    .map(path -> directory + "/" + path.toString().replace('\\', '/'))
+                    .filter(path -> Files.isRegularFile(safeResolveRepositoryPath(root, path)))
+                    .sorted()
+                    .toList();
+        } catch (IOException exception) {
+            LOGGER.log(System.Logger.Level.WARNING, "扫描仓库目录失败: " + base, exception);
+            return List.of();
+        }
+    }
+
+    private <T> Optional<T> readManifest(RepositoryDefinition repository, String relativePath, Class<T> type) {
+        try {
+            return Optional.of(readRepositoryJsonFile(repository, relativePath, type));
+        } catch (RuntimeException exception) {
+            LOGGER.log(System.Logger.Level.WARNING, "跳过无效仓库清单: " + repository.getId() + "/" + relativePath, exception);
+            return Optional.empty();
+        }
     }
 
     private <T> T readRepositoryJsonFile(RepositoryDefinition repository, String relativePath, Class<T> type) {
@@ -953,22 +1097,6 @@ public class RepositoryCatalogService {
 
     private RepositoryCatalogTypes.ToolFile readToolFile(RepositoryDefinition repository, String toolPath) {
         return readRepositoryJsonFile(repository, toolPath, RepositoryCatalogTypes.ToolFile.class);
-    }
-
-    private String resolveToolDescriptorPath(RepositoryDefinition repository, String scriptPath) {
-        if (REPO_TYPE_HTTP.equals(repository.getType()) || NormalizeUtils.isBlank(scriptPath)) {
-            return scriptPath;
-        }
-        Path root = resolveRepositoryRoot(repository);
-        Path requested = safeResolveRepositoryPath(root, scriptPath);
-        if (Files.exists(requested)) {
-            return scriptPath;
-        }
-        if (!scriptPath.endsWith(SCRIPT_DESCRIPTOR_FILE)) {
-            return scriptPath;
-        }
-        String legacyPath = parentDirectoryPath(scriptPath).resolve(TOOL_DESCRIPTOR_FILE).toString().replace('\\', '/');
-        return Files.exists(safeResolveRepositoryPath(root, legacyPath)) ? legacyPath : scriptPath;
     }
 
     private RepositoryCatalogTypes.WebhookFile readWebhookFile(RepositoryDefinition repository, String webhookPath) {
@@ -1104,9 +1232,7 @@ public class RepositoryCatalogService {
 
 
     RepositoryCatalogTypes.RepositoryIndexFile readRepositoryIndexFile(Path root, RepositoryDefinition repository) {
-        return Files.exists(root.resolve(REPOSITORY_INDEX_FILE))
-                ? readJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryCatalogTypes.RepositoryIndexFile.class)
-                : RepositoryWorkspaceHelper.emptyRepositoryIndex(repository);
+        return scanRepositoryIndex(repository);
     }
 
     RelativeRepositoryPath parentDirectoryPath(String filePath) {

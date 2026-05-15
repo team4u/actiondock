@@ -288,7 +288,7 @@ public class ConfigValueUsageAnalysisService {
                 value.getKey(),
                 NormalizeUtils.normalizeNullable(detail.descriptor().repositoryId()),
                 resolveRepositoryName(detail.descriptor().repositoryId(), repositoryNameById),
-                NormalizeUtils.normalizeNullable(detail.descriptor().toolId()),
+                NormalizeUtils.normalizeNullable(detail.descriptor().scriptId()),
                 NormalizeUtils.normalizeNullable(detail.descriptor().displayName()),
                 NormalizeUtils.normalizeNullable(detail.descriptor().version()),
                 NormalizeUtils.normalizeNullable(template.label()),
@@ -352,7 +352,7 @@ public class ConfigValueUsageAnalysisService {
         for (RepositoryToolDescriptor tool : tools) {
             RepositoryToolDetail detail;
             try {
-                detail = services.getRepositoryTool().apply(repository.getId(), tool.toolId());
+                detail = services.getRepositoryTool().apply(repository.getId(), tool.scriptId());
             } catch (RuntimeException exception) {
                 log.log(System.Logger.Level.DEBUG, "扫描跳过: {0}", exception.getMessage());
                 continue;
@@ -371,7 +371,7 @@ public class ConfigValueUsageAnalysisService {
         return new TemplateDeclaration(
                 repository.getId(),
                 repository.getName(),
-                tool.toolId(),
+                tool.scriptId(),
                 tool.displayName(),
                 tool.version(),
                 NormalizeUtils.normalizeNullable(item.label()),

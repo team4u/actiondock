@@ -387,16 +387,16 @@ export class ActionDockClient {
     return this.requestJson<RepositoryToolDescriptor[]>("/api/repositories/scripts");
   }
 
-  async getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
-    return this.requestJson<RepositoryToolDetail>(`/api/repositories/${repositoryId}/scripts/${toolId}`);
+  async getRepositoryTool(repositoryId: string, scriptId: string): Promise<RepositoryToolDetail> {
+    return this.requestJson<RepositoryToolDetail>(`/api/repositories/${repositoryId}/scripts/${scriptId}`);
   }
 
   async installRepositoryTool(
     repositoryId: string,
-    toolId: string,
+    scriptId: string,
     payload: RepositoryInstallRequest
   ): Promise<RepositoryLocalAsset> {
-    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${scriptId}/local-assets`, {
       method: "POST",
       body: JSON.stringify({ mode: "LOCKED", ...payload })
     });
@@ -404,17 +404,17 @@ export class ActionDockClient {
 
   async updateRepositoryTool(
     repositoryId: string,
-    toolId: string,
+    scriptId: string,
     payload: RepositoryInstallRequest
   ): Promise<RepositoryLocalAsset> {
-    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets/update`, {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${scriptId}/local-assets/update`, {
       method: "POST",
       body: JSON.stringify(payload)
     });
   }
 
-  async createRepositoryToolWorkingCopy(repositoryId: string, toolId: string, localAssetId?: string): Promise<RepositoryLocalAsset> {
-    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${toolId}/local-assets`, {
+  async createRepositoryToolWorkingCopy(repositoryId: string, scriptId: string, localAssetId?: string): Promise<RepositoryLocalAsset> {
+    return this.requestJson<RepositoryLocalAsset>(`/api/repositories/${repositoryId}/scripts/${scriptId}/local-assets`, {
       method: "POST",
       body: JSON.stringify({
         mode: "TRACKED",

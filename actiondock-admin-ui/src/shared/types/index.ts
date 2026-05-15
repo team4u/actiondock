@@ -685,8 +685,7 @@ export interface ProjectRepositoryResolution {
 
 export interface RepositoryToolDescriptor {
   repositoryId: string;
-  scriptId?: string;
-  toolId: string;
+  scriptId: string;
   displayName: string;
   version: string;
   description?: string;
@@ -1333,7 +1332,7 @@ export interface RepositoryWebhookPublishRequest {
 
 export interface RepositoryPublishRequest {
   scriptId: string;
-  toolId: string;
+  repositoryScriptId: string;
   displayName: string;
   version: string;
   owner?: string;

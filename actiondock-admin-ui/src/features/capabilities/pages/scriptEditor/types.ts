@@ -116,14 +116,14 @@ export type RepositoryPublishVersionSuggestion =
   | { status: "ERROR"; message: string };
 
 export function resolveRepositoryPublishVersion(
-  tools: Pick<RepositoryToolDescriptor, "toolId" | "version">[],
+  tools: Pick<RepositoryToolDescriptor, "scriptId" | "version">[],
   toolId: string
 ): RepositoryPublishVersionResolution {
   const normalizedToolId = toolId.trim();
   if (!normalizedToolId) {
     return { status: "NOT_FOUND" };
   }
-  const current = tools.find((item) => item.toolId === normalizedToolId);
+  const current = tools.find((item) => item.scriptId === normalizedToolId);
   if (!current?.version) {
     return { status: "NOT_FOUND" };
   }

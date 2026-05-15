@@ -191,7 +191,7 @@ export function DiscoveryDetailDrawers({
                   type={detail.descriptor.localState?.updateAvailable ? "primary" : "default"}
                   ghost={detail.descriptor.localState?.updateAvailable}
                   disabled={!detail.descriptor.localState?.updateAvailable}
-                  loading={actionKey === `update-local:${detail.descriptor.repositoryId}:${detail.descriptor.toolId}`}
+                  loading={actionKey === `update-local:${detail.descriptor.repositoryId}:${detail.descriptor.scriptId}`}
                   onClick={() => void onToolLocalAssetAction(detail.descriptor, "update-local")}
                 >
                   {detail.descriptor.localState?.updateAvailable ? "更新脚本" : "已添加"}
@@ -199,7 +199,7 @@ export function DiscoveryDetailDrawers({
               ) : (
                 <Button
                   type="primary"
-                  loading={actionKey === `add-local:${detail.descriptor.repositoryId}:${detail.descriptor.toolId}`}
+                  loading={actionKey === `add-local:${detail.descriptor.repositoryId}:${detail.descriptor.scriptId}`}
                   onClick={() => void onAddToolToLocal(detail.descriptor)}
                 >
                   添加到本地

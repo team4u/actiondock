@@ -532,7 +532,7 @@ export function RepositoryManagementPage() {
             </Form.Item>
 
             {repositoryPurpose === "CAPABILITY" && repositoryType === "LOCAL_DIR" ? (
-              <Text type="secondary">保存时会自动创建目录、tools/ 子目录和空的 actiondock.repository.json。</Text>
+              <Text type="secondary">保存时会自动创建 scripts、webhooks、plugins、packages、skills 目录；资源列表会在启动和同步后扫描刷新。</Text>
             ) : null}
 
             {repositoryPurpose === "PROJECT" ? (

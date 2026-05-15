@@ -7,7 +7,6 @@ import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -52,15 +51,6 @@ final class RepositoryWorkspaceHelper {
             }
         } catch (java.io.IOException exception) {
             throw new IllegalStateException("初始化仓库目录失败: " + root, exception);
-        }
-        Path indexPath = root.resolve(REPOSITORY_INDEX_FILE);
-        if (Files.exists(indexPath)) {
-            return;
-        }
-        try {
-            Files.writeString(indexPath, jsonCodec.write(emptyRepositoryIndex(repository)), StandardCharsets.UTF_8);
-        } catch (java.io.IOException exception) {
-            throw new IllegalStateException("初始化仓库索引失败: " + indexPath, exception);
         }
     }
 

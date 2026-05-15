@@ -29,13 +29,6 @@ final class RepositoryIndexUtils {
         return withReplaced(current, repository, scripts, null, null, null, null);
     }
 
-    @Deprecated
-    static RepositoryCatalogTypes.RepositoryIndexFile withTools(RepositoryCatalogTypes.RepositoryIndexFile current,
-                                                                RepositoryDefinition repository,
-                                                                List<RepositoryCatalogTypes.RepositoryIndexEntry> tools) {
-        return withScripts(current, repository, tools);
-    }
-
     static RepositoryCatalogTypes.RepositoryIndexFile withWebhooks(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                        RepositoryDefinition repository,
                                                                        List<RepositoryCatalogTypes.RepositoryWebhookIndexEntry> webhooks) {

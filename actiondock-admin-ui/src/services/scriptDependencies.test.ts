@@ -17,7 +17,7 @@ function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinit
 function repositoryTool(overrides: Partial<RepositoryToolDescriptor>): RepositoryToolDescriptor {
   return {
     repositoryId: "repo",
-    toolId: "child",
+    scriptId: "child",
     displayName: "Child",
     version: "1.0.0",
     tags: [],
@@ -84,7 +84,7 @@ describe("autoMatchScriptDependency", () => {
     const repositories = [repository({ id: "a" }), repository({ id: "b" }), repository({ id: "c" })];
     const repositoryTools = [
       repositoryTool({ repositoryId: "c", version: "3.0.0" }),
-      repositoryTool({ repositoryId: "b", toolId: "other", version: "2.0.0" })
+      repositoryTool({ repositoryId: "b", scriptId: "other", version: "2.0.0" })
     ];
 
     expect(autoMatchScriptDependency("child", repositories, repositoryTools, "a")).toEqual({
@@ -97,7 +97,7 @@ describe("autoMatchScriptDependency", () => {
 
   it("returns undefined when no repository contains the tool", () => {
     const repositories = [repository({ id: "a" })];
-    const repositoryTools = [repositoryTool({ repositoryId: "a", toolId: "other" })];
+    const repositoryTools = [repositoryTool({ repositoryId: "a", scriptId: "other" })];
 
     expect(autoMatchScriptDependency("child", repositories, repositoryTools, "a")).toBeUndefined();
   });
@@ -107,8 +107,8 @@ describe("resolveAutoScriptDependency", () => {
   it("prefers the target repository over a declared dependency from another repository", () => {
     const repositories = [repository({ id: "target" }), repository({ id: "publisher" })];
     const repositoryTools = [
-      repositoryTool({ repositoryId: "target", toolId: "child", version: "3.0.0" }),
-      repositoryTool({ repositoryId: "publisher", toolId: "child", version: "1.0.0" })
+      repositoryTool({ repositoryId: "target", scriptId: "child", version: "3.0.0" }),
+      repositoryTool({ repositoryId: "publisher", scriptId: "child", version: "1.0.0" })
     ];
 
     expect(resolveAutoScriptDependency({
@@ -132,7 +132,7 @@ describe("resolveAutoScriptDependency", () => {
   it("falls back to the declared dependency when the target repository does not contain the tool", () => {
     const repositories = [repository({ id: "target" }), repository({ id: "publisher" })];
     const repositoryTools = [
-      repositoryTool({ repositoryId: "publisher", toolId: "child", version: "1.0.0" })
+      repositoryTool({ repositoryId: "publisher", scriptId: "child", version: "1.0.0" })
     ];
 
     expect(resolveAutoScriptDependency({
@@ -156,7 +156,7 @@ describe("resolveAutoScriptDependency", () => {
   it("falls back to the local published script source when there is no declared dependency", () => {
     const repositories = [repository({ id: "target" }), repository({ id: "publisher" })];
     const repositoryTools = [
-      repositoryTool({ repositoryId: "publisher", toolId: "child", version: "2.0.0" })
+      repositoryTool({ repositoryId: "publisher", scriptId: "child", version: "2.0.0" })
     ];
 
     expect(resolveAutoScriptDependency({

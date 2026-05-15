@@ -9,7 +9,7 @@ export default class ScriptRepositoryGetCommand extends BaseCommand {
 
   static args = {
     repositoryId: Args.string({ required: true }),
-    toolId: Args.string({ required: true })
+    scriptId: Args.string({ required: true })
   };
 
   static flags = {
@@ -21,7 +21,7 @@ export default class ScriptRepositoryGetCommand extends BaseCommand {
   async run(): Promise<void> {
     const { args, flags } = await this.parse(ScriptRepositoryGetCommand);
     try {
-      const item = await createClient(flags).getRepositoryTool(args.repositoryId, args.toolId);
+      const item = await createClient(flags).getRepositoryTool(args.repositoryId, args.scriptId);
       flags.json ? this.printJson(item) : this.log(renderRepositoryToolDetail(item));
     } catch (error) {
       this.handleError(error, flags.json);

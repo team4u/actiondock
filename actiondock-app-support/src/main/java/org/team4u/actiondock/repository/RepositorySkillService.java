@@ -165,6 +165,7 @@ public class RepositorySkillService {
         Path root = resolveSkillRepositoryRoot(repository, skillId, normalizedVersion);
         writeSkillFilesToRepository(root, repository, skillRoot, validation, normalizedVersion, releaseNotes, skillId);
         commitSkillPublishIfNeeded(repository, skillId, normalizedVersion, releaseNotes);
+        catalog.refreshRepositoryCache(repository.getId());
         return getRepositorySkill(repository.getId(), skillId).descriptor();
     }
 
@@ -186,7 +187,6 @@ public class RepositorySkillService {
             SkillFileUtils.deleteQuietly(tempSkillDir.resolve(SkillFileUtils.INSTALL_MARKER_FILE));
             SkillArchiveManager.writeManifest(tempSkillDir, validation, normalizedVersion, jsonCodec);
             SkillFileUtils.swapTempToTarget(skillDir, tempSkillDir);
-            updateRepositorySkillIndex(root, repository, validation, normalizedVersion, releaseNotes);
         } catch (IOException exception) {
             throw new IllegalStateException("写入 Skill 仓库文件失败", exception);
         }
@@ -196,36 +196,6 @@ public class RepositorySkillService {
         if (REPO_TYPE_GIT.equals(repository.getType())) {
             catalog.commitAndPush(repository, skillId, normalizedVersion, releaseNotes);
         }
-    }
-
-    /**
-     * 将 Skill 文件信息转换为描述符。
-     *
-     * @param repository 仓库定义
-     * @param skill      Skill 文件记录
-     * @param skillPath  Skill 清单文件路径
-     * @return Skill 描述符
-     */
-
-    /**
-     * 更新仓库索引中的 Skill 条目。
-     *
-     * @param root        仓库根目录
-     * @param repository  仓库定义
-     * @param validation  Skill 校验结果
-     * @param version     版本号
-     * @param releaseNotes 发布说明
-     */
-    private void updateRepositorySkillIndex(Path root,
-                                            RepositoryDefinition repository,
-                                            SkillTypes.SkillValidationResult validation,
-                                            String version,
-                                            String releaseNotes) {
-        RepositoryIndexFile current = catalog.readRepositoryIndexFile(root, repository);
-        RepositorySkillIndexEntry next = RepositorySkillIndexEntry.fromSkillValidation(validation, version, releaseNotes);
-        List<RepositorySkillIndexEntry> entries =
-                RepositoryIndexUtils.upsertSorted(current.safeSkills(), next, RepositorySkillIndexEntry::id);
-        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withSkills(current, repository, entries));
     }
 
     RepositoryCatalogTypes.RepositorySkillDescriptor toSkillDescriptor(RepositoryDefinition repository, RepositoryCatalogTypes.SkillFile skill, String skillPath) {

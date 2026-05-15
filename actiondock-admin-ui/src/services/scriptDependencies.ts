@@ -62,7 +62,7 @@ function getPreferredRepositoryIds(
 export function autoMatchScriptDependency(
   scriptId: string,
   repositories: Pick<RepositoryDefinition, "id">[],
-  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "toolId" | "version">[],
+  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "scriptId" | "version">[],
   preferredRepositoryId?: string
 ): ScriptDependency | undefined {
   const normalizedScriptId = scriptId.trim();
@@ -73,7 +73,7 @@ export function autoMatchScriptDependency(
   const repositoryIds = getPreferredRepositoryIds(repositories, preferredRepositoryId);
   for (const repositoryId of repositoryIds) {
     const matched = repositoryTools.find(
-      (item) => item.repositoryId === repositoryId && item.toolId === normalizedScriptId
+      (item) => item.repositoryId === repositoryId && item.scriptId === normalizedScriptId
     );
     if (!matched) {
       continue;
@@ -81,7 +81,7 @@ export function autoMatchScriptDependency(
     return {
       scriptId: normalizedScriptId,
       repositoryId,
-      toolId: matched.toolId,
+      toolId: matched.scriptId,
       versionRange: matched.version ? `>= ${matched.version}` : undefined
     };
   }
@@ -97,7 +97,7 @@ export interface ScriptDependencyLocalSource {
 export interface ResolveAutoScriptDependencyOptions {
   scriptId: string;
   repositories: Pick<RepositoryDefinition, "id">[];
-  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "toolId" | "version">[];
+  repositoryTools: Pick<RepositoryToolDescriptor, "repositoryId" | "scriptId" | "version">[];
   preferredRepositoryId?: string;
   declaredDependency?: Pick<ScriptDependency, "repositoryId" | "toolId" | "versionRange"> | null;
   localScriptSource?: ScriptDependencyLocalSource | null;
@@ -149,14 +149,14 @@ export function resolveAutoScriptDependency({
 
   const preferredTool = preferredRepositoryId
     ? repositoryTools.find(
-        (item) => item.repositoryId === preferredRepositoryId && item.toolId === normalizedScriptId
+        (item) => item.repositoryId === preferredRepositoryId && item.scriptId === normalizedScriptId
       )
     : undefined;
   const preferredMatch = preferredTool
     ? toMatchedDependency(
         normalizedScriptId,
         preferredTool.repositoryId,
-        preferredTool.toolId,
+        preferredTool.scriptId,
         undefined,
         preferredTool.version
       )

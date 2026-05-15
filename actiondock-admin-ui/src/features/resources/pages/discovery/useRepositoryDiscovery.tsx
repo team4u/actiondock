@@ -168,7 +168,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     setDetailOpen(true);
     setDetailLoading(true);
     try {
-      setDetail(await getRepositoryTool(descriptor.repositoryId, descriptor.toolId));
+      setDetail(await getRepositoryTool(descriptor.repositoryId, descriptor.scriptId));
     } catch (error) {
       setDetail(null);
       messageApi.error(getErrorMessage(error, "加载脚本详情失败"));
@@ -267,13 +267,13 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     let installScriptDependencies = descriptor.scriptDependencies.length > 0;
     let installPluginDependencies = descriptor.pluginDependencies.length > 0;
     let detailForAction = detail?.descriptor.repositoryId === descriptor.repositoryId
-      && detail.descriptor.toolId === descriptor.toolId
+      && detail.descriptor.scriptId === descriptor.scriptId
       ? detail
       : null;
 
     if (!detailForAction) {
       try {
-        detailForAction = await getRepositoryTool(descriptor.repositoryId, descriptor.toolId);
+        detailForAction = await getRepositoryTool(descriptor.repositoryId, descriptor.scriptId);
       } catch (error) {
         messageApi.error(getErrorMessage(error, "读取脚本模板失败"));
         return;
@@ -334,17 +334,17 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
       )
     });
 
-    setActionKey(`${action}:${descriptor.repositoryId}:${descriptor.toolId}`);
+    setActionKey(`${action}:${descriptor.repositoryId}:${descriptor.scriptId}`);
     try {
       const asset = action === "add-local"
-        ? await addRepositoryToolLocalAsset(descriptor.repositoryId, descriptor.toolId, {
+        ? await addRepositoryToolLocalAsset(descriptor.repositoryId, descriptor.scriptId, {
           mode,
           localAssetId: localId,
           installSchedules,
           installScriptDependencies,
           installPluginDependencies
         })
-        : await updateRepositoryToolLocalAsset(descriptor.repositoryId, descriptor.toolId, {
+        : await updateRepositoryToolLocalAsset(descriptor.repositoryId, descriptor.scriptId, {
           installSchedules,
           installScriptDependencies,
           installPluginDependencies

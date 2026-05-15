@@ -176,7 +176,7 @@ export function useScriptPublishToRepo({
       return currentValue.trim();
     }
     const descriptor = repositoryTools.find(
-      (item) => item.repositoryId === repositoryId && item.toolId === toolId
+      (item) => item.repositoryId === repositoryId && item.scriptId === toolId
     );
     return descriptor?.version ? `>= ${descriptor.version}` : undefined;
   };
@@ -332,7 +332,7 @@ export function useScriptPublishToRepo({
             return;
           }
           const descriptor = tools.find(
-            (item) => item.repositoryId === selectedRepositoryId && item.toolId === selectedToolId
+            (item) => item.repositoryId === selectedRepositoryId && item.scriptId === selectedToolId
           );
           if (!descriptor) {
             setPublishVersionSuggestion({ status: "NOT_FOUND" });
@@ -584,7 +584,7 @@ export function useScriptPublishToRepo({
       }));
       const payload = {
         scriptId: publishedScript.id,
-        toolId: values.toolId.trim(),
+        repositoryScriptId: values.toolId.trim(),
         displayName: values.displayName.trim(),
         version: values.version.trim(),
         owner: values.owner?.trim() || undefined,

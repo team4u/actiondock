@@ -402,7 +402,7 @@ export function renderRepositoryToolList(items: RepositoryToolDescriptor[]): str
       const installed = item.installed ? ` installed=${item.installedVersion ?? item.version}` : " not-installed";
       const workingCopy = item.workingCopyId ? ` working-copy=${item.workingCopyId}` : "";
       const type = item.type ? ` ${item.type}` : "";
-      return `${item.repositoryId}/${item.scriptId ?? item.toolId} ${item.displayName}@${item.version}${type}${installed}${workingCopy}`;
+      return `${item.repositoryId}/${item.scriptId} ${item.displayName}@${item.version}${type}${installed}${workingCopy}`;
     })
     .join("\n");
 }
@@ -410,7 +410,7 @@ export function renderRepositoryToolList(items: RepositoryToolDescriptor[]): str
 export function renderRepositoryToolDetail(item: RepositoryToolDetail): string {
   const descriptor = item.descriptor;
   const lines = [
-    `RepositoryScript: ${descriptor.repositoryId}/${descriptor.scriptId ?? descriptor.toolId}`,
+    `RepositoryScript: ${descriptor.repositoryId}/${descriptor.scriptId}`,
     `InstalledScript: ${descriptor.installedScriptId ?? "-"}`,
     `Name: ${descriptor.displayName}`,
     `Version: ${descriptor.version}`,

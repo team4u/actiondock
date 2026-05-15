@@ -1,6 +1,5 @@
 package org.team4u.actiondock.repository;
 
-import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillArchiveManager;
 import org.team4u.actiondock.skill.SkillTypes;
@@ -9,7 +8,6 @@ import org.team4u.actiondock.shared.NormalizeUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
@@ -58,7 +56,6 @@ final class SkillRepositoryPublisher {
             RepositoryCatalogTypes.assertSkillVersionAvailable(
                     session.repository().getId(), session.index(), skillId, normalizedVersion);
             copySkillToRepository(session, skillRoot, validation, normalizedVersion);
-            updateRepositorySkillIndex(session, validation, normalizedVersion, releaseNotes);
             session.commitPublishedAsset(skillId, normalizedVersion, releaseNotes);
 
             return catalog.getRepositorySkill(repositoryId, skillId).descriptor();
@@ -81,19 +78,5 @@ final class SkillRepositoryPublisher {
         SkillFileUtils.deleteQuietly(tempSkillDir.resolve(SkillFileUtils.INSTALL_MARKER_FILE));
         SkillArchiveManager.writeManifest(tempSkillDir, validation, normalizedVersion, catalog.jsonCodec());
         SkillFileUtils.swapTempToTarget(skillDir, tempSkillDir);
-    }
-
-    void updateRepositorySkillIndex(WritableRepositorySession session,
-                                    SkillTypes.SkillValidationResult validation,
-                                    String version,
-                                    String releaseNotes) {
-        Path root = session.root();
-        RepositoryDefinition repository = session.repository();
-        RepositoryIndexFile current = session.index();
-
-        RepositorySkillIndexEntry next = RepositorySkillIndexEntry.fromSkillValidation(validation, version, releaseNotes);
-        List<RepositorySkillIndexEntry> entries =
-                RepositoryIndexUtils.upsertSorted(current.safeSkills(), next, RepositorySkillIndexEntry::id);
-        catalog.writeJson(root.resolve(REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withSkills(current, repository, entries));
     }
 }

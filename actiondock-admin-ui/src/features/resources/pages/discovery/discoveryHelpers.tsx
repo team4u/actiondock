@@ -14,7 +14,7 @@ import type {
 import type { InstallFilter, TrustFilter, TypeFilter } from "./types";
 
 const { Text } = Typography;
-export type DependencyToolLookup = Pick<RepositoryToolDescriptor, "repositoryId" | "toolId" | "displayName">;
+export type DependencyToolLookup = Pick<RepositoryToolDescriptor, "repositoryId" | "scriptId" | "displayName">;
 export type DependencyPluginLookup = Pick<RepositoryPluginDescriptor, "repositoryId" | "pluginId" | "displayName">;
 
 interface DependencyRenderOptions {
@@ -36,7 +36,7 @@ function resolveScriptDependencyName(
 ): string | undefined {
   const repositoryId = resolveScriptDependencyRepositoryId(dependency, options?.currentRepositoryId);
   return options?.availableTools?.find(
-    (tool) => tool.repositoryId === repositoryId && tool.toolId === dependency.toolId
+    (tool) => tool.repositoryId === repositoryId && tool.scriptId === dependency.toolId
   )?.displayName;
 }
 
@@ -61,7 +61,7 @@ export function isLocalWebhook(record: RepositoryWebhookDescriptor): boolean {
 }
 
 export function localAssetId(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): string {
-  return record.localState?.localAssetId ?? ("toolId" in record ? record.toolId : record.webhookId);
+  return record.localState?.localAssetId ?? ("scriptId" in record ? record.scriptId : record.webhookId);
 }
 
 export function isTrackedLocal(record: RepositoryToolDescriptor | RepositoryWebhookDescriptor): boolean {
@@ -152,7 +152,7 @@ export function filterRepositoryTools(
     }
     return matchesKeyword(filters.searchText, [
       tool.displayName,
-      tool.toolId,
+      tool.scriptId,
       tool.localState?.localAssetId,
       tool.description,
       tool.owner,

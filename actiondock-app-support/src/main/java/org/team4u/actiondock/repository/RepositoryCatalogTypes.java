@@ -1,7 +1,5 @@
 package org.team4u.actiondock.repository;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
@@ -33,20 +31,12 @@ import java.util.function.Function;
  */
 public final class RepositoryCatalogTypes {
 
-    /** 仓库索引文件名。 */
-    public static final String REPOSITORY_INDEX_FILE = "actiondock.repository.json";
     /** Script 子目录名称。 */
     public static final String SCRIPTS_DIR = "scripts";
-    /** @deprecated 兼容旧仓库目录结构。 */
-    @Deprecated
-    public static final String TOOLS_DIR = "tools";
     /** Event Source 子目录名称。 */
     public static final String WEBHOOKS_DIR = "webhooks";
     /** Script 描述文件名。 */
     public static final String SCRIPT_DESCRIPTOR_FILE = "script.json";
-    /** @deprecated 兼容旧仓库描述文件名。 */
-    @Deprecated
-    public static final String TOOL_DESCRIPTOR_FILE = "tool.json";
     /** Event Source 描述文件名。 */
     public static final String WEBHOOK_DESCRIPTOR_FILE = "webhook.json";
     /** Plugin 子目录名称。 */
@@ -203,12 +193,6 @@ public final class RepositoryCatalogTypes {
                     scriptDependencies, pluginDependencies, trusted, localState
             );
         }
-
-        @JsonProperty("toolId")
-        @Deprecated
-        public String toolId() {
-            return scriptId;
-        }
     }
 
     public record RepositoryLocalAssetState(
@@ -266,7 +250,7 @@ public final class RepositoryCatalogTypes {
 
     public record RepositoryPublishRequest(
             String scriptId,
-            @JsonAlias("toolId") String repositoryScriptId,
+            String repositoryScriptId,
             String displayName,
             String version,
             String owner,
@@ -277,10 +261,6 @@ public final class RepositoryCatalogTypes {
             List<ScriptDependency> scriptDependencies,
             boolean force
     ) {
-        @Deprecated
-        public String toolId() {
-            return repositoryScriptId;
-        }
     }
 
     public record RepositoryPublishConfigPreviewRequest(
@@ -569,7 +549,7 @@ public final class RepositoryCatalogTypes {
     public record RepositoryIndexFile(int repositoryVersion,
                                       String name,
                                       String description,
-                                      @JsonAlias("tools") List<RepositoryIndexEntry> scripts,
+                                      List<RepositoryIndexEntry> scripts,
                                       List<RepositoryWebhookIndexEntry> webhooks,
                                       List<RepositoryPluginIndexEntry> plugins,
                                       List<CapabilityPackageIndexEntry> packages,
@@ -585,11 +565,6 @@ public final class RepositoryCatalogTypes {
 
         public List<RepositoryIndexEntry> safeScripts() {
             return scripts == null ? List.of() : scripts;
-        }
-
-        @Deprecated
-        public List<RepositoryIndexEntry> safeTools() {
-            return safeScripts();
         }
 
         public List<RepositoryWebhookIndexEntry> safeWebhooks() {
@@ -615,11 +590,7 @@ public final class RepositoryCatalogTypes {
                                        String type,
                                        String description,
                                        String releaseNotes,
-                                       @JsonAlias("toolPath") String scriptPath) {
-        @Deprecated
-        public String toolPath() {
-            return scriptPath;
-        }
+                                       String scriptPath) {
     }
 
     public record RepositoryWebhookIndexEntry(String id,
@@ -734,8 +705,8 @@ public final class RepositoryCatalogTypes {
                                           List<CapabilityPackagePresetTemplate> presetTemplate) {
     }
 
-    public record ToolFile(@JsonProperty("scriptVersion") @JsonAlias("toolVersion") int toolVersion,
-                           @JsonAlias("toolId") String id,
+    public record ToolFile(int scriptVersion,
+                           String id,
                            String name,
                            String version,
                            String type,

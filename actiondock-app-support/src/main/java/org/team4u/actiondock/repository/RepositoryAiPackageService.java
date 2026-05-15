@@ -138,23 +138,6 @@ class RepositoryAiPackageService {
         }
     }
 
-    void updateCapabilityPackageIndex(Path root,
-                                      RepositoryDefinition repository,
-                                      CapabilityPackageDraft draft) {
-        RepositoryIndexFile current = catalog.readRepositoryIndexFile(root, repository);
-        CapabilityPackageIndexEntry next = new CapabilityPackageIndexEntry(
-                draft.packageId(),
-                draft.displayName(),
-                draft.version(),
-                draft.description(),
-                draft.releaseNotes(),
-                CAPABILITY_PACKAGES_DIR + "/" + draft.packageId() + "/" + CAPABILITY_PACKAGE_MANIFEST_FILE
-        );
-        List<CapabilityPackageIndexEntry> entries =
-                RepositoryIndexUtils.upsertSorted(current.safeCapabilityPackages(), next, CapabilityPackageIndexEntry::id);
-        catalog.writeJson(root.resolve(RepositoryCatalogTypes.REPOSITORY_INDEX_FILE), RepositoryIndexUtils.withPackages(current, repository, entries));
-    }
-
     void writePluginFiles(Path pluginDir,
                           String pluginId,
                           String displayName,

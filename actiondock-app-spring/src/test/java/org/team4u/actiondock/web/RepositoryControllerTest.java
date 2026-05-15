@@ -92,7 +92,7 @@ class RepositoryControllerTest {
     }
 
     @Test
-    void repositoryToolCompatibilityRoutesReturnScriptDescriptor() throws Exception {
+    void repositoryScriptRoutesReturnScriptDescriptor() throws Exception {
         RepositoryCatalogTypes.RepositoryToolDescriptor descriptor = new RepositoryCatalogTypes.RepositoryToolDescriptor(
                 "repo-1",
                 "hello-groovy",
@@ -122,20 +122,20 @@ class RepositoryControllerTest {
         when(repositoryCatalogService.getRepositoryTool("repo-1", "hello-groovy"))
                 .thenReturn(new RepositoryCatalogTypes.RepositoryToolDetail(descriptor, "return [message: 'ok']", null, List.of(), List.of()));
 
-        mockMvc.perform(get("/api/repositories/tools"))
+        mockMvc.perform(get("/api/repositories/scripts"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].scriptId").value("hello-groovy"))
-                .andExpect(jsonPath("$.data[0].toolId").value("hello-groovy"));
+                .andExpect(jsonPath("$.data[0].toolId").doesNotExist());
 
-        mockMvc.perform(get("/api/repositories/repo-1/tools"))
+        mockMvc.perform(get("/api/repositories/repo-1/scripts"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].scriptId").value("hello-groovy"))
-                .andExpect(jsonPath("$.data[0].toolId").value("hello-groovy"));
+                .andExpect(jsonPath("$.data[0].toolId").doesNotExist());
 
-        mockMvc.perform(get("/api/repositories/repo-1/tools/hello-groovy"))
+        mockMvc.perform(get("/api/repositories/repo-1/scripts/hello-groovy"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.descriptor.scriptId").value("hello-groovy"))
-                .andExpect(jsonPath("$.data.descriptor.toolId").value("hello-groovy"))
+                .andExpect(jsonPath("$.data.descriptor.toolId").doesNotExist())
                 .andExpect(jsonPath("$.data.source").value("return [message: 'ok']"));
     }
 

@@ -13,7 +13,7 @@ import type { RepositoryPluginDescriptor, RepositoryToolDescriptor } from "../..
 function createTool(overrides: Partial<RepositoryToolDescriptor> = {}): RepositoryToolDescriptor {
   return {
     repositoryId: "repo-a",
-    toolId: "tool-a",
+    scriptId: "tool-a",
     displayName: "Alpha Tool",
     version: "1.0.0",
     tags: [],
@@ -50,7 +50,7 @@ describe("discoveryHelpers", () => {
     const tools = [
       createTool({
         repositoryId: "repo-a",
-        toolId: "billing-sync",
+        scriptId: "billing-sync",
         displayName: "Billing Sync",
         owner: "ops",
         localState: {
@@ -63,7 +63,7 @@ describe("discoveryHelpers", () => {
       }),
       createTool({
         repositoryId: "repo-b",
-        toolId: "etl",
+        scriptId: "etl",
         displayName: "Data ETL",
         type: "PYTHON",
         trusted: false
@@ -79,19 +79,19 @@ describe("discoveryHelpers", () => {
     });
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.toolId).toBe("billing-sync");
+    expect(result[0]?.scriptId).toBe("billing-sync");
   });
 
   it("derives local asset mode and local asset id", () => {
     const tracked = createTool({
-      toolId: "remote-id",
+      scriptId: "remote-id",
       localState: {
         mode: "TRACKED",
         localAssetId: "local-copy",
         updateAvailable: false
       }
     });
-    const remoteOnly = createTool({ toolId: "remote-only", localState: undefined });
+    const remoteOnly = createTool({ scriptId: "remote-only", localState: undefined });
 
     expect(localAssetId(tracked)).toBe("local-copy");
     expect(isTrackedLocal(tracked)).toBe(true);
@@ -111,7 +111,7 @@ describe("discoveryHelpers", () => {
         availableTools: [
           createTool({
             repositoryId: "repo-a",
-            toolId: "billing-sync",
+            scriptId: "billing-sync",
             displayName: "Billing Sync"
           })
         ]

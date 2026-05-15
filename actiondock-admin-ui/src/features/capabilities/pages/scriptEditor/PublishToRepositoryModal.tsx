@@ -70,8 +70,8 @@ function renderScriptDependencyList(
         const toolOptions = repositoryTools
           .filter((item) => item.repositoryId === dependency.repositoryId)
           .map((item) => ({
-            value: item.toolId,
-            label: `${item.displayName} (${item.toolId})`
+            value: item.scriptId,
+            label: `${item.displayName} (${item.scriptId})`
           }));
         return (
           <div key={dependency.scriptId} className="plugin-dependency-row">
@@ -250,7 +250,7 @@ export function PublishToRepositoryModal({
                 <Form.Item
                   label="仓库脚本 ID"
                   name="toolId"
-                  rules={[{ required: true, message: "请输入 toolId" }]}
+                  rules={[{ required: true, message: "请输入仓库脚本 ID" }]}
                 >
                   <Input placeholder="例如 clear-cache" />
                 </Form.Item>
@@ -299,7 +299,7 @@ export function PublishToRepositoryModal({
               {renderScriptDependencyList(scriptDependencies, dependencyRepositories, repositoryTools, onScriptDependencyChange)}
               {scriptDependencies.length > 0 ? (
                 <Text type="secondary">
-                  会优先在当前目标仓库内按同名 toolId 自动匹配，未命中时再扫描其他已启用仓库；你仍然可以手动改写。
+                  会优先在当前目标仓库内按同名脚本 ID 自动匹配，未命中时再扫描其他已启用仓库；你仍然可以手动改写。
                 </Text>
               ) : null}
             </Space>

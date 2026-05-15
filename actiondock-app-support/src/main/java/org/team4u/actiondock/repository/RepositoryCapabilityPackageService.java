@@ -87,8 +87,8 @@ public class RepositoryCapabilityPackageService {
         RepositoryCatalogTypes.assertCapabilityPackageVersionAvailable(repositoryId, session.index(), draft.packageId(), draft.version());
         java.nio.file.Path packageRoot = session.root().resolve(CAPABILITY_PACKAGES_DIR).resolve(draft.packageId());
         aiPackageService.writeCapabilityPackageFiles(packageRoot, draft);
-        aiPackageService.updateCapabilityPackageIndex(session.root(), repository, draft);
         session.commitPublishedAsset(draft.packageId(), draft.version(), draft.releaseNotes());
+        catalog.refreshRepositoryCache(repositoryId);
         return catalog.getCapabilityPackage(repositoryId, draft.packageId()).descriptor();
     }
 

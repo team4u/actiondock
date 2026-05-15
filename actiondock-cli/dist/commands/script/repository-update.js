@@ -6,7 +6,7 @@ export default class ScriptRepositoryUpdateCommand extends BaseCommand {
     static description = "Update an installed repository script";
     static args = {
         repositoryId: Args.string({ required: true }),
-        toolId: Args.string({ required: true })
+        scriptId: Args.string({ required: true })
     };
     static flags = {
         ...BaseCommand.baseFlags,
@@ -20,7 +20,7 @@ export default class ScriptRepositoryUpdateCommand extends BaseCommand {
     async run() {
         const { args, flags } = await this.parse(ScriptRepositoryUpdateCommand);
         try {
-            const item = await createClient(flags).updateRepositoryTool(args.repositoryId, args.toolId, buildRepositoryInstallRequest(flags));
+            const item = await createClient(flags).updateRepositoryTool(args.repositoryId, args.scriptId, buildRepositoryInstallRequest(flags));
             flags.json ? this.printJson(item) : this.log(renderRepositoryLocalAsset(item));
         }
         catch (error) {

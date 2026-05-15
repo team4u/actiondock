@@ -44,7 +44,9 @@ public class RepositoryWebhookService {
     }
 
     public RepositoryWebhookDescriptor publishWebhook(String repositoryId, RepositoryWebhookPublishRequest request) {
-        return publisher.publish(repositoryId, request);
+        RepositoryWebhookDescriptor descriptor = publisher.publish(repositoryId, request);
+        catalog.refreshRepositoryCache(repositoryId);
+        return descriptor;
     }
 
     public RepositoryLocalAsset addLocalAsset(String repositoryId,
