@@ -169,17 +169,19 @@ export function RepositoryManagementPage() {
         trustLevel: values.trustLevel,
         description: values.description?.trim() || undefined
       };
-      const saved = editorState?.mode === "edit" && editorState.repositoryId
-        ? await updateRepository(editorState.repositoryId, payload)
+      const editingRepositoryId = editorState?.mode === "edit" ? editorState.repositoryId : undefined;
+      const saved = editingRepositoryId
+        ? await updateRepository(editingRepositoryId, payload)
         : await createRepository(payload);
+      const effectiveRepository = editingRepositoryId ? saved : await syncRepository(saved.id);
       setRepositories((previous) => {
-        const next = previous.some((item) => item.id === saved.id)
-          ? previous.map((item) => (item.id === saved.id ? saved : item))
-          : [saved, ...previous];
+        const next = previous.some((item) => item.id === effectiveRepository.id)
+          ? previous.map((item) => (item.id === effectiveRepository.id ? effectiveRepository : item))
+          : [effectiveRepository, ...previous];
         return [...next].sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
       });
       closeEditor();
-      messageApi.success(editorState?.mode === "edit" ? "仓库已更新" : "仓库已创建");
+      messageApi.success(editingRepositoryId ? "仓库已更新" : "仓库已创建并同步");
     } catch (error) {
       if (error instanceof ApiError) {
         messageApi.error(error.message);

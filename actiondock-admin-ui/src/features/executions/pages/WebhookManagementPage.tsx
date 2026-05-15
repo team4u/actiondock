@@ -12,6 +12,7 @@ import {
   Empty,
   Form,
   Input,
+  Popconfirm,
   Select,
   Space,
   Switch,
@@ -92,6 +93,7 @@ export function WebhookManagementPage({ embedded = false }: WebhookManagementPag
   const [sampleRequestText, setSampleRequestText] = useState(prettyJson(createDefaultSampleRequest()));
   const [testRequestText, setTestRequestText] = useState(prettyJson(buildTestRequest(createEmptyDraft())));
   const [testResult, setTestResult] = useState<WebhookTestResult | null>(null);
+  const [useKeyAsId, setUseKeyAsId] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
   async function loadData() {
@@ -127,6 +129,7 @@ export function WebhookManagementPage({ embedded = false }: WebhookManagementPag
   function openCreate() {
     const next = createEmptyDraft();
     setDraft(next);
+    setUseKeyAsId(false);
     setSampleRequestText(prettyJson(next.sampleRequest));
     setTestRequestText(prettyJson(buildTestRequest(next)));
     setTestResult(null);
@@ -171,6 +174,9 @@ export function WebhookManagementPage({ embedded = false }: WebhookManagementPag
         ...draft,
         sampleRequest: parseSampleRequestText(sampleRequestText)
       };
+      if (!draft.id && useKeyAsId && draft.key?.trim()) {
+        payload.id = draft.key.trim();
+      }
       const saved = draft.id
         ? await updateWebhook(draft.id, payload)
         : await createWebhook(payload);
@@ -271,14 +277,22 @@ export function WebhookManagementPage({ embedded = false }: WebhookManagementPag
           >
             {record.enabled ? "停用" : "启用"}
           </Button>
-          <Button
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => void removeItem(record)}
+          <Popconfirm
+            title="确认删除"
+            description={`确定要删除 Webhook「${record.name || record.key}」吗？`}
+            onConfirm={() => void removeItem(record)}
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
           >
-            删除
-          </Button>
+            <Button
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+            >
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       )
     }
@@ -364,8 +378,23 @@ export function WebhookManagementPage({ embedded = false }: WebhookManagementPag
               <Form.Item label="启用">
                 <Switch checked={draft.enabled} onChange={(enabled) => updateDraft({ enabled })} />
               </Form.Item>
-              <Form.Item label="Webhook Endpoint">
-                <Input value={draft.transport.endpointPath ?? (draft.id ? `/api/webhooks/${draft.id}` : "保存后生成")} readOnly />
+              <Form.Item
+                label="Webhook Endpoint"
+                tooltip="选择端点路径的生成方式。仅创建时可配置。"
+              >
+                {draft.id ? (
+                  <Input value={`/api/webhooks/${draft.id}`} readOnly />
+                ) : (
+                  <Select
+                    style={{ width: "100%" }}
+                    value={useKeyAsId ? "key" : "auto"}
+                    onChange={(value) => setUseKeyAsId(value === "key")}
+                    options={[
+                      { label: "自动生成", value: "auto" },
+                      { label: `使用 Key（/api/webhooks/${draft.key || "..."}）`, value: "key", disabled: !draft.key?.trim() }
+                    ]}
+                  />
+                )}
               </Form.Item>
             </Form>
           </Card>
