@@ -53,6 +53,12 @@ export ACTIONDOCK_PROFILE=local
 
 脚本是 ActionDock 的主要资产对象。本节覆盖本地脚本的完整生命周期，以及来自仓库的脚本安装与管理。
 
+命令归属原则：
+
+- `repository` 命令管理仓库本身：连接、同步、删除、项目知识入口解析。
+- `script repository-*` 命令管理“仓库里的脚本”：查看、安装、更新、卸载和创建工作副本。
+- 仓库脚本 ID 在 CLI 参数里仍表现为第二个位置参数，例如 `team-tools hello-groovy`。旧文档或旧响应里出现的 `toolId` 与这里的仓库脚本 ID 等价。
+
 ### 查看脚本列表
 
 ```bash
@@ -173,7 +179,7 @@ actiondock script publish <id>
 
 命令前缀：`actiondock script repository-*`
 
-脚本是主对象，仓库只是来源；因此本节将仓库脚本操作放在脚本章节里。
+脚本是主对象，仓库只是来源；因此仓库脚本操作放在脚本章节里。`actiondock repository ...` 只负责仓库连接与同步，不负责安装某个脚本资产。
 
 #### 列出仓库脚本
 

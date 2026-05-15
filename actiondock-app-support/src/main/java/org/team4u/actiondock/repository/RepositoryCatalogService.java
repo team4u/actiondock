@@ -291,7 +291,10 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         return index.safeScripts().stream()
-                .map(entry -> toDescriptor(repository, readToolFile(repository, entry.scriptPath()), entry.scriptPath()))
+                .map(entry -> {
+                    String scriptPath = resolveToolDescriptorPath(repository, entry.scriptPath());
+                    return toDescriptor(repository, readToolFile(repository, scriptPath), scriptPath);
+                })
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryToolDescriptor::scriptId))
                 .toList();
     }
@@ -359,22 +362,23 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
         RepositoryCatalogTypes.RepositoryIndexEntry entry = findEntryById(
                 index.safeScripts(), toolId, RepositoryCatalogTypes.RepositoryIndexEntry::id, "仓库工具");
-        RepositoryCatalogTypes.ToolFile tool = readToolFile(repository, entry.scriptPath());
+        String scriptPath = resolveToolDescriptorPath(repository, entry.scriptPath());
+        RepositoryCatalogTypes.ToolFile tool = readToolFile(repository, scriptPath);
         List<RepositoryCatalogTypes.ConfigTemplateItem> configTemplate = readOptionalFile(
                 repository,
-                parentDirectoryPath(entry.scriptPath()).resolveNullable(tool.configTemplatePath()),
+                parentDirectoryPath(scriptPath).resolveNullable(tool.configTemplatePath()),
                 RepositoryCatalogTypes.ConfigTemplateItem.class
         );
         List<RepositoryCatalogTypes.ScheduleTemplateItem> scheduleTemplate = readOptionalFile(
                 repository,
-                parentDirectoryPath(entry.scriptPath()).resolveNullable(tool.scheduleTemplatePath()),
+                parentDirectoryPath(scriptPath).resolveNullable(tool.scheduleTemplatePath()),
                 RepositoryCatalogTypes.ScheduleTemplateItem.class
         );
-        String source = readRepositoryFile(repository, parentDirectoryPath(entry.scriptPath()).resolve(tool.sourcePath()));
+        String source = readRepositoryFile(repository, parentDirectoryPath(scriptPath).resolve(tool.sourcePath()));
         String pythonRequirements = NormalizeUtils.isBlank(tool.pythonRequirementsPath())
                 ? null
-                : readRepositoryFile(repository, parentDirectoryPath(entry.scriptPath()).resolve(tool.pythonRequirementsPath()));
-        return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, entry.scriptPath()), source, pythonRequirements, configTemplate, scheduleTemplate);
+                : readRepositoryFile(repository, parentDirectoryPath(scriptPath).resolve(tool.pythonRequirementsPath()));
+        return new RepositoryCatalogTypes.RepositoryToolDetail(toDescriptor(repository, tool, scriptPath), source, pythonRequirements, configTemplate, scheduleTemplate);
     }
 
     public RepositoryCatalogTypes.RepositoryWebhookDetail getRepositoryWebhook(String repositoryId, String webhookId) {
@@ -949,6 +953,22 @@ public class RepositoryCatalogService {
 
     private RepositoryCatalogTypes.ToolFile readToolFile(RepositoryDefinition repository, String toolPath) {
         return readRepositoryJsonFile(repository, toolPath, RepositoryCatalogTypes.ToolFile.class);
+    }
+
+    private String resolveToolDescriptorPath(RepositoryDefinition repository, String scriptPath) {
+        if (REPO_TYPE_HTTP.equals(repository.getType()) || NormalizeUtils.isBlank(scriptPath)) {
+            return scriptPath;
+        }
+        Path root = resolveRepositoryRoot(repository);
+        Path requested = safeResolveRepositoryPath(root, scriptPath);
+        if (Files.exists(requested)) {
+            return scriptPath;
+        }
+        if (!scriptPath.endsWith(SCRIPT_DESCRIPTOR_FILE)) {
+            return scriptPath;
+        }
+        String legacyPath = parentDirectoryPath(scriptPath).resolve(TOOL_DESCRIPTOR_FILE).toString().replace('\\', '/');
+        return Files.exists(safeResolveRepositoryPath(root, legacyPath)) ? legacyPath : scriptPath;
     }
 
     private RepositoryCatalogTypes.WebhookFile readWebhookFile(RepositoryDefinition repository, String webhookPath) {

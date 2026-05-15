@@ -34,6 +34,18 @@ import type {
 } from "../../shared/types";
 import { normalizeScriptDefinition } from "../../services/scriptPublication";
 
+function normalizeRepositoryToolDescriptor<T extends { scriptId?: string; toolId?: string }>(descriptor: T): T {
+  return {
+    ...descriptor,
+    scriptId: descriptor.scriptId ?? descriptor.toolId ?? "",
+    toolId: descriptor.toolId ?? descriptor.scriptId ?? ""
+  };
+}
+
+function normalizeRepositoryToolDescriptorList<T extends { scriptId?: string; toolId?: string }>(items: T[]): T[] {
+  return items.map((item) => normalizeRepositoryToolDescriptor(item));
+}
+
 export function listRepositories(purpose?: "CAPABILITY" | "PROJECT"): Promise<RepositoryDefinition[]> {
   const suffix = purpose ? `?purpose=${encodeURIComponent(purpose)}` : "";
   return request<RepositoryDefinition[]>(`/api/repositories${suffix}`);
@@ -72,7 +84,7 @@ export function resolveProjectRepository(repositoryId: string): Promise<ProjectR
 }
 
 export function listRepositoryTools(): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>("/api/repositories/scripts");
+  return request<RepositoryToolDescriptor[]>("/api/repositories/scripts").then(normalizeRepositoryToolDescriptorList);
 }
 
 export function listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
@@ -92,7 +104,7 @@ export function listRepositorySkills(): Promise<RepositorySkillDescriptor[]> {
 }
 
 export function listToolsByRepository(id: string): Promise<RepositoryToolDescriptor[]> {
-  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`);
+  return request<RepositoryToolDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`).then(normalizeRepositoryToolDescriptorList);
 }
 
 export function listWebhooksByRepository(id: string): Promise<RepositoryWebhookDescriptor[]> {
@@ -112,7 +124,10 @@ export function listCapabilityPackagesByRepository(id: string): Promise<Capabili
 }
 
 export function getRepositoryTool(repositoryId: string, toolId: string): Promise<RepositoryToolDetail> {
-  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/scripts/${encodeURIComponent(toolId)}`);
+  return request<RepositoryToolDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/scripts/${encodeURIComponent(toolId)}`).then((detail) => ({
+    ...detail,
+    descriptor: normalizeRepositoryToolDescriptor(detail.descriptor)
+  }));
 }
 
 export function getRepositoryWebhook(repositoryId: string, webhookId: string): Promise<RepositoryWebhookDetail> {
@@ -247,7 +262,7 @@ export function publishRepositoryTool(repositoryId: string, payload: RepositoryP
     operation: "publish",
     repositoryId,
     payload
-  }).then((operation) => operation.result);
+  }).then((operation) => normalizeRepositoryToolDescriptor(operation.result));
 }
 
 export function previewRepositoryWebhookPublish(

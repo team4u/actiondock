@@ -685,6 +685,7 @@ export interface ProjectRepositoryResolution {
 
 export interface RepositoryToolDescriptor {
   repositoryId: string;
+  scriptId?: string;
   toolId: string;
   displayName: string;
   version: string;

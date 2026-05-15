@@ -13,6 +13,8 @@ import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositorySkillService;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -87,6 +89,54 @@ class RepositoryControllerTest {
                 .andExpect(jsonPath("$.data.repositoryId").value("billing-service"))
                 .andExpect(jsonPath("$.data.entryPath").value("ACTIONDOCK.md"))
                 .andExpect(jsonPath("$.data.content").value("# Billing Service"));
+    }
+
+    @Test
+    void repositoryToolCompatibilityRoutesReturnScriptDescriptor() throws Exception {
+        RepositoryCatalogTypes.RepositoryToolDescriptor descriptor = new RepositoryCatalogTypes.RepositoryToolDescriptor(
+                "repo-1",
+                "hello-groovy",
+                "Hello Groovy",
+                "1.0.0",
+                "desc",
+                null,
+                "team",
+                List.of(),
+                "GROOVY",
+                "TOOL",
+                "scripts/hello-groovy/source.groovy",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                true,
+                null
+        );
+        when(repositoryCatalogService.listAllRepositoryTools()).thenReturn(List.of(descriptor));
+        when(repositoryCatalogService.listRepositoryTools("repo-1")).thenReturn(List.of(descriptor));
+        when(repositoryCatalogService.getRepositoryTool("repo-1", "hello-groovy"))
+                .thenReturn(new RepositoryCatalogTypes.RepositoryToolDetail(descriptor, "return [message: 'ok']", null, List.of(), List.of()));
+
+        mockMvc.perform(get("/api/repositories/tools"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].scriptId").value("hello-groovy"))
+                .andExpect(jsonPath("$.data[0].toolId").value("hello-groovy"));
+
+        mockMvc.perform(get("/api/repositories/repo-1/tools"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].scriptId").value("hello-groovy"))
+                .andExpect(jsonPath("$.data[0].toolId").value("hello-groovy"));
+
+        mockMvc.perform(get("/api/repositories/repo-1/tools/hello-groovy"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.descriptor.scriptId").value("hello-groovy"))
+                .andExpect(jsonPath("$.data.descriptor.toolId").value("hello-groovy"))
+                .andExpect(jsonPath("$.data.source").value("return [message: 'ok']"));
     }
 
     @Test

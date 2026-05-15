@@ -204,6 +204,7 @@ public final class RepositoryCatalogTypes {
             );
         }
 
+        @JsonProperty("toolId")
         @Deprecated
         public String toolId() {
             return scriptId;
@@ -734,7 +735,7 @@ public final class RepositoryCatalogTypes {
     }
 
     public record ToolFile(@JsonProperty("scriptVersion") @JsonAlias("toolVersion") int toolVersion,
-                           String id,
+                           @JsonAlias("toolId") String id,
                            String name,
                            String version,
                            String type,

@@ -7,6 +7,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
@@ -25,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -210,6 +213,26 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
+    void toolMetadataAcceptsLegacyToolIdField() throws Exception {
+        String toolJson = """
+                {
+                  "toolVersion": 1,
+                  "toolId": "legacy-tool",
+                  "name": "Legacy Tool",
+                  "version": "1.0.0",
+                  "type": "GROOVY",
+                  "sourcePath": "source.groovy",
+                  "tags": [],
+                  "pluginDependencies": []
+                }
+                """;
+
+        ToolFile tool = objectMapper.readValue(toolJson, ToolFile.class);
+
+        assertThat(tool.id()).isEqualTo("legacy-tool");
+    }
+
+    @Test
     void repositoryMetadataAllowsMissingReleaseNotes() {
         String indexJson = """
                 {
@@ -362,6 +385,65 @@ class RepositoryCatalogServiceTest {
         );
         assertThat(entry.description()).isEqualTo("Asset docs");
         assertThat(entry.releaseNotes()).isNull();
+    }
+
+    @Test
+    void readsLegacyToolDescriptorWhenScriptDescriptorIsMissing() throws Exception {
+        Path repositoryRoot = tempDir.resolve("legacy-tool-repo");
+        Files.createDirectories(repositoryRoot.resolve("scripts/demo-tool"));
+        Files.writeString(repositoryRoot.resolve(REPOSITORY_INDEX_FILE), """
+                {
+                  "repositoryVersion": 1,
+                  "name": "Legacy Tool Repository",
+                  "scripts": [
+                    {
+                      "id": "demo-tool",
+                      "name": "Demo Tool",
+                      "version": "1.0.0",
+                      "type": "GROOVY",
+                      "scriptPath": "scripts/demo-tool/script.json"
+                    }
+                  ],
+                  "plugins": []
+                }
+                """);
+        Files.writeString(repositoryRoot.resolve("scripts/demo-tool/tool.json"), """
+                {
+                  "toolVersion": 1,
+                  "id": "demo-tool",
+                  "name": "Demo Tool",
+                  "version": "1.0.0",
+                  "type": "GROOVY",
+                  "sourcePath": "source.groovy",
+                  "tags": [],
+                  "pluginDependencies": []
+                }
+                """);
+        Files.writeString(repositoryRoot.resolve("scripts/demo-tool/source.groovy"), "return [message: 'ok']");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("legacy-tool-repo")
+                .setName("Legacy Tool Repository")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_CAPABILITY)
+                .setUrl(repositoryRoot.toString())
+                .setEnabled(true);
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        List<RepositoryToolDescriptor> tools = service.listRepositoryTools("legacy-tool-repo");
+        RepositoryToolDetail detail = service.getRepositoryTool("legacy-tool-repo", "demo-tool");
+
+        assertThat(tools).singleElement().satisfies(item -> {
+            assertThat(item.scriptId()).isEqualTo("demo-tool");
+            assertThat(item.sourcePath()).isEqualTo("source.groovy");
+        });
+        assertThat(detail.descriptor().scriptId()).isEqualTo("demo-tool");
+        assertThat(detail.source()).isEqualTo("return [message: 'ok']");
     }
 
     @Test
@@ -665,7 +747,7 @@ class RepositoryCatalogServiceTest {
                 mock(ExecutionPresetRepository.class),
                 mock(ConfigValueRepository.class),
                 mock(org.team4u.actiondock.domain.port.WebhookRepository.class),
-                mock(RepositoryLocalAssetRepository.class),
+                new EmptyRepositoryLocalAssetRepository(),
                 mock(org.team4u.actiondock.ai.api.AiModelProfileRepository.class),
                 mock(org.team4u.actiondock.ai.api.AiAgentProfileRepository.class),
                 mock(org.team4u.actiondock.ai.api.AiToolsetRepository.class)
@@ -709,6 +791,37 @@ class RepositoryCatalogServiceTest {
         @Override
         public void deleteById(String id) {
             items.remove(id);
+        }
+    }
+
+    private static final class EmptyRepositoryLocalAssetRepository implements RepositoryLocalAssetRepository {
+        @Override
+        public RepositoryLocalAsset save(RepositoryLocalAsset asset) {
+            return asset;
+        }
+
+        @Override
+        public Optional<RepositoryLocalAsset> findById(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<RepositoryLocalAsset> findByLocalAsset(UpstreamAssetType assetType, String localAssetId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<RepositoryLocalAsset> findByUpstreamAsset(UpstreamAssetType assetType, String repositoryId, String upstreamAssetId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<RepositoryLocalAsset> findAll() {
+            return List.of();
+        }
+
+        @Override
+        public void deleteById(String id) {
         }
     }
 
