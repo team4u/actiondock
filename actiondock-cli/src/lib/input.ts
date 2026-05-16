@@ -8,6 +8,11 @@ export interface ParsedDynamicInput {
   dynamicFields: string[];
 }
 
+export interface InputJsonLabels {
+  jsonFlag: string;
+  fileFlag: string;
+}
+
 const DEFAULT_BOOLEAN_FLAGS = new Set(["draft", "json"]);
 const DEFAULT_VALUE_FLAGS = new Set([
   "server",
@@ -101,7 +106,7 @@ export function collectDynamicFlags(
 export function parseInputObject(
   inputJson: string | undefined,
   inputFile: string | undefined,
-  labels: { jsonFlag: string; fileFlag: string } = {
+  labels: InputJsonLabels = {
     jsonFlag: "`--input-json`",
     fileFlag: "`--input-file`"
   }
@@ -119,7 +124,7 @@ export function parseInputObject(
 export function parseJsonValueInput(
   inputJson: string | undefined,
   inputFile: string | undefined,
-  labels: { jsonFlag: string; fileFlag: string }
+  labels: InputJsonLabels
 ): unknown {
   return parseJsonInput(inputJson, inputFile, labels);
 }
@@ -127,7 +132,7 @@ export function parseJsonValueInput(
 function parseJsonInput(
   inputJson: string | undefined,
   inputFile: string | undefined,
-  labels: { jsonFlag: string; fileFlag: string }
+  labels: InputJsonLabels
 ): unknown {
   if (inputJson && inputFile) {
     throw new ActionDockCliError(`${labels.jsonFlag} 和 ${labels.fileFlag} 不能同时使用。`, 2);
@@ -148,7 +153,11 @@ function parseJsonInput(
 export function buildInputFromSchema(
   baseInput: Record<string, unknown>,
   dynamicFlags: Map<string, string | boolean>,
-  fields: SchemaFieldDescriptor[]
+  fields: SchemaFieldDescriptor[],
+  labels: InputJsonLabels = {
+    jsonFlag: "`--input-json`",
+    fileFlag: "`--input-file`"
+  }
 ): ParsedDynamicInput {
   const result: Record<string, unknown> = { ...baseInput };
   const dynamicFieldNames: string[] = [];
@@ -167,7 +176,7 @@ export function buildInputFromSchema(
     }
 
     if (!field.supportsFlag) {
-      throw new ActionDockCliError(`字段 ${name} 属于 ${field.kind}，请改用 \`--input-json\` 或 \`--input-file\` 提供。`, 2);
+      throw new ActionDockCliError(`字段 ${name} 属于 ${field.kind}，请改用 ${labels.jsonFlag} 或 ${labels.fileFlag} 提供。`, 2);
     }
 
     result[name] = coerceValue(field, rawValue);
@@ -204,7 +213,7 @@ function parseJsonText(text: string, source: string): unknown {
 function resolveJsonSourceName(
   inputJson: string | undefined,
   inputFile: string | undefined,
-  labels: { jsonFlag: string; fileFlag: string }
+  labels: InputJsonLabels
 ): string {
   if (inputJson) {
     return labels.jsonFlag;

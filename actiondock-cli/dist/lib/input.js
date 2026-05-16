@@ -99,7 +99,10 @@ function parseJsonInput(inputJson, inputFile, labels) {
     }
     return undefined;
 }
-export function buildInputFromSchema(baseInput, dynamicFlags, fields) {
+export function buildInputFromSchema(baseInput, dynamicFlags, fields, labels = {
+    jsonFlag: "`--input-json`",
+    fileFlag: "`--input-file`"
+}) {
     const result = { ...baseInput };
     const dynamicFieldNames = [];
     const fieldMap = new Map(fields.map((field) => [field.name, field]));
@@ -114,7 +117,7 @@ export function buildInputFromSchema(baseInput, dynamicFlags, fields) {
             continue;
         }
         if (!field.supportsFlag) {
-            throw new ActionDockCliError(`字段 ${name} 属于 ${field.kind}，请改用 \`--input-json\` 或 \`--input-file\` 提供。`, 2);
+            throw new ActionDockCliError(`字段 ${name} 属于 ${field.kind}，请改用 ${labels.jsonFlag} 或 ${labels.fileFlag} 提供。`, 2);
         }
         result[name] = coerceValue(field, rawValue);
         dynamicFieldNames.push(name);

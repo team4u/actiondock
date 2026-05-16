@@ -118,6 +118,18 @@ describe("buildInputFromSchema", () => {
     expect(() => buildInputFromSchema({}, dynamicFlags, fields)).toThrow(ActionDockCliError);
   });
 
+  it("uses command-specific JSON labels for JSON-only field errors", () => {
+    const dynamicFlags = new Map<string, string | boolean>([
+      ["name", "Alice"],
+      ["payload", '{"x":1}']
+    ]);
+
+    expect(() => buildInputFromSchema({}, dynamicFlags, fields, {
+      jsonFlag: "`--args-json`",
+      fileFlag: "`--args-file`"
+    })).toThrow("字段 payload 属于 object，请改用 `--args-json` 或 `--args-file` 提供。");
+  });
+
   it("rejects missing required fields", () => {
     expect(() => buildInputFromSchema({}, new Map(), fields)).toThrow(ActionDockCliError);
   });

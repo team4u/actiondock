@@ -1647,6 +1647,29 @@ describe("CLI integration", () => {
     });
   });
 
+  it("uses plugin args labels when rejecting complex dynamic plugin args", async () => {
+    const result = await runCli([
+      "plugin",
+      "invoke",
+      "plugin-a",
+      "summarize",
+      "--server",
+      baseUrl,
+      "--topic",
+      "ops",
+      "--payload",
+      '{"scope":"night"}',
+      "--json"
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr)).toEqual(
+      expect.objectContaining({
+        error: "字段 payload 属于 object，请改用 `--args-json` 或 `--args-file` 提供。"
+      })
+    );
+  });
+
   it("lists plugins, references, and config", async () => {
     const list = await runCli(["plugin", "list", "--server", baseUrl, "--json"]);
     expect(list.status).toBe(0);

@@ -71,7 +71,10 @@ export default class PluginInvokeCommand extends BaseCommand {
       const dynamicFlags = collectDynamicFlags(this.argv, {
         positionals: [args.pluginId, args.action]
       });
-      const { input: actionArgs } = buildInputFromSchema(baseArgs, dynamicFlags, actionFields);
+      const { input: actionArgs } = buildInputFromSchema(baseArgs, dynamicFlags, actionFields, {
+        jsonFlag: "`--args-json`",
+        fileFlag: "`--args-file`"
+      });
       const scriptInput = parseInputObject(flags["script-input-json"], flags["script-input-file"], {
         jsonFlag: "`--script-input-json`",
         fileFlag: "`--script-input-file`"
