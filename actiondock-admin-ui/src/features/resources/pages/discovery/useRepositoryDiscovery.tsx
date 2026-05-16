@@ -9,15 +9,19 @@ import {
   getRepositoryWebhook,
   getRepositorySkill,
   getRepositoryScript,
+  getRepositoryKnowledge,
   installCapabilityPackage,
+  installRepositoryKnowledge,
   installRepositoryPlugin,
   listCapabilityPackages,
   listRepositories,
   listRepositoryWebhooks,
   listRepositoryPlugins,
   listRepositorySkills,
+  listRepositoryKnowledge,
   listRepositoryScripts,
   uninstallCapabilityPackage,
+  uninstallRepositoryKnowledge,
   updateCapabilityPackage,
   updateRepositoryWebhookLocalAsset,
   updateRepositoryPlugin,
@@ -28,6 +32,8 @@ import type {
   CapabilityPackageDescriptor,
   CapabilityPackageDetail,
   RepositoryDefinition,
+  RepositoryKnowledgeDescriptor,
+  RepositoryKnowledgeDetail,
   RepositoryWebhookDescriptor,
   RepositoryWebhookDetail,
   RepositoryPluginDescriptor,
@@ -39,6 +45,7 @@ import type {
 import { getErrorMessage } from "../../../../services/utils";
 import {
   filterCapabilityPackages,
+  filterRepositoryKnowledge,
   filterRepositoryWebhooks,
   filterRepositoryPlugins,
   filterRepositorySkills,
@@ -74,6 +81,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const [packages, setPackages] = useState<CapabilityPackageDescriptor[]>([]);
   const [skills, setSkills] = useState<RepositorySkillDescriptor[]>([]);
   const [plugins, setPlugins] = useState<RepositoryPluginDescriptor[]>([]);
+  const [knowledge, setKnowledge] = useState<RepositoryKnowledgeDescriptor[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [packageActionKey, setPackageActionKey] = useState<string | null>(null);
@@ -95,6 +103,11 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const [skillDetail, setSkillDetail] = useState<RepositorySkillDetail | null>(null);
   const [skillInstallDescriptor, setSkillInstallDescriptor] = useState<RepositorySkillDescriptor | null>(null);
 
+  const [knowledgeDetailOpen, setKnowledgeDetailOpen] = useState(false);
+  const [knowledgeDetailLoading, setKnowledgeDetailLoading] = useState(false);
+  const [knowledgeDetail, setKnowledgeDetail] = useState<RepositoryKnowledgeDetail | null>(null);
+  const [knowledgeActionKey, setKnowledgeActionKey] = useState<string | null>(null);
+
   const [searchText, setSearchText] = useState("");
   const [repositoryFilter, setRepositoryFilter] = useState<string>("ALL");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
@@ -111,13 +124,17 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
         listCapabilityPackages(),
         listRepositorySkills()
       ]);
-      const pluginData = await listRepositoryPlugins();
+      const [pluginData, knowledgeData] = await Promise.all([
+        listRepositoryPlugins(),
+        listRepositoryKnowledge()
+      ]);
       setRepositories(repositoryData);
       setTools(toolData);
       setWebhooks(webhookData);
       setPackages(packageData);
       setSkills(skillData);
       setPlugins(pluginData);
+      setKnowledge(knowledgeData);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载仓库目录失败"));
     } finally {
@@ -163,6 +180,13 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     installFilter,
     trustFilter
   }), [installFilter, plugins, repositoryFilter, searchText, trustFilter]);
+
+  const filteredKnowledge = useMemo(() => filterRepositoryKnowledge(knowledge, {
+    searchText,
+    repositoryFilter,
+    installFilter,
+    trustFilter
+  }), [installFilter, knowledge, repositoryFilter, searchText, trustFilter]);
 
   const openDetail = useCallback(async (descriptor: RepositoryScriptDescriptor) => {
     setDetailOpen(true);
@@ -231,6 +255,62 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const closeSkillInstall = useCallback(() => {
     setSkillInstallDescriptor(null);
   }, []);
+
+  const openKnowledgeDetail = useCallback(async (descriptor: RepositoryKnowledgeDescriptor) => {
+    setKnowledgeDetailOpen(true);
+    setKnowledgeDetailLoading(true);
+    try {
+      setKnowledgeDetail(await getRepositoryKnowledge(descriptor.repositoryId, descriptor.knowledgeId));
+    } catch (error) {
+      setKnowledgeDetail(null);
+      messageApi.error(getErrorMessage(error, "加载知识源详情失败"));
+    } finally {
+      setKnowledgeDetailLoading(false);
+    }
+  }, [messageApi]);
+
+  const handleKnowledgeInstall = useCallback(async (descriptor: RepositoryKnowledgeDescriptor) => {
+    setKnowledgeActionKey(`install:${descriptor.repositoryId}:${descriptor.knowledgeId}`);
+    try {
+      await installRepositoryKnowledge(descriptor.repositoryId, descriptor.knowledgeId);
+      messageApi.success("知识源已安装");
+      await loadData();
+      if (knowledgeDetailOpen) {
+        await openKnowledgeDetail(descriptor);
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "安装知识源失败"));
+    } finally {
+      setKnowledgeActionKey(null);
+    }
+  }, [knowledgeDetailOpen, loadData, messageApi, openKnowledgeDetail]);
+
+  const handleKnowledgeUninstall = useCallback(async (descriptor: RepositoryKnowledgeDescriptor) => {
+    await modal.confirm({
+      title: "卸载知识源",
+      okText: "卸载",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Text>将删除知识源安装时自动创建的项目仓库。</Text>
+          <Text code>{descriptor.repositoryId}/{descriptor.knowledgeId}</Text>
+        </Space>
+      )
+    });
+    setKnowledgeActionKey(`uninstall:${descriptor.repositoryId}:${descriptor.knowledgeId}`);
+    try {
+      await uninstallRepositoryKnowledge(descriptor.repositoryId, descriptor.knowledgeId);
+      messageApi.success("知识源已卸载");
+      setKnowledgeDetailOpen(false);
+      setKnowledgeDetail(null);
+      await loadData();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "卸载知识源失败"));
+    } finally {
+      setKnowledgeActionKey(null);
+    }
+  }, [loadData, messageApi, modal]);
 
   const handleRepositoryPluginAction = useCallback(async (
     record: RepositoryPluginDescriptor,
@@ -614,6 +694,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     filteredPackages,
     filteredSkills,
     filteredPlugins,
+    filteredKnowledge,
     plugins,
     detailOpen,
     detailLoading,
@@ -628,6 +709,10 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     skillDetailLoading,
     skillDetail,
     skillInstallDescriptor,
+    knowledgeDetailOpen,
+    knowledgeDetailLoading,
+    knowledgeDetail,
+    knowledgeActionKey,
     searchText,
     repositoryFilter,
     typeFilter,
@@ -645,6 +730,9 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     openSkillDetail,
     openSkillInstall,
     closeSkillInstall,
+    openKnowledgeDetail,
+    handleKnowledgeInstall,
+    handleKnowledgeUninstall,
     handleRepositoryPluginAction,
     confirmToolLocalAssetAction,
     confirmAddToolToLocal,
@@ -655,6 +743,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     closeDetail: () => setDetailOpen(false),
     closeWebhookDetail: () => setWebhookDetailOpen(false),
     closePackageDetail: () => setPackageDetailOpen(false),
-    closeSkillDetail: () => setSkillDetailOpen(false)
+    closeSkillDetail: () => setSkillDetailOpen(false),
+    closeKnowledgeDetail: () => setKnowledgeDetailOpen(false)
   };
 }

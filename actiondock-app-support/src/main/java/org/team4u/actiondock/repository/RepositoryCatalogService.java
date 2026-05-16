@@ -205,6 +205,10 @@ public class RepositoryCatalogService {
         return definitionService.getRepository(repositoryId);
     }
 
+    public Optional<RepositoryDefinition> findRepository(String repositoryId) {
+        return repos.repositoryDefinitionRepository().findById(repositoryId);
+    }
+
     public RepositoryDefinition saveRepository(RepositoryDefinition definition) {
         RepositoryDefinition saved = definitionService.saveRepository(definition);
         refreshRepositoryCache(saved);
@@ -975,7 +979,8 @@ public class RepositoryCatalogService {
                 scanWebhooks(repository, root),
                 scanPlugins(repository, root),
                 scanCapabilityPackages(repository, root),
-                scanSkills(repository, root)
+                scanSkills(repository, root),
+                scanKnowledge(repository, root)
         );
     }
 
@@ -1060,6 +1065,22 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
+    private List<RepositoryCatalogTypes.RepositoryKnowledgeIndexEntry> scanKnowledge(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, KNOWLEDGE_DIR, KNOWLEDGE_MANIFEST_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.KnowledgeFile.class)
+                        .map(file -> new RepositoryCatalogTypes.RepositoryKnowledgeIndexEntry(
+                                file.knowledgeId(),
+                                file.displayName(),
+                                file.description(),
+                                path,
+                                file.source(),
+                                file.tags()))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryKnowledgeIndexEntry::id))
+                .toList();
+    }
+
     private List<String> scanFixedDirectory(Path root, String directory, String manifestFile) {
         Path base = root.resolve(directory);
         if (!Files.isDirectory(base)) {
@@ -1109,6 +1130,10 @@ public class RepositoryCatalogService {
 
     RepositoryCatalogTypes.SkillFile readSkillFile(RepositoryDefinition repository, String skillPath) {
         return readRepositoryJsonFile(repository, skillPath, RepositoryCatalogTypes.SkillFile.class);
+    }
+
+    RepositoryCatalogTypes.KnowledgeFile readKnowledgeFile(RepositoryDefinition repository, String knowledgePath) {
+        return readRepositoryJsonFile(repository, knowledgePath, RepositoryCatalogTypes.KnowledgeFile.class);
     }
 
     private RepositoryCatalogTypes.CapabilityPackageManifestFile readCapabilityPackageManifest(RepositoryDefinition repository, String manifestPath) {

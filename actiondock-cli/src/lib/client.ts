@@ -29,6 +29,8 @@ import type {
   RepositoryWebhookPublishRequest,
   RepositoryLocalAsset,
   RepositoryInstallRequest,
+  RepositoryKnowledgeDescriptor,
+  RepositoryKnowledgeDetail,
   ResourceLifecycleOperationView,
   RepositoryScriptDescriptor,
   RepositoryScriptDetail,
@@ -700,6 +702,29 @@ export class ActionDockClient {
     const suffix = namespace ? `?${new URLSearchParams({ namespace }).toString()}` : "";
     return this.requestJson<number>(`/api/shared-state/purge-expired${suffix}`, {
       method: "POST"
+    });
+  }
+
+  async listRepositoryKnowledge(repositoryId?: string): Promise<RepositoryKnowledgeDescriptor[]> {
+    const path = repositoryId
+      ? `/api/repositories/${repositoryId}/knowledge`
+      : "/api/repositories/knowledge";
+    return this.requestJson<RepositoryKnowledgeDescriptor[]>(path);
+  }
+
+  async getRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<RepositoryKnowledgeDetail> {
+    return this.requestJson<RepositoryKnowledgeDetail>(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}`);
+  }
+
+  async installRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<RepositoryKnowledgeDescriptor> {
+    return this.requestJson<RepositoryKnowledgeDescriptor>(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}/install`, {
+      method: "POST"
+    });
+  }
+
+  async uninstallRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<void> {
+    await this.requestJson<null>(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}`, {
+      method: "DELETE"
     });
   }
 

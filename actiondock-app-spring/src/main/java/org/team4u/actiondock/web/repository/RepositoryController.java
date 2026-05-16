@@ -19,6 +19,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
 import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
+import org.team4u.actiondock.repository.RepositoryKnowledgeService;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositorySkillService;
@@ -43,19 +44,22 @@ public class RepositoryController {
     private final RepositoryWebhookService repositoryWebhookService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final RepositorySkillService repositorySkillService;
+    private final RepositoryKnowledgeService repositoryKnowledgeService;
 
     public RepositoryController(RepositoryCatalogService repositoryCatalogService,
                                 RepositoryPluginService repositoryPluginService,
                                 RepositoryScriptService repositoryToolService,
                                 RepositoryWebhookService repositoryWebhookService,
                                 RepositoryCapabilityPackageService repositoryCapabilityPackageService,
-                                RepositorySkillService repositorySkillService) {
+                                RepositorySkillService repositorySkillService,
+                                RepositoryKnowledgeService repositoryKnowledgeService) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryToolService = repositoryToolService;
         this.repositoryWebhookService = repositoryWebhookService;
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
         this.repositorySkillService = repositorySkillService;
+        this.repositoryKnowledgeService = repositoryKnowledgeService;
     }
 
     /**
@@ -338,6 +342,35 @@ public class RepositoryController {
                                                         @PathVariable String packageId) {
         repositoryCapabilityPackageService.uninstallCapabilityPackage(id, packageId);
         return ApiResponse.success(null, "能力包已卸载");
+    }
+
+    @GetMapping("/knowledge")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor>> listAllKnowledge() {
+        return ApiResponse.success(repositoryKnowledgeService.listAllRepositoryKnowledge());
+    }
+
+    @GetMapping("/{id}/knowledge")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor>> listRepositoryKnowledge(@PathVariable String id) {
+        return ApiResponse.success(repositoryKnowledgeService.listRepositoryKnowledge(id));
+    }
+
+    @GetMapping("/{id}/knowledge/{knowledgeId}")
+    public ApiResponse<RepositoryCatalogTypes.RepositoryKnowledgeDetail> knowledgeDetail(@PathVariable String id,
+                                                                                            @PathVariable String knowledgeId) {
+        return ApiResponse.success(repositoryKnowledgeService.getRepositoryKnowledge(id, knowledgeId));
+    }
+
+    @PostMapping("/{id}/knowledge/{knowledgeId}/install")
+    public ApiResponse<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor> installKnowledge(@PathVariable String id,
+                                                                                                @PathVariable String knowledgeId) {
+        return ApiResponse.success(repositoryKnowledgeService.installKnowledge(id, knowledgeId), "知识源安装完成");
+    }
+
+    @DeleteMapping("/{id}/knowledge/{knowledgeId}")
+    public ApiResponse<Void> uninstallKnowledge(@PathVariable String id,
+                                                 @PathVariable String knowledgeId) {
+        repositoryKnowledgeService.uninstallKnowledge(id, knowledgeId);
+        return ApiResponse.success(null, "知识源已卸载");
     }
 
     private <T> ApiResponse<T> resolveForceAndApply(RepositoryPluginInstallRequest request,

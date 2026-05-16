@@ -104,3 +104,18 @@ actiondock repository sync <repositoryId> --json
 
 - `ACTIONDOCK.md`: 项目知识入口文件
 - `project repository`: 被注册为 `purpose=PROJECT` 的仓库
+- `knowledge source`: CAPABILITY 仓库中的知识源指针，安装后自动注册为 PROJECT 仓库
+
+## 通过知识源安装
+
+如果项目知识来自团队共享的 CAPABILITY 仓库中的知识源：
+
+```bash
+# 发现可用知识源
+actiondock repository:knowledge-list --repository-id team-cap-repo --json
+
+# 安装（自动注册为 PROJECT 仓库）
+actiondock repository:knowledge-install --repository-id team-cap-repo --knowledge-id product-api
+```
+
+安装后，知识源自动成为 PROJECT 仓库，可通过标准 `repository resolve` 消费。

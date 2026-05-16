@@ -57,16 +57,19 @@ export function RepositoryDiscoveryPage() {
             loading={discovery.loading}
             actionKey={discovery.actionKey}
             packageActionKey={discovery.packageActionKey}
+            knowledgeActionKey={discovery.knowledgeActionKey}
             filteredTools={discovery.filteredTools}
             filteredWebhooks={discovery.filteredWebhooks}
             filteredPackages={discovery.filteredPackages}
             filteredSkills={discovery.filteredSkills}
             filteredPlugins={discovery.filteredPlugins}
+            filteredKnowledge={discovery.filteredKnowledge}
             onOpenToolDetail={discovery.openDetail}
             onOpenWebhookDetail={discovery.openWebhookDetail}
             onOpenPackageDetail={discovery.openPackageDetail}
             onOpenSkillDetail={discovery.openSkillDetail}
             onOpenSkillInstall={discovery.openSkillInstall}
+            onOpenKnowledgeDetail={discovery.openKnowledgeDetail}
             onToolLocalAssetAction={discovery.confirmToolLocalAssetAction}
             onAddToolToLocal={discovery.confirmAddToolToLocal}
             onWebhookLocalAssetAction={discovery.confirmWebhookLocalAssetAction}
@@ -74,6 +77,8 @@ export function RepositoryDiscoveryPage() {
             onPackageInstall={discovery.handlePackageInstall}
             onPackageUninstall={discovery.handlePackageUninstall}
             onPluginAction={discovery.handleRepositoryPluginAction}
+            onKnowledgeInstall={discovery.handleKnowledgeInstall}
+            onKnowledgeUninstall={discovery.handleKnowledgeUninstall}
             onNavigate={(path) => navigate(path)}
           />
         </Card>
@@ -83,6 +88,7 @@ export function RepositoryDiscoveryPage() {
         editorTheme={editorTheme}
         actionKey={discovery.actionKey}
         packageActionKey={discovery.packageActionKey}
+        knowledgeActionKey={discovery.knowledgeActionKey}
         detailOpen={discovery.detailOpen}
         detailLoading={discovery.detailLoading}
         detail={discovery.detail}
@@ -97,10 +103,14 @@ export function RepositoryDiscoveryPage() {
         skillDetailOpen={discovery.skillDetailOpen}
         skillDetailLoading={discovery.skillDetailLoading}
         skillDetail={discovery.skillDetail}
+        knowledgeDetailOpen={discovery.knowledgeDetailOpen}
+        knowledgeDetailLoading={discovery.knowledgeDetailLoading}
+        knowledgeDetail={discovery.knowledgeDetail}
         onCloseToolDetail={discovery.closeDetail}
         onCloseWebhookDetail={discovery.closeWebhookDetail}
         onClosePackageDetail={discovery.closePackageDetail}
         onCloseSkillDetail={discovery.closeSkillDetail}
+        onCloseKnowledgeDetail={discovery.closeKnowledgeDetail}
         onOpenSkillInstall={discovery.openSkillInstall}
         onToolLocalAssetAction={discovery.confirmToolLocalAssetAction}
         onAddToolToLocal={discovery.confirmAddToolToLocal}
@@ -108,6 +118,8 @@ export function RepositoryDiscoveryPage() {
         onAddWebhookToLocal={discovery.confirmAddWebhookToLocal}
         onPackageInstall={discovery.handlePackageInstall}
         onPackageUninstall={discovery.handlePackageUninstall}
+        onKnowledgeInstall={discovery.handleKnowledgeInstall}
+        onKnowledgeUninstall={discovery.handleKnowledgeUninstall}
         onNavigate={(path) => navigate(path)}
       />
 

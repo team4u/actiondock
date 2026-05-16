@@ -53,8 +53,12 @@ public final class RepositoryCatalogTypes {
     public static final String AI_PACKAGE_INTERNAL_PREFIX = ScriptPackaging.MANAGED_INTERNAL_PREFIX;
     /** 能力包子目录名称。 */
     public static final String CAPABILITY_PACKAGES_DIR = "packages";
+    /** Knowledge 子目录名称。 */
+    public static final String KNOWLEDGE_DIR = "knowledge";
+    /** Knowledge 清单文件名。 */
+    public static final String KNOWLEDGE_MANIFEST_FILE = "knowledge.json";
     /** 仓库索引中的所有分节名称。 */
-    public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR);
+    public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR, KNOWLEDGE_DIR);
     /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
 
     /** 仓库类型：Git 仓库。 */
@@ -104,6 +108,8 @@ public final class RepositoryCatalogTypes {
     public static final String ASSET_TYPE_CAPABILITY_PACKAGE = "CAPABILITY_PACKAGE";
     /** 资产类型：技能。 */
     public static final String ASSET_TYPE_SKILL = "SKILL";
+    /** 资产类型：知识源。 */
+    public static final String ASSET_TYPE_KNOWLEDGE = "KNOWLEDGE";
 
     /** 配置发布模式：内联（值直接嵌入脚本源码）。 */
     public static final String PUBLISH_MODE_INLINE = "INLINE";
@@ -567,14 +573,15 @@ public final class RepositoryCatalogTypes {
                                       List<RepositoryWebhookIndexEntry> webhooks,
                                       List<RepositoryPluginIndexEntry> plugins,
                                       List<CapabilityPackageIndexEntry> packages,
-                                      List<RepositorySkillIndexEntry> skills) {
+                                      List<RepositorySkillIndexEntry> skills,
+                                      List<RepositoryKnowledgeIndexEntry> knowledge) {
         public RepositoryIndexFile(int repositoryVersion,
                                    String name,
                                    String description,
                                    List<RepositoryIndexEntry> scripts,
                                    List<RepositoryPluginIndexEntry> plugins,
                                    List<CapabilityPackageIndexEntry> packages) {
-            this(repositoryVersion, name, description, scripts, List.of(), plugins, packages, List.of());
+            this(repositoryVersion, name, description, scripts, List.of(), plugins, packages, List.of(), List.of());
         }
 
         public List<RepositoryIndexEntry> safeScripts() {
@@ -595,6 +602,10 @@ public final class RepositoryCatalogTypes {
 
         public List<RepositorySkillIndexEntry> safeSkills() {
             return skills == null ? List.of() : skills;
+        }
+
+        public List<RepositoryKnowledgeIndexEntry> safeKnowledge() {
+            return knowledge == null ? List.of() : knowledge;
         }
     }
 
@@ -649,6 +660,57 @@ public final class RepositoryCatalogTypes {
                     SKILLS_DIR + "/" + validation.skillId() + "/" + SKILL_MANIFEST_FILE
             );
         }
+    }
+
+    public record KnowledgeSource(
+            String type,
+            String url,
+            String branch,
+            String entryPath
+    ) {
+        public String safeEntryPath() {
+            return NormalizeUtils.isBlank(entryPath) ? DEFAULT_PROJECT_ENTRY_PATH : entryPath;
+        }
+    }
+
+    public record KnowledgeFile(
+            int schemaVersion,
+            String knowledgeId,
+            String displayName,
+            String description,
+            KnowledgeSource source,
+            List<String> tags
+    ) {
+    }
+
+    public record RepositoryKnowledgeIndexEntry(
+            String id,
+            String name,
+            String description,
+            String knowledgePath,
+            KnowledgeSource source,
+            List<String> tags
+    ) {
+    }
+
+    public record RepositoryKnowledgeDescriptor(
+            String repositoryId,
+            String knowledgeId,
+            String displayName,
+            String description,
+            List<String> tags,
+            String knowledgePath,
+            KnowledgeSource source,
+            boolean installed,
+            String installedRepositoryId,
+            boolean trusted
+    ) {
+    }
+
+    public record RepositoryKnowledgeDetail(
+            RepositoryKnowledgeDescriptor descriptor,
+            KnowledgeFile knowledge
+    ) {
     }
 
     public record CapabilityPackageManifestFile(int schemaVersion,

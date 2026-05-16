@@ -6,6 +6,7 @@ import type {
   PluginDependency,
   RepositoryAiPackageDependency,
   RepositoryWebhookDescriptor,
+  RepositoryKnowledgeDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
   RepositoryScriptDescriptor,
@@ -270,6 +271,35 @@ export function filterRepositoryPlugins(
       item.pluginId,
       item.description,
       item.owner,
+      item.repositoryId,
+      ...item.tags
+    ]);
+  });
+}
+
+export function filterRepositoryKnowledge(
+  knowledge: RepositoryKnowledgeDescriptor[],
+  filters: {
+    searchText: string;
+    repositoryFilter: string;
+    installFilter: InstallFilter;
+    trustFilter: TrustFilter;
+  }
+): RepositoryKnowledgeDescriptor[] {
+  return knowledge.filter((item) => {
+    if (!matchesRepositoryFilter(item.repositoryId, filters.repositoryFilter)) {
+      return false;
+    }
+    if (!matchesInstallFilter(item.installed, filters.installFilter)) {
+      return false;
+    }
+    if (!matchesTrustFilter(item.trusted, filters.trustFilter)) {
+      return false;
+    }
+    return matchesKeyword(filters.searchText, [
+      item.displayName,
+      item.knowledgeId,
+      item.description,
       item.repositoryId,
       ...item.tags
     ]);

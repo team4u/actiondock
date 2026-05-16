@@ -23,7 +23,8 @@ final class RepositoryWorkspaceHelper {
             RepositoryCatalogTypes.PluginFile.class,
             RepositoryCatalogTypes.SkillFile.class,
             RepositoryCatalogTypes.CapabilityPackageManifestFile.class,
-            RepositoryCatalogTypes.CapabilityPackageReleaseFile.class
+            RepositoryCatalogTypes.CapabilityPackageReleaseFile.class,
+            RepositoryCatalogTypes.KnowledgeFile.class
     );
     private RepositoryWorkspaceHelper() {
     }
@@ -61,6 +62,7 @@ final class RepositoryWorkspaceHelper {
                 1,
                 repositoryName != null ? repositoryName : repositoryId,
                 NormalizeUtils.normalizeNullable(repository == null ? null : repository.getDescription()),
+                new ArrayList<>(),
                 new ArrayList<>(),
                 new ArrayList<>(),
                 new ArrayList<>(),

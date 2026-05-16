@@ -198,4 +198,9 @@ public class RepositoryConfiguration {
                 repositoryToolService
         );
     }
+
+    @Bean
+    public RepositoryKnowledgeService repositoryKnowledgeService(RepositoryCatalogService repositoryCatalogService) {
+        return new RepositoryKnowledgeService(repositoryCatalogService);
+    }
 }

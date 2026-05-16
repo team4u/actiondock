@@ -10,6 +10,8 @@ import type {
   CapabilityPackageDetail,
   RepositoryWebhookDescriptor,
   RepositoryWebhookDetail,
+  RepositoryKnowledgeDescriptor,
+  RepositoryKnowledgeDetail,
   RepositoryPluginDescriptor,
   RepositorySkillDetail,
   RepositoryScriptDescriptor,
@@ -35,6 +37,7 @@ interface DiscoveryDetailDrawersProps {
   editorTheme: "vs-dark" | "vs-light";
   actionKey: string | null;
   packageActionKey: string | null;
+  knowledgeActionKey: string | null;
   detailOpen: boolean;
   detailLoading: boolean;
   detail: RepositoryScriptDetail | null;
@@ -49,10 +52,14 @@ interface DiscoveryDetailDrawersProps {
   skillDetailOpen: boolean;
   skillDetailLoading: boolean;
   skillDetail: RepositorySkillDetail | null;
+  knowledgeDetailOpen: boolean;
+  knowledgeDetailLoading: boolean;
+  knowledgeDetail: RepositoryKnowledgeDetail | null;
   onCloseToolDetail: () => void;
   onCloseWebhookDetail: () => void;
   onClosePackageDetail: () => void;
   onCloseSkillDetail: () => void;
+  onCloseKnowledgeDetail: () => void;
   onOpenSkillInstall: (descriptor: RepositorySkillDetail["descriptor"]) => void;
   onToolLocalAssetAction: (
     descriptor: RepositoryScriptDetail["descriptor"],
@@ -70,6 +77,8 @@ interface DiscoveryDetailDrawersProps {
   onAddWebhookToLocal: (descriptor: RepositoryWebhookDetail["descriptor"]) => void | Promise<void>;
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
+  onKnowledgeInstall: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
+  onKnowledgeUninstall: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
   onNavigate: (path: string) => void;
 }
 
@@ -77,6 +86,7 @@ export function DiscoveryDetailDrawers({
   editorTheme,
   actionKey,
   packageActionKey,
+  knowledgeActionKey,
   detailOpen,
   detailLoading,
   detail,
@@ -91,10 +101,14 @@ export function DiscoveryDetailDrawers({
   skillDetailOpen,
   skillDetailLoading,
   skillDetail,
+  knowledgeDetailOpen,
+  knowledgeDetailLoading,
+  knowledgeDetail,
   onCloseToolDetail,
   onCloseWebhookDetail,
   onClosePackageDetail,
   onCloseSkillDetail,
+  onCloseKnowledgeDetail,
   onOpenSkillInstall,
   onToolLocalAssetAction,
   onAddToolToLocal,
@@ -102,6 +116,8 @@ export function DiscoveryDetailDrawers({
   onAddWebhookToLocal,
   onPackageInstall,
   onPackageUninstall,
+  onKnowledgeInstall,
+  onKnowledgeUninstall,
   onNavigate
 }: DiscoveryDetailDrawersProps) {
   const packageDrawerActions = packageDetail ? (
@@ -744,6 +760,70 @@ export function DiscoveryDetailDrawers({
               onChange={() => undefined}
               theme={editorTheme}
               readOnly={true}
+            />
+          </Space>
+        )}
+      </Drawer>
+
+      <Drawer
+        title={knowledgeDetail?.descriptor.displayName || "知识源详情"}
+        open={knowledgeDetailOpen}
+        onClose={onCloseKnowledgeDetail}
+        width={860}
+        destroyOnHidden
+        extra={knowledgeDetail ? (
+          <Space>
+            {knowledgeDetail.descriptor.installed ? (
+              <Button
+                danger
+                loading={knowledgeActionKey === `uninstall:${knowledgeDetail.descriptor.repositoryId}:${knowledgeDetail.descriptor.knowledgeId}`}
+                onClick={() => void onKnowledgeUninstall(knowledgeDetail.descriptor)}
+              >
+                卸载
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                icon={<DownloadOutlined />}
+                loading={knowledgeActionKey === `install:${knowledgeDetail.descriptor.repositoryId}:${knowledgeDetail.descriptor.knowledgeId}`}
+                onClick={() => void onKnowledgeInstall(knowledgeDetail.descriptor)}
+              >
+                安装
+              </Button>
+            )}
+          </Space>
+        ) : null}
+      >
+        {knowledgeDetailLoading ? (
+          <div className="page-loading">
+            <Spin size="large" />
+          </div>
+        ) : !knowledgeDetail ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="知识源详情加载失败" />
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Descriptions
+              bordered
+              size="small"
+              column={2}
+              items={[
+                { key: "knowledgeId", label: "知识源 ID", children: <Text code>{knowledgeDetail.descriptor.knowledgeId}</Text> },
+                { key: "repo", label: "来源仓库", children: knowledgeDetail.descriptor.repositoryId },
+                { key: "sourceType", label: "类型", children: knowledgeDetail.knowledge.source.type },
+                { key: "sourceUrl", label: "地址", children: <Text code>{knowledgeDetail.knowledge.source.url}</Text> },
+                { key: "branch", label: "分支", children: knowledgeDetail.knowledge.source.branch || "-" },
+                { key: "entryPath", label: "入口文件", children: knowledgeDetail.knowledge.source.entryPath || "ACTIONDOCK.md" },
+                { key: "installed", label: "安装状态", children: knowledgeDetail.descriptor.installed ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag> },
+                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={knowledgeDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> }
+              ]}
+            />
+            <Space wrap size={[8, 8]}>
+              {knowledgeDetail.knowledge.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+            </Space>
+            <MarkdownDescription
+              value={knowledgeDetail.knowledge.description}
+              emptyText="该知识源没有填写说明。"
+              className="markdown-description--panel"
             />
           </Space>
         )}

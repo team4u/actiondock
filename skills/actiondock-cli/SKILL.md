@@ -31,6 +31,7 @@ npm i -g actiondock
 - **日常执行**：查找脚本、运行已发布脚本 → 读取 `references/script-execution.md`
 - **Webhook**：配置 Webhook 与已发布脚本的一对一绑定，按固定地址接收请求 → 读取 `references/event-framework.md`
 - **项目知识库**：解析项目仓库，先读 `ACTIONDOCK.md`，再按文档指引检索项目内容 → 读取 `references/project-knowledge.md`
+- **知识源安装**：从 CAPABILITY 仓库发现并安装团队知识源指针 → 读取 `references/project-knowledge.md`
 
 如果用户要编写 Python 脚本，且需求涉及第三方 PyPI 依赖、镜像源或 `requirements.txt`，作者态阶段仍读取 `references/script-authoring.md`，但必须按其中的 `pythonRequirements` / `requirements.txt` 约定一起产出并通过 CLI 提交。
 

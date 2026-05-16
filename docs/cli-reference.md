@@ -518,6 +518,27 @@ actiondock repository resolve --repository-id billing-service --json
 - `repository resolve` 不会触发仓库同步
 - `GIT` 类型项目仓库需要先通过定时任务或手工同步准备好本地副本
 
+### 知识源管理
+
+知识源是 CAPABILITY 仓库中的指针，安装后自动注册为 PROJECT 仓库。
+
+```bash
+# 列出所有知识源
+actiondock repository:knowledge-list --json
+
+# 列出指定仓库的知识源
+actiondock repository:knowledge-list --repository-id team-repo --json
+
+# 查看知识源详情
+actiondock repository:knowledge-get --repository-id team-repo --knowledge-id product-api --json
+
+# 安装知识源（自动注册为 PROJECT 仓库）
+actiondock repository:knowledge-install --repository-id team-repo --knowledge-id product-api
+
+# 卸载知识源
+actiondock repository:knowledge-uninstall --repository-id team-repo --knowledge-id product-api
+```
+
 ### 返回结果示例
 
 ```json

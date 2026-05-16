@@ -6,9 +6,12 @@ import type {
   CapabilityPackagePublishPreview,
   CapabilityPackagePublishPreviewRequest,
   CapabilityPackagePublishRequest,
+  KnowledgeFile,
   ProjectRepositoryResolution,
   UpstreamStatus,
   RepositoryDefinition,
+  RepositoryKnowledgeDescriptor,
+  RepositoryKnowledgeDetail,
   RepositoryWebhookDescriptor,
   RepositoryWebhookDetail,
   RepositoryWebhookPublishPreview,
@@ -89,6 +92,29 @@ export function listRepositoryPlugins(): Promise<RepositoryPluginDescriptor[]> {
 
 export function listRepositorySkills(): Promise<RepositorySkillDescriptor[]> {
   return request<RepositorySkillDescriptor[]>("/api/repositories/skills");
+}
+
+export function listRepositoryKnowledge(repositoryId?: string): Promise<RepositoryKnowledgeDescriptor[]> {
+  if (repositoryId) {
+    return request<RepositoryKnowledgeDescriptor[]>(`/api/repositories/${encodeURIComponent(repositoryId)}/knowledge`);
+  }
+  return request<RepositoryKnowledgeDescriptor[]>("/api/repositories/knowledge");
+}
+
+export function getRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<RepositoryKnowledgeDetail> {
+  return request<RepositoryKnowledgeDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/knowledge/${encodeURIComponent(knowledgeId)}`);
+}
+
+export function installRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<RepositoryKnowledgeDescriptor> {
+  return request<RepositoryKnowledgeDescriptor>(`/api/repositories/${encodeURIComponent(repositoryId)}/knowledge/${encodeURIComponent(knowledgeId)}/install`, {
+    method: "POST"
+  });
+}
+
+export function uninstallRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<void> {
+  return request<void>(`/api/repositories/${encodeURIComponent(repositoryId)}/knowledge/${encodeURIComponent(knowledgeId)}`, {
+    method: "DELETE"
+  });
 }
 
 export function listToolsByRepository(id: string): Promise<RepositoryScriptDescriptor[]> {

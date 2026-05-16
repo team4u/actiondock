@@ -1113,6 +1113,40 @@ export interface RepositorySkillDetail {
   content: string;
 }
 
+export interface KnowledgeSource {
+  type: string;
+  url: string;
+  branch?: string;
+  entryPath?: string;
+}
+
+export interface RepositoryKnowledgeDescriptor {
+  repositoryId: string;
+  knowledgeId: string;
+  displayName: string;
+  description?: string;
+  tags: string[];
+  knowledgePath: string;
+  source: KnowledgeSource;
+  installed: boolean;
+  installedRepositoryId?: string;
+  trusted: boolean;
+}
+
+export interface KnowledgeFile {
+  schemaVersion: number;
+  knowledgeId: string;
+  displayName: string;
+  description?: string;
+  source: KnowledgeSource;
+  tags: string[];
+}
+
+export interface RepositoryKnowledgeDetail {
+  descriptor: RepositoryKnowledgeDescriptor;
+  knowledge: KnowledgeFile;
+}
+
 export interface SkillDeployment {
   targetId: string;
   targetPath: string;

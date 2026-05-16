@@ -38,7 +38,7 @@ public class RepositoryDefinition {
 
 | 用途 | 说明 |
 |------|------|
-| `CAPABILITY` | 分发工具、Webhook、插件、Skills、能力包 |
+| `CAPABILITY` | 分发工具、Webhook、插件、Skills、能力包、知识源 |
 | `PROJECT` | 指向业务项目目录，并提供项目知识入口文件 |
 
 ## 项目仓库与 `ACTIONDOCK.md`
@@ -91,6 +91,7 @@ ActionDock 当前不会把正文拆成复杂结构，也不会做向量检索。
 | 插件 (Plugins) | 可安装的 PF4J 插件 | 出现在插件管理列表 |
 | AI 能力包 | AI 配置包 | 自动导入模型/Agent/Toolset 配置 |
 | Skills | 可安装的技能包 | 出现在 Skills 列表 |
+| 知识源 (Knowledge) | 指向外部知识仓库的指针 | 安装后注册为 PROJECT 仓库 |
 
 ### 资源项信息
 
@@ -360,6 +361,66 @@ POST   /api/repositories/{id}/sync              # 同步仓库
 GET    /api/repositories/{id}/scripts             # 列出可用工具
 POST   /api/repositories/{id}/scripts/{scriptId}/local-assets         # 添加仓库脚本到本地
 POST   /api/repositories/{id}/scripts/{scriptId}/local-assets/update  # 更新本地仓库脚本
+```
+
+## 知识源
+
+知识源是 CAPABILITY 仓库中的一种轻量资产，它不存储知识内容本身，而是指向一个外部知识仓库（git 仓库或本地目录）的指针。团队成员安装后，系统自动将其注册为 PROJECT 仓库，AI agent 通过 `repository resolve` 消费。
+
+### 清单格式
+
+在 CAPABILITY 仓库的 `knowledge/` 目录下，每个子目录放一个 `knowledge.json`：
+
+```text
+repository/
+  knowledge/
+    product-api/
+      knowledge.json
+```
+
+`knowledge.json`：
+
+```json
+{
+  "schemaVersion": 1,
+  "knowledgeId": "product-api",
+  "displayName": "产品 API 文档",
+  "description": "外部接口规范与使用指南",
+  "source": {
+    "type": "GIT",
+    "url": "https://github.com/team/api-docs.git",
+    "branch": "main",
+    "entryPath": "ACTIONDOCK.md"
+  },
+  "tags": ["api", "docs"]
+}
+```
+
+`source.type` 支持 `GIT` 和 `LOCAL_DIR`，`entryPath` 默认为 `ACTIONDOCK.md`。
+
+### 安装与卸载
+
+安装后自动创建 `purpose=PROJECT` 的仓库定义，ID 为 `knowledge:{repositoryId}:{knowledgeId}`：
+
+```bash
+# 列出知识源
+actiondock repository:knowledge-list --repository-id team-repo --json
+
+# 安装
+actiondock repository:knowledge-install --repository-id team-repo --knowledge-id product-api
+
+# 卸载
+actiondock repository:knowledge-uninstall --repository-id team-repo --knowledge-id product-api
+```
+
+REST API：
+
+```bash
+GET    /api/repositories/knowledge                                    # 列出所有知识源
+GET    /api/repositories/{id}/knowledge                                # 列出单仓库知识源
+GET    /api/repositories/{id}/knowledge/{knowledgeId}                  # 知识源详情
+POST   /api/repositories/{id}/knowledge/{knowledgeId}/install          # 安装
+DELETE /api/repositories/{id}/knowledge/{knowledgeId}                  # 卸载
 ```
 
 ## 常见问题

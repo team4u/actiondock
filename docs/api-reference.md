@@ -197,6 +197,11 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `GET` | `/api/repositories/{id}/scripts` | 列出仓库中的可用工具 |
 | `POST` | `/api/repositories/{id}/scripts/{scriptId}/local-assets` | 添加仓库脚本到本地 |
 | `POST` | `/api/repositories/{id}/scripts/{scriptId}/local-assets/update` | 更新本地仓库脚本 |
+| `GET` | `/api/repositories/knowledge` | 列出所有仓库的知识源 |
+| `GET` | `/api/repositories/{id}/knowledge` | 列出单仓库知识源 |
+| `GET` | `/api/repositories/{id}/knowledge/{knowledgeId}` | 知识源详情 |
+| `POST` | `/api/repositories/{id}/knowledge/{knowledgeId}/install` | 安装知识源 |
+| `DELETE` | `/api/repositories/{id}/knowledge/{knowledgeId}` | 卸载知识源 |
 
 ### RepositoryDefinition
 
@@ -443,7 +448,8 @@ Webhook 发布和预览走统一资源生命周期入口，而不是单独的 `/
 | Scope（作用域） | `PERSONAL`（个人，含工作副本和 Fork 副本）/ `REPOSITORY`（仓库安装，只读）/ `SAMPLE`（示例） |
 | Packaging（打包类型） | `TOOL`（工具型，单次调用）/ `FLOW`（流程型，可能包含多步骤） |
 | Plugin | 插件，基于 PF4J 的扩展模块 |
-| Repository | 仓库，脚本/插件/Skills 的分发来源 |
+| Repository | 仓库，脚本/插件/Skills/知识源 的分发来源 |
+| Knowledge Source | 知识源，CAPABILITY 仓库中指向外部知识仓库的指针，安装后注册为 PROJECT 仓库 |
 | Toolset | 工具集，Agent 可使用的一组工具 |
 | Agent Profile | Agent 配置，定义 AI Agent 的模型、提示词、工具 |
 | Model Profile | 模型配置，定义 AI 模型的供应商、名称、API Key |
