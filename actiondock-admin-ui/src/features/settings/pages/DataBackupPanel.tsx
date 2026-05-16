@@ -295,7 +295,7 @@ export function DataBackupPanel() {
 
       const pluginJars = new Map<string, { blob: Blob; fileName: string }>();
       await Promise.all(
-        plugins.map(async p => {
+        plugins.filter((plugin) => plugin.sourceType !== "SYSTEM").map(async p => {
           try {
             const blob = await downloadPluginJar(p.pluginId);
             const fileName = p.fileName ?? `${p.pluginId}.jar`;

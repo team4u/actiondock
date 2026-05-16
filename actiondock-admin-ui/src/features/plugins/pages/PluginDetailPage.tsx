@@ -208,6 +208,7 @@ export function PluginDetailPage() {
   );
   const apiKey = getApiKey() || undefined;
   const origin = window.location.origin;
+  const isSystemPlugin = plugin?.sourceType === "SYSTEM";
 
   const loadAll = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -420,6 +421,10 @@ export function PluginDetailPage() {
     }
     setPublishingPlugin(true);
     try {
+      if (plugin.sourceType === "SYSTEM") {
+        messageApi.warning("系统插件不能发布到仓库");
+        return;
+      }
       const repositories = getPublishableRepositories(await listRepositories());
       if (repositories.length === 0) {
         messageApi.warning("当前没有可发布的仓库，请先添加一个 Git 或本地目录仓库");
@@ -649,18 +654,20 @@ export function PluginDetailPage() {
                 <Button
                   type="primary"
                   loading={publishingPlugin}
-                  disabled={!plugin}
+                  disabled={!plugin || isSystemPlugin}
                   onClick={() => void openPublishPluginModal()}
                 >
                   发布到仓库
                 </Button>
-                <Button
-                  icon={<UploadOutlined />}
-                  loading={actionLoading === "upgrade"}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  升级
-                </Button>
+                {!isSystemPlugin ? (
+                  <Button
+                    icon={<UploadOutlined />}
+                    loading={actionLoading === "upgrade"}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    升级
+                  </Button>
+                ) : null}
                 {plugin?.started ? (
                   <Button
                     icon={<PauseCircleOutlined />}
@@ -690,23 +697,25 @@ export function PluginDetailPage() {
                     启动
                   </Button>
                 )}
-                <ConfirmDangerAction
-                  title="确认卸载这个插件？"
-                  description="会删除数据库记录、插件文件与保存的配置。"
-                  okText="卸载"
-                  onConfirm={() =>
-                    withPluginAction("delete", async () => {
-                      await uninstallPlugin(pluginId);
-                      messageApi.success("插件已卸载");
-                      navigate("/plugins");
-                    })
-                  }
-                  loading={actionLoading === "delete"}
-                >
-                  <Button danger icon={<DeleteOutlined />}>
-                    卸载
-                  </Button>
-                </ConfirmDangerAction>
+                {!isSystemPlugin ? (
+                  <ConfirmDangerAction
+                    title="确认卸载这个插件？"
+                    description="会删除数据库记录、插件文件与保存的配置。"
+                    okText="卸载"
+                    onConfirm={() =>
+                      withPluginAction("delete", async () => {
+                        await uninstallPlugin(pluginId);
+                        messageApi.success("插件已卸载");
+                        navigate("/plugins");
+                      })
+                    }
+                    loading={actionLoading === "delete"}
+                  >
+                    <Button danger icon={<DeleteOutlined />}>
+                      卸载
+                    </Button>
+                  </ConfirmDangerAction>
+                ) : null}
               </Space>
             </Col>
           </Row>
@@ -737,6 +746,8 @@ export function PluginDetailPage() {
                   <Alert type="info" showIcon message="正在加载插件配置" />
                 ) : !currentConfig ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="插件配置不存在或加载失败。" />
+                ) : isSystemPlugin ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="系统插件没有独立插件配置。" />
                 ) : (
                   <Space direction="vertical" size={16} style={{ width: "100%" }}>
                     <SchemaObjectEditor

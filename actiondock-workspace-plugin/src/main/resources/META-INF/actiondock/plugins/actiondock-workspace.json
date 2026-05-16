@@ -1,0 +1,284 @@
+{
+  "pluginId": "actiondock-workspace",
+  "name": "ActionDock Workspace",
+  "description": "Built-in workspace system plugin for controlled file-system and shell operations from scripts.",
+  "actions": [
+    {
+      "action": "listDirectory",
+      "title": "List Directory",
+      "description": "List directories and files under a workspace path.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Directory Path"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "dirPath": {
+            "type": "string"
+          },
+          "directories": {
+            "type": "array"
+          },
+          "files": {
+            "type": "array"
+          },
+          "directoryCount": {
+            "type": "integer"
+          },
+          "fileCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "."
+      }
+    },
+    {
+      "action": "viewTextFile",
+      "title": "View Text File",
+      "description": "Read text content from a file with optional line ranges.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "viewRange": {
+            "type": "string",
+            "title": "Line Range"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "startLine": {
+            "type": "integer"
+          },
+          "endLine": {
+            "type": "integer"
+          },
+          "lineCount": {
+            "type": "integer"
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "README.md",
+        "viewRange": "1,20"
+      }
+    },
+    {
+      "action": "writeTextFile",
+      "title": "Write Text File",
+      "description": "Create, overwrite, or replace a text file range.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "ranges": {
+            "type": "string",
+            "title": "Replace Range"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "created": {
+            "type": "boolean"
+          },
+          "replacedRange": {
+            "type": "array"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "snippetRange": {
+            "type": "array"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "notes.txt",
+        "content": "updated line",
+        "ranges": "2,3"
+      }
+    },
+    {
+      "action": "insertTextFile",
+      "title": "Insert Text File",
+      "description": "Insert text content into a file at a specific line.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "lineNumber": {
+            "type": "integer",
+            "title": "Line Number"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "lineNumber": {
+            "type": "integer"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "snippetRange": {
+            "type": "array"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "notes.txt",
+        "content": "inserted line",
+        "lineNumber": 3
+      }
+    },
+    {
+      "action": "executeShellCommand",
+      "title": "Execute Shell Command",
+      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "cwd": {
+            "type": "string",
+            "title": "Working Directory"
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "title": "Timeout Seconds"
+          },
+          "maxOutputBytes": {
+            "type": "integer",
+            "title": "Max Output Bytes"
+          },
+          "allowedCommands": {
+            "type": "array",
+            "title": "Allowed Commands",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shellPath": {
+            "type": "string",
+            "title": "Shell Path"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          },
+          "env": {
+            "type": "object",
+            "title": "Environment"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "exitCode": {
+            "type": "integer"
+          },
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "timedOut": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "command": "ls -la",
+        "cwd": ".",
+        "timeoutSeconds": 10
+      }
+    }
+  ]
+}

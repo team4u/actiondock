@@ -35,6 +35,11 @@
             <artifactId>actiondock-ai-plugin-bridge</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.team4u</groupId>
+            <artifactId>actiondock-workspace-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

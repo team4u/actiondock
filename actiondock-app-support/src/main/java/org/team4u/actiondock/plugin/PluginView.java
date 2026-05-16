@@ -17,6 +17,7 @@ public class PluginView {
     private String repositoryPluginId;
     private String repositoryVersion;
     private String state;
+    private PluginReferenceSourceType sourceType = PluginReferenceSourceType.INSTALLED;
     private boolean started;
     private boolean configurable;
     private String fileName;
@@ -91,6 +92,15 @@ public class PluginView {
 
     public PluginView setState(String state) {
         this.state = state;
+        return this;
+    }
+
+    public PluginReferenceSourceType getSourceType() {
+        return sourceType;
+    }
+
+    public PluginView setSourceType(PluginReferenceSourceType sourceType) {
+        this.sourceType = sourceType == null ? PluginReferenceSourceType.INSTALLED : sourceType;
         return this;
     }
 

@@ -223,7 +223,7 @@ export function buildBackupJson(
   const includeSecretValues = options?.includeSecretValues ?? false;
   const skillTargets = data.skillTargets ?? [];
   const skills = data.skills ?? [];
-  const pluginEntries: PluginBackupEntry[] = data.plugins.map(p => ({
+  const pluginEntries: PluginBackupEntry[] = data.plugins.filter(p => p.sourceType !== "SYSTEM").map(p => ({
     pluginId: p.pluginId,
     fileName: p.fileName ?? `${p.pluginId}.jar`,
     name: p.name,

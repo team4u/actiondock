@@ -68,6 +68,7 @@ class PluginControllerTest {
                         .setName("Demo")
                         .setDescription("Demo plugin")
                         .setVersion("1.0.0")
+                        .setSourceType(PluginReferenceSourceType.SYSTEM)
                         .setState("STARTED")
                         .setStarted(true)
         ));
@@ -75,6 +76,7 @@ class PluginControllerTest {
         mockMvc.perform(get("/api/plugins"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].pluginId").value("demo-plugin"))
+                .andExpect(jsonPath("$.data[0].sourceType").value("SYSTEM"))
                 .andExpect(jsonPath("$.data[0].state").value("STARTED"))
                 .andExpect(jsonPath("$.data[0].started").value(true));
     }

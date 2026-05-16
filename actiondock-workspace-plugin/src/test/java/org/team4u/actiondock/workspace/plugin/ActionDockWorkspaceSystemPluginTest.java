@@ -1,0 +1,120 @@
+package org.team4u.actiondock.workspace.plugin;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ActionDockWorkspaceSystemPluginTest {
+    @TempDir
+    Path tempDir;
+
+    @Test
+    void listDirectoryReturnsDirectoriesAndFiles() throws Exception {
+        Files.createDirectories(tempDir.resolve("dir-a"));
+        Files.writeString(tempDir.resolve("file-a.txt"), "hello", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("listDirectory", null, Map.of("path", "."));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("directoryCount", 1);
+        assertThat(result).containsEntry("fileCount", 1);
+        assertThat((List<Map<String, Object>>) result.get("directories"))
+                .extracting(entry -> entry.get("name"))
+                .containsExactly("dir-a");
+        assertThat((List<Map<String, Object>>) result.get("files"))
+                .extracting(entry -> entry.get("name"))
+                .containsExactly("file-a.txt");
+    }
+
+    @Test
+    void viewTextFileSupportsViewRange() throws Exception {
+        Files.writeString(tempDir.resolve("notes.txt"), "a\nb\nc\nd\n", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("viewTextFile", null, Map.of(
+                "path", "notes.txt",
+                "viewRange", "2,3"
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("startLine", 2);
+        assertThat(result).containsEntry("endLine", 3);
+        assertThat((String) result.get("content")).isEqualTo("2: b\n3: c\n");
+    }
+
+    @Test
+    void writeTextFileSupportsRangesReplacement() throws Exception {
+        Files.writeString(tempDir.resolve("notes.txt"), "a\nb\nc\nd\n", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("writeTextFile", null, Map.of(
+                "path", "notes.txt",
+                "content", "x\ny",
+                "ranges", "2,3"
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("created", false);
+        assertThat(result).containsEntry("replacedRange", List.of(2, 3));
+        assertThat(Files.readString(tempDir.resolve("notes.txt"), StandardCharsets.UTF_8))
+                .isEqualTo("a\nx\ny\nd");
+    }
+
+    @Test
+    void insertTextFileInsertsAtSpecificLine() throws Exception {
+        Files.writeString(tempDir.resolve("notes.txt"), "a\nb\n", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("insertTextFile", null, Map.of(
+                "path", "notes.txt",
+                "content", "x",
+                "lineNumber", 2
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("lineNumber", 2);
+        assertThat(Files.readAllLines(tempDir.resolve("notes.txt"), StandardCharsets.UTF_8))
+                .containsExactly("a", "x", "b");
+    }
+
+    @Test
+    void executeShellCommandRespectsAllowedCommands() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+                "command", "pwd",
+                "allowedCommands", List.of("ls")
+        ));
+
+        assertThat(result).containsEntry("ok", false);
+        assertThat(result).containsEntry("error", "Command is not allowed by allowedCommands: pwd");
+    }
+
+    @Test
+    void executeShellCommandReturnsStdout() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+                "command", "printf 'hello'",
+                "allowedCommands", List.of("printf")
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("timedOut", false);
+        assertThat(result.get("stdout")).isEqualTo("hello");
+    }
+}

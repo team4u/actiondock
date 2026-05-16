@@ -33,11 +33,13 @@ import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
+import org.team4u.actiondock.workspace.plugin.ActionDockWorkspaceSystemPlugin;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -395,6 +397,137 @@ class PluginRuntimeServiceTest {
         assertThat(references).filteredOn(reference -> "actiondock-demo-plugin".equals(reference.getPluginId()))
                 .singleElement()
                 .satisfies(reference -> assertThat(reference.getSourceType()).isEqualTo(PluginReferenceSourceType.INSTALLED));
+
+        assertThat(service.list()).filteredOn(plugin -> "actiondock-ai".equals(plugin.getPluginId()))
+                .singleElement()
+                .satisfies(plugin -> {
+                    assertThat(plugin.getSourceType()).isEqualTo(PluginReferenceSourceType.SYSTEM);
+                    assertThat(plugin.isStarted()).isTrue();
+                    assertThat(plugin.getState()).isEqualTo("STARTED");
+                });
+    }
+
+    @Test
+    void listPluginReferencesIncludesDocumentedWorkspaceSystemPlugin() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                repository,
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new ActionDockWorkspaceSystemPlugin(tempDir.toString()))
+        );
+
+        List<PluginReferenceView> references = service.listPluginReferences();
+
+        assertThat(references).extracting(PluginReferenceView::getPluginId)
+                .containsExactly("actiondock-workspace");
+        assertThat(references.getFirst().getActions()).extracting(PluginActionView::getAction)
+                .containsExactly("listDirectory", "viewTextFile", "writeTextFile", "insertTextFile", "executeShellCommand");
+    }
+
+    @Test
+    void invokeCallsWorkspaceSystemPlugin() throws IOException {
+        Files.writeString(tempDir.resolve("README.md"), "hello", StandardCharsets.UTF_8);
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new ActionDockWorkspaceSystemPlugin(tempDir.toString()))
+        );
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) service.invoke(
+                "actiondock-workspace",
+                "viewTextFile",
+                null,
+                null,
+                null,
+                Map.of("path", "README.md")
+        );
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("filePath", tempDir.resolve("README.md").toString());
+        assertThat(result.get("content")).isEqualTo("1: hello\n");
+    }
+
+    @Test
+    void systemPluginStopDisablesReferencesAndInvocationUntilRestarted() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemorySystemPluginStateRepository stateRepository = new InMemorySystemPluginStateRepository();
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                stateRepository,
+                null,
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new ActionDockWorkspaceSystemPlugin(tempDir.toString()))
+        );
+
+        PluginView stopped = service.stop("actiondock-workspace");
+
+        assertThat(stopped.isStarted()).isFalse();
+        assertThat(stopped.getState()).isEqualTo("DISABLED");
+        assertThat(service.listPluginReferences()).isEmpty();
+        assertThatThrownBy(() -> service.invoke(
+                "actiondock-workspace",
+                "listDirectory",
+                null,
+                null,
+                null,
+                Map.of("path", ".")
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("插件未启动: actiondock-workspace");
+
+        PluginRuntimeService restartedRuntime = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                stateRepository,
+                null,
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new ActionDockWorkspaceSystemPlugin(tempDir.toString()))
+        );
+        assertThat(restartedRuntime.get("actiondock-workspace").isStarted()).isFalse();
+
+        PluginView started = restartedRuntime.start("actiondock-workspace");
+
+        assertThat(started.isStarted()).isTrue();
+        assertThat(restartedRuntime.listPluginReferences()).hasSize(1);
+    }
+
+    @Test
+    void systemPluginsRejectArtifactOperations() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new ActionDockWorkspaceSystemPlugin(tempDir.toString()))
+        );
+
+        assertThatThrownBy(() -> service.upgrade("actiondock-workspace", "plugin.jar", "jar".getBytes()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("系统插件不支持升级: actiondock-workspace");
+        assertThatThrownBy(() -> service.uninstall("actiondock-workspace", true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("系统插件不支持卸载: actiondock-workspace");
+        assertThatThrownBy(() -> service.readPluginFile("actiondock-workspace"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("系统插件不支持下载: actiondock-workspace");
+        assertThatThrownBy(() -> service.saveConfig("actiondock-workspace", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("系统插件不支持配置: actiondock-workspace");
     }
 
     @Test
@@ -411,6 +544,7 @@ class PluginRuntimeServiceTest {
         );
 
         assertThat(service.listPluginReferences()).isEmpty();
+        assertThat(service.list()).isEmpty();
     }
 
     @Test

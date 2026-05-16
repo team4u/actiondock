@@ -457,6 +457,7 @@ export interface PluginView {
   repositoryPluginId?: string;
   repositoryVersion?: string;
   state: string;
+  sourceType: PluginReferenceSourceType;
   started: boolean;
   configurable: boolean;
   fileName?: string;

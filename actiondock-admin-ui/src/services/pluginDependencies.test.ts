@@ -8,10 +8,18 @@ function plugin(pluginId: string, version: string): PluginView {
     version,
     name: pluginId,
     description: "",
+    sourceType: "INSTALLED",
     started: true,
     state: "STARTED",
     configurable: false,
     actions: []
+  };
+}
+
+function systemPlugin(pluginId: string, version: string): PluginView {
+  return {
+    ...plugin(pluginId, version),
+    sourceType: "SYSTEM"
   };
 }
 
@@ -70,6 +78,25 @@ describe("extractPluginDependenciesFromSource", () => {
     expect(dependencies).toEqual([
       { pluginId: "plugin-a", versionRange: ">= 1.2.3", requiredActions: ["echo", "summarize"] },
       { pluginId: "plugin-b", versionRange: ">= 0.4.0", requiredActions: ["run"] }
+    ]);
+  });
+
+  it("keeps system plugins out of normal plugin dependencies", () => {
+    const dependencies = extractPluginDependenciesFromSource(
+      `
+      plugins.invoke("actiondock-ai", "chat", [:])
+      plugins.invoke("actiondock-workspace", "viewTextFile", [path: "README.md"])
+      plugins.invoke("plugin-a", "echo", [message: "hi"])
+      `,
+      [
+        systemPlugin("actiondock-ai", "0.3.0"),
+        systemPlugin("actiondock-workspace", "0.3.0"),
+        plugin("plugin-a", "1.2.3")
+      ]
+    );
+
+    expect(dependencies).toEqual([
+      { pluginId: "plugin-a", versionRange: ">= 1.2.3", requiredActions: ["echo"] }
     ]);
   });
 });

@@ -1,50 +1,47 @@
-HELP.md
-target/
-bin
+
+actiondock-admin-ui/dist/
+actiondock-admin-ui/.vite/
 !actiondock-cli/bin/
 !actiondock-cli/bin/**
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**
-!**/src/test/**
-
-### STS ###
+actiondock-cli/runtime/
 .apt_generated
+bin
+build/
 .classpath
+.cx-index.db
+data/
+/dist/
+.DS_Store
+extensions.idx
 .factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-.vscode
 .github/*
 !.github/workflows/
 !.github/workflows/**
+HELP.md
+.idea
+*.iml
+### IntelliJ IDEA ###
+*.ipr
+*.iws
 jdeploy
 jdeploy-bundle
-actiondock-cli/runtime/
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
-/nbproject/private/
+!.mvn/wrapper/maven-wrapper.jar
 /nbbuild/
-/dist/
 /nbdist/
 /.nb-gradle/
-build/
+/nbproject/private/
+### NetBeans ###
 node_modules/
-actiondock-admin-ui/dist/
-actiondock-admin-ui/.vite/
+.planning/
+.project
+.settings
+.springBeans
+!**/src/main/**
+!**/src/test/**
+### STS ###
+.sts4-cache
+target/
 *.tsbuildinfo
-
-### VS Code ###
+.vscode
 .vscode/
-data/
-.cx-index.db
-
-.DS_Store
-extensions.idx
+### VS Code ###

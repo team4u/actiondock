@@ -23,6 +23,7 @@
         <module>actiondock-ai-core</module>
         <module>actiondock-ai-agentscope</module>
         <module>actiondock-ai-plugin-bridge</module>
+        <module>actiondock-workspace-plugin</module>
         <module>actiondock-plugin-api</module>
         <module>actiondock-storage-jpa</module>
         <module>actiondock-app-support</module>

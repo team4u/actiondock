@@ -7,14 +7,16 @@ export function extractPluginDependenciesFromSource(source: string, plugins: Plu
     return [];
   }
 
-  const versions = new Map(plugins.map((plugin) => [plugin.pluginId, plugin.version]));
+  const installedPlugins = plugins.filter((plugin) => plugin.sourceType !== "SYSTEM");
+  const versions = new Map(installedPlugins.map((plugin) => [plugin.pluginId, plugin.version]));
+  const systemPluginIds = new Set(plugins.filter((plugin) => plugin.sourceType === "SYSTEM").map((plugin) => plugin.pluginId));
   const actionsByPlugin = new Map<string, Set<string>>();
   let match: RegExpExecArray | null;
 
   while ((match = PLUGIN_INVOKE_PATTERN.exec(source)) !== null) {
     const pluginId = match[2].trim();
     const action = match[4].trim();
-    if (pluginId === "actiondock-ai") {
+    if (pluginId === "actiondock-ai" || systemPluginIds.has(pluginId)) {
       continue;
     }
     if (!pluginId || !action) {

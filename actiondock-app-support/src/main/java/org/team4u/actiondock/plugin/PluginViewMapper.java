@@ -40,6 +40,7 @@ class PluginViewMapper {
                 .setRepositoryPluginId(registration.getRepositoryPluginId())
                 .setRepositoryVersion(registration.getRepositoryVersion())
                 .setState(state)
+                .setSourceType(PluginReferenceSourceType.INSTALLED)
                 .setStarted(wrapper != null && wrapper.getPluginState().isStarted())
                 .setConfigurable(!registration.getConfigSchema().isEmpty() || !registration.getDefaultConfig().isEmpty())
                 .setFileName(registration.getFileName())
@@ -79,6 +80,33 @@ class PluginViewMapper {
                 .setActions(manifest.getActions().stream()
                         .map(PluginViewMapper::toActionView)
                         .toList());
+    }
+
+    static PluginView toSystemPluginView(String pluginId, ActionDockPlugin plugin, boolean enabled) {
+        PluginManifest manifest;
+        try {
+            manifest = PluginManifestLoader.load(plugin.getClass(), pluginId);
+        } catch (IllegalArgumentException exception) {
+            LOGGER.warn("System plugin manifest missing: {}", pluginId);
+            return null;
+        }
+        return new PluginView()
+                .setPluginId(pluginId)
+                .setName(NormalizeUtils.isBlank(manifest.getName()) ? pluginId : manifest.getName())
+                .setDescription(manifest.getDescription())
+                .setVersion(manifest.getVersion())
+                .setState(enabled ? "STARTED" : PLUGIN_STATE_DISABLED)
+                .setSourceType(PluginReferenceSourceType.SYSTEM)
+                .setStarted(enabled)
+                .setConfigurable(false)
+                .setActions(manifest.getActions().stream()
+                        .map(PluginViewMapper::toActionView)
+                        .toList());
+    }
+
+    static PluginRegistration toSystemRegistration(String pluginId, ActionDockPlugin plugin, boolean enabled) {
+        PluginManifest manifest = PluginManifestLoader.load(plugin.getClass(), pluginId);
+        return toRegistration(manifest, null, enabled, null);
     }
 
     private static PluginActionView toActionView(PluginActionMetadata actionMetadata) {

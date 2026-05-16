@@ -27,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,6 +94,27 @@ class RepositoryCatalogServiceTest {
         assertThat(dependencies.get(1).getPluginId()).isEqualTo("plugin-b");
         assertThat(dependencies.get(1).getVersionRange()).isEqualTo(">= 0.4.0");
         assertThat(dependencies.get(1).getRequiredActions()).containsExactly("run");
+    }
+
+    @Test
+    void extractsPluginDependenciesSkipsSystemPluginIds() {
+        String source = """
+                plugins.invoke("actiondock-ai", "chat", [:])
+                plugins.invoke("actiondock-workspace", "viewTextFile", [path: "README.md"])
+                plugins.invoke("plugin-a", "echo", [message: "hi"])
+                """;
+
+        var dependencies = ScriptRepositoryPublisher.extractPluginDependenciesFromSource(
+                source,
+                Map.of("plugin-a", "1.2.3"),
+                Set.of("actiondock-ai", "actiondock-workspace")
+        );
+
+        assertThat(dependencies).singleElement().satisfies(dependency -> {
+            assertThat(dependency.getPluginId()).isEqualTo("plugin-a");
+            assertThat(dependency.getVersionRange()).isEqualTo(">= 1.2.3");
+            assertThat(dependency.getRequiredActions()).containsExactly("echo");
+        });
     }
 
     @Test

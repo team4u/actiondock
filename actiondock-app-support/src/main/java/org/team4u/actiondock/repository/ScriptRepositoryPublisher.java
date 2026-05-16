@@ -12,6 +12,7 @@ import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
+import org.team4u.actiondock.plugin.PluginReferenceSourceType;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
@@ -28,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -216,14 +218,19 @@ final class ScriptRepositoryPublisher {
 
     private List<PluginDependency> resolveToolPluginDependencies(ScriptDefinition script) {
         Map<String, String> installedPluginVersions = new LinkedHashMap<>();
+        Set<String> systemPluginIds = new LinkedHashSet<>();
         for (PluginView plugin : services.pluginRuntimeService().list()) {
+            if (plugin.getSourceType() == PluginReferenceSourceType.SYSTEM) {
+                systemPluginIds.add(plugin.getPluginId());
+                continue;
+            }
             installedPluginVersions.put(plugin.getPluginId(), plugin.getVersion());
         }
         Map<String, PluginDependency> dependencies = new LinkedHashMap<>();
         mergePluginDependencies(dependencies, script.getPluginDependencies());
         mergePluginDependencies(
                 dependencies,
-                extractPluginDependenciesFromSource(script.getSource(), installedPluginVersions)
+                extractPluginDependenciesFromSource(script.getSource(), installedPluginVersions, systemPluginIds)
         );
         return List.copyOf(dependencies.values());
     }
@@ -294,6 +301,12 @@ final class ScriptRepositoryPublisher {
     }
 
     static List<PluginDependency> extractPluginDependenciesFromSource(String source, Map<String, String> installedPluginVersions) {
+        return extractPluginDependenciesFromSource(source, installedPluginVersions, Set.of());
+    }
+
+    static List<PluginDependency> extractPluginDependenciesFromSource(String source,
+                                                                      Map<String, String> installedPluginVersions,
+                                                                      Set<String> excludedPluginIds) {
         if (NormalizeUtils.isBlank(source)) {
             return List.of();
         }
@@ -303,7 +316,7 @@ final class ScriptRepositoryPublisher {
         while (matcher.find()) {
             String pluginId = matcher.group(2).trim();
             String action = matcher.group(4).trim();
-            if (pluginId.isBlank() || action.isBlank()) {
+            if (pluginId.isBlank() || action.isBlank() || excludedPluginIds.contains(pluginId)) {
                 continue;
             }
             actionsByPlugin.computeIfAbsent(pluginId, ignored -> new LinkedHashSet<>()).add(action);

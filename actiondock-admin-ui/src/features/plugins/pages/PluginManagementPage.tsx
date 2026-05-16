@@ -209,7 +209,9 @@ export function PluginManagementPage() {
       key: "source",
       width: 160,
       render: (_: unknown, record) =>
-        record.repositoryId ? (
+        record.sourceType === "SYSTEM" ? (
+          <Tag color="processing">系统内置</Tag>
+        ) : record.repositoryId ? (
           <Space direction="vertical" size={2}>
             <Text>{record.repositoryId}</Text>
             <Text type="secondary">{record.repositoryVersion || record.version}</Text>
@@ -225,17 +227,19 @@ export function PluginManagementPage() {
       width: 320,
       render: (_: unknown, record) => (
         <Space wrap>
-          <Button
-            size="small"
-            icon={<UploadOutlined />}
-            loading={actionId === record.pluginId}
-            onClick={() => {
-              setPendingUploadPluginId(record.pluginId);
-              fileInputRef.current?.click();
-            }}
-          >
-            升级
-          </Button>
+          {record.sourceType !== "SYSTEM" ? (
+            <Button
+              size="small"
+              icon={<UploadOutlined />}
+              loading={actionId === record.pluginId}
+              onClick={() => {
+                setPendingUploadPluginId(record.pluginId);
+                fileInputRef.current?.click();
+              }}
+            >
+              升级
+            </Button>
+          ) : null}
           {record.started ? (
             <Button
               size="small"
@@ -267,21 +271,23 @@ export function PluginManagementPage() {
               启动
             </Button>
           )}
-          <Button
-            size="small"
-            danger
-            icon={<DownloadOutlined />}
-            loading={actionId === record.pluginId}
-            onClick={() =>
-              void withAction(record.pluginId, async () => {
-                await uninstallPlugin(record.pluginId);
-                setPlugins((previous) => previous.filter((item) => item.pluginId !== record.pluginId));
-                messageApi.success("插件已卸载");
-              })
-            }
-          >
-            卸载
-          </Button>
+          {record.sourceType !== "SYSTEM" ? (
+            <Button
+              size="small"
+              danger
+              icon={<DownloadOutlined />}
+              loading={actionId === record.pluginId}
+              onClick={() =>
+                void withAction(record.pluginId, async () => {
+                  await uninstallPlugin(record.pluginId);
+                  setPlugins((previous) => previous.filter((item) => item.pluginId !== record.pluginId));
+                  messageApi.success("插件已卸载");
+                })
+              }
+            >
+              卸载
+            </Button>
+          ) : null}
         </Space>
       )
     }
