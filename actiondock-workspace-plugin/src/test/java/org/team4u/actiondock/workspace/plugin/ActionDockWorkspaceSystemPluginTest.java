@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -116,5 +117,77 @@ class ActionDockWorkspaceSystemPluginTest {
         assertThat(result).containsEntry("ok", true);
         assertThat(result).containsEntry("timedOut", false);
         assertThat(result.get("stdout")).isEqualTo("hello");
+    }
+
+    @Test
+    void getSystemInfoReturnsWorkspaceSystemAndCommandDetails() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("getSystemInfo", null, Map.of());
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).doesNotContainKey("env");
+        assertThat(result.get("pathEntries")).isInstanceOf(List.class);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> workspace = (Map<String, Object>) result.get("workspace");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> system = (Map<String, Object>) result.get("system");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> shells = (List<Map<String, Object>>) result.get("shells");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> commands = (List<Map<String, Object>>) result.get("commands");
+
+        assertThat(workspace).containsEntry("resolvedBaseDir", tempDir.toString());
+        assertThat(workspace).containsKey("processWorkingDirectory");
+        assertThat(system).containsKeys("osName", "osVersion", "osArch", "javaVersion", "javaVendor", "pathSeparator");
+        assertThat(shells).isNotEmpty();
+        assertThat(commands)
+                .extracting(entry -> entry.get("name"))
+                .containsExactly("bash", "python", "python3", "node", "npm", "npx", "git", "java", "mvn");
+        assertThat(commands)
+                .allSatisfy(entry -> assertThat(entry).containsKeys(
+                        "name", "source", "available", "resolvedPath", "versionCommand", "versionText", "versionExitCode", "versionTimedOut"
+                ));
+    }
+
+    @Test
+    void getSystemInfoAppendsAdditionalCommandsWithoutOverwritingBuiltins() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("getSystemInfo", null, Map.of(
+                "additionalCommands", List.of("git", "docker", "custom-tool")
+        ));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> commands = (List<Map<String, Object>>) result.get("commands");
+        Map<String, Map<String, Object>> byName = new LinkedHashMap<>();
+        commands.forEach(entry -> byName.put(String.valueOf(entry.get("name")), entry));
+
+        assertThat(commands)
+                .extracting(entry -> entry.get("name"))
+                .containsExactly("bash", "python", "python3", "node", "npm", "npx", "git", "java", "mvn", "docker", "custom-tool");
+        assertThat(byName.get("git")).containsEntry("source", "builtin");
+        assertThat(byName.get("docker")).containsEntry("source", "additional");
+        assertThat(byName.get("docker")).containsEntry("versionCommand", null);
+        assertThat(byName.get("custom-tool")).containsEntry("versionCommand", null);
+    }
+
+    @Test
+    void getSystemInfoReportsRequestedShellPathFirst() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("getSystemInfo", null, Map.of(
+                "shellPath", "/bin/sh"
+        ));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> shells = (List<Map<String, Object>>) result.get("shells");
+
+        assertThat(shells).isNotEmpty();
+        assertThat(shells.getFirst()).containsEntry("name", "/bin/sh");
     }
 }

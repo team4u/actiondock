@@ -3,12 +3,15 @@ package org.team4u.actiondock.application;
 import org.team4u.actiondock.domain.model.SchemaValueCopier;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.ScheduleExpressionValidator;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -82,7 +85,11 @@ public class ScheduleApplicationService {
      */
     public ScriptSchedule getById(String scheduleId) {
         return scriptScheduleRepository.findById(scheduleId)
-                .orElseThrow(() -> new IllegalArgumentException("调度不存在: " + scheduleId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.SCHEDULE_NOT_FOUND,
+                        "调度不存在: " + scheduleId,
+                        Map.of("scheduleId", scheduleId)
+                ));
     }
 
     /**
@@ -249,25 +256,41 @@ public class ScheduleApplicationService {
     private ScriptDefinition ensurePublishedScript(String scriptId) {
         ScriptDefinition script = ensureScriptExists(scriptId);
         if (!script.hasPublishedRevision()) {
-            throw new IllegalArgumentException("脚本未发布: " + scriptId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCRIPT_NOT_PUBLISHED,
+                    "脚本未发布: " + scriptId,
+                    Map.of("scriptId", scriptId)
+            );
         }
         return script;
     }
 
     private ScriptDefinition ensureScriptExists(String scriptId) {
         return scriptRepository.findById(scriptId)
-                .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + scriptId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.SCRIPT_NOT_FOUND,
+                        "脚本不存在: " + scriptId,
+                        Map.of("scriptId", scriptId)
+                ));
     }
 
     private static void ensureScheduleBelongsToScript(ScriptSchedule schedule, String scriptId) {
         if (!schedule.getScriptId().equals(scriptId)) {
-            throw new IllegalArgumentException("调度不属于该脚本: " + schedule.getId());
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCHEDULE_SCRIPT_MISMATCH,
+                    "调度不属于该脚本: " + schedule.getId(),
+                    Map.of("scheduleId", schedule.getId(), "scriptId", scriptId)
+            );
         }
     }
 
     private static void ensureEditable(ScriptSchedule schedule) {
         if (!schedule.isEditable()) {
-            throw new IllegalArgumentException("团队定时任务为只读");
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCHEDULE_NOT_EDITABLE,
+                    "团队定时任务为只读",
+                    Map.of("scheduleId", schedule.getId())
+            );
         }
     }
 }

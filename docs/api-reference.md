@@ -16,27 +16,43 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 ```json
 {
-  "code": 200,
-  "message": "操作成功",
+  "status": 0,
+  "msg": "处理成功",
   "data": { ... }
 }
 ```
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `code` | int | HTTP 状态码，200 表示成功 |
-| `message` | string | 操作结果消息 |
+| `status` | int | 业务状态，成功固定为 `0`，错误时与 HTTP 状态码一致 |
+| `msg` | string | 操作结果消息 |
 | `data` | object/array | 响应数据结构 |
 
 错误响应：
 
 ```json
 {
-  "code": 400,
-  "message": "参数错误：name 不能为空",
-  "data": null
+  "status": 404,
+  "msg": "插件不存在: workspace",
+  "data": {
+    "code": "PLUGIN_NOT_FOUND",
+    "pluginId": "workspace"
+  }
 }
 ```
+
+错误响应的 `data.code` 是稳定错误码，前端和 CLI 应优先依赖它而不是解析 `msg`。HTTP API 异常不会返回 Java 异常类型或完整堆栈；完整堆栈只写入服务端日志。
+
+常见状态码：
+
+| HTTP 状态码 | 说明 |
+|-------------|------|
+| `400` | 请求参数、请求体或输入校验失败 |
+| `401` | 访问令牌缺失或无效 |
+| `404` | 请求的脚本、执行记录、插件、配置值等资源不存在 |
+| `409` | 资源状态冲突、版本冲突、资源已存在或当前操作不允许 |
+| `413` / `431` | Webhook 请求体或请求头超限 |
+| `500` | 未预期的服务端错误，响应 `data.code` 为 `INTERNAL_ERROR` |
 
 ## 脚本管理 API
 

@@ -14,6 +14,8 @@ import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.application.InvalidExecutionInputException;
 import org.team4u.actiondock.application.SchemaFieldError;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.ErrorDetail;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.ExecutionLogEntry;
@@ -256,15 +258,20 @@ class ExecutionControllerTest {
     }
 
     @Test
-    void detailMapsMissingExecutionToBadRequest() throws Exception {
-        when(executionApplicationService.get("missing")).thenThrow(new IllegalArgumentException("Execution not found: missing"));
+    void detailMapsMissingExecutionToNotFound() throws Exception {
+        when(executionApplicationService.get("missing")).thenThrow(ActionDockException.notFound(
+                ActionDockErrorCodes.EXECUTION_NOT_FOUND,
+                "执行记录不存在: missing",
+                Map.of("executionId", "missing")
+        ));
 
         mockMvc.perform(get("/api/executions/missing"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.msg").value("Execution not found: missing"))
-                .andExpect(jsonPath("$.data.type").value("java.lang.IllegalArgumentException"))
-                .andExpect(jsonPath("$.data.stackTrace").exists());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.msg").value("执行记录不存在: missing"))
+                .andExpect(jsonPath("$.data.code").value("EXECUTION_NOT_FOUND"))
+                .andExpect(jsonPath("$.data.executionId").value("missing"))
+                .andExpect(jsonPath("$.data.stackTrace").doesNotExist());
     }
 
     @Test

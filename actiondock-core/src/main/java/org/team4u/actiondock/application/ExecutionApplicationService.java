@@ -7,6 +7,8 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.model.ExecutionTriggerSource;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -164,13 +166,21 @@ public class ExecutionApplicationService {
 
     private ScriptDefinition getScript(String scriptId) {
         return scriptRepository.findById(scriptId)
-                .orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + scriptId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.SCRIPT_NOT_FOUND,
+                        "脚本不存在: " + scriptId,
+                        Map.of("scriptId", scriptId)
+                ));
     }
 
     private ScriptDefinition getPublishedScript(String scriptId) {
         ScriptDefinition definition = getScript(scriptId);
         if (!definition.hasPublishedRevision()) {
-            throw new IllegalArgumentException("脚本未发布: " + scriptId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCRIPT_NOT_PUBLISHED,
+                    "脚本未发布: " + scriptId,
+                    Map.of("scriptId", scriptId)
+            );
         }
         return definition.toPublishedDefinition();
     }
@@ -225,7 +235,11 @@ public class ExecutionApplicationService {
      */
     public ExecutionRecord get(String id) {
         return executionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.EXECUTION_NOT_FOUND,
+                        "执行记录不存在: " + id,
+                        Map.of("executionId", id)
+                ));
     }
 
     /**
@@ -262,7 +276,11 @@ public class ExecutionApplicationService {
      */
     public void delete(String id) {
         ExecutionRecord record = executionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.EXECUTION_NOT_FOUND,
+                        "执行记录不存在: " + id,
+                        Map.of("executionId", id)
+                ));
         ensureExecutionDeletable(record);
         executionRepository.deleteById(id);
     }
@@ -285,7 +303,11 @@ public class ExecutionApplicationService {
 
     private static void ensureExecutionDeletable(ExecutionRecord record) {
         if (record.getStatus() == ExecutionStatus.PENDING || record.getStatus() == ExecutionStatus.RUNNING) {
-            throw new IllegalArgumentException("执行进行中，无法删除");
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.EXECUTION_IN_PROGRESS,
+                    "执行进行中，无法删除",
+                    Map.of("executionId", record.getId())
+            );
         }
     }
 }

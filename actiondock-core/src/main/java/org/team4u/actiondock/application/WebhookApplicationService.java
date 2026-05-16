@@ -8,12 +8,15 @@ import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.model.WebhookSampleRequest;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.WebhookRepository;
 import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class WebhookApplicationService {
@@ -35,7 +38,11 @@ public class WebhookApplicationService {
 
     public WebhookDefinition get(String id) {
         return webhookRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Webhook不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.WEBHOOK_NOT_FOUND,
+                        "Webhook不存在: " + id,
+                        Map.of("webhookId", id)
+                ));
     }
 
     public WebhookDefinition save(WebhookDefinition definition) {
@@ -53,9 +60,17 @@ public class WebhookApplicationService {
         String webhookScriptId = ApplicationServiceSupport.normalize(definition.getWebhookScriptId(), "webhookScriptId 不能为空");
         validateKeyUniqueness(key, target.getId());
         ScriptDefinition script = scriptRepository.findById(webhookScriptId)
-                .orElseThrow(() -> new IllegalArgumentException("Webhook 脚本不存在: " + webhookScriptId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.SCRIPT_NOT_FOUND,
+                        "Webhook 脚本不存在: " + webhookScriptId,
+                        Map.of("scriptId", webhookScriptId)
+                ));
         if (!script.hasPublishedRevision()) {
-            throw new IllegalArgumentException("Webhook 脚本未发布: " + webhookScriptId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCRIPT_NOT_PUBLISHED,
+                    "Webhook 脚本未发布: " + webhookScriptId,
+                    Map.of("scriptId", webhookScriptId)
+            );
         }
 
         WebhookTransport transport = configureTransport(definition.getTransport(), target.getId());
@@ -90,7 +105,11 @@ public class WebhookApplicationService {
         webhookRepository.findByKey(key)
                 .filter(found -> !found.getId().equals(targetId))
                 .ifPresent(found -> {
-                    throw new IllegalArgumentException("Webhook Key 已存在: " + key);
+                    throw ActionDockException.conflict(
+                            ActionDockErrorCodes.WEBHOOK_KEY_EXISTS,
+                            "Webhook Key 已存在: " + key,
+                            Map.of("key", key)
+                    );
                 });
     }
 

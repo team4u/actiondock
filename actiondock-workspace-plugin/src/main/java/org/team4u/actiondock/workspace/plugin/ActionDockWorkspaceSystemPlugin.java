@@ -5,6 +5,7 @@ import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -14,6 +15,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -31,16 +33,24 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
     private static final int DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
     private static final int DEFAULT_SNIPPET_CONTEXT_LINES = 5;
+    private static final int DEFAULT_VERSION_TIMEOUT_SECONDS = 5;
+    private static final List<String> BUILTIN_COMMANDS = List.of(
+            "bash", "python", "python3", "node", "npm", "npx", "git", "java", "mvn"
+    );
+    private static final Map<String, List<String>> VERSION_COMMANDS = createVersionCommands();
 
     private final Path defaultBaseDir;
 
     public ActionDockWorkspaceSystemPlugin() {
-        this(Paths.get(".").toAbsolutePath().normalize().toString());
+        this.defaultBaseDir = Paths.get(".").toAbsolutePath().normalize().getRoot();
     }
 
     public ActionDockWorkspaceSystemPlugin(String defaultBaseDir) {
-        String value = defaultBaseDir == null || defaultBaseDir.isBlank() ? "." : defaultBaseDir;
-        this.defaultBaseDir = Paths.get(value).toAbsolutePath().normalize();
+        if (defaultBaseDir == null || defaultBaseDir.isBlank()) {
+            this.defaultBaseDir = Paths.get(".").toAbsolutePath().normalize().getRoot();
+        } else {
+            this.defaultBaseDir = Paths.get(defaultBaseDir).toAbsolutePath().normalize();
+        }
     }
 
     @Override
@@ -57,6 +67,7 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
                 case "listDirectory" -> listDirectory(values);
                 case "writeTextFile" -> writeTextFile(values);
                 case "insertTextFile" -> insertTextFile(values);
+                case "getSystemInfo" -> getSystemInfo(values);
                 case "executeShellCommand" -> executeShellCommand(values);
                 default -> throw new IllegalArgumentException("Unsupported workspace action: " + action);
             };
@@ -296,6 +307,19 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         throw lastStartError == null ? new IOException("No usable shell found.") : lastStartError;
     }
 
+    private Map<String, Object> getSystemInfo(Map<String, Object> values) throws IOException, InterruptedException {
+        Path baseDir = baseDir(values);
+        Files.createDirectories(baseDir);
+
+        Map<String, Object> result = ok("System information collected.");
+        result.put("workspace", workspaceInfo(baseDir));
+        result.put("system", systemInfo());
+        result.put("pathEntries", pathEntries());
+        result.put("shells", shellInfo(values));
+        result.put("commands", commandInfo(values));
+        return result;
+    }
+
     private Map<String, Object> runProcess(List<String> shell,
                                            String command,
                                            Path cwd,
@@ -361,6 +385,135 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         return thread;
     }
 
+    private Map<String, Object> workspaceInfo(Path baseDir) {
+        Map<String, Object> workspace = new LinkedHashMap<>();
+        workspace.put("resolvedBaseDir", baseDir.toString());
+        workspace.put("processWorkingDirectory", Paths.get(".").toAbsolutePath().normalize().toString());
+        return workspace;
+    }
+
+    private Map<String, Object> systemInfo() {
+        Map<String, Object> system = new LinkedHashMap<>();
+        system.put("osName", System.getProperty("os.name", ""));
+        system.put("osVersion", System.getProperty("os.version", ""));
+        system.put("osArch", System.getProperty("os.arch", ""));
+        system.put("javaVersion", System.getProperty("java.version", ""));
+        system.put("javaVendor", System.getProperty("java.vendor", ""));
+        system.put("pathSeparator", File.pathSeparator);
+        return system;
+    }
+
+    private List<String> pathEntries() {
+        String path = System.getenv("PATH");
+        if (path == null || path.isBlank()) {
+            return List.of();
+        }
+        List<String> entries = new ArrayList<>();
+        for (String item : path.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+            if (!item.isBlank()) {
+                entries.add(item);
+            }
+        }
+        return entries;
+    }
+
+    private List<Map<String, Object>> shellInfo(Map<String, Object> values) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (List<String> shell : shellCandidates(values)) {
+            String executable = shell.isEmpty() ? "" : shell.getFirst();
+            Path resolved = resolveExecutable(executable);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", executable);
+            item.put("available", resolved != null);
+            item.put("resolvedPath", resolved == null ? null : resolved.toString());
+            result.add(item);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> commandInfo(Map<String, Object> values) throws IOException, InterruptedException {
+        List<Map<String, Object>> result = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (String command : BUILTIN_COMMANDS) {
+            seen.add(command);
+            result.add(probeBuiltinCommand(command));
+        }
+        for (String command : stringSet(values.get("additionalCommands"))) {
+            if (seen.add(command)) {
+                result.add(probeAdditionalCommand(command));
+            }
+        }
+        return result;
+    }
+
+    private Map<String, Object> probeBuiltinCommand(String command) throws IOException, InterruptedException {
+        Map<String, Object> item = baseCommandProbe(command, "builtin");
+        List<String> versionCommand = VERSION_COMMANDS.get(command);
+        item.put("versionCommand", versionCommand == null ? null : String.join(" ", versionCommand));
+        if (!Boolean.TRUE.equals(item.get("available")) || versionCommand == null) {
+            item.put("versionText", null);
+            item.put("versionExitCode", null);
+            item.put("versionTimedOut", false);
+            return item;
+        }
+
+        Map<String, Object> version = runDirectCommand(versionCommand, DEFAULT_VERSION_TIMEOUT_SECONDS, DEFAULT_MAX_OUTPUT_BYTES);
+        String text = firstNonBlank((String) version.get("stdout"), (String) version.get("stderr"));
+        item.put("versionText", text == null ? "" : text.strip());
+        item.put("versionExitCode", version.get("exitCode"));
+        item.put("versionTimedOut", version.get("timedOut"));
+        return item;
+    }
+
+    private Map<String, Object> probeAdditionalCommand(String command) {
+        Map<String, Object> item = baseCommandProbe(command, "additional");
+        item.put("versionCommand", null);
+        item.put("versionText", null);
+        item.put("versionExitCode", null);
+        item.put("versionTimedOut", false);
+        return item;
+    }
+
+    private Map<String, Object> baseCommandProbe(String command, String source) {
+        Path resolved = resolveExecutable(command);
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("name", command);
+        item.put("source", source);
+        item.put("available", resolved != null);
+        item.put("resolvedPath", resolved == null ? null : resolved.toString());
+        return item;
+    }
+
+    private Map<String, Object> runDirectCommand(List<String> command,
+                                                 int timeoutSeconds,
+                                                 int maxOutputBytes) throws IOException, InterruptedException {
+        ProcessBuilder builder = new ProcessBuilder(command);
+        long started = System.currentTimeMillis();
+        Process process = builder.start();
+
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        Thread outThread = streamCollector(process.getInputStream(), stdout, maxOutputBytes);
+        Thread errThread = streamCollector(process.getErrorStream(), stderr, maxOutputBytes);
+
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            process.waitFor(3, TimeUnit.SECONDS);
+        }
+        outThread.join(Duration.ofSeconds(1));
+        errThread.join(Duration.ofSeconds(1));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ok", finished && process.exitValue() == 0);
+        result.put("stdout", stdout.toString(StandardCharsets.UTF_8));
+        result.put("stderr", stderr.toString(StandardCharsets.UTF_8));
+        result.put("exitCode", finished ? process.exitValue() : null);
+        result.put("durationMs", System.currentTimeMillis() - started);
+        result.put("timedOut", !finished);
+        return result;
+    }
+
     private List<List<String>> shellCandidates(Map<String, Object> values) {
         String shellPath = optionalString(values.get("shellPath"));
         String osName = System.getProperty("os.name", "").toLowerCase();
@@ -383,6 +536,43 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
             candidates.add(List.of("/bin/sh", "-lc"));
         }
         return candidates;
+    }
+
+    private Path resolveExecutable(String executable) {
+        if (executable == null || executable.isBlank()) {
+            return null;
+        }
+        Path direct = Paths.get(executable);
+        if ((direct.isAbsolute() || executable.contains("/") || executable.contains("\\")) && Files.isExecutable(direct)) {
+            return direct.toAbsolutePath().normalize();
+        }
+
+        String path = System.getenv("PATH");
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        List<String> candidates = windows ? executableCandidates(executable) : List.of(executable);
+        for (String entry : path.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+            if (entry == null || entry.isBlank()) {
+                continue;
+            }
+            for (String candidate : candidates) {
+                Path resolved = Paths.get(entry, candidate);
+                if (Files.isRegularFile(resolved) && Files.isExecutable(resolved)) {
+                    return resolved.toAbsolutePath().normalize();
+                }
+            }
+        }
+        return null;
+    }
+
+    private List<String> executableCandidates(String executable) {
+        String lower = executable.toLowerCase();
+        if (lower.endsWith(".exe") || lower.endsWith(".cmd") || lower.endsWith(".bat")) {
+            return List.of(executable);
+        }
+        return List.of(executable + ".exe", executable + ".cmd", executable + ".bat", executable);
     }
 
     private boolean allowed(String command, Set<String> allowedCommands) {
@@ -520,5 +710,29 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
             }
         }
         return result;
+    }
+
+    private static Map<String, List<String>> createVersionCommands() {
+        Map<String, List<String>> commands = new HashMap<>();
+        commands.put("bash", List.of("bash", "--version"));
+        commands.put("python", List.of("python", "--version"));
+        commands.put("python3", List.of("python3", "--version"));
+        commands.put("node", List.of("node", "--version"));
+        commands.put("npm", List.of("npm", "--version"));
+        commands.put("npx", List.of("npx", "--version"));
+        commands.put("git", List.of("git", "--version"));
+        commands.put("java", List.of("java", "-version"));
+        commands.put("mvn", List.of("mvn", "-version"));
+        return commands;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        if (second != null && !second.isBlank()) {
+            return second;
+        }
+        return null;
     }
 }

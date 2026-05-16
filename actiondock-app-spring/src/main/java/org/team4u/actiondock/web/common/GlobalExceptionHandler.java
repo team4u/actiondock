@@ -6,10 +6,11 @@ import org.team4u.actiondock.application.EventAuthenticationException;
 import org.team4u.actiondock.application.InvalidPythonRequirementsException;
 import org.team4u.actiondock.application.WebhookRequestHeadersTooLargeException;
 import org.team4u.actiondock.application.WebhookRequestPayloadTooLargeException;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.exception.UpstreamConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
-import org.team4u.actiondock.domain.model.ErrorDetail;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +29,17 @@ import java.util.Map;
 public class GlobalExceptionHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(ActionDockException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleActionDockException(ActionDockException exception,
+                                                                                     HttpServletRequest request) {
+        logException(exception, exception.getStatus(), exception.getCode(), request);
+        return ResponseEntity.status(exception.getStatus()).body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                exception.getStatus(),
+                exception.toResponseData()
+        ));
+    }
+
     /**
      * 处理脚本执行输入校验异常，返回 400 响应及字段级错误详情。
      *
@@ -42,14 +54,14 @@ public class GlobalExceptionHandler {
                 exception.getScriptId(),
                 exception.getFieldErrors()
         );
-        logException(exception, 400, request);
+        logException(exception, 400, exception.getCode(), request);
         return ResponseEntity.badRequest().body(ApiResponse.error(exception.getMessage(), 400, data));
     }
 
     @ExceptionHandler(InvalidScriptPatchException.class)
     public ResponseEntity<ApiResponse<Map<String, Object>>> handleInvalidScriptPatch(InvalidScriptPatchException exception,
                                                                                     HttpServletRequest request) {
-        logException(exception, 400, request);
+        logException(exception, 400, "INVALID_SCRIPT_PATCH", request);
         return ResponseEntity.badRequest().body(ApiResponse.error(
                 exception.getMessage(),
                 400,
@@ -65,7 +77,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidPythonRequirementsException.class)
     public ResponseEntity<ApiResponse<Map<String, Object>>> handleInvalidPythonRequirements(InvalidPythonRequirementsException exception,
                                                                                            HttpServletRequest request) {
-        logException(exception, 400, request);
+        logException(exception, 400, exception.getCode(), request);
         return ResponseEntity.badRequest().body(ApiResponse.error(
                 exception.getMessage(),
                 400,
@@ -80,38 +92,38 @@ public class GlobalExceptionHandler {
      * @return 400 响应，包含错误详情
      */
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<ErrorDetail>> handleIllegalArgument(IllegalArgumentException exception,
-                                                                         HttpServletRequest request) {
-        return errorDetailResponse(exception, 400, request);
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleIllegalArgument(IllegalArgumentException exception,
+                                                                                 HttpServletRequest request) {
+        return errorResponse(exception, 400, ActionDockErrorCodes.BAD_REQUEST, request);
     }
 
     @ExceptionHandler(EventAuthenticationException.class)
-    public ResponseEntity<ApiResponse<ErrorDetail>> handleEventAuthentication(EventAuthenticationException exception,
-                                                                             HttpServletRequest request) {
-        return errorDetailResponse(exception, 401, request);
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleEventAuthentication(EventAuthenticationException exception,
+                                                                                     HttpServletRequest request) {
+        return errorResponse(exception, 401, ActionDockErrorCodes.WEBHOOK_AUTHENTICATION_FAILED, request);
     }
 
     @ExceptionHandler(WebhookRequestPayloadTooLargeException.class)
-    public ResponseEntity<ApiResponse<ErrorDetail>> handleWebhookRequestPayloadTooLarge(WebhookRequestPayloadTooLargeException exception,
-                                                                                       HttpServletRequest request) {
-        return errorDetailResponse(exception, 413, request);
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleWebhookRequestPayloadTooLarge(WebhookRequestPayloadTooLargeException exception,
+                                                                                               HttpServletRequest request) {
+        return errorResponse(exception, 413, ActionDockErrorCodes.WEBHOOK_PAYLOAD_TOO_LARGE, request);
     }
 
     @ExceptionHandler(WebhookRequestHeadersTooLargeException.class)
-    public ResponseEntity<ApiResponse<ErrorDetail>> handleWebhookRequestHeadersTooLarge(WebhookRequestHeadersTooLargeException exception,
-                                                                                       HttpServletRequest request) {
-        return errorDetailResponse(exception, 431, request);
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleWebhookRequestHeadersTooLarge(WebhookRequestHeadersTooLargeException exception,
+                                                                                               HttpServletRequest request) {
+        return errorResponse(exception, 431, ActionDockErrorCodes.WEBHOOK_HEADERS_TOO_LARGE, request);
     }
 
     @ExceptionHandler(RepositoryPluginConflictException.class)
     public ResponseEntity<ApiResponse<Map<String, Object>>> handlePluginConflict(RepositoryPluginConflictException exception,
                                                                                 HttpServletRequest request) {
-        logException(exception, 400, request);
-        return ResponseEntity.badRequest().body(ApiResponse.error(
+        logException(exception, 409, ActionDockErrorCodes.PLUGIN_VERSION_CONFLICT, request);
+        return ResponseEntity.status(409).body(ApiResponse.error(
                 exception.getMessage(),
-                400,
+                409,
                 Map.of(
-                        "code", "PLUGIN_VERSION_CONFLICT",
+                        "code", ActionDockErrorCodes.PLUGIN_VERSION_CONFLICT,
                         "pluginId", exception.getPluginId(),
                         "conflicts", exception.getConflicts()
                 )
@@ -121,12 +133,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RepositoryVersionExistsException.class)
     public ResponseEntity<ApiResponse<Map<String, Object>>> handleRepositoryVersionExists(RepositoryVersionExistsException exception,
                                                                                          HttpServletRequest request) {
-        logException(exception, 400, request);
-        return ResponseEntity.badRequest().body(ApiResponse.error(
+        logException(exception, 409, ActionDockErrorCodes.REPOSITORY_VERSION_EXISTS, request);
+        return ResponseEntity.status(409).body(ApiResponse.error(
                 exception.getMessage(),
-                400,
+                409,
                 Map.of(
-                        "code", "REPOSITORY_VERSION_EXISTS",
+                        "code", ActionDockErrorCodes.REPOSITORY_VERSION_EXISTS,
                         "assetKind", exception.getAssetKind(),
                         "repositoryId", exception.getRepositoryId(),
                         "assetId", exception.getAssetId(),
@@ -138,12 +150,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UpstreamConflictException.class)
     public ResponseEntity<ApiResponse<Map<String, Object>>> handleUpstreamConflict(UpstreamConflictException exception,
                                                                                   HttpServletRequest request) {
-        logException(exception, 400, request);
-        return ResponseEntity.badRequest().body(ApiResponse.error(
+        logException(exception, 409, ActionDockErrorCodes.UPSTREAM_CONFLICT, request);
+        return ResponseEntity.status(409).body(ApiResponse.error(
                 exception.getMessage(),
-                400,
+                409,
                 Map.of(
-                        "code", "UPSTREAM_CONFLICT",
+                        "code", ActionDockErrorCodes.UPSTREAM_CONFLICT,
                         "localAssetId", exception.getLocalAssetId(),
                         "repositoryId", exception.getRepositoryId(),
                         "upstreamAssetId", exception.getUpstreamAssetId()
@@ -158,30 +170,36 @@ public class GlobalExceptionHandler {
      * @return 500 响应，包含错误详情
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<ErrorDetail>> handleException(Exception exception,
-                                                                   HttpServletRequest request) {
-        return errorDetailResponse(exception, 500, request);
-    }
-
-    private static ResponseEntity<ApiResponse<ErrorDetail>> errorDetailResponse(Exception exception,
-                                                                               int status,
-                                                                               HttpServletRequest request) {
-        logException(exception, status, request);
-        return ResponseEntity.status(status).body(ApiResponse.error(
-                ErrorDetailSupport.summarize(exception),
-                status,
-                ErrorDetailSupport.describe(exception)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleException(Exception exception,
+                                                                           HttpServletRequest request) {
+        logException(exception, 500, ActionDockErrorCodes.INTERNAL_ERROR, request);
+        return ResponseEntity.status(500).body(ApiResponse.error(
+                "服务器内部错误",
+                500,
+                Map.of("code", ActionDockErrorCodes.INTERNAL_ERROR)
         ));
     }
 
-    private static void logException(Exception exception, int status, HttpServletRequest request) {
+    private static ResponseEntity<ApiResponse<Map<String, Object>>> errorResponse(Exception exception,
+                                                                                 int status,
+                                                                                 String code,
+                                                                                 HttpServletRequest request) {
+        logException(exception, status, code, request);
+        return ResponseEntity.status(status).body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                status,
+                Map.of("code", code)
+        ));
+    }
+
+    private static void logException(Exception exception, int status, String code, HttpServletRequest request) {
         String method = request == null ? "-" : request.getMethod();
         String uri = request == null ? "-" : request.getRequestURI();
-        String message = "API exception status=" + status + " method=" + method + " uri=" + uri + " message=" + ErrorDetailSupport.summarize(exception);
+        String message = "API exception status=" + status + " code=" + code + " method=" + method + " uri=" + uri + " message=" + ErrorDetailSupport.summarize(exception);
         if (status >= 500) {
             LOGGER.error(message, exception);
         } else {
-            LOGGER.warn(message, exception);
+            LOGGER.warn(message);
         }
     }
 }

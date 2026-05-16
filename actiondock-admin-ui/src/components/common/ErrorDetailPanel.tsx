@@ -17,6 +17,7 @@ export function ErrorDetailPanel({
   }
 
   const summary = message?.trim() || detail?.type || title;
+  const hasStructuredDetail = Boolean(detail?.type || detail?.stackTrace);
 
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -26,7 +27,7 @@ export function ErrorDetailPanel({
         message={title}
         description={summary}
       />
-      {detail ? (
+      {hasStructuredDetail ? (
         <Collapse
           size="small"
           items={[
@@ -36,11 +37,15 @@ export function ErrorDetailPanel({
               children: (
                 <Space direction="vertical" size={12} style={{ width: "100%" }}>
                   <Descriptions size="small" column={1}>
-                    <Descriptions.Item label="异常类型">
-                      <Text code>{detail.type}</Text>
-                    </Descriptions.Item>
+                    {detail?.type ? (
+                      <Descriptions.Item label="异常类型">
+                        <Text code>{detail.type}</Text>
+                      </Descriptions.Item>
+                    ) : null}
                   </Descriptions>
-                  <pre className="error-detail-panel__stack-trace">{detail.stackTrace}</pre>
+                  {detail?.stackTrace ? (
+                    <pre className="error-detail-panel__stack-trace">{detail.stackTrace}</pre>
+                  ) : null}
                 </Space>
               )
             }

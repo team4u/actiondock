@@ -431,7 +431,7 @@ export function renderPluginList(items) {
         const name = item.name ? ` ${item.name}` : "";
         const version = item.version ? `@${item.version}` : "";
         const actions = Array.isArray(item.actions) ? ` actions=${item.actions.length}` : "";
-        const source = "sourceType" in item && item.sourceType ? ` ${item.sourceType}` : "";
+        const source = item.sourceType ? ` ${item.sourceType}` : "";
         return `${item.pluginId}${version}${name}${source}${actions}`;
     })
         .join("\n");

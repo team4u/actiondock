@@ -1,6 +1,8 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ConfigValue;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 
 import java.time.LocalDateTime;
@@ -100,7 +102,11 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
         ensureEnabled();
         ConfigValue normalized = normalizeForCreate(configValue);
         if (configValueRepository.findByKey(normalized.getKey()).isPresent()) {
-            throw new IllegalArgumentException("配置值已存在: " + normalized.getKey());
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.CONFIG_VALUE_EXISTS,
+                    "配置值已存在: " + normalized.getKey(),
+                    Map.of("key", normalized.getKey())
+            );
         }
         LocalDateTime now = LocalDateTime.now();
         normalized.setCreatedAt(now).setUpdatedAt(now);
@@ -293,7 +299,11 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
 
     private ConfigValue requireExisting(String key) {
         return configValueRepository.findByKey(key)
-                .orElseThrow(() -> new IllegalArgumentException("配置值不存在: " + key));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.CONFIG_VALUE_NOT_FOUND,
+                        "配置值不存在: " + key,
+                        Map.of("key", key)
+                ));
     }
 
 

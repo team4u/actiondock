@@ -4,9 +4,12 @@ import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolRegistry;
 import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
@@ -45,7 +48,11 @@ public class AiToolsetService {
 
     public AiToolset get(String id) {
         return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("AI 工具集不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.AI_TOOLSET_NOT_FOUND,
+                        "AI 工具集不存在: " + id,
+                        Map.of("toolsetId", id)
+                ));
     }
 
     public AiToolset save(AiToolset toolset) {

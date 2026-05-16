@@ -202,6 +202,61 @@
       }
     },
     {
+      "action": "getSystemInfo",
+      "title": "Get System Info",
+      "description": "Inspect the current system, workspace, available shells, and common command runtimes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          },
+          "shellPath": {
+            "type": "string",
+            "title": "Shell Path"
+          },
+          "additionalCommands": {
+            "type": "array",
+            "title": "Additional Commands",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "workspace": {
+            "type": "object"
+          },
+          "system": {
+            "type": "object"
+          },
+          "pathEntries": {
+            "type": "array"
+          },
+          "shells": {
+            "type": "array"
+          },
+          "commands": {
+            "type": "array"
+          }
+        }
+      },
+      "exampleArgs": {
+        "baseDir": ".",
+        "additionalCommands": [
+          "docker",
+          "uv"
+        ]
+      }
+    },
+    {
       "action": "executeShellCommand",
       "title": "Execute Shell Command",
       "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions.",

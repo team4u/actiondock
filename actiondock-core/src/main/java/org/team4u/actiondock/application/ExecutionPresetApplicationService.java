@@ -1,10 +1,13 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ExecutionPreset;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -41,7 +44,11 @@ public class ExecutionPresetApplicationService {
      */
     public ExecutionPreset getById(String presetId) {
         return executionPresetRepository.findById(presetId)
-                .orElseThrow(() -> new IllegalArgumentException("Preset not found: " + presetId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.PRESET_NOT_FOUND,
+                        "Preset not found: " + presetId,
+                        Map.of("presetId", presetId)
+                ));
     }
 
     /**
@@ -95,13 +102,21 @@ public class ExecutionPresetApplicationService {
 
     private static void ensurePresetBelongsToScript(ExecutionPreset preset, String scriptId) {
         if (!preset.getScriptId().equals(scriptId)) {
-            throw new IllegalArgumentException("Preset does not belong to script: " + preset.getId());
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PRESET_SCRIPT_MISMATCH,
+                    "Preset does not belong to script: " + preset.getId(),
+                    Map.of("presetId", preset.getId(), "scriptId", scriptId)
+            );
         }
     }
 
     private static void ensureEditable(ExecutionPreset preset) {
         if (!preset.isEditable()) {
-            throw new IllegalArgumentException("托管预设不允许直接修改: " + preset.getId());
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PRESET_NOT_EDITABLE,
+                    "托管预设不允许直接修改: " + preset.getId(),
+                    Map.of("presetId", preset.getId())
+            );
         }
     }
 

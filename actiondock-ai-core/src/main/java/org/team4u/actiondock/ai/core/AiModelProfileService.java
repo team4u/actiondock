@@ -3,9 +3,12 @@ package org.team4u.actiondock.ai.core;
 import org.team4u.actiondock.ai.api.AiModelProfile;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
@@ -36,7 +39,11 @@ public class AiModelProfileService {
 
     public AiModelProfile get(String id) {
         return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("AI 模型 Profile 不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.AI_MODEL_PROFILE_NOT_FOUND,
+                        "AI 模型 Profile 不存在: " + id,
+                        Map.of("profileId", id)
+                ));
     }
 
     public AiModelProfile save(AiModelProfile profile) {

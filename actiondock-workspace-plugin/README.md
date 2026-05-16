@@ -12,6 +12,7 @@
 - `viewTextFile`
 - `writeTextFile`
 - `insertTextFile`
+- `getSystemInfo`
 - `executeShellCommand`
 
 ## Groovy 调用示例
@@ -35,12 +36,26 @@ result = plugins.invoke("actiondock-workspace", "listDirectory", {
 return {"files": result["files"]}
 ```
 
+## 环境探测示例
+
+```groovy
+def result = plugins.invoke("actiondock-workspace", "getSystemInfo", [
+  additionalCommands: ["docker", "uv"]
+])
+
+return [
+  os: result.system.osName,
+  commands: result.commands
+]
+```
+
 ## 使用约定
 
 - 对外接口统一使用 Java 驼峰风格动作名和参数名
 - `path` / `cwd` 默认相对当前工作目录解析
 - 所有路径访问都限制在 `baseDir` 范围内
 - `writeTextFile` 通过 `ranges` 支持局部替换
+- `getSystemInfo` 默认只返回 PATH 拆分、shell/命令探测结果，不暴露完整环境变量
 
 ## 相关模块
 

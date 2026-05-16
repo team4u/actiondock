@@ -9,10 +9,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.SharedStateApplicationService;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.SharedStateEntry;
 import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 共享状态 REST 控制器。
@@ -42,7 +45,11 @@ public class SharedStateController {
     public ApiResponse<SharedStateDetailView> detail(@RequestParam String namespace, @RequestParam String key) {
         SharedStateEntry entry = sharedStateApplicationService.get(namespace, key);
         if (entry == null) {
-            throw new IllegalArgumentException("共享状态不存在: " + namespace + "/" + key);
+            throw ActionDockException.notFound(
+                    ActionDockErrorCodes.SHARED_STATE_NOT_FOUND,
+                    "共享状态不存在: " + namespace + "/" + key,
+                    Map.of("namespace", namespace, "key", key)
+            );
         }
         return ApiResponse.success(toDetailView(entry));
     }

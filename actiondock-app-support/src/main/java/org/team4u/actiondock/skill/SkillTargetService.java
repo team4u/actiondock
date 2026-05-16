@@ -1,5 +1,7 @@
 package org.team4u.actiondock.skill;
 
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.ManagedSkill;
 import org.team4u.actiondock.domain.model.SkillInstallation;
 import org.team4u.actiondock.domain.model.SkillTarget;
@@ -217,7 +219,11 @@ public class SkillTargetService {
 
     SkillTarget requireTarget(String id) {
         return skillTargetRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("SkillTarget 不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.SKILL_TARGET_NOT_FOUND,
+                        "SkillTarget 不存在: " + id,
+                        Map.of("targetId", id)
+                ));
     }
 
     // ------------------------------------------------------------------

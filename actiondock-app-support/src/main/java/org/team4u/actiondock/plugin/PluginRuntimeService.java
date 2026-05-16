@@ -14,6 +14,8 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.model.SubmitMode;
 import org.team4u.actiondock.domain.model.SystemPluginState;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -212,7 +214,7 @@ public class PluginRuntimeService {
     public PluginConfigView saveConfig(String pluginId, Map<String, Object> config) {
         return withWriteLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
-                throw new IllegalArgumentException("系统插件不支持配置: " + pluginId);
+                throw systemPluginUnsupported("配置", pluginId);
             }
             PluginRegistration registration = requireRegistration(pluginId);
             Map<String, Object> normalized = PluginConfigManager.normalizeConfig(config);
@@ -326,17 +328,30 @@ public class PluginRuntimeService {
             try {
                 pluginId = persistPluginArtifact(content, destination, repositoryVersion);
                 if (systemPlugins.containsKey(pluginId)) {
-                    throw new IllegalArgumentException("插件 ID 与系统插件冲突: " + pluginId);
+                    throw ActionDockException.conflict(
+                            ActionDockErrorCodes.PLUGIN_EXISTS,
+                            "插件 ID 与系统插件冲突: " + pluginId,
+                            Map.of("pluginId", pluginId)
+                    );
                 }
                 if (pluginRegistryRepository.findByPluginId(pluginId).isPresent()) {
-                    throw new IllegalArgumentException("插件已存在: " + pluginId);
+                    throw ActionDockException.conflict(
+                            ActionDockErrorCodes.PLUGIN_EXISTS,
+                            "插件已存在: " + pluginId,
+                            Map.of("pluginId", pluginId)
+                    );
                 }
                 PluginRegistration saved = saveRegistration(pluginId, destination.getFileName().toString(), true, null, repositoryId, repositoryPluginId, repositoryVersion);
                 return PluginViewMapper.toPluginView(saved, pluginManager);
             } catch (Exception exception) {
                 cleanupFailedInstall(pluginId, destination);
-                throw exception instanceof PluginRuntimeException re ? re
-                        : new PluginRuntimeException("安装插件失败: " + exception.getMessage(), exception);
+                if (exception instanceof PluginRuntimeException pluginRuntimeException) {
+                    throw pluginRuntimeException;
+                }
+                if (exception instanceof ActionDockException actionDockException) {
+                    throw actionDockException;
+                }
+                throw new PluginRuntimeException("安装插件失败: " + exception.getMessage(), exception);
             }
         });
     }
@@ -392,7 +407,7 @@ public class PluginRuntimeService {
         return withWriteLock(lock, () -> {
             ensureEnabled();
             if (systemPlugins.containsKey(pluginId)) {
-                throw new IllegalArgumentException("系统插件不支持升级: " + pluginId);
+                throw systemPluginUnsupported("升级", pluginId);
             }
             PluginRegistration current = requireRegistration(pluginId);
             PluginRegistration backup = current.copy();
@@ -473,7 +488,7 @@ public class PluginRuntimeService {
     public byte[] readPluginFile(String pluginId) {
         return withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
-                throw new IllegalArgumentException("系统插件不支持下载: " + pluginId);
+                throw systemPluginUnsupported("下载", pluginId);
             }
             try {
                 PluginRegistration registration = requireRegistration(pluginId);
@@ -520,7 +535,7 @@ public class PluginRuntimeService {
         withWriteLock(lock, () -> {
             ensureEnabled();
             if (systemPlugins.containsKey(pluginId)) {
-                throw new IllegalArgumentException("系统插件不支持卸载: " + pluginId);
+                throw systemPluginUnsupported("卸载", pluginId);
             }
             if (!force && scriptRepository != null) {
                 List<String> dependentScripts = scriptRepository.findAll().stream()
@@ -546,7 +561,7 @@ public class PluginRuntimeService {
         withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
                 if (!isSystemPluginEnabled(pluginId)) {
-                    throw new IllegalArgumentException("插件未启动: " + pluginId);
+                    throw pluginNotStarted(pluginId);
                 }
                 PluginRegistration registration;
                 try {
@@ -559,13 +574,13 @@ public class PluginRuntimeService {
             }
             PluginRegistration registration = requireRegistration(pluginId);
             if (!registration.isEnabled() || !isLoadedAndStarted(pluginId)) {
-                throw new IllegalArgumentException("插件未启动: " + pluginId);
+                throw pluginNotStarted(pluginId);
             }
             boolean exists = registration.getActions().stream()
                     .map(PluginActionMetadata::getAction)
                     .anyMatch(action::equals);
             if (!exists) {
-                throw new IllegalArgumentException("插件动作不存在: " + pluginId + "/" + action);
+                throw pluginActionNotFound(pluginId, action);
             }
             return null;
         });
@@ -628,7 +643,7 @@ public class PluginRuntimeService {
 
             if (systemPlugin != null) {
                 if (!isSystemPluginEnabled(pluginId)) {
-                    throw new IllegalArgumentException("插件未启动: " + pluginId);
+                    throw pluginNotStarted(pluginId);
                 }
                 plugin = systemPlugin;
                 pluginConfig = Map.of();
@@ -647,6 +662,8 @@ public class PluginRuntimeService {
                     .setPluginConfig(pluginConfig);
 
             return plugin.invoke(action, context, args == null ? Map.of() : new LinkedHashMap<>(args));
+        } catch (ActionDockException exception) {
+            throw exception;
         } catch (Exception exception) {
             throw enrichPluginInvocationException(pluginId, action, exception);
         }
@@ -701,7 +718,7 @@ public class PluginRuntimeService {
     private PluginRegistration requireRegistration(String pluginId) {
         ensureEnabled();
         return pluginRegistryRepository.findByPluginId(pluginId)
-                .orElseThrow(() -> new IllegalArgumentException("插件不存在: " + pluginId));
+                .orElseThrow(() -> pluginNotFound(pluginId));
     }
 
     private boolean isSystemPluginEnabled(String pluginId) {
@@ -728,7 +745,7 @@ public class PluginRuntimeService {
     private PluginView requireSystemPluginView(String pluginId) {
         PluginView view = findSystemPluginView(pluginId);
         if (view == null) {
-            throw new IllegalArgumentException("插件不存在: " + pluginId);
+            throw pluginNotFound(pluginId);
         }
         return view;
     }
@@ -737,7 +754,39 @@ public class PluginRuntimeService {
         return registration.getActions().stream()
                 .filter(metadata -> action.equals(metadata.getAction()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("插件动作不存在: " + registration.getPluginId() + "/" + action));
+                .orElseThrow(() -> pluginActionNotFound(registration.getPluginId(), action));
+    }
+
+    private static ActionDockException pluginNotFound(String pluginId) {
+        return ActionDockException.notFound(
+                ActionDockErrorCodes.PLUGIN_NOT_FOUND,
+                "插件不存在: " + pluginId,
+                Map.of("pluginId", pluginId)
+        );
+    }
+
+    private static ActionDockException pluginActionNotFound(String pluginId, String action) {
+        return ActionDockException.notFound(
+                ActionDockErrorCodes.PLUGIN_ACTION_NOT_FOUND,
+                "插件动作不存在: " + pluginId + "/" + action,
+                Map.of("pluginId", pluginId, "action", action)
+        );
+    }
+
+    private static ActionDockException pluginNotStarted(String pluginId) {
+        return ActionDockException.conflict(
+                ActionDockErrorCodes.PLUGIN_NOT_STARTED,
+                "插件未启动: " + pluginId,
+                Map.of("pluginId", pluginId)
+        );
+    }
+
+    private static ActionDockException systemPluginUnsupported(String operation, String pluginId) {
+        return ActionDockException.conflict(
+                ActionDockErrorCodes.PLUGIN_SYSTEM_OPERATION_UNSUPPORTED,
+                "系统插件不支持" + operation + ": " + pluginId,
+                Map.of("pluginId", pluginId, "operation", operation)
+        );
     }
 
     private boolean isLoadedAndStarted(String pluginId) {

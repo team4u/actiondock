@@ -11,6 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.application.ScheduleApplicationService;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.ExecutionRecord;
 import org.team4u.actiondock.domain.model.ExecutionStatus;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
@@ -111,15 +113,20 @@ class ScheduleControllerTest {
     @Test
     void updateRejectsCrossScriptMove() throws Exception {
         when(scheduleApplicationService.save(eq("other-script"), any()))
-                .thenThrow(new IllegalArgumentException("调度不属于该脚本: schedule-1"));
+                .thenThrow(ActionDockException.conflict(
+                        ActionDockErrorCodes.SCHEDULE_SCRIPT_MISMATCH,
+                        "调度不属于该脚本: schedule-1",
+                        Map.of("scheduleId", "schedule-1", "scriptId", "other-script")
+                ));
 
         mockMvc.perform(put("/api/schedules/schedule-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"scriptId":"other-script","name":"Nightly","cronExpression":"0 0 2 * * *","input":{},"enabled":true}
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.msg").value("调度不属于该脚本: schedule-1"));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.msg").value("调度不属于该脚本: schedule-1"))
+                .andExpect(jsonPath("$.data.code").value("SCHEDULE_SCRIPT_MISMATCH"));
     }
 
     @Test

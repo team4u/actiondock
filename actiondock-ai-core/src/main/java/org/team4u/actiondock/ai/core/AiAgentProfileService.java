@@ -5,10 +5,13 @@ import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiAgentSkillRegistry;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
@@ -63,7 +66,11 @@ public class AiAgentProfileService {
 
     public AiAgentProfile get(String id) {
         return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("AI Agent Profile 不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.AI_AGENT_PROFILE_NOT_FOUND,
+                        "AI Agent Profile 不存在: " + id,
+                        Map.of("profileId", id)
+                ));
     }
 
     public AiAgentProfile save(AiAgentProfile profile) {
@@ -93,7 +100,11 @@ public class AiAgentProfileService {
             throw new IllegalArgumentException("模型 Profile 不能为空");
         }
         if (modelProfileRepository.findById(profile.getModelProfileId()).isEmpty()) {
-            throw new IllegalArgumentException("模型 Profile 不存在: " + profile.getModelProfileId());
+            throw ActionDockException.notFound(
+                    ActionDockErrorCodes.AI_MODEL_PROFILE_NOT_FOUND,
+                    "模型 Profile 不存在: " + profile.getModelProfileId(),
+                    Map.of("profileId", profile.getModelProfileId())
+            );
         }
         if (toolRegistry != null) {
             toolRegistry.listAgentTools(profile);
@@ -103,7 +114,11 @@ public class AiAgentProfileService {
                     throw new IllegalArgumentException("工具集 ID 不能为空");
                 }
                 if (toolsetRepository.findById(toolsetId).isEmpty()) {
-                    throw new IllegalArgumentException("AI 工具集不存在: " + toolsetId);
+                    throw ActionDockException.notFound(
+                            ActionDockErrorCodes.AI_TOOLSET_NOT_FOUND,
+                            "AI 工具集不存在: " + toolsetId,
+                            Map.of("toolsetId", toolsetId)
+                    );
                 }
             }
         }

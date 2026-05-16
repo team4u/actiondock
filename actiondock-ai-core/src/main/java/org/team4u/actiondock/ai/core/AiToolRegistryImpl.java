@@ -10,6 +10,8 @@ import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
 import org.team4u.actiondock.ai.api.ConfigurableAiTool;
 import org.team4u.actiondock.ai.api.AiAgentProfile;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.SchemaValueCopier;
 
 import java.util.ArrayList;
@@ -86,7 +88,11 @@ public class AiToolRegistryImpl implements AiToolRegistry {
                     .orElse(null);
         }
         if (tool == null) {
-            throw new IllegalArgumentException("AI 工具不存在: " + name);
+            throw ActionDockException.notFound(
+                    ActionDockErrorCodes.AI_TOOL_NOT_FOUND,
+                    "AI 工具不存在: " + name,
+                    Map.of("toolName", name)
+            );
         }
         return tool;
     }
@@ -148,7 +154,11 @@ public class AiToolRegistryImpl implements AiToolRegistry {
                 throw new IllegalArgumentException("工具集 ID 不能为空");
             }
             AiToolset toolset = toolsetRepository.findById(toolsetId)
-                    .orElseThrow(() -> new IllegalArgumentException("AI 工具集不存在: " + toolsetId));
+                    .orElseThrow(() -> ActionDockException.notFound(
+                            ActionDockErrorCodes.AI_TOOLSET_NOT_FOUND,
+                            "AI 工具集不存在: " + toolsetId,
+                            Map.of("toolsetId", toolsetId)
+                    ));
             if (!toolset.isEnabled()) {
                 continue;
             }

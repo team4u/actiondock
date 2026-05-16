@@ -7,6 +7,8 @@ import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
@@ -14,6 +16,7 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 
@@ -86,7 +89,11 @@ public class ScriptApplicationService {
      * @throws IllegalArgumentException 如果脚本不存在
      */
     public ScriptDefinition get(String id) {
-        return scriptRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("脚本不存在: " + id));
+        return scriptRepository.findById(id).orElseThrow(() -> ActionDockException.notFound(
+                ActionDockErrorCodes.SCRIPT_NOT_FOUND,
+                "脚本不存在: " + id,
+                Map.of("scriptId", id)
+        ));
     }
 
     /**
@@ -101,7 +108,11 @@ public class ScriptApplicationService {
     public ScriptDefinition getPublished(String id) {
         ScriptDefinition definition = get(id);
         if (!definition.hasPublishedRevision()) {
-            throw new IllegalArgumentException("脚本未发布: " + id);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCRIPT_NOT_PUBLISHED,
+                    "脚本未发布: " + id,
+                    Map.of("scriptId", id)
+            );
         }
         return definition.toPublishedDefinition();
     }
@@ -183,7 +194,11 @@ public class ScriptApplicationService {
     public ScriptDefinition discardDraft(String id) {
         ScriptDefinition definition = get(id);
         if (!definition.hasPublishedRevision()) {
-            throw new IllegalArgumentException("脚本未发布: " + id);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCRIPT_NOT_PUBLISHED,
+                    "脚本未发布: " + id,
+                    Map.of("scriptId", id)
+            );
         }
         definition.revertToPublished();
         definition.setUpdatedAt(LocalDateTime.now());
@@ -197,7 +212,11 @@ public class ScriptApplicationService {
         }
         String normalizedId = ApplicationServiceSupport.normalize(targetId, "Fork 脚本 ID 不能为空");
         if (scriptRepository.findById(normalizedId).isPresent()) {
-            throw new IllegalArgumentException("脚本已存在: " + normalizedId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCRIPT_EXISTS,
+                    "脚本已存在: " + normalizedId,
+                    Map.of("scriptId", normalizedId)
+            );
         }
         ScriptDefinition fork = source.hasPublishedRevision() ? source.toPublishedDefinition() : source.fullCopy();
         fork.setId(normalizedId)
@@ -261,7 +280,11 @@ public class ScriptApplicationService {
 
     private static void ensureEditable(ScriptDefinition definition) {
         if (!definition.isEditable()) {
-            throw new IllegalArgumentException("仓库工具为只读，请先 Fork");
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.SCRIPT_NOT_EDITABLE,
+                    "仓库工具为只读，请先 Fork",
+                    Map.of("scriptId", definition.getId())
+            );
         }
     }
 

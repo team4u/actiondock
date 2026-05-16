@@ -1,5 +1,7 @@
 package org.team4u.actiondock.application;
 
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 
 import java.util.ArrayList;
@@ -70,7 +72,7 @@ class ConfigPlaceholderResolver {
             String key = matcher.group(1);
             String replacement = configValues.get(key);
             if (replacement == null) {
-                throw new IllegalArgumentException("配置值不存在: " + key);
+                throw missingConfigValue(key);
             }
             matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
@@ -87,7 +89,7 @@ class ConfigPlaceholderResolver {
             return cached;
         }
         if (!rawValues.containsKey(key)) {
-            throw new IllegalArgumentException("配置值不存在: " + key);
+            throw missingConfigValue(key);
         }
         if (!stack.add(key)) {
             List<String> cycle = new ArrayList<>(stack);
@@ -119,5 +121,13 @@ class ConfigPlaceholderResolver {
                 .sorted(Comparator.comparing(item -> item.getKey()))
                 .forEach(item -> rawValues.put(item.getKey(), item.getValue() == null ? "" : item.getValue()));
         return rawValues;
+    }
+
+    private static ActionDockException missingConfigValue(String key) {
+        return ActionDockException.notFound(
+                ActionDockErrorCodes.CONFIG_VALUE_NOT_FOUND,
+                "配置值不存在: " + key,
+                Map.of("key", key)
+        );
     }
 }

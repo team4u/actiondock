@@ -20,6 +20,8 @@ import org.team4u.actiondock.ai.api.AiProviderClient;
 import org.team4u.actiondock.ai.api.AiRunStatus;
 import org.team4u.actiondock.ai.api.AiStepType;
 import org.team4u.actiondock.ai.api.AiUsage;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -150,7 +152,11 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
             throw new IllegalArgumentException("AI Agent Profile 已禁用: " + agentProfile.getId());
         }
         AiModelProfile modelProfile = modelProfileRepository.findById(agentProfile.getModelProfileId())
-                .orElseThrow(() -> new IllegalArgumentException("模型 Profile 不存在: " + agentProfile.getModelProfileId()));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.AI_MODEL_PROFILE_NOT_FOUND,
+                        "模型 Profile 不存在: " + agentProfile.getModelProfileId(),
+                        Map.of("profileId", agentProfile.getModelProfileId())
+                ));
         String runId = UUID.randomUUID().toString();
         AiAgentRunContext effectiveContext = withEffectivePolicy(agentProfile, context, runId, asyncSubmission);
 
@@ -312,7 +318,11 @@ public class AiAgentRuntimeImpl implements AiAgentRuntime {
 
     private AiAgentRunRecord requireRun(String runId) {
         return runRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("AI Agent Run 不存在: " + runId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.AI_AGENT_RUN_NOT_FOUND,
+                        "AI Agent Run 不存在: " + runId,
+                        Map.of("runId", runId)
+                ));
     }
 
     private AiAgentRunContext withEffectivePolicy(AiAgentProfile agentProfile,

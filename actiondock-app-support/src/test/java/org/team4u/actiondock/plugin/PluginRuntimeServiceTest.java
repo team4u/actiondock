@@ -425,7 +425,7 @@ class PluginRuntimeServiceTest {
         assertThat(references).extracting(PluginReferenceView::getPluginId)
                 .containsExactly("actiondock-workspace");
         assertThat(references.getFirst().getActions()).extracting(PluginActionView::getAction)
-                .containsExactly("listDirectory", "viewTextFile", "writeTextFile", "insertTextFile", "executeShellCommand");
+                .containsExactly("listDirectory", "viewTextFile", "writeTextFile", "insertTextFile", "getSystemInfo", "executeShellCommand");
     }
 
     @Test

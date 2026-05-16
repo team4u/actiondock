@@ -281,8 +281,8 @@ export interface ExecutionLogEntry {
 }
 
 export interface ErrorDetail {
-  type: string;
-  stackTrace: string;
+  type?: string;
+  stackTrace?: string;
   details?: Record<string, unknown>;
 }
 
@@ -428,12 +428,17 @@ export interface ApiErrorPayload {
   data?: unknown;
 }
 
+export interface ApiErrorData {
+  code: string;
+  [key: string]: unknown;
+}
+
 export function isErrorDetail(value: unknown): value is ErrorDetail {
   return (
     Boolean(value) &&
     typeof value === "object" &&
-    typeof (value as ErrorDetail).type === "string" &&
-    typeof (value as ErrorDetail).stackTrace === "string"
+    (typeof (value as ErrorDetail).type === "string" ||
+      typeof (value as ErrorDetail).stackTrace === "string")
   );
 }
 

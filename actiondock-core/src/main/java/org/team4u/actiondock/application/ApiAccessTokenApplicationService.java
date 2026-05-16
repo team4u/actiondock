@@ -1,6 +1,8 @@
 package org.team4u.actiondock.application;
 
 import org.team4u.actiondock.domain.model.ApiAccessToken;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 
 import java.util.Comparator;
@@ -10,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -104,7 +107,11 @@ public class ApiAccessTokenApplicationService {
 
     private ApiAccessToken requireExisting(String id) {
         return repository.findById(normalizeId(id))
-                .orElseThrow(() -> new IllegalArgumentException("访问令牌不存在: " + id));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.ACCESS_TOKEN_NOT_FOUND,
+                        "访问令牌不存在: " + id,
+                        Map.of("tokenId", id)
+                ));
     }
 
     private static String normalizeId(String id) {

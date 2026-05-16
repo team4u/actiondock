@@ -13,6 +13,8 @@ import org.team4u.actiondock.web.common.GlobalExceptionHandler;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.team4u.actiondock.RuntimeApplication;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.plugin.PluginConfigView;
 import org.team4u.actiondock.plugin.PluginInvokeDebugView;
 import org.team4u.actiondock.plugin.PluginInvokeView;
@@ -96,6 +98,23 @@ class PluginControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
                 .andExpect(jsonPath("$.data.version").value("1.0.0"));
+    }
+
+    @Test
+    void getMissingPluginReturnsNotFoundWithoutStackTrace() throws Exception {
+        when(pluginRuntimeService.get("workspace")).thenThrow(ActionDockException.notFound(
+                ActionDockErrorCodes.PLUGIN_NOT_FOUND,
+                "插件不存在: workspace",
+                Map.of("pluginId", "workspace")
+        ));
+
+        mockMvc.perform(get("/api/plugins/workspace"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.msg").value("插件不存在: workspace"))
+                .andExpect(jsonPath("$.data.code").value("PLUGIN_NOT_FOUND"))
+                .andExpect(jsonPath("$.data.pluginId").value("workspace"))
+                .andExpect(jsonPath("$.data.stackTrace").doesNotExist());
     }
 
     @Test
@@ -187,7 +206,7 @@ class PluginControllerTest {
     }
 
     @Test
-    void invokeReturnsStructuredErrorDetailWhenPluginFails(CapturedOutput output) throws Exception {
+    void invokeReturnsInternalErrorWithoutResponseStackTrace(CapturedOutput output) throws Exception {
         when(pluginRuntimeService.invokeForDebug(
                 eq("demo-plugin"),
                 eq("echo"),
@@ -207,12 +226,13 @@ class PluginControllerTest {
                                 """))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.status").value(500))
-                .andExpect(jsonPath("$.msg").value("plugin failed"))
-                .andExpect(jsonPath("$.data.type").value("java.lang.IllegalStateException"))
-                .andExpect(jsonPath("$.data.stackTrace").exists());
+                .andExpect(jsonPath("$.msg").value("服务器内部错误"))
+                .andExpect(jsonPath("$.data.code").value("INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.data.type").doesNotExist())
+                .andExpect(jsonPath("$.data.stackTrace").doesNotExist());
 
         assertThat(output).contains("ERROR");
-        assertThat(output).contains("API exception status=500 method=POST uri=/api/plugins/demo-plugin/actions/echo/invoke message=plugin failed");
+        assertThat(output).contains("API exception status=500 code=INTERNAL_ERROR method=POST uri=/api/plugins/demo-plugin/actions/echo/invoke message=plugin failed");
     }
 
     @Test
@@ -224,9 +244,11 @@ class PluginControllerTest {
                         .file(new MockMultipartFile("file", "demo.jar", "application/java-archive", "jar".getBytes())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.msg").value("bad plugin"));
+                .andExpect(jsonPath("$.msg").value("bad plugin"))
+                .andExpect(jsonPath("$.data.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.data.stackTrace").doesNotExist());
 
         assertThat(output).contains("WARN");
-        assertThat(output).contains("API exception status=400 method=POST uri=/api/plugins/install message=bad plugin");
+        assertThat(output).contains("API exception status=400 code=BAD_REQUEST method=POST uri=/api/plugins/install message=bad plugin");
     }
 }

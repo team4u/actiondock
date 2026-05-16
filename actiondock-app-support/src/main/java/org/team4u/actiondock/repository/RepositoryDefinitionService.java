@@ -1,6 +1,8 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.shared.NormalizeUtils;
@@ -10,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
@@ -47,7 +50,11 @@ class RepositoryDefinitionService {
 
     RepositoryDefinition getRepository(String repositoryId) {
         return repositoryDefinitionRepository.findById(repositoryId)
-                .orElseThrow(() -> new IllegalArgumentException("仓库不存在: " + repositoryId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.REPOSITORY_NOT_FOUND,
+                        "仓库不存在: " + repositoryId,
+                        Map.of("repositoryId", repositoryId)
+                ));
     }
 
     RepositoryDefinition saveRepository(RepositoryDefinition definition) {
