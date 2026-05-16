@@ -19,6 +19,7 @@ import org.team4u.actiondock.plugin.PluginConfigView;
 import org.team4u.actiondock.plugin.PluginInvokeView;
 import org.team4u.actiondock.plugin.PluginReferenceView;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.plugin.PluginSummaryView;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.web.common.ApiResponse;
 import org.team4u.actiondock.web.execution.ExecutionResponseView;
@@ -46,7 +47,7 @@ public class PluginController {
      * @return API 响应，包含插件视图列表
      */
     @GetMapping
-    public ApiResponse<List<PluginView>> list() {
+    public ApiResponse<List<PluginSummaryView>> list() {
         return ApiResponse.success(pluginRuntimeService.list());
     }
 

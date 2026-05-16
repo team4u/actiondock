@@ -29,6 +29,7 @@ import {
 } from "../../ai/api";
 import {
   downloadPluginJar,
+  getPlugin,
   getPluginConfig,
   installPlugin,
   listPlugins,
@@ -244,6 +245,18 @@ export function DataBackupPanel() {
         })
       );
 
+      const fullPlugins = await Promise.all(
+        plugins
+          .filter(plugin => plugin.sourceType !== "SYSTEM")
+          .map(async plugin => {
+            try {
+              return await getPlugin(plugin.pluginId);
+            } catch {
+              return null;
+            }
+          })
+      ).then(items => items.filter((plugin): plugin is PluginView => plugin !== null));
+
       const pluginConfigs = new Map<string, Record<string, unknown>>();
       await Promise.all(
         plugins
@@ -281,7 +294,7 @@ export function DataBackupPanel() {
           configValues,
           executionPresets: allPresets,
           repositories,
-          plugins,
+          plugins: fullPlugins,
           pluginConfigs,
           sharedStates,
           aiModels,

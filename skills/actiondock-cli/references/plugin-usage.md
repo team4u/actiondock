@@ -19,6 +19,9 @@ actiondock plugin list --json
 - 当前装了哪些插件
 - 插件是否已启动
 - 插件版本是什么
+- 动作数量（`actionCount`）
+
+`plugin list` 只返回插件摘要，不返回 action schema。需要参数结构时使用 `plugin get <plugin-id> --json`。
 
 ### 查看某个插件详情
 
@@ -32,6 +35,7 @@ actiondock plugin get <plugin-id> --json
 - 每个 action 的 `inputSchema`
 - 每个 action 的 `outputSchema`
 - `description`
+- `exampleArgs`
 
 ### 查看脚本可引用的插件
 

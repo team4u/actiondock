@@ -5,6 +5,7 @@ import type {
   RepositoryDefinition,
   ScriptDefinition,
   ScriptSchedule,
+  PluginSummaryView,
   PluginView,
   AiModelProfile,
   AiAgentProfile,
@@ -359,7 +360,7 @@ export function analyzeBackupBundle(
     configValues: ConfigValue[];
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
-    plugins: PluginView[];
+    plugins: PluginSummaryView[];
     sharedStates: SharedStateSummary[];
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];

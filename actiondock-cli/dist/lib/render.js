@@ -430,7 +430,12 @@ export function renderPluginList(items) {
         .map((item) => {
         const name = item.name ? ` ${item.name}` : "";
         const version = item.version ? `@${item.version}` : "";
-        const actions = Array.isArray(item.actions) ? ` actions=${item.actions.length}` : "";
+        const actionCount = "actionCount" in item
+            ? item.actionCount
+            : Array.isArray(item.actions)
+                ? item.actions.length
+                : undefined;
+        const actions = typeof actionCount === "number" ? ` actions=${actionCount}` : "";
         const source = item.sourceType ? ` ${item.sourceType}` : "";
         return `${item.pluginId}${version}${name}${source}${actions}`;
     })

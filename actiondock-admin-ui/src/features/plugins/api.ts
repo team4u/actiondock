@@ -4,11 +4,12 @@ import type {
   PluginInvokeRequest,
   PluginInvokeResponse,
   PluginReferenceView,
+  PluginSummaryView,
   PluginView
 } from "../../shared/types";
 
-export function listPlugins(): Promise<PluginView[]> {
-  return request<PluginView[]>("/api/plugins");
+export function listPlugins(): Promise<PluginSummaryView[]> {
+  return request<PluginSummaryView[]>("/api/plugins");
 }
 
 export function listPluginReferences(): Promise<PluginReferenceView[]> {

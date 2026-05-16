@@ -26,7 +26,7 @@ import { extractPluginDependenciesFromSource } from "../../../../services/plugin
 import { extractAiDependenciesFromSource } from "../../../../services/aiDependencies";
 import { parseGeneratedScriptText } from "../../../../services/generatedScript";
 import { buildScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
-import type { UpstreamStatus, PluginReferenceView, PluginView, ScriptDefinition, ScriptType } from "../../../../shared/types";
+import type { UpstreamStatus, PluginReferenceView, PluginSummaryView, ScriptDefinition, ScriptType } from "../../../../shared/types";
 import type { SchemaEditorState } from "../../../../services/schema";
 import { hasScriptDraftChanges } from "../../../../services/scriptPublication";
 import {
@@ -70,7 +70,7 @@ export function useScriptEditor({
   const [copiedFromScript, setCopiedFromScript] = useState<{ id: string; name: string } | null>(null);
   const [availableScripts, setAvailableScripts] = useState<ScriptDefinition[]>([]);
   const [scriptsLoading, setScriptsLoading] = useState(false);
-  const [availablePlugins, setAvailablePlugins] = useState<PluginView[]>([]);
+  const [availablePlugins, setAvailablePlugins] = useState<PluginSummaryView[]>([]);
   const [availablePluginReferences, setAvailablePluginReferences] = useState<PluginReferenceView[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(false);
   const [developmentStatus, setUpstreamStatus] = useState<UpstreamStatus | null>(null);

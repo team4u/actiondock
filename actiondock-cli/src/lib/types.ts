@@ -381,6 +381,19 @@ export interface PluginView {
   actions: PluginActionDefinition[];
 }
 
+export interface PluginSummaryView {
+  pluginId: string;
+  name?: string;
+  description?: string;
+  version?: string;
+  state?: string;
+  sourceType?: string;
+  started?: boolean;
+  configurable?: boolean;
+  fileName?: string;
+  actionCount: number;
+}
+
 export interface PluginReferenceView {
   pluginId: string;
   name?: string;

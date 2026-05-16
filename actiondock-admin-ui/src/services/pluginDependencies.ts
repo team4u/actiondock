@@ -1,8 +1,8 @@
-import type { PluginDependency, PluginView, RepositoryScriptDescriptor, ScriptDefinition } from "../shared/types";
+import type { PluginDependency, PluginSummaryView, RepositoryScriptDescriptor, ScriptDefinition } from "../shared/types";
 
 const PLUGIN_INVOKE_PATTERN = /plugins\s*\.\s*invoke\s*\(\s*(["'`])([^"'`]+)\1\s*,\s*(["'`])([^"'`]+)\3/g;
 
-export function extractPluginDependenciesFromSource(source: string, plugins: PluginView[]): PluginDependency[] {
+export function extractPluginDependenciesFromSource(source: string, plugins: PluginSummaryView[]): PluginDependency[] {
   if (!source.trim()) {
     return [];
   }
@@ -40,7 +40,7 @@ export function extractPluginDependenciesFromSource(source: string, plugins: Plu
 export function resolveEffectivePluginDependencies(
   script: ScriptDefinition,
   descriptor: RepositoryScriptDescriptor | undefined,
-  plugins: PluginView[]
+  plugins: PluginSummaryView[]
 ): PluginDependency[] {
   if (descriptor?.pluginDependencies.length) {
     return descriptor.pluginDependencies;

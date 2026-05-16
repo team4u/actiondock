@@ -492,6 +492,8 @@ actiondock plugin references --json
 actiondock plugin config get <plugin-id> --json
 ```
 
+`plugin list` 只返回插件摘要，包括状态、版本和 `actionCount`，不返回 action schema。需要查看 action 参数、描述、示例时使用 `plugin get <plugin-id> --json`。
+
 ### 调用插件动作
 
 ```bash

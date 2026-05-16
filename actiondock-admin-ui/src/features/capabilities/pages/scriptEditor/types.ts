@@ -4,7 +4,7 @@ import type {
   PluginDependency,
   AiDependency,
   PluginReferenceView,
-  PluginView,
+  PluginSummaryView,
   UpstreamStatus,
   RepositoryScriptDescriptor,
   ScriptDefinition,
@@ -155,7 +155,7 @@ export interface ScriptEditorContext {
   copiedFromScript: { id: string; name: string } | null;
   availableScripts: ScriptDefinition[];
   scriptsLoading: boolean;
-  availablePlugins: PluginView[];
+  availablePlugins: PluginSummaryView[];
   availablePluginReferences: PluginReferenceView[];
   pluginsLoading: boolean;
   headerActionModel: ScriptEditorHeaderActionModel;

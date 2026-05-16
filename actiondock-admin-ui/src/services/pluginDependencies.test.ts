@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { extractPluginDependenciesFromSource, resolveEffectivePluginDependencies } from "./pluginDependencies";
-import type { PluginDependency, PluginView, RepositoryScriptDescriptor, ScriptDefinition } from "../shared/types";
+import type { PluginDependency, PluginSummaryView, RepositoryScriptDescriptor, ScriptDefinition } from "../shared/types";
 
-function plugin(pluginId: string, version: string): PluginView {
+function plugin(pluginId: string, version: string): PluginSummaryView {
   return {
     pluginId,
     version,
@@ -12,11 +12,11 @@ function plugin(pluginId: string, version: string): PluginView {
     started: true,
     state: "STARTED",
     configurable: false,
-    actions: []
+    actionCount: 0
   };
 }
 
-function systemPlugin(pluginId: string, version: string): PluginView {
+function systemPlugin(pluginId: string, version: string): PluginSummaryView {
   return {
     ...plugin(pluginId, version),
     sourceType: "SYSTEM"

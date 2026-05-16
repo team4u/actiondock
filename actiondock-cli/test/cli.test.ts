@@ -555,9 +555,7 @@ beforeAll(async () => {
             state: "STARTED",
             started: true,
             configurable: true,
-            actions: [
-              { action: "summarize" }
-            ]
+            actionCount: 1
           }
         ]
       });
@@ -1675,9 +1673,11 @@ describe("CLI integration", () => {
     expect(list.status).toBe(0);
     expect(JSON.parse(list.stdout)).toEqual([
       expect.objectContaining({
-        pluginId: "plugin-a"
+        pluginId: "plugin-a",
+        actionCount: 1
       })
     ]);
+    expect(JSON.parse(list.stdout)[0].actions).toBeUndefined();
 
     const references = await runCli(["plugin", "references", "--server", baseUrl, "--json"]);
     expect(references.status).toBe(0);

@@ -469,6 +469,22 @@ export interface PluginView {
   actions: PluginAction[];
 }
 
+export interface PluginSummaryView {
+  pluginId: string;
+  name: string;
+  description: string;
+  version: string;
+  repositoryId?: string;
+  repositoryPluginId?: string;
+  repositoryVersion?: string;
+  state: string;
+  sourceType: PluginReferenceSourceType;
+  started: boolean;
+  configurable: boolean;
+  fileName?: string;
+  actionCount: number;
+}
+
 export interface PluginReferenceView {
   pluginId: string;
   name: string;

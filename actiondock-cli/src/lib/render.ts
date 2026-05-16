@@ -8,6 +8,7 @@ import type {
   ExecutionResponse,
   PluginConfigView,
   PluginReferenceView,
+  PluginSummaryView,
   PluginView,
   RepositoryDefinition,
   ProjectRepositoryResolution,
@@ -482,7 +483,7 @@ export function renderWebhookInvokeResult(result: WebhookInvokeResult): string {
   return lines.join("\n");
 }
 
-export function renderPluginList(items: Array<PluginView | PluginReferenceView>): string {
+export function renderPluginList(items: Array<PluginSummaryView | PluginReferenceView>): string {
   if (items.length === 0) {
     return "没有插件。";
   }
@@ -491,7 +492,12 @@ export function renderPluginList(items: Array<PluginView | PluginReferenceView>)
     .map((item) => {
       const name = item.name ? ` ${item.name}` : "";
       const version = item.version ? `@${item.version}` : "";
-      const actions = Array.isArray(item.actions) ? ` actions=${item.actions.length}` : "";
+      const actionCount = "actionCount" in item
+        ? item.actionCount
+        : Array.isArray(item.actions)
+          ? item.actions.length
+          : undefined;
+      const actions = typeof actionCount === "number" ? ` actions=${actionCount}` : "";
       const source = item.sourceType ? ` ${item.sourceType}` : "";
       return `${item.pluginId}${version}${name}${source}${actions}`;
     })

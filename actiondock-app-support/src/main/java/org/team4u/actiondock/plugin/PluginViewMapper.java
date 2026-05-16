@@ -49,6 +49,27 @@ class PluginViewMapper {
                         .toList());
     }
 
+    static PluginSummaryView toPluginSummaryView(PluginRegistration registration, DefaultPluginManager pluginManager) {
+        PluginWrapper wrapper = pluginManager.getPlugin(registration.getPluginId());
+        String state = wrapper == null
+                ? (registration.isEnabled() ? PLUGIN_STATE_ENABLED : PLUGIN_STATE_DISABLED)
+                : wrapper.getPluginState().name();
+        return new PluginSummaryView()
+                .setPluginId(registration.getPluginId())
+                .setName(registration.getName())
+                .setDescription(registration.getDescription())
+                .setVersion(registration.getVersion())
+                .setRepositoryId(registration.getRepositoryId())
+                .setRepositoryPluginId(registration.getRepositoryPluginId())
+                .setRepositoryVersion(registration.getRepositoryVersion())
+                .setState(state)
+                .setSourceType(PluginReferenceSourceType.INSTALLED)
+                .setStarted(wrapper != null && wrapper.getPluginState().isStarted())
+                .setConfigurable(!registration.getConfigSchema().isEmpty() || !registration.getDefaultConfig().isEmpty())
+                .setFileName(registration.getFileName())
+                .setActionCount(registration.getActions().size());
+    }
+
     static PluginReferenceView toInstalledPluginReferenceView(PluginRegistration registration) {
         return new PluginReferenceView()
                 .setPluginId(registration.getPluginId())
@@ -102,6 +123,26 @@ class PluginViewMapper {
                 .setActions(manifest.getActions().stream()
                         .map(PluginViewMapper::toActionView)
                         .toList());
+    }
+
+    static PluginSummaryView toSystemPluginSummaryView(String pluginId, ActionDockPlugin plugin, boolean enabled) {
+        PluginManifest manifest;
+        try {
+            manifest = PluginManifestLoader.load(plugin.getClass(), pluginId);
+        } catch (IllegalArgumentException exception) {
+            LOGGER.warn("System plugin manifest missing: {}", pluginId);
+            return null;
+        }
+        return new PluginSummaryView()
+                .setPluginId(pluginId)
+                .setName(NormalizeUtils.isBlank(manifest.getName()) ? pluginId : manifest.getName())
+                .setDescription(manifest.getDescription())
+                .setVersion(manifest.getVersion())
+                .setState(enabled ? "STARTED" : PLUGIN_STATE_DISABLED)
+                .setSourceType(PluginReferenceSourceType.SYSTEM)
+                .setStarted(enabled)
+                .setConfigurable(false)
+                .setActionCount(manifest.getActions().size());
     }
 
     static PluginRegistration toSystemRegistration(String pluginId, ActionDockPlugin plugin, boolean enabled) {

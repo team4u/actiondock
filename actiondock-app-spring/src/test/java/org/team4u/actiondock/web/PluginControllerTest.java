@@ -21,6 +21,7 @@ import org.team4u.actiondock.plugin.PluginInvokeView;
 import org.team4u.actiondock.plugin.PluginReferenceSourceType;
 import org.team4u.actiondock.plugin.PluginReferenceView;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.plugin.PluginSummaryView;
 import org.team4u.actiondock.plugin.PluginView;
 
 import java.util.List;
@@ -65,7 +66,7 @@ class PluginControllerTest {
     @Test
     void listReturnsPluginDescriptors() throws Exception {
         when(pluginRuntimeService.list()).thenReturn(List.of(
-                new PluginView()
+                new PluginSummaryView()
                         .setPluginId("demo-plugin")
                         .setName("Demo")
                         .setDescription("Demo plugin")
@@ -73,6 +74,7 @@ class PluginControllerTest {
                         .setSourceType(PluginReferenceSourceType.SYSTEM)
                         .setState("STARTED")
                         .setStarted(true)
+                        .setActionCount(2)
         ));
 
         mockMvc.perform(get("/api/plugins"))
@@ -80,7 +82,9 @@ class PluginControllerTest {
                 .andExpect(jsonPath("$.data[0].pluginId").value("demo-plugin"))
                 .andExpect(jsonPath("$.data[0].sourceType").value("SYSTEM"))
                 .andExpect(jsonPath("$.data[0].state").value("STARTED"))
-                .andExpect(jsonPath("$.data[0].started").value(true));
+                .andExpect(jsonPath("$.data[0].started").value(true))
+                .andExpect(jsonPath("$.data[0].actionCount").value(2))
+                .andExpect(jsonPath("$.data[0].actions").doesNotExist());
     }
 
     @Test

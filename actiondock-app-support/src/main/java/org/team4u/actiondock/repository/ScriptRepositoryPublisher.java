@@ -13,7 +13,7 @@ import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.plugin.PluginReferenceSourceType;
-import org.team4u.actiondock.plugin.PluginView;
+import org.team4u.actiondock.plugin.PluginSummaryView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 import org.team4u.actiondock.shared.NormalizeUtils;
@@ -219,7 +219,7 @@ final class ScriptRepositoryPublisher {
     private List<PluginDependency> resolveToolPluginDependencies(ScriptDefinition script) {
         Map<String, String> installedPluginVersions = new LinkedHashMap<>();
         Set<String> systemPluginIds = new LinkedHashSet<>();
-        for (PluginView plugin : services.pluginRuntimeService().list()) {
+        for (PluginSummaryView plugin : services.pluginRuntimeService().list()) {
             if (plugin.getSourceType() == PluginReferenceSourceType.SYSTEM) {
                 systemPluginIds.add(plugin.getPluginId());
                 continue;

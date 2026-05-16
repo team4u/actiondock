@@ -20,13 +20,13 @@ import { PageHeader } from "../../../components/common/PageHeader";
 import { TableLinkCell } from "../../../components/common/TableLinkCell";
 import { useActionWithLoading } from "../../../shared/hooks/useActionWithLoading";
 import { ApiError } from "../../../shared/api/httpClient";
-import type { PluginView, RepositoryPluginConflict, RepositoryPluginDescriptor } from "../../../shared/types";
+import type { PluginSummaryView, PluginView, RepositoryPluginConflict, RepositoryPluginDescriptor } from "../../../shared/types";
 import { getErrorMessage } from "../../../services/utils";
 
 const { Text } = Typography;
 
 export function PluginManagementPage() {
-  const [plugins, setPlugins] = useState<PluginView[]>([]);
+  const [plugins, setPlugins] = useState<PluginSummaryView[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [bulkUpdating, setBulkUpdating] = useState(false);
@@ -51,12 +51,29 @@ export function PluginManagementPage() {
     void loadPlugins();
   }, []);
 
+  const toPluginSummary = (plugin: PluginView): PluginSummaryView => ({
+    pluginId: plugin.pluginId,
+    name: plugin.name,
+    description: plugin.description,
+    version: plugin.version,
+    repositoryId: plugin.repositoryId,
+    repositoryPluginId: plugin.repositoryPluginId,
+    repositoryVersion: plugin.repositoryVersion,
+    state: plugin.state,
+    sourceType: plugin.sourceType,
+    started: plugin.started,
+    configurable: plugin.configurable,
+    fileName: plugin.fileName,
+    actionCount: plugin.actions.length
+  });
+
   const replacePlugin = (nextPlugin: PluginView) => {
+    const nextSummary = toPluginSummary(nextPlugin);
     setPlugins((previous) => {
-      const hasPlugin = previous.some((item) => item.pluginId === nextPlugin.pluginId);
+      const hasPlugin = previous.some((item) => item.pluginId === nextSummary.pluginId);
       const next = hasPlugin
-        ? previous.map((item) => (item.pluginId === nextPlugin.pluginId ? nextPlugin : item))
-        : [...previous, nextPlugin];
+        ? previous.map((item) => (item.pluginId === nextSummary.pluginId ? nextSummary : item))
+        : [...previous, nextSummary];
       return [...next].sort((left, right) => left.pluginId.localeCompare(right.pluginId));
     });
   };
@@ -188,7 +205,7 @@ export function PluginManagementPage() {
     }
   };
 
-  const columns: ColumnsType<PluginView> = [
+  const columns: ColumnsType<PluginSummaryView> = [
     {
       title: "插件 ID",
       dataIndex: "pluginId",
@@ -220,7 +237,7 @@ export function PluginManagementPage() {
           <Tag>手动上传</Tag>
         )
     },
-    { title: "动作数", key: "actions", width: 100, render: (_: unknown, record) => record.actions.length },
+    { title: "动作数", dataIndex: "actionCount", key: "actionCount", width: 100 },
     {
       title: "操作",
       key: "operations",

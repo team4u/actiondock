@@ -20,6 +20,7 @@ import type {
   PluginInvokeRequest,
   PluginInvokeResponse,
   PluginReferenceView,
+  PluginSummaryView,
   PluginView,
   RepositoryDefinition,
   ProjectRepositoryResolution,
@@ -341,8 +342,8 @@ export class ActionDockClient {
     });
   }
 
-  async listPlugins(): Promise<PluginView[]> {
-    return this.requestJson<PluginView[]>("/api/plugins");
+  async listPlugins(): Promise<PluginSummaryView[]> {
+    return this.requestJson<PluginSummaryView[]>("/api/plugins");
   }
 
   async listRepositories(purpose?: string): Promise<RepositoryDefinition[]> {

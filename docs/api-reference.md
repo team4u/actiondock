@@ -172,9 +172,9 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/plugins` | 插件列表 |
-| `GET` | `/api/plugins/references` | 插件引用列表（编辑器用） |
-| `GET` | `/api/plugins/{pluginId}` | 插件详情 |
+| `GET` | `/api/plugins` | 插件摘要列表（含 `actionCount`，不含 action schema） |
+| `GET` | `/api/plugins/references` | 插件引用列表（编辑器用，含 action schema） |
+| `GET` | `/api/plugins/{pluginId}` | 插件详情（含 action schema） |
 | `GET` | `/api/plugins/{pluginId}/download` | 下载插件 JAR |
 | `POST` | `/api/plugins/install` | 上传安装插件（multipart） |
 | `POST` | `/api/plugins/{pluginId}/upgrade` | 升级插件（multipart） |

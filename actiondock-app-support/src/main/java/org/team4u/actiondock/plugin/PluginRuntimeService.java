@@ -148,22 +148,22 @@ public class PluginRuntimeService {
         return DISABLED;
     }
 
-    public List<PluginView> list() {
+    public List<PluginSummaryView> list() {
         if (!enabled) {
             return List.of();
         }
         return withReadLock(lock, () -> {
-            List<PluginView> plugins = new ArrayList<>();
+            List<PluginSummaryView> plugins = new ArrayList<>();
             pluginRegistryRepository.findAll().stream()
-                    .map(reg -> PluginViewMapper.toPluginView(reg, pluginManager))
+                    .map(reg -> PluginViewMapper.toPluginSummaryView(reg, pluginManager))
                     .forEach(plugins::add);
             systemPlugins.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> PluginViewMapper.toSystemPluginView(entry.getKey(), entry.getValue(), isSystemPluginEnabled(entry.getKey())))
+                    .map(entry -> PluginViewMapper.toSystemPluginSummaryView(entry.getKey(), entry.getValue(), isSystemPluginEnabled(entry.getKey())))
                     .filter(Objects::nonNull)
                     .forEach(plugins::add);
             return plugins.stream()
-                    .sorted(Comparator.comparing(PluginView::getPluginId))
+                    .sorted(Comparator.comparing(PluginSummaryView::getPluginId))
                     .toList();
         });
     }

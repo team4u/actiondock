@@ -58,7 +58,7 @@ import {
 } from "../../../services/scriptTransfer";
 import { buildScriptDiff, toDiffTarget } from "../../../services/scriptDiff";
 import { ApiError } from "../../../shared/api/httpClient";
-import type { PluginDependency, PluginView, RepositoryScriptDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptType } from "../../../shared/types";
+import type { PluginDependency, PluginSummaryView, RepositoryScriptDescriptor, ScriptDefinition, ScriptDependency, ScriptScope, ScriptType } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
 import { UpstreamSyncTag } from "../../../components/domain/UpstreamSyncTag";
 import { ForkScriptModal } from "../../../components/common/ForkScriptModal";
@@ -127,7 +127,7 @@ export function ScriptLibraryPage() {
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
   const [toolDescriptors, setToolDescriptors] = useState<RepositoryScriptDescriptor[]>([]);
-  const [plugins, setPlugins] = useState<PluginView[]>([]);
+  const [plugins, setPlugins] = useState<PluginSummaryView[]>([]);
   const [selectedScriptIds, setSelectedScriptIds] = useState<Key[]>([]);
   const [searchText, setSearchText] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
