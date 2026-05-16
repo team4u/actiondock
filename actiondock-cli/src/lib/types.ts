@@ -330,6 +330,46 @@ export interface RepositoryWebhookDetail {
   configTemplate: RepositoryConfigTemplateItem[];
 }
 
+export interface RepositoryPublishConfigItem {
+  key: string;
+  publishMode: "INLINE" | "PLACEHOLDER";
+}
+
+export interface RepositoryWebhookPublishDependencyDraft {
+  scriptId: string;
+  repositoryId?: string;
+  repositoryScriptId?: string;
+  versionRange?: string;
+  state: string;
+}
+
+export interface RepositoryWebhookPublishPreview {
+  items: RepositoryPublishConfigItem[];
+  missingKeys: string[];
+  scriptDependencies: ScriptDependency[];
+  dependencyDrafts: RepositoryWebhookPublishDependencyDraft[];
+}
+
+export interface RepositoryWebhookPublishPreviewRequest {
+  sourceId: string;
+  repositoryId?: string;
+  scriptDependencies?: ScriptDependency[];
+}
+
+export interface RepositoryWebhookPublishRequest {
+  sourceId: string;
+  webhookId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  releaseNotes?: string;
+  tags?: string[];
+  configItems?: RepositoryPublishConfigItem[];
+  scriptDependencies?: ScriptDependency[];
+  publishScriptDependencies?: boolean;
+  force?: boolean;
+}
+
 export interface RepositoryLocalAsset {
   id: string;
   assetType: "SCRIPT" | "WEBHOOK";

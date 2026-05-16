@@ -620,7 +620,7 @@ public class RepositoryCatalogService {
         return computeDigest(values);
     }
 
-    private String computeDigest(Map<String, Object> values) {
+    String computeDigest(Map<String, Object> values) {
         return RepositoryVersionUtils.sha256(jsonCodec.write(values).getBytes(StandardCharsets.UTF_8));
     }
 

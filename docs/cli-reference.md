@@ -308,6 +308,64 @@ actiondock webhook invoke <webhook-id> --payload-json '{"event": "test"}'
 actiondock webhook invoke <webhook-id> --payload-file ./payload.json
 ```
 
+#### 发布 Webhook 到仓库
+
+```bash
+actiondock webhook publish order-created \
+  --repository team-tools \
+  --repository-webhook-id order-created \
+  --display-name "Order Created" \
+  --version 1.0.0
+```
+
+带依赖脚本映射与配置模板的例子：
+
+```bash
+actiondock webhook publish order-created \
+  --repository team-tools \
+  --repository-webhook-id order-created \
+  --display-name "Order Created" \
+  --version 1.0.0 \
+  --owner team4u \
+  --release-notes "首次发布" \
+  --tag webhook \
+  --tag order \
+  --script-dependencies-file ./script-dependencies.json \
+  --config-items-file ./config-items.json \
+  --publish-script-dependencies
+```
+
+参数说明：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--repository` | 是 | 目标仓库 ID |
+| `--repository-webhook-id` | 是 | 仓库中的 Webhook ID |
+| `--display-name` | 是 | 发布显示名 |
+| `--version` | 是 | 发布版本 |
+| `--owner` | 否 | 发布所有者 |
+| `--release-notes` | 否 | 发布说明 |
+| `--tag` | 否 | 标签，可重复传入 |
+| `--script-dependencies-json` / `--script-dependencies-file` | 否 | 依赖脚本映射数组 |
+| `--config-items-json` / `--config-items-file` | 否 | 配置模板数组 |
+| `--publish-script-dependencies` | 否 | 连同 `scripts.invoke(...)` 依赖脚本一起发布，默认开启 |
+| `--force` | 否 | 忽略可强制覆盖的发布冲突 |
+
+`--script-dependencies-*` 传的是 JSON 数组，每一项形如：
+
+```json
+[
+  {
+    "scriptId": "shared-helper",
+    "repositoryId": "team-tools",
+    "repositoryScriptId": "shared-helper",
+    "versionRange": "^1.0.0"
+  }
+]
+```
+
+当 Webhook 绑定脚本依赖其他本地脚本时，CLI 会把映射提交给后端；如果启用 `--publish-script-dependencies`，这些依赖脚本会参考现有脚本发布流程递归一起发布。
+
 ### 来自仓库的 Webhook
 
 命令前缀：`actiondock webhook repository-*`

@@ -297,6 +297,50 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `POST` | `/api/webhooks/{id}/test-webhook` | Dry-run Webhook 脚本 |
 | `POST` | `/api/webhooks/{id}` | 调用固定 Webhook 地址（不需要 Bearer Token） |
 
+### Webhook 发布到仓库
+
+Webhook 发布和预览走统一资源生命周期入口，而不是单独的 `/api/webhooks/{id}/publish` 路径。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/resource-lifecycle/operations` | 预览或发布 Webhook 到仓库 |
+
+请求体示例：
+
+```json
+{
+  "kind": "repositoryWebhookPublishPreview",
+  "payload": {
+    "sourceId": "order-created",
+    "repositoryId": "team-tools",
+    "scriptDependencies": [
+      {
+        "scriptId": "shared-helper",
+        "repositoryId": "team-tools",
+        "repositoryScriptId": "shared-helper",
+        "versionRange": "^1.0.0"
+      }
+    ]
+  }
+}
+```
+
+发布时把 `kind` 改为 `repositoryWebhookPublish`，并在 `payload` 中补充：
+
+- `webhookId`：要发布的本地 Webhook ID
+- `displayName`、`version`、`owner`、`releaseNotes`、`tags`
+- `configItems`：配置模板项
+- `publishScriptDependencies`：是否连同依赖脚本一起发布
+- `force`：是否覆盖版本/上游冲突校验
+
+预览响应除配置模板外，还会返回 `dependencyDrafts`，用于提示每个 `scripts.invoke(...)` 依赖是：
+
+- `AUTO`：可自动映射到目标仓库脚本
+- `MANUAL`：需要显式指定仓库脚本 ID 或版本范围
+- `UNRESOLVED`：当前无法解析，发布会失败
+
+如果 `publishScriptDependencies=true`，服务端会按脚本发布流程递归检查并优先发布被 Webhook 绑定脚本依赖的其他脚本；未解析的依赖或非字面量 `scripts.invoke(...)` 仍会阻止发布。
+
 ## AI API
 
 | 方法 | 路径 | 说明 |

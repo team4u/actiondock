@@ -25,6 +25,7 @@ public class RepositoryWebhookService {
     private final RepositoryConfigTemplateSyncService configTemplateSyncService;
     private final RepositoryScriptService repositoryToolService;
     private final RepositoryDependencyResolver dependencyResolver;
+    private final RepositoryScriptDependencyPublishPlanner dependencyPlanner;
 
     public RepositoryWebhookService(RepositoryCatalogService catalog,
                                         RepositoryCatalogService.Repositories repos,
@@ -35,7 +36,8 @@ public class RepositoryWebhookService {
         this.configTemplateSyncService = configTemplateSyncService;
         this.repositoryToolService = repositoryToolService;
         this.upstreamSync = new UpstreamSyncService(catalog, repos, catalog.getServices());
-        this.publisher = new WebhookRepositoryPublisher(catalog, repos);
+        this.dependencyPlanner = new RepositoryScriptDependencyPublishPlanner(catalog, repositoryToolService.publisher());
+        this.publisher = new WebhookRepositoryPublisher(catalog, repos, dependencyPlanner);
         this.dependencyResolver = new RepositoryDependencyResolver(catalog);
     }
 

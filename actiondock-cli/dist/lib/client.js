@@ -364,6 +364,17 @@ export class ActionDockClient {
             })
         }).then((operation) => operation.result);
     }
+    async publishRepositoryWebhook(repositoryId, payload) {
+        return this.requestJson("/api/resource-lifecycle/operations", {
+            method: "POST",
+            body: JSON.stringify({
+                resourceType: "REPOSITORY_WEBHOOK",
+                operation: "publish",
+                repositoryId,
+                payload
+            })
+        }).then((operation) => operation.result);
+    }
     async getPlugin(pluginId) {
         return this.requestJson(`/api/plugins/${pluginId}`);
     }

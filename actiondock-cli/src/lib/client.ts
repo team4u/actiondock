@@ -26,6 +26,7 @@ import type {
   ProjectRepositoryResolution,
   RepositoryWebhookDescriptor,
   RepositoryWebhookDetail,
+  RepositoryWebhookPublishRequest,
   RepositoryLocalAsset,
   RepositoryInstallRequest,
   ResourceLifecycleOperationView,
@@ -500,6 +501,21 @@ export class ActionDockClient {
           forcePluginUpgrade: false,
           ...(localAssetId ? { localAssetId } : {})
         }
+      })
+    }).then((operation) => operation.result);
+  }
+
+  async publishRepositoryWebhook(
+    repositoryId: string,
+    payload: RepositoryWebhookPublishRequest
+  ): Promise<RepositoryWebhookDescriptor> {
+    return this.requestJson<ResourceLifecycleOperationView<RepositoryWebhookDescriptor>>("/api/resource-lifecycle/operations", {
+      method: "POST",
+      body: JSON.stringify({
+        resourceType: "REPOSITORY_WEBHOOK",
+        operation: "publish",
+        repositoryId,
+        payload
       })
     }).then((operation) => operation.result);
   }

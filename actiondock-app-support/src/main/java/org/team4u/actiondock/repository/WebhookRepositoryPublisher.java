@@ -7,7 +7,6 @@ import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDependency;
-import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
@@ -24,11 +23,14 @@ final class WebhookRepositoryPublisher {
 
     private final RepositoryCatalogService catalog;
     private final RepositoryCatalogService.Repositories repos;
+    private final RepositoryScriptDependencyPublishPlanner dependencyPlanner;
 
     WebhookRepositoryPublisher(RepositoryCatalogService catalog,
-                                   RepositoryCatalogService.Repositories repos) {
+                               RepositoryCatalogService.Repositories repos,
+                               RepositoryScriptDependencyPublishPlanner dependencyPlanner) {
         this.catalog = catalog;
         this.repos = repos;
+        this.dependencyPlanner = dependencyPlanner;
     }
 
     RepositoryWebhookDescriptor publish(String repositoryId, RepositoryWebhookPublishRequest request) {
@@ -45,7 +47,14 @@ final class WebhookRepositoryPublisher {
 
         String webhookId = NormalizeUtils.normalize(request.webhookId(), "webhookId 不能为空");
         String version = NormalizeUtils.normalize(request.version(), "version 不能为空");
-        List<ScriptDependency> scriptDependencies = resolveScriptDependencies(source);
+        List<ScriptDependency> scriptDependencies = dependencyPlanner.resolvePublishDependencies(
+                source.getWebhookScriptId(),
+                repositoryId,
+                request.scriptDependencies()
+        );
+        if (request.publishScriptDependencies()) {
+            dependencyPlanner.publishDependencies(repositoryId, source.getWebhookScriptId(), scriptDependencies, request.force());
+        }
         List<ConfigTemplateItem> configTemplates = buildConfigTemplates(source, request.configItems());
 
         assertWebhookVersionAvailable(repositoryId, session.index(), webhookId, version);
@@ -69,7 +78,19 @@ final class WebhookRepositoryPublisher {
 
     RepositoryWebhookPublishPreview preview(RepositoryWebhookPublishPreviewRequest request) {
         WebhookDefinition source = requireSource(request.sourceId());
-        List<ScriptDependency> dependencies = resolveScriptDependencies(source);
+        List<RepositoryWebhookPublishDependencyDraft> dependencyDrafts = dependencyPlanner.preview(
+                source.getWebhookScriptId(),
+                NormalizeUtils.normalizeNullable(request.repositoryId()),
+                request.scriptDependencies()
+        );
+        List<ScriptDependency> dependencies = dependencyDrafts.stream()
+                .filter(item -> NormalizeUtils.isNotBlank(item.repositoryId()) && NormalizeUtils.isNotBlank(item.repositoryScriptId()))
+                .map(item -> new ScriptDependency()
+                        .setScriptId(item.scriptId())
+                        .setRepositoryId(item.repositoryId())
+                        .setRepositoryScriptId(item.repositoryScriptId())
+                        .setVersionRange(item.versionRange()))
+                .toList();
         RepositoryPublishConfigResolver.PublishConfigResolution resolution = RepositoryPublishConfigResolver.resolve(
                 collectConfigSource(source),
                 List.of(),
@@ -81,7 +102,8 @@ final class WebhookRepositoryPublisher {
         return new RepositoryWebhookPublishPreview(
                 candidates,
                 resolution.missingKeys(),
-                dependencies
+                dependencies,
+                dependencyDrafts
         );
     }
 
@@ -112,23 +134,6 @@ final class WebhookRepositoryPublisher {
                 .setBaseDigest(state.digest())
                 .setLastSyncedAt(LocalDateTime.now())
                 .setUpdatedAt(LocalDateTime.now()));
-    }
-
-    private List<ScriptDependency> resolveScriptDependencies(WebhookDefinition source) {
-        ScriptDefinition script = repos.scriptRepository().findById(
-                NormalizeUtils.normalize(source.getWebhookScriptId(), "webhookScriptId 不能为空"))
-                .orElseThrow(() -> new IllegalArgumentException("Webhook 脚本不存在: " + source.getWebhookScriptId()));
-        if (!script.hasPublishedRevision() && NormalizeUtils.isBlank(script.getRepositoryId())) {
-            throw new IllegalArgumentException("Webhook 脚本尚未发布: " + script.getId());
-        }
-        if (NormalizeUtils.isBlank(script.getRepositoryId()) || NormalizeUtils.isBlank(script.getRepositoryScriptId())) {
-            return List.of();
-        }
-        return List.of(new ScriptDependency()
-                .setScriptId(script.getId())
-                .setRepositoryId(script.getRepositoryId())
-                .setRepositoryScriptId(script.getRepositoryScriptId())
-                .setVersionRange(script.getRepositoryVersion() == null ? null : ">= " + script.getRepositoryVersion()));
     }
 
     private List<ConfigTemplateItem> buildConfigTemplates(WebhookDefinition source,

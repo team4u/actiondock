@@ -394,28 +394,6 @@ export function DiscoveryCatalogTabs({
           )
         },
         {
-          key: "webhooks",
-          label: `Webhook (${filteredWebhooks.length})`,
-          children: (
-            <Table<RepositoryWebhookDescriptor>
-              rowKey={(item) => `${item.repositoryId}:${item.webhookId}`}
-              loading={loading}
-              columns={webhookColumns}
-              dataSource={filteredWebhooks}
-              scroll={{ x: 980 }}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              locale={{
-                emptyText: (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="当前没有可发现的Webhook。先到仓库管理页添加并同步仓库。"
-                  />
-                )
-              }}
-            />
-          )
-        },
-        {
           key: "packages",
           label: `能力包 (${filteredPackages.length})`,
           children: (
@@ -463,6 +441,28 @@ export function DiscoveryCatalogTabs({
           key: "plugins",
           label: `插件 (${filteredPlugins.length})`,
           children: renderRepositoryPlugins(filteredPlugins, actionKey, onPluginAction)
+        },
+        {
+          key: "webhooks",
+          label: `Webhook (${filteredWebhooks.length})`,
+          children: (
+            <Table<RepositoryWebhookDescriptor>
+              rowKey={(item) => `${item.repositoryId}:${item.webhookId}`}
+              loading={loading}
+              columns={webhookColumns}
+              dataSource={filteredWebhooks}
+              scroll={{ x: 980 }}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+              locale={{
+                emptyText: (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="当前没有可发现的Webhook。先到仓库管理页添加并同步仓库。"
+                  />
+                )
+              }}
+            />
+          )
         }
       ]}
     />

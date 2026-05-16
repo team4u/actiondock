@@ -1332,12 +1332,23 @@ export interface RepositoryPublishConfigPreview {
 
 export interface RepositoryWebhookPublishPreviewRequest {
   sourceId: string;
+  repositoryId?: string;
+  scriptDependencies?: ScriptDependency[];
+}
+
+export interface RepositoryWebhookPublishDependencyDraft {
+  scriptId: string;
+  repositoryId?: string;
+  repositoryScriptId?: string;
+  versionRange?: string;
+  state: "AUTO" | "MANUAL" | "UNRESOLVED" | string;
 }
 
 export interface RepositoryWebhookPublishPreview {
   items: RepositoryPublishConfigCandidate[];
   missingKeys: string[];
   scriptDependencies: ScriptDependency[];
+  dependencyDrafts: RepositoryWebhookPublishDependencyDraft[];
 }
 
 export interface RepositoryWebhookPublishRequest {
@@ -1349,6 +1360,8 @@ export interface RepositoryWebhookPublishRequest {
   releaseNotes?: string;
   tags?: string[];
   configItems?: RepositoryPublishConfigItem[];
+  scriptDependencies?: ScriptDependency[];
+  publishScriptDependencies?: boolean;
   force?: boolean;
 }
 

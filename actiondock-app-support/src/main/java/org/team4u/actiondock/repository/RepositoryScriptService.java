@@ -125,6 +125,10 @@ public class RepositoryScriptService {
         return descriptor;
     }
 
+    ScriptRepositoryPublisher publisher() {
+        return toolRepositoryPublisher;
+    }
+
     private RepositoryLocalAsset installOrUpdateTool(String repositoryId,
                                                      String toolId,
                                                      ToolInstallationOptions options,

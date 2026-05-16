@@ -543,6 +543,30 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "POST" && req.url === "/api/resource-lifecycle/operations" && body?.resourceType === "REPOSITORY_WEBHOOK" && body?.operation === "publish") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          resourceType: "REPOSITORY_WEBHOOK",
+          operation: "publish",
+          repositoryId: body.repositoryId,
+          resourceId: null,
+          status: "COMPLETED",
+          result: {
+            repositoryId: body.repositoryId,
+            webhookId: body.payload?.webhookId,
+            displayName: body.payload?.displayName,
+            version: body.payload?.version,
+            description: "Published Webhook",
+            tags: body.payload?.tags ?? [],
+            scriptDependencies: body.payload?.scriptDependencies ?? [],
+            trusted: true
+          }
+        }
+      });
+    }
+
     if (req.method === "GET" && req.url === "/api/plugins") {
       return json(res, {
         status: 0,
@@ -1603,6 +1627,81 @@ describe("CLI integration", () => {
 
     expect((await runCli(["webhook", "delete", "source-1", "--server", baseUrl, "--json"])).status).toBe(0);
   }, 15000);
+
+  it("publishes webhook to repository", async () => {
+    const result = await runCli([
+      "webhook",
+      "publish",
+      "source-1",
+      "--repository",
+      "repo-1",
+      "--repository-webhook-id",
+      "order-created",
+      "--display-name",
+      "Order Created",
+      "--version",
+      "1.0.0",
+      "--owner",
+      "team",
+      "--release-notes",
+      "Initial",
+      "--tag",
+      "demo",
+      "--script-dependencies-json",
+      '[{"scriptId":"child","repositoryId":"repo-1","repositoryScriptId":"child-tool","versionRange":">= 1.0.0"}]',
+      "--config-items-json",
+      '[{"key":"webhook.secret","publishMode":"PLACEHOLDER"}]',
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(
+      expect.objectContaining({
+        repositoryId: "repo-1",
+        webhookId: "order-created",
+        displayName: "Order Created",
+        version: "1.0.0"
+      })
+    );
+
+    const publishRequest = requests.find((item) =>
+      item.method === "POST"
+      && item.url === "/api/resource-lifecycle/operations"
+      && item.body?.resourceType === "REPOSITORY_WEBHOOK"
+      && item.body?.operation === "publish"
+    );
+    expect(publishRequest?.body).toEqual({
+      resourceType: "REPOSITORY_WEBHOOK",
+      operation: "publish",
+      repositoryId: "repo-1",
+      payload: {
+        sourceId: "source-1",
+        webhookId: "order-created",
+        displayName: "Order Created",
+        version: "1.0.0",
+        owner: "team",
+        releaseNotes: "Initial",
+        tags: ["demo"],
+        publishScriptDependencies: true,
+        scriptDependencies: [
+          {
+            scriptId: "child",
+            repositoryId: "repo-1",
+            repositoryScriptId: "child-tool",
+            versionRange: ">= 1.0.0"
+          }
+        ],
+        configItems: [
+          {
+            key: "webhook.secret",
+            publishMode: "PLACEHOLDER"
+          }
+        ],
+        force: false
+      }
+    });
+  });
 
   it("invokes a plugin action with flat args and script input json", async () => {
     const result = await runCli([

@@ -13,6 +13,7 @@ import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.plugin.PluginReferenceSourceType;
+import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginSummaryView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
@@ -183,13 +184,13 @@ final class ScriptRepositoryPublisher {
         }
     }
 
-    private static ToolFile buildToolFile(ScriptDefinition script,
-                                          RepositoryPublishRequest request,
-                                          String sourceFileName,
-                                          List<ConfigTemplateItem> configTemplates,
-                                          List<ScheduleTemplateItem> scheduleTemplates,
-                                          List<ScriptDependency> scriptDependencies,
-                                          List<PluginDependency> pluginDependencies) {
+    static ToolFile buildToolFile(ScriptDefinition script,
+                                  RepositoryPublishRequest request,
+                                  String sourceFileName,
+                                  List<ConfigTemplateItem> configTemplates,
+                                  List<ScheduleTemplateItem> scheduleTemplates,
+                                  List<ScriptDependency> scriptDependencies,
+                                  List<PluginDependency> pluginDependencies) {
         return new ToolFile(
                 RepositoryIndexUtils.DEFAULT_VERSION,
                 NormalizeUtils.normalize(request.repositoryScriptId(), "scriptId 不能为空"),
@@ -217,9 +218,14 @@ final class ScriptRepositoryPublisher {
     }
 
     private List<PluginDependency> resolveToolPluginDependencies(ScriptDefinition script) {
+        return resolvePluginDependenciesForDigest(services.pluginRuntimeService(), script);
+    }
+
+    static List<PluginDependency> resolvePluginDependenciesForDigest(PluginRuntimeService pluginRuntimeService,
+                                                                     ScriptDefinition script) {
         Map<String, String> installedPluginVersions = new LinkedHashMap<>();
         Set<String> systemPluginIds = new LinkedHashSet<>();
-        for (PluginSummaryView plugin : services.pluginRuntimeService().list()) {
+        for (PluginSummaryView plugin : pluginRuntimeService.list()) {
             if (plugin.getSourceType() == PluginReferenceSourceType.SYSTEM) {
                 systemPluginIds.add(plugin.getPluginId());
                 continue;
@@ -255,7 +261,7 @@ final class ScriptRepositoryPublisher {
         return List.copyOf(dependencies);
     }
 
-    private static void assertLiteralScriptInvocations(String source) {
+    static void assertLiteralScriptInvocations(String source) {
         int invocationCount = NormalizeUtils.isBlank(source) ? 0 : (int) SCRIPT_INVOKE_ANY_PATTERN.matcher(source).results().count();
         int literalInvocationCount = AiPackageIdRewriter.countLiteralScriptInvocations(source);
         if (invocationCount != literalInvocationCount) {

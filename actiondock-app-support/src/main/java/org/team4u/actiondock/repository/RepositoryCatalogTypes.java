@@ -285,19 +285,33 @@ public final class RepositoryCatalogTypes {
             String releaseNotes,
             List<String> tags,
             List<RepositoryPublishConfigItem> configItems,
+            List<ScriptDependency> scriptDependencies,
+            boolean publishScriptDependencies,
             boolean force
     ) {
     }
 
     public record RepositoryWebhookPublishPreviewRequest(
-            String sourceId
+            String sourceId,
+            String repositoryId,
+            List<ScriptDependency> scriptDependencies
+    ) {
+    }
+
+    public record RepositoryWebhookPublishDependencyDraft(
+            String scriptId,
+            String repositoryId,
+            String repositoryScriptId,
+            String versionRange,
+            String state
     ) {
     }
 
     public record RepositoryWebhookPublishPreview(
             List<RepositoryPublishConfigCandidate> items,
             List<String> missingKeys,
-            List<ScriptDependency> scriptDependencies
+            List<ScriptDependency> scriptDependencies,
+            List<RepositoryWebhookPublishDependencyDraft> dependencyDrafts
     ) {
     }
 

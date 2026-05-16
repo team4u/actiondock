@@ -261,6 +261,64 @@ describe("api request auth handling", () => {
     });
   });
 
+  it("routes webhook repository publish through the lifecycle endpoint", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        status: 0,
+        msg: "ok",
+        data: {
+          resourceType: "REPOSITORY_WEBHOOK",
+          operation: "publish",
+          repositoryId: "main",
+          resourceId: null,
+          status: "COMPLETED",
+          result: { repositoryId: "main", webhookId: "order-created", displayName: "Order Created", version: "1.0.0" }
+        }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { publishRepositoryWebhook } = await import("../features/resources/api");
+    const result = await publishRepositoryWebhook("main", {
+      sourceId: "source-1",
+      webhookId: "order-created",
+      displayName: "Order Created",
+      version: "1.0.0",
+      owner: "team",
+      releaseNotes: "Initial",
+      tags: ["demo"],
+      configItems: [{ key: "webhook.secret", publishMode: "PLACEHOLDER" }],
+      scriptDependencies: [{ scriptId: "child", repositoryId: "main", repositoryScriptId: "child", versionRange: ">= 1.0.0" }],
+      publishScriptDependencies: true,
+      force: false
+    });
+
+    expect(result).toEqual({ repositoryId: "main", webhookId: "order-created", displayName: "Order Created", version: "1.0.0" });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(JSON.parse(init?.body as string)).toEqual({
+      resourceType: "REPOSITORY_WEBHOOK",
+      operation: "publish",
+      repositoryId: "main",
+      payload: {
+        sourceId: "source-1",
+        webhookId: "order-created",
+        displayName: "Order Created",
+        version: "1.0.0",
+        owner: "team",
+        releaseNotes: "Initial",
+        tags: ["demo"],
+        configItems: [{ key: "webhook.secret", publishMode: "PLACEHOLDER" }],
+        scriptDependencies: [{ scriptId: "child", repositoryId: "main", repositoryScriptId: "child", versionRange: ">= 1.0.0" }],
+        publishScriptDependencies: true,
+        force: false
+      }
+    });
+  });
+
   it("returns repository script descriptors with scriptId", async () => {
     getApiKeyMock.mockReturnValue("secret-token");
     const fetchMock = vi.fn().mockResolvedValue(
