@@ -373,6 +373,21 @@ public class RepositoryController {
         return ApiResponse.success(null, "知识源已卸载");
     }
 
+    @PostMapping("/publish-knowledge")
+    public ApiResponse<Void> publishKnowledge(@RequestBody PublishKnowledgeRequest request) {
+        repositoryKnowledgeService.publishKnowledge(
+                request.projectRepositoryId(),
+                request.targetRepositoryId(),
+                new RepositoryKnowledgeService.PublishKnowledgeRequest(
+                        request.knowledgeId(),
+                        request.displayName(),
+                        request.description(),
+                        request.tags()
+                )
+        );
+        return ApiResponse.success(null, "知识源发布完成");
+    }
+
     private <T> ApiResponse<T> resolveForceAndApply(RepositoryPluginInstallRequest request,
                                                     Function<Boolean, T> action,
                                                     String successMessage) {
@@ -387,5 +402,15 @@ public class RepositoryController {
                 ? new ToolInstallationOptions(request.isInstallSchedules(), request.isInstallScriptDependencies(), request.isInstallPluginDependencies(), request.isForcePluginUpgrade())
                 : ToolInstallationOptions.DEFAULT;
         return ApiResponse.success(action.apply(options), successMessage);
+    }
+
+    record PublishKnowledgeRequest(
+            String projectRepositoryId,
+            String targetRepositoryId,
+            String knowledgeId,
+            String displayName,
+            String description,
+            List<String> tags
+    ) {
     }
 }

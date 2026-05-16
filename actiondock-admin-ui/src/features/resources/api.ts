@@ -117,6 +117,21 @@ export function uninstallRepositoryKnowledge(repositoryId: string, knowledgeId: 
   });
 }
 
+export function publishRepositoryKnowledge(payload: {
+  projectRepositoryId: string;
+  targetRepositoryId: string;
+  knowledgeId: string;
+  displayName: string;
+  description?: string;
+  tags?: string[];
+}): Promise<void> {
+  return request<void>("/api/repositories/publish-knowledge", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload)
+  });
+}
+
 export function listToolsByRepository(id: string): Promise<RepositoryScriptDescriptor[]> {
   return request<RepositoryScriptDescriptor[]>(`/api/repositories/${encodeURIComponent(id)}/scripts`);
 }

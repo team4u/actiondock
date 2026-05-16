@@ -2,6 +2,7 @@ import {
   DeleteOutlined,
   EyeOutlined,
   PlusOutlined,
+  ShareAltOutlined,
   ReloadOutlined,
   SyncOutlined
 } from "@ant-design/icons";
@@ -27,6 +28,7 @@ import {
   createRepository,
   deleteRepository,
   listRepositories,
+  publishRepositoryKnowledge,
   resolveProjectRepository,
   syncRepository,
   updateRepository
@@ -81,6 +83,10 @@ export function RepositoryManagementPage() {
   const [resolution, setResolution] = useState<ProjectRepositoryResolution | null>(null);
   const [resolutionOpen, setResolutionOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
+
+  const [publishingProject, setPublishingProject] = useState<RepositoryDefinition | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishForm] = Form.useForm();
 
   const loadData = async () => {
     setLoading(true);
@@ -243,6 +249,44 @@ export function RepositoryManagementPage() {
     }
   };
 
+  const openPublishKnowledge = (projectRepo: RepositoryDefinition) => {
+    publishForm.setFieldsValue({
+      knowledgeId: projectRepo.id,
+      displayName: projectRepo.name,
+      description: projectRepo.description || ""
+    });
+    setPublishingProject(projectRepo);
+  };
+
+  const handlePublishKnowledge = async () => {
+    if (!publishingProject) return;
+    try {
+      const values = await publishForm.validateFields();
+      setPublishing(true);
+      await publishRepositoryKnowledge({
+        projectRepositoryId: publishingProject.id,
+        targetRepositoryId: values.targetRepositoryId,
+        knowledgeId: values.knowledgeId.trim(),
+        displayName: values.displayName.trim(),
+        description: values.description?.trim() || undefined,
+        tags: values.tags || []
+      });
+      messageApi.success("知识源已发布到目标仓库");
+      setPublishingProject(null);
+      publishForm.resetFields();
+    } catch (error) {
+      if (error instanceof ApiError) {
+        messageApi.error(error.message);
+      } else if (typeof error === "object" && error !== null && "errorFields" in error) {
+        return;
+      } else {
+        messageApi.error(getErrorMessage(error, "发布知识源失败"));
+      }
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const commonRepositoryCell = (_value: unknown, record: RepositoryDefinition) => (
     <Space direction="vertical" size={2}>
       <Space wrap size={[8, 8]}>
@@ -349,7 +393,7 @@ export function RepositoryManagementPage() {
     {
       title: "操作",
       key: "actions",
-      width: 280,
+      width: 340,
       render: (_value: unknown, record) => (
         <Space wrap size={[4, 4]}>
           <Button
@@ -359,6 +403,13 @@ export function RepositoryManagementPage() {
             onClick={() => void handleResolve(record.id)}
           >
             解析
+          </Button>
+          <Button
+            size="small"
+            icon={<ShareAltOutlined />}
+            onClick={() => openPublishKnowledge(record)}
+          >
+            发布
           </Button>
           <Button
             size="small"
@@ -604,6 +655,67 @@ export function RepositoryManagementPage() {
               </Paragraph>
             </Card>
           </Space>
+        ) : null}
+      </Drawer>
+
+      <Drawer
+        title={publishingProject ? `发布为知识源：${publishingProject.name}` : "发布为知识源"}
+        open={publishingProject !== null}
+        onClose={() => { setPublishingProject(null); publishForm.resetFields(); }}
+        destroyOnClose
+        width={520}
+        extra={
+          <Button type="primary" loading={publishing} onClick={() => void handlePublishKnowledge()}>
+            发布
+          </Button>
+        }
+      >
+        {publishingProject ? (
+          <Form form={publishForm} layout="vertical">
+            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+              <Text type="secondary">
+                将项目仓库 <Text strong>{publishingProject.name}</Text>（{publishingProject.url}）发布为知识源指针到目标能力仓库，团队成员发现后可一键安装。
+              </Text>
+
+              <Form.Item
+                label="目标能力仓库"
+                name="targetRepositoryId"
+                rules={[{ required: true, message: "请选择目标能力仓库" }]}
+              >
+                <Select
+                  placeholder="选择目标能力仓库"
+                  options={capabilityRepositories.map((repo) => ({
+                    value: repo.id,
+                    label: `${repo.name}（${repo.id}）`
+                  }))}
+                />
+              </Form.Item>
+
+              <Form.Item
+                label="知识源 ID"
+                name="knowledgeId"
+                rules={[{ required: true, message: "请输入知识源 ID" }]}
+              >
+                <Input placeholder="安装后用于识别的知识源标识" />
+              </Form.Item>
+
+              <Form.Item
+                label="显示名称"
+                name="displayName"
+                rules={[{ required: true, message: "请输入显示名称" }]}
+              >
+                <Input placeholder="知识源的显示名称" />
+              </Form.Item>
+
+              <Form.Item label="说明" name="description">
+                <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="可选，知识源说明" />
+              </Form.Item>
+
+              <Form.Item label="标签" name="tags">
+                <Select mode="tags" placeholder="输入后按回车添加标签" />
+              </Form.Item>
+            </Space>
+          </Form>
         ) : null}
       </Drawer>
     </>

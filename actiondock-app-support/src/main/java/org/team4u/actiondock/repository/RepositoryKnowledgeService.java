@@ -3,6 +3,7 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -90,6 +91,59 @@ public class RepositoryKnowledgeService {
             throw new IllegalArgumentException("知识源未安装: " + knowledgeId);
         }
         catalog.deleteRepository(installedRepoId);
+    }
+
+    /**
+     * 将项目仓库发布为知识源指针到目标能力仓库。
+     * <p>
+     * 在目标能力仓库的 knowledge/ 目录下创建 knowledge.json，
+     * source 指向项目仓库的连接信息（url、branch、type）。
+     *
+     * @param projectRepositoryId 项目仓库 ID
+     * @param targetRepositoryId  目标能力仓库 ID
+     * @param request             发布请求（knowledgeId、displayName、description、tags）
+     */
+    public void publishKnowledge(String projectRepositoryId,
+                                  String targetRepositoryId,
+                                  PublishKnowledgeRequest request) {
+        RepositoryDefinition projectRepo = catalog.getRepository(projectRepositoryId);
+
+        if (!REPO_PURPOSE_PROJECT.equals(projectRepo.getPurpose())) {
+            throw new IllegalArgumentException("只能将项目仓库发布为知识源: " + projectRepositoryId);
+        }
+
+        WritableRepositorySession session =
+                catalog.openWritableRepositorySession(targetRepositoryId);
+
+        KnowledgeSource source = new KnowledgeSource(
+                projectRepo.getType(),
+                projectRepo.getUrl(),
+                projectRepo.getBranch(),
+                DEFAULT_PROJECT_ENTRY_PATH
+        );
+
+        KnowledgeFile knowledgeFile = new KnowledgeFile(
+                1,
+                NormalizeUtils.normalize(request.knowledgeId(), "knowledgeId 不能为空"),
+                NormalizeUtils.normalize(request.displayName(), "displayName 不能为空"),
+                NormalizeUtils.normalizeNullable(request.description()),
+                source,
+                NormalizeUtils.nullSafeList(request.tags())
+        );
+
+        Path knowledgeDir = session.root().resolve(KNOWLEDGE_DIR).resolve(knowledgeFile.knowledgeId());
+        catalog.writeJson(knowledgeDir.resolve(KNOWLEDGE_MANIFEST_FILE), knowledgeFile);
+
+        session.commitPublishedAsset(knowledgeFile.knowledgeId(), "1.0.0", null);
+        catalog.refreshRepositoryCache(targetRepositoryId);
+    }
+
+    public record PublishKnowledgeRequest(
+            String knowledgeId,
+            String displayName,
+            String description,
+            List<String> tags
+    ) {
     }
 
     private RepositoryKnowledgeIndexEntry findKnowledgeEntry(RepositoryIndexFile index, String knowledgeId) {
