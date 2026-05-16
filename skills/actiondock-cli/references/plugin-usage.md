@@ -72,6 +72,14 @@ actiondock plugin invoke <plugin-id> <action> --json
 3. 决定用动态 flag 还是 JSON / 文件输入
 4. 再执行 `plugin invoke`
 
+插件调用有三类输入，不能混用错：
+
+- action args 简单字段：直接用动态 flag，例如 `--name world`
+- action args 复杂字段：用 `--args-json` / `--args-file`
+- 脚本上下文：用 `--script-input-json` / `--script-input-file`
+
+`--input-json` / `--input-file` 只属于 `script run`，不要用于 `plugin invoke`。
+
 ### 简单参数：直接用动态 flag
 
 适用于顶层 string / number / integer / boolean / enum 字段：
@@ -98,6 +106,17 @@ actiondock plugin invoke my-plugin summarize \
 ```bash
 actiondock plugin invoke my-plugin summarize \
   --args-file ./plugin-args.json \
+  --json
+```
+
+### 混合传参
+
+`--args-json` / `--args-file` 提供基础 action args 对象，动态 flag 会合并进去并覆盖同名字段：
+
+```bash
+actiondock plugin invoke my-plugin summarize \
+  --args-file ./plugin-args.json \
+  --topic override \
   --json
 ```
 

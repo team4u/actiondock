@@ -259,44 +259,52 @@
     {
       "action": "executeShellCommand",
       "title": "Execute Shell Command",
-      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions.",
+      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions. Bash is the preferred shell on all platforms: on Linux/macOS it uses bash directly; on Windows it tries Git Bash first and only falls back to PowerShell or cmd.exe if bash is unavailable. Use 'shellPath' to override the default shell, or 'allowedCommands' to restrict which commands may run.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "command": {
             "type": "string",
-            "title": "Command"
+            "title": "Command",
+            "description": "The shell command string to execute. Prefer bash syntax for cross-platform compatibility."
           },
           "cwd": {
             "type": "string",
-            "title": "Working Directory"
+            "title": "Working Directory",
+            "description": "Working directory for command execution. Defaults to baseDir if not specified."
           },
           "timeoutSeconds": {
             "type": "integer",
-            "title": "Timeout Seconds"
+            "title": "Timeout Seconds",
+            "description": "Maximum execution time in seconds. The process is killed if it exceeds this limit. Default: 30."
           },
           "maxOutputBytes": {
             "type": "integer",
-            "title": "Max Output Bytes"
+            "title": "Max Output Bytes",
+            "description": "Truncate combined stdout+stderr output to this many bytes to avoid memory issues. Default: 1048576 (1 MB)."
           },
           "allowedCommands": {
             "type": "array",
             "title": "Allowed Commands",
+            "description": "If non-empty, only commands whose first token appears in this list are permitted. Use this to restrict the command surface.",
             "items": {
               "type": "string"
             }
           },
           "shellPath": {
             "type": "string",
-            "title": "Shell Path"
+            "title": "Shell Path",
+            "description": "Explicit path to the shell executable. Overrides auto-detected shell (e.g. '/bin/bash', 'C:\\Program Files\\Git\\bin\\bash.exe')."
           },
           "baseDir": {
             "type": "string",
-            "title": "Base Directory"
+            "title": "Base Directory",
+            "description": "Root directory for the workspace sandbox. Defaults to the filesystem root ('/' on Linux, drive root on Windows) if not specified."
           },
           "env": {
             "type": "object",
-            "title": "Environment"
+            "title": "Environment",
+            "description": "Additional environment variables to set for the child process, as key-value pairs. These are merged with the current process environment."
           }
         }
       },

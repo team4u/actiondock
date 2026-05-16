@@ -481,6 +481,65 @@ actiondock repository resolve --repository-id billing-service --json
 2. 再按正文中描述的入口文件、目录和关键词去 `read` / `grep`
 3. 只有在 Markdown 不足时再读源码
 
+## 插件命令
+
+### 查看插件
+
+```bash
+actiondock plugin list --json
+actiondock plugin get <plugin-id> --json
+actiondock plugin references --json
+actiondock plugin config get <plugin-id> --json
+```
+
+### 调用插件动作
+
+```bash
+actiondock plugin invoke <plugin-id> <action> --json
+```
+
+插件调用有三类输入：
+
+| 输入 | 用法 |
+|------|------|
+| action args 简单字段 | `--name value`、`--count 3`、`--enabled` |
+| action args 复杂字段 | `--args-json` / `--args-file` |
+| 脚本上下文 | `--script-input-json` / `--script-input-file` |
+
+顶层 string、number、integer、boolean、enum 字段可直接展开：
+
+```bash
+actiondock plugin invoke my-plugin summarize --topic ops --priority 3 --json
+```
+
+对象和数组类型不能展开，使用 `--args-json` 或 `--args-file`：
+
+```bash
+actiondock plugin invoke my-plugin summarize \
+  --args-json '{"topic":"ops","filters":{"env":"prod"}}' \
+  --json
+```
+
+`--args-file` 提供基础 action args 对象，动态 flag 会合并进去并覆盖同名字段：
+
+```bash
+actiondock plugin invoke my-plugin summarize \
+  --args-file ./plugin-args.json \
+  --topic override \
+  --json
+```
+
+如果插件动作需要脚本侧上下文，额外传 `scriptInput`：
+
+```bash
+actiondock plugin invoke my-plugin summarize \
+  --args-json '{"topic":"ops"}' \
+  --script-input-json '{"locale":"zh-CN"}' \
+  --json
+```
+
+`--input-json` / `--input-file` 只用于 `script run`，不要用于 `plugin invoke`。
+
 ## 配置命令参考
 
 ```bash
