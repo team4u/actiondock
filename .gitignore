@@ -4,6 +4,7 @@ actiondock-admin-ui/.vite/
 !actiondock-cli/bin/
 !actiondock-cli/bin/**
 actiondock-cli/runtime/
+actiondock-cli/*.tgz
 .apt_generated
 bin
 build/
