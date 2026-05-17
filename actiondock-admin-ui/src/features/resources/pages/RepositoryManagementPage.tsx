@@ -371,12 +371,6 @@ export function RepositoryManagementPage() {
       render: commonRepositoryCell
     },
     {
-      title: "项目 ID",
-      dataIndex: "id",
-      key: "id",
-      width: 180
-    },
-    {
       title: "类型",
       dataIndex: "type",
       key: "type",
