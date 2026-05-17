@@ -6,6 +6,7 @@ import { TrustLevelTag } from "../../../../components/domain/TrustLevelTag";
 import { getUpstreamActionLabel } from "../../../../components/domain/UpstreamSyncTag";
 import type {
   CapabilityPackageDescriptor,
+  RepositoryKnowledgeDescriptor,
   RepositoryWebhookDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
@@ -28,16 +29,19 @@ interface DiscoveryCatalogTabsProps {
   loading: boolean;
   actionKey: string | null;
   packageActionKey: string | null;
+  knowledgeActionKey: string | null;
   filteredTools: RepositoryScriptDescriptor[];
   filteredWebhooks: RepositoryWebhookDescriptor[];
   filteredPackages: CapabilityPackageDescriptor[];
   filteredSkills: RepositorySkillDescriptor[];
   filteredPlugins: RepositoryPluginDescriptor[];
+  filteredKnowledge: RepositoryKnowledgeDescriptor[];
   onOpenToolDetail: (descriptor: RepositoryScriptDescriptor) => void | Promise<void>;
   onOpenWebhookDetail: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
   onOpenPackageDetail: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onOpenSkillDetail: (descriptor: RepositorySkillDescriptor) => void | Promise<void>;
   onOpenSkillInstall: (descriptor: RepositorySkillDescriptor) => void;
+  onOpenKnowledgeDetail: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
   onToolLocalAssetAction: (
     descriptor: RepositoryScriptDescriptor,
     action: LocalAssetAction,
@@ -55,6 +59,8 @@ interface DiscoveryCatalogTabsProps {
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onPluginAction: (record: RepositoryPluginDescriptor, action: "install" | "update", force?: boolean) => Promise<void>;
+  onKnowledgeInstall: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
+  onKnowledgeUninstall: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
   onNavigate: (path: string) => void;
 }
 
@@ -62,16 +68,19 @@ export function DiscoveryCatalogTabs({
   loading,
   actionKey,
   packageActionKey,
+  knowledgeActionKey,
   filteredTools,
   filteredWebhooks,
   filteredPackages,
   filteredSkills,
   filteredPlugins,
+  filteredKnowledge,
   onOpenToolDetail,
   onOpenWebhookDetail,
   onOpenPackageDetail,
   onOpenSkillDetail,
   onOpenSkillInstall,
+  onOpenKnowledgeDetail,
   onToolLocalAssetAction,
   onAddToolToLocal,
   onWebhookLocalAssetAction,
@@ -79,6 +88,8 @@ export function DiscoveryCatalogTabs({
   onPackageInstall,
   onPackageUninstall,
   onPluginAction,
+  onKnowledgeInstall,
+  onKnowledgeUninstall,
   onNavigate
 }: DiscoveryCatalogTabsProps) {
   const toolColumns: ColumnsType<RepositoryScriptDescriptor> = [
@@ -367,6 +378,59 @@ export function DiscoveryCatalogTabs({
     }
   ];
 
+  const knowledgeColumns: ColumnsType<RepositoryKnowledgeDescriptor> = [
+    {
+      title: "知识源",
+      key: "knowledge",
+      width: "25%",
+      render: (_value, record) => (
+        <Space direction="vertical" size={2}>
+          <TableLinkCell onClick={() => void onOpenKnowledgeDetail(record)}>{record.displayName}</TableLinkCell>
+          <Text code>{record.repositoryId}/{record.knowledgeId}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "说明",
+      dataIndex: "description",
+      key: "description",
+      width: "45%",
+      render: (value?: string) => value || <Text type="secondary">-</Text>
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 180,
+      render: (_value, record) => (
+        <Space wrap size={[4, 4]}>
+          <Button size="small" onClick={() => void onOpenKnowledgeDetail(record)}>
+            查看
+          </Button>
+          {record.installed ? (
+            <Button
+              size="small"
+              danger
+              loading={knowledgeActionKey === `uninstall:${record.repositoryId}:${record.knowledgeId}`}
+              onClick={() => void onKnowledgeUninstall(record)}
+            >
+              卸载
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={knowledgeActionKey === `install:${record.repositoryId}:${record.knowledgeId}`}
+              onClick={() => void onKnowledgeInstall(record)}
+            >
+              安装
+            </Button>
+          )}
+        </Space>
+      )
+    }
+  ];
+
   return (
     <Tabs
       defaultActiveKey="scripts"
@@ -387,6 +451,28 @@ export function DiscoveryCatalogTabs({
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description="当前没有可发现的脚本。先到仓库管理页添加并同步仓库。"
+                  />
+                )
+              }}
+            />
+          )
+        },
+        {
+          key: "knowledge",
+          label: `知识源 (${filteredKnowledge.length})`,
+          children: (
+            <Table<RepositoryKnowledgeDescriptor>
+              rowKey={(item) => `${item.repositoryId}:${item.knowledgeId}`}
+              loading={loading}
+              columns={knowledgeColumns}
+              dataSource={filteredKnowledge}
+              scroll={{ x: 900 }}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+              locale={{
+                emptyText: (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="当前没有可发现的知识源。"
                   />
                 )
               }}
