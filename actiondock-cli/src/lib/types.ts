@@ -610,9 +610,11 @@ export interface KnowledgeFile {
   description?: string;
   source: KnowledgeSource;
   tags: string[];
+  configTemplatePath?: string;
 }
 
 export interface RepositoryKnowledgeDetail {
   descriptor: RepositoryKnowledgeDescriptor;
   knowledge: KnowledgeFile;
+  configTemplate: RepositoryConfigTemplateItem[];
 }

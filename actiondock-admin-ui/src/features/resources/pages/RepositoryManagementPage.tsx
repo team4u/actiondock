@@ -7,6 +7,7 @@ import {
   SyncOutlined
 } from "@ant-design/icons";
 import {
+  Alert,
   Button,
   Card,
   Drawer,
@@ -15,6 +16,7 @@ import {
   Input,
   Select,
   Space,
+  Spin,
   Switch,
   Table,
   Tabs,
@@ -28,6 +30,7 @@ import {
   createRepository,
   deleteRepository,
   listRepositories,
+  previewRepositoryKnowledgePublish,
   publishRepositoryKnowledge,
   resolveProjectRepository,
   syncRepository,
@@ -41,7 +44,7 @@ import { InfoHint } from "../../../components/common/InfoHint";
 import { getRepositoryTypeLabel } from "../../../components/domain/typeLabels";
 import { suggestRepositoryId } from "../../../services/repositoryId";
 import { ApiError } from "../../../shared/api/httpClient";
-import type { ProjectRepositoryResolution, RepositoryDefinition, RepositoryPurpose } from "../../../shared/types";
+import type { ProjectRepositoryResolution, RepositoryDefinition, RepositoryPurpose, RepositoryPublishConfigCandidate } from "../../../shared/types";
 import { formatDateTime, getErrorMessage } from "../../../services/utils";
 
 const { Text, Paragraph } = Typography;
@@ -86,6 +89,10 @@ export function RepositoryManagementPage() {
 
   const [publishingProject, setPublishingProject] = useState<RepositoryDefinition | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [publishConfigLoading, setPublishConfigLoading] = useState(false);
+  const [publishConfigItems, setPublishConfigItems] = useState<RepositoryPublishConfigCandidate[]>([]);
+  const [publishMissingKeys, setPublishMissingKeys] = useState<string[]>([]);
+  const [publishConfigModes, setPublishConfigModes] = useState<Record<string, "INLINE" | "PLACEHOLDER">>({});
   const [publishForm] = Form.useForm();
 
   const loadData = async () => {
@@ -255,13 +262,39 @@ export function RepositoryManagementPage() {
       displayName: projectRepo.name,
       description: projectRepo.description || ""
     });
+    setPublishConfigItems([]);
+    setPublishMissingKeys([]);
+    setPublishConfigModes({});
     setPublishingProject(projectRepo);
+    setPublishConfigLoading(true);
+    void previewRepositoryKnowledgePublish({ projectRepositoryId: projectRepo.id })
+      .then((preview) => {
+        setPublishConfigItems(preview.items);
+        setPublishMissingKeys(preview.missingKeys);
+        setPublishConfigModes(Object.fromEntries(
+          preview.items.map((item) => [item.key, item.secret ? "PLACEHOLDER" : "PLACEHOLDER"])
+        ));
+      })
+      .catch((error) => {
+        setPublishConfigItems([]);
+        setPublishMissingKeys([]);
+        messageApi.error(getErrorMessage(error, "加载配置依赖失败"));
+      })
+      .finally(() => setPublishConfigLoading(false));
   };
 
   const handlePublishKnowledge = async () => {
     if (!publishingProject) return;
     try {
       const values = await publishForm.validateFields();
+      if (publishConfigLoading) {
+        messageApi.warning("正在分析配置依赖，请稍后再试");
+        return;
+      }
+      if (publishMissingKeys.length > 0) {
+        messageApi.error(`缺少发布依赖的配置值: ${publishMissingKeys.join(", ")}`);
+        return;
+      }
       setPublishing(true);
       await publishRepositoryKnowledge({
         projectRepositoryId: publishingProject.id,
@@ -269,10 +302,17 @@ export function RepositoryManagementPage() {
         knowledgeId: values.knowledgeId.trim(),
         displayName: values.displayName.trim(),
         description: values.description?.trim() || undefined,
-        tags: values.tags || []
+        tags: values.tags || [],
+        configItems: publishConfigItems.map((item) => ({
+          key: item.key,
+          publishMode: publishConfigModes[item.key] ?? "PLACEHOLDER"
+        }))
       });
       messageApi.success("知识源已发布到目标仓库");
       setPublishingProject(null);
+      setPublishConfigItems([]);
+      setPublishMissingKeys([]);
+      setPublishConfigModes({});
       publishForm.resetFields();
     } catch (error) {
       if (error instanceof ApiError) {
@@ -595,7 +635,7 @@ export function RepositoryManagementPage() {
               name="url"
               rules={[{ required: true, message: "请输入仓库地址或目录路径" }]}
             >
-              <Input placeholder={repositoryType === "LOCAL_DIR" ? "/Users/me/projects/billing-service" : "git@github.com:company/billing-service.git"} />
+              <Input placeholder={repositoryType === "LOCAL_DIR" ? "/Users/me/projects/${config.project_dir}" : "https://${config.github_token}@github.com/company/repo.git"} />
             </Form.Item>
 
             {repositoryPurpose === "CAPABILITY" && repositoryType === "LOCAL_DIR" ? (
@@ -708,6 +748,52 @@ export function RepositoryManagementPage() {
               <Form.Item label="标签" name="tags">
                 <Select mode="tags" placeholder="输入后按回车添加标签" />
               </Form.Item>
+
+              <Card type="inner" title={`配置模板 (${publishConfigItems.length})`}>
+                {publishConfigLoading ? (
+                  <div className="page-loading"><Spin size="large" /></div>
+                ) : (
+                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                    {publishMissingKeys.length > 0 ? (
+                      <Alert
+                        type="error"
+                        showIcon
+                        message="检测到缺失的配置依赖"
+                        description={publishMissingKeys.join(", ")}
+                      />
+                    ) : null}
+                    {publishConfigItems.length === 0 ? (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前项目仓库地址没有检测到配置引用" />
+                    ) : (
+                      publishConfigItems.map((item) => {
+                        const forcedPlaceholder = Boolean(item.secret);
+                        const selectedMode = forcedPlaceholder ? "PLACEHOLDER" : (publishConfigModes[item.key] ?? "PLACEHOLDER");
+                        return (
+                          <div key={item.key} className="repository-config-publish-row">
+                            <Space direction="vertical" size={2}>
+                              <Space wrap size={[8, 8]}>
+                                <Text code>{item.key}</Text>
+                                {item.secret ? <Tag color="gold">SECRET</Tag> : null}
+                              </Space>
+                              <Text type="secondary">{item.label || "未填写说明"}</Text>
+                            </Space>
+                            <Select
+                              value={selectedMode}
+                              disabled={forcedPlaceholder}
+                              style={{ width: 160 }}
+                              options={[
+                                { value: "PLACEHOLDER", label: "PLACEHOLDER" },
+                                ...(forcedPlaceholder ? [] : [{ value: "INLINE", label: "INLINE" }])
+                              ]}
+                              onChange={(value) => setPublishConfigModes((current) => ({ ...current, [item.key]: value }))}
+                            />
+                          </div>
+                        );
+                      })
+                    )}
+                  </Space>
+                )}
+              </Card>
             </Space>
           </Form>
         ) : null}

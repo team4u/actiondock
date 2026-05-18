@@ -1,5 +1,6 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.shared.NormalizeUtils;
 
@@ -52,14 +53,22 @@ public class RepositoryKnowledgeService {
         RepositoryIndexFile index = catalog.readRepositoryIndex(repository);
         RepositoryKnowledgeIndexEntry entry = findKnowledgeEntry(index, knowledgeId);
         KnowledgeFile knowledge = catalog.readKnowledgeFile(repository, entry.knowledgePath());
-        return new RepositoryKnowledgeDetail(toKnowledgeDescriptor(repository, entry), knowledge);
+        return new RepositoryKnowledgeDetail(
+                toKnowledgeDescriptor(repository, entry),
+                knowledge,
+                catalog.readOptionalFile(
+                        repository,
+                        catalog.parentDirectoryPath(entry.knowledgePath()).resolveNullable(knowledge.configTemplatePath()),
+                        ConfigTemplateItem.class
+                )
+        );
     }
 
     public RepositoryKnowledgeDescriptor installKnowledge(String repositoryId, String knowledgeId) {
+        RepositoryKnowledgeDetail detail = getRepositoryKnowledge(repositoryId, knowledgeId);
         RepositoryDefinition repository = catalog.getRepository(repositoryId);
-        RepositoryIndexFile index = catalog.readRepositoryIndex(repository);
-        RepositoryKnowledgeIndexEntry entry = findKnowledgeEntry(index, knowledgeId);
-        KnowledgeFile knowledge = catalog.readKnowledgeFile(repository, entry.knowledgePath());
+        RepositoryKnowledgeIndexEntry entry = findKnowledgeEntry(catalog.readRepositoryIndex(repository), knowledgeId);
+        KnowledgeFile knowledge = detail.knowledge();
         KnowledgeSource source = knowledge.source();
 
         String installedRepoId = buildInstalledRepositoryId(repositoryId, knowledgeId);
@@ -80,7 +89,10 @@ public class RepositoryKnowledgeService {
                 .setTrustLevel(isTrusted(repository) ? REPO_TRUST_TRUSTED : REPO_TRUST_UNTRUSTED);
 
         catalog.saveRepository(projectRepo);
-        catalog.syncRepository(installedRepoId);
+        catalog.getConfigTemplateSyncService().syncConfigTemplates(repositoryId, knowledgeId, "1.0.0", detail.configTemplate());
+        if (canAutoSyncProjectRepository(detail.configTemplate())) {
+            catalog.syncRepository(installedRepoId);
+        }
 
         return toKnowledgeDescriptor(repository, entry, installedRepoId);
     }
@@ -103,9 +115,27 @@ public class RepositoryKnowledgeService {
      * @param targetRepositoryId  目标能力仓库 ID
      * @param request             发布请求（knowledgeId、displayName、description、tags）
      */
-    public void publishKnowledge(String projectRepositoryId,
-                                  String targetRepositoryId,
-                                  PublishKnowledgeRequest request) {
+    public RepositoryPublishConfigPreview previewPublish(RepositoryKnowledgePublishPreviewRequest request) {
+        RepositoryDefinition projectRepo = catalog.getRepository(NormalizeUtils.normalize(
+                request == null ? null : request.projectRepositoryId(),
+                "projectRepositoryId 不能为空"
+        ));
+        RepositoryPublishConfigResolver.PublishConfigResolution resolution = RepositoryPublishConfigResolver.resolve(
+                projectRepo.getUrl(),
+                List.of(),
+                catalog.configValueRepository().findAll()
+        );
+        return new RepositoryPublishConfigPreview(
+                resolution.items().stream()
+                        .map(item -> new RepositoryPublishConfigCandidate(item.key(), item.label(), item.secret()))
+                        .toList(),
+                resolution.missingKeys()
+        );
+    }
+
+    public RepositoryKnowledgeDescriptor publishKnowledge(String projectRepositoryId,
+                                                           String targetRepositoryId,
+                                                           PublishKnowledgeRequest request) {
         RepositoryDefinition projectRepo = catalog.getRepository(projectRepositoryId);
 
         if (!REPO_PURPOSE_PROJECT.equals(projectRepo.getPurpose())) {
@@ -121,6 +151,14 @@ public class RepositoryKnowledgeService {
                 projectRepo.getBranch(),
                 DEFAULT_PROJECT_ENTRY_PATH
         );
+        RepositoryPublishConfigResolver.PublishConfigResolution configResolution = RepositoryPublishConfigResolver.resolve(
+                projectRepo.getUrl(),
+                List.of(),
+                catalog.configValueRepository().findAll()
+        );
+        List<ConfigTemplateItem> configTemplates = RepositoryPublishConfigResolver.buildTemplates(configResolution, request.configItems()).stream()
+                .sorted(Comparator.comparing(ConfigTemplateItem::key))
+                .toList();
 
         KnowledgeFile knowledgeFile = new KnowledgeFile(
                 1,
@@ -128,22 +166,44 @@ public class RepositoryKnowledgeService {
                 NormalizeUtils.normalize(request.displayName(), "displayName 不能为空"),
                 NormalizeUtils.normalizeNullable(request.description()),
                 source,
-                NormalizeUtils.nullSafeList(request.tags())
+                NormalizeUtils.nullSafeList(request.tags()),
+                configTemplates.isEmpty() ? null : KNOWLEDGE_CONFIG_TEMPLATE_FILE
         );
 
         Path knowledgeDir = session.root().resolve(KNOWLEDGE_DIR).resolve(knowledgeFile.knowledgeId());
         catalog.writeJson(knowledgeDir.resolve(KNOWLEDGE_MANIFEST_FILE), knowledgeFile);
+        if (!configTemplates.isEmpty()) {
+            catalog.writeJson(knowledgeDir.resolve(KNOWLEDGE_CONFIG_TEMPLATE_FILE), configTemplates);
+        }
 
         session.commitPublishedAsset(knowledgeFile.knowledgeId(), "1.0.0", null);
         catalog.refreshRepositoryCache(targetRepositoryId);
+        return getRepositoryKnowledge(targetRepositoryId, knowledgeFile.knowledgeId()).descriptor();
     }
 
     public record PublishKnowledgeRequest(
             String knowledgeId,
             String displayName,
             String description,
-            List<String> tags
+            List<String> tags,
+            List<RepositoryPublishConfigItem> configItems
     ) {
+        public PublishKnowledgeRequest(String knowledgeId,
+                                       String displayName,
+                                       String description,
+                                       List<String> tags) {
+            this(knowledgeId, displayName, description, tags, List.of());
+        }
+    }
+
+    private boolean canAutoSyncProjectRepository(List<ConfigTemplateItem> configTemplates) {
+        for (ConfigTemplateItem template : NormalizeUtils.nullSafeList(configTemplates)) {
+            ConfigValue value = catalog.configValueRepository().findByKey(template.key()).orElse(null);
+            if (value == null || NormalizeUtils.isBlank(value.getValue())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private RepositoryKnowledgeIndexEntry findKnowledgeEntry(RepositoryIndexFile index, String knowledgeId) {

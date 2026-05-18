@@ -5,6 +5,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
+import org.team4u.actiondock.domain.model.ConfigValue;
+import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 
@@ -29,12 +31,14 @@ class RepositoryKnowledgeServiceTest {
     Path tempDir;
 
     private InMemoryRepositoryDefinitionRepository definitionRepository;
+    private InMemoryConfigValueRepository configValueRepository;
     private RepositoryCatalogService catalogService;
     private RepositoryKnowledgeService knowledgeService;
 
     @BeforeEach
     void setUp() {
         definitionRepository = new InMemoryRepositoryDefinitionRepository();
+        configValueRepository = new InMemoryConfigValueRepository();
         catalogService = new RepositoryCatalogService(
                 new RepositoryCatalogService.Repositories(
                         definitionRepository,
@@ -43,7 +47,7 @@ class RepositoryKnowledgeServiceTest {
                         mock(org.team4u.actiondock.domain.port.ScriptRepository.class),
                         mock(org.team4u.actiondock.domain.port.ScriptScheduleRepository.class),
                         mock(org.team4u.actiondock.domain.port.ExecutionPresetRepository.class),
-                        mock(org.team4u.actiondock.domain.port.ConfigValueRepository.class),
+                        configValueRepository,
                         mock(org.team4u.actiondock.domain.port.WebhookRepository.class),
                         mock(org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository.class),
                         mock(org.team4u.actiondock.ai.api.AiModelProfileRepository.class),
@@ -52,7 +56,7 @@ class RepositoryKnowledgeServiceTest {
                 ),
                 new RepositoryCatalogService.ApplicationServices(
                         mock(org.team4u.actiondock.application.ScriptApplicationService.class),
-                        mock(org.team4u.actiondock.application.ConfigValueApplicationService.class),
+                        new org.team4u.actiondock.application.ConfigValueApplicationService(configValueRepository),
                         mock(org.team4u.actiondock.plugin.PluginRuntimeService.class)
                 ),
                 jsonCodec,
@@ -190,6 +194,92 @@ class RepositoryKnowledgeServiceTest {
     }
 
     @Test
+    void previewPublishDetectsConfigReferencesFromProjectRepositoryUrl() {
+        configValueRepository.save(new ConfigValue()
+                .setKey("git.token")
+                .setValue("secret")
+                .setSecret(true)
+                .setDescription("Git Token"));
+        definitionRepository.save(new RepositoryDefinition()
+                .setId("project-repo")
+                .setName("Project Repo")
+                .setType(REPO_TYPE_GIT)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("https://${config.git.token}@github.com/team/project.git")
+                .setEnabled(true));
+
+        RepositoryPublishConfigPreview preview = knowledgeService.previewPublish(
+                new RepositoryKnowledgePublishPreviewRequest("project-repo")
+        );
+
+        assertThat(preview.missingKeys()).isEmpty();
+        assertThat(preview.items()).singleElement().satisfies(item -> {
+            assertThat(item.key()).isEqualTo("git.token");
+            assertThat(item.secret()).isTrue();
+        });
+    }
+
+    @Test
+    void publishKnowledgeWritesConfigTemplateAndKeepsSourceUrlTemplate() throws Exception {
+        Path targetRepoRoot = tempDir.resolve("target-cap-repo");
+        createCapabilityRepo("target-cap", targetRepoRoot);
+        configValueRepository.save(new ConfigValue()
+                .setKey("project.path")
+                .setValue("/tmp/project")
+                .setSecret(false)
+                .setDescription("Project Path"));
+        definitionRepository.save(new RepositoryDefinition()
+                .setId("project-repo")
+                .setName("Project Repo")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("${config.project.path}")
+                .setEnabled(true));
+
+        RepositoryKnowledgeDescriptor descriptor = knowledgeService.publishKnowledge(
+                "project-repo",
+                "target-cap",
+                new RepositoryKnowledgeService.PublishKnowledgeRequest(
+                        "project-docs",
+                        "Project Docs",
+                        "Docs",
+                        List.of("docs"),
+                        List.of(new RepositoryPublishConfigItem("project.path", "INLINE"))
+                )
+        );
+        RepositoryKnowledgeDetail detail = knowledgeService.getRepositoryKnowledge("target-cap", "project-docs");
+
+        assertThat(descriptor.knowledgeId()).isEqualTo("project-docs");
+        assertThat(detail.knowledge().source().url()).isEqualTo("${config.project.path}");
+        assertThat(detail.knowledge().configTemplatePath()).isEqualTo(KNOWLEDGE_CONFIG_TEMPLATE_FILE);
+        assertThat(detail.configTemplate()).singleElement().satisfies(item -> {
+            assertThat(item.key()).isEqualTo("project.path");
+            assertThat(item.defaultValue()).isEqualTo("/tmp/project");
+        });
+    }
+
+    @Test
+    void installKnowledgeSyncsConfigTemplateBeforeAutoSync() throws Exception {
+        Path repoRoot = tempDir.resolve("config-install-repo");
+        Path knowledgeTarget = tempDir.resolve("config-install-target");
+        Files.createDirectories(knowledgeTarget);
+        Files.writeString(knowledgeTarget.resolve("ACTIONDOCK.md"), "# Config Install");
+        setupKnowledgeEntry(repoRoot, "config-k", "配置知识", "描述",
+                new KnowledgeSource(REPO_TYPE_LOCAL_DIR, "${config.project.path}", null, null), List.of(),
+                List.of(new ConfigTemplateItem("project.path", "Project Path", "string", false, false, knowledgeTarget.toString())));
+        createCapabilityRepo("config-install-repo", repoRoot);
+
+        knowledgeService.installKnowledge("config-install-repo", "config-k");
+
+        ConfigValue synced = configValueRepository.findByKey("project.path").orElseThrow();
+        assertThat(synced.isManaged()).isTrue();
+        assertThat(synced.getValue()).isEqualTo(knowledgeTarget.toString());
+        RepositoryDefinition projectRepo = definitionRepository.findById("knowledge:config-install-repo:config-k").orElseThrow();
+        assertThat(projectRepo.getUrl()).isEqualTo("${config.project.path}");
+        assertThat(projectRepo.getLastSyncedAt()).isNotNull();
+    }
+
+    @Test
     void installKnowledgeThrowsWhenAlreadyInstalled() throws Exception {
         Path repoRoot = tempDir.resolve("dup-repo");
         Path knowledgeTarget = tempDir.resolve("dup-target");
@@ -316,11 +406,28 @@ class RepositoryKnowledgeServiceTest {
 
     private void setupKnowledgeEntry(Path repoRoot, String knowledgeId, String displayName,
                                        String description, KnowledgeSource source, List<String> tags) throws Exception {
+        setupKnowledgeEntry(repoRoot, knowledgeId, displayName, description, source, tags, List.of());
+    }
+
+    private void setupKnowledgeEntry(Path repoRoot, String knowledgeId, String displayName,
+                                       String description, KnowledgeSource source, List<String> tags,
+                                       List<ConfigTemplateItem> configTemplate) throws Exception {
         Path knowledgeDir = repoRoot.resolve(KNOWLEDGE_DIR).resolve(knowledgeId);
         Files.createDirectories(knowledgeDir);
 
-        KnowledgeFile knowledgeFile = new KnowledgeFile(1, knowledgeId, displayName, description, source, tags);
+        KnowledgeFile knowledgeFile = new KnowledgeFile(
+                1,
+                knowledgeId,
+                displayName,
+                description,
+                source,
+                tags,
+                configTemplate.isEmpty() ? null : KNOWLEDGE_CONFIG_TEMPLATE_FILE
+        );
         Files.writeString(knowledgeDir.resolve(KNOWLEDGE_MANIFEST_FILE), objectMapper.writeValueAsString(knowledgeFile));
+        if (!configTemplate.isEmpty()) {
+            Files.writeString(knowledgeDir.resolve(KNOWLEDGE_CONFIG_TEMPLATE_FILE), objectMapper.writeValueAsString(configTemplate));
+        }
     }
 
     private static final class TestJsonCodec implements JsonCodec {
@@ -387,6 +494,31 @@ class RepositoryKnowledgeServiceTest {
         @Override
         public void deleteById(String id) {
             store.remove(id);
+        }
+    }
+
+    private static class InMemoryConfigValueRepository implements ConfigValueRepository {
+        private final Map<String, ConfigValue> store = new HashMap<>();
+
+        @Override
+        public ConfigValue save(ConfigValue configValue) {
+            store.put(configValue.getKey(), configValue.copy());
+            return configValue.copy();
+        }
+
+        @Override
+        public Optional<ConfigValue> findByKey(String key) {
+            return Optional.ofNullable(store.get(key)).map(ConfigValue::copy);
+        }
+
+        @Override
+        public List<ConfigValue> findAll() {
+            return store.values().stream().map(ConfigValue::copy).toList();
+        }
+
+        @Override
+        public void deleteByKey(String key) {
+            store.remove(key);
         }
     }
 }

@@ -1045,7 +1045,7 @@ export interface RepositoryLocalAsset {
   updatedAt?: string;
 }
 
-export type ResourceLifecycleResourceType = "REPOSITORY_SCRIPT" | "REPOSITORY_WEBHOOK" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE";
+export type ResourceLifecycleResourceType = "REPOSITORY_SCRIPT" | "REPOSITORY_WEBHOOK" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE" | "REPOSITORY_KNOWLEDGE";
 export type ResourceLifecycleOperation = "install" | "update" | "add-local" | "update-local" | "publish" | "preview" | "uninstall";
 
 export interface ResourceLifecycleRequest<TPayload = Record<string, unknown>> {
@@ -1140,11 +1140,13 @@ export interface KnowledgeFile {
   description?: string;
   source: KnowledgeSource;
   tags: string[];
+  configTemplatePath?: string;
 }
 
 export interface RepositoryKnowledgeDetail {
   descriptor: RepositoryKnowledgeDescriptor;
   knowledge: KnowledgeFile;
+  configTemplate: RepositoryConfigTemplateItem[];
 }
 
 export interface SkillDeployment {
@@ -1362,6 +1364,20 @@ export interface RepositoryPublishConfigCandidate {
 export interface RepositoryPublishConfigPreview {
   items: RepositoryPublishConfigCandidate[];
   missingKeys: string[];
+}
+
+export interface RepositoryKnowledgePublishPreviewRequest {
+  projectRepositoryId: string;
+}
+
+export interface RepositoryKnowledgePublishRequest {
+  projectRepositoryId: string;
+  targetRepositoryId: string;
+  knowledgeId: string;
+  displayName: string;
+  description?: string;
+  tags?: string[];
+  configItems?: RepositoryPublishConfigItem[];
 }
 
 export interface RepositoryWebhookPublishPreviewRequest {

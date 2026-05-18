@@ -374,18 +374,18 @@ public class RepositoryController {
     }
 
     @PostMapping("/publish-knowledge")
-    public ApiResponse<Void> publishKnowledge(@RequestBody PublishKnowledgeRequest request) {
-        repositoryKnowledgeService.publishKnowledge(
+    public ApiResponse<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor> publishKnowledge(@RequestBody PublishKnowledgeRequest request) {
+        return ApiResponse.success(repositoryKnowledgeService.publishKnowledge(
                 request.projectRepositoryId(),
                 request.targetRepositoryId(),
                 new RepositoryKnowledgeService.PublishKnowledgeRequest(
                         request.knowledgeId(),
                         request.displayName(),
                         request.description(),
-                        request.tags()
+                        request.tags(),
+                        request.configItems()
                 )
-        );
-        return ApiResponse.success(null, "知识源发布完成");
+        ), "知识源发布完成");
     }
 
     private <T> ApiResponse<T> resolveForceAndApply(RepositoryPluginInstallRequest request,
@@ -410,7 +410,8 @@ public class RepositoryController {
             String knowledgeId,
             String displayName,
             String description,
-            List<String> tags
+            List<String> tags,
+            List<RepositoryCatalogTypes.RepositoryPublishConfigItem> configItems
     ) {
     }
 }

@@ -22,7 +22,7 @@ class RepositoryGitOperations {
         this.repositoriesRoot = repositoriesRoot;
     }
 
-    void syncGitRepository(RepositoryDefinition repository, Path root) {
+    void syncGitRepository(RepositoryDefinition repository, Path root, String remoteUrl) {
         try {
             Files.createDirectories(repositoriesRoot);
         } catch (IOException exception) {
@@ -34,8 +34,10 @@ class RepositoryGitOperations {
             if (branch != null) {
                 cloneCommand.addAll(List.of("--branch", branch, "--single-branch"));
             }
-            cloneCommand.addAll(List.of(repository.getUrl(), root.toString()));
-            GitCommandRunner.runGit(repositoriesRoot, cloneCommand);
+            cloneCommand.addAll(List.of(remoteUrl, root.toString()));
+            List<String> displayCommand = new ArrayList<>(cloneCommand);
+            displayCommand.set(displayCommand.size() - 2, repository.getUrl());
+            GitCommandRunner.runGit(repositoriesRoot, cloneCommand, displayCommand);
             return;
         }
         if (branch != null) {

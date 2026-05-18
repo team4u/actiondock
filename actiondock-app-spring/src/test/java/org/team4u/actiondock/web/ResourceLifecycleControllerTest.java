@@ -12,6 +12,7 @@ import org.team4u.actiondock.RuntimeApplication;
 import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
 import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
+import org.team4u.actiondock.repository.RepositoryKnowledgeService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
@@ -61,6 +62,9 @@ class ResourceLifecycleControllerTest {
 
     @MockBean
     private RepositoryCapabilityPackageService repositoryCapabilityPackageService;
+
+    @MockBean
+    private RepositoryKnowledgeService repositoryKnowledgeService;
 
     @Test
     void routesWebhookPublishThroughLifecycleFacade() throws Exception {

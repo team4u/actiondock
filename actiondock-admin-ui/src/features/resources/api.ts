@@ -9,6 +9,8 @@ import type {
   KnowledgeFile,
   ProjectRepositoryResolution,
   UpstreamStatus,
+  RepositoryKnowledgePublishPreviewRequest,
+  RepositoryKnowledgePublishRequest,
   RepositoryDefinition,
   RepositoryKnowledgeDescriptor,
   RepositoryKnowledgeDetail,
@@ -117,19 +119,22 @@ export function uninstallRepositoryKnowledge(repositoryId: string, knowledgeId: 
   });
 }
 
-export function publishRepositoryKnowledge(payload: {
-  projectRepositoryId: string;
-  targetRepositoryId: string;
-  knowledgeId: string;
-  displayName: string;
-  description?: string;
-  tags?: string[];
-}): Promise<void> {
-  return request<void>("/api/repositories/publish-knowledge", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
+export function previewRepositoryKnowledgePublish(
+  payload: RepositoryKnowledgePublishPreviewRequest
+): Promise<RepositoryPublishConfigPreview> {
+  return runResourceLifecycleOperation<RepositoryPublishConfigPreview, RepositoryKnowledgePublishPreviewRequest>({
+    resourceType: "REPOSITORY_KNOWLEDGE",
+    operation: "preview",
+    payload
+  }).then((operation) => operation.result);
+}
+
+export function publishRepositoryKnowledge(payload: RepositoryKnowledgePublishRequest): Promise<RepositoryKnowledgeDescriptor> {
+  return runResourceLifecycleOperation<RepositoryKnowledgeDescriptor, RepositoryKnowledgePublishRequest>({
+    resourceType: "REPOSITORY_KNOWLEDGE",
+    operation: "publish",
+    payload
+  }).then((operation) => operation.result);
 }
 
 export function listToolsByRepository(id: string): Promise<RepositoryScriptDescriptor[]> {

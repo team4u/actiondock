@@ -21,12 +21,20 @@ class GitCommandRunner {
     }
 
     static void runGit(Path workdir, List<String> command, boolean ignoreNothingToCommit) {
+        runGit(workdir, command, command, ignoreNothingToCommit);
+    }
+
+    static void runGit(Path workdir, List<String> command, List<String> displayCommand) {
+        runGit(workdir, command, displayCommand, false);
+    }
+
+    private static void runGit(Path workdir, List<String> command, List<String> displayCommand, boolean ignoreNothingToCommit) {
         GitResult result = executeGitCommand(workdir, command);
         if (result.exitCode() != 0 && ignoreNothingToCommit
                 && result.stderr().toLowerCase(Locale.ROOT).contains("nothing to commit")) {
             return;
         }
-        assertGitSuccess(result, command);
+        assertGitSuccess(result, displayCommand);
     }
 
     static String gitHead(Path root) {

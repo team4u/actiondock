@@ -131,10 +131,13 @@ public class RepositoryCatalogService {
                                     PluginArtifactResolverRegistry pluginArtifactResolverRegistry,
                                     RepositoryPluginService pluginService) {
         this.repos = repos;
+        ConfigValueApplicationService resolvedConfigValueService = services.configValueApplicationService() == null
+                ? ConfigValueApplicationService.disabled()
+                : services.configValueApplicationService();
         PluginRuntimeService resolvedPluginRuntimeService = services.pluginRuntimeService() == null ? PluginRuntimeService.disabled() : services.pluginRuntimeService();
         this.services = new ApplicationServices(
                 services.scriptApplicationService(),
-                services.configValueApplicationService(),
+                resolvedConfigValueService,
                 resolvedPluginRuntimeService
         );
         this.jsonCodec = jsonCodec;
@@ -147,7 +150,7 @@ public class RepositoryCatalogService {
                 ? AppProperties.defaultHomeDir()
                 : properties.getHomeDir()).resolve("repositories"));
         this.gitOps = new RepositoryGitOperations(repositoriesRoot);
-        this.definitionService = new RepositoryDefinitionService(repos.repositoryDefinitionRepository(), jsonCodec, repositoriesRoot);
+        this.definitionService = new RepositoryDefinitionService(repos.repositoryDefinitionRepository(), jsonCodec, repositoriesRoot, resolvedConfigValueService);
         this.aiPackageService = new RepositoryAiPackageService(this, repos, this.services);
         this.pluginRepositoryPublisher = new PluginRepositoryPublisher(this, aiPackageService);
         this.skillPublisher = new SkillRepositoryPublisher(this);
@@ -251,7 +254,7 @@ public class RepositoryCatalogService {
         RepositoryDefinition repository = getRepository(repositoryId);
         if (REPO_PURPOSE_PROJECT.equalsIgnoreCase(repository.getPurpose())) {
             switch (repository.getType()) {
-                case REPO_TYPE_GIT -> gitOps.syncGitRepository(repository, resolveRepositoryRoot(repository));
+                case REPO_TYPE_GIT -> gitOps.syncGitRepository(repository, resolveRepositoryRoot(repository), resolveRepositoryUrl(repository));
                 case REPO_TYPE_LOCAL_DIR -> {
                     Path root = resolveRepositoryRoot(repository);
                     if (!Files.isDirectory(root)) {
@@ -267,7 +270,7 @@ public class RepositoryCatalogService {
         switch (repository.getType()) {
             case REPO_TYPE_GIT -> {
                 Path root = resolveRepositoryRoot(repository);
-                gitOps.syncGitRepository(repository, root);
+                gitOps.syncGitRepository(repository, root, resolveRepositoryUrl(repository));
                 RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
             }
             case REPO_TYPE_LOCAL_DIR -> ensureLocalDirRepository(repository);
@@ -970,7 +973,7 @@ public class RepositoryCatalogService {
             ensureLocalDirRepository(repository);
         }
         if (REPO_TYPE_GIT.equals(repository.getType()) && Files.notExists(root)) {
-            gitOps.syncGitRepository(repository, root);
+            gitOps.syncGitRepository(repository, root, resolveRepositoryUrl(repository));
             RepositoryWorkspaceHelper.ensureRepositoryWorkspace(root, repository, jsonCodec);
         }
         return new RepositoryCatalogTypes.RepositoryIndexFile(
@@ -1113,7 +1116,7 @@ public class RepositoryCatalogService {
 
     private <T> T readRepositoryJsonFile(RepositoryDefinition repository, String relativePath, Class<T> type) {
         if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            return httpReader.readHttpJson(httpReader.joinHttpPath(repository.getUrl(), relativePath), type);
+            return httpReader.readHttpJson(httpReader.joinHttpPath(resolveRepositoryUrl(repository), relativePath), type);
         }
         return readJson(safeResolveRepositoryPath(resolveRepositoryRoot(repository), relativePath), type);
     }
@@ -1144,7 +1147,7 @@ public class RepositoryCatalogService {
 
     String readRepositoryFile(RepositoryDefinition repository, Path path) {
         if (REPO_TYPE_HTTP.equals(repository.getType())) {
-            return httpReader.readHttpText(httpReader.joinHttpPath(repository.getUrl(), path.toString().replace('\\', '/')));
+            return httpReader.readHttpText(httpReader.joinHttpPath(resolveRepositoryUrl(repository), path.toString().replace('\\', '/')));
         }
         try {
             return Files.readString(safeResolveRepositoryPath(resolveRepositoryRoot(repository), path.toString()), StandardCharsets.UTF_8);
@@ -1153,7 +1156,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private <T> List<T> readOptionalFile(RepositoryDefinition repository, RelativeRepositoryPath path, Class<T> elementType) {
+    <T> List<T> readOptionalFile(RepositoryDefinition repository, RelativeRepositoryPath path, Class<T> elementType) {
         if (path == null || NormalizeUtils.isBlank(path.value())) {
             return List.of();
         }
@@ -1163,6 +1166,10 @@ public class RepositoryCatalogService {
 
     Path resolveRepositoryRoot(RepositoryDefinition repository) {
         return definitionService.resolveRepositoryRoot(repository);
+    }
+
+    String resolveRepositoryUrl(RepositoryDefinition repository) {
+        return definitionService.resolveRepositoryUrl(repository);
     }
 
     private RepositoryDefinition findProjectRepository(String repositoryId) {

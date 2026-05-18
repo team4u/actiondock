@@ -12,6 +12,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositoryScriptService;
+import org.team4u.actiondock.repository.RepositoryKnowledgeService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
 import org.team4u.actiondock.shared.NormalizeUtils;
 import org.team4u.actiondock.web.common.ApiResponse;
@@ -32,6 +33,7 @@ public class ResourceLifecycleController {
     private static final String RESOURCE_REPOSITORY_WEBHOOK = "REPOSITORY_WEBHOOK";
     private static final String RESOURCE_REPOSITORY_PLUGIN = "REPOSITORY_PLUGIN";
     private static final String RESOURCE_CAPABILITY_PACKAGE = "CAPABILITY_PACKAGE";
+    private static final String RESOURCE_REPOSITORY_KNOWLEDGE = "REPOSITORY_KNOWLEDGE";
 
     private static final String OP_INSTALL = "install";
     private static final String OP_UPDATE = "update";
@@ -46,6 +48,7 @@ public class ResourceLifecycleController {
     private final RepositoryWebhookService repositoryWebhookService;
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
+    private final RepositoryKnowledgeService repositoryKnowledgeService;
     private final ObjectMapper objectMapper;
 
     public ResourceLifecycleController(RepositoryCatalogService repositoryCatalogService,
@@ -53,12 +56,14 @@ public class ResourceLifecycleController {
                                        RepositoryWebhookService repositoryWebhookService,
                                        RepositoryPluginService repositoryPluginService,
                                        RepositoryCapabilityPackageService repositoryCapabilityPackageService,
+                                       RepositoryKnowledgeService repositoryKnowledgeService,
                                        ObjectMapper objectMapper) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryToolService = repositoryToolService;
         this.repositoryWebhookService = repositoryWebhookService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
+        this.repositoryKnowledgeService = repositoryKnowledgeService;
         this.objectMapper = objectMapper;
     }
 
@@ -72,6 +77,7 @@ public class ResourceLifecycleController {
             case RESOURCE_REPOSITORY_WEBHOOK -> executeRepositoryWebhook(operation, safeRequest);
             case RESOURCE_REPOSITORY_PLUGIN -> executeRepositoryPlugin(operation, safeRequest);
             case RESOURCE_CAPABILITY_PACKAGE -> executeCapabilityPackage(operation, safeRequest);
+            case RESOURCE_REPOSITORY_KNOWLEDGE -> executeRepositoryKnowledge(operation, safeRequest);
             default -> throw new IllegalArgumentException("不支持的资源类型: " + resourceType);
         };
         return ApiResponse.success(
@@ -156,6 +162,29 @@ public class ResourceLifecycleController {
             case OP_PUBLISH -> repositoryCapabilityPackageService.publishCapabilityPackage(repositoryId,
                     requirePayload(request.getPayload(), RepositoryCatalogTypes.CapabilityPackagePublishRequest.class));
             default -> throw unsupported(operation, RESOURCE_CAPABILITY_PACKAGE);
+        };
+    }
+
+    private Object executeRepositoryKnowledge(String operation, ResourceLifecycleRequest request) {
+        return switch (operation) {
+            case OP_PREVIEW -> repositoryKnowledgeService.previewPublish(
+                    requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryKnowledgePublishPreviewRequest.class));
+            case OP_PUBLISH -> {
+                RepositoryCatalogTypes.RepositoryKnowledgePublishRequest payload =
+                        requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryKnowledgePublishRequest.class);
+                yield repositoryKnowledgeService.publishKnowledge(
+                        payload.projectRepositoryId(),
+                        payload.targetRepositoryId(),
+                        new RepositoryKnowledgeService.PublishKnowledgeRequest(
+                                payload.knowledgeId(),
+                                payload.displayName(),
+                                payload.description(),
+                                payload.tags(),
+                                payload.configItems()
+                        )
+                );
+            }
+            default -> throw unsupported(operation, RESOURCE_REPOSITORY_KNOWLEDGE);
         };
     }
 

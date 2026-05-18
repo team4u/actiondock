@@ -57,6 +57,8 @@ public final class RepositoryCatalogTypes {
     public static final String KNOWLEDGE_DIR = "knowledge";
     /** Knowledge 清单文件名。 */
     public static final String KNOWLEDGE_MANIFEST_FILE = "knowledge.json";
+    /** Knowledge 配置模板文件名。 */
+    public static final String KNOWLEDGE_CONFIG_TEMPLATE_FILE = "config.template.json";
     /** 仓库索引中的所有分节名称。 */
     public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR, KNOWLEDGE_DIR);
     /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
@@ -279,6 +281,22 @@ public final class RepositoryCatalogTypes {
     public record RepositoryPublishConfigPreview(
             List<RepositoryPublishConfigCandidate> items,
             List<String> missingKeys
+    ) {
+    }
+
+    public record RepositoryKnowledgePublishPreviewRequest(
+            String projectRepositoryId
+    ) {
+    }
+
+    public record RepositoryKnowledgePublishRequest(
+            String projectRepositoryId,
+            String targetRepositoryId,
+            String knowledgeId,
+            String displayName,
+            String description,
+            List<String> tags,
+            List<RepositoryPublishConfigItem> configItems
     ) {
     }
 
@@ -679,8 +697,17 @@ public final class RepositoryCatalogTypes {
             String displayName,
             String description,
             KnowledgeSource source,
-            List<String> tags
+            List<String> tags,
+            String configTemplatePath
     ) {
+        public KnowledgeFile(int schemaVersion,
+                             String knowledgeId,
+                             String displayName,
+                             String description,
+                             KnowledgeSource source,
+                             List<String> tags) {
+            this(schemaVersion, knowledgeId, displayName, description, source, tags, null);
+        }
     }
 
     public record RepositoryKnowledgeIndexEntry(
@@ -709,7 +736,8 @@ public final class RepositoryCatalogTypes {
 
     public record RepositoryKnowledgeDetail(
             RepositoryKnowledgeDescriptor descriptor,
-            KnowledgeFile knowledge
+            KnowledgeFile knowledge,
+            List<ConfigTemplateItem> configTemplate
     ) {
     }
 

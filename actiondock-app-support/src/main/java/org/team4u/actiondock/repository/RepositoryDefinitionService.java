@@ -1,5 +1,6 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
 import org.team4u.actiondock.domain.exception.ActionDockException;
@@ -26,13 +27,24 @@ class RepositoryDefinitionService {
     private final RepositoryDefinitionRepository repositoryDefinitionRepository;
     private final JsonCodec jsonCodec;
     private final Path repositoriesRoot;
+    private final ConfigValueApplicationService configValueApplicationService;
 
     RepositoryDefinitionService(RepositoryDefinitionRepository repositoryDefinitionRepository,
                                 JsonCodec jsonCodec,
                                 Path repositoriesRoot) {
+        this(repositoryDefinitionRepository, jsonCodec, repositoriesRoot, ConfigValueApplicationService.disabled());
+    }
+
+    RepositoryDefinitionService(RepositoryDefinitionRepository repositoryDefinitionRepository,
+                                JsonCodec jsonCodec,
+                                Path repositoriesRoot,
+                                ConfigValueApplicationService configValueApplicationService) {
         this.repositoryDefinitionRepository = repositoryDefinitionRepository;
         this.jsonCodec = jsonCodec;
         this.repositoriesRoot = repositoriesRoot;
+        this.configValueApplicationService = configValueApplicationService == null
+                ? ConfigValueApplicationService.disabled()
+                : configValueApplicationService;
     }
 
     List<RepositoryDefinition> listRepositories() {
@@ -88,9 +100,13 @@ class RepositoryDefinitionService {
 
     Path resolveRepositoryRoot(RepositoryDefinition repository) {
         if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
-            return Path.of(repository.getUrl());
+            return Path.of(resolveRepositoryUrl(repository));
         }
         return repositoriesRoot.resolve(repository.getId());
+    }
+
+    String resolveRepositoryUrl(RepositoryDefinition repository) {
+        return configValueApplicationService.resolveText(repository.getUrl());
     }
 
     RepositoryDefinitionRepository getRepositoryDefinitionRepository() {
