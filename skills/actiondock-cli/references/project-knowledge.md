@@ -105,7 +105,29 @@ actiondock repository sync <repositoryId> --json
 | `writeTextFile` | 创建或覆盖文本文件 |
 | `executeShellCommand` | 在项目目录下执行 Shell 命令 |
 
-典型用法：解析项目后，通过 `plugins.invoke('actiondock-workspace', 'listDirectory', { path: root })` 浏览目录结构，再通过 `viewTextFile` 读取具体文件。
+通过 CLI 调用：
+
+```bash
+# 浏览项目根目录结构
+actiondock plugin invoke actiondock-workspace listDirectory --path <root> --json
+
+# 读取项目中的某个文件
+actiondock plugin invoke actiondock-workspace viewTextFile --path <root>/docs/architecture.md --json
+
+# 读取文件指定行范围
+actiondock plugin invoke actiondock-workspace viewTextFile \
+  --args-json '{"path":"<root>/README.md","viewRange":"1,50"}' --json
+
+# 在项目目录下执行 Shell 命令
+actiondock plugin invoke actiondock-workspace executeShellCommand \
+  --args-json '{"command":"find <root>/src -name *.java | head -20"}' --json
+```
+
+如果不确定插件有哪些动作或参数，先查看插件详情（返回每个动作的 `inputSchema` 和 `outputSchema`）：
+
+```bash
+actiondock plugin get actiondock-workspace --json
+```
 
 ## 回答用户时要体现的依据
 
