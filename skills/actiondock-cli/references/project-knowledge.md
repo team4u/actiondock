@@ -92,6 +92,21 @@ actiondock repository sync <repositoryId> --json
 
 可以把这类文件统一理解为各类 `*ignore` 文件，通常不提供业务知识。
 
+## 浏览项目知识库
+
+解析项目仓库拿到 `root` 后，如果需要深入浏览项目目录和文件内容，需配合 `actiondock-workspace` 系统插件。
+
+该插件提供以下核心动作：
+
+| 动作 | 用途 |
+|------|------|
+| `listDirectory` | 列出目录下的文件和子目录 |
+| `viewTextFile` | 读取文本文件内容（支持行范围） |
+| `writeTextFile` | 创建或覆盖文本文件 |
+| `executeShellCommand` | 在项目目录下执行 Shell 命令 |
+
+典型用法：解析项目后，通过 `plugins.invoke('actiondock-workspace', 'listDirectory', { path: root })` 浏览目录结构，再通过 `viewTextFile` 读取具体文件。
+
 ## 回答用户时要体现的依据
 
 如果结论依赖项目知识库，回答里应明确指出依据来自：
@@ -105,6 +120,7 @@ actiondock repository sync <repositoryId> --json
 - `ACTIONDOCK.md`: 项目知识入口文件
 - `project repository`: 被注册为 `purpose=PROJECT` 的仓库
 - `knowledge source`: CAPABILITY 仓库中的知识源指针，安装后自动注册为 PROJECT 仓库
+- `actiondock-workspace`: 内置系统插件，提供目录浏览、文件读写和 Shell 命令执行能力，浏览知识库时需配合使用
 
 ## 通过知识源安装
 
