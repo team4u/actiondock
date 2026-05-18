@@ -103,7 +103,7 @@ actiondock repository sync <repositoryId> --json
 | `listDirectory` | 列出目录下的文件和子目录 |
 | `viewTextFile` | 读取文本文件内容（支持行范围） |
 | `writeTextFile` | 创建或覆盖文本文件 |
-| `executeShellCommand` | 在项目目录下执行 Shell 命令 |
+| `executeShellCommand` | 在项目目录下执行 Shell 命令（默认 Bash，Windows 优先 Git Bash；可通过 `shellPath` 指定 Shell，`allowedCommands` 限制可执行命令，支持超时设置） |
 
 通过 CLI 调用：
 
