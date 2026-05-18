@@ -104,6 +104,7 @@ actiondock repository sync <repositoryId> --json
 | `viewTextFile` | 读取文本文件内容（支持行范围） |
 | `writeTextFile` | 创建或覆盖文本文件 |
 | `executeShellCommand` | 在项目目录下执行 Shell 命令（默认 Bash，Windows 优先 Git Bash；可通过 `shellPath` 指定 Shell，`allowedCommands` 限制可执行命令，支持超时设置） |
+| `getSystemInfo` | 探测系统信息：工作区路径、系统环境（OS、Java 版本）、PATH 环境变量、可用 Shell（bash/sh/PowerShell/cmd）、常用命令版本（bash、python、python3、node、npm、npx、git、java、mvn），支持 `additionalCommands` 补充探测更多命令 |
 
 通过 CLI 调用：
 
@@ -121,6 +122,13 @@ actiondock plugin invoke actiondock-workspace viewTextFile \
 # 在项目目录下执行 Shell 命令
 actiondock plugin invoke actiondock-workspace executeShellCommand \
   --args-json '{"command":"find <root>/src -name *.java | head -20"}' --json
+
+# 探测系统信息（工作区、Shell、常用命令版本等）
+actiondock plugin invoke actiondock-workspace getSystemInfo --json
+
+# 探测系统信息并补充检测其他命令
+actiondock plugin invoke actiondock-workspace getSystemInfo \
+  --args-json '{"additionalCommands":["go","gradle","docker"]}' --json
 ```
 
 如果不确定插件有哪些动作或参数，先查看插件详情（返回每个动作的 `inputSchema` 和 `outputSchema`）：
