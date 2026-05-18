@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -542,9 +543,14 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         if (executable == null || executable.isBlank()) {
             return null;
         }
-        Path direct = Paths.get(executable);
-        if ((direct.isAbsolute() || executable.contains("/") || executable.contains("\\")) && Files.isExecutable(direct)) {
-            return direct.toAbsolutePath().normalize();
+        Path direct;
+        try {
+            direct = Paths.get(executable);
+        } catch (InvalidPathException exception) {
+            return null;
+        }
+        if (direct.isAbsolute() || executable.contains("/") || executable.contains("\\")) {
+            return Files.isExecutable(direct) ? direct.toAbsolutePath().normalize() : null;
         }
 
         String path = System.getenv("PATH");
@@ -558,7 +564,12 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
                 continue;
             }
             for (String candidate : candidates) {
-                Path resolved = Paths.get(entry, candidate);
+                Path resolved;
+                try {
+                    resolved = Paths.get(entry, candidate);
+                } catch (InvalidPathException exception) {
+                    continue;
+                }
                 if (Files.isRegularFile(resolved) && Files.isExecutable(resolved)) {
                     return resolved.toAbsolutePath().normalize();
                 }

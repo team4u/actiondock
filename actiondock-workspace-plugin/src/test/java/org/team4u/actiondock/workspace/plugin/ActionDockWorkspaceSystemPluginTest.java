@@ -190,4 +190,46 @@ class ActionDockWorkspaceSystemPluginTest {
         assertThat(shells).isNotEmpty();
         assertThat(shells.getFirst()).containsEntry("name", "/bin/sh");
     }
+
+    @Test
+    void getSystemInfoReportsMissingPathLikeShellAsUnavailable() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+        String shellPath = tempDir.resolve("missing").resolve("bash.exe").toString();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("getSystemInfo", null, Map.of(
+                "shellPath", shellPath
+        ));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> shells = (List<Map<String, Object>>) result.get("shells");
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(shells).isNotEmpty();
+        assertThat(shells.getFirst())
+                .containsEntry("name", shellPath)
+                .containsEntry("available", false)
+                .containsEntry("resolvedPath", null);
+    }
+
+    @Test
+    void getSystemInfoIgnoresInvalidShellPath() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+        String shellPath = "\u0000invalid";
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("getSystemInfo", null, Map.of(
+                "shellPath", shellPath
+        ));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> shells = (List<Map<String, Object>>) result.get("shells");
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(shells).isNotEmpty();
+        assertThat(shells.getFirst())
+                .containsEntry("name", shellPath)
+                .containsEntry("available", false)
+                .containsEntry("resolvedPath", null);
+    }
 }
