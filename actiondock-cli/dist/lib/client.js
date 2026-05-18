@@ -519,25 +519,6 @@ export class ActionDockClient {
             method: "POST"
         });
     }
-    async listRepositoryKnowledge(repositoryId) {
-        const path = repositoryId
-            ? `/api/repositories/${repositoryId}/knowledge`
-            : "/api/repositories/knowledge";
-        return this.requestJson(path);
-    }
-    async getRepositoryKnowledge(repositoryId, knowledgeId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}`);
-    }
-    async installRepositoryKnowledge(repositoryId, knowledgeId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}/install`, {
-            method: "POST"
-        });
-    }
-    async uninstallRepositoryKnowledge(repositoryId, knowledgeId) {
-        await this.requestJson(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}`, {
-            method: "DELETE"
-        });
-    }
     async requestJson(pathname, init) {
         const url = new URL(`${this.options.serverUrl}${pathname}`);
         const method = init?.method ?? "GET";
