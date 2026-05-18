@@ -20,6 +20,7 @@ import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
+import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
@@ -259,6 +260,7 @@ public class RepositoryCatalogService {
                 }
                 default -> throw new IllegalArgumentException("项目仓库类型仅支持 GIT / LOCAL_DIR");
             }
+            ensureProjectEntryFile(repository, resolveRepositoryRoot(repository));
             repository.setLastSyncedAt(LocalDateTime.now()).setUpdatedAt(LocalDateTime.now());
             return repos.repositoryDefinitionRepository().save(repository);
         }
@@ -293,7 +295,7 @@ public class RepositoryCatalogService {
         }
         Path entry = safeResolveProjectEntryPath(root);
         if (!Files.exists(entry)) {
-            throw new IllegalArgumentException("项目知识入口不存在: " + repository.getId());
+            throw new IllegalArgumentException("项目知识入口不存在，请重新同步仓库: " + repository.getId());
         }
         if (!Files.isRegularFile(entry)) {
             throw new IllegalArgumentException("项目知识入口必须是文件: " + repository.getId());
@@ -1174,6 +1176,26 @@ public class RepositoryCatalogService {
 
     private Path safeResolveProjectEntryPath(Path root) {
         return safeResolvePath(root, DEFAULT_PROJECT_ENTRY_PATH, "项目知识入口路径");
+    }
+
+    private void ensureProjectEntryFile(RepositoryDefinition repository, Path root) {
+        Path entry = safeResolveProjectEntryPath(root);
+        if (Files.exists(entry)) {
+            return;
+        }
+        String template = repos.configValueRepository()
+                .findByKey("system.project-entry-template")
+                .map(ConfigValue::getValue)
+                .orElse("## 优先阅读\n\n## 关键目录\n");
+        String content = services.configValueApplicationService() != null
+                ? services.configValueApplicationService().resolveText(template)
+                : template;
+        try {
+            Files.writeString(entry, content, StandardCharsets.UTF_8);
+            LOGGER.log(System.Logger.Level.INFO, "已自动创建项目知识入口: " + entry);
+        } catch (IOException exception) {
+            throw new IllegalStateException("创建项目知识入口失败: " + entry, exception);
+        }
     }
 
     private static boolean isTrusted(RepositoryDefinition repository) {

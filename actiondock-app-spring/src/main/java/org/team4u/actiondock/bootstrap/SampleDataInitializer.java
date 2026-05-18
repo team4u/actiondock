@@ -82,6 +82,21 @@ public class SampleDataInitializer implements CommandLineRunner {
                     .setDescription("发布到仓库时默认的维护人/作者名称"));
         }
 
+        if (configValueRepository.findByKey("system.project-entry-template").isEmpty()) {
+            configValueApplicationService.create(new ConfigValue()
+                    .setKey("system.project-entry-template")
+                    .setValue("""
+                        ## 优先阅读
+
+                        > 请在此处列出团队成员应首先阅读的关键文档。
+
+                        ## 关键目录
+
+                        > 请在此处列出项目的重要目录结构及说明。
+                        """)
+                    .setDescription("项目仓库 ACTIONDOCK.md 入口文件的默认模板，支持 ${config.xxx} 占位符"));
+        }
+
         try {
             repositoryCatalogService.refreshRepositoryCache();
         } catch (RuntimeException exception) {
