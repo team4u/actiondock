@@ -94,7 +94,7 @@ actiondock repository sync <repositoryId> --json
 
 ## 浏览项目知识库
 
-解析项目仓库拿到 `root` 后，如果需要深入浏览项目目录和文件内容，需配合 `actiondock-workspace` 系统插件。
+解析项目仓库拿到 `root` 后，如果需要深入浏览项目目录和文件内容，**必须通过 `actiondock-workspace` 系统插件**，不能使用本地文件读取命令。因为 ActionDock 可能运行在远端，项目文件不在本地，只有通过插件才能访问远端的仓库内容。
 
 该插件提供以下核心动作：
 
