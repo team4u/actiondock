@@ -1,0 +1,24 @@
+spring:
+  config:
+    import: classpath:runtime-common.yml
+  application:
+    name: actiondock-app-spring
+  h2:
+    console:
+      enabled: false
+
+server:
+  address: 127.0.0.1
+  port: 5177
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
