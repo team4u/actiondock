@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -41,17 +42,23 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
     private static final Map<String, List<String>> VERSION_COMMANDS = createVersionCommands();
 
     private final Path defaultBaseDir;
+    private final Function<String, Path> executableResolver;
 
     public ActionDockWorkspaceSystemPlugin() {
-        this.defaultBaseDir = Paths.get(".").toAbsolutePath().normalize().getRoot();
+        this((String) null);
     }
 
     public ActionDockWorkspaceSystemPlugin(String defaultBaseDir) {
+        this(defaultBaseDir, null);
+    }
+
+    ActionDockWorkspaceSystemPlugin(String defaultBaseDir, Function<String, Path> executableResolver) {
         if (defaultBaseDir == null || defaultBaseDir.isBlank()) {
             this.defaultBaseDir = Paths.get(".").toAbsolutePath().normalize().getRoot();
         } else {
             this.defaultBaseDir = Paths.get(defaultBaseDir).toAbsolutePath().normalize();
         }
+        this.executableResolver = executableResolver == null ? this::resolveExecutableFromPath : executableResolver;
     }
 
     @Override
@@ -432,7 +439,7 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         return result;
     }
 
-    private List<Map<String, Object>> commandInfo(Map<String, Object> values) throws IOException, InterruptedException {
+    private List<Map<String, Object>> commandInfo(Map<String, Object> values) {
         List<Map<String, Object>> result = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (String command : BUILTIN_COMMANDS) {
@@ -447,7 +454,7 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         return result;
     }
 
-    private Map<String, Object> probeBuiltinCommand(String command) throws IOException, InterruptedException {
+    private Map<String, Object> probeBuiltinCommand(String command) {
         Map<String, Object> item = baseCommandProbe(command, "builtin");
         List<String> versionCommand = VERSION_COMMANDS.get(command);
         item.put("versionCommand", versionCommand == null ? null : String.join(" ", versionCommand));
@@ -458,11 +465,25 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
             return item;
         }
 
-        Map<String, Object> version = runDirectCommand(versionCommand, DEFAULT_VERSION_TIMEOUT_SECONDS, DEFAULT_MAX_OUTPUT_BYTES);
-        String text = firstNonBlank((String) version.get("stdout"), (String) version.get("stderr"));
-        item.put("versionText", text == null ? "" : text.strip());
-        item.put("versionExitCode", version.get("exitCode"));
-        item.put("versionTimedOut", version.get("timedOut"));
+        try {
+            List<String> resolvedVersionCommand = resolvedVersionCommand(versionCommand, (String) item.get("resolvedPath"));
+            Map<String, Object> version = runDirectCommand(resolvedVersionCommand, DEFAULT_VERSION_TIMEOUT_SECONDS, DEFAULT_MAX_OUTPUT_BYTES);
+            String text = firstNonBlank((String) version.get("stdout"), (String) version.get("stderr"));
+            item.put("versionText", text == null ? "" : text.strip());
+            item.put("versionExitCode", version.get("exitCode"));
+            item.put("versionTimedOut", version.get("timedOut"));
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            item.put("versionText", null);
+            item.put("versionExitCode", null);
+            item.put("versionTimedOut", false);
+            item.put("versionError", exception.getMessage());
+        } catch (IOException exception) {
+            item.put("versionText", null);
+            item.put("versionExitCode", null);
+            item.put("versionTimedOut", false);
+            item.put("versionError", exception.getMessage());
+        }
         return item;
     }
 
@@ -483,6 +504,15 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         item.put("available", resolved != null);
         item.put("resolvedPath", resolved == null ? null : resolved.toString());
         return item;
+    }
+
+    private List<String> resolvedVersionCommand(List<String> command, String resolvedExecutable) {
+        if (command.isEmpty() || resolvedExecutable == null || resolvedExecutable.isBlank()) {
+            return command;
+        }
+        List<String> result = new ArrayList<>(command);
+        result.set(0, resolvedExecutable);
+        return result;
     }
 
     private Map<String, Object> runDirectCommand(List<String> command,
@@ -540,6 +570,10 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
     }
 
     private Path resolveExecutable(String executable) {
+        return executableResolver.apply(executable);
+    }
+
+    private Path resolveExecutableFromPath(String executable) {
         if (executable == null || executable.isBlank()) {
             return null;
         }

@@ -106,7 +106,7 @@ class ActionDockWorkspaceSystemPluginTest {
 
     @Test
     void executeShellCommandReturnsStdout() {
-        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(Path.of(".").toAbsolutePath().normalize().toString());
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
@@ -173,6 +173,32 @@ class ActionDockWorkspaceSystemPluginTest {
         assertThat(byName.get("docker")).containsEntry("source", "additional");
         assertThat(byName.get("docker")).containsEntry("versionCommand", null);
         assertThat(byName.get("custom-tool")).containsEntry("versionCommand", null);
+    }
+
+    @Test
+    void getSystemInfoReportsVersionProbeFailuresPerCommand() {
+        Path missingExecutable = tempDir.resolve("missing-npm");
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(
+                tempDir.toString(),
+                command -> "npm".equals(command) ? missingExecutable : null
+        );
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("getSystemInfo", null, Map.of());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> commands = (List<Map<String, Object>>) result.get("commands");
+        Map<String, Map<String, Object>> byName = new LinkedHashMap<>();
+        commands.forEach(entry -> byName.put(String.valueOf(entry.get("name")), entry));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(byName.get("npm"))
+                .containsEntry("available", true)
+                .containsEntry("resolvedPath", missingExecutable.toString())
+                .containsEntry("versionText", null)
+                .containsEntry("versionExitCode", null)
+                .containsEntry("versionTimedOut", false)
+                .containsKey("versionError");
     }
 
     @Test
