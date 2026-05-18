@@ -44,6 +44,7 @@ beforeAll(async () => {
               name: "Published Tool",
               type: "GROOVY",
               packaging: "TOOL",
+              description: "Generate a published greeting",
               inputSchema: {
                 type: "object",
                 required: ["name"],
@@ -92,6 +93,7 @@ beforeAll(async () => {
             name: "Published Tool",
             type: "GROOVY",
             packaging: "TOOL",
+            description: "Generate a published greeting",
             inputSchema: {
               type: "object",
               required: ["name"],
@@ -119,6 +121,7 @@ beforeAll(async () => {
           name: "Published Tool",
           type: "GROOVY",
           packaging: "TOOL",
+          description: "Generate a published greeting",
           inputSchema: {
             type: "object",
             required: ["name"],
@@ -611,10 +614,13 @@ beforeAll(async () => {
         data: {
           pluginId: "plugin-a",
           name: "Plugin A",
+          description: "Plugin A tools",
           version: "1.2.3",
           actions: [
             {
               action: "summarize",
+              title: "Summarize",
+              description: "Summarize a topic",
               inputSchema: {
                 type: "object",
                 required: ["topic"],
@@ -1234,6 +1240,9 @@ describe("CLI integration", () => {
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
         target: "published",
+        script: expect.objectContaining({
+          description: "Generate a published greeting"
+        }),
         flagFields: [
           expect.objectContaining({ name: "name" }),
           expect.objectContaining({ name: "count" })
@@ -1243,6 +1252,10 @@ describe("CLI integration", () => {
         ]
       })
     );
+
+    const textResult = await runCli(["script", "schema", "published-tool", "--server", baseUrl]);
+    expect(textResult.status).toBe(0);
+    expect(textResult.stdout).toContain("Description: Generate a published greeting");
   });
 
   it("runs a published script with flat flags and merged JSON input", async () => {
@@ -1795,6 +1808,11 @@ describe("CLI integration", () => {
         version: "1.2.3"
       })
     );
+
+    const detailText = await runCli(["plugin", "get", "plugin-a", "--server", baseUrl]);
+    expect(detailText.status).toBe(0);
+    expect(detailText.stdout).toContain("Description: Plugin A tools");
+    expect(detailText.stdout).toContain("summarize (Summarize) - Summarize a topic");
 
     const config = await runCli(["plugin", "config", "get", "plugin-a", "--server", baseUrl, "--json"]);
     expect(config.status).toBe(0);

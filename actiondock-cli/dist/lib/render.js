@@ -18,6 +18,9 @@ export function renderSchemaDetail(params) {
         `Script: ${script.id}${script.name ? ` (${script.name})` : ""}`,
         `Target: ${target}`,
     ];
+    if (script.description) {
+        lines.push(`Description: ${script.description}`);
+    }
     if (fields.length === 0) {
         lines.push("Input schema: none");
         return lines.join("\n");
@@ -445,6 +448,9 @@ export function renderPluginDetail(plugin) {
     const lines = [
         `Plugin: ${plugin.pluginId}${plugin.name ? ` (${plugin.name})` : ""}`,
     ];
+    if (plugin.description) {
+        lines.push(`Description: ${plugin.description}`);
+    }
     if (plugin.version) {
         lines.push(`Version: ${plugin.version}`);
     }
@@ -463,7 +469,7 @@ export function renderPluginDetail(plugin) {
     else {
         lines.push("Actions:");
         for (const action of plugin.actions) {
-            lines.push(`  ${action.action}${action.title ? ` (${action.title})` : ""}`);
+            lines.push(`  ${action.action}${action.title ? ` (${action.title})` : ""}${action.description ? ` - ${action.description}` : ""}`);
         }
     }
     return lines.join("\n");

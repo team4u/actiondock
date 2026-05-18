@@ -40,7 +40,8 @@ export default class ScriptSchemaCommand extends BaseCommand {
                 script: {
                     id: script.id,
                     name: script.name,
-                    type: script.type
+                    type: script.type,
+                    description: script.description
                 },
                 target: flags.draft ? "draft" : "published",
                 inputSchema: schema ?? {},
