@@ -444,6 +444,7 @@ export function ScriptRunPage() {
                       inputOverride={executedInput ?? undefined}
                       pollingExecutionId={pollingExecutionId}
                       title="结果"
+                      messageApi={messageApi}
                     />
                   ) : (
                     <Card className="run-panel run-panel--output" title="结果">

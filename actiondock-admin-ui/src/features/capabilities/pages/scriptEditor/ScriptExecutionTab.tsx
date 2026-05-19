@@ -369,6 +369,7 @@ export function ScriptExecutionTab({
             outputSchema={currentScript?.outputSchema}
             title="执行记录"
             showTriggerSource={true}
+            messageApi={messageApi}
             headerActions={
               <Button
                 icon={<HistoryOutlined />}

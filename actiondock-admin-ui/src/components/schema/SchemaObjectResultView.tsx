@@ -1,10 +1,12 @@
-import { Alert, Form, Input, InputNumber, Segmented, Select, Space, Switch, Typography } from "antd";
+import { CopyOutlined } from "@ant-design/icons";
+import { Alert, Button, Form, Input, InputNumber, Segmented, Select, Space, Switch, Tooltip, Typography } from "antd";
+import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useState } from "react";
 import { useColorMode } from "../../shared/contexts/ColorModeContext";
 import { resolveSchemaFields, type SchemaFieldDefinition } from "../../services/schema";
 import { CodeEditor } from "../common/CodeEditor";
 import { MarkdownDescription } from "../common/MarkdownDescription";
-import { prettyJson } from "../../services/utils";
+import { copyText, prettyJson } from "../../services/utils";
 
 const { Text } = Typography;
 
@@ -93,16 +95,48 @@ function renderReadonlyField(field: SchemaFieldDefinition, value: unknown, edito
   return <Input value={formatTextValue(value)} readOnly />;
 }
 
+function FieldLabelWithCopy({
+  label,
+  value,
+  messageApi
+}: {
+  label: string;
+  value: unknown;
+  messageApi?: MessageInstance;
+}) {
+  const textValue = formatTextValue(value);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <span>{label}</span>
+      <Tooltip title="复制">
+        <Button
+          size="small"
+          type="text"
+          icon={<CopyOutlined />}
+          style={{ marginInlineStart: "auto" }}
+          onClick={() => {
+            void copyText(textValue)
+              .then(() => messageApi?.success("已复制"))
+              .catch(() => messageApi?.error("复制失败"));
+          }}
+        />
+      </Tooltip>
+    </div>
+  );
+}
+
 export function SchemaObjectResultView({
   schema,
   value,
   schemaName = "outputSchema",
-  valueName = "输出"
+  valueName = "输出",
+  messageApi
 }: {
   schema?: Record<string, unknown>;
   value?: Record<string, unknown>;
   schemaName?: string;
   valueName?: string;
+  messageApi?: MessageInstance;
 }) {
   const { supportedFields, unsupportedFields } = resolveSchemaFields(schema);
   const editorTheme = useColorMode() === "dark" ? "vs-dark" : "vs-light";
@@ -145,9 +179,19 @@ export function SchemaObjectResultView({
               description={`以下字段请切换到 JSON 查看：${unsupportedFields.join(", ")}`}
             />
           ) : null}
-          <Form layout="vertical" disabled>
+          <Form layout="vertical">
             {supportedFields.map((field) => (
-              <Form.Item key={field.name} label={field.label} extra={field.description}>
+              <Form.Item
+                key={field.name}
+                label={
+                  <FieldLabelWithCopy
+                    label={field.label}
+                    value={resultValue[field.name]}
+                    messageApi={messageApi}
+                  />
+                }
+                extra={field.description}
+              >
                 {renderReadonlyField(field, resultValue[field.name], editorTheme)}
               </Form.Item>
             ))}

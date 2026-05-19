@@ -1,16 +1,35 @@
-import { Alert, Collapse, Descriptions, Space, Typography } from "antd";
+import { CopyOutlined } from "@ant-design/icons";
+import { Alert, Button, Collapse, Descriptions, Space, Typography } from "antd";
+import type { MessageInstance } from "antd/es/message/interface";
 import type { ErrorDetail } from "../../shared/types";
+import { copyText } from "../../services/utils";
 
 const { Text } = Typography;
+
+function formatErrorText(message?: string | null, detail?: ErrorDetail | null): string {
+  const parts: string[] = [];
+  if (message?.trim()) {
+    parts.push(message.trim());
+  }
+  if (detail?.type) {
+    parts.push(`异常类型: ${detail.type}`);
+  }
+  if (detail?.stackTrace) {
+    parts.push(detail.stackTrace);
+  }
+  return parts.join("\n\n");
+}
 
 export function ErrorDetailPanel({
   title = "执行失败",
   message,
-  detail
+  detail,
+  messageApi
 }: {
   title?: string;
   message?: string | null;
   detail?: ErrorDetail | null;
+  messageApi?: MessageInstance;
 }) {
   if (!message && !detail) {
     return null;
@@ -19,6 +38,13 @@ export function ErrorDetailPanel({
   const summary = message?.trim() || detail?.type || title;
   const hasStructuredDetail = Boolean(detail?.type || detail?.stackTrace);
 
+  const handleCopy = () => {
+    const text = formatErrorText(message, detail);
+    void copyText(text)
+      .then(() => messageApi?.success("已复制错误信息"))
+      .catch(() => messageApi?.error("复制失败"));
+  };
+
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
       <Alert
@@ -26,6 +52,11 @@ export function ErrorDetailPanel({
         showIcon
         message={title}
         description={summary}
+        action={
+          <Button size="small" type="text" icon={<CopyOutlined />} onClick={handleCopy}>
+            复制
+          </Button>
+        }
       />
       {hasStructuredDetail ? (
         <Collapse

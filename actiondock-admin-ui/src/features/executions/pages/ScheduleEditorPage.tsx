@@ -730,6 +730,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                             title="调试结果"
                             pollingExecutionId={pollingExecutionId}
                             errorTitle="调试执行失败"
+                            messageApi={messageApi}
                           />
                         )}
                       </Space>
@@ -803,6 +804,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
             outputSchema={selectedScript?.outputSchema}
             title="执行记录"
             showTriggerSource
+            messageApi={messageApi}
           />
         ) : null}
       </Drawer>
