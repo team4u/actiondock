@@ -13,6 +13,7 @@ import {
   installCapabilityPackage,
   installRepositoryKnowledge,
   installRepositoryPlugin,
+  listInstalledResources,
   listCapabilityPackages,
   listRepositories,
   listRepositoryWebhooks,
@@ -21,6 +22,7 @@ import {
   listRepositoryKnowledge,
   listRepositoryScripts,
   uninstallCapabilityPackage,
+  uninstallInstalledResource,
   uninstallRepositoryKnowledge,
   updateCapabilityPackage,
   updateRepositoryWebhookLocalAsset,
@@ -31,6 +33,7 @@ import { ApiError } from "../../../../shared/api/httpClient";
 import type {
   CapabilityPackageDescriptor,
   CapabilityPackageDetail,
+  InstalledResourceView,
   RepositoryDefinition,
   RepositoryKnowledgeDescriptor,
   RepositoryKnowledgeDetail,
@@ -82,9 +85,11 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const [skills, setSkills] = useState<RepositorySkillDescriptor[]>([]);
   const [plugins, setPlugins] = useState<RepositoryPluginDescriptor[]>([]);
   const [knowledge, setKnowledge] = useState<RepositoryKnowledgeDescriptor[]>([]);
+  const [installedResources, setInstalledResources] = useState<InstalledResourceView[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [packageActionKey, setPackageActionKey] = useState<string | null>(null);
+  const [installedResourceActionKey, setInstalledResourceActionKey] = useState<string | null>(null);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -117,12 +122,13 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [repositoryData, toolData, webhookData, packageData, skillData] = await Promise.all([
+      const [repositoryData, toolData, webhookData, packageData, skillData, installedResourceData] = await Promise.all([
         listRepositories(),
         listRepositoryScripts(),
         listRepositoryWebhooks(),
         listCapabilityPackages(),
-        listRepositorySkills()
+        listRepositorySkills(),
+        listInstalledResources()
       ]);
       const [pluginData, knowledgeData] = await Promise.all([
         listRepositoryPlugins(),
@@ -135,6 +141,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
       setSkills(skillData);
       setPlugins(pluginData);
       setKnowledge(knowledgeData);
+      setInstalledResources(installedResourceData);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载仓库目录失败"));
     } finally {
@@ -187,6 +194,34 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     installFilter,
     trustFilter
   }), [installFilter, knowledge, repositoryFilter, searchText, trustFilter]);
+
+  const filteredInstalledResources = useMemo(() => {
+    const tokens = searchText.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return installedResources.filter((resource) => {
+      if (repositoryFilter !== "ALL" && resource.repositoryId !== repositoryFilter) {
+        return false;
+      }
+      if (installFilter === "NOT_INSTALLED") {
+        return false;
+      }
+      if (installFilter === "ORPHAN" && !resource.orphan) {
+        return false;
+      }
+      const haystack = [
+        resource.displayName,
+        resource.id,
+        resource.description,
+        resource.repositoryId,
+        resource.repositoryName,
+        resource.upstreamId,
+        resource.version
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join(" ")
+        .toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }, [installFilter, installedResources, repositoryFilter, searchText]);
 
   const openDetail = useCallback(async (descriptor: RepositoryScriptDescriptor) => {
     setDetailOpen(true);
@@ -683,18 +718,46 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     }
   }, [loadData, messageApi, modal]);
 
+  const handleInstalledResourceUninstall = useCallback(async (resource: InstalledResourceView) => {
+    await modal.confirm({
+      title: "卸载已安装资源",
+      okText: "卸载",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Text>将删除本机已安装资源及其托管安装记录。</Text>
+          <Text code>{resource.type}:{resource.id}</Text>
+          {resource.orphan ? <Text type="warning">来源仓库已删除，卸载将使用本地安装记录完成清理。</Text> : null}
+        </Space>
+      )
+    });
+    setInstalledResourceActionKey(`uninstall:${resource.type}:${resource.id}`);
+    try {
+      await uninstallInstalledResource(resource.type, resource.id);
+      messageApi.success("资源已卸载");
+      await loadData();
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "卸载资源失败"));
+    } finally {
+      setInstalledResourceActionKey(null);
+    }
+  }, [loadData, messageApi, modal]);
+
   return {
     repositories,
     tools,
     loading,
     actionKey,
     packageActionKey,
+    installedResourceActionKey,
     filteredTools,
     filteredWebhooks,
     filteredPackages,
     filteredSkills,
     filteredPlugins,
     filteredKnowledge,
+    filteredInstalledResources,
     plugins,
     detailOpen,
     detailLoading,
@@ -740,6 +803,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     confirmAddWebhookToLocal,
     handlePackageInstall,
     handlePackageUninstall,
+    handleInstalledResourceUninstall,
     closeDetail: () => setDetailOpen(false),
     closeWebhookDetail: () => setWebhookDetailOpen(false),
     closePackageDetail: () => setPackageDetailOpen(false),

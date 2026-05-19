@@ -275,7 +275,13 @@ public class ConfigValueUsageAnalysisService {
         if (!value.isManaged() || value.getRepositoryId() == null || value.getRepositoryScriptId() == null) {
             return Optional.empty();
         }
-        RepositoryScriptDetail detail = services.getRepositoryScript().apply(value.getRepositoryId(), value.getRepositoryScriptId());
+        RepositoryScriptDetail detail;
+        try {
+            detail = services.getRepositoryScript().apply(value.getRepositoryId(), value.getRepositoryScriptId());
+        } catch (RuntimeException exception) {
+            log.log(System.Logger.Level.DEBUG, "托管配置来源不可用: {0}", exception.getMessage());
+            return Optional.empty();
+        }
         ConfigTemplateItem template = detail.configTemplate().stream()
                 .filter(item -> value.getKey().equals(item.key()))
                 .findFirst()

@@ -99,10 +99,21 @@ public class RepositoryKnowledgeService {
 
     public void uninstallKnowledge(String repositoryId, String knowledgeId) {
         String installedRepoId = buildInstalledRepositoryId(repositoryId, knowledgeId);
-        if (catalog.findRepository(installedRepoId).isEmpty()) {
-            throw new IllegalArgumentException("知识源未安装: " + knowledgeId);
+        uninstallKnowledgeByInstalledRepositoryId(installedRepoId, NormalizeUtils.normalize(knowledgeId, "knowledgeId 不能为空"));
+    }
+
+    public void uninstallKnowledgeByInstalledRepositoryId(String installedRepoId) {
+        uninstallKnowledgeByInstalledRepositoryId(installedRepoId, null);
+    }
+
+    private void uninstallKnowledgeByInstalledRepositoryId(String installedRepoId, String missingLabel) {
+        String normalizedInstalledRepoId = NormalizeUtils.normalize(installedRepoId, "installedRepositoryId 不能为空");
+        InstalledKnowledgeSource source = parseInstalledRepositoryId(normalizedInstalledRepoId);
+        if (catalog.findRepository(normalizedInstalledRepoId).isEmpty()) {
+            throw new IllegalArgumentException("知识源未安装: " + NormalizeUtils.normalizeOrDefault(missingLabel, normalizedInstalledRepoId));
         }
-        catalog.deleteRepository(installedRepoId);
+        catalog.deleteRepository(normalizedInstalledRepoId);
+        catalog.getConfigTemplateSyncService().removeManagedConfigTemplates(source.repositoryId(), source.knowledgeId());
     }
 
     /**
@@ -243,5 +254,24 @@ public class RepositoryKnowledgeService {
                 + NormalizeUtils.normalize(repositoryId, "repositoryId 不能为空")
                 + ":"
                 + NormalizeUtils.normalize(knowledgeId, "knowledgeId 不能为空");
+    }
+
+    public static boolean isInstalledKnowledgeRepositoryId(String repositoryId) {
+        return repositoryId != null && repositoryId.startsWith(KNOWLEDGE_REPO_ID_PREFIX);
+    }
+
+    private static InstalledKnowledgeSource parseInstalledRepositoryId(String installedRepoId) {
+        if (!isInstalledKnowledgeRepositoryId(installedRepoId)) {
+            throw new IllegalArgumentException("不是知识源安装仓库: " + installedRepoId);
+        }
+        String value = installedRepoId.substring(KNOWLEDGE_REPO_ID_PREFIX.length());
+        int splitAt = value.indexOf(':');
+        if (splitAt <= 0 || splitAt == value.length() - 1) {
+            throw new IllegalArgumentException("知识源安装仓库 ID 格式不合法: " + installedRepoId);
+        }
+        return new InstalledKnowledgeSource(value.substring(0, splitAt), value.substring(splitAt + 1));
+    }
+
+    private record InstalledKnowledgeSource(String repositoryId, String knowledgeId) {
     }
 }

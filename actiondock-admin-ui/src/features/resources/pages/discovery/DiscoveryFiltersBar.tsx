@@ -55,7 +55,8 @@ export function DiscoveryFiltersBar({
         options={[
           { value: "ALL", label: "全部状态" },
           { value: "INSTALLED", label: "已安装" },
-          { value: "NOT_INSTALLED", label: "未安装" }
+          { value: "NOT_INSTALLED", label: "未安装" },
+          { value: "ORPHAN", label: "来源仓库已删除" }
         ]}
       />
       <Select

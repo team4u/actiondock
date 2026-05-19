@@ -104,12 +104,23 @@ public class RepositoryCapabilityPackageService {
         CapabilityPackageInstallation installation = repos.capabilityPackageInstallationRepository()
                 .findByInstallationId(RepositoryCatalogTypes.capabilityPackageInstallationId(repositoryId, packageId))
                 .orElseThrow(() -> new IllegalArgumentException("能力包尚未安装: " + packageId));
+        uninstallCapabilityPackage(installation);
+    }
+
+    public void uninstallCapabilityPackageByInstallationId(String installationId) {
+        CapabilityPackageInstallation installation = repos.capabilityPackageInstallationRepository()
+                .findByInstallationId(NormalizeUtils.normalize(installationId, "installationId 不能为空"))
+                .orElseThrow(() -> new IllegalArgumentException("能力包尚未安装: " + installationId));
+        uninstallCapabilityPackage(installation);
+    }
+
+    private void uninstallCapabilityPackage(CapabilityPackageInstallation installation) {
         catalog.uninstallManagedCapabilityPackageAssets(installation);
         for (String presetId : installation.getPresetIds()) {
             repos.executionPresetRepository().deleteById(presetId);
         }
         repos.capabilityPackageInstallationRepository().deleteByInstallationId(installation.getInstallationId());
-        configTemplateSyncService.removeManagedConfigTemplates(repositoryId, packageId);
+        configTemplateSyncService.removeManagedConfigTemplates(installation.getRepositoryId(), installation.getPackageId());
     }
 
     /**

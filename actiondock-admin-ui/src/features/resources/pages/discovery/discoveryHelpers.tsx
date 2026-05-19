@@ -111,6 +111,9 @@ function matchesInstallFilter(installed: boolean, installFilter: InstallFilter):
   if (installFilter === "NOT_INSTALLED") {
     return !installed;
   }
+  if (installFilter === "ORPHAN") {
+    return false;
+  }
   return true;
 }
 

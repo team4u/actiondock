@@ -58,12 +58,14 @@ export function RepositoryDiscoveryPage() {
             actionKey={discovery.actionKey}
             packageActionKey={discovery.packageActionKey}
             knowledgeActionKey={discovery.knowledgeActionKey}
+            installedResourceActionKey={discovery.installedResourceActionKey}
             filteredTools={discovery.filteredTools}
             filteredWebhooks={discovery.filteredWebhooks}
             filteredPackages={discovery.filteredPackages}
             filteredSkills={discovery.filteredSkills}
             filteredPlugins={discovery.filteredPlugins}
             filteredKnowledge={discovery.filteredKnowledge}
+            filteredInstalledResources={discovery.filteredInstalledResources}
             onOpenToolDetail={discovery.openDetail}
             onOpenWebhookDetail={discovery.openWebhookDetail}
             onOpenPackageDetail={discovery.openPackageDetail}
@@ -79,6 +81,7 @@ export function RepositoryDiscoveryPage() {
             onPluginAction={discovery.handleRepositoryPluginAction}
             onKnowledgeInstall={discovery.handleKnowledgeInstall}
             onKnowledgeUninstall={discovery.handleKnowledgeUninstall}
+            onInstalledResourceUninstall={discovery.handleInstalledResourceUninstall}
             onNavigate={(path) => navigate(path)}
           />
         </Card>

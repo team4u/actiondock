@@ -7,6 +7,7 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
 import org.team4u.actiondock.domain.port.*;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.skill.SkillService;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
 import org.team4u.actiondock.ai.api.AiModelProfileRepository;
 import org.team4u.actiondock.ai.api.AiToolsetRepository;
@@ -202,5 +203,26 @@ public class RepositoryConfiguration {
     @Bean
     public RepositoryKnowledgeService repositoryKnowledgeService(RepositoryCatalogService repositoryCatalogService) {
         return new RepositoryKnowledgeService(repositoryCatalogService);
+    }
+
+    @Bean
+    public InstalledResourceService installedResourceService(RepositoryCatalogService repositoryCatalogService,
+                                                            RepositoryScriptService repositoryToolService,
+                                                            RepositoryWebhookService repositoryWebhookService,
+                                                            RepositoryCapabilityPackageService repositoryCapabilityPackageService,
+                                                            RepositoryKnowledgeService repositoryKnowledgeService,
+                                                            SkillService skillService,
+                                                            PluginRuntimeService pluginRuntimeService,
+                                                            ConfigValueApplicationService configValueApplicationService) {
+        return new InstalledResourceService(
+                repositoryCatalogService,
+                repositoryToolService,
+                repositoryWebhookService,
+                repositoryCapabilityPackageService,
+                repositoryKnowledgeService,
+                skillService,
+                pluginRuntimeService,
+                configValueApplicationService
+        );
     }
 }

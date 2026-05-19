@@ -19,6 +19,7 @@ export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
 export type RepositoryPurpose = "CAPABILITY" | "PROJECT";
 export type UpstreamSyncState = "SYNCED" | "LOCAL_CHANGES" | "REMOTE_CHANGES" | "DIVERGED";
+export type InstalledResourceType = "SCRIPT" | "WEBHOOK" | "CONFIG_VALUE" | "CAPABILITY_PACKAGE" | "KNOWLEDGE" | "SKILL" | "PLUGIN";
 
 export interface ForkFormValues {
   id: string;
@@ -691,6 +692,20 @@ export interface RepositoryDefinition {
   description?: string;
   lastSyncedAt?: string;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InstalledResourceView {
+  type: InstalledResourceType;
+  id: string;
+  displayName: string;
+  description?: string;
+  repositoryId?: string;
+  repositoryName?: string;
+  upstreamId?: string;
+  version?: string;
+  repositoryExists: boolean;
+  orphan: boolean;
   updatedAt?: string;
 }
 

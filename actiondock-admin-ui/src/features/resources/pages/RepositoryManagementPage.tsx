@@ -82,7 +82,6 @@ export function RepositoryManagementPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [editorState, setEditorState] = useState<EditorState | null>(null);
-  const [repositoryIdManuallyEdited, setRepositoryIdManuallyEdited] = useState(false);
   const [resolution, setResolution] = useState<ProjectRepositoryResolution | null>(null);
   const [resolutionOpen, setResolutionOpen] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
@@ -134,7 +133,6 @@ export function RepositoryManagementPage() {
       trustLevel: "UNTRUSTED",
       description: ""
     });
-    setRepositoryIdManuallyEdited(false);
     setEditorState({ mode: "create" });
   };
 
@@ -150,22 +148,20 @@ export function RepositoryManagementPage() {
       trustLevel: item.trustLevel,
       description: item.description ?? ""
     });
-    setRepositoryIdManuallyEdited(true);
     setEditorState({ mode: "edit", repositoryId: item.id });
   };
 
   const closeEditor = () => {
     setEditorState(null);
-    setRepositoryIdManuallyEdited(false);
     form.resetFields();
   };
 
   useEffect(() => {
-    if (editorState?.mode !== "create" || repositoryIdManuallyEdited) {
+    if (editorState?.mode !== "create") {
       return;
     }
     form.setFieldValue("id", suggestRepositoryId(repositoryType, repositoryUrl));
-  }, [editorState?.mode, form, repositoryIdManuallyEdited, repositoryType, repositoryUrl]);
+  }, [editorState?.mode, form, repositoryType, repositoryUrl]);
 
   const handleSubmit = async () => {
     try {
@@ -380,7 +376,7 @@ export function RepositoryManagementPage() {
           </Button>
           <ConfirmDangerAction
             title="确认删除这个仓库？"
-            description="删除后不会卸载已安装脚本，但将无法继续从该仓库同步或发布。"
+            description="删除仓库不会卸载已从发现页安装的脚本、Webhook、配置、能力包、知识源、插件或 Skill；这些资源会保留为已安装资源，可在发现页的“已安装”中继续卸载。"
             onConfirm={async () => {
               setDeletingId(record.id);
               try {
@@ -455,7 +451,7 @@ export function RepositoryManagementPage() {
           </Button>
           <ConfirmDangerAction
             title="确认删除这个项目仓库？"
-            description="删除后将无法继续通过 ActionDock 解析该项目知识入口。"
+            description="删除项目仓库后将无法继续解析该项目知识入口；如果它来自发现页安装的知识源，可在发现页的“已安装”中继续卸载。"
             onConfirm={async () => {
               setDeletingId(record.id);
               try {
@@ -575,21 +571,16 @@ export function RepositoryManagementPage() {
         >
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <Form.Item
-              label={<InfoHint label="仓库 ID" content="创建时会根据 Git 地址或目录名自动生成默认值。项目仓库的项目 ID 也直接使用这个值。" />}
+              label={<InfoHint label="仓库 ID" content="根据 Git 地址或目录名自动生成，无需手动输入。项目仓库的项目 ID 也直接使用这个值。" />}
               name="id"
               rules={[
-                { required: true, message: "请输入仓库 ID" },
+                { required: true, message: "请输入仓库地址以自动生成 ID" },
                 { pattern: /^[A-Za-z0-9._-]+$/, message: "仅支持字母、数字、点、中横线和下划线" }
               ]}
             >
               <Input
-                disabled={editorState?.mode === "edit"}
-                placeholder="例如 repo-platform 或 billing-service"
-                onChange={() => {
-                  if (editorState?.mode === "create") {
-                    setRepositoryIdManuallyEdited(true);
-                  }
-                }}
+                disabled
+                placeholder="根据地址自动生成"
               />
             </Form.Item>
 
@@ -642,9 +633,6 @@ export function RepositoryManagementPage() {
               <Text type="secondary">保存时会自动创建 scripts、webhooks、plugins、packages、skills 目录；资源列表会在启动和同步后扫描刷新。</Text>
             ) : null}
 
-            {repositoryPurpose === "PROJECT" ? (
-              <Text type="secondary">项目仓库不会初始化 actiondock.repository.json，只会在 Resolve 时读取根目录 ACTIONDOCK.md。</Text>
-            ) : null}
 
             {repositoryType === "GIT" ? (
               <Form.Item label="分支" name="branch">

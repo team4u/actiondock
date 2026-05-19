@@ -6,6 +6,7 @@ import type {
   CapabilityPackagePublishPreview,
   CapabilityPackagePublishPreviewRequest,
   CapabilityPackagePublishRequest,
+  InstalledResourceView,
   KnowledgeFile,
   ProjectRepositoryResolution,
   UpstreamStatus,
@@ -101,6 +102,18 @@ export function listRepositoryKnowledge(repositoryId?: string): Promise<Reposito
     return request<RepositoryKnowledgeDescriptor[]>(`/api/repositories/${encodeURIComponent(repositoryId)}/knowledge`);
   }
   return request<RepositoryKnowledgeDescriptor[]>("/api/repositories/knowledge");
+}
+
+export function listInstalledResources(): Promise<InstalledResourceView[]> {
+  return request<InstalledResourceView[]>("/api/installed-resources");
+}
+
+export function uninstallInstalledResource(type: string, id: string): Promise<void> {
+  return request<void>("/api/installed-resources/uninstall", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ type, id })
+  });
 }
 
 export function getRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<RepositoryKnowledgeDetail> {

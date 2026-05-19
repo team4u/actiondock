@@ -2,6 +2,7 @@ package org.team4u.actiondock.domain.port;
 
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -13,6 +14,8 @@ public interface CapabilityPackageInstallationRepository {
     Optional<CapabilityPackageInstallation> findByInstallationId(String installationId);
 
     Optional<CapabilityPackageInstallation> findByEntryAgentId(String entryAgentId);
+
+    List<CapabilityPackageInstallation> findAll();
 
     void deleteByInstallationId(String installationId);
 }

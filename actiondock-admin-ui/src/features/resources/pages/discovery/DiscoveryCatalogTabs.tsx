@@ -6,6 +6,7 @@ import { TrustLevelTag } from "../../../../components/domain/TrustLevelTag";
 import { getUpstreamActionLabel } from "../../../../components/domain/UpstreamSyncTag";
 import type {
   CapabilityPackageDescriptor,
+  InstalledResourceView,
   RepositoryKnowledgeDescriptor,
   RepositoryWebhookDescriptor,
   RepositoryPluginDescriptor,
@@ -30,12 +31,14 @@ interface DiscoveryCatalogTabsProps {
   actionKey: string | null;
   packageActionKey: string | null;
   knowledgeActionKey: string | null;
+  installedResourceActionKey: string | null;
   filteredTools: RepositoryScriptDescriptor[];
   filteredWebhooks: RepositoryWebhookDescriptor[];
   filteredPackages: CapabilityPackageDescriptor[];
   filteredSkills: RepositorySkillDescriptor[];
   filteredPlugins: RepositoryPluginDescriptor[];
   filteredKnowledge: RepositoryKnowledgeDescriptor[];
+  filteredInstalledResources: InstalledResourceView[];
   onOpenToolDetail: (descriptor: RepositoryScriptDescriptor) => void | Promise<void>;
   onOpenWebhookDetail: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
   onOpenPackageDetail: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
@@ -61,20 +64,33 @@ interface DiscoveryCatalogTabsProps {
   onPluginAction: (record: RepositoryPluginDescriptor, action: "install" | "update", force?: boolean) => Promise<void>;
   onKnowledgeInstall: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
   onKnowledgeUninstall: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
+  onInstalledResourceUninstall: (resource: InstalledResourceView) => void | Promise<void>;
   onNavigate: (path: string) => void;
 }
+
+const installedResourceTypeLabels: Record<InstalledResourceView["type"], string> = {
+  SCRIPT: "脚本",
+  WEBHOOK: "Webhook",
+  CONFIG_VALUE: "配置",
+  CAPABILITY_PACKAGE: "能力包",
+  KNOWLEDGE: "知识源",
+  SKILL: "Skill",
+  PLUGIN: "插件"
+};
 
 export function DiscoveryCatalogTabs({
   loading,
   actionKey,
   packageActionKey,
   knowledgeActionKey,
+  installedResourceActionKey,
   filteredTools,
   filteredWebhooks,
   filteredPackages,
   filteredSkills,
   filteredPlugins,
   filteredKnowledge,
+  filteredInstalledResources,
   onOpenToolDetail,
   onOpenWebhookDetail,
   onOpenPackageDetail,
@@ -90,6 +106,7 @@ export function DiscoveryCatalogTabs({
   onPluginAction,
   onKnowledgeInstall,
   onKnowledgeUninstall,
+  onInstalledResourceUninstall,
   onNavigate
 }: DiscoveryCatalogTabsProps) {
   const toolColumns: ColumnsType<RepositoryScriptDescriptor> = [
@@ -431,10 +448,94 @@ export function DiscoveryCatalogTabs({
     }
   ];
 
+  const installedResourceColumns: ColumnsType<InstalledResourceView> = [
+    {
+      title: "资源",
+      key: "resource",
+      render: (_value, record) => (
+        <Space direction="vertical" size={2}>
+          <Space wrap size={[8, 8]}>
+            <Text strong>{record.displayName}</Text>
+            <Text code>{record.id}</Text>
+          </Space>
+          {record.description ? <Text type="secondary">{record.description}</Text> : null}
+        </Space>
+      )
+    },
+    {
+      title: "类型",
+      dataIndex: "type",
+      key: "type",
+      width: 130,
+      render: (value: InstalledResourceView["type"]) => <Tag>{installedResourceTypeLabels[value] ?? value}</Tag>
+    },
+    {
+      title: "来源",
+      key: "repository",
+      width: 260,
+      render: (_value, record) => (
+        <Space direction="vertical" size={2}>
+          {record.repositoryId ? (
+            <Space wrap size={[4, 4]}>
+              <Text>{record.repositoryName || record.repositoryId}</Text>
+              {record.orphan ? <Tag color="red">来源仓库已删除</Tag> : null}
+            </Space>
+          ) : (
+            <Text type="secondary">未记录来源</Text>
+          )}
+          {record.upstreamId ? <Text code>{record.upstreamId}</Text> : null}
+        </Space>
+      )
+    },
+    {
+      title: "版本",
+      key: "version",
+      width: 150,
+      render: (_value, record) => record.version ? <Text>{record.version}</Text> : <Text type="secondary">-</Text>
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (_value, record) => (
+        <Button
+          size="small"
+          danger
+          loading={installedResourceActionKey === `uninstall:${record.type}:${record.id}`}
+          onClick={() => void onInstalledResourceUninstall(record)}
+        >
+          卸载
+        </Button>
+      )
+    }
+  ];
+
   return (
     <Tabs
-      defaultActiveKey="scripts"
+      defaultActiveKey="installed"
       items={[
+        {
+          key: "installed",
+          label: `已安装 (${filteredInstalledResources.length})`,
+          children: (
+            <Table<InstalledResourceView>
+              rowKey={(item) => `${item.type}:${item.id}`}
+              loading={loading}
+              columns={installedResourceColumns}
+              dataSource={filteredInstalledResources}
+              scroll={{ x: 980 }}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+              locale={{
+                emptyText: (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="当前没有匹配的已安装资源。"
+                  />
+                )
+              }}
+            />
+          )
+        },
         {
           key: "scripts",
           label: `脚本 (${filteredTools.length})`,
