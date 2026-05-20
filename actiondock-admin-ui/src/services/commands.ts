@@ -683,6 +683,7 @@ export function buildPluginInvokeCurlCommand({
   action,
   apiKey,
   args,
+  configName,
   origin,
   pluginId,
   responseView,
@@ -691,6 +692,7 @@ export function buildPluginInvokeCurlCommand({
   action: string;
   apiKey?: string;
   args: Record<string, unknown>;
+  configName?: string;
   origin: string;
   pluginId: string;
   responseView?: ExecutionResponseView;
@@ -708,7 +710,8 @@ export function buildPluginInvokeCurlCommand({
       JSON.stringify({
         args,
         scriptInput,
-        responseView: responseView ?? "RESULT"
+        responseView: responseView ?? "RESULT",
+        ...(configName ? { configName } : {})
       })
     )}`
   );
@@ -720,6 +723,7 @@ export function buildPluginInvokePowerShellCommand({
   action,
   apiKey,
   args,
+  configName,
   origin,
   pluginId,
   responseView,
@@ -728,6 +732,7 @@ export function buildPluginInvokePowerShellCommand({
   action: string;
   apiKey?: string;
   args: Record<string, unknown>;
+  configName?: string;
   origin: string;
   pluginId: string;
   responseView?: ExecutionResponseView;
@@ -738,7 +743,8 @@ export function buildPluginInvokePowerShellCommand({
     body: {
       args,
       scriptInput,
-      responseView: responseView ?? "RESULT"
+      responseView: responseView ?? "RESULT",
+      ...(configName ? { configName } : {})
     },
     method: "Post",
     url: `${origin}/api/plugins/${pluginId}/actions/${action}/invoke`
@@ -749,6 +755,7 @@ export function buildPluginInvokeCliCommand({
   action,
   apiKey,
   args,
+  configName,
   environment,
   origin,
   pluginId,
@@ -758,6 +765,7 @@ export function buildPluginInvokeCliCommand({
   action: string;
   apiKey?: string;
   args: Record<string, unknown>;
+  configName?: string;
   environment: CliEnvironment;
   origin: string;
   pluginId: string;
@@ -771,6 +779,7 @@ export function buildPluginInvokeCliCommand({
     ...(responseView && responseView !== "RESULT"
       ? [buildCliFlag("response-view", responseView.toLowerCase(), environment)]
       : []),
+    ...(configName ? [buildCliFlag("config-name", configName, environment)] : []),
     ...buildCliObjectInputFlags({
       input: args,
       jsonFlagName: "args-json",

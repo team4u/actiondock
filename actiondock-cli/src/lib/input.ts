@@ -20,6 +20,7 @@ const DEFAULT_VALUE_FLAGS = new Set([
   "profile",
   "mode",
   "response-view",
+  "config-name",
   "input-json",
   "input-file",
   "args-json",

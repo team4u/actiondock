@@ -498,6 +498,7 @@ export interface PluginReferenceView {
 
 export interface PluginConfigView {
   pluginId: string;
+  configName: string;
   configSchema: Record<string, unknown>;
   defaultConfig: Record<string, unknown>;
   config: Record<string, unknown>;
@@ -519,6 +520,7 @@ export interface PluginInvokeRequest {
   args: Record<string, unknown>;
   scriptInput: Record<string, unknown>;
   responseView?: ExecutionResponseView;
+  configName?: string;
 }
 
 export interface ConfigValue {
@@ -579,6 +581,7 @@ export interface ConfigValuePluginConfigReference {
   pluginId: string;
   pluginName: string;
   dependentScriptCount: number;
+  configName?: string;
 }
 
 export interface ConfigValueModelReference {

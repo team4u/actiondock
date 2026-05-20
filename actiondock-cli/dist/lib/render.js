@@ -477,9 +477,16 @@ export function renderPluginDetail(plugin) {
 export function renderPluginConfig(config) {
     return [
         `Plugin: ${config.pluginId}`,
+        `ConfigName: ${config.configName ?? "default"}`,
         "Config:",
         indent(formatValue(config.config ?? {}))
     ].join("\n");
+}
+export function renderPluginConfigList(configs) {
+    if (configs.length === 0) {
+        return "没有插件配置。";
+    }
+    return configs.map((config) => `${config.configName ?? "default"}`).join("\n");
 }
 export function renderConfigValueList(items) {
     if (items.length === 0) {

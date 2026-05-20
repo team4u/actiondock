@@ -213,6 +213,7 @@ export interface ScriptSkillExampleContext {
 export interface PluginSkillExampleContext {
   pluginId: string;
   action: string;
+  configName?: string;
   args: Record<string, unknown>;
   argsSource: ResolvedCommandInput["source"];
   scriptInput: Record<string, unknown>;
@@ -290,6 +291,7 @@ export function buildPluginSkillExample(context: PluginSkillExampleContext): str
       "## 当前上下文",
       `- \`pluginId\`: \`${context.pluginId}\``,
       `- \`action\`: \`${context.action}\``,
+      ...(context.configName ? [`- \`configName\`: \`${context.configName}\``] : []),
       `- \`argsSource\`: ${renderScriptInputSourceLabel(context.argsSource)}`,
       `- \`scriptInputSource\`: ${renderPluginScriptInputSourceLabel(context.scriptInputSource)}`,
       "",

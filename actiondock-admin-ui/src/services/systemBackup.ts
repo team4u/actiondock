@@ -35,6 +35,7 @@ export interface PluginBackupEntry {
   configurable: boolean;
   actions: Array<{ action: string; title: string; description: string }>;
   config?: Record<string, unknown>;
+  configs?: Record<string, Record<string, unknown>>;
 }
 
 export interface SharedStateBackupEntry {
@@ -212,6 +213,7 @@ export function buildBackupJson(
     repositories: RepositoryDefinition[];
     plugins: PluginView[];
     pluginConfigs: Map<string, Record<string, unknown>>;
+    pluginNamedConfigs?: Map<string, Record<string, Record<string, unknown>>>;
     sharedStates: SharedStateBackupEntry[];
     aiModels: AiModelProfile[];
     aiAgents: AiAgentProfile[];
@@ -235,7 +237,8 @@ export function buildBackupJson(
     repositoryVersion: p.repositoryVersion,
     configurable: p.configurable,
     actions: p.actions.map(a => ({ action: a.action, title: a.title, description: a.description })),
-    config: p.configurable ? data.pluginConfigs.get(p.pluginId) : undefined
+    config: p.configurable ? data.pluginConfigs.get(p.pluginId) : undefined,
+    configs: p.configurable ? data.pluginNamedConfigs?.get(p.pluginId) : undefined
   }));
 
   const skillTargetEntries: SkillTargetBackupEntry[] = skillTargets.map(t => ({

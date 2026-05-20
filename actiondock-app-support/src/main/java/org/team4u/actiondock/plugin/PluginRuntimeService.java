@@ -199,41 +199,104 @@ public class PluginRuntimeService {
     }
 
     public PluginConfigView getConfig(String pluginId) {
+        return getConfig(pluginId, PluginConfigManager.DEFAULT_CONFIG_NAME);
+    }
+
+    public PluginConfigView getConfig(String pluginId, String configName) {
         return withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
+                assertDefaultConfigName(configName, pluginId);
                 return new PluginConfigView()
                         .setPluginId(pluginId)
+                        .setConfigName(PluginConfigManager.DEFAULT_CONFIG_NAME)
                         .setConfigSchema(Map.of())
                         .setDefaultConfig(Map.of())
                         .setConfig(Map.of());
             }
-            return buildConfigView(pluginId, requireRegistration(pluginId));
+            PluginRegistration registration = requireRegistration(pluginId);
+            String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
+            requireConfigExists(pluginId, normalizedConfigName);
+            return buildConfigView(pluginId, registration, normalizedConfigName);
+        });
+    }
+
+    public List<PluginConfigView> listConfigs(String pluginId) {
+        return withReadLock(lock, () -> {
+            if (systemPlugins.containsKey(pluginId)) {
+                return List.of(new PluginConfigView()
+                        .setPluginId(pluginId)
+                        .setConfigName(PluginConfigManager.DEFAULT_CONFIG_NAME)
+                        .setConfigSchema(Map.of())
+                        .setDefaultConfig(Map.of())
+                        .setConfig(Map.of()));
+            }
+            PluginRegistration registration = requireRegistration(pluginId);
+            return configManager.listConfigNames(pluginId).stream()
+                    .map(configName -> buildConfigView(pluginId, registration, configName))
+                    .toList();
+        });
+    }
+
+    public Map<String, Map<String, Object>> listRawEffectiveConfigs(String pluginId) {
+        return withReadLock(lock, () -> {
+            if (systemPlugins.containsKey(pluginId)) {
+                return Map.of(PluginConfigManager.DEFAULT_CONFIG_NAME, Map.of());
+            }
+            PluginRegistration registration = requireRegistration(pluginId);
+            Map<String, Map<String, Object>> configs = new LinkedHashMap<>();
+            for (String configName : configManager.listConfigNames(pluginId)) {
+                configs.put(configName, configManager.loadRawEffectiveConfig(registration.getDefaultConfig(), pluginId, configName));
+            }
+            return configs;
         });
     }
 
     public PluginConfigView saveConfig(String pluginId, Map<String, Object> config) {
+        return saveConfig(pluginId, PluginConfigManager.DEFAULT_CONFIG_NAME, config);
+    }
+
+    public PluginConfigView saveConfig(String pluginId, String configName, Map<String, Object> config) {
         return withWriteLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
                 throw systemPluginUnsupported("配置", pluginId);
             }
             PluginRegistration registration = requireRegistration(pluginId);
+            String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
             Map<String, Object> normalized = PluginConfigManager.normalizeConfig(config);
             Map<String, Object> effectiveConfig = configManager.resolveRuntimeConfig(registration.getDefaultConfig(), normalized);
             ActionDockPlugin plugin = findLoadedExtension(pluginId);
             if (plugin != null) {
                 plugin.validateConfig(effectiveConfig);
             }
-            configManager.writeConfig(pluginId, normalized);
-            return buildConfigView(pluginId, registration);
+            configManager.writeConfig(pluginId, normalizedConfigName, normalized);
+            return buildConfigView(pluginId, registration, normalizedConfigName);
         });
     }
 
     private PluginConfigView buildConfigView(String pluginId, PluginRegistration registration) {
+        return buildConfigView(pluginId, registration, PluginConfigManager.DEFAULT_CONFIG_NAME);
+    }
+
+    private PluginConfigView buildConfigView(String pluginId, PluginRegistration registration, String configName) {
         return new PluginConfigView()
                 .setPluginId(pluginId)
+                .setConfigName(configName)
                 .setConfigSchema(registration.getConfigSchema())
                 .setDefaultConfig(registration.getDefaultConfig())
-                .setConfig(configManager.loadRawEffectiveConfig(registration.getDefaultConfig(), pluginId));
+                .setConfig(configManager.loadRawEffectiveConfig(registration.getDefaultConfig(), pluginId, configName));
+    }
+
+    public void deleteConfig(String pluginId, String configName) {
+        withWriteLock(lock, () -> {
+            if (systemPlugins.containsKey(pluginId)) {
+                throw systemPluginUnsupported("配置", pluginId);
+            }
+            requireRegistration(pluginId);
+            String normalizedConfigName = PluginConfigManager.normalizeNamedConfigName(configName);
+            requireConfigExists(pluginId, normalizedConfigName);
+            configManager.deleteNamedConfig(pluginId, normalizedConfigName);
+            return null;
+        });
     }
 
     public PluginView install(String originalFilename, byte[] content) {
@@ -592,9 +655,19 @@ public class PluginRuntimeService {
                          ScriptExecutionContext executionContext,
                          Map<String, Object> input,
                          Map<String, Object> args) {
+        return invoke(pluginId, action, definition, executionContext, input, args, PluginConfigManager.DEFAULT_CONFIG_NAME);
+    }
+
+    public Object invoke(String pluginId,
+                         String action,
+                         ScriptDefinition definition,
+                         ScriptExecutionContext executionContext,
+                         Map<String, Object> input,
+                         Map<String, Object> args,
+                         String configName) {
         return withReadLock(lock, () -> {
             assertActionAvailable(pluginId, action);
-            return doInvoke(pluginId, action, definition, executionContext, input, args);
+            return doInvoke(pluginId, action, definition, executionContext, input, args, configName);
         });
     }
 
@@ -603,12 +676,22 @@ public class PluginRuntimeService {
                                            Map<String, Object> args,
                                            Map<String, Object> scriptInput,
                                            boolean includeDebug) {
+        return invokeForDebug(pluginId, action, args, scriptInput, includeDebug, PluginConfigManager.DEFAULT_CONFIG_NAME);
+    }
+
+    public PluginInvokeView invokeForDebug(String pluginId,
+                                           String action,
+                                           Map<String, Object> args,
+                                           Map<String, Object> scriptInput,
+                                           boolean includeDebug,
+                                           String configName) {
         return withReadLock(lock, () -> {
             PluginRegistration registration = systemPlugins.containsKey(pluginId)
                     ? PluginViewMapper.toSystemRegistration(pluginId, systemPlugins.get(pluginId), true)
                     : requireRegistration(pluginId);
             PluginActionMetadata actionMetadata = requireActionMetadata(registration, action);
             assertActionAvailable(pluginId, action);
+            String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
             Map<String, Object> normalizedArgs = configValueApplicationService.resolveMap(args);
             Map<String, Object> normalizedScriptInput = configValueApplicationService.resolveMap(scriptInput);
             Map<String, Object> pluginResult = MapValueConverter.toResultMap(
@@ -616,7 +699,7 @@ public class PluginRuntimeService {
                             new ScriptExecutionContext()
                                     .setSubmitMode(SubmitMode.SYNC)
                                     .setConfig(configValueApplicationService.snapshot()),
-                            normalizedScriptInput, normalizedArgs)
+                            normalizedScriptInput, normalizedArgs, normalizedConfigName)
             );
             return new PluginInvokeView()
                     .setPluginId(pluginId)
@@ -635,13 +718,16 @@ public class PluginRuntimeService {
                             ScriptDefinition definition,
                             ScriptExecutionContext executionContext,
                             Map<String, Object> input,
-                            Map<String, Object> args) {
+                            Map<String, Object> args,
+                            String configName) {
         try {
             ActionDockPlugin systemPlugin = systemPlugins.get(pluginId);
             ActionDockPlugin plugin;
             Map<String, Object> pluginConfig;
+            String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
 
             if (systemPlugin != null) {
+                assertDefaultConfigName(normalizedConfigName, pluginId);
                 if (!isSystemPluginEnabled(pluginId)) {
                     throw pluginNotStarted(pluginId);
                 }
@@ -650,7 +736,8 @@ public class PluginRuntimeService {
             } else {
                 PluginRegistration registration = requireRegistration(pluginId);
                 plugin = requireLoadedExtension(pluginId);
-                pluginConfig = configManager.loadRuntimeConfig(registration.getDefaultConfig(), pluginId);
+                requireConfigExists(pluginId, normalizedConfigName);
+                pluginConfig = configManager.loadRuntimeConfig(registration.getDefaultConfig(), pluginId, normalizedConfigName);
             }
 
             ScriptPluginContext context = new ScriptPluginContext()
@@ -659,6 +746,7 @@ public class PluginRuntimeService {
                     .setExecutionId(executionContext == null ? null : executionContext.getExecutionId())
                     .setSubmitMode(resolveSubmitMode(executionContext))
                     .setScriptInput(input)
+                    .setPluginConfigName(normalizedConfigName)
                     .setPluginConfig(pluginConfig);
 
             return plugin.invoke(action, context, args == null ? Map.of() : new LinkedHashMap<>(args));
@@ -773,6 +861,14 @@ public class PluginRuntimeService {
         );
     }
 
+    private static ActionDockException pluginConfigNotFound(String pluginId, String configName) {
+        return ActionDockException.notFound(
+                ActionDockErrorCodes.PLUGIN_CONFIG_NOT_FOUND,
+                "插件配置不存在: " + pluginId + "/" + configName,
+                Map.of("pluginId", pluginId, "configName", configName)
+        );
+    }
+
     private static ActionDockException pluginNotStarted(String pluginId) {
         return ActionDockException.conflict(
                 ActionDockErrorCodes.PLUGIN_NOT_STARTED,
@@ -787,6 +883,23 @@ public class PluginRuntimeService {
                 "系统插件不支持" + operation + ": " + pluginId,
                 Map.of("pluginId", pluginId, "operation", operation)
         );
+    }
+
+    private void requireConfigExists(String pluginId, String configName) {
+        if (!PluginConfigManager.DEFAULT_CONFIG_NAME.equals(configName) && !configManager.exists(pluginId, configName)) {
+            throw pluginConfigNotFound(pluginId, configName);
+        }
+    }
+
+    private static void assertDefaultConfigName(String configName, String pluginId) {
+        String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
+        if (!PluginConfigManager.DEFAULT_CONFIG_NAME.equals(normalizedConfigName)) {
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PLUGIN_SYSTEM_OPERATION_UNSUPPORTED,
+                    "系统插件不支持命名配置: " + pluginId + "/" + normalizedConfigName,
+                    Map.of("pluginId", pluginId, "configName", normalizedConfigName)
+            );
+        }
     }
 
     private boolean isLoadedAndStarted(String pluginId) {

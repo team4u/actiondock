@@ -10,6 +10,7 @@ import java.util.Map;
  */
 public class PluginConfigView {
     private String pluginId;
+    private String configName = PluginConfigManager.DEFAULT_CONFIG_NAME;
     private Map<String, Object> configSchema = new LinkedHashMap<>();
     private Map<String, Object> defaultConfig = new LinkedHashMap<>();
     private Map<String, Object> config = new LinkedHashMap<>();
@@ -20,6 +21,17 @@ public class PluginConfigView {
 
     public PluginConfigView setPluginId(String pluginId) {
         this.pluginId = pluginId;
+        return this;
+    }
+
+    public String getConfigName() {
+        return configName;
+    }
+
+    public PluginConfigView setConfigName(String configName) {
+        this.configName = configName == null || configName.isBlank()
+                ? PluginConfigManager.DEFAULT_CONFIG_NAME
+                : configName;
         return this;
     }
 

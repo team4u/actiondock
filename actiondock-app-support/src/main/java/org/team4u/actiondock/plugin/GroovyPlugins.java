@@ -63,4 +63,16 @@ public class GroovyPlugins {
     public Object invoke(String pluginId, String action, Map<String, Object> args) {
         return pluginRuntimeService.invoke(pluginId, action, definition, executionContext, input, args);
     }
+
+    public Object invoke(String pluginId, String action, Map<String, Object> args, Map<String, Object> options) {
+        return pluginRuntimeService.invoke(pluginId, action, definition, executionContext, input, args, resolveConfigName(options));
+    }
+
+    private static String resolveConfigName(Map<String, Object> options) {
+        if (options == null) {
+            return null;
+        }
+        Object value = options.get("configName");
+        return value == null ? null : String.valueOf(value);
+    }
 }

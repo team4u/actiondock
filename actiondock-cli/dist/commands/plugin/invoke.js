@@ -30,6 +30,9 @@ export default class PluginInvokeCommand extends BaseCommand {
             options: ["result", "debug"],
             default: "result"
         }),
+        "config-name": Flags.string({
+            description: "Named plugin config to use"
+        }),
         profile: Flags.string({
             description: "Use a configured server profile"
         }),
@@ -74,7 +77,8 @@ export default class PluginInvokeCommand extends BaseCommand {
             const response = await client.invokePlugin(args.pluginId, args.action, {
                 args: actionArgs,
                 scriptInput,
-                responseView: flags["response-view"].toUpperCase()
+                responseView: flags["response-view"].toUpperCase(),
+                configName: flags["config-name"]
             });
             this.printJson(response);
         }

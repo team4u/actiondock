@@ -190,6 +190,9 @@ def greeting = result.greeting
 // 基本调用
 def result = plugins.invoke("plugin-id", "action-id", [param1: "value1"])
 
+// 选择命名插件配置
+def prodResult = plugins.invoke("plugin-id", "action-id", [param1: "value1"], [configName: "prod"])
+
 // 调用 actiondock-ai 插件
 def chatResult = plugins.invoke("actiondock-ai", "chat", [
     modelProfileId: "my-model",

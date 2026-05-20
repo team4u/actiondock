@@ -55,7 +55,7 @@ public class ConfigValueUsageAnalysisService {
      * 应用服务分组，封装所有业务查询函数。
      */
     public record ApplicationServices(
-            Function<String, Map<String, Object>> loadPluginConfig,
+            Function<String, Map<String, Map<String, Object>>> loadPluginConfigs,
             Supplier<List<RepositoryDefinition>> listRepositories,
             Function<String, List<RepositoryScriptDescriptor>> listRepositoryScripts,
             Supplier<List<RepositoryScriptDescriptor>> listAllRepositoryScripts,
@@ -220,20 +220,26 @@ public class ConfigValueUsageAnalysisService {
         List<PluginConfigReference> pluginReferences = new ArrayList<>();
         Map<String, Set<String>> pluginCascadeMatches = new LinkedHashMap<>();
         for (PluginRegistration plugin : plugins) {
-            Map<String, Object> rawConfig = services.loadPluginConfig().apply(plugin.getPluginId());
-            Set<String> directMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, Set.of(key));
-            if (!directMatches.isEmpty()) {
-                pluginReferences.add(new PluginConfigReference(plugin.getPluginId(), plugin.getName(),
-                        (int) scripts.stream().filter(s -> s.getPluginDependencies().stream().map(PluginDependency::getPluginId).anyMatch(plugin.getPluginId()::equals)).count()));
-            }
-            Set<String> cascadeMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, cascadingConfigKeys);
-            if (!cascadeMatches.isEmpty()) {
-                pluginCascadeMatches.put(plugin.getPluginId(), cascadeMatches);
+            Map<String, Map<String, Object>> pluginConfigs = services.loadPluginConfigs().apply(plugin.getPluginId());
+            for (Map.Entry<String, Map<String, Object>> entry : pluginConfigs.entrySet()) {
+                String configName = entry.getKey();
+                Map<String, Object> rawConfig = entry.getValue();
+                Set<String> directMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, Set.of(key));
+                if (!directMatches.isEmpty()) {
+                    pluginReferences.add(new PluginConfigReference(plugin.getPluginId(), plugin.getName(),
+                            (int) scripts.stream().filter(s -> s.getPluginDependencies().stream().map(PluginDependency::getPluginId).anyMatch(plugin.getPluginId()::equals)).count(),
+                            configName));
+                }
+                Set<String> cascadeMatches = PlaceholderKeyExtractor.filterPlaceholderKeys(rawConfig, cascadingConfigKeys);
+                if (!cascadeMatches.isEmpty()) {
+                    pluginCascadeMatches.put(plugin.getPluginId() + "/" + configName, cascadeMatches);
+                }
             }
         }
         return new PluginReferenceResult(
                 pluginReferences.stream()
-                        .sorted(Comparator.comparing(PluginConfigReference::pluginId))
+                        .sorted(Comparator.comparing(PluginConfigReference::pluginId)
+                                .thenComparing(PluginConfigReference::configName))
                         .toList(),
                 pluginCascadeMatches
         );
@@ -456,7 +462,7 @@ public class ConfigValueUsageAnalysisService {
     public record ScheduleReference(String scheduleId, String scheduleName, String scriptId, String scriptName) {
     }
 
-    public record PluginConfigReference(String pluginId, String pluginName, int dependentScriptCount) {
+    public record PluginConfigReference(String pluginId, String pluginName, int dependentScriptCount, String configName) {
     }
 
     public record TemplateDeclaration(String repositoryId,

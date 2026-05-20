@@ -407,7 +407,12 @@ public class PythonScriptEngine implements ScriptEngine {
 
     private PythonPluginRequest parsePluginRequest(String payload) {
         Map<String, Object> value = jsonCodec.readMap(payload);
-        return new PythonPluginRequest(stringField(value, "pluginId"), stringField(value, "action"), mapField(value, "args"));
+        return new PythonPluginRequest(
+                stringField(value, "pluginId"),
+                stringField(value, "action"),
+                mapField(value, "args"),
+                mapField(value, "options")
+        );
     }
 
     private static String stringField(Map<String, Object> map, String key) {
@@ -438,7 +443,7 @@ public class PythonScriptEngine implements ScriptEngine {
     record PythonInvocationRequest(String scriptId, Map<String, Object> args) {
     }
 
-    record PythonPluginRequest(String pluginId, String action, Map<String, Object> args) {
+    record PythonPluginRequest(String pluginId, String action, Map<String, Object> args, Map<String, Object> options) {
     }
 
     record PythonStateRequest(String operation,

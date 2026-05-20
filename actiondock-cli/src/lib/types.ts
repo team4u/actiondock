@@ -446,6 +446,7 @@ export interface PluginReferenceView {
 
 export interface PluginConfigView {
   pluginId: string;
+  configName?: string;
   configSchema?: Record<string, unknown>;
   defaultConfig?: Record<string, unknown>;
   config?: Record<string, unknown>;
@@ -460,6 +461,7 @@ export interface PluginInvokeRequest {
   args: Record<string, unknown>;
   scriptInput: Record<string, unknown>;
   responseView?: "RESULT" | "DEBUG";
+  configName?: string;
 }
 
 export interface PluginInvokeResponse {

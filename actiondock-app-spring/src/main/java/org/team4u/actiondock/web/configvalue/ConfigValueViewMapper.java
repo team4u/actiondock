@@ -85,7 +85,7 @@ class ConfigValueViewMapper {
                         .toList(),
                 insight.pluginConfigReferences().stream()
                         .map(item -> new ConfigValueDetailView.PluginConfigReference(
-                                item.pluginId(), item.pluginName(), item.dependentScriptCount()))
+                                item.pluginId(), item.pluginName(), item.dependentScriptCount(), item.configName()))
                         .toList(),
                 insight.templateDeclarations().stream()
                         .map(item -> new ConfigValueDetailView.TemplateDeclaration(
