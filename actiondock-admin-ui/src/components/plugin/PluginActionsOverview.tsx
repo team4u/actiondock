@@ -25,6 +25,7 @@ interface PluginActionsOverviewProps {
   mode?: "tabs" | "collapse";
   /** 生成调用示例所需参数，collapse 模式下必传 */
   snippetContext?: {
+    configName?: string;
     pluginId: string;
     scriptType: ScriptType;
   };
@@ -161,7 +162,7 @@ export function PluginActionsOverview({
                 onCopy={(value) => void handleCopy(value)}
                 snippet={
                   snippetContext
-                    ? buildPluginInvokeSnippet(snippetContext.scriptType, snippetContext.pluginId, action.action, action.exampleArgs)
+                    ? buildPluginInvokeSnippet(snippetContext.scriptType, snippetContext.pluginId, action.action, action.exampleArgs, snippetContext.configName)
                     : undefined
                 }
               />
@@ -180,7 +181,7 @@ export function PluginActionsOverview({
         className="plugin-reference-collapse plugin-reference-collapse--nested"
         items={actions.map((action) => {
           const snippet = snippetContext
-            ? buildPluginInvokeSnippet(snippetContext.scriptType, snippetContext.pluginId, action.action, action.exampleArgs)
+            ? buildPluginInvokeSnippet(snippetContext.scriptType, snippetContext.pluginId, action.action, action.exampleArgs, snippetContext.configName)
             : undefined;
           return {
             key: `${snippetContext?.pluginId ?? ""}-${action.action}`,

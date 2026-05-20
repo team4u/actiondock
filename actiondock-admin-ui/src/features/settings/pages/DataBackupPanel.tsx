@@ -32,6 +32,7 @@ import {
   getPlugin,
   getPluginConfig,
   installPlugin,
+  listPluginConfigs,
   listPlugins,
   uninstallPlugin,
   updatePluginConfig
@@ -258,15 +259,28 @@ export function DataBackupPanel() {
       ).then(items => items.filter((plugin): plugin is PluginView => plugin !== null));
 
       const pluginConfigs = new Map<string, Record<string, unknown>>();
+      const pluginNamedConfigs = new Map<string, Record<string, Record<string, unknown>>>();
       await Promise.all(
         plugins
           .filter(p => p.configurable)
           .map(async p => {
             try {
-              const configView = await getPluginConfig(p.pluginId);
-              pluginConfigs.set(p.pluginId, configView.config);
+              const configViews = await listPluginConfigs(p.pluginId);
+              const configs: Record<string, Record<string, unknown>> = {};
+              for (const configView of configViews) {
+                configs[configView.configName] = configView.config;
+                if (configView.configName === "default") {
+                  pluginConfigs.set(p.pluginId, configView.config);
+                }
+              }
+              pluginNamedConfigs.set(p.pluginId, configs);
             } catch {
-              // skip
+              try {
+                const configView = await getPluginConfig(p.pluginId);
+                pluginConfigs.set(p.pluginId, configView.config);
+              } catch {
+                // skip
+              }
             }
           })
       );
@@ -296,6 +310,7 @@ export function DataBackupPanel() {
           repositories,
           plugins: fullPlugins,
           pluginConfigs,
+          pluginNamedConfigs,
           sharedStates,
           aiModels,
           aiAgents,
@@ -681,6 +696,15 @@ export function DataBackupPanel() {
                 await updatePluginConfig(plugin.pluginId, plugin.config);
               } catch {
                 // config restore is non-fatal
+              }
+            }
+            if (plugin.configurable && plugin.configs) {
+              for (const [configName, config] of Object.entries(plugin.configs)) {
+                try {
+                  await updatePluginConfig(plugin.pluginId, config, configName === "default" ? undefined : configName);
+                } catch {
+                  // config restore is non-fatal
+                }
               }
             }
             succeeded++;

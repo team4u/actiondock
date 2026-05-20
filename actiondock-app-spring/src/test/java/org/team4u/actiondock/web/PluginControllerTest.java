@@ -143,6 +143,7 @@ class PluginControllerTest {
         when(pluginRuntimeService.saveConfig("demo-plugin", Map.of("prefix", "hello"))).thenReturn(
                 new PluginConfigView()
                         .setPluginId("demo-plugin")
+                        .setConfigName("default")
                         .setConfig(Map.of("prefix", "hello"))
         );
 
@@ -154,6 +155,52 @@ class PluginControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
                 .andExpect(jsonPath("$.data.config.prefix").value("hello"));
+    }
+
+    @Test
+    void namedConfigCanBeSavedAndUsedForDebugInvoke() throws Exception {
+        when(pluginRuntimeService.saveConfig("demo-plugin", "prod", Map.of("prefix", "live"))).thenReturn(
+                new PluginConfigView()
+                        .setPluginId("demo-plugin")
+                        .setConfigName("prod")
+                        .setConfig(Map.of("prefix", "live"))
+        );
+
+        mockMvc.perform(put("/api/plugins/demo-plugin/configs/prod")
+                        .contentType("application/json")
+                        .content("""
+                                {"config":{"prefix":"live"}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
+                .andExpect(jsonPath("$.data.configName").value("prod"))
+                .andExpect(jsonPath("$.data.config.prefix").value("live"));
+
+        when(pluginRuntimeService.invokeForDebug(
+                eq("demo-plugin"),
+                eq("echo"),
+                eq(Map.of("message", "hello")),
+                eq(Map.of("name", "Alice")),
+                eq(false),
+                eq("prod")
+        )).thenReturn(
+                new PluginInvokeView()
+                        .setPluginId("demo-plugin")
+                        .setAction("echo")
+                        .setResult(Map.of("message", "live:hello"))
+        );
+
+        mockMvc.perform(post("/api/plugins/demo-plugin/actions/echo/invoke")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "args": {"message":"hello"},
+                                  "scriptInput": {"name":"Alice"},
+                                  "configName": "prod"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result.message").value("live:hello"));
     }
 
     @Test
@@ -181,7 +228,8 @@ class PluginControllerTest {
                 eq("echo"),
                 eq(Map.of("message", "hello")),
                 eq(Map.of("name", "Alice")),
-                eq(true)
+                eq(true),
+                eq(null)
         )).thenReturn(
                 new PluginInvokeView()
                         .setPluginId("demo-plugin")
@@ -216,7 +264,8 @@ class PluginControllerTest {
                 eq("echo"),
                 eq(Map.of("message", "hello")),
                 eq(Map.of("name", "Alice")),
-                eq(false)
+                eq(false),
+                eq(null)
         )).thenThrow(new IllegalStateException("plugin failed"));
 
         mockMvc.perform(post("/api/plugins/demo-plugin/actions/echo/invoke")

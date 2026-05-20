@@ -147,7 +147,13 @@ curl http://localhost:5177/api/plugins/{pluginId}/config
 # 保存插件配置
 curl -X PUT http://localhost:5177/api/plugins/{pluginId}/config \
   -H 'Content-Type: application/json' \
-  -d '{"key": "value"}'
+  -d '{"config":{"key": "value"}}'
+
+# 管理命名配置
+curl http://localhost:5177/api/plugins/{pluginId}/configs
+curl -X PUT http://localhost:5177/api/plugins/{pluginId}/configs/prod \
+  -H 'Content-Type: application/json' \
+  -d '{"config":{"key": "prod-value"}}'
 ```
 
 ## 在脚本中调用插件
@@ -157,11 +163,17 @@ curl -X PUT http://localhost:5177/api/plugins/{pluginId}/config \
 ```groovy
 // Groovy 脚本
 def result = plugins.invoke("my-plugin", "hello", [name: "world"])
+
+// 使用命名配置
+def prodResult = plugins.invoke("my-plugin", "hello", [name: "world"], [configName: "prod"])
 ```
 
 ```python
 # Python 脚本
 result = plugins.invoke("my-plugin", "hello", {"name": "world"})
+
+# 使用命名配置
+prod_result = plugins.invoke("my-plugin", "hello", {"name": "world"}, {"configName": "prod"})
 ```
 
 参数说明：

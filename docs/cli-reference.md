@@ -569,6 +569,8 @@ actiondock plugin list --json
 actiondock plugin get <plugin-id> --json
 actiondock plugin references --json
 actiondock plugin config get <plugin-id> --json
+actiondock plugin config list <plugin-id> --json
+actiondock plugin config get <plugin-id> --config-name prod --json
 ```
 
 `plugin list` 只返回插件摘要，包括状态、版本和 `actionCount`，不返回 action schema。需要查看 action 参数、描述、示例时使用 `plugin get <plugin-id> --json`。
@@ -586,6 +588,7 @@ actiondock plugin invoke <plugin-id> <action> --json
 | action args 简单字段 | `--name value`、`--count 3`、`--enabled` |
 | action args 复杂字段 | `--args-json` / `--args-file` |
 | 脚本上下文 | `--script-input-json` / `--script-input-file` |
+| 命名插件配置 | `--config-name <name>` |
 
 顶层 string、number、integer、boolean、enum 字段可直接展开：
 
@@ -616,6 +619,15 @@ actiondock plugin invoke my-plugin summarize \
 actiondock plugin invoke my-plugin summarize \
   --args-json '{"topic":"ops"}' \
   --script-input-json '{"locale":"zh-CN"}' \
+  --json
+```
+
+如果插件保存了多份配置，调用时可选择其中一份；未指定时使用默认配置：
+
+```bash
+actiondock plugin invoke my-plugin summarize \
+  --config-name prod \
+  --args-json '{"topic":"ops"}' \
   --json
 ```
 

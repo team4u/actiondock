@@ -168,7 +168,7 @@ public class RepositoryConfiguration {
                         pluginRegistryRepository
                 ),
                 new ConfigValueUsageAnalysisService.ApplicationServices(
-                        pluginId -> pluginRuntimeService.getConfig(pluginId).getConfig(),
+                        pluginRuntimeService::listRawEffectiveConfigs,
                         repositoryCatalogService::listRepositories,
                         repositoryCatalogService::listRepositoryScripts,
                         repositoryCatalogService::listAllRepositoryScripts,

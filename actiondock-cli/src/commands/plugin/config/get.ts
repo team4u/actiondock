@@ -23,6 +23,9 @@ export default class PluginConfigGetCommand extends BaseCommand {
     token: Flags.string({
       description: "Override ActionDock bearer token"
     }),
+    "config-name": Flags.string({
+      description: "Named plugin config to show"
+    }),
     help: Flags.help({ char: "h" })
   };
 
@@ -34,7 +37,9 @@ export default class PluginConfigGetCommand extends BaseCommand {
         serverUrl: resolveServerUrl(flags),
         token: resolveToken(flags)
       });
-      const config = await client.getPluginConfig(args.pluginId);
+      const config = flags["config-name"]
+        ? await client.getNamedPluginConfig(args.pluginId, flags["config-name"])
+        : await client.getPluginConfig(args.pluginId);
 
       if (flags.json) {
         this.printJson(config);

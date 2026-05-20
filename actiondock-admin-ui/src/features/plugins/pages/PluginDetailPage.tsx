@@ -33,7 +33,10 @@ import { useColorMode } from "../../../shared/contexts/ColorModeContext";
 import {
   getPlugin,
   getPluginConfig,
+  deletePluginConfig,
+  getNamedPluginConfig,
   invokePluginAction,
+  listPluginConfigs,
   startPlugin,
   stopPlugin,
   uninstallPlugin,
@@ -151,6 +154,8 @@ export function PluginDetailPage() {
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<PluginConfigView | null>(null);
+  const [pluginConfigs, setPluginConfigs] = useState<PluginConfigView[]>([]);
+  const [selectedConfigName, setSelectedConfigName] = useState("default");
   const [configText, setConfigText] = useState("{}");
   const [configInputMode, setConfigInputMode] = useState<SchemaObjectEditorMode>("JSON");
   const [selectedActionName, setSelectedActionName] = useState<string>("");
@@ -209,18 +214,23 @@ export function PluginDetailPage() {
   const apiKey = getApiKey() || undefined;
   const origin = window.location.origin;
   const isSystemPlugin = plugin?.sourceType === "SYSTEM";
+  const activeConfigName = currentConfig?.configName ?? selectedConfigName;
+  const invokeConfigName = activeConfigName === "default" ? undefined : activeConfigName;
 
   const loadAll = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setConfigLoading(true);
     try {
-      const [pluginResult, configResult] = await Promise.all([
+      const [pluginResult, configResults] = await Promise.all([
         getPlugin(pluginId),
-        getPluginConfig(pluginId),
+        listPluginConfigs(pluginId),
       ]);
       if (signal?.aborted) return;
       setPlugin(pluginResult);
-      setCurrentConfig(configResult);
+      setPluginConfigs(configResults);
+      const nextConfig = configResults.find((item) => item.configName === "default") ?? configResults[0] ?? await getPluginConfig(pluginId);
+      setSelectedConfigName(nextConfig.configName);
+      setCurrentConfig(nextConfig);
     } catch (error) {
       if (signal?.aborted) return;
       const detail = error instanceof ApiError ? error.message : "加载插件详情失败";
@@ -240,6 +250,22 @@ export function PluginDetailPage() {
   const loadConfig = useCallback(async () => {
     await loadAll();
   }, [loadAll]);
+
+  const loadNamedConfig = useCallback(async (configName: string) => {
+    setConfigLoading(true);
+    try {
+      const config = configName === "default"
+        ? await getPluginConfig(pluginId)
+        : await getNamedPluginConfig(pluginId, configName);
+      setSelectedConfigName(config.configName);
+      setCurrentConfig(config);
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "加载插件配置失败";
+      messageApi.error(detail);
+    } finally {
+      setConfigLoading(false);
+    }
+  }, [pluginId, messageApi]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -389,8 +415,13 @@ export function PluginDetailPage() {
         configInputMode === "SCHEMA"
           ? { ...parseJsonText(configText, "插件配置"), ...(await configForm.validateFields()) }
           : parseJsonText(configText, "插件配置");
-      const saved = await updatePluginConfig(currentConfig.pluginId, nextConfig);
+      const saved = await updatePluginConfig(currentConfig.pluginId, nextConfig, invokeConfigName);
       setCurrentConfig(saved);
+      setSelectedConfigName(saved.configName);
+      setPluginConfigs((items) => {
+        const others = items.filter((item) => item.configName !== saved.configName);
+        return [...others, saved].sort((a, b) => a.configName.localeCompare(b.configName));
+      });
       configForm.setFieldsValue(saved.config as Parameters<typeof configForm.setFieldsValue>[0]);
       setConfigText(prettyJson(saved.config));
       messageApi.success("插件配置已保存");
@@ -398,6 +429,47 @@ export function PluginDetailPage() {
     } catch (error) {
       const detail = error instanceof ApiError || error instanceof Error ? error.message : "保存插件配置失败";
       messageApi.error(detail);
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleCreateConfig = async () => {
+    if (!currentConfig) {
+      return;
+    }
+    const name = window.prompt("配置名");
+    const configName = name?.trim();
+    if (!configName) {
+      return;
+    }
+    try {
+      const saved = await updatePluginConfig(currentConfig.pluginId, {}, configName);
+      setPluginConfigs((items) => [...items.filter((item) => item.configName !== saved.configName), saved]
+        .sort((a, b) => a.configName.localeCompare(b.configName)));
+      setSelectedConfigName(saved.configName);
+      setCurrentConfig(saved);
+      messageApi.success("插件配置已创建");
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "创建插件配置失败"));
+    }
+  };
+
+  const handleDeleteConfig = async () => {
+    if (!currentConfig || currentConfig.configName === "default") {
+      return;
+    }
+    setConfigSaving(true);
+    try {
+      await deletePluginConfig(currentConfig.pluginId, currentConfig.configName);
+      messageApi.success("插件配置已删除");
+      const configs = await listPluginConfigs(pluginId);
+      setPluginConfigs(configs);
+      const nextConfig = configs.find((item) => item.configName === "default") ?? configs[0] ?? await getPluginConfig(pluginId);
+      setSelectedConfigName(nextConfig.configName);
+      setCurrentConfig(nextConfig);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "删除插件配置失败"));
     } finally {
       setConfigSaving(false);
     }
@@ -520,7 +592,8 @@ export function PluginDetailPage() {
       const response = await invokePluginAction(plugin.pluginId, currentAction.action, {
         args,
         scriptInput,
-        responseView: "RESULT"
+        responseView: "RESULT",
+        configName: invokeConfigName
       });
       setDebugResult(response);
       setDebugError(null);
@@ -548,8 +621,8 @@ export function PluginDetailPage() {
     return buildCommandPresets([
       ...buildHttpCommandPresets({
         keyPrefix: "invoke",
-        httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" }),
-        httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT" })
+        httpBash: buildPluginInvokeCurlCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT", configName: invokeConfigName }),
+        httpPowerShell: buildPluginInvokePowerShellCommand({ apiKey, origin, pluginId: plugin.pluginId, action: currentAction.action, args: commandArgsInput.value, scriptInput: commandScriptInput.value, responseView: "RESULT", configName: invokeConfigName })
       }),
       ...buildCliCommandPresets({
         keyPrefix: "invoke",
@@ -560,6 +633,7 @@ export function PluginDetailPage() {
           origin,
           pluginId: plugin.pluginId,
           action: currentAction.action,
+          configName: invokeConfigName,
           responseView: "RESULT",
           scriptInput: commandScriptInput.value
         }),
@@ -570,12 +644,13 @@ export function PluginDetailPage() {
           origin,
           pluginId: plugin.pluginId,
           action: currentAction.action,
+          configName: invokeConfigName,
           responseView: "RESULT",
           scriptInput: commandScriptInput.value
         })
       })
     ]);
-  }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput]);
+  }, [plugin, currentAction, apiKey, origin, commandArgsInput, commandScriptInput, invokeConfigName]);
 
   const skillExample = useMemo(() => {
     if (!plugin || !currentAction) {
@@ -584,6 +659,7 @@ export function PluginDetailPage() {
     return buildPluginSkillExample({
       pluginId: plugin.pluginId,
       action: currentAction.action,
+      configName: invokeConfigName,
       args: commandArgsInput.value,
       argsSource: commandArgsInput.source,
       scriptInput: commandScriptInput.value,
@@ -750,6 +826,29 @@ export function PluginDetailPage() {
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="系统插件没有独立插件配置。" />
                 ) : (
                   <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Space wrap>
+                      <Select
+                        value={activeConfigName}
+                        options={pluginConfigs.map((item) => ({
+                          value: item.configName,
+                          label: item.configName === "default" ? "default（默认）" : item.configName
+                        }))}
+                        onChange={(value) => void loadNamedConfig(value)}
+                        style={{ minWidth: 220 }}
+                      />
+                      <Button onClick={() => void handleCreateConfig()}>
+                        新建配置
+                      </Button>
+                      <Button
+                        danger
+                        icon={<DeleteOutlined />}
+                        disabled={activeConfigName === "default"}
+                        loading={configSaving}
+                        onClick={() => void handleDeleteConfig()}
+                      >
+                        删除配置
+                      </Button>
+                    </Space>
                     <SchemaObjectEditor
                       form={configForm}
                       supportedFields={configSupportedFields}
@@ -794,6 +893,18 @@ export function PluginDetailPage() {
                                 <Form.Item label="动作名称">
                                   <Select value={currentAction?.action} options={actionOptions} onChange={setSelectedActionName} />
                                 </Form.Item>
+                                {!isSystemPlugin && pluginConfigs.length > 0 ? (
+                                  <Form.Item label="插件配置">
+                                    <Select
+                                      value={activeConfigName}
+                                      options={pluginConfigs.map((item) => ({
+                                        value: item.configName,
+                                        label: item.configName === "default" ? "default（默认）" : item.configName
+                                      }))}
+                                      onChange={(value) => void loadNamedConfig(value)}
+                                    />
+                                  </Form.Item>
+                                ) : null}
                               </Form>
                               <SchemaObjectEditor
                                 form={argsForm}
@@ -887,6 +998,9 @@ export function PluginDetailPage() {
 	                      <Text type="secondary">
 	                        脚本输入来源：{commandScriptInput.source === "current-json" ? "当前 JSON 输入" : "空对象"}
 	                      </Text>
+                      {!isSystemPlugin ? (
+                        <Text type="secondary">插件配置：{activeConfigName}</Text>
+                      ) : null}
 	                    </Space>
 	                    <CommandPanel
 	                      title="调用动作命令"

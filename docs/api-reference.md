@@ -180,8 +180,13 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `POST` | `/api/plugins/{pluginId}/upgrade` | 升级插件（multipart） |
 | `POST` | `/api/plugins/{pluginId}/start` | 启动插件 |
 | `POST` | `/api/plugins/{pluginId}/stop` | 停止插件 |
-| `GET` | `/api/plugins/{pluginId}/config` | 获取插件配置 |
-| `PUT` | `/api/plugins/{pluginId}/config` | 保存插件配置 |
+| `GET` | `/api/plugins/{pluginId}/config` | 获取默认插件配置 |
+| `PUT` | `/api/plugins/{pluginId}/config` | 保存默认插件配置 |
+| `GET` | `/api/plugins/{pluginId}/configs` | 列出插件配置（含默认配置） |
+| `GET` | `/api/plugins/{pluginId}/configs/{configName}` | 获取命名插件配置 |
+| `PUT` | `/api/plugins/{pluginId}/configs/{configName}` | 保存命名插件配置 |
+| `DELETE` | `/api/plugins/{pluginId}/configs/{configName}` | 删除命名插件配置 |
+| `POST` | `/api/plugins/{pluginId}/actions/{action}/invoke` | 调试调用插件动作，body 可传 `configName` 选择命名配置 |
 
 ## 仓库 API
 

@@ -64,11 +64,28 @@ export function getPluginConfig(pluginId: string): Promise<PluginConfigView> {
   return request<PluginConfigView>(`/api/plugins/${pluginId}/config`);
 }
 
-export function updatePluginConfig(pluginId: string, config: Record<string, unknown>): Promise<PluginConfigView> {
-  return request<PluginConfigView>(`/api/plugins/${pluginId}/config`, {
+export function listPluginConfigs(pluginId: string): Promise<PluginConfigView[]> {
+  return request<PluginConfigView[]>(`/api/plugins/${pluginId}/configs`);
+}
+
+export function getNamedPluginConfig(pluginId: string, configName: string): Promise<PluginConfigView> {
+  return request<PluginConfigView>(`/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`);
+}
+
+export function updatePluginConfig(pluginId: string, config: Record<string, unknown>, configName?: string): Promise<PluginConfigView> {
+  const path = configName && configName !== "default"
+    ? `/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`
+    : `/api/plugins/${pluginId}/config`;
+  return request<PluginConfigView>(path, {
     method: "PUT",
     headers: JSON_HEADERS,
     body: JSON.stringify({ config })
+  });
+}
+
+export function deletePluginConfig(pluginId: string, configName: string): Promise<void> {
+  return request<void>(`/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`, {
+    method: "DELETE"
   });
 }
 

@@ -72,10 +72,15 @@ export function buildPluginInvokeSnippet(
   language: ScriptType,
   pluginId: string,
   action: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  configName?: string
 ): string {
+  const options = configName ? `, ${formatValue({ configName }, language)}` : "";
   if (isEmptyObject(args)) {
-    return `plugins.invoke(${JSON.stringify(pluginId)}, ${JSON.stringify(action)})`;
+    if (!configName) {
+      return `plugins.invoke(${JSON.stringify(pluginId)}, ${JSON.stringify(action)})`;
+    }
+    return `plugins.invoke(${JSON.stringify(pluginId)}, ${JSON.stringify(action)}, ${formatValue({}, language)}${options})`;
   }
-  return `plugins.invoke(${JSON.stringify(pluginId)}, ${JSON.stringify(action)}, ${formatValue(args, language)})`;
+  return `plugins.invoke(${JSON.stringify(pluginId)}, ${JSON.stringify(action)}, ${formatValue(args, language)}${options})`;
 }

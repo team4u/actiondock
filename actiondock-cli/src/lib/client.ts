@@ -534,10 +534,27 @@ export class ActionDockClient {
     return this.requestJson<PluginConfigView>(`/api/plugins/${pluginId}/config`);
   }
 
-  async savePluginConfig(pluginId: string, config: Record<string, unknown>): Promise<PluginConfigView> {
-    return this.requestJson<PluginConfigView>(`/api/plugins/${pluginId}/config`, {
+  async listPluginConfigs(pluginId: string): Promise<PluginConfigView[]> {
+    return this.requestJson<PluginConfigView[]>(`/api/plugins/${pluginId}/configs`);
+  }
+
+  async getNamedPluginConfig(pluginId: string, configName: string): Promise<PluginConfigView> {
+    return this.requestJson<PluginConfigView>(`/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`);
+  }
+
+  async savePluginConfig(pluginId: string, config: Record<string, unknown>, configName?: string): Promise<PluginConfigView> {
+    const pathname = configName
+      ? `/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`
+      : `/api/plugins/${pluginId}/config`;
+    return this.requestJson<PluginConfigView>(pathname, {
       method: "PUT",
       body: JSON.stringify({ config })
+    });
+  }
+
+  async deletePluginConfig(pluginId: string, configName: string): Promise<void> {
+    await this.requestJson<null>(`/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`, {
+      method: "DELETE"
     });
   }
 

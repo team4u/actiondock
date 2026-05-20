@@ -318,6 +318,82 @@ class PluginRuntimeServiceTest {
     }
 
     @Test
+    void supportsNamedPluginConfigsForInvokeAndDebug() throws IOException {
+        Path pluginJar = buildPluginJar(
+                tempDir.resolve("demo-plugin.jar"),
+                demoPluginManifestJson("0.2.0", "ActionDock Demo Plugin")
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+        service.saveConfig("actiondock-demo-plugin", Map.of("prefix", "default"));
+        PluginConfigView prodConfig = service.saveConfig("actiondock-demo-plugin", "prod", Map.of("prefix", "live"));
+
+        assertThat(prodConfig.getConfigName()).isEqualTo("prod");
+        assertThat(service.listConfigs("actiondock-demo-plugin"))
+                .extracting(PluginConfigView::getConfigName)
+                .containsExactly("default", "prod");
+
+        Map<String, Object> defaultResult = (Map<String, Object>) service.invoke(
+                "actiondock-demo-plugin",
+                "echo",
+                null,
+                null,
+                null,
+                Map.of("message", "hello")
+        );
+        Map<String, Object> namedResult = (Map<String, Object>) service.invoke(
+                "actiondock-demo-plugin",
+                "echo",
+                null,
+                null,
+                null,
+                Map.of("message", "hello"),
+                "prod"
+        );
+        PluginInvokeView debug = service.invokeForDebug(
+                "actiondock-demo-plugin",
+                "echo",
+                Map.of("message", "debug"),
+                Map.of(),
+                false,
+                "prod"
+        );
+
+        assertThat(defaultResult).containsEntry("message", "default:hello");
+        assertThat(namedResult).containsEntry("message", "live:hello");
+        assertThat(debug.getResult()).containsEntry("message", "live:debug");
+    }
+
+    @Test
+    void missingNamedPluginConfigFails() throws IOException {
+        Path pluginJar = buildPluginJar(
+                tempDir.resolve("demo-plugin.jar"),
+                demoPluginManifestJson("0.2.0", "ActionDock Demo Plugin")
+        );
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
+        PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties);
+
+        service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
+
+        assertThatThrownBy(() -> service.invoke(
+                "actiondock-demo-plugin",
+                "echo",
+                null,
+                null,
+                null,
+                Map.of("message", "hello"),
+                "missing"
+        ))
+                .hasMessageContaining("插件配置不存在: actiondock-demo-plugin/missing");
+    }
+
+    @Test
     void resolvesConfigPlaceholdersForPluginConfigAndDebugInputs() throws IOException {
         Path pluginJar = buildPluginJar(
                 tempDir.resolve("demo-plugin.jar"),

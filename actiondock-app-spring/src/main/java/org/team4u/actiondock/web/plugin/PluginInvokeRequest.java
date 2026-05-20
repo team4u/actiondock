@@ -13,6 +13,7 @@ public class PluginInvokeRequest {
     private Map<String, Object> args = new LinkedHashMap<>();
     private Map<String, Object> scriptInput = new LinkedHashMap<>();
     private ExecutionResponseView responseView = ExecutionResponseView.RESULT;
+    private String configName;
 
     public Map<String, Object> getArgs() {
         return args;
@@ -36,5 +37,13 @@ public class PluginInvokeRequest {
 
     public void setResponseView(ExecutionResponseView responseView) {
         this.responseView = responseView == null ? ExecutionResponseView.RESULT : responseView;
+    }
+
+    public String getConfigName() {
+        return configName;
+    }
+
+    public void setConfigName(String configName) {
+        this.configName = configName;
     }
 }

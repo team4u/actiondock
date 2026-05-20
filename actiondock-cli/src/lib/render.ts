@@ -540,9 +540,17 @@ export function renderPluginDetail(plugin: PluginView | PluginReferenceView): st
 export function renderPluginConfig(config: PluginConfigView): string {
   return [
     `Plugin: ${config.pluginId}`,
+    `ConfigName: ${config.configName ?? "default"}`,
     "Config:",
     indent(formatValue(config.config ?? {}))
   ].join("\n");
+}
+
+export function renderPluginConfigList(configs: PluginConfigView[]): string {
+  if (configs.length === 0) {
+    return "没有插件配置。";
+  }
+  return configs.map((config) => `${config.configName ?? "default"}`).join("\n");
 }
 
 export function renderConfigValueList(items: ConfigValueView[]): string {

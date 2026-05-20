@@ -49,7 +49,7 @@ class PythonBridge {
 
     String respondPlugin(PythonScriptEngine.PythonPluginRequest request) {
         return respond(() -> pluginRuntimeService.invoke(
-                request.pluginId(), request.action(), definition, executionContext, input, request.args()));
+                request.pluginId(), request.action(), definition, executionContext, input, request.args(), resolveConfigName(request.options())));
     }
 
     String respondState(PythonScriptEngine.PythonStateRequest request) {
@@ -83,5 +83,13 @@ class PythonBridge {
         } catch (Exception exception) {
             return writeResponse(false, null, ErrorDetailSupport.summarize(exception));
         }
+    }
+
+    private static String resolveConfigName(Map<String, Object> options) {
+        if (options == null) {
+            return null;
+        }
+        Object value = options.get("configName");
+        return value == null ? null : String.valueOf(value);
     }
 }

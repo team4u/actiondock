@@ -50,7 +50,7 @@ public record ConfigValueDetailView(
     public record ScheduleReference(String scheduleId, String scheduleName, String scriptId, String scriptName) {
     }
 
-    public record PluginConfigReference(String pluginId, String pluginName, int dependentScriptCount) {
+    public record PluginConfigReference(String pluginId, String pluginName, int dependentScriptCount, String configName) {
     }
 
     public record TemplateDeclaration(String repositoryId,

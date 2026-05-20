@@ -9,6 +9,7 @@ public class ScriptPluginContext {
     private String scriptName;
     private String executionId;
     private String submitMode;
+    private String pluginConfigName;
     private Map<String, Object> scriptInput = new LinkedHashMap<>();
     private Map<String, Object> pluginConfig = new LinkedHashMap<>();
 
@@ -45,6 +46,15 @@ public class ScriptPluginContext {
 
     public ScriptPluginContext setSubmitMode(String submitMode) {
         this.submitMode = submitMode;
+        return this;
+    }
+
+    public String getPluginConfigName() {
+        return pluginConfigName;
+    }
+
+    public ScriptPluginContext setPluginConfigName(String pluginConfigName) {
+        this.pluginConfigName = pluginConfigName;
         return this;
     }
 

@@ -10,6 +10,9 @@ export default class PluginConfigSetCommand extends BaseCommand {
     static flags = {
         ...BaseCommand.baseFlags,
         ...jsonObjectFlags("config", "plugin config"),
+        "config-name": Flags.string({
+            description: "Named plugin config to save"
+        }),
         ...serverTokenFlags,
         help: Flags.help({ char: "h" })
     };
@@ -17,7 +20,7 @@ export default class PluginConfigSetCommand extends BaseCommand {
         const { args, flags } = await this.parse(PluginConfigSetCommand);
         try {
             const config = parseNamedObject(flags, "config", "plugin config");
-            const item = await createClient(flags).savePluginConfig(args.pluginId, config);
+            const item = await createClient(flags).savePluginConfig(args.pluginId, config, flags["config-name"]);
             flags.json ? this.printJson(item) : this.log(renderPluginConfig(item));
         }
         catch (error) {

@@ -147,6 +147,17 @@ public class PluginController {
         return ApiResponse.success(pluginRuntimeService.getConfig(pluginId));
     }
 
+    @GetMapping("/{pluginId}/configs")
+    public ApiResponse<List<PluginConfigView>> listConfigs(@PathVariable String pluginId) {
+        return ApiResponse.success(pluginRuntimeService.listConfigs(pluginId));
+    }
+
+    @GetMapping("/{pluginId}/configs/{configName}")
+    public ApiResponse<PluginConfigView> getNamedConfig(@PathVariable String pluginId,
+                                                        @PathVariable String configName) {
+        return ApiResponse.success(pluginRuntimeService.getConfig(pluginId, configName));
+    }
+
     /**
      * 保存插件配置。
      *
@@ -160,6 +171,23 @@ public class PluginController {
                 pluginRuntimeService.saveConfig(pluginId, request == null ? null : request.getConfig()),
                 "插件配置已保存"
         );
+    }
+
+    @PutMapping("/{pluginId}/configs/{configName}")
+    public ApiResponse<PluginConfigView> saveNamedConfig(@PathVariable String pluginId,
+                                                         @PathVariable String configName,
+                                                         @RequestBody PluginConfigRequest request) {
+        return ApiResponse.success(
+                pluginRuntimeService.saveConfig(pluginId, configName, request == null ? null : request.getConfig()),
+                "插件配置已保存"
+        );
+    }
+
+    @DeleteMapping("/{pluginId}/configs/{configName}")
+    public ApiResponse<Void> deleteNamedConfig(@PathVariable String pluginId,
+                                               @PathVariable String configName) {
+        pluginRuntimeService.deleteConfig(pluginId, configName);
+        return ApiResponse.success(null, "插件配置已删除");
     }
 
     /**
@@ -183,7 +211,8 @@ public class PluginController {
                         action,
                         invokeRequest.getArgs(),
                         invokeRequest.getScriptInput(),
-                        invokeRequest.getResponseView() == ExecutionResponseView.DEBUG
+                        invokeRequest.getResponseView() == ExecutionResponseView.DEBUG,
+                        invokeRequest.getConfigName()
                 ),
                 "插件调用成功"
         );

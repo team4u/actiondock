@@ -38,11 +38,12 @@ class __ActionDockScripts:
 scripts = __ActionDockScripts()
 
 class __ActionDockPlugins:
-    def invoke(self, plugin_id, action, args=None):
+    def invoke(self, plugin_id, action, args=None, options=None):
         payload = json.dumps({
             "pluginId": plugin_id,
             "action": action,
-            "args": {} if args is None else args
+            "args": {} if args is None else args,
+            "options": {} if options is None else options
         }, ensure_ascii=False)
         sys.stderr.write("__ACTIONDOCK_PLUGIN__" + payload + "\n")
         sys.stderr.flush()
