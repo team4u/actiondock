@@ -119,7 +119,7 @@ class PluginViewMapper {
                 .setState(enabled ? "STARTED" : PLUGIN_STATE_DISABLED)
                 .setSourceType(PluginReferenceSourceType.SYSTEM)
                 .setStarted(enabled)
-                .setConfigurable(false)
+                .setConfigurable(isConfigurable(manifest))
                 .setActions(manifest.getActions().stream()
                         .map(PluginViewMapper::toActionView)
                         .toList());
@@ -141,13 +141,17 @@ class PluginViewMapper {
                 .setState(enabled ? "STARTED" : PLUGIN_STATE_DISABLED)
                 .setSourceType(PluginReferenceSourceType.SYSTEM)
                 .setStarted(enabled)
-                .setConfigurable(false)
+                .setConfigurable(isConfigurable(manifest))
                 .setActionCount(manifest.getActions().size());
     }
 
     static PluginRegistration toSystemRegistration(String pluginId, ActionDockPlugin plugin, boolean enabled) {
         PluginManifest manifest = PluginManifestLoader.load(plugin.getClass(), pluginId);
         return toRegistration(manifest, null, enabled, null);
+    }
+
+    private static boolean isConfigurable(PluginManifest manifest) {
+        return manifest != null && (!manifest.getConfigSchema().isEmpty() || !manifest.getDefaultConfig().isEmpty());
     }
 
     private static PluginActionView toActionView(PluginActionMetadata actionMetadata) {

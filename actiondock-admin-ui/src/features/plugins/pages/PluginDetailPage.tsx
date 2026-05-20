@@ -822,32 +822,36 @@ export function PluginDetailPage() {
                   <Alert type="info" showIcon message="正在加载插件配置" />
                 ) : !currentConfig ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="插件配置不存在或加载失败。" />
-                ) : isSystemPlugin ? (
-                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="系统插件没有独立插件配置。" />
+                ) : !plugin?.configurable ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前插件没有独立插件配置。" />
                 ) : (
                   <Space direction="vertical" size={16} style={{ width: "100%" }}>
                     <Space wrap>
-                      <Select
-                        value={activeConfigName}
-                        options={pluginConfigs.map((item) => ({
-                          value: item.configName,
-                          label: item.configName === "default" ? "default（默认）" : item.configName
-                        }))}
-                        onChange={(value) => void loadNamedConfig(value)}
-                        style={{ minWidth: 220 }}
-                      />
-                      <Button onClick={() => void handleCreateConfig()}>
-                        新建配置
-                      </Button>
-                      <Button
-                        danger
-                        icon={<DeleteOutlined />}
-                        disabled={activeConfigName === "default"}
-                        loading={configSaving}
-                        onClick={() => void handleDeleteConfig()}
-                      >
-                        删除配置
-                      </Button>
+                      {!isSystemPlugin ? (
+                        <>
+                          <Select
+                            value={activeConfigName}
+                            options={pluginConfigs.map((item) => ({
+                              value: item.configName,
+                              label: item.configName === "default" ? "default（默认）" : item.configName
+                            }))}
+                            onChange={(value) => void loadNamedConfig(value)}
+                            style={{ minWidth: 220 }}
+                          />
+                          <Button onClick={() => void handleCreateConfig()}>
+                            新建配置
+                          </Button>
+                          <Button
+                            danger
+                            icon={<DeleteOutlined />}
+                            disabled={activeConfigName === "default"}
+                            loading={configSaving}
+                            onClick={() => void handleDeleteConfig()}
+                          >
+                            删除配置
+                          </Button>
+                        </>
+                      ) : null}
                     </Space>
                     <SchemaObjectEditor
                       form={configForm}

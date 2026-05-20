@@ -41,6 +41,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -480,7 +481,73 @@ class PluginRuntimeServiceTest {
                     assertThat(plugin.getSourceType()).isEqualTo(PluginReferenceSourceType.SYSTEM);
                     assertThat(plugin.isStarted()).isTrue();
                     assertThat(plugin.getState()).isEqualTo("STARTED");
+                    assertThat(plugin.isConfigurable()).isFalse();
                 });
+    }
+
+    @Test
+    void systemPluginConfigUsesManifestDefaultsAndSavedOverrides() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        SystemConfigurablePlugin plugin = new SystemConfigurablePlugin();
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(plugin)
+        );
+
+        assertThat(service.get("system-configurable-plugin").isConfigurable()).isTrue();
+        assertThat(service.getConfig("system-configurable-plugin").getConfig())
+                .containsEntry("prefix", "system");
+        assertThat(service.listConfigs("system-configurable-plugin"))
+                .singleElement()
+                .satisfies(config -> {
+                    assertThat(config.getConfigName()).isEqualTo("default");
+                    assertThat(config.getDefaultConfig()).containsEntry("prefix", "system");
+                    assertThat(config.getConfigSchema()).containsEntry("type", "object");
+                    assertThat(config.getConfig()).containsEntry("prefix", "system");
+                });
+
+        PluginConfigView saved = service.saveConfig("system-configurable-plugin", Map.of("prefix", "saved"));
+
+        assertThat(saved.getConfig()).containsEntry("prefix", "saved");
+        assertThat(service.listRawEffectiveConfigs("system-configurable-plugin"))
+                .containsEntry("default", Map.of("prefix", "saved"));
+        assertThat(service.invoke(
+                "system-configurable-plugin",
+                "echo",
+                new ScriptDefinition().setId("script-1"),
+                new ScriptExecutionContext().setExecutionId("exec-1"),
+                Map.of("name", "Alice"),
+                Map.of("message", "hello")
+        )).isEqualTo(Map.of(
+                "message", "saved:hello",
+                "configName", "default",
+                "scriptId", "script-1"
+        ));
+        assertThat(plugin.validatedConfigs).containsExactly(Map.of("prefix", "saved"));
+    }
+
+    @Test
+    void systemPluginsStillRejectNamedConfigs() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new SystemConfigurablePlugin())
+        );
+
+        assertThatThrownBy(() -> service.getConfig("system-configurable-plugin", "prod"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("系统插件不支持命名配置: system-configurable-plugin/prod");
+        assertThatThrownBy(() -> service.saveConfig("system-configurable-plugin", "prod", Map.of("prefix", "prod")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("系统插件不支持命名配置: system-configurable-plugin/prod");
     }
 
     @Test
@@ -601,9 +668,6 @@ class PluginRuntimeServiceTest {
         assertThatThrownBy(() -> service.readPluginFile("actiondock-workspace"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("系统插件不支持下载: actiondock-workspace");
-        assertThatThrownBy(() -> service.saveConfig("actiondock-workspace", Map.of()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("系统插件不支持配置: actiondock-workspace");
     }
 
     @Test
@@ -645,6 +709,29 @@ class PluginRuntimeServiceTest {
         ))
                 .isInstanceOf(PluginRuntimeException.class)
                 .hasMessage("插件调用失败 failing-system-plugin/explode: downstream boom");
+    }
+
+    private static final class SystemConfigurablePlugin implements ActionDockPlugin {
+        private final List<Map<String, Object>> validatedConfigs = new ArrayList<>();
+
+        @Override
+        public String id() {
+            return "system-configurable-plugin";
+        }
+
+        @Override
+        public void validateConfig(Map<String, Object> config) {
+            validatedConfigs.add(new LinkedHashMap<>(config));
+        }
+
+        @Override
+        public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
+            return Map.of(
+                    "message", context.getPluginConfig().get("prefix") + ":" + args.getOrDefault("message", ""),
+                    "configName", context.getPluginConfigName(),
+                    "scriptId", context.getScriptId()
+            );
+        }
     }
 
     private Path buildPluginJar(Path destination, String manifestJson) throws IOException {

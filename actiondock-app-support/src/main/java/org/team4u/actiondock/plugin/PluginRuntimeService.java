@@ -206,12 +206,8 @@ public class PluginRuntimeService {
         return withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
                 assertDefaultConfigName(configName, pluginId);
-                return new PluginConfigView()
-                        .setPluginId(pluginId)
-                        .setConfigName(PluginConfigManager.DEFAULT_CONFIG_NAME)
-                        .setConfigSchema(Map.of())
-                        .setDefaultConfig(Map.of())
-                        .setConfig(Map.of());
+                PluginRegistration registration = toSystemRegistrationOrEmpty(pluginId, systemPlugins.get(pluginId));
+                return buildConfigView(pluginId, registration, PluginConfigManager.DEFAULT_CONFIG_NAME);
             }
             PluginRegistration registration = requireRegistration(pluginId);
             String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
@@ -223,12 +219,8 @@ public class PluginRuntimeService {
     public List<PluginConfigView> listConfigs(String pluginId) {
         return withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
-                return List.of(new PluginConfigView()
-                        .setPluginId(pluginId)
-                        .setConfigName(PluginConfigManager.DEFAULT_CONFIG_NAME)
-                        .setConfigSchema(Map.of())
-                        .setDefaultConfig(Map.of())
-                        .setConfig(Map.of()));
+                PluginRegistration registration = toSystemRegistrationOrEmpty(pluginId, systemPlugins.get(pluginId));
+                return List.of(buildConfigView(pluginId, registration, PluginConfigManager.DEFAULT_CONFIG_NAME));
             }
             PluginRegistration registration = requireRegistration(pluginId);
             return configManager.listConfigNames(pluginId).stream()
@@ -240,7 +232,11 @@ public class PluginRuntimeService {
     public Map<String, Map<String, Object>> listRawEffectiveConfigs(String pluginId) {
         return withReadLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
-                return Map.of(PluginConfigManager.DEFAULT_CONFIG_NAME, Map.of());
+                PluginRegistration registration = toSystemRegistrationOrEmpty(pluginId, systemPlugins.get(pluginId));
+                return Map.of(
+                        PluginConfigManager.DEFAULT_CONFIG_NAME,
+                        configManager.loadRawEffectiveConfig(registration.getDefaultConfig(), pluginId)
+                );
             }
             PluginRegistration registration = requireRegistration(pluginId);
             Map<String, Map<String, Object>> configs = new LinkedHashMap<>();
@@ -258,7 +254,14 @@ public class PluginRuntimeService {
     public PluginConfigView saveConfig(String pluginId, String configName, Map<String, Object> config) {
         return withWriteLock(lock, () -> {
             if (systemPlugins.containsKey(pluginId)) {
-                throw systemPluginUnsupported("配置", pluginId);
+                String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
+                assertDefaultConfigName(normalizedConfigName, pluginId);
+                PluginRegistration registration = toSystemRegistrationOrEmpty(pluginId, systemPlugins.get(pluginId));
+                Map<String, Object> normalized = PluginConfigManager.normalizeConfig(config);
+                Map<String, Object> effectiveConfig = configManager.resolveRuntimeConfig(registration.getDefaultConfig(), normalized);
+                systemPlugins.get(pluginId).validateConfig(effectiveConfig);
+                configManager.writeConfig(pluginId, normalizedConfigName, normalized);
+                return buildConfigView(pluginId, registration, normalizedConfigName);
             }
             PluginRegistration registration = requireRegistration(pluginId);
             String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
@@ -732,7 +735,8 @@ public class PluginRuntimeService {
                     throw pluginNotStarted(pluginId);
                 }
                 plugin = systemPlugin;
-                pluginConfig = Map.of();
+                PluginRegistration registration = toSystemRegistrationOrEmpty(pluginId, systemPlugin);
+                pluginConfig = configManager.loadRuntimeConfig(registration.getDefaultConfig(), pluginId, normalizedConfigName);
             } else {
                 PluginRegistration registration = requireRegistration(pluginId);
                 plugin = requireLoadedExtension(pluginId);
@@ -836,6 +840,18 @@ public class PluginRuntimeService {
             throw pluginNotFound(pluginId);
         }
         return view;
+    }
+
+    private static PluginRegistration toSystemRegistrationOrEmpty(String pluginId, ActionDockPlugin plugin) {
+        try {
+            return PluginViewMapper.toSystemRegistration(pluginId, plugin, true);
+        } catch (IllegalArgumentException exception) {
+            return new PluginRegistration()
+                    .setPluginId(pluginId)
+                    .setConfigSchema(Map.of())
+                    .setDefaultConfig(Map.of())
+                    .setEnabled(true);
+        }
     }
 
     private PluginActionMetadata requireActionMetadata(PluginRegistration registration, String action) {
