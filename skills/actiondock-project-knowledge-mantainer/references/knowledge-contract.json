@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "inputs": {
+    "required": [
+      "repoPath"
+    ],
+    "optional": [
+      "operation",
+      "projectName",
+      "serviceName",
+      "language",
+      "framework",
+      "entryPath",
+      "evidenceFiles",
+      "audience",
+      "detailLevel",
+      "inferenceMode",
+      "batchMode",
+      "batchSize",
+      "maxBatchRounds",
+      "resume"
+    ],
+    "defaults": {
+      "entryPath": "ACTIONDOCK.md",
+      "audience": "newcomer",
+      "detailLevel": "deep",
+      "inferenceMode": "evidence-bound",
+      "batchMode": "auto",
+      "maxBatchRounds": 100,
+      "resume": true
+    }
+  },
+  "outputs": {
+    "entry": "ACTIONDOCK.md",
+    "reports": {
+      "init": "KNOWLEDGE_INIT_REPORT.md",
+      "refresh": "KNOWLEDGE_UPDATE_REPORT.md"
+    },
+    "formalRoots": [
+      "docs"
+    ],
+    "tempRoot": ".knowledge-tmp"
+  },
+  "workflow": {
+    "phaseOrder": [
+      "validate-repo",
+      "discover",
+      "activate-domains",
+      "draft",
+      "merge-write",
+      "quality-check"
+    ],
+    "formalWritePhases": [
+      "merge-write"
+    ]
+  },
+  "batch": {
+    "thresholds": {
+      "flows": 12,
+      "tables": 30
+    },
+    "sizes": {
+      "flow": 6,
+      "table": 15,
+      "runtime": 5
+    },
+    "planFile": "batch-plan.json",
+    "checkpointFile": "checkpoint.json",
+    "statusValues": [
+      "pending",
+      "in_progress",
+      "done",
+      "skipped",
+      "needs_review"
+    ]
+  },
+  "toolContext": {
+    "path": "docs/agent/tool-context.md"
+  },
+  "diagnosis": {
+    "indexPath": "docs/diagnosis/index.md",
+    "playbooks": {
+      "sql": "docs/diagnosis/sql-playbook.md",
+      "log": "docs/diagnosis/log-playbook.md",
+      "runbook": "docs/diagnosis/runbook.md"
+    },
+    "optionalDocs": [
+      "docs/diagnosis/logs.md",
+      "docs/diagnosis/exceptions.md",
+      "docs/diagnosis/observability.md"
+    ],
+    "indexRequiredSections": [
+      "快速入口",
+      "问题场景索引",
+      "工具上下文",
+      "证据缺口"
+    ],
+    "playbookSuggestedSections": [
+      "适用条件",
+      "结果解释",
+      "证据与不确定性"
+    ],
+    "runbookSuggestedSections": [
+      "适用现象",
+      "排查步骤",
+      "判断矩阵",
+      "关联知识",
+      "风险与边界",
+      "证据与不确定性"
+    ]
+  }
+}
