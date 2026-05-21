@@ -1,0 +1,140 @@
+{
+  "pluginId": "actiondock-project-knowledge",
+  "name": "ActionDock Project Knowledge",
+  "description": "Built-in project knowledge maintenance plugin for planning, running, resuming, and validating ACTIONDOCK.md based knowledge bases.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "externalCommandProfiles": {
+        "type": "object",
+        "title": "External Command Profiles"
+      },
+      "defaultExecutor": {
+        "type": "string",
+        "title": "Default Executor"
+      }
+    }
+  },
+  "defaultConfig": {
+    "defaultExecutor": "builtin-agent",
+    "externalCommandProfiles": {}
+  },
+  "actions": [
+    {
+      "action": "planMaintenance",
+      "title": "Plan Knowledge Maintenance",
+      "description": "Inspect a repository and return the init/refresh plan, activated domains, expected outputs, and warnings without writing formal files.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["repoPath"],
+        "properties": {
+          "repoPath": {"type": "string", "title": "Repository Path"},
+          "operation": {"type": "string", "title": "Operation"},
+          "evidenceFiles": {"type": "array", "items": {"type": "string"}},
+          "resume": {"type": "boolean"},
+          "executor": {"type": "string"},
+          "agentProfile": {"type": "string"},
+          "externalCommandProfile": {"type": "string"}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {"type": "string"},
+          "operation": {"type": "string"},
+          "entryPath": {"type": "string"},
+          "activatedDomains": {"type": "array"},
+          "warnings": {"type": "array"}
+        }
+      },
+      "exampleArgs": {
+        "repoPath": "/path/to/project",
+        "operation": "refresh",
+        "executor": "builtin-agent"
+      }
+    },
+    {
+      "action": "runMaintenance",
+      "title": "Run Knowledge Maintenance",
+      "description": "Run init, refresh, or resume. Writes ACTIONDOCK.md, docs, reports, and checkpoint files inside the target repository.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["repoPath"],
+        "properties": {
+          "repoPath": {"type": "string", "title": "Repository Path"},
+          "operation": {"type": "string", "title": "Operation"},
+          "evidenceFiles": {"type": "array", "items": {"type": "string"}},
+          "resume": {"type": "boolean"},
+          "executor": {"type": "string"},
+          "agentProfile": {"type": "string"},
+          "externalCommandProfile": {"type": "string"},
+          "dryRun": {"type": "boolean"}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {"type": "string"},
+          "status": {"type": "string"},
+          "changedFiles": {"type": "array"},
+          "reportPath": {"type": "string"},
+          "checkpointPath": {"type": "string"},
+          "qualityGateResult": {"type": "object"}
+        }
+      },
+      "exampleArgs": {
+        "repoPath": "/path/to/project",
+        "operation": "init",
+        "dryRun": false
+      }
+    },
+    {
+      "action": "getRun",
+      "title": "Get Knowledge Maintenance Run",
+      "description": "Read the latest or requested maintenance run state from .knowledge-tmp.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["repoPath"],
+        "properties": {
+          "repoPath": {"type": "string"},
+          "runId": {"type": "string"}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {"type": "string"},
+          "status": {"type": "string"},
+          "checkpointPath": {"type": "string"},
+          "reportPath": {"type": "string"}
+        }
+      },
+      "exampleArgs": {
+        "repoPath": "/path/to/project"
+      }
+    },
+    {
+      "action": "validateKnowledge",
+      "title": "Validate Project Knowledge",
+      "description": "Run semantic and structural quality checks for generated project knowledge files.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["repoPath"],
+        "properties": {
+          "repoPath": {"type": "string"}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {"type": "boolean"},
+          "issues": {"type": "array"}
+        }
+      },
+      "exampleArgs": {
+        "repoPath": "/path/to/project"
+      }
+    }
+  ]
+}
