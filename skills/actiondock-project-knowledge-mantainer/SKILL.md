@@ -69,6 +69,6 @@ actiondock plugin invoke actiondock-project-knowledge validateKnowledge \
 ## 边界
 
 - 不自动 stage、commit、push 或创建 PR。
-- 不绕过插件直接维护 `ACTIONDOCK.md`、`docs/`、报告或 `.knowledge-tmp/`。
-- 不把 `.knowledge-tmp/` 内容作为长期事实来源。
+- 不绕过插件直接维护 `ACTIONDOCK.md`、`docs/`、报告或 `.actiondock/.knowledge-tmp/`。
+- 不把 `.actiondock/.knowledge-tmp/` 内容作为长期事实来源。
 - 如果插件返回质量门问题，必须把问题和报告路径反馈给用户，不要伪装成完全成功。

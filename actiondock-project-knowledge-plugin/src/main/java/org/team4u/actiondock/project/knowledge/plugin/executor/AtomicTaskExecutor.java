@@ -4,7 +4,10 @@ import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 import org.team4u.actiondock.project.knowledge.plugin.domain.AtomicTask;
 import org.team4u.actiondock.project.knowledge.plugin.domain.MaintenanceRequest;
 import org.team4u.actiondock.project.knowledge.plugin.domain.RepositoryFacts;
+import org.team4u.actiondock.project.knowledge.plugin.domain.RepositoryInventory;
 import org.team4u.actiondock.project.knowledge.plugin.domain.TaskResult;
+
+import java.util.Map;
 
 /**
  * 原子任务执行器接口。
@@ -26,4 +29,20 @@ public interface AtomicTaskExecutor {
      * @return 任务执行结果
      */
     TaskResult execute(ScriptPluginContext context, MaintenanceRequest request, RepositoryFacts facts, AtomicTask task, String template);
+
+    /**
+     * 执行仓库扫描判域任务。
+     *
+     * @param context   脚本插件上下文
+     * @param request   维护请求
+     * @param inventory 递归 inventory 结果
+     * @param prompt    扫描提示词
+     * @return 结构化扫描结果
+     */
+    default Map<String, Object> scanRepository(ScriptPluginContext context,
+                                               MaintenanceRequest request,
+                                               RepositoryInventory inventory,
+                                               String prompt) {
+        throw new UnsupportedOperationException("Repository scanning is not supported by this executor.");
+    }
 }

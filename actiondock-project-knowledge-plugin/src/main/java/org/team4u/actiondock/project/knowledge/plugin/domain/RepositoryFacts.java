@@ -6,19 +6,29 @@ import java.util.List;
 /**
  * 仓库扫描结果。
  *
- * <p>封装对目标仓库进行结构扫描后收集的全部信息，包括检测到的文件、激活的知识域、警告信息和证据文件。
+ * <p>封装递归 inventory 和 AI 判域后的仓库事实，用于任务规划、文档写入和报告输出。
  *
- * @param root            仓库根目录的绝对路径
- * @param detectedFiles   检测到的文件列表（格式：{@code label:relativePath}）
- * @param activatedDomains 激活的知识域列表（如 {@code java}、{@code frontend}、{@code data}）
- * @param warnings        扫描过程中产生的警告信息
- * @param evidenceFiles   用户指定的额外证据文件列表
+ * @param root             仓库根目录绝对路径
+ * @param scanSummary      扫描摘要
+ * @param projectShape     项目形态
+ * @param detectedStacks   识别出的技术栈列表
+ * @param modules          模块清单
+ * @param domains          激活的知识域清单
+ * @param taskGroups       扫描阶段建议的任务分组
+ * @param inventorySignals inventory 收集到的证据列表
+ * @param scanWarnings     扫描阶段告警
+ * @param evidenceFiles    用户指定的额外证据文件
  */
 public record RepositoryFacts(
         Path root,
-        List<String> detectedFiles,
-        List<String> activatedDomains,
-        List<String> warnings,
+        String scanSummary,
+        String projectShape,
+        List<String> detectedStacks,
+        List<DetectedModule> modules,
+        List<DetectedDomain> domains,
+        List<PlannedTaskGroup> taskGroups,
+        List<String> inventorySignals,
+        List<String> scanWarnings,
         List<String> evidenceFiles
 ) {
 }

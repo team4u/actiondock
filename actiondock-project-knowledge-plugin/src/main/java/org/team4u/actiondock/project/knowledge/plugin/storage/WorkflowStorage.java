@@ -16,7 +16,7 @@ import java.util.Map;
  * 工作流存储服务。
  *
  * <p>管理工作流运行过程中的检查点、任务计划和任务追踪数据的持久化。
- * 所有中间数据存储在仓库根目录的 {@code .knowledge-tmp} 临时目录中。
+ * 所有中间数据存储在仓库根目录的 {@code .actiondock/.knowledge-tmp} 临时目录中。
  *
  * @author ActionDock
  */
@@ -37,7 +37,7 @@ public class WorkflowStorage {
     /**
      * 获取临时工作目录路径。
      *
-     * @return {@code .knowledge-tmp} 目录的绝对路径
+     * @return {@code .actiondock/.knowledge-tmp} 目录的绝对路径
      */
     public Path tempRoot() {
         return tempRoot;

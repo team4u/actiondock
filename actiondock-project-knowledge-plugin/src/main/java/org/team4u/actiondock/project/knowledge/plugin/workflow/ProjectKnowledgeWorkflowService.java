@@ -30,10 +30,8 @@ import java.util.UUID;
  * <p>工作流节点执行顺序：
  * <ol>
  *   <li>validateRepo — 校验仓库路径有效性</li>
- *   <li>scanBaseline — 扫描仓库结构基线</li>
- *   <li>askExplorationOutline — 生成探索大纲</li>
- *   <li>normalizeExploration — 标准化探索结果</li>
- *   <li>activateDomains — 激活知识域</li>
+ *   <li>collectInventory — 递归收集轻量证据</li>
+ *   <li>classifyDomains — 使用 AI 判定项目形态、域和任务分组</li>
  *   <li>buildTaskPlan — 构建原子任务计划</li>
  *   <li>executeAtomicTasks — 逐个执行原子任务</li>
  *   <li>mergeWrite — 合并写入知识文档</li>
@@ -44,9 +42,9 @@ import java.util.UUID;
  * @author ActionDock
  */
 public class ProjectKnowledgeWorkflowService {
-    private final RepositoryScanner repositoryScanner = new RepositoryScanner();
-    private final TaskPlanner taskPlanner = new TaskPlanner();
     private final TemplateService templateService = new TemplateService();
+    private final RepositoryScanner repositoryScanner = new RepositoryScanner(templateService);
+    private final TaskPlanner taskPlanner = new TaskPlanner();
     private final KnowledgeDocumentWriter documentWriter = new KnowledgeDocumentWriter();
     private final KnowledgeQualityService qualityService = new KnowledgeQualityService();
     private final AtomicTaskExecutorRouter executorRouter;
@@ -71,12 +69,11 @@ public class ProjectKnowledgeWorkflowService {
      */
     public Map<String, Object> planMaintenance(Map<String, Object> values) throws IOException {
         MaintenanceRequest request = MaintenanceRequest.from(values);
-        RepositoryFacts facts = repositoryScanner.scan(request);
-        Map<String, Object> outline = deterministicExplorationOutline(facts);
-        List<AtomicTask> tasks = taskPlanner.plan(facts, outline);
+        AtomicTaskExecutor executor = executorRouter.resolve(request.executor());
+        RepositoryFacts facts = repositoryScanner.scan(null, request, executor);
+        List<AtomicTask> tasks = taskPlanner.plan(facts);
         Map<String, Object> result = basePlan(request, facts, tasks);
         result.put("status", "PLANNED");
-        result.put("explorationOutline", outline);
         return result;
     }
 
@@ -93,9 +90,9 @@ public class ProjectKnowledgeWorkflowService {
      */
     public Map<String, Object> runMaintenance(ScriptPluginContext context, Map<String, Object> values) throws IOException {
         MaintenanceRequest request = MaintenanceRequest.from(values);
-        RepositoryFacts facts = repositoryScanner.scan(request);
-        Map<String, Object> outline = deterministicExplorationOutline(facts);
-        List<AtomicTask> tasks = taskPlanner.plan(facts, outline);
+        AtomicTaskExecutor executor = executorRouter.resolve(request.executor());
+        RepositoryFacts facts = repositoryScanner.scan(context, request, executor);
+        List<AtomicTask> tasks = taskPlanner.plan(facts);
         Map<String, Object> plan = basePlan(request, facts, tasks);
 
         // dryRun 模式：仅返回规划结果，不实际执行
@@ -108,19 +105,16 @@ public class ProjectKnowledgeWorkflowService {
         WorkflowRun run = new WorkflowRun(newRunId(), request);
         WorkflowStorage storage = new WorkflowStorage(facts.root());
 
-        // 阶段一：仓库校验与基线扫描（确定性步骤，快速完成）
+        // 阶段一：仓库校验与扫描规划
         runNode(run, storage, "validateRepo");
-        runNode(run, storage, "scanBaseline");
-        runNode(run, storage, "askExplorationOutline");
-        runNode(run, storage, "normalizeExploration");
-        runNode(run, storage, "activateDomains");
+        runNode(run, storage, "collectInventory");
+        runNode(run, storage, "classifyDomains");
         runNode(run, storage, "buildTaskPlan");
         storage.savePlan(plan);
 
         // 阶段二：逐个执行原子任务（涉及 AI/外部调用，耗时较长）
         run.startNode("executeAtomicTasks");
         storage.saveCheckpoint(run);
-        AtomicTaskExecutor executor = executorRouter.resolve(request.executor());
         for (AtomicTask task : tasks) {
             String template = templateService.load(task.templateName());
             TaskResult result = executor.execute(context, request, facts, task, template);
@@ -212,21 +206,17 @@ public class ProjectKnowledgeWorkflowService {
         result.put("tempRoot", KnowledgeConstants.TEMP_ROOT);
         result.put("checkpointPath", KnowledgeConstants.TEMP_ROOT + "/" + KnowledgeConstants.CHECKPOINT_FILE);
         result.put("workflowNodes", KnowledgeConstants.WORKFLOW_NODES);
-        result.put("activatedDomains", facts.activatedDomains());
-        result.put("detectedFiles", facts.detectedFiles());
-        result.put("warnings", facts.warnings());
+        result.put("scanSummary", facts.scanSummary());
+        result.put("projectShape", facts.projectShape());
+        result.put("detectedStacks", facts.detectedStacks());
+        result.put("modules", facts.modules());
+        result.put("domains", facts.domains());
+        result.put("inventorySignals", facts.inventorySignals());
+        result.put("scanWarnings", facts.scanWarnings());
         result.put("executor", request.executor());
         result.put("taskPlan", taskPlanner.toPlan(tasks));
         result.put("templateBindings", tasks.stream().map(task -> Map.of("taskId", task.id(), "templateName", task.templateName())).toList());
         return result;
-    }
-
-    private Map<String, Object> deterministicExplorationOutline(RepositoryFacts facts) {
-        Map<String, Object> outline = new LinkedHashMap<>();
-        outline.put("summary", "Deterministic exploration outline from repository scan.");
-        outline.put("candidateDomains", facts.activatedDomains());
-        outline.put("evidence", facts.detectedFiles());
-        return outline;
     }
 
     // 合并未通过的任务和质检问题为统一的待审核列表

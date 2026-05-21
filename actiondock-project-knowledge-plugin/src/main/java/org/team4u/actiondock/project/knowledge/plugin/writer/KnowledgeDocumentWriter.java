@@ -77,14 +77,17 @@ public class KnowledgeDocumentWriter {
         String content = "# Project Knowledge " + ("init".equals(request.operation()) ? "Init" : "Update") + " Report\n\n"
                 + "- Operation: `" + request.operation() + "`\n"
                 + "- Repository: `" + facts.root() + "`\n"
+                + "- Scan summary: " + facts.scanSummary() + "\n"
+                + "- Project shape: `" + facts.projectShape() + "`\n"
+                + "- Detected stacks: " + facts.detectedStacks() + "\n"
                 + "- Executor: `" + request.executor() + "`\n"
                 + "- Quality gate: `" + (Boolean.TRUE.equals(quality.get("ok")) ? "PASS" : "NEEDS_REVIEW") + "`\n\n"
                 + "## Task Summary\n\n"
                 + taskSummary(taskResults)
                 + "\n## Changed Files\n\n"
                 + bulletList(changedFiles)
-                + "\n## Warnings\n\n"
-                + bulletList(facts.warnings())
+                + "\n## Scan Warnings\n\n"
+                + bulletList(facts.scanWarnings())
                 + "\n## Needs Review\n\n"
                 + needsReview(taskResults)
                 + "\n## Quality Issues\n\n"
@@ -99,10 +102,16 @@ public class KnowledgeDocumentWriter {
                 + "## Start Here\n\n"
                 + "1. `docs/project-knowledge-overview.md`\n"
                 + "2. `KNOWLEDGE_INIT_REPORT.md` or `KNOWLEDGE_UPDATE_REPORT.md`\n\n"
-                + "## Repository Signals\n\n"
-                + bulletList(facts.detectedFiles())
-                + "\n## Activated Domains\n\n"
-                + bulletList(facts.activatedDomains())
+                + "## Scan Summary\n\n"
+                + facts.scanSummary() + "\n\n"
+                + "## Project Shape\n\n"
+                + "- `" + facts.projectShape() + "`\n"
+                + "\n## Detected Stacks\n\n"
+                + bulletList(facts.detectedStacks())
+                + "\n## Inventory Signals\n\n"
+                + bulletList(facts.inventorySignals())
+                + "\n## Domains\n\n"
+                + bulletList(facts.domains().stream().map(domain -> domain.id() + " / " + domain.priority()).toList())
                 + "\n## Completed Atomic Tasks\n\n"
                 + bulletList(taskResults.stream().filter(TaskResult::done).map(result -> result.taskId() + " / " + result.taskType()).toList());
     }
@@ -110,10 +119,16 @@ public class KnowledgeDocumentWriter {
     private static String overviewContent(RepositoryFacts facts, List<TaskResult> taskResults) {
         return "# Project Knowledge Overview\n\n"
                 + "This document is maintained by `actiondock-project-knowledge` through a code-controlled workflow. AI outputs are kept as atomic task results and merged by code.\n\n"
-                + "## Evidence Entry Points\n\n"
-                + bulletList(facts.detectedFiles())
+                + "## Scan Summary\n\n"
+                + facts.scanSummary() + "\n\n"
+                + "## Project Shape\n\n"
+                + "- `" + facts.projectShape() + "`\n"
+                + "\n## Modules\n\n"
+                + bulletList(facts.modules().stream().map(module -> module.path() + " / " + module.role() + " / " + module.stacks()).toList())
                 + "\n## Domains\n\n"
-                + bulletList(facts.activatedDomains())
+                + bulletList(facts.domains().stream().map(domain -> domain.id() + " / " + domain.priority() + " / " + domain.reason()).toList())
+                + "\n## Inventory Signals\n\n"
+                + bulletList(facts.inventorySignals())
                 + "\n## Completed Atomic Tasks\n\n"
                 + bulletList(taskResults.stream().filter(TaskResult::done).map(result -> result.taskId() + " / " + result.taskType()).toList())
                 + "\n## Review Items\n\n"

@@ -24,7 +24,7 @@
     {
       "action": "planMaintenance",
       "title": "Plan Knowledge Maintenance",
-      "description": "Inspect a repository and return the init/refresh plan, activated domains, expected outputs, and warnings without writing formal files.",
+      "description": "Inspect a repository with recursive inventory and AI domain classification, then return the init/refresh plan and scan metadata without writing formal files.",
       "inputSchema": {
         "type": "object",
         "required": ["repoPath"],
@@ -34,8 +34,8 @@
           "evidenceFiles": {"type": "array", "items": {"type": "string"}},
           "resume": {"type": "boolean"},
           "executor": {"type": "string"},
-          "agentProfile": {"type": "string"},
-          "externalCommandProfile": {"type": "string"}
+          "agentProfile": {"type": "string", "description": "Required when executor is builtin-agent or auto."},
+          "externalCommandProfile": {"type": "string", "description": "Required when executor is external-cli."}
         }
       },
       "outputSchema": {
@@ -44,14 +44,20 @@
           "runId": {"type": "string"},
           "operation": {"type": "string"},
           "entryPath": {"type": "string"},
-          "activatedDomains": {"type": "array"},
-          "warnings": {"type": "array"}
+          "scanSummary": {"type": "string"},
+          "projectShape": {"type": "string"},
+          "detectedStacks": {"type": "array"},
+          "modules": {"type": "array"},
+          "domains": {"type": "array"},
+          "inventorySignals": {"type": "array"},
+          "scanWarnings": {"type": "array"}
         }
       },
       "exampleArgs": {
         "repoPath": "/path/to/project",
         "operation": "refresh",
-        "executor": "builtin-agent"
+        "executor": "builtin-agent",
+        "agentProfile": "project-knowledge-scanner"
       }
     },
     {
@@ -67,8 +73,8 @@
           "evidenceFiles": {"type": "array", "items": {"type": "string"}},
           "resume": {"type": "boolean"},
           "executor": {"type": "string"},
-          "agentProfile": {"type": "string"},
-          "externalCommandProfile": {"type": "string"},
+          "agentProfile": {"type": "string", "description": "Required when executor is builtin-agent or auto."},
+          "externalCommandProfile": {"type": "string", "description": "Required when executor is external-cli."},
           "dryRun": {"type": "boolean"}
         }
       },
@@ -86,13 +92,14 @@
       "exampleArgs": {
         "repoPath": "/path/to/project",
         "operation": "init",
+        "agentProfile": "project-knowledge-scanner",
         "dryRun": false
       }
     },
     {
       "action": "getRun",
       "title": "Get Knowledge Maintenance Run",
-      "description": "Read the latest or requested maintenance run state from .knowledge-tmp.",
+      "description": "Read the latest or requested maintenance run state from .actiondock/.knowledge-tmp.",
       "inputSchema": {
         "type": "object",
         "required": ["repoPath"],

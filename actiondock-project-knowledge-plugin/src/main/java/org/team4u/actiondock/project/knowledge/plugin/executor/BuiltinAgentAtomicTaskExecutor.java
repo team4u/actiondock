@@ -6,16 +6,21 @@ import org.team4u.actiondock.ai.api.AiAgentRunResult;
 import org.team4u.actiondock.ai.api.AiAgentRuntime;
 import org.team4u.actiondock.ai.api.AiCallerType;
 import org.team4u.actiondock.ai.api.AiMessage;
+import org.team4u.actiondock.ai.api.AiRunStatus;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
+import org.team4u.actiondock.plugin.api.PluginObjectMappers;
+import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.project.knowledge.plugin.ActionDockProjectKnowledgeSystemPlugin;
 import org.team4u.actiondock.project.knowledge.plugin.domain.AtomicTask;
 import org.team4u.actiondock.project.knowledge.plugin.domain.MaintenanceRequest;
 import org.team4u.actiondock.project.knowledge.plugin.domain.RepositoryFacts;
+import org.team4u.actiondock.project.knowledge.plugin.domain.RepositoryInventory;
 import org.team4u.actiondock.project.knowledge.plugin.domain.TaskResult;
 import org.team4u.actiondock.project.knowledge.plugin.parser.AiOutputParser;
 import org.team4u.actiondock.project.knowledge.plugin.parser.ParsedAiOutput;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -84,9 +89,50 @@ public class BuiltinAgentAtomicTaskExecutor implements AtomicTaskExecutor {
         AiAgentRunResult agentResult = aiAgentRuntime.run(agentRequest, agentContext);
 
         // 优先取 data 作为原始输出，失败时取 errorMessage
-        String raw = agentResult.data() == null ? String.valueOf(agentResult.errorMessage()) : String.valueOf(agentResult.data());
+        String raw = rawOutput(agentResult);
         ParsedAiOutput parsed = outputParser.parse(raw);
         return new TaskResult(task.id(), task.taskType(), parsed.status(), raw, parsed.parsedOutput(), parsed.parseError(), task.outputPath());
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> scanRepository(ScriptPluginContext context,
+                                              MaintenanceRequest request,
+                                              RepositoryInventory inventory,
+                                              String prompt) {
+        if (aiAgentRuntime == null) {
+            throw new PluginRuntimeException("AI runtime is required for repository scan.");
+        }
+        if (request.agentProfile() == null || request.agentProfile().isBlank()) {
+            throw new PluginRuntimeException("agentProfile is required for repository scan.");
+        }
+
+        AiAgentRunRequest agentRequest = new AiAgentRunRequest(
+                request.agentProfile(),
+                List.of(
+                        new AiMessage("system", "You classify one repository inventory into structured project-knowledge scan JSON. Return JSON only."),
+                        new AiMessage("user", prompt)
+                ),
+                Map.of("repoPath", inventory.root().toString()),
+                Map.of("scanPhase", "repository-classification")
+        );
+        AiAgentRunContext agentContext = new AiAgentRunContext(
+                AiCallerType.SCRIPT,
+                context == null ? null : context.getScriptId(),
+                context == null ? null : context.getExecutionId(),
+                null,
+                Map.of("pluginId", ActionDockProjectKnowledgeSystemPlugin.PLUGIN_ID, "phase", "repository-scan")
+        );
+
+        AiAgentRunResult result = aiAgentRuntime.run(agentRequest, agentContext);
+        if (result.status() != null && result.status() != AiRunStatus.SUCCESS) {
+            throw new PluginRuntimeException("Repository scan failed: " + failureMessage(result));
+        }
+        ParsedAiOutput parsed = outputParser.parse(rawOutput(result));
+        if (!parsed.parsed()) {
+            throw new PluginRuntimeException("Repository scan returned invalid JSON: " + parsed.parseError());
+        }
+        return new LinkedHashMap<>(parsed.parsedOutput());
     }
 
     private String atomicPrompt(AtomicTask task, String template) {
@@ -105,5 +151,31 @@ public class BuiltinAgentAtomicTaskExecutor implements AtomicTaskExecutor {
 
                 Return JSON with fields: title, summary, evidence, uncertainty, draftMarkdown.
                 """.formatted(task.id(), task.taskType(), task.title(), task.outputPath(), task.evidence(), template);
+    }
+
+    private static String rawOutput(AiAgentRunResult result) {
+        if (result == null) {
+            return "";
+        }
+        Map<String, Object> data = result.data();
+        if (data == null || data.isEmpty()) {
+            return result.errorMessage() == null ? "" : result.errorMessage();
+        }
+        Object text = data.get("text");
+        if (text instanceof String string) {
+            return string;
+        }
+        try {
+            return PluginObjectMappers.DEFAULT.writeValueAsString(data);
+        } catch (Exception exception) {
+            return String.valueOf(data);
+        }
+    }
+
+    private static String failureMessage(AiAgentRunResult result) {
+        String error = result == null ? null : result.errorMessage();
+        return error == null || error.isBlank()
+                ? "status=" + (result == null || result.status() == null ? "unknown" : result.status().name())
+                : error;
     }
 }

@@ -39,7 +39,7 @@
     "formalRoots": [
       "docs"
     ],
-    "tempRoot": ".knowledge-tmp"
+    "tempRoot": ".actiondock/.knowledge-tmp"
   },
   "workflow": {
     "phaseOrder": [

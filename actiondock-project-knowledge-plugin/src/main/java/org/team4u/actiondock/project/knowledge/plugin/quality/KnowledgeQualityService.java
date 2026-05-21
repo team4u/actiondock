@@ -75,9 +75,9 @@ public class KnowledgeQualityService {
             if (content.isBlank()) {
                 issues.add(new QualityIssue("empty-document", relative, "Document is empty."));
             }
-            // 检查是否引用了临时目录（正式文档不应包含 .knowledge-tmp 引用）
+            // 检查是否引用了临时目录（正式文档不应包含 .actiondock/.knowledge-tmp 引用）
             if (content.contains(KnowledgeConstants.TEMP_ROOT)) {
-                issues.add(new QualityIssue("temp-reference", relative, "Formal document references .knowledge-tmp."));
+                issues.add(new QualityIssue("temp-reference", relative, "Formal document references .actiondock/.knowledge-tmp."));
             }
             // 检查是否包含未完成的占位符
             if (containsPlaceholder(content)) {

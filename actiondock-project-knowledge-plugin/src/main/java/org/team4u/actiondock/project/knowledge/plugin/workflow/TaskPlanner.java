@@ -1,9 +1,10 @@
 package org.team4u.actiondock.project.knowledge.plugin.workflow;
 
 import org.team4u.actiondock.project.knowledge.plugin.domain.AtomicTask;
+import org.team4u.actiondock.project.knowledge.plugin.domain.KnowledgeConstants;
+import org.team4u.actiondock.project.knowledge.plugin.domain.PlannedTaskGroup;
 import org.team4u.actiondock.project.knowledge.plugin.domain.RepositoryFacts;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,55 +20,15 @@ import java.util.Map;
 public class TaskPlanner {
 
     /**
-     * 根据仓库事实和探索大纲规划原子任务列表。
+     * 根据仓库事实规划原子任务列表。
      *
-     * <p>始终生成探索大纲摘要任务，按需生成数据索引和代码概览任务。
-     *
-     * @param facts            仓库扫描结果
-     * @param explorationOutline 探索大纲
+     * @param facts 仓库扫描结果
      * @return 原子任务列表
      */
-    public List<AtomicTask> plan(RepositoryFacts facts, Map<String, Object> explorationOutline) {
-        List<AtomicTask> tasks = new ArrayList<>();
-
-        // 基础任务：探索大纲摘要（始终生成）
-        tasks.add(new AtomicTask(
-                "outline-1",
-                "draftExplorationOutline",
-                "Summarize code exploration outline",
-                "template-common.md",
-                ".knowledge-tmp/domain-drafts/exploration-outline.json",
-                facts.detectedFiles(),
-                Map.of("detectedFiles", facts.detectedFiles(), "outline", explorationOutline)
-        ));
-
-        // 按需任务：数据域存在时添加数据模型索引
-        if (facts.activatedDomains().contains("data")) {
-            tasks.add(new AtomicTask(
-                    "data-1",
-                    "draftDataIndex",
-                    "Draft data model index",
-                    "template-data.md",
-                    ".knowledge-tmp/domain-drafts/data-index.json",
-                    facts.detectedFiles(),
-                    Map.of("detectedFiles", facts.detectedFiles())
-            ));
-        }
-
-        // 按需任务：Java 或前端域存在时添加代码结构概览
-        if (facts.activatedDomains().contains("java") || facts.activatedDomains().contains("frontend")) {
-            tasks.add(new AtomicTask(
-                    "code-1",
-                    "draftCodeOverview",
-                    "Draft code structure overview",
-                    "template-common.md",
-                    ".knowledge-tmp/domain-drafts/code-overview.json",
-                    facts.detectedFiles(),
-                    Map.of("detectedFiles", facts.detectedFiles())
-            ));
-        }
-
-        return tasks;
+    public List<AtomicTask> plan(RepositoryFacts facts) {
+        return facts.taskGroups().stream()
+                .map(group -> toTask(facts, group))
+                .toList();
     }
 
     /**
@@ -92,5 +53,46 @@ public class TaskPlanner {
         map.put("outputPath", task.outputPath());
         map.put("evidence", task.evidence());
         return map;
+    }
+
+    private AtomicTask toTask(RepositoryFacts facts, PlannedTaskGroup group) {
+        return new AtomicTask(
+                group.id(),
+                taskType(group.id()),
+                group.title(),
+                group.templateName(),
+                outputPath(group.id()),
+                group.evidence().isEmpty() ? facts.inventorySignals() : group.evidence(),
+                Map.of(
+                        "scanSummary", facts.scanSummary(),
+                        "projectShape", facts.projectShape(),
+                        "detectedStacks", facts.detectedStacks(),
+                        "domains", facts.domains(),
+                        "groupDomains", group.domains(),
+                        "modules", facts.modules(),
+                        "inventorySignals", facts.inventorySignals()
+                )
+        );
+    }
+
+    private String taskType(String groupId) {
+        return switch (groupId) {
+            case "common" -> "draftCommonKnowledge";
+            case "flows" -> "draftFlowKnowledge";
+            case "data" -> "draftDataKnowledge";
+            case "integrations" -> "draftIntegrationKnowledge";
+            case "ops" -> "draftOpsKnowledge";
+            case "diagnosis" -> "draftDiagnosisKnowledge";
+            case "security" -> "draftSecurityKnowledge";
+            case "agent" -> "draftAgentKnowledge";
+            default -> throw new IllegalArgumentException("Unsupported task group id: " + groupId);
+        };
+    }
+
+    private String outputPath(String groupId) {
+        if (!KnowledgeConstants.SUPPORTED_TASK_GROUP_IDS.contains(groupId)) {
+            throw new IllegalArgumentException("Unsupported task group id: " + groupId);
+        }
+        return KnowledgeConstants.TEMP_ROOT + "/domain-drafts/" + groupId + ".json";
     }
 }

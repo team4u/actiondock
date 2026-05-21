@@ -37,6 +37,7 @@ node_modules/
 .project
 .settings
 .springBeans
+.actiondock/
 !**/src/main/**
 !**/src/test/**
 ### STS ###

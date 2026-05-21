@@ -1,15 +1,20 @@
 package org.team4u.actiondock.project.knowledge.plugin.executor;
 
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
+import org.team4u.actiondock.plugin.api.PluginObjectMappers;
+import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.project.knowledge.plugin.domain.AtomicTask;
 import org.team4u.actiondock.project.knowledge.plugin.domain.MaintenanceRequest;
 import org.team4u.actiondock.project.knowledge.plugin.domain.RepositoryFacts;
+import org.team4u.actiondock.project.knowledge.plugin.domain.RepositoryInventory;
 import org.team4u.actiondock.project.knowledge.plugin.domain.TaskResult;
 import org.team4u.actiondock.project.knowledge.plugin.parser.AiOutputParser;
 import org.team4u.actiondock.project.knowledge.plugin.parser.ParsedAiOutput;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -84,6 +89,47 @@ public class ExternalCliAtomicTaskExecutor implements AtomicTaskExecutor {
             return new TaskResult(task.id(), task.taskType(), status, raw, parsed.parsedOutput(), parsed.parseError(), task.outputPath());
         } catch (Exception exception) {
             return new TaskResult(task.id(), task.taskType(), "needs_review", null, java.util.Map.of("message", exception.getMessage()), "external-cli-error", task.outputPath());
+        }
+    }
+
+    @Override
+    public Map<String, Object> scanRepository(ScriptPluginContext context,
+                                              MaintenanceRequest request,
+                                              RepositoryInventory inventory,
+                                              String prompt) {
+        if (request.externalCommandProfile() == null || request.externalCommandProfile().isBlank()) {
+            throw new PluginRuntimeException("externalCommandProfile is required for repository scan.");
+        }
+        List<String> command = switch (request.externalCommandProfile()) {
+            case "claude-code" -> List.of("claude", "-p", prompt);
+            default -> List.of();
+        };
+        if (command.isEmpty()) {
+            throw new PluginRuntimeException("Repository scan external command profile is not allowed: " + request.externalCommandProfile());
+        }
+        try {
+            Process process = new ProcessBuilder(command)
+                    .directory(inventory.root().toFile())
+                    .redirectErrorStream(true)
+                    .start();
+            boolean finished = process.waitFor(120, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new PluginRuntimeException("Repository scan timed out.");
+            }
+            String raw = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (process.exitValue() != 0) {
+                throw new PluginRuntimeException("Repository scan failed: " + raw);
+            }
+            ParsedAiOutput parsed = outputParser.parse(raw);
+            if (!parsed.parsed()) {
+                throw new PluginRuntimeException("Repository scan returned invalid JSON: " + parsed.parseError());
+            }
+            return new LinkedHashMap<>(parsed.parsedOutput());
+        } catch (PluginRuntimeException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new PluginRuntimeException("Repository scan failed: " + exception.getMessage(), exception);
         }
     }
 

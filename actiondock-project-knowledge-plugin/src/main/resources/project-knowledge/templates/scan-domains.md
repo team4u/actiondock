@@ -31,6 +31,7 @@
 - `template-integrations.md`：外部依赖
 - `template-ops.md`：任务、补偿、运维操作
 - `template-diagnosis.md`：观测、诊断索引、runbook、SQL/日志手册
+- `template-security.md`：认证、授权、敏感操作、安全边界
 - `template-agent.md`：Agent 指南和查询工具上下文
 
 ## 激活和优先级启发式
