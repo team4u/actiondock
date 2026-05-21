@@ -9,7 +9,19 @@ import org.team4u.actiondock.project.knowledge.plugin.domain.TaskResult;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 本地确定性原子任务执行器。
+ *
+ * <p>当 AI 输出不可用或不必要时使用的回退策略，生成确定性的最小化结果。
+ * 作为所有其他执行器的最终回退保证知识库工作流不会因 AI 不可用而中断。
+ *
+ * @author ActionDock
+ */
 public class LocalAtomicTaskExecutor implements AtomicTaskExecutor {
+
+    /**
+     * 生成本地确定性结果，不依赖外部 AI 服务。
+     */
     @Override
     public TaskResult execute(ScriptPluginContext context, MaintenanceRequest request, RepositoryFacts facts, AtomicTask task, String template) {
         Map<String, Object> parsed = new LinkedHashMap<>();

@@ -18,21 +18,51 @@ import org.team4u.actiondock.project.knowledge.plugin.parser.ParsedAiOutput;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 内置 AI Agent 原子任务执行器。
+ *
+ * <p>通过 ActionDock AI Agent 运行时执行原子任务，将任务描述和证据作为 prompt 发送给 AI Agent，
+ * 然后解析返回结果。当 AI 运行时不可用或未配置 Agent Profile 时，回退到本地确定性策略。
+ *
+ * @author ActionDock
+ */
 public class BuiltinAgentAtomicTaskExecutor implements AtomicTaskExecutor {
     private final AiAgentRuntime aiAgentRuntime;
     private final AtomicTaskExecutor fallback;
     private final AiOutputParser outputParser = new AiOutputParser();
 
+    /**
+     * 创建内置 Agent 执行器。
+     *
+     * @param aiAgentRuntime AI Agent 运行时
+     * @param fallback       AI 不可用时的回退执行器
+     */
     public BuiltinAgentAtomicTaskExecutor(AiAgentRuntime aiAgentRuntime, AtomicTaskExecutor fallback) {
         this.aiAgentRuntime = aiAgentRuntime;
         this.fallback = fallback;
     }
 
+    /**
+     * 通过 AI Agent 执行原子任务。
+     *
+     * <p>当 {@code aiAgentRuntime} 为 {@code null} 或 {@code agentProfile} 未配置时直接回退。
+     * 成功调用后使用 {@link AiOutputParser} 解析 Agent 返回结果。
+     *
+     * @param context  脚本插件上下文
+     * @param request 维护请求
+     * @param facts   仓库扫描结果
+     * @param task    待执行的原子任务
+     * @param template 任务关联的模板内容
+     * @return 任务执行结果
+     */
     @Override
     public TaskResult execute(ScriptPluginContext context, MaintenanceRequest request, RepositoryFacts facts, AtomicTask task, String template) {
+        // AI 运行时不可用或未配置 Agent Profile 时直接回退
         if (aiAgentRuntime == null || request.agentProfile() == null || request.agentProfile().isBlank()) {
             return fallback.execute(context, request, facts, task, template);
         }
+
+        // 构建 Agent 请求：system 指令限定为单任务执行，user prompt 包含任务详情和模板约束
         AiAgentRunRequest agentRequest = new AiAgentRunRequest(
                 request.agentProfile(),
                 List.of(
@@ -42,6 +72,7 @@ public class BuiltinAgentAtomicTaskExecutor implements AtomicTaskExecutor {
                 Map.of("task", task, "repoPath", facts.root().toString()),
                 Map.of("taskType", task.taskType())
         );
+        // 构建调用上下文，关联插件 ID 和任务 ID 以便追踪
         AiAgentRunContext agentContext = new AiAgentRunContext(
                 AiCallerType.SCRIPT,
                 context == null ? null : context.getScriptId(),
@@ -49,7 +80,10 @@ public class BuiltinAgentAtomicTaskExecutor implements AtomicTaskExecutor {
                 null,
                 Map.of("pluginId", ActionDockProjectKnowledgeSystemPlugin.PLUGIN_ID, "taskId", task.id())
         );
+
         AiAgentRunResult agentResult = aiAgentRuntime.run(agentRequest, agentContext);
+
+        // 优先取 data 作为原始输出，失败时取 errorMessage
         String raw = agentResult.data() == null ? String.valueOf(agentResult.errorMessage()) : String.valueOf(agentResult.data());
         ParsedAiOutput parsed = outputParser.parse(raw);
         return new TaskResult(task.id(), task.taskType(), parsed.status(), raw, parsed.parsedOutput(), parsed.parseError(), task.outputPath());

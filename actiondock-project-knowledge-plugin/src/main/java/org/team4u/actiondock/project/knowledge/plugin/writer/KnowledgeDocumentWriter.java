@@ -13,31 +13,67 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 知识库文档写入器。
+ *
+ * <p>负责将原子任务执行结果合并写入正式知识文档，包括入口文件 ACTIONDOCK.md、
+ * 项目概览文档和维护报告。所有文档输出使用 Markdown 格式。
+ *
+ * @author ActionDock
+ */
 public class KnowledgeDocumentWriter {
 
+    /**
+     * 将原子任务结果合并写入知识文档。
+     *
+     * <p>生成或更新入口文件 ACTIONDOCK.md 和项目概览文档 {@code docs/project-knowledge-overview.md}。
+     *
+     * @param facts       仓库扫描结果
+     * @param request     维护请求
+     * @param taskResults 全部原子任务执行结果
+     * @return 变更的文件路径列表
+     * @throws IOException 文件写入失败
+     */
     public List<String> mergeWrite(RepositoryFacts facts, MaintenanceRequest request, List<TaskResult> taskResults) throws IOException {
         List<String> changedFiles = new ArrayList<>();
         Path docs = facts.root().resolve("docs");
         Files.createDirectories(docs);
 
+        // 初始化操作或入口文件不存在时生成/覆盖 ACTIONDOCK.md
         Path entry = facts.root().resolve(KnowledgeConstants.ENTRY_PATH);
         if (!Files.exists(entry) || "init".equals(request.operation())) {
             Files.writeString(entry, entryContent(facts, taskResults), StandardCharsets.UTF_8);
             changedFiles.add(KnowledgeConstants.ENTRY_PATH);
         }
 
+        // 概览文档每次运行都更新
         Path overview = docs.resolve("project-knowledge-overview.md");
         Files.writeString(overview, overviewContent(facts, taskResults), StandardCharsets.UTF_8);
         changedFiles.add("docs/project-knowledge-overview.md");
         return changedFiles;
     }
 
+    /**
+     * 生成并写入知识库维护报告。
+     *
+     * <p>报告包含操作类型、执行器信息、任务摘要、变更文件、警告和待审核项等。
+     *
+     * @param facts        仓库扫描结果
+     * @param request      维护请求
+     * @param taskResults  全部原子任务执行结果
+     * @param changedFiles 变更文件列表
+     * @param quality      质量检查结果
+     * @return 报告文件路径
+     * @throws IOException 文件写入失败
+     */
     public String writeReport(RepositoryFacts facts,
                               MaintenanceRequest request,
                               List<TaskResult> taskResults,
                               List<String> changedFiles,
                               Map<String, Object> quality) throws IOException {
         String reportPath = KnowledgeConstants.reportPath(request.operation());
+
+        // 拼接 Markdown 格式的维护报告
         String content = "# Project Knowledge " + ("init".equals(request.operation()) ? "Init" : "Update") + " Report\n\n"
                 + "- Operation: `" + request.operation() + "`\n"
                 + "- Repository: `" + facts.root() + "`\n"
@@ -53,6 +89,7 @@ public class KnowledgeDocumentWriter {
                 + needsReview(taskResults)
                 + "\n## Quality Issues\n\n"
                 + issueList(quality.get("issues"));
+
         Files.writeString(facts.root().resolve(reportPath), content, StandardCharsets.UTF_8);
         return reportPath;
     }
