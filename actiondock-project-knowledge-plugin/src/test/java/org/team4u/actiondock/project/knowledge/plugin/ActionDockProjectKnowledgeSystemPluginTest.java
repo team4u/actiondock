@@ -31,20 +31,20 @@ class ActionDockProjectKnowledgeSystemPluginTest {
     }
 
     @Test
-    void planMaintenanceDetectsOperationAndDomains() throws Exception {
+    void planMaintenanceReturnsWorkflowAndAtomicTasks() throws Exception {
         Files.writeString(tempDir.resolve("pom.xml"), "<project/>", StandardCharsets.UTF_8);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) plugin.invoke("planMaintenance", null, Map.of("repoPath", tempDir.toString()));
 
         assertThat(result.get("status")).isEqualTo("PLANNED");
-        assertThat(result.get("operation")).isEqualTo("init");
+        assertThat((List<String>) result.get("workflowNodes")).contains("scanBaseline", "executeAtomicTasks", "mergeWrite");
+        assertThat((Map<String, Object>) result.get("taskPlan")).containsEntry("taskCount", 2);
         assertThat((List<String>) result.get("activatedDomains")).contains("java", "actiondock");
-        assertThat((List<String>) result.get("warnings")).contains("ACTIONDOCK.md is missing and will be initialized.");
     }
 
     @Test
-    void runMaintenanceWritesEntryReportCheckpointAndOverview() throws Exception {
+    void runMaintenanceWritesEntryReportCheckpointAndAtomicOutputs() throws Exception {
         Files.writeString(tempDir.resolve("pom.xml"), "<project/>", StandardCharsets.UTF_8);
 
         @SuppressWarnings("unchecked")
@@ -58,7 +58,8 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         assertThat(Files.exists(tempDir.resolve("docs/project-knowledge-overview.md"))).isTrue();
         assertThat(Files.exists(tempDir.resolve("KNOWLEDGE_INIT_REPORT.md"))).isTrue();
         assertThat(Files.exists(tempDir.resolve(".knowledge-tmp/checkpoint.json"))).isTrue();
-        assertThat(Files.readString(tempDir.resolve("ACTIONDOCK.md"))).contains("docs/project-knowledge-overview.md");
+        assertThat(Files.exists(tempDir.resolve(".knowledge-tmp/domain-drafts/exploration-outline.json"))).isTrue();
+        assertThat(Files.readString(tempDir.resolve(".knowledge-tmp/checkpoint.json"))).contains("executeAtomicTasks", "taskStats");
     }
 
     @Test

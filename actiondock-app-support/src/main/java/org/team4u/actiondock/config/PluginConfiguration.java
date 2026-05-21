@@ -2,6 +2,7 @@ package org.team4u.actiondock.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.team4u.actiondock.ai.core.AiAgentRuntimeImpl;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
@@ -40,7 +41,7 @@ public class PluginConfiguration {
     }
 
     @Bean
-    public ActionDockPlugin actionDockProjectKnowledgeSystemPlugin() {
-        return new ActionDockProjectKnowledgeSystemPlugin();
+    public ActionDockPlugin actionDockProjectKnowledgeSystemPlugin(AiAgentRuntimeImpl aiAgentRuntime) {
+        return new ActionDockProjectKnowledgeSystemPlugin(aiAgentRuntime);
     }
 }
