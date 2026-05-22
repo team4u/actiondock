@@ -35,7 +35,7 @@ Skill 负责选择 runner、准备输入、解释返回结果。internal Agent �
 
 ```bash
 actiondock plugin invoke actiondock-project-knowledge init \
-  --input-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","runner":{"type":"internal"}}' \
+  --args-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","runner":{"type":"internal"}}' \
   --json
 ```
 
@@ -43,7 +43,7 @@ actiondock plugin invoke actiondock-project-knowledge init \
 
 ```bash
 actiondock plugin invoke actiondock-project-knowledge refresh \
-  --input-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","changedFiles":["src/main/java/demo/OrderController.java"],"runner":{"type":"internal"}}' \
+  --args-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","changedFiles":["src/main/java/demo/OrderController.java"],"runner":{"type":"internal"}}' \
   --json
 ```
 
@@ -51,7 +51,7 @@ actiondock plugin invoke actiondock-project-knowledge refresh \
 
 ```bash
 actiondock plugin invoke actiondock-project-knowledge refresh \
-  --input-json '{"repoPath":"/path/to/repo","runner":{"type":"external-cli","command":["claude","-p"],"timeoutSeconds":900}}' \
+  --args-json '{"repoPath":"/path/to/repo","runner":{"type":"external-cli","command":["claude","-p"],"timeoutSeconds":900}}' \
   --json
 ```
 
@@ -59,7 +59,7 @@ actiondock plugin invoke actiondock-project-knowledge refresh \
 
 ```bash
 actiondock plugin invoke actiondock-project-knowledge ingest \
-  --input-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","sources":[".kb_inbox/raw-note.md"],"runner":{"type":"internal"}}' \
+  --args-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","sources":[".kb_inbox/raw-note.md"],"runner":{"type":"internal"}}' \
   --json
 ```
 
@@ -67,7 +67,7 @@ actiondock plugin invoke actiondock-project-knowledge ingest \
 
 ```bash
 actiondock plugin invoke actiondock-project-knowledge validate \
-  --input-json '{"repoPath":"/path/to/repo"}' \
+  --args-json '{"repoPath":"/path/to/repo"}' \
   --json
 ```
 
