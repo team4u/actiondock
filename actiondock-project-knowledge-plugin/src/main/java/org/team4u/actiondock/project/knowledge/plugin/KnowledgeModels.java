@@ -2,6 +2,7 @@ package org.team4u.actiondock.project.knowledge.plugin;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /** 知识库生成请求参数，包含仓库路径、额外证据文件、受众和 AI profile 等。 */
 record KnowledgeRequest(
@@ -55,5 +56,44 @@ record ValidationIssue(
         String shardId,
         /** 是否可通过重新生成自动修复 */
         boolean repairable
+) {
+}
+
+/** Chief Architect 输出的单个执行批次，包含阶段序号和需要激活的 Planner 列表。 */
+record KnowledgePhase(
+        /** 阶段序号，从 0 开始，数值越小越早执行 */
+        int phaseNum,
+        /** 本阶段需要激活的领域 Planner 名称列表 */
+        List<String> domainsToActivate
+) {
+}
+
+/** Domain Planner 输出的单个原子文档任务，描述一次 UPSERT 或 PRUNE 操作。 */
+record KnowledgeWorkerTask(
+        /** 操作类型：UPSERT（创建或更新）或 PRUNE（删除） */
+        String action,
+        /** 目标文档路径，必须位于 .knowledge_base/ 下 */
+        String targetPath,
+        /** 关联的源码实体路径，用于 Agent 定位代码证据 */
+        String focusCodeEntity,
+        /** Planner 给出的操作线索，帮助 Worker 理解任务意图 */
+        String clue,
+        /** 生成此任务的 Planner 名称，用于追踪和错误报告 */
+        String planner
+) {
+}
+
+/** Worker 执行后的摘要，包含执行状态和变更文件列表。 */
+record KnowledgeWorkerResult(
+        /** 执行状态：COMPLETED 或 FAILED */
+        String status,
+        /** 实际写入的目标文档路径 */
+        String targetPath,
+        /** 本次执行中修改或创建的文件列表 */
+        List<String> changedFiles,
+        /** 执行过程中产生的警告信息 */
+        List<String> warnings,
+        /** Agent 返回的原始 JSON 对象 */
+        Map<String, Object> raw
 ) {
 }

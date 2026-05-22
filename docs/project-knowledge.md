@@ -149,8 +149,9 @@ actiondock script schema query-mysql-json --json
 
 当前 `actiondock-project-knowledge` 插件走一条更收敛的生成路径：
 
-- Java 插件只负责编排异步任务、调用 Agent、执行最终校验和记录 run 状态
-- Agent 直接读取代码、现有知识库和输入资料，自行决定维护哪些知识正文
+- Java 插件只负责编排异步任务、创建并调度多层 Agent、执行最终校验和记录 run 状态
+- 插件先创建 Chief Architect Agent 做 phase 分诊，再创建 Domain Planner Agent 产出 UPSERT / PRUNE 任务，最后创建 Specialized Worker Agent 执行单文件物理收敛
+- internal Agent 和 external CLI Agent 都由插件通过 `runner` 配置创建；调用方只决定 runner 类型，不直接承担编排职责
 - 正式知识入口是 `ACTIONDOCK.md`，正文根目录是 `.knowledge_base/`
 - `init` 初始化知识库，`refresh` 根据代码变化刷新，`ingest` 融合显式传入的手工资料
 

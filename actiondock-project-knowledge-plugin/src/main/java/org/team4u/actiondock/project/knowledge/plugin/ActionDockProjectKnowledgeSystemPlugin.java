@@ -25,6 +25,7 @@ import java.util.Map;
  */
 public class ActionDockProjectKnowledgeSystemPlugin implements ActionDockPlugin {
 
+    /** 插件唯一标识，用于 PF4J 插件注册和日志追踪。 */
     public static final String PLUGIN_ID = "actiondock-project-knowledge";
 
     private final ProjectKnowledgeService service;
@@ -50,6 +51,13 @@ public class ActionDockProjectKnowledgeSystemPlugin implements ActionDockPlugin 
         return PLUGIN_ID;
     }
 
+    /**
+     * 插件动作分发入口。
+     *
+     * <p>支持的动作包括：init（初始化）、refresh（增量刷新）、ingest（资料导入）、
+     * validate（质量校验）、getRun（查询异步任务状态）、cancelRun（取消异步任务）。
+     * 所有 init/refresh/ingest 操作为异步执行，立即返回 runId。
+     */
     @Override
     public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
         Map<String, Object> values = args == null ? Map.of() : args;
@@ -64,7 +72,6 @@ public class ActionDockProjectKnowledgeSystemPlugin implements ActionDockPlugin 
                 default -> throw new IllegalArgumentException("Unsupported project knowledge action: " + action);
             };
         } catch (PluginRuntimeException exception) {
-            // 已知的业务异常直接透传
             throw exception;
         } catch (Exception exception) {
             throw new PluginRuntimeException("Project knowledge action failed: " + exception.getMessage(), exception);

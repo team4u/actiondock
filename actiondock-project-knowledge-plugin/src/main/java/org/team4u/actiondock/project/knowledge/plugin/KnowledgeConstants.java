@@ -19,26 +19,22 @@ final class KnowledgeConstants {
     /** OCKB 目录树索引 */
     static final String SUMMARY_PATH = KNOWLEDGE_BASE_ROOT + "/SUMMARY.md";
 
-    /** 架构总览与领域文档路径 */
-    static final String OVERVIEW_PATH = KNOWLEDGE_BASE_ROOT + "/00_Overview_and_Domain/overview.md";
+    /** OCKB 七大基座目录 */
+    static final String ARCHITECTURE_DIR = KNOWLEDGE_BASE_ROOT + "/01_Architecture_Overview";
 
-    /** 编码规范文档路径 */
-    static final String CODING_GUIDELINES_PATH = KNOWLEDGE_BASE_ROOT + "/01_Coding_Guidelines/guidelines.md";
+    static final String API_DIR = KNOWLEDGE_BASE_ROOT + "/02_API_Specifications";
 
-    /** 基础设施和环境文档路径 */
-    static final String INFRA_ENV_PATH = KNOWLEDGE_BASE_ROOT + "/02_Infra_and_Env/infra-and-env.md";
+    static final String DATA_DIR = KNOWLEDGE_BASE_ROOT + "/03_Data_Models";
 
-    /** 数据模型文档路径 */
-    static final String DATA_PATH = KNOWLEDGE_BASE_ROOT + "/03_Data_Models/data-models.md";
+    static final String FLOWS_DIR = KNOWLEDGE_BASE_ROOT + "/04_Business_Flows";
 
-    /** 业务流程文档路径 */
-    static final String FLOWS_PATH = KNOWLEDGE_BASE_ROOT + "/04_Business_Flows/business-flows.md";
+    static final String AGENT_TOOLS_DIR = KNOWLEDGE_BASE_ROOT + "/05_Agent_Tools_and_CLI";
 
-    /** Agent 工具与 CLI 文档路径 */
-    static final String AGENT_TOOLS_PATH = KNOWLEDGE_BASE_ROOT + "/05_Agent_Tools_and_CLI/agent-tools-and-cli.md";
+    static final String INFRA_ENV_DIR = KNOWLEDGE_BASE_ROOT + "/06_Infra_and_Env";
 
-    /** Runbook 和运维文档路径 */
-    static final String RUNBOOKS_PATH = KNOWLEDGE_BASE_ROOT + "/06_Runbooks_and_Ops/runbooks-and-ops.md";
+    static final String MAINTENANCE_OPS_DIR = KNOWLEDGE_BASE_ROOT + "/07_Maintenance_and_Ops";
+
+    static final String ERRORS_PATH = MAINTENANCE_OPS_DIR + "/ERRORS.md";
 
     private KnowledgeConstants() {
     }

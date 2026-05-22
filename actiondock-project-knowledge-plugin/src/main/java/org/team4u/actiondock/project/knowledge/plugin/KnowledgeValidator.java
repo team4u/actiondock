@@ -48,22 +48,27 @@ final class KnowledgeValidator {
         } else {
             checkMarkdown(scanRoot, summary, documentIdsByPath, issues);
         }
-        for (String rel : List.of(
-                KnowledgeConstants.OVERVIEW_PATH,
-                KnowledgeConstants.CODING_GUIDELINES_PATH,
-                KnowledgeConstants.INFRA_ENV_PATH,
-                KnowledgeConstants.DATA_PATH,
-                KnowledgeConstants.FLOWS_PATH,
-                KnowledgeConstants.AGENT_TOOLS_PATH,
-                KnowledgeConstants.RUNBOOKS_PATH)) {
+        for (String rel : pillarDirs()) {
             Path path = scanRoot.resolve(rel);
-            if (!Files.exists(path)) {
-                issues.add(new ValidationIssue("missing-pillar", rel, "OCKB pillar document is missing.", documentIdsByPath.getOrDefault(rel, documentIdOf(rel)), documentIdOf(rel), true));
+            if (!Files.isDirectory(path)) {
+                issues.add(new ValidationIssue("missing-pillar", rel, "OCKB pillar directory is missing.", documentIdsByPath.getOrDefault(rel, documentIdOf(rel)), documentIdOf(rel), true));
             } else {
-                checkMarkdown(scanRoot, path, documentIdsByPath, issues);
+                checkMarkdownTree(scanRoot, path, documentIdsByPath, issues);
             }
         }
         return new MapValidation(issues.isEmpty(), issues);
+    }
+
+    /** 递归扫描目录下所有 .md 文件并逐一校验。 */
+    private void checkMarkdownTree(Path scanRoot, Path root, Map<String, String> documentIdsByPath, List<ValidationIssue> issues) {
+        try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
+            stream
+                    .filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".md"))
+                    .forEach(path -> checkMarkdown(scanRoot, path, documentIdsByPath, issues));
+        } catch (IOException exception) {
+            String rel = scanRoot.relativize(root).toString().replace('\\', '/');
+            issues.add(new ValidationIssue("read-failed", rel, exception.getMessage(), documentIdOf(rel), documentIdOf(rel), false));
+        }
     }
 
     /**
@@ -80,22 +85,28 @@ final class KnowledgeValidator {
             if (content.isBlank()) {
                 issues.add(new ValidationIssue("empty-document", rel, "Document is empty.", documentId, documentId, true));
             }
+            // 禁止正式文档引用内部工作区路径
             if (content.contains(".actiondock/project-knowledge") || content.contains(".knowledge-tmp")) {
                 issues.add(new ValidationIssue("temp-reference", rel, "Formal document references temporary workspace.", documentId, documentId, true));
             }
             String lower = content.toLowerCase(Locale.ROOT);
+            // 禁止正式文档包含未完成的占位符文本
             if (lower.contains("todo") || lower.contains("placeholder")) {
                 issues.add(new ValidationIssue("placeholder", rel, "Formal document contains placeholder text.", documentId, documentId, true));
             }
+            // 正式文档必须是纯 Markdown，不包含 YAML frontmatter
             if (content.startsWith("---\n")) {
                 issues.add(new ValidationIssue("frontmatter", rel, "Formal document must be pure Markdown without YAML frontmatter.", documentId, documentId, true));
             }
+            // 禁止正式文档包含机器元数据或 JSON 代码片段
             if (content.contains("```json") || content.contains("\"bodyMarkdown\"") || content.contains("touches_tables:") || content.contains("tags:")) {
                 issues.add(new ValidationIssue("machine-metadata", rel, "Formal document contains machine metadata or JSON fragments.", documentId, documentId, true));
             }
+            // 关键结论段落必须附带引用标记（方括号）
             if (content.contains("## 关键结论") && !content.contains("[")) {
                 issues.add(new ValidationIssue("missing-citation", rel, "Document contains conclusions without citations.", documentId, documentId, true));
             }
+            // OCKB 文档必须包含证据与边界段落（SUMMARY.md 除外）
             if (rel.startsWith(KnowledgeConstants.KNOWLEDGE_BASE_ROOT + "/") && !rel.equals(KnowledgeConstants.SUMMARY_PATH)
                     && !content.contains("## 证据与边界")) {
                 issues.add(new ValidationIssue("missing-evidence-boundary", rel, "OCKB document must include ## 证据与边界.", documentId, documentId, true));
@@ -118,13 +129,13 @@ final class KnowledgeValidator {
         Map<String, String> ids = new LinkedHashMap<>();
         ids.put(KnowledgeConstants.ACTIONDOCK_ENTRY, "entry");
         ids.put(KnowledgeConstants.SUMMARY_PATH, "summary");
-        ids.put(KnowledgeConstants.OVERVIEW_PATH, "overview");
-        ids.put(KnowledgeConstants.CODING_GUIDELINES_PATH, "coding-guidelines");
-        ids.put(KnowledgeConstants.INFRA_ENV_PATH, "infra-env");
-        ids.put(KnowledgeConstants.FLOWS_PATH, "flows");
-        ids.put(KnowledgeConstants.DATA_PATH, "data");
-        ids.put(KnowledgeConstants.AGENT_TOOLS_PATH, "agent-tools");
-        ids.put(KnowledgeConstants.RUNBOOKS_PATH, "runbooks");
+        ids.put(KnowledgeConstants.ARCHITECTURE_DIR, "architecture");
+        ids.put(KnowledgeConstants.API_DIR, "api");
+        ids.put(KnowledgeConstants.DATA_DIR, "data");
+        ids.put(KnowledgeConstants.FLOWS_DIR, "flows");
+        ids.put(KnowledgeConstants.AGENT_TOOLS_DIR, "agent-tools");
+        ids.put(KnowledgeConstants.INFRA_ENV_DIR, "infra-env");
+        ids.put(KnowledgeConstants.MAINTENANCE_OPS_DIR, "maintenance-ops");
         return ids;
     }
 
@@ -137,6 +148,18 @@ final class KnowledgeValidator {
             return "summary";
         }
         return defaultDocumentIds().getOrDefault(rel, rel.replace('/', ':'));
+    }
+
+    private List<String> pillarDirs() {
+        return List.of(
+                KnowledgeConstants.ARCHITECTURE_DIR,
+                KnowledgeConstants.API_DIR,
+                KnowledgeConstants.DATA_DIR,
+                KnowledgeConstants.FLOWS_DIR,
+                KnowledgeConstants.AGENT_TOOLS_DIR,
+                KnowledgeConstants.INFRA_ENV_DIR,
+                KnowledgeConstants.MAINTENANCE_OPS_DIR
+        );
     }
 
     /** 校验结果，包含是否通过和所有发现的问题列表。 */

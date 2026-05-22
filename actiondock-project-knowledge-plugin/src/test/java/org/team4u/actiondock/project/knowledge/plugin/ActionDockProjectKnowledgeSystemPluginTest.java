@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -58,9 +59,9 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         assertThat(Files.exists(tempDir.resolve("KNOWLEDGE_REPORT.md"))).isFalse();
         assertThat(Files.exists(tempDir.resolve(".actiondock/project-knowledge/state.json"))).isFalse();
         assertThat(Files.exists(tempDir.resolve(".knowledge_base/SUMMARY.md"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve(".knowledge_base/00_Overview_and_Domain/overview.md"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve(".knowledge_base/04_Business_Flows/business-flows.md"))).isTrue();
-        assertThat(Files.readString(tempDir.resolve(".knowledge_base/00_Overview_and_Domain/overview.md"))).doesNotStartWith("---");
+        assertThat(Files.exists(tempDir.resolve(".knowledge_base/01_Architecture_Overview/overview.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve(".knowledge_base/04_Business_Flows/business-flow.md"))).isTrue();
+        assertThat(Files.readString(tempDir.resolve(".knowledge_base/01_Architecture_Overview/overview.md"))).doesNotStartWith("---");
         assertThat(((Map<String, Object>) result.get("qualityGate")).get("ok")).isEqualTo(true);
     }
 
@@ -79,7 +80,7 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         assertThat(run.get("status")).isEqualTo("SUCCESS");
         assertThat(result.get("status")).isEqualTo("NEEDS_REVIEW");
         assertThat(Files.exists(tempDir.resolve("ACTIONDOCK.md"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve(".knowledge_base/00_Overview_and_Domain/overview.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve(".knowledge_base/01_Architecture_Overview/overview.md"))).isTrue();
         assertThat(Files.exists(tempDir.resolve(".actiondock/project-knowledge/state.json"))).isFalse();
         assertThat(((Map<String, Object>) result.get("qualityGate")).get("ok")).isEqualTo(false);
     }
@@ -148,6 +149,7 @@ class ActionDockProjectKnowledgeSystemPluginTest {
 
     private static class StubAgentRuntime implements AiAgentRuntime {
         private final boolean invalid;
+        private final List<String> taskTypes = new ArrayList<>();
 
         StubAgentRuntime(boolean invalid) {
             this.invalid = invalid;
@@ -160,32 +162,124 @@ class ActionDockProjectKnowledgeSystemPluginTest {
 
         @Override
         public AiAgentRunResult run(AiAgentRunRequest request, AiAgentRunContext context) {
-            writeKnowledge(request.input());
-            String text = "{\"status\":\"SUCCESS\",\"summary\":\"知识库已维护\",\"changedFiles\":[\"ACTIONDOCK.md\"],\"warnings\":[]}";
+            String taskType = String.valueOf(request.options().get("phase"));
+            Object typed = request.input().get("mode");
+            Object inputTaskType = request.options().get("taskType");
+            if (inputTaskType != null) {
+                taskType = String.valueOf(inputTaskType);
+            }
+            taskTypes.add(taskType);
+            String text = switch (taskType) {
+                case "chief-architect" -> chief();
+                case "domain-planner" -> planner(request.input());
+                case "specialized-worker" -> worker(request.input());
+                default -> fallback(typed == null ? "" : String.valueOf(typed));
+            };
             return new AiAgentRunResult("run-1", AiRunStatus.SUCCESS, Map.of("text", text), List.of(), AiUsage.empty(), null);
+        }
+
+        private String chief() {
+            return """
+                    {"phases":[
+                      {"phase_num":0,"domains_to_activate":["Chief_Architect","Data_Model_Planner","Infra_Env_Planner","Agent_Tool_Planner"]},
+                      {"phase_num":1,"domains_to_activate":["Business_Flow_Planner"]}
+                    ]}
+                    """;
+        }
+
+        @SuppressWarnings("unchecked")
+        private String planner(Map<String, Object> input) {
+            String domain = String.valueOf(input.get("domain"));
+            List<Map<String, Object>> tasks = new ArrayList<>();
+            switch (domain) {
+                case "Chief_Architect" -> tasks.add(Map.of(
+                        "action", "UPSERT",
+                        "target_path", ".knowledge_base/01_Architecture_Overview/overview.md",
+                        "focus_code_entity", "pom.xml",
+                        "clue", "更新系统架构总览"
+                ));
+                case "Data_Model_Planner" -> tasks.add(Map.of(
+                        "action", "UPSERT",
+                        "target_path", ".knowledge_base/03_Data_Models/orders.md",
+                        "focus_code_entity", "db/migration/V1__init.sql",
+                        "clue", "更新 orders 表结构"
+                ));
+                case "Infra_Env_Planner" -> tasks.add(Map.of(
+                        "action", "UPSERT",
+                        "target_path", ".knowledge_base/06_Infra_and_Env/infra.md",
+                        "focus_code_entity", "pom.xml",
+                        "clue", "更新构建与环境信息"
+                ));
+                case "Agent_Tool_Planner" -> tasks.add(Map.of(
+                        "action", "UPSERT",
+                        "target_path", ".knowledge_base/05_Agent_Tools_and_CLI/cli.md",
+                        "focus_code_entity", "README.md",
+                        "clue", "沉淀 Agent 工具入口"
+                ));
+                case "Business_Flow_Planner" -> tasks.add(Map.of(
+                        "action", "UPSERT",
+                        "target_path", ".knowledge_base/04_Business_Flows/business-flow.md",
+                        "focus_code_entity", "src/main/java/demo/OrderController.java",
+                        "clue", "更新下单业务流程"
+                ));
+                default -> {
+                }
+            }
+            return "{\"tasks\":" + toJson(tasks) + "}";
+        }
+
+        private String worker(Map<String, Object> input) {
+            writeKnowledge(input);
+            String targetPath = String.valueOf(input.get("targetPath"));
+            return """
+                    {"status":"COMPLETED","target_path":"%s","changedFiles":["%s"],"warnings":[]}
+                    """.formatted(targetPath, targetPath);
+        }
+
+        private String fallback(String mode) {
+            return """
+                    {"status":"SUCCESS","summary":"知识库已维护","changedFiles":["ACTIONDOCK.md"],"warnings":[],"mode":"%s"}
+                    """.formatted(mode);
         }
 
         private void writeKnowledge(Map<String, Object> input) {
             Path repo = Path.of(String.valueOf(input.get("repoPath")));
             String boundary = invalid ? "" : "\n\n## 证据与边界\n\n- 依据 README 和代码入口。 [README.md]\n";
+            String targetPath = String.valueOf(input.get("targetPath"));
             try {
                 Files.writeString(repo.resolve("ACTIONDOCK.md"), "# Demo 项目知识库\n\n## 阅读路径\n\n- `.knowledge_base/SUMMARY.md`\n", StandardCharsets.UTF_8);
-                Files.createDirectories(repo.resolve(".knowledge_base/00_Overview_and_Domain"));
-                Files.createDirectories(repo.resolve(".knowledge_base/01_Coding_Guidelines"));
-                Files.createDirectories(repo.resolve(".knowledge_base/02_Infra_and_Env"));
+                Files.createDirectories(repo.resolve(".knowledge_base/01_Architecture_Overview"));
+                Files.createDirectories(repo.resolve(".knowledge_base/02_API_Specifications"));
                 Files.createDirectories(repo.resolve(".knowledge_base/03_Data_Models"));
                 Files.createDirectories(repo.resolve(".knowledge_base/04_Business_Flows"));
                 Files.createDirectories(repo.resolve(".knowledge_base/05_Agent_Tools_and_CLI"));
-                Files.createDirectories(repo.resolve(".knowledge_base/06_Runbooks_and_Ops"));
-                Files.writeString(repo.resolve(".knowledge_base/SUMMARY.md"), "# OCKB 全景知识库目录\n\n- [架构总览](00_Overview_and_Domain/overview.md)\n", StandardCharsets.UTF_8);
-                write(repo, ".knowledge_base/00_Overview_and_Domain/overview.md", "# 架构总览与领域\n\n## 关键结论\n\n- 项目以 Java 为主。 [README.md]" + boundary);
-                write(repo, ".knowledge_base/01_Coding_Guidelines/guidelines.md", "# 编码规范\n\n## 关键结论\n\n- 暂未发现项目专属规范。 [README.md]" + boundary);
-                write(repo, ".knowledge_base/02_Infra_and_Env/infra-and-env.md", "# 基础设施与环境\n\n## 关键结论\n\n- 当前证据包含 Maven 配置。 [pom.xml]" + boundary);
-                write(repo, ".knowledge_base/03_Data_Models/data-models.md", "# 数据模型\n\n## 表职责\n\n- 当前仓库包含 orders 表。 [db/migration/V1__init.sql]" + boundary);
-                write(repo, ".knowledge_base/04_Business_Flows/business-flows.md", "# 业务流程\n\n## 触发入口\n\n- 业务入口来自 OrderController。 [src/main/java/demo/OrderController.java]" + boundary);
-                write(repo, ".knowledge_base/05_Agent_Tools_and_CLI/agent-tools-and-cli.md", "# Agent 工具与 CLI\n\n## 用途\n\n- 暂未发现项目专属 CLI。 [README.md]" + boundary);
-                write(repo, ".knowledge_base/06_Runbooks_and_Ops/runbooks-and-ops.md", "# Runbook 与运维\n\n## 适用场景\n\n- 暂未沉淀真实故障场景。 [README.md]" + boundary);
+                Files.createDirectories(repo.resolve(".knowledge_base/06_Infra_and_Env"));
+                Files.createDirectories(repo.resolve(".knowledge_base/07_Maintenance_and_Ops"));
+                Files.writeString(repo.resolve(".knowledge_base/SUMMARY.md"), "# OCKB 全景知识库目录\n\n- [架构总览](01_Architecture_Overview/overview.md)\n", StandardCharsets.UTF_8);
+                if (targetPath.endsWith("/overview.md")) {
+                    write(repo, ".knowledge_base/01_Architecture_Overview/overview.md", "# 架构总览\n\n## 关键结论\n\n- 项目以 Java 为主。 [README.md]" + boundary);
+                }
+                if (targetPath.endsWith("/orders.md")) {
+                    write(repo, ".knowledge_base/03_Data_Models/orders.md", "# 数据模型\n\n## 表职责\n\n- 当前仓库包含 orders 表。 [db/migration/V1__init.sql]" + boundary);
+                }
+                if (targetPath.endsWith("/business-flow.md")) {
+                    write(repo, ".knowledge_base/04_Business_Flows/business-flow.md", "# 业务流程\n\n## 触发入口\n\n- 业务入口来自 OrderController。 [src/main/java/demo/OrderController.java]" + boundary);
+                }
+                if (targetPath.endsWith("/cli.md")) {
+                    write(repo, ".knowledge_base/05_Agent_Tools_and_CLI/cli.md", "# Agent 工具与 CLI\n\n## 用途\n\n- 暂未发现项目专属 CLI。 [README.md]" + boundary);
+                }
+                if (targetPath.endsWith("/infra.md")) {
+                    write(repo, ".knowledge_base/06_Infra_and_Env/infra.md", "# 基础设施与环境\n\n## 关键结论\n\n- 当前证据包含 Maven 配置。 [pom.xml]" + boundary);
+                }
             } catch (IOException exception) {
+                throw new RuntimeException(exception);
+            }
+        }
+
+        private String toJson(Object value) {
+            try {
+                return org.team4u.actiondock.plugin.api.PluginObjectMappers.DEFAULT.writeValueAsString(value);
+            } catch (Exception exception) {
                 throw new RuntimeException(exception);
             }
         }

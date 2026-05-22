@@ -86,7 +86,11 @@ final class InternalAgentRunner implements AgentRunner {
                 task.systemPrompt(),
                 task.userPrompt(),
                 task.input(),
-                Map.of("phase", request.mode(), "structuredOutputReminder", "JSON"),
+                Map.of(
+                        "phase", request.mode(),
+                        "taskType", task.taskType(),
+                        "structuredOutputReminder", "JSON"
+                ),
                 Map.of("pluginId", ActionDockProjectKnowledgeSystemPlugin.PLUGIN_ID, "phase", request.mode(), "taskId", task.taskId())
         );
         return new AgentTaskResult("", json, List.of());
@@ -134,8 +138,9 @@ final class ExternalCliAgentRunner implements AgentRunner {
             Thread errThread = collect(process.getErrorStream(), stderr);
             boolean finished = process.waitFor(spec.timeoutSeconds(), TimeUnit.SECONDS);
             if (!finished) {
+                // 超时后强制终止子进程，最多等待 3 秒让 OS 回收资源
                 process.destroyForcibly();
-                process.waitFor(3, TimeUnit.SECONDS); // 等待强制终止完成
+                process.waitFor(3, TimeUnit.SECONDS);
             }
             outThread.join(Duration.ofSeconds(1));
             errThread.join(Duration.ofSeconds(1));
@@ -145,6 +150,7 @@ final class ExternalCliAgentRunner implements AgentRunner {
                 throw new PluginRuntimeException("External agent timed out after " + spec.timeoutSeconds() + "s");
             }
             if (process.exitValue() != 0) {
+                // 非 0 退出码视为外部 Agent 执行失败，stderr 内容作为错误信息
                 throw new PluginRuntimeException("External agent failed: " + err);
             }
             // 从 stdout 中提取 <OCKB_JSON> 标签包裹的 JSON，stderr 作为警告

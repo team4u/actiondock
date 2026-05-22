@@ -1,7 +1,7 @@
 {
   "pluginId": "actiondock-project-knowledge",
   "name": "ActionDock Project Knowledge",
-  "description": "Built-in OCKB project knowledge plugin with async orchestration, agent-maintained Markdown outputs, and ACTIONDOCK.md entry.",
+  "description": "Built-in OCKB project knowledge plugin with async Chief/Planner/Worker agent orchestration, phased reconciliation, and ACTIONDOCK.md entry.",
   "version": "3.0.0",
   "configSchema": {
     "type": "object",
@@ -19,7 +19,7 @@
     {
       "action": "init",
       "title": "Initialize OCKB Knowledge Base",
-      "description": "Start an async OCKB initialization run. The selected agent directly maintains ACTIONDOCK.md and .knowledge_base, then the plugin validates the result.",
+      "description": "Start an async OCKB initialization run. The plugin creates Chief, Planner, and Worker agents through the selected runner, then validates the result.",
       "inputSchema": {
         "type": "object",
         "required": ["repoPath"],

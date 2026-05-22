@@ -91,6 +91,14 @@ final class KnowledgeAsyncRunStore {
         ));
     }
 
+    /**
+     * 检查指定任务是否已被取消。
+     *
+     * <p>用于流水线完成后判断是否应写入结果——若已取消则跳过状态更新。
+     *
+     * @param runId 任务唯一标识
+     * @return 已取消返回 {@code true}，任务不存在也返回 {@code false}
+     */
     boolean cancelled(String runId) {
         Path path = path(runId);
         if (!Files.exists(path)) {
@@ -99,7 +107,7 @@ final class KnowledgeAsyncRunStore {
         return "CANCELLED".equals(load(runId).status());
     }
 
-    /** 将任务状态更新为 CANCELLED。 */
+    /** 将任务状态更新为 CANCELLED，不可逆操作。 */
     void cancelled(KnowledgeRunSnapshot current) {
         save(new KnowledgeRunSnapshot(
                 current.runId(),

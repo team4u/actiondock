@@ -63,6 +63,7 @@ final class AiJsonSupport {
                                 Map<String, Object> input,
                                 Map<String, Object> options,
                                 Map<String, Object> metadata) {
+        // 构建多轮消息（system + user），通过 Agent Runtime 发起 AI 调用
         AiAgentRunResult result = runtime.run(
                 new AiAgentRunRequest(profile, List.of(
                         new AiMessage("system", systemPrompt),
@@ -80,6 +81,7 @@ final class AiJsonSupport {
             throw new PluginRuntimeException("AI run failed: " + (result == null ? "unknown" : result.errorMessage()));
         }
         String raw = rawText(result);
+        // 将 AI 返回的文本解析为 JSON 对象，非对象类型或格式错误均抛出异常
         try {
             Object parsed = PluginObjectMappers.DEFAULT.readValue(raw, Object.class);
             if (parsed instanceof Map<?, ?> map) {
