@@ -31,6 +31,14 @@ Skill 负责选择 runner、准备输入、解释返回结果。internal Agent �
 - `changedFiles`：refresh 时提供变更文件；不提供时插件按 Git diff 尝试发现
 - `sources`：ingest 时提供手工资料路径
 
+查看插件动作和参数 schema：
+
+```bash
+actiondock plugin get actiondock-project-knowledge --json
+```
+
+重点查看 `actions[].inputSchema`、`actions[].outputSchema` 和 `actions[].exampleArgs`，再决定具体 action 的 `--args-json` / `--args-file` 入参。
+
 初始化知识库：
 
 ```bash
