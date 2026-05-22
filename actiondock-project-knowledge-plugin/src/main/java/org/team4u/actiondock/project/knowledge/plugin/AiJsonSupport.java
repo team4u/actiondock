@@ -1,12 +1,6 @@
 package org.team4u.actiondock.project.knowledge.plugin;
 
-import org.team4u.actiondock.ai.api.AiAgentRunContext;
-import org.team4u.actiondock.ai.api.AiAgentRunRequest;
-import org.team4u.actiondock.ai.api.AiAgentRunResult;
-import org.team4u.actiondock.ai.api.AiAgentRuntime;
-import org.team4u.actiondock.ai.api.AiCallerType;
-import org.team4u.actiondock.ai.api.AiMessage;
-import org.team4u.actiondock.ai.api.AiRunStatus;
+import org.team4u.actiondock.ai.api.*;
 import org.team4u.actiondock.plugin.api.PluginObjectMappers;
 import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
@@ -29,6 +23,22 @@ final class AiJsonSupport {
         this.runtime = runtime;
     }
 
+    // 从 AI 运行结果中提取原始文本：优先取 data.text，否则序列化整个 data
+    private static String rawText(AiAgentRunResult result) {
+        if (result.data() == null) {
+            return "";
+        }
+        Object text = result.data().get("text");
+        if (text instanceof String string) {
+            return string;
+        }
+        try {
+            return PluginObjectMappers.DEFAULT.writeValueAsString(result.data());
+        } catch (Exception exception) {
+            return String.valueOf(result.data());
+        }
+    }
+
     /**
      * 检查指定 AI profile 是否可用。
      *
@@ -45,8 +55,8 @@ final class AiJsonSupport {
      * <p>将 system/user 消息、结构化输入和元数据发送给 AI Agent，
      * 期望返回的 data.text 是一个 JSON 对象字符串。
      *
-     * @param context     脚本插件上下文
-     * @param profile     AI 配置文件标识
+     * @param context      脚本插件上下文
+     * @param profile      AI 配置文件标识
      * @param systemPrompt 系统提示词
      * @param userPrompt   用户提示词
      * @param input        结构化输入数据
@@ -90,22 +100,6 @@ final class AiJsonSupport {
             throw new PluginRuntimeException("AI output must be a JSON object.");
         } catch (Exception exception) {
             throw new PluginRuntimeException("AI output is not valid JSON: " + exception.getMessage(), exception);
-        }
-    }
-
-    // 从 AI 运行结果中提取原始文本：优先取 data.text，否则序列化整个 data
-    private static String rawText(AiAgentRunResult result) {
-        if (result.data() == null) {
-            return "";
-        }
-        Object text = result.data().get("text");
-        if (text instanceof String string) {
-            return string;
-        }
-        try {
-            return PluginObjectMappers.DEFAULT.writeValueAsString(result.data());
-        } catch (Exception exception) {
-            return String.valueOf(result.data());
         }
     }
 }

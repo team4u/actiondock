@@ -9,14 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,32 +28,44 @@ import java.util.stream.Stream;
  */
 public class ProjectKnowledgeService {
 
-    /** 单个 Worker 任务最大重试次数，超过后记录到 ERRORS.md。 */
+    /**
+     * 单个 Worker 任务最大重试次数，超过后记录到 ERRORS.md。
+     */
     private static final int MAX_WORKER_RETRIES = 3;
 
     private final AgentRunners agentRunners;
 
-    /** 文档质量校验器，在流水线完成后执行门禁检查。 */
+    /**
+     * 文档质量校验器，在流水线完成后执行门禁检查。
+     */
     private final KnowledgeValidator validator = new KnowledgeValidator();
 
-    /** 虚拟线程池，用于异步执行流水线以及并发调度 Worker 任务。 */
+    /**
+     * 虚拟线程池，用于异步执行流水线以及并发调度 Worker 任务。
+     */
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public ProjectKnowledgeService(AiAgentRuntime runtime) {
         this.agentRunners = new AgentRunners(runtime);
     }
 
-    /** 初始化 OCKB 知识库（异步），覆盖全部七大基座领域。 */
+    /**
+     * 初始化 OCKB 知识库（异步），覆盖全部七大基座领域。
+     */
     public Map<String, Object> init(ScriptPluginContext context, Map<String, Object> values) {
         return submit(context, KnowledgeRequests.init(values));
     }
 
-    /** 增量刷新知识库（异步），仅处理变更涉及的领域。 */
+    /**
+     * 增量刷新知识库（异步），仅处理变更涉及的领域。
+     */
     public Map<String, Object> refresh(ScriptPluginContext context, Map<String, Object> values) {
         return submit(context, KnowledgeRequests.refresh(values));
     }
 
-    /** 导入手工资料（异步），激活 Triage Planner 进行资料整理。 */
+    /**
+     * 导入手工资料（异步），激活 Triage Planner 进行资料整理。
+     */
     public Map<String, Object> ingest(ScriptPluginContext context, Map<String, Object> values) {
         return submit(context, KnowledgeRequests.ingest(values));
     }
@@ -165,7 +170,9 @@ public class ProjectKnowledgeService {
         return result;
     }
 
-    /** 检查仓库是否已初始化：必须存在 ACTIONDOCK.md 入口文件和 .knowledge_base 目录。 */
+    /**
+     * 检查仓库是否已初始化：必须存在 ACTIONDOCK.md 入口文件和 .knowledge_base 目录。
+     */
     private void requireInitialized(Path repoPath) {
         if (!Files.exists(repoPath.resolve(KnowledgeConstants.ACTIONDOCK_ENTRY))
                 || !Files.isDirectory(repoPath.resolve(KnowledgeConstants.KNOWLEDGE_BASE_ROOT))) {
@@ -173,7 +180,9 @@ public class ProjectKnowledgeService {
         }
     }
 
-    /** 确保七大基座目录和 .kb_inbox 收件箱目录存在。 */
+    /**
+     * 确保七大基座目录和 .kb_inbox 收件箱目录存在。
+     */
     private void ensureBaseStructure(Path repoPath) throws IOException {
         for (String dir : pillarDirs()) {
             Files.createDirectories(repoPath.resolve(dir));
@@ -215,7 +224,9 @@ public class ProjectKnowledgeService {
         return git.isEmpty() ? List.of() : git;
     }
 
-    /** 通过 git diff 获取相对于 HEAD 的变更文件列表，排除构建产物和知识库自身文件。 */
+    /**
+     * 通过 git diff 获取相对于 HEAD 的变更文件列表，排除构建产物和知识库自身文件。
+     */
     private List<String> gitChangedFiles(Path repoPath) {
         try {
             Process process = new ProcessBuilder("git", "diff", "--name-status", "--find-renames", "HEAD")
@@ -242,7 +253,9 @@ public class ProjectKnowledgeService {
         }
     }
 
-    /** 判断变更文件是否应排除：排除知识库输出、工作区、构建产物和 node_modules。 */
+    /**
+     * 判断变更文件是否应排除：排除知识库输出、工作区、构建产物和 node_modules。
+     */
     private boolean excludedChange(String path) {
         return path.startsWith(".knowledge_base/")
                 || path.startsWith(".actiondock/")
@@ -292,7 +305,9 @@ public class ProjectKnowledgeService {
         return phases.isEmpty() ? fallbackPhases(request) : phases;
     }
 
-    /** 构建 Chief Architect Agent 任务：根据仓库变更和知识库现状划分执行阶段。 */
+    /**
+     * 构建 Chief Architect Agent 任务：根据仓库变更和知识库现状划分执行阶段。
+     */
     private AgentTask chiefTask(KnowledgeRequest request, String runId, Map<String, Object> input) {
         return new AgentTask(
                 runId + "-chief",
@@ -312,7 +327,9 @@ public class ProjectKnowledgeService {
         );
     }
 
-    /** 构建 Domain Planner Agent 任务：针对单个领域生成 UPSERT/PRUNE 原子任务列表。 */
+    /**
+     * 构建 Domain Planner Agent 任务：针对单个领域生成 UPSERT/PRUNE 原子任务列表。
+     */
     private AgentTask plannerTask(KnowledgeRequest request,
                                   String runId,
                                   KnowledgePhase phase,
@@ -335,7 +352,9 @@ public class ProjectKnowledgeService {
         );
     }
 
-    /** 生成 Planner 的用户提示词，约束输出格式和任务类型。 */
+    /**
+     * 生成 Planner 的用户提示词，约束输出格式和任务类型。
+     */
     private String plannerPrompt(String domain) {
         return """
                 当前 Planner：%s。
@@ -555,7 +574,9 @@ public class ProjectKnowledgeService {
         return new KnowledgeWorkerResult("FAILED", task.targetPath(), List.of(), List.of(previousError), Map.of());
     }
 
-    /** 解析 Worker Agent 的执行结果，合并 runner 级别和 Agent 级别的警告。 */
+    /**
+     * 解析 Worker Agent 的执行结果，合并 runner 级别和 Agent 级别的警告。
+     */
     private KnowledgeWorkerResult parseWorkerResult(Map<String, Object> json, KnowledgeWorkerTask task, List<String> runnerWarnings) {
         List<String> warnings = new ArrayList<>(runnerWarnings);
         warnings.addAll(stringList(json.get("warnings")));
@@ -568,15 +589,17 @@ public class ProjectKnowledgeService {
         );
     }
 
-    /** 将 Worker 执行失败信息追加到 ERRORS.md 日志文件。 */
+    /**
+     * 将 Worker 执行失败信息追加到 ERRORS.md 日志文件。
+     */
     private void appendError(Path repoPath, KnowledgeWorkerTask task, String error) {
         try {
             Path path = repoPath.resolve(KnowledgeConstants.ERRORS_PATH);
             Files.createDirectories(path.getParent());
             String block = """
-
+                    
                     ## %s
-
+                    
                     - target_path: `%s`
                     - action: `%s`
                     - planner: `%s`
@@ -600,9 +623,9 @@ public class ProjectKnowledgeService {
         if (!Files.exists(actiondock)) {
             Files.writeString(actiondock, """
                     # 项目知识库
-
+                    
                     ## 阅读路径
-
+                    
                     - 知识库索引：`.knowledge_base/SUMMARY.md`
                     - 架构总览：`.knowledge_base/01_Architecture_Overview/`
                     - API 契约：`.knowledge_base/02_API_Specifications/`
@@ -618,7 +641,9 @@ public class ProjectKnowledgeService {
         Files.writeString(summary, summaryContent(repoPath), StandardCharsets.UTF_8);
     }
 
-    /** 扫描七大基座目录生成 SUMMARY.md 内容，列出所有已发布的 Markdown 文档。 */
+    /**
+     * 扫描七大基座目录生成 SUMMARY.md 内容，列出所有已发布的 Markdown 文档。
+     */
     private String summaryContent(Path repoPath) {
         StringBuilder builder = new StringBuilder("# OCKB 全景知识库目录\n\n");
         for (String dir : pillarDirs()) {
@@ -648,14 +673,18 @@ public class ProjectKnowledgeService {
         }
     }
 
-    /** 同步校验知识库文档质量，返回质量门结果。 */
+    /**
+     * 同步校验知识库文档质量，返回质量门结果。
+     */
     public Map<String, Object> validate(Map<String, Object> values) throws IOException {
         Path repoPath = KnowledgeRequests.validate(values);
         KnowledgeValidator.MapValidation validation = validator.validate(repoPath);
         return qualityGate(validation);
     }
 
-    /** 查询异步任务的执行状态和结果。 */
+    /**
+     * 查询异步任务的执行状态和结果。
+     */
     public Map<String, Object> getRun(Map<String, Object> values) {
         Path repoPath = KnowledgeRequests.validate(values);
         String runId = String.valueOf(values.get("runId"));
@@ -675,7 +704,9 @@ public class ProjectKnowledgeService {
         return result;
     }
 
-    /** 取消正在执行的异步任务，标记状态为 CANCELLED。 */
+    /**
+     * 取消正在执行的异步任务，标记状态为 CANCELLED。
+     */
     public Map<String, Object> cancelRun(Map<String, Object> values) {
         Path repoPath = KnowledgeRequests.validate(values);
         String runId = String.valueOf(values.get("runId"));
@@ -688,7 +719,9 @@ public class ProjectKnowledgeService {
         return Map.of("runId", runId, "status", "CANCELLED");
     }
 
-    /** 将校验结果转换为质量门响应格式，包含 ok 标志和问题详情列表。 */
+    /**
+     * 将校验结果转换为质量门响应格式，包含 ok 标志和问题详情列表。
+     */
     private Map<String, Object> qualityGate(KnowledgeValidator.MapValidation validation) {
         Map<String, Object> gate = new LinkedHashMap<>();
         gate.put("ok", validation.ok());
@@ -704,7 +737,9 @@ public class ProjectKnowledgeService {
         return gate;
     }
 
-    /** 返回 OCKB 七大基座目录的相对路径列表。 */
+    /**
+     * 返回 OCKB 七大基座目录的相对路径列表。
+     */
     private List<String> pillarDirs() {
         return List.of(
                 KnowledgeConstants.ARCHITECTURE_DIR,
@@ -731,7 +766,9 @@ public class ProjectKnowledgeService {
         return normalized;
     }
 
-    /** 将文件路径转换为安全的 taskId（仅保留字母数字，用连字符连接）。 */
+    /**
+     * 将文件路径转换为安全的 taskId（仅保留字母数字，用连字符连接）。
+     */
     private String safeTaskId(String value) {
         return value.replaceAll("[^A-Za-z0-9]+", "-");
     }

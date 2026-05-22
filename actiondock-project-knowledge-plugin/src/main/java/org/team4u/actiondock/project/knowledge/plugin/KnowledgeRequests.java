@@ -18,17 +18,23 @@ final class KnowledgeRequests {
     private KnowledgeRequests() {
     }
 
-    /** 解析 init 操作的请求参数。 */
+    /**
+     * 解析 init 操作的请求参数。
+     */
     static KnowledgeRequest init(Map<String, Object> values) {
         return request(values, "init");
     }
 
-    /** 解析 refresh 操作的请求参数。 */
+    /**
+     * 解析 refresh 操作的请求参数。
+     */
     static KnowledgeRequest refresh(Map<String, Object> values) {
         return request(values, "refresh");
     }
 
-    /** 解析 ingest 操作的请求参数。 */
+    /**
+     * 解析 ingest 操作的请求参数。
+     */
     static KnowledgeRequest ingest(Map<String, Object> values) {
         return request(values, "ingest");
     }
@@ -112,7 +118,9 @@ final class KnowledgeRequests {
         );
     }
 
-    /** 解析并校验仓库路径，必须为有效目录的绝对路径。 */
+    /**
+     * 解析并校验仓库路径，必须为有效目录的绝对路径。
+     */
     private static Path repoPath(Map<String, Object> values) {
         String repoPath = string(values.get("repoPath"));
         if (repoPath == null || repoPath.isBlank()) {
@@ -125,18 +133,24 @@ final class KnowledgeRequests {
         }
     }
 
-    /** 安全地将 Object 转为 String，null 返回 null。 */
+    /**
+     * 安全地将 Object 转为 String，null 返回 null。
+     */
     private static String string(Object value) {
         return value == null ? null : String.valueOf(value);
     }
 
-    /** 取字符串值，为空或空白时返回默认值。 */
+    /**
+     * 取字符串值，为空或空白时返回默认值。
+     */
     private static String defaultString(Object value, String defaultValue) {
         String string = string(value);
         return string == null || string.isBlank() ? defaultValue : string;
     }
 
-    /** 将 Object 转为字符串列表，过滤 null 元素；非 List 类型返回空列表。 */
+    /**
+     * 将 Object 转为字符串列表，过滤 null 元素；非 List 类型返回空列表。
+     */
     private static List<String> stringList(Object value) {
         if (!(value instanceof List<?> list)) {
             return List.of();
@@ -144,7 +158,9 @@ final class KnowledgeRequests {
         return list.stream().filter(Objects::nonNull).map(String::valueOf).toList();
     }
 
-    /** 将 Object 转为正整数（最小值 1），解析失败返回默认值。 */
+    /**
+     * 将 Object 转为正整数（最小值 1），解析失败返回默认值。
+     */
     private static int intValue(Object value, int defaultValue) {
         if (value instanceof Number number) {
             return Math.max(1, number.intValue());

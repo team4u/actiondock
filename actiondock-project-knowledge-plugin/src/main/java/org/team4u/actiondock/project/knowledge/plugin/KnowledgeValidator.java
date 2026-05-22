@@ -4,11 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 知识库文档质量校验器。
@@ -31,7 +27,7 @@ final class KnowledgeValidator {
     /**
      * 校验指定目录下的知识库文档质量。
      *
-     * @param scanRoot 待校验的仓库根目录
+     * @param scanRoot          待校验的仓库根目录
      * @param documentIdsByPath 文件路径到文档 ID 的映射
      */
     MapValidation validate(Path scanRoot, Map<String, String> documentIdsByPath) throws IOException {
@@ -59,7 +55,9 @@ final class KnowledgeValidator {
         return new MapValidation(issues.isEmpty(), issues);
     }
 
-    /** 递归扫描目录下所有 .md 文件并逐一校验。 */
+    /**
+     * 递归扫描目录下所有 .md 文件并逐一校验。
+     */
     private void checkMarkdownTree(Path scanRoot, Path root, Map<String, String> documentIdsByPath, List<ValidationIssue> issues) {
         try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
             stream
@@ -124,7 +122,9 @@ final class KnowledgeValidator {
         }
     }
 
-    /** 返回默认的 "相对路径 → 文档 ID" 映射，覆盖所有标准 OCKB 文档。 */
+    /**
+     * 返回默认的 "相对路径 → 文档 ID" 映射，覆盖所有标准 OCKB 文档。
+     */
     private Map<String, String> defaultDocumentIds() {
         Map<String, String> ids = new LinkedHashMap<>();
         ids.put(KnowledgeConstants.ACTIONDOCK_ENTRY, "entry");
@@ -139,7 +139,9 @@ final class KnowledgeValidator {
         return ids;
     }
 
-    /** 从相对路径推断文档 ID，已知路径返回固定 ID，未知路径用冒号替换斜杠。 */
+    /**
+     * 从相对路径推断文档 ID，已知路径返回固定 ID，未知路径用冒号替换斜杠。
+     */
     private String documentIdOf(String rel) {
         if (rel.equals(KnowledgeConstants.ACTIONDOCK_ENTRY)) {
             return "entry";
@@ -162,7 +164,9 @@ final class KnowledgeValidator {
         );
     }
 
-    /** 校验结果，包含是否通过和所有发现的问题列表。 */
+    /**
+     * 校验结果，包含是否通过和所有发现的问题列表。
+     */
     record MapValidation(boolean ok, List<ValidationIssue> issues) {
     }
 }

@@ -8,7 +8,6 @@ import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -105,6 +104,68 @@ final class InternalAgentRunner implements AgentRunner {
  * 支持：超时控制、环境变量白名单透传、stderr 收集为警告。
  */
 final class ExternalCliAgentRunner implements AgentRunner {
+    /**
+     * 创建守护线程异步读取子进程的输入流，防止进程因管道缓冲区满而挂起。
+     */
+    private static Thread collect(java.io.InputStream input, ByteArrayOutputStream output) {
+        Thread thread = new Thread(() -> {
+            try (input) {
+                input.transferTo(output);
+            } catch (IOException ignored) {
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
+        return thread;
+    }
+
+    /**
+     * 组装外部 Agent 的完整 prompt。
+     *
+     * <p>在 system/user 提示词之后追加 JSON 输出格式约束，
+     * 要求外部 Agent 使用 {@code <OCKB_JSON>} 标签包裹返回值。
+     */
+    private static String externalPrompt(AgentTask task) {
+        return task.systemPrompt() + "\n\n" + task.userPrompt() + """
+                
+                After you finish modifying files, return only one JSON object wrapped by these exact markers:
+                <OCKB_JSON>
+                {"status":"SUCCESS","summary":"","changedFiles":[],"warnings":[]}
+                </OCKB_JSON>
+                Do not place Markdown fences around the JSON.
+                """;
+    }
+
+    /**
+     * 从外部 Agent 的标准输出中解析 {@code <OCKB_JSON>} 标签包裹的 JSON。
+     *
+     * <p>如果未找到标签标记，则尝试将整个输出作为 JSON 解析（兼容直接输出 JSON 的 Agent）。
+     *
+     * @param output 外部 Agent 的完整标准输出
+     * @return 解析后的 JSON 对象
+     * @throws PluginRuntimeException 输出不是合法 JSON 或不是 JSON 对象
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> parseTaggedJson(String output) {
+        String begin = "<OCKB_JSON>";
+        String end = "</OCKB_JSON>";
+        int start = output.indexOf(begin);
+        int stop = output.indexOf(end);
+        // 优先提取标签内容，否则回退到完整输出
+        String raw = start >= 0 && stop > start
+                ? output.substring(start + begin.length(), stop).strip()
+                : output.strip();
+        try {
+            Object parsed = PluginObjectMappers.DEFAULT.readValue(raw, Object.class);
+            if (parsed instanceof Map<?, ?> map) {
+                return (Map<String, Object>) map;
+            }
+            throw new PluginRuntimeException("External agent output must be a JSON object");
+        } catch (IOException exception) {
+            throw new PluginRuntimeException("External agent output is not valid JSON: " + exception.getMessage(), exception);
+        }
+    }
+
     @Override
     public AgentTaskResult run(ScriptPluginContext context, KnowledgeRequest request, AgentTask task) {
         RunnerSpec spec = request.runner();
@@ -160,66 +221,6 @@ final class ExternalCliAgentRunner implements AgentRunner {
             throw new PluginRuntimeException("External agent interrupted", exception);
         } catch (IOException exception) {
             throw new PluginRuntimeException("External agent failed to start", exception);
-        }
-    }
-
-    /** 创建守护线程异步读取子进程的输入流，防止进程因管道缓冲区满而挂起。 */
-    private static Thread collect(java.io.InputStream input, ByteArrayOutputStream output) {
-        Thread thread = new Thread(() -> {
-            try (input) {
-                input.transferTo(output);
-            } catch (IOException ignored) {
-            }
-        });
-        thread.setDaemon(true);
-        thread.start();
-        return thread;
-    }
-
-    /**
-     * 组装外部 Agent 的完整 prompt。
-     *
-     * <p>在 system/user 提示词之后追加 JSON 输出格式约束，
-     * 要求外部 Agent 使用 {@code <OCKB_JSON>} 标签包裹返回值。
-     */
-    private static String externalPrompt(AgentTask task) {
-        return task.systemPrompt() + "\n\n" + task.userPrompt() + """
-
-                After you finish modifying files, return only one JSON object wrapped by these exact markers:
-                <OCKB_JSON>
-                {"status":"SUCCESS","summary":"","changedFiles":[],"warnings":[]}
-                </OCKB_JSON>
-                Do not place Markdown fences around the JSON.
-                """;
-    }
-
-    /**
-     * 从外部 Agent 的标准输出中解析 {@code <OCKB_JSON>} 标签包裹的 JSON。
-     *
-     * <p>如果未找到标签标记，则尝试将整个输出作为 JSON 解析（兼容直接输出 JSON 的 Agent）。
-     *
-     * @param output 外部 Agent 的完整标准输出
-     * @return 解析后的 JSON 对象
-     * @throws PluginRuntimeException 输出不是合法 JSON 或不是 JSON 对象
-     */
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> parseTaggedJson(String output) {
-        String begin = "<OCKB_JSON>";
-        String end = "</OCKB_JSON>";
-        int start = output.indexOf(begin);
-        int stop = output.indexOf(end);
-        // 优先提取标签内容，否则回退到完整输出
-        String raw = start >= 0 && stop > start
-                ? output.substring(start + begin.length(), stop).strip()
-                : output.strip();
-        try {
-            Object parsed = PluginObjectMappers.DEFAULT.readValue(raw, Object.class);
-            if (parsed instanceof Map<?, ?> map) {
-                return (Map<String, Object>) map;
-            }
-            throw new PluginRuntimeException("External agent output must be a JSON object");
-        } catch (IOException exception) {
-            throw new PluginRuntimeException("External agent output is not valid JSON: " + exception.getMessage(), exception);
         }
     }
 }

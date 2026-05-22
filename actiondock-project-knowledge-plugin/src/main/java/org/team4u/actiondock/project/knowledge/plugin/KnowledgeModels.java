@@ -4,7 +4,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-/** 知识库生成请求参数，包含仓库路径、额外证据文件、受众和 AI profile 等。 */
+/**
+ * 知识库生成请求参数，包含仓库路径、额外证据文件、受众和 AI profile 等。
+ */
 record KnowledgeRequest(
         /** 待扫描的仓库根目录 */
         Path repoPath,
@@ -27,7 +29,9 @@ record KnowledgeRequest(
 ) {
 }
 
-/** Agent Runner 配置，支持内置 Agent 与外部 CLI Agent。 */
+/**
+ * Agent Runner 配置，支持内置 Agent 与外部 CLI Agent。
+ */
 record RunnerSpec(
         /** internal / external-cli */
         String type,
@@ -42,7 +46,9 @@ record RunnerSpec(
 ) {
 }
 
-/** 单条校验问题，描述文档质量不达标的详细信息。 */
+/**
+ * 单条校验问题，描述文档质量不达标的详细信息。
+ */
 record ValidationIssue(
         /** 问题代码，如 "missing-entry"、"placeholder" */
         String code,
@@ -59,7 +65,9 @@ record ValidationIssue(
 ) {
 }
 
-/** Chief Architect 输出的单个执行批次，包含阶段序号和需要激活的 Planner 列表。 */
+/**
+ * Chief Architect 输出的单个执行批次，包含阶段序号和需要激活的 Planner 列表。
+ */
 record KnowledgePhase(
         /** 阶段序号，从 0 开始，数值越小越早执行 */
         int phaseNum,
@@ -68,7 +76,9 @@ record KnowledgePhase(
 ) {
 }
 
-/** Domain Planner 输出的单个原子文档任务，描述一次 UPSERT 或 PRUNE 操作。 */
+/**
+ * Domain Planner 输出的单个原子文档任务，描述一次 UPSERT 或 PRUNE 操作。
+ */
 record KnowledgeWorkerTask(
         /** 操作类型：UPSERT（创建或更新）或 PRUNE（删除） */
         String action,
@@ -83,7 +93,9 @@ record KnowledgeWorkerTask(
 ) {
 }
 
-/** Worker 执行后的摘要，包含执行状态和变更文件列表。 */
+/**
+ * Worker 执行后的摘要，包含执行状态和变更文件列表。
+ */
 record KnowledgeWorkerResult(
         /** 执行状态：COMPLETED 或 FAILED */
         String status,

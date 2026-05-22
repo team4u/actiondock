@@ -2,14 +2,7 @@ package org.team4u.actiondock.project.knowledge.plugin;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.team4u.actiondock.ai.api.AiAgentRunContext;
-import org.team4u.actiondock.ai.api.AiAgentRunRequest;
-import org.team4u.actiondock.ai.api.AiAgentRunResult;
-import org.team4u.actiondock.ai.api.AiAgentRunSnapshot;
-import org.team4u.actiondock.ai.api.AiAgentRunSubmission;
-import org.team4u.actiondock.ai.api.AiAgentRuntime;
-import org.team4u.actiondock.ai.api.AiRunStatus;
-import org.team4u.actiondock.ai.api.AiUsage;
+import org.team4u.actiondock.ai.api.*;
 import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginManifestLoader;
 
@@ -25,11 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ActionDockProjectKnowledgeSystemPluginTest {
 
-    @TempDir
-    Path tempDir;
-
     private final ActionDockProjectKnowledgeSystemPlugin plugin = new ActionDockProjectKnowledgeSystemPlugin(new StubAgentRuntime(false));
     private final ActionDockProjectKnowledgeSystemPlugin failingPlugin = new ActionDockProjectKnowledgeSystemPlugin(new StubAgentRuntime(true));
+    @TempDir
+    Path tempDir;
 
     @Test
     void manifestDocumentsPublicActions() {

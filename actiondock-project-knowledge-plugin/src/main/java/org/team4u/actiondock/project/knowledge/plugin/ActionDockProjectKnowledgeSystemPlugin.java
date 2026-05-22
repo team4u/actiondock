@@ -25,7 +25,9 @@ import java.util.Map;
  */
 public class ActionDockProjectKnowledgeSystemPlugin implements ActionDockPlugin {
 
-    /** 插件唯一标识，用于 PF4J 插件注册和日志追踪。 */
+    /**
+     * 插件唯一标识，用于 PF4J 插件注册和日志追踪。
+     */
     public static final String PLUGIN_ID = "actiondock-project-knowledge";
 
     private final ProjectKnowledgeService service;

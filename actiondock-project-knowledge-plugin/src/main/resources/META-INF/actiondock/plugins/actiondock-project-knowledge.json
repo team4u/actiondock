@@ -22,17 +22,36 @@
       "description": "Start an async OCKB initialization run. The plugin creates Chief, Planner, and Worker agents through the selected runner, then validates the result.",
       "inputSchema": {
         "type": "object",
-        "required": ["repoPath"],
+        "required": [
+          "repoPath"
+        ],
         "properties": {
-          "repoPath": {"type": "string"},
-          "evidenceFiles": {"type": "array", "items": {"type": "string"}},
-          "audience": {"type": "string"},
-          "detailLevel": {"type": "string"},
-          "aiProfile": {"type": "string"},
-          "runner": {"type": "object"}
+          "repoPath": {
+            "type": "string"
+          },
+          "evidenceFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audience": {
+            "type": "string"
+          },
+          "detailLevel": {
+            "type": "string"
+          },
+          "aiProfile": {
+            "type": "string"
+          },
+          "runner": {
+            "type": "object"
+          }
         }
       },
-      "outputSchema": {"type": "object"}
+      "outputSchema": {
+        "type": "object"
+      }
     },
     {
       "action": "refresh",
@@ -40,14 +59,27 @@
       "description": "Start a manually triggered async refresh run.",
       "inputSchema": {
         "type": "object",
-        "required": ["repoPath"],
+        "required": [
+          "repoPath"
+        ],
         "properties": {
-          "repoPath": {"type": "string"},
-          "changedFiles": {"type": "array", "items": {"type": "string"}},
-          "runner": {"type": "object"}
+          "repoPath": {
+            "type": "string"
+          },
+          "changedFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "runner": {
+            "type": "object"
+          }
         }
       },
-      "outputSchema": {"type": "object"}
+      "outputSchema": {
+        "type": "object"
+      }
     },
     {
       "action": "ingest",
@@ -55,14 +87,27 @@
       "description": "Start a manually triggered async ingest run for files or directories.",
       "inputSchema": {
         "type": "object",
-        "required": ["repoPath"],
+        "required": [
+          "repoPath"
+        ],
         "properties": {
-          "repoPath": {"type": "string"},
-          "sources": {"type": "array", "items": {"type": "string"}},
-          "runner": {"type": "object"}
+          "repoPath": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "runner": {
+            "type": "object"
+          }
         }
       },
-      "outputSchema": {"type": "object"}
+      "outputSchema": {
+        "type": "object"
+      }
     },
     {
       "action": "validate",
@@ -70,12 +115,18 @@
       "description": "Validate ACTIONDOCK.md and the OCKB pure Markdown document tree.",
       "inputSchema": {
         "type": "object",
-        "required": ["repoPath"],
+        "required": [
+          "repoPath"
+        ],
         "properties": {
-          "repoPath": {"type": "string"}
+          "repoPath": {
+            "type": "string"
+          }
         }
       },
-      "outputSchema": {"type": "object"}
+      "outputSchema": {
+        "type": "object"
+      }
     },
     {
       "action": "getRun",
@@ -83,13 +134,22 @@
       "description": "Read an async OCKB run snapshot.",
       "inputSchema": {
         "type": "object",
-        "required": ["repoPath", "runId"],
+        "required": [
+          "repoPath",
+          "runId"
+        ],
         "properties": {
-          "repoPath": {"type": "string"},
-          "runId": {"type": "string"}
+          "repoPath": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
         }
       },
-      "outputSchema": {"type": "object"}
+      "outputSchema": {
+        "type": "object"
+      }
     },
     {
       "action": "cancelRun",
@@ -97,13 +157,22 @@
       "description": "Mark an async OCKB run as cancelled.",
       "inputSchema": {
         "type": "object",
-        "required": ["repoPath", "runId"],
+        "required": [
+          "repoPath",
+          "runId"
+        ],
         "properties": {
-          "repoPath": {"type": "string"},
-          "runId": {"type": "string"}
+          "repoPath": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
         }
       },
-      "outputSchema": {"type": "object"}
+      "outputSchema": {
+        "type": "object"
+      }
     }
   ]
 }

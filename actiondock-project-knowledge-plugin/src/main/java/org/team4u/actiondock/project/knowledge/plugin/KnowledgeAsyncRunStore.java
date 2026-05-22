@@ -57,7 +57,9 @@ final class KnowledgeAsyncRunStore {
         return JsonFiles.read(path, KnowledgeRunSnapshot.class);
     }
 
-    /** 将任务状态更新为 SUCCESS，并记录生成结果。 */
+    /**
+     * 将任务状态更新为 SUCCESS，并记录生成结果。
+     */
     void success(KnowledgeRunSnapshot current, Map<String, Object> result) {
         if (cancelled(current.runId())) {
             return;
@@ -74,7 +76,9 @@ final class KnowledgeAsyncRunStore {
         ));
     }
 
-    /** 将任务状态更新为 FAILED，并记录错误信息。 */
+    /**
+     * 将任务状态更新为 FAILED，并记录错误信息。
+     */
     void failed(KnowledgeRunSnapshot current, String message) {
         if (cancelled(current.runId())) {
             return;
@@ -107,7 +111,9 @@ final class KnowledgeAsyncRunStore {
         return "CANCELLED".equals(load(runId).status());
     }
 
-    /** 将任务状态更新为 CANCELLED，不可逆操作。 */
+    /**
+     * 将任务状态更新为 CANCELLED，不可逆操作。
+     */
     void cancelled(KnowledgeRunSnapshot current) {
         save(new KnowledgeRunSnapshot(
                 current.runId(),
