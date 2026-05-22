@@ -40,12 +40,7 @@ ActionDock 借鉴的就是这个思路。项目知识系统不维护索引，不
 
 项目知识的第一步不是写文章，而是定义规则。ActionDock 把这部分能力放进 `actiondock-project-knowledge-mantainer`，让知识生成过程本身成为可维护的 Skill。
 
-这套 Skill 的约束不是散落在 Prompt 里，而是落在一组显式契约中：
-
-- `knowledge-contract.json` 负责输入默认值、输出路径、批处理阈值、checkpoint 文件名和阶段顺序
-- `workflow.md` 负责约束发现、起草、汇总、批处理和恢复边界
-- `scan-domains.md` 负责按证据动态激活分析域，而不是无条件产出一整套模板
-- `quality-gates.md` 负责正式文档写入前的语义审查
+这套 Skill 的约束不是散落在 Prompt 里，而是收敛在 Skill 本身、插件 manifest 和插件代码定义的输入输出契约里。
 
 从 `validate-repo`、`discover` 到 `activate-domains`、`draft`、`merge-write`、`quality-check`，每一步都在回答同一个问题：哪些内容可以进入正式文档，哪些只能留在报告里。
 
