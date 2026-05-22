@@ -31,6 +31,7 @@ If evidence remains unavailable or the Worker cannot confidently assemble the do
 - keep concurrent Workers within `maxFanout`
 - a failed task does not block unrelated tasks
 - pass failed lower-level context to dependent tasks as missing evidence
+- in `standard` or `deep` runs, if a failed target blocks a later phase, return the gap to the Leader instead of guessing through the dependency
 
 ## Path Safety
 

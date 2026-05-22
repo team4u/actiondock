@@ -1,6 +1,6 @@
 # OCKB Domain Map
 
-Use these domains as logical classification labels. Formal output remains under `docs/`.
+Use these domains as routing domains for Chief and Planner work. Formal output remains under `docs/`.
 
 | Domain | Evidence scope | Canonical targets |
 |---|---|---|
@@ -19,5 +19,17 @@ Use these domains as logical classification labels. Formal output remains under 
 - Prefer data and infra updates before API and business-flow docs when the same evidence affects both.
 - Prefer business-flow docs over endpoint catalogs when source evidence shows end-to-end state or table changes.
 - Prefer diagnosis or runbook docs only when evidence supports actionable steps, queries, or decision criteria.
+- Prefer `skip` or `defer` over forced updates when the change does not improve future understanding or actionability.
 - Use Mermaid fenced blocks for nontrivial flows or state machines when source evidence supports the flow.
 - Include an evidence section in every substantive docs page. Name it `## Evidence and Boundaries` unless the repository already uses Chinese headings, in which case use `## 证据与边界`.
+
+## Data and SQL Guidance
+
+- Route broad DDL or multi-table migration changes to `docs/data/schema.md` first.
+- Route stable single-table semantics to `docs/data/tables/*.md` when the repository already uses table-level pages.
+- Route transaction boundaries, locking behavior, cross-table write sequences, and rollback semantics to `docs/data/transactions.md`.
+- Route ORM/entity changes with no behavioral or schema meaning to `defer` or `skip` unless an existing doc would become wrong without the update.
+- Pure SQL formatting, comment churn, generated query artifacts, or trivial mapper renames are usually `skip`.
+- Small durable SQL-related naming or helper changes that do not alter schema meaning or operational behavior are usually `defer`.
+- If SQL or migration evidence changes HTTP contracts, event payloads, or end-to-end business rules, run `Data` before `API` and `BusinessFlow`.
+- If migration evidence changes deploy order, feature flags, backfill steps, or operational safety, run `Data` before `InfraEnv` or `MaintenanceOps`.

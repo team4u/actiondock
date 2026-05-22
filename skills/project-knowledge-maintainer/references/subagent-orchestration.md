@@ -10,10 +10,11 @@ The current main agent is the Leader.
 - derive candidate targets from evidence and `knowledge-map`
 - classify candidates as `write`, `defer`, or `skip`
 - decide the run profile
-- spawn `Impact Analyzer`, Planner, and Worker subagents only for write decisions that need them
+- spawn `Chief`, `Impact Analyzer`, Planner, and Worker subagents only when the chosen profile needs them
 - validate role outputs against the contract JSON
 - deduplicate tasks by `target_path`
 - enforce path safety before any Worker runs
+- enforce phase barriers for `standard` and `deep` runs
 - update `docs/_meta/knowledge-map.json`
 - update `ACTIONDOCK.md` only when navigation changed
 - summarize status and write operation reports
@@ -21,8 +22,9 @@ The current main agent is the Leader.
 
 ## Spawn Granularity
 
+- `Chief`: 0 or 1 per run; required for `standard` and `deep`, usually skipped for `thin`
 - `Impact Analyzer`: at most 1 per run, only for ownership or scope ambiguity
-- Planner: 1 per ambiguous or new candidate target, or 1 per tightly related target bundle when the ambiguity is shared
+- Planner: 1 per active domain per phase for `standard` and `deep`; 1 per narrow target bundle only when a `thin` run still needs planning
 - Worker: 1 per unique `target_path`
 
 ## Right-size Subagents
@@ -30,7 +32,7 @@ The current main agent is the Leader.
 Subagents are for single responsibility and context control, not maximum parallelism.
 
 - Do not spawn planners for targets that deterministic preflight already resolved.
-- `thin` runs should often skip `Impact Analyzer` and Planner subagents entirely.
+- `thin` runs should often skip `Chief`, `Impact Analyzer`, and Planner subagents entirely.
 - Do not spawn planners or Workers for deferred or skipped candidates.
 - Use `maxFanout` from the contract input to cap concurrent Worker tasks.
 - When a target is uncertain, record an evidence gap or review note before widening the run.
@@ -38,8 +40,9 @@ Subagents are for single responsibility and context control, not maximum paralle
 
 ## Parallelism
 
-- Planner subagents may run in parallel only when their target sets do not overlap.
-- Worker subagents may run in parallel only when their `target_path` values differ.
+- Planner subagents in the same phase may run in parallel when their target sets do not overlap.
+- Worker subagents in the same phase may run in parallel only when their `target_path` values differ.
+- Do not start the next phase in a `standard` or `deep` run until the current phase's Workers have completed or failed.
 - A failed target does not block unrelated targets.
 - When one target fails and later targets depend on it, pass the missing context forward as an evidence gap.
 
@@ -65,6 +68,7 @@ When subagents cannot be used, serial fallback is allowed only if the run can st
   "subagent_mode": "serial_fallback",
   "subagent_unavailable_fallback": true,
   "fallback_reason": "runtime_unavailable|host_policy_blocked|user_forbidden",
+  "chief_agent": "serial",
   "impact_analyzer": "serial",
   "planner_agents": [],
   "worker_agents": []
@@ -77,8 +81,9 @@ When subagents are used, record:
 {
   "subagent_mode": "native_subagents",
   "subagent_unavailable_fallback": false,
+  "chief_agent": "spawned",
   "impact_analyzer": "not_needed",
-  "planner_agents": ["docs/data/schema.md"],
+  "planner_agents": ["Data@phase0"],
   "worker_agents": ["docs/data/schema.md"]
 }
 ```

@@ -20,8 +20,24 @@ Run deterministic `preflight` before any planning or writing:
 Profile guidance:
 
 - `thin`: `<=5` changed files, `<=2` target docs, no root build/schema/infra trigger, and no ambiguous ownership.
-- `standard`: bounded but meaningful refresh, or a few ambiguous targets.
-- `deep`: wide structural change, missing ownership metadata, cross-domain impact, or `forceFullValidate=true`.
+- `standard`: bounded but meaningful refresh, a few ambiguous targets, or a repository complex enough to benefit from domain routing.
+- `deep`: wide structural change, missing ownership metadata, cross-domain impact, repeated routing ambiguity, or `forceFullValidate=true`.
+
+## Profile Strategy
+
+Choose the lightest profile that still preserves correctness.
+
+- `thin`:
+  - prefer direct owner reuse from `knowledge-map`
+  - do not expand to full phase orchestration unless ambiguity forces it
+  - skip updates that are tiny, cosmetic, generated, or otherwise not knowledge-worthy
+- `standard`:
+  - run one Chief to activate only the domains that matter
+  - preserve phase order where downstream docs depend on upstream evidence
+- `deep`:
+  - run the full Chief-led phase skeleton
+  - widen validation and ownership repair
+  - preserve strict phase barriers
 
 ## Target Derivation
 
@@ -49,7 +65,30 @@ Classify every candidate before spawning Workers:
 
 Write immediately when evidence changes API contracts, schema or DDL, config semantics, deployment or runtime behavior, business rules, agent/tool usage, runbook steps, security posture, or makes an existing doc wrong.
 
+Typical `skip` cases:
+
+- generated assets, snapshots, or lockfile churn with no operational meaning
+- formatting-only SQL or mapper edits
+- pure test refactors with no reusable behavior knowledge
+- tiny code movement that leaves existing docs fully correct
+
+Typical `defer` cases:
+
+- small durable naming alignment that still belongs to an existing owner page
+- minor SQL helper changes that do not alter schema meaning or runtime behavior
+- small supporting config clarifications that are not yet worth widening a formal page
+
 Do not create new docs for `defer` or `skip`. Record `defer` items as capped pending evidence on the existing owner entry in `knowledge-map`; record `skip` items only in the operation report. Promote deferred items to `write` when related pending evidence accumulates, confidence drops, or a later material change touches the same owner.
+
+## Phase Strategy
+
+For `standard` and `deep` runs, preserve the older phased backbone:
+
+- Phase 0: `Data`, `InfraEnv`, `Triage`
+- Phase 1: `API`, `BusinessFlow`, `AgentTooling`
+- Phase 2: `Architecture`, `MaintenanceOps`
+
+Chief may activate only a subset of these domains for `standard` runs. `thin` runs may collapse phases entirely.
 
 ## Init
 
@@ -57,19 +96,22 @@ Do not create new docs for `defer` or `skip`. Record `defer` items as capped pen
 2. Create minimal `docs/` subtrees only for evidence-backed topics.
 3. Build initial candidates from strong evidence first.
 4. Apply the significance gate; skip weak or transient material instead of creating placeholder docs.
-5. Use Planner subagents only for ambiguous or new write targets.
-6. Spawn one Worker per unique write `target_path`.
-7. Let the Leader write `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the init report.
+5. If the run is `standard` or `deep`, spawn Chief and activate only the needed domains by phase.
+6. Use Planner subagents only for active domains or new write targets that still need planning.
+7. Spawn one Worker per unique write `target_path`.
+8. Let the Leader write `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the init report.
 
 ## Refresh
 
 1. Run `preflight`.
 2. Reuse `knowledge-map` ownership where possible.
 3. Apply the significance gate.
-4. Escalate only ambiguous write targets to `Impact Analyzer` or Planner subagents.
-5. Spawn Workers for the final deduplicated write target set.
-6. Update `ACTIONDOCK.md` only when any completed write task has `nav_impact=true`.
-7. Write the refresh report with updated targets, deferred updates, skipped low-significance items, and evidence gaps.
+4. If the change set is `thin` and ownership is obvious, plan directly or skip planning entirely.
+5. If the change set is `standard` or `deep`, spawn Chief and run active-domain Planners phase by phase.
+6. Escalate only ambiguous write targets to `Impact Analyzer`.
+7. Spawn Workers for the final deduplicated write target set.
+8. Update `ACTIONDOCK.md` only when any completed write task has `nav_impact=true`.
+9. Write the refresh report with updated targets, deferred updates, skipped low-significance items, and evidence gaps.
 
 ## Ingest
 
@@ -81,9 +123,10 @@ Do not create new docs for `defer` or `skip`. Record `defer` items as capped pen
 3. Route pure operations material to maintenance or diagnosis docs.
 4. Convert change-intent material into candidates backed by repository evidence.
 5. Apply the significance gate before creating write tasks.
-6. After successful absorption, let the owning Worker remove only processed inbox files.
-7. Preserve unprocessed, deferred, or skipped files and report why.
-8. Refresh `knowledge-map`, then write the ingest report.
+6. If the resulting work is broader than `thin`, run Chief and phase-aware Planners before Workers.
+7. After successful absorption, let the owning Worker remove only processed inbox files.
+8. Preserve unprocessed, deferred, or skipped files and report why.
+9. Refresh `knowledge-map`, then write the ingest report.
 
 ## Validate
 

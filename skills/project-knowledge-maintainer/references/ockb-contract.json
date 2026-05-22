@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "inputs": {
     "required": ["repoPath"],
     "optional": [
@@ -49,18 +49,44 @@
     "MaintenanceOps",
     "Triage"
   ],
+  "phaseDefaults": [
+    {
+      "phase_num": 0,
+      "domains_to_activate": ["Data", "InfraEnv", "Triage"]
+    },
+    {
+      "phase_num": 1,
+      "domains_to_activate": ["API", "BusinessFlow", "AgentTooling"]
+    },
+    {
+      "phase_num": 2,
+      "domains_to_activate": ["Architecture", "MaintenanceOps"]
+    }
+  ],
+  "chiefOutput": {
+    "required": ["profile", "phases"],
+    "phaseFields": ["phase_num", "domains_to_activate"],
+    "optionalPhaseFields": ["reason"]
+  },
   "profiles": {
     "thin": {
       "maxChangedFiles": 5,
       "maxTargets": 2,
-      "broadChangeTriggers": ["build-root", "schema-root", "infra-root"]
+      "broadChangeTriggers": ["build-root", "schema-root", "infra-root"],
+      "chiefMode": "skip_by_default",
+      "plannerMode": "target_scoped_or_skip"
     },
     "standard": {
       "maxChangedFiles": 25,
-      "maxTargets": 5
+      "maxTargets": 5,
+      "chiefMode": "required",
+      "plannerMode": "per_active_domain_per_phase"
     },
     "deep": {
-      "requiresFullValidate": true
+      "requiresFullValidate": true,
+      "chiefMode": "required",
+      "plannerMode": "per_active_domain_per_phase",
+      "strictPhaseBarriers": true
     }
   },
   "targetTask": {
@@ -75,6 +101,11 @@
     ],
     "modeValues": ["create", "update", "prune"],
     "confidenceValues": ["high", "medium", "low"]
+  },
+  "plannerOutput": {
+    "required": ["tasks", "deferred", "skipped"],
+    "deferredItemFields": ["target_path", "evidence_paths", "impact", "reason"],
+    "skippedItemFields": ["item", "reason"]
   },
   "knowledgeImpact": {
     "levels": ["material", "minor", "noise"],
@@ -96,7 +127,7 @@
     "requiredWhenAvailable": true,
     "serialFallbackAllowed": true,
     "fallbackReasons": ["runtime_unavailable", "host_policy_blocked", "user_forbidden"],
-    "roles": ["impact_analyzer", "planner", "worker"],
+    "roles": ["chief", "impact_analyzer", "planner", "worker"],
     "leaderMayWrite": [
       "ACTIONDOCK.md",
       "KNOWLEDGE_INIT_REPORT.md",
@@ -109,6 +140,7 @@
       "subagent_mode",
       "subagent_unavailable_fallback",
       "fallback_reason",
+      "chief_agent",
       "impact_analyzer",
       "planner_agents",
       "worker_agents"

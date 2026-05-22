@@ -50,6 +50,7 @@ Each entry should be small and deterministic:
 - `target_path` must be unique across entries.
 - `owner_key` identifies one canonical doc owner for one logical topic cluster.
 - Prefer updating an existing owner entry over creating a new one.
+- Use `knowledge-map` to make `thin` routing deterministic before escalating to Chief or Planner work.
 - `confidence` is `high`, `medium`, or `low`.
 - `nav_impact=true` means the target should be considered when regenerating `ACTIONDOCK.md`.
 - `pending_evidence` is optional and only for `defer` decisions that already map to this owner.
@@ -62,6 +63,7 @@ Each entry should be small and deterministic:
 - no existing entry covers the evidence or topic
 - the current target would become a mixed-topic dump
 - the repository already separates this topic into a stable dedicated page
+- a later phase needs a new canonical owner after Chief routing confirmed the split
 
 ## When Not to Create a New Entry
 
