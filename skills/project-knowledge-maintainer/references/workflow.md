@@ -1,5 +1,7 @@
 # Workflow
 
+`references/ockb-contract.json` is the canonical contract for inputs, outputs, domains, phase defaults, retry limits, and path safety. This file describes flow, not constants.
+
 ## Mode Selection
 
 - `init`: use when `ACTIONDOCK.md` or `docs/` is missing or the user asks to initialize.
@@ -16,7 +18,7 @@ If `operation` is `auto`, choose `init` when no formal knowledge base exists, ot
 3. Spawn the Chief subagent using repository path summaries and any existing docs tree.
 4. Spawn one Planner subagent for each activated domain in each phase.
 5. Spawn one Worker subagent for each unique `target_path` to create evidence-bound docs.
-6. Let the Leader update `ACTIONDOCK.md` and write `KNOWLEDGE_INIT_REPORT.md` with created docs, skipped domains, subagent mode, and evidence gaps.
+6. Let the Leader update `ACTIONDOCK.md` and write the init report defined by the contract with created docs, skipped domains, subagent mode, and evidence gaps.
 
 ## Refresh
 
@@ -25,7 +27,7 @@ If `operation` is `auto`, choose `init` when no formal knowledge base exists, ot
 3. Spawn the Chief subagent from changed paths and docs tree only.
 4. Spawn domain Planner subagents to produce `UPSERT` or `PRUNE` tasks.
 5. Spawn Worker subagents phase by phase. Later phases may read docs written by earlier phases.
-6. Let the Leader update navigation and write `KNOWLEDGE_UPDATE_REPORT.md`.
+6. Let the Leader update navigation and write the refresh report defined by the contract.
 
 ## Ingest
 
@@ -37,7 +39,7 @@ If `operation` is `auto`, choose `init` when no formal knowledge base exists, ot
 3. Spawn Worker subagents to archive pure operations material under `docs/ops/maintenance/` or `docs/diagnosis/`.
 4. Convert change-intent material into tasks for the appropriate domain Planner subagents.
 5. After successful absorption, let the responsible Worker remove or empty only the processed inbox source files. Preserve unprocessed files and report why.
-6. Let the Leader write `KNOWLEDGE_INGEST_REPORT.md`.
+6. Let the Leader write the ingest report defined by the contract.
 
 ## Validate
 
@@ -52,7 +54,7 @@ Do not rewrite substantive docs unless the user explicitly asks for fixes. The L
 - no obvious secrets are exposed in docs.
 - no `.knowledge_base/` layout is required unless the user requested it.
 
-Write `KNOWLEDGE_VALIDATE_REPORT.md` with pass/fail status, findings, suggested repair tasks, and subagent mode. If the user asks to fix findings, route each substantive doc change through Worker subagents.
+Write the validate report defined by the contract with pass/fail status, findings, suggested repair tasks, and subagent mode. If the user asks to fix findings, route each substantive doc change through Worker subagents.
 
 ## Finalization
 

@@ -6,6 +6,24 @@ AI 辅助编程已经很常见，但一旦问题进入具体项目，模型最�
 
 在 ActionDock 里，这条路径被拆成了几层明确的能力：知识生产、入口定位、工作区浏览、脚本执行，以及团队分发。
 
+## 设计哲学
+
+你大概率也遇到过这种情况：文档写的时候很完整，项目一改就开始漂；看起来资料很多，真正要回答一个问题时，却没人能说清哪一句还算数。这个 Skill 解决的不是“把知识写出来”，而是“把知识和仓库状态绑在一起”。
+
+它的做法很克制。项目事实散在代码、配置、DDL、测试、日志和现有文档里，单次 Prompt 很快就会失真；一个人既找材料又判断又落笔，文档也容易写成一团；规则如果散在多个地方，后人就更不知道哪句才算数；证据不够时，系统最容易犯的错，就是补一个“看起来完整”的答案。
+
+所以这个 Skill 只守几条底线：只认仓库证据，`project-knowledge-maintainer` 只负责维护，Chief 只分诊，Planner 只出任务，Worker 只收敛到单文件；这样每一层只接收自己需要的信息，既守住单一职责，也把上下文压小，把幻觉空间压低；输入、输出、边界和路径安全收进 `ockb-contract.json`；证据不够时就跳过、失败或写报告，不硬编知识。
+
+```mermaid
+flowchart TD
+  A[项目证据<br/>code / config / DDL / tests / logs / docs] --> B[project-knowledge-maintainer]
+  B --> C[Chief 分诊]
+  C --> D[Planner 出任务]
+  D --> E[Worker 收敛到 docs/ 与 ACTIONDOCK.md]
+  E --> F[验证 / 报告]
+  B -->|证据不足或路径不安全| G[跳过 / 失败 / 记录]
+```
+
 ---
 
 ## 痛点：把代码喂给 AI，为什么还不够？
@@ -36,13 +54,13 @@ ActionDock 借鉴的就是这个思路。项目知识系统不维护索引，不
 
 ## 设计：为什么这条链路要拆开
 
-### 1. 知识生成是 Skill，不是 Prompt
+### 1. 知识生成是 Skill，不是一次性 Prompt
 
-项目知识的第一步不是写文章，而是定义规则。ActionDock 把这部分能力放进 `actiondock-project-knowledge-mantainer`，让知识生成过程本身成为可维护的 Skill。
+项目知识的第一步不是写文章，而是定义维护规则。ActionDock 把这部分能力放进 `project-knowledge-maintainer` 技能，让知识生成过程本身成为可维护的 Skill。
 
-这套 Skill 的约束不是散落在 Prompt 里，而是收敛在 Skill 本身、插件 manifest 和插件代码定义的输入输出契约里。
+这套 Skill 的约束不是散落在一次性 Prompt 里，而是收敛在 Skill 本身、契约文件和 subagent 编排约定里。
 
-从 `validate-repo`、`discover` 到 `activate-domains`、`draft`、`merge-write`、`quality-check`，每一步都在回答同一个问题：哪些内容可以进入正式文档，哪些只能留在报告里。
+从 `init`、`refresh`、`ingest` 到 `validate`，每一步都在回答同一个问题：哪些内容可以进入正式文档，哪些只能留在报告里。
 
 这里的关键原则是证据优先。结论必须回到代码、配置、DDL、测试、日志或现有文档；证据不足时，允许跳过，允许写入报告，但不允许伪造一份"结构完整、内容空心"的知识文档。
 
@@ -137,20 +155,6 @@ actiondock script schema query-mysql-json --json
 一旦找到了合适脚本，后续才进入数据库查询、日志查询或其他执行动作。知识库提供的是"查什么、为什么查、结果怎么解释"，脚本提供的是"如何真正执行"。
 
 这条顺序看起来比"直接搜索代码"更慢，但它更可靠。AI 不是一上来盲扫仓库，而是沿着"入口 -> 文档 -> Workspace -> 脚本"的顺序推进。项目知识因此真正进入了工作流，而不是停留在一组静态说明文档里。
-
----
-
-## 插件执行补充
-
-当前 `actiondock-project-knowledge` 插件走一条更收敛的生成路径：
-
-- Java 插件只负责编排异步任务、创建并调度多层 Agent、执行最终校验和记录 run 状态
-- 插件先创建 Chief Architect Agent 做 phase 分诊，再创建 Domain Planner Agent 产出 UPSERT / PRUNE 任务，最后创建 Specialized Worker Agent 执行单文件物理收敛
-- internal Agent 和 external CLI Agent 都由插件通过 `runner` 配置创建；调用方只决定 runner 类型，不直接承担编排职责
-- 正式知识入口是 `ACTIONDOCK.md`，正文根目录是 `.knowledge_base/`
-- `init` 初始化知识库，`refresh` 根据代码变化刷新，`ingest` 融合显式传入的手工资料
-
-这条路径去掉了 staging、发布复制、state.json、fingerprint 和代码侧 dirty-doc 判断。Agent 执行后插件只做正式知识库校验；校验失败时返回 `NEEDS_REVIEW`，文件不自动回滚，交给人工或下一轮 Agent 修复。
 
 ---
 

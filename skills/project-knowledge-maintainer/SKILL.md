@@ -1,15 +1,28 @@
 ---
 name: project-knowledge-maintainer
-description: Initialize, refresh, ingest, or validate a repository-backed project knowledge base with Chief/Planner/Worker subagents. Use when maintaining ACTIONDOCK.md, docs/ project knowledge, .kb_inbox/ materials, or evidence-bound architecture/API/data/business-flow/ops/diagnosis documentation from a local code repository without using an external metadata service.
+description: Maintain a repository-backed project knowledge base from local evidence. Use when initializing, refreshing, ingesting, or validating ACTIONDOCK.md, docs/, or .kb_inbox/ materials for a local repository with Chief/Planner/Worker subagents.
 ---
 
 # Project Knowledge Maintainer
 
 ## Goal
 
-Maintain an Omni-Context Knowledge Base from the repository and filesystem as the source of truth. Use native subagents for Chief, Planner, and Worker roles whenever the runtime supports them. Serial execution is a fallback only when subagents are unavailable, blocked by host policy, or explicitly forbidden by the user.
+Maintain an evidence-bound project knowledge base from repository files and filesystem state. Use native subagents for Chief, Planner, and Worker roles whenever the runtime supports them. Serial execution is a fallback only when subagents are unavailable, blocked by host policy, or explicitly forbidden by the user.
 
 This skill is prompt-first. Do not require ActionDock Server, an external metadata database, background polling, or bundled orchestrator scripts.
+
+## When to Use
+
+- `init`: the repository has no formal knowledge base yet.
+- `refresh`: code, config, DDL, tests, scripts, logs, or docs changed and the knowledge base needs to be updated.
+- `ingest`: `.kb_inbox/` or explicit inbox files should be absorbed into formal docs.
+- `validate`: the existing knowledge base should be checked without proactively rewriting substantive docs.
+
+## When Not to Use
+
+- You only need to look up project knowledge or scripts. Use the searcher or CLI workflow instead.
+- The target repository is unavailable locally and cannot be resolved from files.
+- The task is outside repository evidence or does not touch `ACTIONDOCK.md`, `docs/`, or `.kb_inbox/`.
 
 ## Load Order
 
@@ -19,11 +32,12 @@ Read only the files needed for the current operation:
 2. `references/workflow.md` for `init`, `refresh`, `ingest`, and `validate` execution rules.
 3. `references/domain-map.md` for the seven OCKB logical domains and their `docs/` targets.
 4. `references/subagent-orchestration.md` for mandatory spawn granularity, concurrency, and fallback rules.
-5. Role prompts as needed:
+5. `references/examples.md` for canonical JSON shapes and smoke scenarios.
+6. Role prompts as needed:
    - `references/prompt-chief.md`
    - `references/prompt-planner.md`
    - `references/prompt-worker.md`
-6. `references/failure-policy.md` before any Worker writes or deletes files.
+7. `references/failure-policy.md` before any Worker writes or deletes files.
 
 ## Operating Rules
 
@@ -73,11 +87,7 @@ Use the domain names from `ockb-contract.json` exactly:
 - `Maintenance_Ops_Planner`
 - `Triage_Planner`
 
-Phase ordering defaults:
-
-- Phase 0: data models, infra/env, triage that affects downstream domains.
-- Phase 1: API specifications, business flows, agent tools.
-- Phase 2: architecture overview, maintenance/ops consolidation, entry/report refresh.
+Phase ordering and active domains come from `ockb-contract.json`; do not invent alternate routing rules.
 
 ## Output Style
 

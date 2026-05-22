@@ -1,6 +1,6 @@
 # Subagent Orchestration
 
-Use native subagents whenever the runtime supports them. Serial execution is only a fallback for unavailable subagents, host policy blocks, or explicit user prohibition.
+Use native subagents whenever the runtime supports them. Follow `references/ockb-contract.json` for exact domain names, report fields, and fallback invariants. Serial execution is only a fallback for unavailable subagents, host policy blocks, or explicit user prohibition.
 
 ## Leader Duties
 
