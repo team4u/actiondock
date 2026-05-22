@@ -1,15 +1,20 @@
 ---
 name: actiondock-project-knowledge-mantainer
-description: 通过 ActionDock 项目知识库插件初始化、刷新、恢复或校验本地代码仓库的项目知识库。
+description: 通过 ActionDock 项目知识库插件生成并校验本地代码仓库的项目知识库。
 ---
 
 # 项目知识库维护器
 
 ## 目标
 
-当用户要求初始化、刷新、恢复或校验项目知识库时，不要手工按模板写文档。应调用平台插件 `actiondock-project-knowledge`，由插件负责流程编排、checkpoint、执行器选择、正式落盘、报告和质量门。
+当用户要求生成或校验项目知识库时，不要手工按模板写文档。应调用平台插件 `actiondock-project-knowledge`，由插件负责：
 
-Skill 只负责判断何时调用插件、准备输入、解释插件返回结果。
+- 代码主导的结构扫描
+- AI 辅助的知识文档生成
+- staging 校验
+- 正式文档写入与状态持久化
+
+Skill 只负责判断何时调用插件、准备输入、解释返回结果。
 
 ## 标准调用
 
@@ -19,56 +24,36 @@ Skill 只负责判断何时调用插件、准备输入、解释插件返回结�
 
 常用可选输入：
 
-- `operation`：`init` 或 `refresh`；未提供时交给插件自动判断
-- `evidenceFiles`：补充证据文件或目录
-- `resume`：是否从 checkpoint 继续
-- `executor`：`builtin-agent`、`external-cli` 或 `auto`
-- `agentProfile`：内置 Agent profile
-- `externalCommandProfile`：外部命令 profile，例如 `claude-code`
-- `dryRun`：只规划不正式写入
+- `evidenceFiles`：补充证据文件
+- `audience`：默认 `balanced`
+- `detailLevel`：默认 `standard`
+- `aiProfile`
+- `aiProfiles.writer`
 
-先规划：
+生成知识库：
 
 ```bash
-actiondock plugin invoke actiondock-project-knowledge planMaintenance \
-  --input-json '{"repoPath":"/path/to/repo","operation":"refresh"}' \
-  --json
-```
-
-再执行：
-
-```bash
-actiondock plugin invoke actiondock-project-knowledge runMaintenance \
-  --input-json '{"repoPath":"/path/to/repo","operation":"refresh","executor":"builtin-agent","resume":true}' \
-  --json
-```
-
-查询运行状态：
-
-```bash
-actiondock plugin invoke actiondock-project-knowledge getRun \
-  --input-json '{"repoPath":"/path/to/repo"}' \
+actiondock plugin invoke actiondock-project-knowledge generate \
+  --input-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer"}' \
   --json
 ```
 
 单独校验：
 
 ```bash
-actiondock plugin invoke actiondock-project-knowledge validateKnowledge \
+actiondock plugin invoke actiondock-project-knowledge validate \
   --input-json '{"repoPath":"/path/to/repo"}' \
   --json
 ```
 
 ## 结果解释
 
-- `status=SUCCESS`：维护完成，向用户说明入口、报告和变更文件。
-- `status=NEEDS_REVIEW`：维护已落盘但质量门发现问题，列出 `needsReviewItems` 和报告路径。
-- `status=PLANNED`：只完成规划，说明将激活的域、输出路径和警告。
-- `status=NOT_FOUND`：没有可读取的运行记录，建议先执行 `planMaintenance` 或 `runMaintenance`。
+- `status=SUCCESS`：正式文档已写入且质量门通过。
+- `status=NEEDS_REVIEW`：生成已完成，但 staging 质量门未通过；不会发布正式正文。
 
 ## 边界
 
 - 不自动 stage、commit、push 或创建 PR。
-- 不绕过插件直接维护 `ACTIONDOCK.md`、`docs/`、报告或 `.actiondock/.knowledge-tmp/`。
-- 不把 `.actiondock/.knowledge-tmp/` 内容作为长期事实来源。
-- 如果插件返回质量门问题，必须把问题和报告路径反馈给用户，不要伪装成完全成功。
+- 不绕过插件直接维护 `ACTIONDOCK.md`、报告或插件拥有的生成目录。
+- 不把 `.actiondock/project-knowledge/staging/*` 中间产物当作长期事实来源。
+- 对证据不足项，必须保留为报告或审查项，不伪装成正式知识。

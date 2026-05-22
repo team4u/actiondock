@@ -1,15 +1,11 @@
 {
   "pluginId": "actiondock-project-knowledge",
   "name": "ActionDock Project Knowledge",
-  "description": "Built-in project knowledge maintenance plugin for planning, running, resuming, and validating ACTIONDOCK.md based knowledge bases.",
-  "version": "1.0.0",
+  "description": "Built-in project knowledge plugin with code-first repository scanning, staging validation, and formal publish.",
+  "version": "2.0.0",
   "configSchema": {
     "type": "object",
     "properties": {
-      "externalCommandProfiles": {
-        "type": "object",
-        "title": "External Command Profiles"
-      },
       "defaultExecutor": {
         "type": "string",
         "title": "Default Executor"
@@ -17,114 +13,49 @@
     }
   },
   "defaultConfig": {
-    "defaultExecutor": "builtin-agent",
-    "externalCommandProfiles": {}
+    "defaultExecutor": "auto"
   },
   "actions": [
     {
-      "action": "planMaintenance",
-      "title": "Plan Knowledge Maintenance",
-      "description": "Inspect a repository with recursive inventory and AI domain classification, then return the init/refresh plan and scan metadata without writing formal files.",
-      "inputSchema": {
-        "type": "object",
-        "required": ["repoPath"],
-        "properties": {
-          "repoPath": {"type": "string", "title": "Repository Path"},
-          "operation": {"type": "string", "title": "Operation"},
-          "evidenceFiles": {"type": "array", "items": {"type": "string"}},
-          "resume": {"type": "boolean"},
-          "executor": {"type": "string"},
-          "agentProfile": {"type": "string", "description": "Required when executor is builtin-agent or auto."},
-          "externalCommandProfile": {"type": "string", "description": "Required when executor is external-cli."}
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "runId": {"type": "string"},
-          "operation": {"type": "string"},
-          "entryPath": {"type": "string"},
-          "scanSummary": {"type": "string"},
-          "projectShape": {"type": "string"},
-          "detectedStacks": {"type": "array"},
-          "modules": {"type": "array"},
-          "domains": {"type": "array"},
-          "inventorySignals": {"type": "array"},
-          "scanWarnings": {"type": "array"}
-        }
-      },
-      "exampleArgs": {
-        "repoPath": "/path/to/project",
-        "operation": "refresh",
-        "executor": "builtin-agent",
-        "agentProfile": "project-knowledge-scanner"
-      }
-    },
-    {
-      "action": "runMaintenance",
-      "title": "Run Knowledge Maintenance",
-      "description": "Run init, refresh, or resume. Writes ACTIONDOCK.md, docs, reports, and checkpoint files inside the target repository.",
-      "inputSchema": {
-        "type": "object",
-        "required": ["repoPath"],
-        "properties": {
-          "repoPath": {"type": "string", "title": "Repository Path"},
-          "operation": {"type": "string", "title": "Operation"},
-          "evidenceFiles": {"type": "array", "items": {"type": "string"}},
-          "resume": {"type": "boolean"},
-          "executor": {"type": "string"},
-          "agentProfile": {"type": "string", "description": "Required when executor is builtin-agent or auto."},
-          "externalCommandProfile": {"type": "string", "description": "Required when executor is external-cli."},
-          "dryRun": {"type": "boolean"}
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "runId": {"type": "string"},
-          "status": {"type": "string"},
-          "changedFiles": {"type": "array"},
-          "reportPath": {"type": "string"},
-          "checkpointPath": {"type": "string"},
-          "qualityGateResult": {"type": "object"}
-        }
-      },
-      "exampleArgs": {
-        "repoPath": "/path/to/project",
-        "operation": "init",
-        "agentProfile": "project-knowledge-scanner",
-        "dryRun": false
-      }
-    },
-    {
-      "action": "getRun",
-      "title": "Get Knowledge Maintenance Run",
-      "description": "Read the latest or requested maintenance run state from .actiondock/.knowledge-tmp.",
+      "action": "generate",
+      "title": "Generate Project Knowledge",
+      "description": "Scan the repository, generate a compact knowledge pack into staging, validate it, and publish formal documents only when validation passes.",
       "inputSchema": {
         "type": "object",
         "required": ["repoPath"],
         "properties": {
           "repoPath": {"type": "string"},
-          "runId": {"type": "string"}
+          "evidenceFiles": {"type": "array", "items": {"type": "string"}},
+          "audience": {"type": "string"},
+          "detailLevel": {"type": "string"},
+          "aiProfile": {"type": "string"},
+          "aiProfiles": {
+            "type": "object",
+            "properties": {
+              "discovery": {"type": "string"},
+              "writer": {"type": "string"}
+            }
+          }
         }
       },
       "outputSchema": {
         "type": "object",
         "properties": {
-          "runId": {"type": "string"},
           "status": {"type": "string"},
-          "checkpointPath": {"type": "string"},
-          "reportPath": {"type": "string"}
+          "repoPath": {"type": "string"},
+          "workspacePath": {"type": "string"},
+          "changedFiles": {"type": "array"},
+          "documents": {"type": "array"},
+          "reportPath": {"type": "string"},
+          "qualityGate": {"type": "object"},
+          "published": {"type": "boolean"}
         }
-      },
-      "exampleArgs": {
-        "repoPath": "/path/to/project"
       }
     },
     {
-      "action": "validateKnowledge",
+      "action": "validate",
       "title": "Validate Project Knowledge",
-      "description": "Run semantic and structural quality checks for generated project knowledge files.",
+      "description": "Validate formal project knowledge documents for structural and content hygiene.",
       "inputSchema": {
         "type": "object",
         "required": ["repoPath"],
@@ -138,9 +69,6 @@
           "ok": {"type": "boolean"},
           "issues": {"type": "array"}
         }
-      },
-      "exampleArgs": {
-        "repoPath": "/path/to/project"
       }
     }
   ]
