@@ -1,4 +1,4 @@
-package org.team4u.actiondock.project.knowledge.plugin.v2;
+package org.team4u.actiondock.project.knowledge.plugin;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

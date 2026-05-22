@@ -1,4 +1,4 @@
-package org.team4u.actiondock.project.knowledge.plugin.v2;
+package org.team4u.actiondock.project.knowledge.plugin;
 
 import org.team4u.actiondock.ai.api.AiAgentRunContext;
 import org.team4u.actiondock.ai.api.AiAgentRunRequest;

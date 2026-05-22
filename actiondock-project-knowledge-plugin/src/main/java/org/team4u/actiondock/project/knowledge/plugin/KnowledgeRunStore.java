@@ -1,4 +1,4 @@
-package org.team4u.actiondock.project.knowledge.plugin.v2;
+package org.team4u.actiondock.project.knowledge.plugin;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
