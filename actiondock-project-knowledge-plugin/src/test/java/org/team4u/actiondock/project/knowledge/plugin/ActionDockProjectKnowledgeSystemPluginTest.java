@@ -13,6 +13,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -93,6 +98,67 @@ class ActionDockProjectKnowledgeSystemPluginTest {
     }
 
     @Test
+    void initLogsExternalCliStartFailuresWithStackTrace() throws Exception {
+        createDemoRepo(true);
+
+        List<LogRecord> records = captureLogs(ProjectKnowledgeService.class.getName(), () -> {
+            Map<String, Object> accepted = invoke("init", Map.of(
+                    "repoPath", tempDir.toString(),
+                    "runner", Map.of(
+                            "type", "external-cli",
+                            "command", List.of("actiondock-missing-ockb-agent"),
+                            "envKeys", List.of("PATH"),
+                            "timeoutSeconds", 5
+                    )
+            ));
+            Map<String, Object> run = awaitRun(String.valueOf(accepted.get("runId")));
+
+            assertThat(run.get("status")).isEqualTo("FAILED");
+            assertThat(String.valueOf(run.get("errorMessage")))
+                    .contains("External agent failed to start")
+                    .contains("actiondock-missing-ockb-agent");
+        });
+
+        assertThat(records)
+                .anySatisfy(record -> {
+                    assertThat(record.getMessage()).contains("OCKB async run failed").contains("External agent failed to start");
+                    assertThat(hasCause(record.getThrown(), IOException.class)).isTrue();
+                });
+    }
+
+    @Test
+    void initLogsWorkerRetryFailures() throws Exception {
+        createDemoRepo(true);
+        ActionDockProjectKnowledgeSystemPlugin workerFailingPlugin =
+                new ActionDockProjectKnowledgeSystemPlugin(new StubAgentRuntime(false, true));
+
+        List<LogRecord> records = captureLogs(ProjectKnowledgeService.class.getName(), () -> {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> accepted = (Map<String, Object>) workerFailingPlugin.invoke("init", null, Map.of(
+                    "repoPath", tempDir.toString(),
+                    "aiProfile", "project-knowledge-writer"
+            ));
+            Map<String, Object> run = awaitRun(workerFailingPlugin, String.valueOf(accepted.get("runId")));
+
+            assertThat(run.get("status")).isEqualTo("SUCCESS");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = (Map<String, Object>) run.get("result");
+            assertThat(result.get("status")).isEqualTo("NEEDS_REVIEW");
+            assertThat(Files.exists(tempDir.resolve(".knowledge_base/07_Maintenance_and_Ops/ERRORS.md"))).isTrue();
+        });
+
+        assertThat(records)
+                .anySatisfy(record -> {
+                    assertThat(record.getMessage()).contains("OCKB worker attempt failed");
+                    assertThat(hasCause(record.getThrown(), IllegalStateException.class)).isTrue();
+                })
+                .anySatisfy(record -> {
+                    assertThat(record.getMessage()).contains("OCKB worker exhausted retries");
+                    assertThat(hasCause(record.getThrown(), IllegalStateException.class)).isTrue();
+                });
+    }
+
+    @Test
     void validateReportsMissingEntryWhenNothingGenerated() {
         Map<String, Object> result = invoke("validate", Map.of("repoPath", tempDir.toString()));
 
@@ -128,6 +194,47 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         throw new AssertionError("Run did not finish: " + runId);
     }
 
+    private List<LogRecord> captureLogs(String loggerName, ThrowingRunnable action) throws Exception {
+        Logger logger = Logger.getLogger(loggerName);
+        Level originalLevel = logger.getLevel();
+        List<LogRecord> records = new CopyOnWriteArrayList<>();
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                records.add(record);
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        handler.setLevel(Level.ALL);
+        logger.setLevel(Level.ALL);
+        logger.addHandler(handler);
+        try {
+            action.run();
+            return records;
+        } finally {
+            logger.removeHandler(handler);
+            logger.setLevel(originalLevel);
+        }
+    }
+
+    private boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
     private void createDemoRepo(boolean includeReadme) throws Exception {
         Files.writeString(tempDir.resolve("pom.xml"), "<project/>", StandardCharsets.UTF_8);
         if (includeReadme) {
@@ -141,10 +248,16 @@ class ActionDockProjectKnowledgeSystemPluginTest {
 
     private static class StubAgentRuntime implements AiAgentRuntime {
         private final boolean invalid;
+        private final boolean failWorker;
         private final List<String> taskTypes = new ArrayList<>();
 
         StubAgentRuntime(boolean invalid) {
+            this(invalid, false);
+        }
+
+        StubAgentRuntime(boolean invalid, boolean failWorker) {
             this.invalid = invalid;
+            this.failWorker = failWorker;
         }
 
         @Override
@@ -221,6 +334,9 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         }
 
         private String worker(Map<String, Object> input) {
+            if (failWorker) {
+                throw new IllegalStateException("worker boom");
+            }
             writeKnowledge(input);
             String targetPath = String.valueOf(input.get("targetPath"));
             return """
@@ -293,5 +409,10 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         public AiAgentRunSnapshot getRun(String runId) {
             throw new UnsupportedOperationException();
         }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
     }
 }

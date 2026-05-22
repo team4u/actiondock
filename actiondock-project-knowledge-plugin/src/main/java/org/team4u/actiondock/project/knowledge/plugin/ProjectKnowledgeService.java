@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -27,6 +28,7 @@ import java.util.stream.Stream;
  * 任务状态持久化到 {@code .actiondock/project-knowledge/runs/} 目录。
  */
 public class ProjectKnowledgeService {
+    private static final System.Logger LOGGER = System.getLogger(ProjectKnowledgeService.class.getName());
 
     /**
      * 单个 Worker 任务最大重试次数，超过后记录到 ERRORS.md。
@@ -87,8 +89,14 @@ public class ProjectKnowledgeService {
                     asyncStore.success(snapshot, result);
                 }
             } catch (Exception exception) {
+                LOGGER.log(
+                        System.Logger.Level.ERROR,
+                        "OCKB async run failed runId=%s mode=%s repoPath=%s runnerType=%s message=%s"
+                                .formatted(runId, request.mode(), request.repoPath(), runnerType(request), summarize(exception)),
+                        exception
+                );
                 if (!asyncStore.cancelled(runId)) {
-                    asyncStore.failed(snapshot, exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage());
+                    asyncStore.failed(snapshot, summarize(exception));
                 }
             }
         });
@@ -137,7 +145,7 @@ public class ProjectKnowledgeService {
             // 去重 + 安全校验（防止路径穿越和通配符注入）
             List<KnowledgeWorkerTask> safeTasks = uniqueSafeTasks(tasks);
             // 并发执行 Worker 任务，每个任务支持失败重试
-            List<KnowledgeWorkerResult> workerResults = runWorkers(context, runner, request, runId, phase, safeTasks, warnings);
+            List<KnowledgeWorkerResult> workerResults = runWorkers(context, runner, request, runId, phase, safeTasks);
             for (KnowledgeWorkerResult result : workerResults) {
                 if (result.changedFiles() != null) {
                     changedFiles.addAll(result.changedFiles());
@@ -528,8 +536,7 @@ public class ProjectKnowledgeService {
                                                    KnowledgeRequest request,
                                                    String runId,
                                                    KnowledgePhase phase,
-                                                   List<KnowledgeWorkerTask> tasks,
-                                                   List<String> warnings) {
+                                                   List<KnowledgeWorkerTask> tasks) {
         List<Callable<KnowledgeWorkerResult>> calls = tasks.stream()
                 .map(task -> (Callable<KnowledgeWorkerResult>) () -> runWorkerWithRetries(context, runner, request, runId, phase, task))
                 .toList();
@@ -543,9 +550,13 @@ public class ProjectKnowledgeService {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new PluginRuntimeException("OCKB worker phase interrupted", exception);
-        } catch (Exception exception) {
-            warnings.add(exception.getMessage());
-            return List.of();
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            throw new PluginRuntimeException(
+                    "OCKB worker phase failed runId=%s phase=%d: %s"
+                            .formatted(runId, phase.phaseNum(), summarize(cause)),
+                    cause
+            );
         }
     }
 
@@ -562,15 +573,31 @@ public class ProjectKnowledgeService {
                                                        KnowledgePhase phase,
                                                        KnowledgeWorkerTask task) {
         String previousError = null;
+        Exception lastException = null;
         for (int attempt = 1; attempt <= MAX_WORKER_RETRIES; attempt++) {
             try {
                 AgentTaskResult result = runner.run(context, request, workerTask(request, runId, phase, task, previousError));
                 return parseWorkerResult(result.json(), task, result.warnings());
             } catch (Exception exception) {
-                previousError = exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage();
+                lastException = exception;
+                previousError = summarize(exception);
+                LOGGER.log(
+                        System.Logger.Level.WARNING,
+                        "OCKB worker attempt failed runId=%s phase=%d planner=%s targetPath=%s attempt=%d/%d message=%s"
+                                .formatted(runId, phase.phaseNum(), task.planner(), task.targetPath(), attempt, MAX_WORKER_RETRIES, previousError),
+                        exception
+                );
             }
         }
         appendError(request.repoPath(), task, previousError);
+        if (lastException != null) {
+            LOGGER.log(
+                    System.Logger.Level.ERROR,
+                    "OCKB worker exhausted retries runId=%s phase=%d planner=%s targetPath=%s message=%s"
+                            .formatted(runId, phase.phaseNum(), task.planner(), task.targetPath(), previousError),
+                    lastException
+            );
+        }
         return new KnowledgeWorkerResult("FAILED", task.targetPath(), List.of(), List.of(previousError), Map.of());
     }
 
@@ -750,6 +777,17 @@ public class ProjectKnowledgeService {
                 KnowledgeConstants.INFRA_ENV_DIR,
                 KnowledgeConstants.MAINTENANCE_OPS_DIR
         );
+    }
+
+    private static String summarize(Throwable throwable) {
+        String message = throwable.getMessage();
+        return message == null || message.isBlank() ? throwable.getClass().getName() : message;
+    }
+
+    private static String runnerType(KnowledgeRequest request) {
+        return request.runner() == null || request.runner().type() == null || request.runner().type().isBlank()
+                ? "internal"
+                : request.runner().type();
     }
 
     /**

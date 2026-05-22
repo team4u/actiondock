@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Agent 执行器抽象接口。
@@ -104,6 +105,8 @@ final class InternalAgentRunner implements AgentRunner {
  * 支持：超时控制、环境变量白名单透传、stderr 收集为警告。
  */
 final class ExternalCliAgentRunner implements AgentRunner {
+    private static final int FAILURE_OUTPUT_PREVIEW_LIMIT = 500;
+
     /**
      * 创建守护线程异步读取子进程的输入流，防止进程因管道缓冲区满而挂起。
      */
@@ -166,6 +169,27 @@ final class ExternalCliAgentRunner implements AgentRunner {
         }
     }
 
+    private static String summarize(Throwable throwable) {
+        String message = throwable.getMessage();
+        return message == null || message.isBlank() ? throwable.getClass().getName() : message;
+    }
+
+    private static String formatCommand(List<String> command) {
+        return command.stream()
+                .map(token -> token.indexOf(' ') >= 0 ? "\"" + token + "\"" : token)
+                .collect(Collectors.joining(" "));
+    }
+
+    private static String preview(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String normalized = text.strip().replace('\n', ' ').replace('\r', ' ');
+        return normalized.length() <= FAILURE_OUTPUT_PREVIEW_LIMIT
+                ? normalized
+                : normalized.substring(0, FAILURE_OUTPUT_PREVIEW_LIMIT) + "...";
+    }
+
     @Override
     public AgentTaskResult run(ScriptPluginContext context, KnowledgeRequest request, AgentTask task) {
         RunnerSpec spec = request.runner();
@@ -190,6 +214,8 @@ final class ExternalCliAgentRunner implements AgentRunner {
             env.clear();
             env.putAll(filtered);
         }
+        List<String> effectiveEnvKeys = env.keySet().stream().sorted().toList();
+        String commandText = formatCommand(command);
         try {
             Process process = builder.start();
             ByteArrayOutputStream stdout = new ByteArrayOutputStream();
@@ -211,8 +237,14 @@ final class ExternalCliAgentRunner implements AgentRunner {
                 throw new PluginRuntimeException("External agent timed out after " + spec.timeoutSeconds() + "s");
             }
             if (process.exitValue() != 0) {
-                // 非 0 退出码视为外部 Agent 执行失败，stderr 内容作为错误信息
-                throw new PluginRuntimeException("External agent failed: " + err);
+                String detail = !err.isBlank() ? err.strip() : preview(out);
+                if (detail.isBlank()) {
+                    detail = "no stderr or stdout output";
+                }
+                throw new PluginRuntimeException(
+                        "External agent failed (exitCode=%d, command=%s, workDir=%s): %s"
+                                .formatted(process.exitValue(), commandText, request.repoPath(), detail)
+                );
             }
             // 从 stdout 中提取 <OCKB_JSON> 标签包裹的 JSON，stderr 作为警告
             return new AgentTaskResult(out, parseTaggedJson(out), err.isBlank() ? List.of() : List.of(err.strip()));
@@ -220,7 +252,11 @@ final class ExternalCliAgentRunner implements AgentRunner {
             Thread.currentThread().interrupt();
             throw new PluginRuntimeException("External agent interrupted", exception);
         } catch (IOException exception) {
-            throw new PluginRuntimeException("External agent failed to start", exception);
+            throw new PluginRuntimeException(
+                    "External agent failed to start (command=%s, workDir=%s, envKeys=%s): %s"
+                            .formatted(commandText, request.repoPath(), effectiveEnvKeys, summarize(exception)),
+                    exception
+            );
         }
     }
 }
