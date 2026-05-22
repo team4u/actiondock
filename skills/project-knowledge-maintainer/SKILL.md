@@ -51,6 +51,7 @@ Read only the files needed for the current operation:
 - Do not stage, commit, push, create PRs, or rewrite unrelated files.
 - Do not record real tokens, secrets, passwords, private keys, or full sensitive connection strings. Record only key names, purpose, source path, and redacted examples.
 - Prefer stable, reusable, action-enabling knowledge. Skip transient implementation detail, generated noise, and one-off facts unless they change future decisions.
+- Apply the significance gate before any Worker task: write material knowledge now, defer minor durable changes to existing `knowledge-map` owners, and skip noise.
 - Avoid scanning generated or dependency directories unless the repository explicitly uses them as source: `node_modules/`, `dist/`, `build/`, `target/`, `.git/`, `.cache/`, `coverage/`.
 
 ## Run Profiles
@@ -72,11 +73,12 @@ Choose the profile during `preflight` based on the repository state, not on suba
    - read current `ACTIONDOCK.md`, `docs/` tree, and `docs/_meta/knowledge-map.json` when present
    - choose `thin`, `standard`, or `deep`
 2. Build candidate targets from direct evidence and existing ownership metadata.
-3. If target ownership or scope is ambiguous, spawn one `Impact Analyzer` subagent. Keep it path-focused; do not let it draft docs.
-4. Spawn Planner subagents only for ambiguous or new targets. Planners return atomic `target_task` JSON and never write files.
-5. Spawn one Worker subagent per unique `target_path`. A Worker owns one file and may only use the evidence assigned to it unless retry rules explicitly widen the search.
-6. Update `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the operation report after Workers finish. Update `ACTIONDOCK.md` only when navigation coverage changed.
-7. Run validate semantics from `workflow.md`; report unresolved evidence gaps, skipped tasks, failures, stale docs, and manual review needs.
+3. Apply the significance gate and classify each candidate as `write`, `defer`, or `skip`.
+4. If write-target ownership or scope is ambiguous, spawn one `Impact Analyzer` subagent. Keep it path-focused; do not let it draft docs.
+5. Spawn Planner subagents only for ambiguous or new write targets. Planners return atomic `target_task` JSON and never write files.
+6. Spawn one Worker subagent per unique write `target_path`. A Worker owns one file and may only use the evidence assigned to it unless retry rules explicitly widen the search.
+7. Update `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the operation report after Workers finish. Update `ACTIONDOCK.md` only when navigation coverage changed.
+8. Run validate semantics from `workflow.md`; report unresolved evidence gaps, deferred updates, skipped tasks, failures, stale docs, and manual review needs.
 
 ## Subagent Mandate
 
@@ -96,6 +98,7 @@ At completion, report:
 - operation mode
 - main files changed
 - validation result
+- deferred updates
 - skipped or failed tasks
 - evidence gaps requiring human review
 

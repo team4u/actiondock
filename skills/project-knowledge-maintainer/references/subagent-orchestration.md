@@ -8,8 +8,9 @@ The current main agent is the Leader.
 
 - run deterministic `preflight`
 - derive candidate targets from evidence and `knowledge-map`
+- classify candidates as `write`, `defer`, or `skip`
 - decide the run profile
-- spawn `Impact Analyzer`, Planner, and Worker subagents only when needed
+- spawn `Impact Analyzer`, Planner, and Worker subagents only for write decisions that need them
 - validate role outputs against the contract JSON
 - deduplicate tasks by `target_path`
 - enforce path safety before any Worker runs
@@ -30,6 +31,7 @@ Subagents are for single responsibility and context control, not maximum paralle
 
 - Do not spawn planners for targets that deterministic preflight already resolved.
 - `thin` runs should often skip `Impact Analyzer` and Planner subagents entirely.
+- Do not spawn planners or Workers for deferred or skipped candidates.
 - Use `maxFanout` from the contract input to cap concurrent Worker tasks.
 - When a target is uncertain, record an evidence gap or review note before widening the run.
 - Keep each subagent prompt narrow: pass the operation, assigned target, relevant paths, and only the evidence context it needs.

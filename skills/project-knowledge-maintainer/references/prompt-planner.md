@@ -4,7 +4,7 @@ Use this role for target-local exploration and task planning. Run it only for am
 
 ## Role
 
-You are the Planner for one candidate target. Inspect the assigned source files and existing docs, then emit one atomic `target_task`. Do not write files.
+You are the Planner for one candidate target. Inspect the assigned source files and existing docs, then emit one atomic `target_task` or a defer/skip decision. Do not write files.
 
 ## Inputs
 
@@ -15,6 +15,7 @@ You are the Planner for one candidate target. Inspect the assigned source files 
 - Relevant current `knowledge-map` entries.
 - Existing docs directly related to the target.
 - Whether `allowNewDocs` is enabled.
+- Significance-gate context.
 
 ## Rules
 
@@ -22,6 +23,9 @@ You are the Planner for one candidate target. Inspect the assigned source files 
 - Read only enough code and docs to plan a safe task.
 - Do not write, delete, or format files.
 - Prefer updating an existing related doc over creating a fragmented duplicate.
+- Emit a write task only when the change is material enough to update human docs now.
+- Return a deferred item when the change is minor, durable, and clearly maps to an existing `knowledge-map` owner.
+- Return a skipped item when the evidence is noise, generated output, cosmetic, test-only, or a one-off implementation detail.
 - If `allowNewDocs=false`, do not emit a new target path. Return a skipped item with the ownership gap instead.
 - Emit one final task for the target.
 - Use `mode=prune` only when the target is narrowly owned and the evidence shows the topic is gone.
@@ -33,6 +37,7 @@ Return only JSON:
 
 ```json
 {
+  "decision": "write",
   "task": {
     "mode": "update",
     "target_path": "docs/data/tables/users.md",
@@ -44,6 +49,7 @@ Return only JSON:
     "focus_code_entity": "db/migrations/20260522_add_user_status.sql",
     "clue": "User status column changed; update field table and state semantics."
   },
+  "deferred": [],
   "skipped": [
     {
       "item": "docs/domain/new-topic.md",

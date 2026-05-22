@@ -39,23 +39,37 @@ Escalate to an `Impact Analyzer` subagent only when:
 - a new topic may deserve a new canonical page
 - stale ownership metadata conflicts with current repository structure
 
+## Significance Gate
+
+Classify every candidate before spawning Workers:
+
+- `write`: durable knowledge changed and human docs should be updated now.
+- `defer`: the change is real but minor, clearly belongs to an existing `knowledge-map` owner, and does not change what future agents or engineers should do today.
+- `skip`: the change is generated, cosmetic, transient, test-only, or an isolated implementation detail with no future decision value.
+
+Write immediately when evidence changes API contracts, schema or DDL, config semantics, deployment or runtime behavior, business rules, agent/tool usage, runbook steps, security posture, or makes an existing doc wrong.
+
+Do not create new docs for `defer` or `skip`. Record `defer` items as capped pending evidence on the existing owner entry in `knowledge-map`; record `skip` items only in the operation report. Promote deferred items to `write` when related pending evidence accumulates, confidence drops, or a later material change touches the same owner.
+
 ## Init
 
 1. Run `preflight`.
 2. Create minimal `docs/` subtrees only for evidence-backed topics.
-3. Build initial `target_task` items from strong evidence first.
-4. Use Planner subagents only for ambiguous or new targets.
-5. Spawn one Worker per unique `target_path`.
-6. Let the Leader write `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the init report.
+3. Build initial candidates from strong evidence first.
+4. Apply the significance gate; skip weak or transient material instead of creating placeholder docs.
+5. Use Planner subagents only for ambiguous or new write targets.
+6. Spawn one Worker per unique write `target_path`.
+7. Let the Leader write `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the init report.
 
 ## Refresh
 
 1. Run `preflight`.
 2. Reuse `knowledge-map` ownership where possible.
-3. Escalate only ambiguous targets to `Impact Analyzer` or Planner subagents.
-4. Spawn Workers for the final deduplicated target set.
-5. Update `ACTIONDOCK.md` only when any completed task has `nav_impact=true`.
-6. Write the refresh report with updated targets, skipped targets, and evidence gaps.
+3. Apply the significance gate.
+4. Escalate only ambiguous write targets to `Impact Analyzer` or Planner subagents.
+5. Spawn Workers for the final deduplicated write target set.
+6. Update `ACTIONDOCK.md` only when any completed write task has `nav_impact=true`.
+7. Write the refresh report with updated targets, deferred updates, skipped low-significance items, and evidence gaps.
 
 ## Ingest
 
@@ -65,10 +79,11 @@ Escalate to an `Impact Analyzer` subagent only when:
    - code/data/API/business-flow change intent
    - unrelated or unsafe material
 3. Route pure operations material to maintenance or diagnosis docs.
-4. Convert change-intent material into `target_task` items backed by repository evidence.
-5. After successful absorption, let the owning Worker remove only processed inbox files.
-6. Preserve unprocessed files and report why.
-7. Refresh `knowledge-map`, then write the ingest report.
+4. Convert change-intent material into candidates backed by repository evidence.
+5. Apply the significance gate before creating write tasks.
+6. After successful absorption, let the owning Worker remove only processed inbox files.
+7. Preserve unprocessed, deferred, or skipped files and report why.
+8. Refresh `knowledge-map`, then write the ingest report.
 
 ## Validate
 
@@ -79,6 +94,7 @@ Do not rewrite substantive docs unless the user explicitly asks for fixes. Check
 - target docs include `## Evidence and Boundaries`.
 - evidence sections include sources, freshness, confidence, and scope limits.
 - `knowledge-map` entries match current formal docs.
+- deferred metadata is capped and attached only to existing owner entries.
 - docs do not contain duplicate ownership or orphan pages.
 - known changed files have plausible doc coverage.
 - inbox files are either pending or intentionally unprocessed.
@@ -92,6 +108,7 @@ After any mutating operation, summarize:
 
 - operation
 - files created, updated, pruned, or skipped
+- deferred updates and skipped low-significance items
 - failed Worker tasks
 - subagent mode and fallback reason if any
 - unresolved evidence gaps

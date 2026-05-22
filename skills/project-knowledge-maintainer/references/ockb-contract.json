@@ -76,6 +76,18 @@
     "modeValues": ["create", "update", "prune"],
     "confidenceValues": ["high", "medium", "low"]
   },
+  "knowledgeImpact": {
+    "levels": ["material", "minor", "noise"],
+    "decisionValues": ["write", "defer", "skip"],
+    "defaultWriteThreshold": "material",
+    "deferLimitPerTarget": 5
+  },
+  "operationReportFields": [
+    "updated_targets",
+    "deferred_updates",
+    "skipped_low_significance",
+    "evidence_gaps"
+  ],
   "worker": {
     "maxRetries": 3,
     "statusValues": ["COMPLETED", "FAILED", "SKIPPED"]
