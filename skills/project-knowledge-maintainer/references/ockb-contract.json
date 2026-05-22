@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "inputs": {
+    "required": ["repoPath"],
+    "optional": ["operation", "changedFiles", "inboxPaths", "resume", "projectName", "audience", "detailLevel"],
+    "defaults": {
+      "operation": "auto",
+      "resume": true,
+      "audience": "future agents and engineers",
+      "detailLevel": "evidence-bound"
+    }
+  },
+  "operations": ["init", "refresh", "ingest", "validate"],
+  "outputs": {
+    "entry": "ACTIONDOCK.md",
+    "formalRoot": "docs",
+    "inboxRoot": ".kb_inbox",
+    "reports": {
+      "init": "KNOWLEDGE_INIT_REPORT.md",
+      "refresh": "KNOWLEDGE_UPDATE_REPORT.md",
+      "ingest": "KNOWLEDGE_INGEST_REPORT.md",
+      "validate": "KNOWLEDGE_VALIDATE_REPORT.md"
+    },
+    "errorLog": "docs/ops/maintenance/errors.md"
+  },
+  "domains": [
+    "Chief_Architect",
+    "API_Spec_Planner",
+    "Data_Model_Planner",
+    "Business_Flow_Planner",
+    "Agent_Tool_Planner",
+    "Infra_Env_Planner",
+    "Maintenance_Ops_Planner",
+    "Triage_Planner"
+  ],
+  "phaseDefaults": [
+    {
+      "phase_num": 0,
+      "domains_to_activate": ["Data_Model_Planner", "Infra_Env_Planner", "Triage_Planner"]
+    },
+    {
+      "phase_num": 1,
+      "domains_to_activate": ["API_Spec_Planner", "Business_Flow_Planner", "Agent_Tool_Planner"]
+    },
+    {
+      "phase_num": 2,
+      "domains_to_activate": ["Chief_Architect", "Maintenance_Ops_Planner"]
+    }
+  ],
+  "worker": {
+    "maxRetries": 3,
+    "allowedActions": ["UPSERT", "PRUNE"],
+    "statusValues": ["COMPLETED", "FAILED", "SKIPPED"]
+  },
+  "subagents": {
+    "requiredWhenAvailable": true,
+    "serialFallbackAllowed": true,
+    "fallbackReasons": ["runtime_unavailable", "host_policy_blocked", "user_forbidden"],
+    "spawnStrategy": {
+      "chief": "one_per_run",
+      "planner": "one_per_active_domain_per_phase",
+      "worker": "one_per_unique_target_path"
+    },
+    "leaderMayWrite": [
+      "ACTIONDOCK.md",
+      "KNOWLEDGE_INIT_REPORT.md",
+      "KNOWLEDGE_UPDATE_REPORT.md",
+      "KNOWLEDGE_INGEST_REPORT.md",
+      "KNOWLEDGE_VALIDATE_REPORT.md"
+    ],
+    "requiredReportFields": [
+      "subagent_mode",
+      "subagent_unavailable_fallback",
+      "fallback_reason",
+      "chief_agent",
+      "planner_agents",
+      "worker_agents"
+    ]
+  },
+  "pathSafety": {
+    "allowedFormalPrefixes": [
+      "ACTIONDOCK.md",
+      "KNOWLEDGE_INIT_REPORT.md",
+      "KNOWLEDGE_UPDATE_REPORT.md",
+      "KNOWLEDGE_INGEST_REPORT.md",
+      "KNOWLEDGE_VALIDATE_REPORT.md",
+      "docs/"
+    ],
+    "forbiddenSegments": ["..", ".git", "node_modules", "dist", "build", "target", ".cache", "coverage"],
+    "forbidAbsolutePaths": true,
+    "forbidWildcards": true
+  }
+}
