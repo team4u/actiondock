@@ -32,7 +32,7 @@ Read only the files needed for the current operation:
 2. `references/workflow.md` for `init`, `refresh`, `ingest`, and `validate` execution rules.
 3. `references/domain-map.md` for the seven OCKB logical domains and their `docs/` targets.
 4. `references/subagent-orchestration.md` for mandatory spawn granularity, concurrency, and fallback rules.
-5. `references/examples.md` for canonical JSON shapes and smoke scenarios.
+5. `references/examples.md` when you need canonical JSON shapes or smoke scenarios.
 6. Role prompts as needed:
    - `references/prompt-chief.md`
    - `references/prompt-planner.md`
@@ -48,12 +48,24 @@ Read only the files needed for the current operation:
 - Do not create `.knowledge_base/` unless the user explicitly asks for that layout.
 - Do not stage, commit, push, create PRs, or rewrite unrelated files.
 - Do not record real tokens, secrets, passwords, private keys, or full sensitive connection strings. Record only key names, purpose, source path, and redacted examples.
+- Prefer stable, reusable, action-enabling knowledge. Skip transient implementation detail, generated noise, and one-off facts unless they change future decisions.
 - Avoid scanning generated or dependency directories unless the repository explicitly uses them as source: `node_modules/`, `dist/`, `build/`, `target/`, `.git/`, `.cache/`, `coverage/`.
+
+## Run Profiles
+
+Use the lightest profile that still covers the change correctly.
+
+- `thin`: narrow surface, small or textual update, direct evidence available, minimal references and minimal fan-out.
+- `standard`: the default for bounded but real refresh work.
+- `deep`: broad cross-domain or semantic change that needs fuller phase coverage and validation.
+
+The selected profile controls how far the run expands. Do not promote a run just because more subagents are available.
 
 ## Subagent Mandate
 
 - The Leader is the current main agent. The Leader coordinates the run, validates JSON, deduplicates tasks, enforces path safety, applies phase barriers, and writes final navigation or reports.
 - The Leader must not write domain body docs directly. Domain body docs are any substantive files under `docs/` except final report/navigation summaries. Use Workers for those files.
+- Use subagents to enforce single responsibility and context control, not to maximize fan-out. Start only the evidence-backed domains and targets needed for the current step; scale the batch to the selected run profile and do not launch every possible Planner or Worker just because it is available.
 - Start exactly one Chief subagent per run when subagents are available.
 - Start one Planner subagent per active domain per phase.
 - Start one Worker subagent per unique `target_path`.
@@ -63,14 +75,14 @@ Read only the files needed for the current operation:
 
 ## Orchestration
 
-1. Determine `repoPath`, operation, changed files, existing docs tree, and inbox state.
+1. Determine `repoPath`, operation, changed files, existing docs tree, inbox state, and run profile.
 2. Spawn the Chief subagent. Chief reads only path/status summaries and docs tree, then returns phase/domain routing JSON.
-3. For each phase, spawn one Planner subagent per active domain. Planners may inspect source and docs, but must only return task JSON.
+3. For each phase, spawn Planner subagents for active domains with direct evidence, at the intensity allowed by the run profile. Planners may inspect source and docs, but must only return task JSON. If many domains are plausible, start with the strongest evidence and continue after reviewing results.
 4. Sanitize and deduplicate tasks:
    - `action` must be `UPSERT` or `PRUNE`.
    - `target_path` must stay under allowed `docs/` paths or approved top-level report/entry paths.
    - Reject absolute paths, `..`, wildcards, dependency directories, and duplicate target writers.
-5. Spawn one Worker subagent for each unique `target_path` in the current phase. Workers may write only their assigned `target_path`; parallelize only when target paths differ.
+5. Spawn Worker subagents for unique `target_path` values as needed. Workers may write only their assigned `target_path`; parallelize only when target paths differ and the batch is small enough for the Leader to supervise.
 6. Regenerate or update `ACTIONDOCK.md` and the operation report after Workers finish.
 7. Run validate semantics from `workflow.md`; report unresolved evidence gaps, skipped tasks, failures, and manual review needs.
 

@@ -21,6 +21,17 @@ The current main agent is the Leader.
 - Planner: spawn 1 Planner subagent per active domain per phase.
 - Worker: spawn 1 Worker subagent per unique `target_path`.
 
+## Right-size Subagents
+
+Subagents are for single responsibility and context control, not maximum parallelism.
+
+- Treat spawn granularity as ownership guidance, not a reason to launch every possible agent at once.
+- Use the selected run profile to decide how far to expand: thin runs stay at the smallest useful group, standard runs follow the normal phase flow, and deep runs may widen coverage when evidence justifies it.
+- Activate only domains with direct evidence. `phaseDefaults` define ordering; they are not a checklist of domains to always spawn.
+- Start with the smallest useful group of Planner or Worker subagents, then continue after reviewing results.
+- When a domain is uncertain, record an evidence gap or review note before spawning exploratory agents.
+- Keep each subagent prompt narrow: pass the operation, assigned domain or target, relevant paths, and only the evidence context it needs.
+
 ## Parallelism
 
 - Planner subagents in the same phase may run in parallel.

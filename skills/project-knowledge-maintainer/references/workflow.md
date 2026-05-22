@@ -11,6 +11,16 @@
 
 If `operation` is `auto`, choose `init` when no formal knowledge base exists, otherwise choose `refresh`. If inbox files exist and the user explicitly asks to process them, choose `ingest`.
 
+## Run Profile
+
+Choose one profile before planning the run:
+
+- `thin`: narrow surface, small or textual update, direct evidence available.
+- `standard`: the default for a bounded but meaningful refresh.
+- `deep`: broad cross-domain or semantic change that needs fuller coverage and validation.
+
+Use the lightest profile that still covers the change correctly. The profile controls how many domains to activate, how much parallelism to allow, and how much validation depth to apply. Do not escalate to `deep` just because subagents are available.
+
 ## Init
 
 1. Inspect repository structure, manifests, config, source roots, tests, scripts, and existing docs.
@@ -25,7 +35,7 @@ If `operation` is `auto`, choose `init` when no formal knowledge base exists, ot
 1. Build a changed-file list from user input or Git.
 2. Inspect existing `ACTIONDOCK.md` and affected `docs/` pages.
 3. Spawn the Chief subagent from changed paths and docs tree only.
-4. Spawn domain Planner subagents to produce `UPSERT` or `PRUNE` tasks.
+4. Spawn domain Planner subagents to produce `UPSERT` or `PRUNE` tasks, sized to the selected run profile.
 5. Spawn Worker subagents phase by phase. Later phases may read docs written by earlier phases.
 6. Let the Leader update navigation and write the refresh report defined by the contract.
 
@@ -48,6 +58,7 @@ Do not rewrite substantive docs unless the user explicitly asks for fixes. The L
 - `ACTIONDOCK.md` exists and links to relevant `docs/` areas.
 - docs links point to existing files.
 - target docs include evidence/boundary sections.
+- target docs reflect a fitting depth for the change surface and are not obvious fact dumps or bloated walkthroughs.
 - docs do not cite temporary paths as final evidence.
 - known changed files have plausible domain coverage.
 - inbox files are either pending or intentionally unprocessed.
