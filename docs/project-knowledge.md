@@ -149,12 +149,12 @@ actiondock script schema query-mysql-json --json
 
 当前 `actiondock-project-knowledge` 插件走一条更收敛的生成路径：
 
-- 代码扫描仓库，收集 README、构建文件、业务入口、DDL、配置和运行线索
-- AI 基于证据一次性生成紧凑知识包；AI 不可用时回退到确定性文档生成
-- 文档先写入 staging 并执行校验
-- 只有 staging 校验通过时，才正式写入 `ACTIONDOCK.md` 和 `docs/project/*.md`
+- Java 插件只负责编排异步任务、调用 Agent、执行最终校验和记录 run 状态
+- Agent 直接读取代码、现有知识库和输入资料，自行决定维护哪些知识正文
+- 正式知识入口是 `ACTIONDOCK.md`，正文根目录是 `.knowledge_base/`
+- `init` 初始化知识库，`refresh` 根据代码变化刷新，`ingest` 融合显式传入的手工资料
 
-这条路径去掉了运行计划、分片重试、run checkpoint 和部分发布。生成失败或校验失败时，正式知识入口保持不变，调用方只会拿到 `NEEDS_REVIEW` 和 staging 报告路径。
+这条路径去掉了 staging、发布复制、state.json、fingerprint 和代码侧 dirty-doc 判断。Agent 执行后插件只做正式知识库校验；校验失败时返回 `NEEDS_REVIEW`，文件不自动回滚，交给人工或下一轮 Agent 修复。
 
 ---
 

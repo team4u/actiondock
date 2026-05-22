@@ -13,8 +13,12 @@ import java.util.Map;
  * <p>ActionDock 的内置系统插件，为 Agent 脚本提供项目知识库的自动化生成与校验能力。
  * 插件以 Spring Bean 注册，始终可用。支持的操作包括：
  * <ul>
- *   <li>{@code generate} — 扫描仓库、生成 staging 文档并在校验通过后正式发布</li>
+ *   <li>{@code init} — 初始化 OCKB 知识库</li>
+ *   <li>{@code refresh} — 手工触发增量刷新</li>
+ *   <li>{@code ingest} — 导入手工资料</li>
  *   <li>{@code validate} — 校验知识库文档质量</li>
+ *   <li>{@code getRun} — 查询异步任务状态</li>
+ *   <li>{@code cancelRun} — 取消异步任务</li>
  * </ul>
  *
  * @author ActionDock
@@ -51,8 +55,12 @@ public class ActionDockProjectKnowledgeSystemPlugin implements ActionDockPlugin 
         Map<String, Object> values = args == null ? Map.of() : args;
         try {
             return switch (action) {
-                case "generate" -> service.generate(context, values);
+                case "init" -> service.init(context, values);
+                case "refresh" -> service.refresh(context, values);
+                case "ingest" -> service.ingest(context, values);
                 case "validate" -> service.validate(values);
+                case "getRun" -> service.getRun(values);
+                case "cancelRun" -> service.cancelRun(values);
                 default -> throw new IllegalArgumentException("Unsupported project knowledge action: " + action);
             };
         } catch (PluginRuntimeException exception) {

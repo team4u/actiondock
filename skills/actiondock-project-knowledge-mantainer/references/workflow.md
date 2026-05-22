@@ -1,26 +1,25 @@
 # 工作流
 
-按这个顺序执行，除非用户明确只要求其中一部分。正式产物路径、状态文件和 staging 目录统一以 `knowledge-contract.json` 为准。
+按这个顺序执行，除非用户明确只要求其中一部分。正式产物路径和 run 记录以 `knowledge-contract.json` 为准。
 
-## 1. scan
+## 1. submit
 
-- 代码扫描仓库，收集构建文件、README、配置、Controller/Router、Job/Consumer、DDL/ORM、Client、安全相关入口。
-- 产出结构化证据目录；每条证据都必须带路径和摘要片段。
-- 如果用户提供 `evidenceFiles`，只把它们当作补充证据，不当作代码事实替代品。
+- 调用 `init`、`refresh` 或 `ingest`。
+- 插件立即返回 `ACCEPTED` 和 `runId`。
+- 后续通过 `getRun` 查询异步结果。
 
-## 2. generate
+## 2. agent-maintain
 
-- AI 基于证据目录生成紧凑的知识文档集合。
-- AI 只能引用已有 evidence，不能发明路径、模块、流程或表。
+- Agent 直接读取代码、现有知识库和输入资料。
+- Agent 自行决定需要新增、更新或删除哪些知识正文。
+- Agent 直接维护 `ACTIONDOCK.md` 和 `.knowledge_base/`。
 
-## 3. stage-validate
+## 3. validate
 
-- 文档先写入 staging。
-- staging 校验失败时返回 `NEEDS_REVIEW`，不发布正式正文。
+- 插件对正式知识库执行质量校验。
+- 校验失败时 run result 为 `NEEDS_REVIEW`，文件不自动回滚。
 
-## 4. publish
+## 4. record-run
 
-- 正式 Markdown 由代码写入。
-- `ACTIONDOCK.md` 只做导航。
-- 报告记录生成文件和待审项。
-- 写入 `state.json` 并清理本插件上一次生成但本次不再需要的正式文件。
+- 插件只写入 `.actiondock/project-knowledge/runs/<runId>.json`。
+- 不维护 staging、state.json、fingerprint 或报告文件。

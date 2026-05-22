@@ -13,6 +13,7 @@ import org.team4u.actiondock.ai.api.AiUsage;
 import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginManifestLoader;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,21 +22,14 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * {@link ActionDockProjectKnowledgeSystemPlugin} 集成测试。
- *
- * <p>验证插件的 generate 和 validate 操作在正常和异常场景下的行为。
- * 使用内存中的 StubAgentRuntime 模拟 AI 响应，无需真实 AI 后端。
- */
 class ActionDockProjectKnowledgeSystemPluginTest {
 
     @TempDir
     Path tempDir;
 
-    private final ActionDockProjectKnowledgeSystemPlugin plugin = new ActionDockProjectKnowledgeSystemPlugin(new StubAgentRuntime());
-    private final ActionDockProjectKnowledgeSystemPlugin failingPlugin = new ActionDockProjectKnowledgeSystemPlugin(new MissingCitationStubAgentRuntime());
+    private final ActionDockProjectKnowledgeSystemPlugin plugin = new ActionDockProjectKnowledgeSystemPlugin(new StubAgentRuntime(false));
+    private final ActionDockProjectKnowledgeSystemPlugin failingPlugin = new ActionDockProjectKnowledgeSystemPlugin(new StubAgentRuntime(true));
 
-    /** 验证插件 manifest 正确声明了 generate 和 validate 两个公开操作。 */
     @Test
     void manifestDocumentsPublicActions() {
         PluginManifest manifest = PluginManifestLoader.load(ActionDockProjectKnowledgeSystemPlugin.class, ActionDockProjectKnowledgeSystemPlugin.PLUGIN_ID);
@@ -43,59 +37,71 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         assertThat(manifest.getPluginId()).isEqualTo(ActionDockProjectKnowledgeSystemPlugin.PLUGIN_ID);
         assertThat(manifest.getActions())
                 .extracting("action")
-                .containsExactly("generate", "validate");
+                .containsExactly("init", "refresh", "ingest", "validate", "getRun", "cancelRun");
     }
 
-    /** 验证完整的 generate 流程：扫描 → AI 生成 → 渲染 → 校验通过 → 正式发布文档和状态。 */
     @Test
-    void generateWritesFormalDocumentsStateAndReport() throws Exception {
+    void initLetsAgentWriteFormalDocumentsAndDoesNotCreateStateOrReport() throws Exception {
         createDemoRepo(true);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("generate", null, Map.of(
+        Map<String, Object> accepted = invoke("init", Map.of(
                 "repoPath", tempDir.toString(),
                 "aiProfile", "project-knowledge-writer"
         ));
+        Map<String, Object> run = awaitRun(String.valueOf(accepted.get("runId")));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) run.get("result");
 
+        assertThat(run.get("status")).isEqualTo("SUCCESS");
         assertThat(result.get("status")).isEqualTo("SUCCESS");
-        assertThat(result.get("published")).isEqualTo(true);
         assertThat(Files.exists(tempDir.resolve("ACTIONDOCK.md"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve("KNOWLEDGE_REPORT.md"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve(".actiondock/project-knowledge/state.json"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve("docs/project/overview.md"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve("docs/project/flows.md"))).isTrue();
-        assertThat(Files.exists(tempDir.resolve("docs/project/data.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve("KNOWLEDGE_REPORT.md"))).isFalse();
+        assertThat(Files.exists(tempDir.resolve(".actiondock/project-knowledge/state.json"))).isFalse();
+        assertThat(Files.exists(tempDir.resolve(".knowledge_base/SUMMARY.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve(".knowledge_base/00_Overview_and_Domain/overview.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve(".knowledge_base/04_Business_Flows/business-flows.md"))).isTrue();
+        assertThat(Files.readString(tempDir.resolve(".knowledge_base/00_Overview_and_Domain/overview.md"))).doesNotStartWith("---");
         assertThat(((Map<String, Object>) result.get("qualityGate")).get("ok")).isEqualTo(true);
-        assertThat((List<Map<String, Object>>) result.get("documents"))
-                .extracting(item -> item.get("documentId"))
-                .contains("overview", "flows", "data", "entry", "report");
     }
 
-    /** 验证校验不通过时文档仅输出到 staging，不发布到仓库正式目录。 */
     @Test
-    void generateDoesNotPublishFormalDocumentsWhenValidationFails() throws Exception {
+    void initKeepsAgentFilesWhenValidationFails() throws Exception {
         createDemoRepo(false);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) failingPlugin.invoke("generate", null, Map.of(
+        Map<String, Object> accepted = failingPluginInvoke("init", Map.of(
                 "repoPath", tempDir.toString(),
                 "aiProfile", "project-knowledge-writer"
         ));
+        Map<String, Object> run = awaitRun(failingPlugin, String.valueOf(accepted.get("runId")));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) run.get("result");
 
+        assertThat(run.get("status")).isEqualTo("SUCCESS");
         assertThat(result.get("status")).isEqualTo("NEEDS_REVIEW");
-        assertThat(result.get("published")).isEqualTo(false);
-        assertThat(Files.exists(tempDir.resolve("ACTIONDOCK.md"))).isFalse();
-        assertThat(Files.exists(tempDir.resolve("docs/project/overview.md"))).isFalse();
+        assertThat(Files.exists(tempDir.resolve("ACTIONDOCK.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve(".knowledge_base/00_Overview_and_Domain/overview.md"))).isTrue();
         assertThat(Files.exists(tempDir.resolve(".actiondock/project-knowledge/state.json"))).isFalse();
         assertThat(((Map<String, Object>) result.get("qualityGate")).get("ok")).isEqualTo(false);
-        assertThat((String) result.get("reportPath")).contains("KNOWLEDGE_REPORT.md");
     }
 
-    /** 验证对空仓库执行 validate 时正确报告 missing-entry 问题。 */
     @Test
-    void validateReportsMissingEntryWhenNothingGenerated() throws Exception {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("validate", null, Map.of("repoPath", tempDir.toString()));
+    void refreshFailsWhenKnowledgeBaseIsNotInitialized() throws Exception {
+        createDemoRepo(true);
+
+        Map<String, Object> accepted = invoke("refresh", Map.of(
+                "repoPath", tempDir.toString(),
+                "aiProfile", "project-knowledge-writer",
+                "changedFiles", List.of("src/main/java/demo/OrderController.java")
+        ));
+        Map<String, Object> run = awaitRun(String.valueOf(accepted.get("runId")));
+
+        assertThat(run.get("status")).isEqualTo("FAILED");
+        assertThat(run.get("errorMessage")).isEqualTo("Knowledge base is not initialized. Run init first.");
+    }
+
+    @Test
+    void validateReportsMissingEntryWhenNothingGenerated() {
+        Map<String, Object> result = invoke("validate", Map.of("repoPath", tempDir.toString()));
 
         assertThat(result.get("ok")).isEqualTo(false);
         assertThat((List<Map<String, Object>>) result.get("issues"))
@@ -103,7 +109,32 @@ class ActionDockProjectKnowledgeSystemPluginTest {
                 .contains("missing-entry");
     }
 
-    /** 在临时目录中创建一个包含 pom.xml、README、Controller 和 SQL migration 的演示仓库。 */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> invoke(String action, Map<String, Object> args) {
+        return (Map<String, Object>) plugin.invoke(action, null, args);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> failingPluginInvoke(String action, Map<String, Object> args) {
+        return (Map<String, Object>) failingPlugin.invoke(action, null, args);
+    }
+
+    private Map<String, Object> awaitRun(String runId) throws Exception {
+        return awaitRun(plugin, runId);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> awaitRun(ActionDockProjectKnowledgeSystemPlugin target, String runId) throws Exception {
+        for (int i = 0; i < 50; i++) {
+            Map<String, Object> run = (Map<String, Object>) target.invoke("getRun", null, Map.of("repoPath", tempDir.toString(), "runId", runId));
+            if (!"RUNNING".equals(run.get("status"))) {
+                return run;
+            }
+            Thread.sleep(100);
+        }
+        throw new AssertionError("Run did not finish: " + runId);
+    }
+
     private void createDemoRepo(boolean includeReadme) throws Exception {
         Files.writeString(tempDir.resolve("pom.xml"), "<project/>", StandardCharsets.UTF_8);
         if (includeReadme) {
@@ -115,8 +146,13 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         Files.writeString(tempDir.resolve("db/migration/V1__init.sql"), "create table orders(id bigint primary key);", StandardCharsets.UTF_8);
     }
 
-    /** 模拟 AI 运行时，返回包含完整引用的合规文档 JSON。 */
     private static class StubAgentRuntime implements AiAgentRuntime {
+        private final boolean invalid;
+
+        StubAgentRuntime(boolean invalid) {
+            this.invalid = invalid;
+        }
+
         @Override
         public AiAgentRunSubmission submit(AiAgentRunRequest request, AiAgentRunContext context) {
             throw new UnsupportedOperationException();
@@ -124,32 +160,38 @@ class ActionDockProjectKnowledgeSystemPluginTest {
 
         @Override
         public AiAgentRunResult run(AiAgentRunRequest request, AiAgentRunContext context) {
-            String text = """
-                    {
-                      "projectSummary": "Demo service with one flow and one SQL-backed table.",
-                      "documents": [
-                        {
-                          "id": "overview",
-                          "title": "项目总览",
-                          "outputPath": "docs/project/overview.md",
-                          "body": "# 项目总览\\n\\n## 关键结论\\n\\n- 项目以 Java 为主。 [README.md]\\n"
-                        },
-                        {
-                          "id": "flows",
-                          "title": "业务流程",
-                          "outputPath": "docs/project/flows.md",
-                          "body": "# 业务流程\\n\\n## 关键结论\\n\\n- 业务入口来自 OrderController。 [src/main/java/demo/OrderController.java]\\n"
-                        },
-                        {
-                          "id": "data",
-                          "title": "数据模型",
-                          "outputPath": "docs/project/data.md",
-                          "body": "# 数据模型\\n\\n## 关键结论\\n\\n- 当前仓库包含 orders 表。 [db/migration/V1__init.sql]\\n"
-                        }
-                      ]
-                    }
-                    """;
+            writeKnowledge(request.input());
+            String text = "{\"status\":\"SUCCESS\",\"summary\":\"知识库已维护\",\"changedFiles\":[\"ACTIONDOCK.md\"],\"warnings\":[]}";
             return new AiAgentRunResult("run-1", AiRunStatus.SUCCESS, Map.of("text", text), List.of(), AiUsage.empty(), null);
+        }
+
+        private void writeKnowledge(Map<String, Object> input) {
+            Path repo = Path.of(String.valueOf(input.get("repoPath")));
+            String boundary = invalid ? "" : "\n\n## 证据与边界\n\n- 依据 README 和代码入口。 [README.md]\n";
+            try {
+                Files.writeString(repo.resolve("ACTIONDOCK.md"), "# Demo 项目知识库\n\n## 阅读路径\n\n- `.knowledge_base/SUMMARY.md`\n", StandardCharsets.UTF_8);
+                Files.createDirectories(repo.resolve(".knowledge_base/00_Overview_and_Domain"));
+                Files.createDirectories(repo.resolve(".knowledge_base/01_Coding_Guidelines"));
+                Files.createDirectories(repo.resolve(".knowledge_base/02_Infra_and_Env"));
+                Files.createDirectories(repo.resolve(".knowledge_base/03_Data_Models"));
+                Files.createDirectories(repo.resolve(".knowledge_base/04_Business_Flows"));
+                Files.createDirectories(repo.resolve(".knowledge_base/05_Agent_Tools_and_CLI"));
+                Files.createDirectories(repo.resolve(".knowledge_base/06_Runbooks_and_Ops"));
+                Files.writeString(repo.resolve(".knowledge_base/SUMMARY.md"), "# OCKB 全景知识库目录\n\n- [架构总览](00_Overview_and_Domain/overview.md)\n", StandardCharsets.UTF_8);
+                write(repo, ".knowledge_base/00_Overview_and_Domain/overview.md", "# 架构总览与领域\n\n## 关键结论\n\n- 项目以 Java 为主。 [README.md]" + boundary);
+                write(repo, ".knowledge_base/01_Coding_Guidelines/guidelines.md", "# 编码规范\n\n## 关键结论\n\n- 暂未发现项目专属规范。 [README.md]" + boundary);
+                write(repo, ".knowledge_base/02_Infra_and_Env/infra-and-env.md", "# 基础设施与环境\n\n## 关键结论\n\n- 当前证据包含 Maven 配置。 [pom.xml]" + boundary);
+                write(repo, ".knowledge_base/03_Data_Models/data-models.md", "# 数据模型\n\n## 表职责\n\n- 当前仓库包含 orders 表。 [db/migration/V1__init.sql]" + boundary);
+                write(repo, ".knowledge_base/04_Business_Flows/business-flows.md", "# 业务流程\n\n## 触发入口\n\n- 业务入口来自 OrderController。 [src/main/java/demo/OrderController.java]" + boundary);
+                write(repo, ".knowledge_base/05_Agent_Tools_and_CLI/agent-tools-and-cli.md", "# Agent 工具与 CLI\n\n## 用途\n\n- 暂未发现项目专属 CLI。 [README.md]" + boundary);
+                write(repo, ".knowledge_base/06_Runbooks_and_Ops/runbooks-and-ops.md", "# Runbook 与运维\n\n## 适用场景\n\n- 暂未沉淀真实故障场景。 [README.md]" + boundary);
+            } catch (IOException exception) {
+                throw new RuntimeException(exception);
+            }
+        }
+
+        private void write(Path repo, String rel, String content) throws IOException {
+            Files.writeString(repo.resolve(rel), content, StandardCharsets.UTF_8);
         }
 
         @Override
@@ -164,39 +206,6 @@ class ActionDockProjectKnowledgeSystemPluginTest {
         @Override
         public AiAgentRunSnapshot getRun(String runId) {
             throw new UnsupportedOperationException();
-        }
-    }
-
-    /** 模拟 AI 运行时，故意返回缺少引用标记的文档 JSON，用于触发校验失败。 */
-    private static final class MissingCitationStubAgentRuntime extends StubAgentRuntime {
-        @Override
-        public AiAgentRunResult run(AiAgentRunRequest request, AiAgentRunContext context) {
-            String text = """
-                    {
-                      "projectSummary": "Demo service with one flow and one SQL-backed table.",
-                      "documents": [
-                        {
-                          "id": "overview",
-                          "title": "项目总览",
-                          "outputPath": "docs/project/overview.md",
-                          "body": "# 项目总览\\n\\n## 关键结论\\n\\n- 项目以 Java 为主。\\n"
-                        },
-                        {
-                          "id": "flows",
-                          "title": "业务流程",
-                          "outputPath": "docs/project/flows.md",
-                          "body": "# 业务流程\\n\\n## 关键结论\\n\\n- 业务入口来自 OrderController。\\n"
-                        },
-                        {
-                          "id": "data",
-                          "title": "数据模型",
-                          "outputPath": "docs/project/data.md",
-                          "body": "# 数据模型\\n\\n## 关键结论\\n\\n- 当前仓库包含 orders 表。\\n"
-                        }
-                      ]
-                    }
-                    """;
-            return new AiAgentRunResult("run-1", AiRunStatus.SUCCESS, Map.of("text", text), List.of(), AiUsage.empty(), null);
         }
     }
 }

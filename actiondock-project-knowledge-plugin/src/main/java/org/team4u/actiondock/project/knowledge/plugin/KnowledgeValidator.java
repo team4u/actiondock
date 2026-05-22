@@ -20,6 +20,9 @@ final class KnowledgeValidator {
 
     /**
      * 使用默认文档 ID 映射校验仓库中已发布的知识库文档。
+     *
+     * @param root 仓库根目录
+     * @return 校验结果，包含是否通过和问题列表
      */
     MapValidation validate(Path root) throws IOException {
         return validate(root, defaultDocumentIds());
@@ -28,7 +31,7 @@ final class KnowledgeValidator {
     /**
      * 校验指定目录下的知识库文档质量。
      *
-     * @param scanRoot 待校验的根目录（staging 或仓库根目录）
+     * @param scanRoot 待校验的仓库根目录
      * @param documentIdsByPath 文件路径到文档 ID 的映射
      */
     MapValidation validate(Path scanRoot, Map<String, String> documentIdsByPath) throws IOException {
@@ -39,15 +42,26 @@ final class KnowledgeValidator {
         } else {
             checkMarkdown(scanRoot, entry, documentIdsByPath, issues);
         }
-        for (String rel : List.of(KnowledgeConstants.OVERVIEW_PATH, KnowledgeConstants.FLOWS_PATH, KnowledgeConstants.DATA_PATH, KnowledgeConstants.OPERATIONS_PATH)) {
+        Path summary = scanRoot.resolve(KnowledgeConstants.SUMMARY_PATH);
+        if (!Files.exists(summary)) {
+            issues.add(new ValidationIssue("missing-summary", KnowledgeConstants.SUMMARY_PATH, "OCKB SUMMARY.md is missing.", "summary", "summary", true));
+        } else {
+            checkMarkdown(scanRoot, summary, documentIdsByPath, issues);
+        }
+        for (String rel : List.of(
+                KnowledgeConstants.OVERVIEW_PATH,
+                KnowledgeConstants.CODING_GUIDELINES_PATH,
+                KnowledgeConstants.INFRA_ENV_PATH,
+                KnowledgeConstants.DATA_PATH,
+                KnowledgeConstants.FLOWS_PATH,
+                KnowledgeConstants.AGENT_TOOLS_PATH,
+                KnowledgeConstants.RUNBOOKS_PATH)) {
             Path path = scanRoot.resolve(rel);
-            if (Files.exists(path)) {
+            if (!Files.exists(path)) {
+                issues.add(new ValidationIssue("missing-pillar", rel, "OCKB pillar document is missing.", documentIdsByPath.getOrDefault(rel, documentIdOf(rel)), documentIdOf(rel), true));
+            } else {
                 checkMarkdown(scanRoot, path, documentIdsByPath, issues);
             }
-        }
-        Path report = scanRoot.resolve(KnowledgeConstants.REPORT_FILE);
-        if (Files.exists(report)) {
-            checkMarkdown(scanRoot, report, documentIdsByPath, issues);
         }
         return new MapValidation(issues.isEmpty(), issues);
     }
@@ -73,8 +87,18 @@ final class KnowledgeValidator {
             if (lower.contains("todo") || lower.contains("placeholder")) {
                 issues.add(new ValidationIssue("placeholder", rel, "Formal document contains placeholder text.", documentId, documentId, true));
             }
+            if (content.startsWith("---\n")) {
+                issues.add(new ValidationIssue("frontmatter", rel, "Formal document must be pure Markdown without YAML frontmatter.", documentId, documentId, true));
+            }
+            if (content.contains("```json") || content.contains("\"bodyMarkdown\"") || content.contains("touches_tables:") || content.contains("tags:")) {
+                issues.add(new ValidationIssue("machine-metadata", rel, "Formal document contains machine metadata or JSON fragments.", documentId, documentId, true));
+            }
             if (content.contains("## 关键结论") && !content.contains("[")) {
                 issues.add(new ValidationIssue("missing-citation", rel, "Document contains conclusions without citations.", documentId, documentId, true));
+            }
+            if (rel.startsWith(KnowledgeConstants.KNOWLEDGE_BASE_ROOT + "/") && !rel.equals(KnowledgeConstants.SUMMARY_PATH)
+                    && !content.contains("## 证据与边界")) {
+                issues.add(new ValidationIssue("missing-evidence-boundary", rel, "OCKB document must include ## 证据与边界.", documentId, documentId, true));
             }
         } catch (IOException exception) {
             String rel = scanRoot.relativize(path).toString().replace('\\', '/');
@@ -89,31 +113,28 @@ final class KnowledgeValidator {
         }
     }
 
-    Map<String, String> documentIdsByPath(List<DocumentRef> documents) {
-        Map<String, String> values = new LinkedHashMap<>();
-        for (DocumentRef document : documents) {
-            values.put(document.outputPath(), document.documentId());
-        }
-        return values;
-    }
-
+    /** 返回默认的 "相对路径 → 文档 ID" 映射，覆盖所有标准 OCKB 文档。 */
     private Map<String, String> defaultDocumentIds() {
         Map<String, String> ids = new LinkedHashMap<>();
         ids.put(KnowledgeConstants.ACTIONDOCK_ENTRY, "entry");
-        ids.put(KnowledgeConstants.REPORT_FILE, "report");
+        ids.put(KnowledgeConstants.SUMMARY_PATH, "summary");
         ids.put(KnowledgeConstants.OVERVIEW_PATH, "overview");
+        ids.put(KnowledgeConstants.CODING_GUIDELINES_PATH, "coding-guidelines");
+        ids.put(KnowledgeConstants.INFRA_ENV_PATH, "infra-env");
         ids.put(KnowledgeConstants.FLOWS_PATH, "flows");
         ids.put(KnowledgeConstants.DATA_PATH, "data");
-        ids.put(KnowledgeConstants.OPERATIONS_PATH, "operations");
+        ids.put(KnowledgeConstants.AGENT_TOOLS_PATH, "agent-tools");
+        ids.put(KnowledgeConstants.RUNBOOKS_PATH, "runbooks");
         return ids;
     }
 
+    /** 从相对路径推断文档 ID，已知路径返回固定 ID，未知路径用冒号替换斜杠。 */
     private String documentIdOf(String rel) {
         if (rel.equals(KnowledgeConstants.ACTIONDOCK_ENTRY)) {
             return "entry";
         }
-        if (rel.equals(KnowledgeConstants.REPORT_FILE)) {
-            return "report";
+        if (rel.equals(KnowledgeConstants.SUMMARY_PATH)) {
+            return "summary";
         }
         return defaultDocumentIds().getOrDefault(rel, rel.replace('/', ':'));
     }

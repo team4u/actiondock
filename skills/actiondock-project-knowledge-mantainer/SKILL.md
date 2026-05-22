@@ -9,10 +9,10 @@ description: 通过 ActionDock 项目知识库插件生成并校验本地代码�
 
 当用户要求生成或校验项目知识库时，不要手工按模板写文档。应调用平台插件 `actiondock-project-knowledge`，由插件负责：
 
-- 代码主导的结构扫描
-- AI 辅助的知识文档生成
-- staging 校验
-- 正式文档写入与状态持久化
+- 异步编排知识库维护任务
+- 调用 Agent 直接维护正式知识库正文
+- 执行最终质量校验
+- 持久化 run 状态
 
 Skill 只负责判断何时调用插件、准备输入、解释返回结果。
 
@@ -24,17 +24,32 @@ Skill 只负责判断何时调用插件、准备输入、解释返回结果。
 
 常用可选输入：
 
-- `evidenceFiles`：补充证据文件
-- `audience`：默认 `balanced`
-- `detailLevel`：默认 `standard`
 - `aiProfile`
-- `aiProfiles.writer`
+- `runner`
+- `changedFiles`：refresh 时提供变更文件
+- `sources`：ingest 时提供手工资料路径
 
-生成知识库：
+初始化知识库：
 
 ```bash
-actiondock plugin invoke actiondock-project-knowledge generate \
+actiondock plugin invoke actiondock-project-knowledge init \
   --input-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer"}' \
+  --json
+```
+
+刷新知识库：
+
+```bash
+actiondock plugin invoke actiondock-project-knowledge refresh \
+  --input-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","changedFiles":["src/main/java/demo/OrderController.java"]}' \
+  --json
+```
+
+导入手工资料：
+
+```bash
+actiondock plugin invoke actiondock-project-knowledge ingest \
+  --input-json '{"repoPath":"/path/to/repo","aiProfile":"project-knowledge-writer","sources":["docs/raw-note.md"]}' \
   --json
 ```
 
@@ -48,12 +63,14 @@ actiondock plugin invoke actiondock-project-knowledge validate \
 
 ## 结果解释
 
-- `status=SUCCESS`：正式文档已写入且质量门通过。
-- `status=NEEDS_REVIEW`：生成已完成，但 staging 质量门未通过；不会发布正式正文。
+- action 返回 `status=ACCEPTED` 和 `runId`：任务已进入后台执行。
+- `getRun` 返回 `status=SUCCESS`：Agent 已完成，质量门通过。
+- run result 中 `status=NEEDS_REVIEW`：Agent 已完成，但正式正文校验未通过；文件不会自动回滚。
+- `status=FAILED`：Agent 执行或编排流程异常。
 
 ## 边界
 
 - 不自动 stage、commit、push 或创建 PR。
-- 不绕过插件直接维护 `ACTIONDOCK.md`、报告或插件拥有的生成目录。
-- 不把 `.actiondock/project-knowledge/staging/*` 中间产物当作长期事实来源。
-- 对证据不足项，必须保留为报告或审查项，不伪装成正式知识。
+- 不绕过插件直接维护 `ACTIONDOCK.md` 或 `.knowledge_base/`。
+- 不依赖 staging、state.json、fingerprint 或报告文件。
+- 对证据不足项，必须在正文中说明边界，不伪装成确定事实。

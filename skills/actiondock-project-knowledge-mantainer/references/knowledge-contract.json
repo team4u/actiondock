@@ -1,47 +1,43 @@
 {
-  "version": 2,
+  "version": 3,
   "actions": [
-    "generate",
-    "validate"
+    "init",
+    "refresh",
+    "ingest",
+    "validate",
+    "getRun",
+    "cancelRun"
   ],
   "inputs": {
     "required": [
       "repoPath"
     ],
     "optional": [
-      "evidenceFiles",
-      "audience",
-      "detailLevel",
       "aiProfile",
-      "aiProfiles"
-    ],
-    "defaults": {
-      "audience": "balanced",
-      "detailLevel": "standard"
-    }
+      "runner",
+      "changedFiles",
+      "sources"
+    ]
   },
   "outputs": {
     "entry": "ACTIONDOCK.md",
-    "report": "KNOWLEDGE_REPORT.md",
-    "generatedRoots": [
-      "docs/project"
-    ],
+    "knowledgeRoot": ".knowledge_base",
+    "summary": ".knowledge_base/SUMMARY.md",
     "workspaceRoot": ".actiondock/project-knowledge",
-    "stateFile": ".actiondock/project-knowledge/state.json",
-    "stagingRoot": ".actiondock/project-knowledge/staging/<sessionId>"
+    "runSnapshots": ".actiondock/project-knowledge/runs/<runId>.json"
   },
   "workflow": {
     "phaseOrder": [
-      "scan",
-      "generate",
-      "stage-validate",
-      "publish"
+      "submit",
+      "agent-maintain",
+      "validate",
+      "record-run"
     ],
     "formalWritePhases": [
-      "publish"
+      "agent-maintain"
     ]
   },
   "aiRoles": {
-    "writer": "AI drafts a compact evidence-bound knowledge pack from the scanned repository."
+    "maintainer": "Agent directly reads code and maintains ACTIONDOCK.md plus .knowledge_base Markdown documents."
   }
 }

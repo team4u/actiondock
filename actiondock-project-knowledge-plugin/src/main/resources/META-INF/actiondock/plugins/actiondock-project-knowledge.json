@@ -1,8 +1,8 @@
 {
   "pluginId": "actiondock-project-knowledge",
   "name": "ActionDock Project Knowledge",
-  "description": "Built-in project knowledge plugin with code-first repository scanning, staging validation, and formal publish.",
-  "version": "2.0.0",
+  "description": "Built-in OCKB project knowledge plugin with async orchestration, agent-maintained Markdown outputs, and ACTIONDOCK.md entry.",
+  "version": "3.0.0",
   "configSchema": {
     "type": "object",
     "properties": {
@@ -13,13 +13,13 @@
     }
   },
   "defaultConfig": {
-    "defaultExecutor": "auto"
+    "defaultExecutor": "internal"
   },
   "actions": [
     {
-      "action": "generate",
-      "title": "Generate Project Knowledge",
-      "description": "Scan the repository, generate a compact knowledge pack into staging, validate it, and publish formal documents only when validation passes.",
+      "action": "init",
+      "title": "Initialize OCKB Knowledge Base",
+      "description": "Start an async OCKB initialization run. The selected agent directly maintains ACTIONDOCK.md and .knowledge_base, then the plugin validates the result.",
       "inputSchema": {
         "type": "object",
         "required": ["repoPath"],
@@ -29,33 +29,45 @@
           "audience": {"type": "string"},
           "detailLevel": {"type": "string"},
           "aiProfile": {"type": "string"},
-          "aiProfiles": {
-            "type": "object",
-            "properties": {
-              "discovery": {"type": "string"},
-              "writer": {"type": "string"}
-            }
-          }
+          "runner": {"type": "object"}
         }
       },
-      "outputSchema": {
+      "outputSchema": {"type": "object"}
+    },
+    {
+      "action": "refresh",
+      "title": "Refresh OCKB Knowledge Base",
+      "description": "Start a manually triggered async refresh run.",
+      "inputSchema": {
         "type": "object",
+        "required": ["repoPath"],
         "properties": {
-          "status": {"type": "string"},
           "repoPath": {"type": "string"},
-          "workspacePath": {"type": "string"},
-          "changedFiles": {"type": "array"},
-          "documents": {"type": "array"},
-          "reportPath": {"type": "string"},
-          "qualityGate": {"type": "object"},
-          "published": {"type": "boolean"}
+          "changedFiles": {"type": "array", "items": {"type": "string"}},
+          "runner": {"type": "object"}
         }
-      }
+      },
+      "outputSchema": {"type": "object"}
+    },
+    {
+      "action": "ingest",
+      "title": "Ingest Manual Knowledge Sources",
+      "description": "Start a manually triggered async ingest run for files or directories.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["repoPath"],
+        "properties": {
+          "repoPath": {"type": "string"},
+          "sources": {"type": "array", "items": {"type": "string"}},
+          "runner": {"type": "object"}
+        }
+      },
+      "outputSchema": {"type": "object"}
     },
     {
       "action": "validate",
-      "title": "Validate Project Knowledge",
-      "description": "Validate formal project knowledge documents for structural and content hygiene.",
+      "title": "Validate OCKB Knowledge Base",
+      "description": "Validate ACTIONDOCK.md and the OCKB pure Markdown document tree.",
       "inputSchema": {
         "type": "object",
         "required": ["repoPath"],
@@ -63,13 +75,35 @@
           "repoPath": {"type": "string"}
         }
       },
-      "outputSchema": {
+      "outputSchema": {"type": "object"}
+    },
+    {
+      "action": "getRun",
+      "title": "Get Knowledge Run",
+      "description": "Read an async OCKB run snapshot.",
+      "inputSchema": {
         "type": "object",
+        "required": ["repoPath", "runId"],
         "properties": {
-          "ok": {"type": "boolean"},
-          "issues": {"type": "array"}
+          "repoPath": {"type": "string"},
+          "runId": {"type": "string"}
         }
-      }
+      },
+      "outputSchema": {"type": "object"}
+    },
+    {
+      "action": "cancelRun",
+      "title": "Cancel Knowledge Run",
+      "description": "Mark an async OCKB run as cancelled.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["repoPath", "runId"],
+        "properties": {
+          "repoPath": {"type": "string"},
+          "runId": {"type": "string"}
+        }
+      },
+      "outputSchema": {"type": "object"}
     }
   ]
 }
