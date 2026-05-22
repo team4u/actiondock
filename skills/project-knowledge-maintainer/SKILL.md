@@ -1,13 +1,13 @@
 ---
 name: project-knowledge-maintainer
-description: Maintain a repository-backed project knowledge base from local evidence. Use when initializing, refreshing, ingesting, or validating ACTIONDOCK.md, docs/, or .kb_inbox/ materials for a local repository with Chief/Planner/Worker subagents.
+description: Maintain a repository-backed project knowledge base from local evidence. Use when initializing, refreshing, ingesting, or validating ACTIONDOCK.md, docs/, or .kb_inbox/ materials for a local repository with evidence-driven preflight, targeted planning, and single-target writer subagents.
 ---
 
 # Project Knowledge Maintainer
 
 ## Goal
 
-Maintain an evidence-bound project knowledge base from repository files and filesystem state. Use native subagents for Chief, Planner, and Worker roles whenever the runtime supports them. Serial execution is a fallback only when subagents are unavailable, blocked by host policy, or explicitly forbidden by the user.
+Maintain an evidence-bound project knowledge base from repository files and filesystem state.
 
 This skill is prompt-first. Do not require ActionDock Server, an external metadata database, background polling, or bundled orchestrator scripts.
 
@@ -28,23 +28,25 @@ This skill is prompt-first. Do not require ActionDock Server, an external metada
 
 Read only the files needed for the current operation:
 
-1. `references/ockb-contract.json` for inputs, outputs, domains, phase defaults, and retry limits.
-2. `references/workflow.md` for `init`, `refresh`, `ingest`, and `validate` execution rules.
-3. `references/domain-map.md` for the seven OCKB logical domains and their `docs/` targets.
-4. `references/subagent-orchestration.md` for mandatory spawn granularity, concurrency, and fallback rules.
-5. `references/examples.md` when you need canonical JSON shapes or smoke scenarios.
-6. Role prompts as needed:
-   - `references/prompt-chief.md`
+1. `references/ockb-contract.json` for inputs, outputs, target task schema, report fields, retry limits, and path safety.
+2. `references/workflow.md` for `preflight`, `init`, `refresh`, `ingest`, and `validate` execution rules.
+3. `references/knowledge-map.md` when you need the machine-owned coverage index shape or ownership rules.
+4. `references/domain-map.md` for logical knowledge domains and canonical `docs/` targets.
+5. `references/subagent-orchestration.md` for subagent responsibilities, concurrency, and fallback rules.
+6. `references/examples.md` when you need canonical JSON shapes or smoke scenarios.
+7. Role prompts as needed:
+   - `references/prompt-impact-analyzer.md`
    - `references/prompt-planner.md`
    - `references/prompt-worker.md`
-7. `references/failure-policy.md` before any Worker writes or deletes files.
+8. `references/failure-policy.md` before any Worker writes or deletes files.
 
 ## Operating Rules
 
 - Treat current source code, config, DDL, scripts, tests, logs, and existing docs as evidence. If evidence conflicts, current repository files win.
 - Keep `ACTIONDOCK.md` as the entry point and `docs/` as the formal knowledge root.
 - Keep `.kb_inbox/` as the manual intake folder. Ingest it only when requested or when the operation is `ingest`.
-- Use the seven OCKB domains as routing domains, not physical `.knowledge_base/` directories.
+- Keep machine-owned coverage metadata in `docs/_meta/knowledge-map.json`.
+- Use OCKB domains as classification labels, not mandatory agent boundaries.
 - Do not create `.knowledge_base/` unless the user explicitly asks for that layout.
 - Do not stage, commit, push, create PRs, or rewrite unrelated files.
 - Do not record real tokens, secrets, passwords, private keys, or full sensitive connection strings. Record only key names, purpose, source path, and redacted examples.
@@ -55,51 +57,37 @@ Read only the files needed for the current operation:
 
 Use the lightest profile that still covers the change correctly.
 
-- `thin`: narrow surface, small or textual update, direct evidence available, minimal references and minimal fan-out.
-- `standard`: the default for bounded but real refresh work.
-- `deep`: broad cross-domain or semantic change that needs fuller phase coverage and validation.
+- `thin`: narrow surface, direct evidence, at most a couple of target files, no broad reclassification.
+- `standard`: the default for bounded but meaningful refresh work.
+- `deep`: structural or cross-cutting change, missing ownership metadata, or wide ambiguity that requires broader validation.
 
-The selected profile controls how far the run expands. Do not promote a run just because more subagents are available.
+Choose the profile during `preflight` based on the repository state, not on subagent availability.
+
+## Execution Model
+
+1. Run deterministic `preflight` first:
+   - normalize `operation`
+   - collect `changedFiles` or infer them from Git when allowed
+   - inspect `.kb_inbox/`
+   - read current `ACTIONDOCK.md`, `docs/` tree, and `docs/_meta/knowledge-map.json` when present
+   - choose `thin`, `standard`, or `deep`
+2. Build candidate targets from direct evidence and existing ownership metadata.
+3. If target ownership or scope is ambiguous, spawn one `Impact Analyzer` subagent. Keep it path-focused; do not let it draft docs.
+4. Spawn Planner subagents only for ambiguous or new targets. Planners return atomic `target_task` JSON and never write files.
+5. Spawn one Worker subagent per unique `target_path`. A Worker owns one file and may only use the evidence assigned to it unless retry rules explicitly widen the search.
+6. Update `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the operation report after Workers finish. Update `ACTIONDOCK.md` only when navigation coverage changed.
+7. Run validate semantics from `workflow.md`; report unresolved evidence gaps, skipped tasks, failures, stale docs, and manual review needs.
 
 ## Subagent Mandate
 
-- The Leader is the current main agent. The Leader coordinates the run, validates JSON, deduplicates tasks, enforces path safety, applies phase barriers, and writes final navigation or reports.
-- The Leader must not write domain body docs directly. Domain body docs are any substantive files under `docs/` except final report/navigation summaries. Use Workers for those files.
-- Use subagents to enforce single responsibility and context control, not to maximize fan-out. Start only the evidence-backed domains and targets needed for the current step; scale the batch to the selected run profile and do not launch every possible Planner or Worker just because it is available.
-- Start exactly one Chief subagent per run when subagents are available.
-- Start one Planner subagent per active domain per phase.
+- The Leader is the current main agent. The Leader performs `preflight`, validates JSON, deduplicates tasks, enforces path safety, updates machine metadata, and writes final navigation or reports.
+- The Leader must not write substantive domain body docs directly. Domain body docs are any substantive files under `docs/` except navigation summaries, reports, and `docs/_meta/knowledge-map.json`.
+- Use subagents for context control, not maximum fan-out.
+- `Impact Analyzer` is optional and at most one per run.
+- Planner subagents are optional and scoped to one candidate target or one tightly related target set.
 - Start one Worker subagent per unique `target_path`.
-- Planner subagents never write files. They only inspect evidence and return task JSON.
 - Worker subagents own exactly one `target_path`. A Worker is the only actor allowed to write or prune that target.
 - If subagents cannot be used, continue serially only as a fallback and record `subagent_unavailable_fallback=true` plus `fallback_reason` in the operation report.
-
-## Orchestration
-
-1. Determine `repoPath`, operation, changed files, existing docs tree, inbox state, and run profile.
-2. Spawn the Chief subagent. Chief reads only path/status summaries and docs tree, then returns phase/domain routing JSON.
-3. For each phase, spawn Planner subagents for active domains with direct evidence, at the intensity allowed by the run profile. Planners may inspect source and docs, but must only return task JSON. If many domains are plausible, start with the strongest evidence and continue after reviewing results.
-4. Sanitize and deduplicate tasks:
-   - `action` must be `UPSERT` or `PRUNE`.
-   - `target_path` must stay under allowed `docs/` paths or approved top-level report/entry paths.
-   - Reject absolute paths, `..`, wildcards, dependency directories, and duplicate target writers.
-5. Spawn Worker subagents for unique `target_path` values as needed. Workers may write only their assigned `target_path`; parallelize only when target paths differ and the batch is small enough for the Leader to supervise.
-6. Regenerate or update `ACTIONDOCK.md` and the operation report after Workers finish.
-7. Run validate semantics from `workflow.md`; report unresolved evidence gaps, skipped tasks, failures, and manual review needs.
-
-## Domain Defaults
-
-Use the domain names from `ockb-contract.json` exactly:
-
-- `Chief_Architect`
-- `API_Spec_Planner`
-- `Data_Model_Planner`
-- `Business_Flow_Planner`
-- `Agent_Tool_Planner`
-- `Infra_Env_Planner`
-- `Maintenance_Ops_Planner`
-- `Triage_Planner`
-
-Phase ordering and active domains come from `ockb-contract.json`; do not invent alternate routing rules.
 
 ## Output Style
 

@@ -1,19 +1,35 @@
 {
-  "version": 1,
+  "version": 2,
   "inputs": {
     "required": ["repoPath"],
-    "optional": ["operation", "changedFiles", "inboxPaths", "resume", "projectName", "audience", "detailLevel"],
+    "optional": [
+      "operation",
+      "changedFiles",
+      "inboxPaths",
+      "resume",
+      "projectName",
+      "audience",
+      "detailLevel",
+      "maxFanout",
+      "allowNewDocs",
+      "forceFullValidate"
+    ],
     "defaults": {
       "operation": "auto",
       "resume": true,
       "audience": "future agents and engineers",
-      "detailLevel": "evidence-bound"
+      "detailLevel": "evidence-bound",
+      "maxFanout": 4,
+      "allowNewDocs": true,
+      "forceFullValidate": false
     }
   },
-  "operations": ["init", "refresh", "ingest", "validate"],
+  "operations": ["auto", "init", "refresh", "ingest", "validate"],
   "outputs": {
     "entry": "ACTIONDOCK.md",
     "formalRoot": "docs",
+    "metadataRoot": "docs/_meta",
+    "knowledgeMap": "docs/_meta/knowledge-map.json",
     "inboxRoot": ".kb_inbox",
     "reports": {
       "init": "KNOWLEDGE_INIT_REPORT.md",
@@ -24,55 +40,64 @@
     "errorLog": "docs/ops/maintenance/errors.md"
   },
   "domains": [
-    "Chief_Architect",
-    "API_Spec_Planner",
-    "Data_Model_Planner",
-    "Business_Flow_Planner",
-    "Agent_Tool_Planner",
-    "Infra_Env_Planner",
-    "Maintenance_Ops_Planner",
-    "Triage_Planner"
+    "Architecture",
+    "API",
+    "Data",
+    "BusinessFlow",
+    "AgentTooling",
+    "InfraEnv",
+    "MaintenanceOps",
+    "Triage"
   ],
-  "phaseDefaults": [
-    {
-      "phase_num": 0,
-      "domains_to_activate": ["Data_Model_Planner", "Infra_Env_Planner", "Triage_Planner"]
+  "profiles": {
+    "thin": {
+      "maxChangedFiles": 5,
+      "maxTargets": 2,
+      "broadChangeTriggers": ["build-root", "schema-root", "infra-root"]
     },
-    {
-      "phase_num": 1,
-      "domains_to_activate": ["API_Spec_Planner", "Business_Flow_Planner", "Agent_Tool_Planner"]
+    "standard": {
+      "maxChangedFiles": 25,
+      "maxTargets": 5
     },
-    {
-      "phase_num": 2,
-      "domains_to_activate": ["Chief_Architect", "Maintenance_Ops_Planner"]
+    "deep": {
+      "requiresFullValidate": true
     }
-  ],
+  },
+  "targetTask": {
+    "required": [
+      "mode",
+      "target_path",
+      "kind",
+      "evidence_paths",
+      "existing_doc_paths",
+      "confidence",
+      "nav_impact"
+    ],
+    "modeValues": ["create", "update", "prune"],
+    "confidenceValues": ["high", "medium", "low"]
+  },
   "worker": {
     "maxRetries": 3,
-    "allowedActions": ["UPSERT", "PRUNE"],
     "statusValues": ["COMPLETED", "FAILED", "SKIPPED"]
   },
   "subagents": {
     "requiredWhenAvailable": true,
     "serialFallbackAllowed": true,
     "fallbackReasons": ["runtime_unavailable", "host_policy_blocked", "user_forbidden"],
-    "spawnStrategy": {
-      "chief": "one_per_run",
-      "planner": "one_per_active_domain_per_phase",
-      "worker": "one_per_unique_target_path"
-    },
+    "roles": ["impact_analyzer", "planner", "worker"],
     "leaderMayWrite": [
       "ACTIONDOCK.md",
       "KNOWLEDGE_INIT_REPORT.md",
       "KNOWLEDGE_UPDATE_REPORT.md",
       "KNOWLEDGE_INGEST_REPORT.md",
-      "KNOWLEDGE_VALIDATE_REPORT.md"
+      "KNOWLEDGE_VALIDATE_REPORT.md",
+      "docs/_meta/knowledge-map.json"
     ],
     "requiredReportFields": [
       "subagent_mode",
       "subagent_unavailable_fallback",
       "fallback_reason",
-      "chief_agent",
+      "impact_analyzer",
       "planner_agents",
       "worker_agents"
     ]
@@ -89,5 +114,13 @@
     "forbiddenSegments": ["..", ".git", "node_modules", "dist", "build", "target", ".cache", "coverage"],
     "forbidAbsolutePaths": true,
     "forbidWildcards": true
-  }
+  },
+  "validateChecks": [
+    "entry_links_exist",
+    "evidence_section_present",
+    "freshness_recorded",
+    "owner_mapping_present",
+    "duplicate_or_orphan_docs",
+    "sensitive_data_redacted"
+  ]
 }

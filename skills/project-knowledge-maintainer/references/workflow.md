@@ -1,71 +1,90 @@
 # Workflow
 
-`references/ockb-contract.json` is the canonical contract for inputs, outputs, domains, phase defaults, retry limits, and path safety. This file describes flow, not constants.
+`references/ockb-contract.json` is the canonical contract for inputs, outputs, target task shape, validation checks, retry limits, and path safety. This file describes flow, not constants.
 
-## Mode Selection
+## Preflight
 
-- `init`: use when `ACTIONDOCK.md` or `docs/` is missing or the user asks to initialize.
-- `refresh`: use when maintaining an existing knowledge base from code changes. If `changedFiles` is absent, derive it from Git status/diff when available.
-- `ingest`: use when `.kb_inbox/` or user-provided inbox paths should be absorbed into formal docs.
-- `validate`: use when checking the existing knowledge base without proactively rewriting substantive docs.
+Run deterministic `preflight` before any planning or writing:
 
-If `operation` is `auto`, choose `init` when no formal knowledge base exists, otherwise choose `refresh`. If inbox files exist and the user explicitly asks to process them, choose `ingest`.
+1. Resolve `operation`. If `auto`, choose `init` when `ACTIONDOCK.md` or `docs/` is missing, otherwise choose `refresh`.
+2. Gather `changedFiles` from user input or Git when allowed.
+3. Inspect `.kb_inbox/` and explicit `inboxPaths` when relevant.
+4. Read the current `ACTIONDOCK.md`, `docs/` tree, and `docs/_meta/knowledge-map.json` when present.
+5. Filter generated or dependency directories using the contract safety rules.
+6. Build the initial candidate target set from:
+   - changed evidence paths
+   - current doc ownership from `knowledge-map`
+   - existing docs that already cover the same topic
+7. Choose `thin`, `standard`, or `deep`.
 
-## Run Profile
+Profile guidance:
 
-Choose one profile before planning the run:
+- `thin`: `<=5` changed files, `<=2` target docs, no root build/schema/infra trigger, and no ambiguous ownership.
+- `standard`: bounded but meaningful refresh, or a few ambiguous targets.
+- `deep`: wide structural change, missing ownership metadata, cross-domain impact, or `forceFullValidate=true`.
 
-- `thin`: narrow surface, small or textual update, direct evidence available.
-- `standard`: the default for a bounded but meaningful refresh.
-- `deep`: broad cross-domain or semantic change that needs fuller coverage and validation.
+## Target Derivation
 
-Use the lightest profile that still covers the change correctly. The profile controls how many domains to activate, how much parallelism to allow, and how much validation depth to apply. Do not escalate to `deep` just because subagents are available.
+Prefer deterministic routing before asking subagents to reason.
+
+- If `knowledge-map` already maps the evidence to a canonical `target_path`, reuse it.
+- If one existing doc clearly owns the topic, plan an `update`.
+- Create a new target only when the current docs cannot absorb the change without becoming a mixed-topic dump and `allowNewDocs=true`.
+- If a new target is warranted but `allowNewDocs=false`, keep the nearest canonical target unchanged and report an evidence-backed gap for manual review.
+- Use `prune` only when the target is narrowly owned and the evidence shows the topic is gone.
+
+Escalate to an `Impact Analyzer` subagent only when:
+
+- multiple existing docs plausibly own the same evidence
+- a new topic may deserve a new canonical page
+- stale ownership metadata conflicts with current repository structure
 
 ## Init
 
-1. Inspect repository structure, manifests, config, source roots, tests, scripts, and existing docs.
-2. Create minimal `docs/` subtrees only for domains with evidence.
-3. Spawn the Chief subagent using repository path summaries and any existing docs tree.
-4. Spawn one Planner subagent for each activated domain in each phase.
-5. Spawn one Worker subagent for each unique `target_path` to create evidence-bound docs.
-6. Let the Leader update `ACTIONDOCK.md` and write the init report defined by the contract with created docs, skipped domains, subagent mode, and evidence gaps.
+1. Run `preflight`.
+2. Create minimal `docs/` subtrees only for evidence-backed topics.
+3. Build initial `target_task` items from strong evidence first.
+4. Use Planner subagents only for ambiguous or new targets.
+5. Spawn one Worker per unique `target_path`.
+6. Let the Leader write `docs/_meta/knowledge-map.json`, `ACTIONDOCK.md`, and the init report.
 
 ## Refresh
 
-1. Build a changed-file list from user input or Git.
-2. Inspect existing `ACTIONDOCK.md` and affected `docs/` pages.
-3. Spawn the Chief subagent from changed paths and docs tree only.
-4. Spawn domain Planner subagents to produce `UPSERT` or `PRUNE` tasks, sized to the selected run profile.
-5. Spawn Worker subagents phase by phase. Later phases may read docs written by earlier phases.
-6. Let the Leader update navigation and write the refresh report defined by the contract.
+1. Run `preflight`.
+2. Reuse `knowledge-map` ownership where possible.
+3. Escalate only ambiguous targets to `Impact Analyzer` or Planner subagents.
+4. Spawn Workers for the final deduplicated target set.
+5. Update `ACTIONDOCK.md` only when any completed task has `nav_impact=true`.
+6. Write the refresh report with updated targets, skipped targets, and evidence gaps.
 
 ## Ingest
 
-1. Inspect `.kb_inbox/` and user-provided `inboxPaths`.
-2. Spawn `Triage_Planner` as a Planner subagent to classify each item:
-   - pure troubleshooting or operations knowledge
+1. Run `preflight`.
+2. Classify `.kb_inbox/` or explicit inbox files:
+   - troubleshooting or operations material
    - code/data/API/business-flow change intent
    - unrelated or unsafe material
-3. Spawn Worker subagents to archive pure operations material under `docs/ops/maintenance/` or `docs/diagnosis/`.
-4. Convert change-intent material into tasks for the appropriate domain Planner subagents.
-5. After successful absorption, let the responsible Worker remove or empty only the processed inbox source files. Preserve unprocessed files and report why.
-6. Let the Leader write the ingest report defined by the contract.
+3. Route pure operations material to maintenance or diagnosis docs.
+4. Convert change-intent material into `target_task` items backed by repository evidence.
+5. After successful absorption, let the owning Worker remove only processed inbox files.
+6. Preserve unprocessed files and report why.
+7. Refresh `knowledge-map`, then write the ingest report.
 
 ## Validate
 
-Do not rewrite substantive docs unless the user explicitly asks for fixes. The Leader may perform the read-only validation directly or spawn read-only validation subagents for large repositories. Check:
+Do not rewrite substantive docs unless the user explicitly asks for fixes. Check:
 
 - `ACTIONDOCK.md` exists and links to relevant `docs/` areas.
 - docs links point to existing files.
-- target docs include evidence/boundary sections.
-- target docs reflect a fitting depth for the change surface and are not obvious fact dumps or bloated walkthroughs.
-- docs do not cite temporary paths as final evidence.
-- known changed files have plausible domain coverage.
+- target docs include `## Evidence and Boundaries`.
+- evidence sections include sources, freshness, confidence, and scope limits.
+- `knowledge-map` entries match current formal docs.
+- docs do not contain duplicate ownership or orphan pages.
+- known changed files have plausible doc coverage.
 - inbox files are either pending or intentionally unprocessed.
 - no obvious secrets are exposed in docs.
-- no `.knowledge_base/` layout is required unless the user requested it.
 
-Write the validate report defined by the contract with pass/fail status, findings, suggested repair tasks, and subagent mode. If the user asks to fix findings, route each substantive doc change through Worker subagents.
+Write the validate report with pass/fail status, findings, suggested repair tasks, and subagent mode. If the user asks to fix findings, route each substantive doc change through Worker subagents.
 
 ## Finalization
 

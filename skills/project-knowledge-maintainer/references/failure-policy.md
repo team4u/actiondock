@@ -1,37 +1,44 @@
 # Failure Policy
 
-## Stderr Feedback Loop
+## Retry Policy
 
-When a Worker command fails:
+Classify the failure before retrying.
 
-1. Capture command, exit code, stdout summary, and stderr.
-2. Retry the Worker with the error text and ask it to rediscover evidence using repository search.
-3. Allow at most 3 attempts for one task.
+- Filesystem or command failure:
+  - capture command, exit code, stdout summary, and stderr
+  - retry with the error text and the same assigned evidence
+- Missing or conflicting evidence:
+  - do not loop blindly
+  - retry once with a narrow evidence rediscovery step limited to likely owner paths
+- Validation failure after write:
+  - allow one repair pass for the same target
+
+Allow at most 3 attempts total for one target.
 
 ## No Dirty Writes
 
 If evidence remains unavailable or the Worker cannot confidently assemble the document after all retries:
 
-- Do not overwrite the target with partial content.
-- Preserve the previous version of the target file.
-- Mark the task `FAILED`.
-- Append or create an error entry under `docs/ops/maintenance/errors.md` if the operation is mutating.
-- Include the failure in the operation report.
+- do not overwrite the target with partial content
+- preserve the previous version of the target file
+- mark the task `FAILED`
+- append or create an error entry under `docs/ops/maintenance/errors.md` if the operation is mutating
+- include the failure in the operation report
 
 ## Parallel Safety
 
-- Never run two Workers that write the same `target_path` concurrently.
-- Do not run later phases until all earlier phase Workers have finished.
-- A failed task does not block unrelated tasks in the same phase.
-- A failed lower-level task should be reported to later-phase Workers as missing context when it affects them.
+- never run two Workers that write the same `target_path` concurrently
+- keep concurrent Workers within `maxFanout`
+- a failed task does not block unrelated tasks
+- pass failed lower-level context to dependent tasks as missing evidence
 
 ## Path Safety
 
 Before a Worker writes or deletes:
 
-- Resolve the target relative to `repoPath`.
-- Reject absolute paths.
-- Reject paths containing `..`.
-- Reject wildcards.
-- Reject targets outside `ACTIONDOCK.md`, operation reports, or `docs/`.
-- Reject directory deletion.
+- resolve the target relative to `repoPath`
+- reject absolute paths
+- reject paths containing `..`
+- reject wildcards
+- reject targets outside `ACTIONDOCK.md`, operation reports, `docs/`, or `docs/_meta/knowledge-map.json`
+- reject directory deletion
