@@ -16,6 +16,7 @@ Must decide:
 - execution mode: team_agent/native_subagent/serial
 - whether document_set_plan_required is true
 - which stages require delegates
+- which domains require Domain Planner delegates
 - whether any immediate safety risk exists
 
 Do not perform Planner work. Do not write docs.
@@ -24,12 +25,15 @@ Do not perform Planner work. Do not write docs.
 
 # Planner Prompt
 
-Create the plan. When document_set_plan_required is true, create Plan A first.
+Create the plan. When document_set_plan_required is true, do domain-partitioned planning first: dispatch or run Domain Planner passes, wait for results, merge them into Plan A, then derive Plan B.
 
 You must not delegate document discovery to Workers. Workers execute planned targets.
 
 Return:
 
+- domain_planner_assignments, if Plan A is required
+- domain_plan_results or references to completed delegate results
+- domain merge decisions
 - Plan A document set, if required
 - Plan B task plan
 - domain coverage
@@ -37,13 +41,36 @@ Return:
 - phases
 - delegate assignments
 
-Prefer over-complete Plan A with `candidate`, `defer`, or `excluded` entries over underplanning.
+Prefer over-complete per-domain inventories with `candidate`, `defer`, or `excluded` entries over underplanning. Do not produce a shallow one- or two-document Plan A for a broad repository scope.
+
+---
+
+# Domain Planner Prompt
+
+Create a detailed document inventory for exactly one domain. Do not write docs. Do not create Worker tasks.
+
+Return JSON matching `schemas/domain-plan.schema.json`.
+
+You must identify domain entities from repository evidence, existing docs, inbox material, tests, routes, migrations, configuration, jobs, prompts, or scripts. For every substantial entity group, propose a leaf document or explicitly exclude/defer it with a reason.
+
+Your output must include:
+
+- activation_status
+- evidence_scanned
+- domain_entities_found
+- recommended_documents
+- excluded_documents
+- coverage_assertion
+- thin_plan_risk
+- open_questions
+
+If the domain is active but you propose only an index or overview, set `thin_plan_risk=true` and explain why.
 
 ---
 
 # Document Set Planner Prompt
 
-Produce a complete expected document set.
+Produce a complete expected document set by merging Domain Planner outputs.
 
 For each document include:
 
@@ -59,12 +86,14 @@ For each document include:
 
 Also include:
 
+- domain_plan_results
+- domain_merge_decisions
 - coverage_basis
 - coverage_assertion
 - scope_boundary
 - excluded_candidates
 
-Do not output vague instructions such as “workers will add docs as needed.”
+Do not output vague instructions such as “workers will add docs as needed.” Do not discard a Domain Planner `must` document without a recorded merge decision.
 
 ---
 

@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DomainPlan",
+  "type": "object",
+  "required": [
+    "domain",
+    "activation_status",
+    "evidence_scanned",
+    "domain_entities_found",
+    "recommended_documents",
+    "excluded_documents",
+    "coverage_assertion",
+    "thin_plan_risk",
+    "open_questions"
+  ],
+  "properties": {
+    "domain": {
+      "enum": [
+        "architecture",
+        "api",
+        "data",
+        "business_flow",
+        "agent_tool",
+        "infra_env",
+        "maintenance_ops",
+        "other"
+      ]
+    },
+    "activation_status": {
+      "enum": [
+        "active",
+        "candidate",
+        "excluded"
+      ]
+    },
+    "evidence_scanned": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "domain_entities_found": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "evidence_basis"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommended_documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_path",
+          "category",
+          "reason",
+          "evidence_basis",
+          "expected_content"
+        ],
+        "properties": {
+          "target_path": {
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "existing",
+              "must",
+              "should",
+              "candidate",
+              "defer",
+              "excluded"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "excluded_documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_path",
+          "reason"
+        ],
+        "properties": {
+          "target_path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "coverage_assertion": {
+      "type": "string"
+    },
+    "thin_plan_risk": {
+      "type": "boolean"
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

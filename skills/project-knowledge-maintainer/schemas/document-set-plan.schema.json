@@ -3,6 +3,8 @@
   "title": "DocumentSetPlan",
   "type": "object",
   "required": [
+    "domain_merge_decisions",
+    "domain_plan_results",
     "coverage_basis",
     "coverage_assertion",
     "scope_boundary",
@@ -99,6 +101,86 @@
       "type": "array",
       "items": {
         "type": "object"
+      }
+    },
+    "domain_plan_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "domain",
+          "result_status",
+          "summary"
+        ],
+        "properties": {
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "result_status": {
+            "enum": [
+              "COMPLETED",
+              "FAILED",
+              "BLOCKED",
+              "NEEDS_REPLAN",
+              "UNAVAILABLE",
+              "TIMEOUT_REPORTED"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "result_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "thin_plan_risk": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "domain_merge_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "domain",
+          "decision",
+          "reason"
+        ],
+        "properties": {
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "decision": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       }
     }
   },

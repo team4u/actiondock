@@ -1,0 +1,43 @@
+{
+  "status": "FAIL",
+  "completion_allowed": false,
+  "delegate_result_check": {
+    "ok": false,
+    "missing": [
+      "domain_planner"
+    ]
+  },
+  "plan_a_check": {
+    "ok": false,
+    "reason": "Plan A required but no Domain Planner fan-out occurred and the global plan is shallow."
+  },
+  "findings": [
+    {
+      "id": "domain_planner_missing",
+      "severity": "hard",
+      "message": "Plan A required but no Domain Planner fan-out was performed.",
+      "affected_paths": [],
+      "repair_required": true
+    },
+    {
+      "id": "domain_doc_inventory_too_shallow",
+      "severity": "hard",
+      "message": "API, data, infra, and ops evidence were collapsed into one or two broad docs.",
+      "affected_paths": [
+        "docs/index.md",
+        "docs/architecture.md"
+      ],
+      "repair_required": true
+    },
+    {
+      "id": "planner_underplanning",
+      "severity": "hard",
+      "message": "Global plan omitted obvious leaf docs for activated domains.",
+      "affected_paths": [
+        "docs/index.md",
+        "docs/architecture.md"
+      ],
+      "repair_required": true
+    }
+  ]
+}

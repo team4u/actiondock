@@ -61,3 +61,10 @@ Validation status must be one of:
 - `BLOCKED`
 
 Use `PASS_WITH_NOTES` only for non-hard findings that do not affect correctness or safety.
+
+
+## Domain Planner validation
+
+When Plan A is required, Validator must verify that Domain Planner fan-out occurred for activated or plausible domains, all delegated Domain Planner stages returned explicit results, and those results were merged into Plan A.
+
+Fail with `domain_doc_inventory_too_shallow` when an active domain has substantive evidence but only a broad index/overview document is planned without a clear scope-boundary explanation.

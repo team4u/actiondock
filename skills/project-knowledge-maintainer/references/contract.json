@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge-maintainer",
-  "version": "5.0.1",
+  "version": "5.1.0",
   "purpose": "Repo-aware knowledge-base reconstruction and maintenance protocol.",
   "execution_priority": [
     "team_agent",
@@ -24,6 +24,7 @@
       "workspace_scanner",
       "noise_filter",
       "planner",
+      "domain_planner",
       "document_set_planner",
       "task_planner",
       "worker",
@@ -60,7 +61,8 @@
       "repo_rebuild",
       "large_ingest",
       "category_under_split_risk",
-      "worker_would_need_to_discover_structure"
+      "worker_would_need_to_discover_structure",
+      "multi_domain_planning_needed"
     ],
     "plan_a_categories": [
       "existing",
@@ -72,7 +74,26 @@
     ],
     "underplanning_is_error": true,
     "worker_discovery_cannot_replace_plan_a": true,
-    "prefer_overcomplete_candidates_over_missing_docs": true
+    "prefer_overcomplete_candidates_over_missing_docs": true,
+    "domain_partitioned_planning": {
+      "required_when_plan_a_required": true,
+      "global_planner_must_dispatch_domain_planners": true,
+      "one_domain_planner_per_activated_or_plausible_domain": true,
+      "domain_planner_results_required_before_plan_a_merge": true,
+      "domain_plan_must_be_merged_into_plan_a": true,
+      "prefer_overcomplete_domain_inventories_over_shallow_global_plan": true,
+      "active_domain_index_only_plan_requires_thin_plan_risk_explanation": true,
+      "canonical_domains": [
+        "architecture",
+        "api",
+        "data",
+        "business_flow",
+        "agent_tool",
+        "infra_env",
+        "maintenance_ops",
+        "other"
+      ]
+    }
   },
   "worker": {
     "one_target_path_per_delegate": true,
@@ -91,6 +112,11 @@
     "pass_forbidden_when_hard_failure_unresolved": true
   },
   "hard_failures": [
+    "shallow_global_plan",
+    "domain_doc_inventory_too_shallow",
+    "domain_plan_not_merged",
+    "domain_plan_result_missing",
+    "domain_planner_missing",
     "planner_underplanning",
     "delegated_discovery_to_worker",
     "delegate_result_missing",
@@ -113,9 +139,10 @@
     "task_plan": "schemas/task-plan.schema.json",
     "delegate_result": "schemas/delegate-result.schema.json",
     "validation_report": "schemas/validation-report.schema.json",
-    "final_report": "schemas/final-report.schema.json"
+    "final_report": "schemas/final-report.schema.json",
+    "domain_plan": "schemas/domain-plan.schema.json"
   },
-  "release": "protocol-rewrite-compatible-format",
+  "release": "domain-partitioned-planning",
   "skill_layout": {
     "entrypoint": "SKILL.md",
     "metadata": "YAML frontmatter in SKILL.md",

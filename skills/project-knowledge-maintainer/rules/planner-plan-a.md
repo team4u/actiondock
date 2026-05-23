@@ -55,3 +55,12 @@ If a Worker identifies a missing document, it must return `NEEDS_REPLAN` or incl
 - `missing_required_leaf_doc`
 - `unplanned_leaf_doc_created`
 - `document_set_plan_incomplete_metadata`
+
+
+## Domain Planner fan-out
+
+When Plan A is required, the Global Planner must assign or run one Domain Planner pass per activated or plausible domain before finalizing Plan A. Domain Planner outputs are expected to be more detailed than the final merged plan; merge later, do not under-enumerate early.
+
+A Plan A for a broad or multi-domain scope that contains only one or two target docs is invalid unless each domain plan proves the scope is genuinely that small.
+
+Hard failures: `domain_planner_missing`, `domain_plan_result_missing`, `domain_plan_not_merged`, `domain_doc_inventory_too_shallow`.

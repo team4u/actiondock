@@ -19,12 +19,17 @@ Always check:
 
 When Plan A is required, also check:
 
+- Domain Planner assignments exist for activated or plausible domains
+- Domain Planner results were returned, blocked, or marked unavailable before Plan A merge
+- Domain Planner outputs were merged into Plan A
+- active domain plans are not shallow index-only inventories when evidence shows substantive entities
 - Plan A exists
 - Plan A metadata is complete
 - Worker tasks derive from Plan A
 - no obvious required leaf docs are missing
 - no unplanned substantive docs were created
 - Workers did not receive discovery responsibility as a substitute for planning
+- Planner did not collapse multi-domain evidence into one or two broad docs
 
 When document granularity risk exists, also check:
 
@@ -37,6 +42,10 @@ When document granularity risk exists, also check:
 
 A final `PASS` is prohibited if any hard failure is unresolved:
 
+- `domain_planner_missing`
+- `domain_plan_result_missing`
+- `domain_plan_not_merged`
+- `domain_doc_inventory_too_shallow`
 - `planner_underplanning`
 - `delegated_discovery_to_worker`
 - `delegate_result_missing`

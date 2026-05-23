@@ -8,7 +8,8 @@ Use for broad refreshes, monorepos, full knowledge-base reconstruction, large in
 Route
 → Workspace Scan
 → Noise Filter
-→ Document Set Plan A
+→ Domain Planner Fan-out
+→ Document Set Plan A Merge
 → Task Plan B
 → Delegate Dispatch
 → Delegate Wait Gate
@@ -21,6 +22,7 @@ Route
 ## Mandatory features
 
 - Plan A is required.
+- Domain Planner fan-out is required for every activated or plausible domain.
 - Domain coverage matrix is required.
 - Delegate use is required when team agents or subagents are available.
 - All delegated stages are gated.
@@ -38,7 +40,7 @@ Planner must explicitly consider:
 - infra_env
 - maintenance_ops
 
-Only activated domains need Worker tasks, but skipped domains must be justified for L/XL.
+Only activated domains need Worker tasks, but each activated or plausible domain must have a Domain Planner result or an explicit `UNAVAILABLE` / `BLOCKED` delegate result. Skipped domains must be justified for L/XL.
 
 ## Noise filter
 
@@ -53,4 +55,4 @@ Separate durable facts from:
 
 ## Completion
 
-Do not report completion if Plan A is incomplete, delegated stages are unresolved, validation failed, or repair was claimed without evidence.
+Do not report completion if Domain Planner results are missing, Plan A is incomplete, delegated stages are unresolved, validation failed, or repair was claimed without evidence.

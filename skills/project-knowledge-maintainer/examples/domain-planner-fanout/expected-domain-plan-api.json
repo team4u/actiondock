@@ -1,0 +1,74 @@
+{
+  "domain": "api",
+  "activation_status": "active",
+  "evidence_scanned": [
+    "services/api/routes/orders.ts",
+    "services/api/routes/payments.ts"
+  ],
+  "domain_entities_found": [
+    {
+      "name": "orders",
+      "kind": "route_group",
+      "evidence_basis": [
+        "services/api/routes/orders.ts"
+      ]
+    },
+    {
+      "name": "payments",
+      "kind": "route_group",
+      "evidence_basis": [
+        "services/api/routes/payments.ts"
+      ]
+    }
+  ],
+  "recommended_documents": [
+    {
+      "target_path": "docs/api/index.md",
+      "category": "must",
+      "reason": "API navigation index is needed.",
+      "evidence_basis": [
+        "services/api/routes/*"
+      ],
+      "expected_content": [
+        "links to endpoint docs"
+      ],
+      "dependencies": []
+    },
+    {
+      "target_path": "docs/api/http/orders.md",
+      "category": "must",
+      "reason": "Orders endpoints need a leaf doc.",
+      "evidence_basis": [
+        "services/api/routes/orders.ts"
+      ],
+      "expected_content": [
+        "endpoint list",
+        "request/response shapes",
+        "errors"
+      ],
+      "dependencies": [
+        "docs/api/index.md"
+      ]
+    },
+    {
+      "target_path": "docs/api/http/payments.md",
+      "category": "must",
+      "reason": "Payments endpoints need a leaf doc.",
+      "evidence_basis": [
+        "services/api/routes/payments.ts"
+      ],
+      "expected_content": [
+        "endpoint list",
+        "payment states",
+        "errors"
+      ],
+      "dependencies": [
+        "docs/api/index.md"
+      ]
+    }
+  ],
+  "excluded_documents": [],
+  "coverage_assertion": "API plan covers discovered route groups and keeps index navigation-only.",
+  "thin_plan_risk": false,
+  "open_questions": []
+}

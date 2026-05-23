@@ -86,6 +86,56 @@
         },
         "additionalProperties": false
       }
+    },
+    "domain_planner_assignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "domain",
+          "delegate_required",
+          "assigned_delegate",
+          "status"
+        ],
+        "properties": {
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "delegate_required": {
+            "type": "boolean"
+          },
+          "assigned_delegate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "PLANNED",
+              "DISPATCHED",
+              "COMPLETED",
+              "FAILED",
+              "BLOCKED",
+              "UNAVAILABLE",
+              "TIMEOUT_REPORTED"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

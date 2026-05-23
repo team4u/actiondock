@@ -8,8 +8,8 @@ Choose the lightest protocol that can safely complete the task.
 XS: Route-lite → Apply → Validate-lite → Report
 S:  Route-lite → Mini Plan → Apply → Validate-lite → Report
 M:  Route → Task Plan → Delegate Dispatch → Delegate Wait Gate → Integration → Validate → Report
-L:  Route → Workspace Scan → Noise Filter → Plan A → Plan B → Delegates → Gate → Integration → Validate → Repair if needed → Report
-XL: Route → Workspace Partition → Noise Filter → Plan A → Phased Plan B → Delegates → Gate → Integration → Validate → Repair if needed → Report
+L:  Route → Workspace Scan → Noise Filter → Domain Planner Fan-out → Plan A Merge → Plan B → Delegates → Gate → Integration → Validate → Repair if needed → Report
+XL: Route → Workspace Partition → Noise Filter → Domain Planner Fan-out → Plan A Merge → Phased Plan B → Delegates → Gate → Integration → Validate → Repair if needed → Report
 ```
 
 ## Execution priority
@@ -37,9 +37,9 @@ Valid completion statuses:
 
 `WAITING` is an interim status, not completion.
 
-## Plan A / Plan B
+## Domain planning, Plan A, and Plan B
 
-When `document_set_plan_required=true`, Planner must first produce Plan A, the complete expected document set. Plan B is the executable task batch derived from Plan A.
+When `document_set_plan_required=true`, Planner must first run domain-partitioned planning. Each activated or plausible domain receives a Domain Planner pass. The Global Planner merges domain plans into Plan A, the complete expected document set. Plan B is the executable task batch derived from Plan A.
 
 Workers may propose extra tasks but cannot create unplanned substantive leaf docs.
 
@@ -54,6 +54,7 @@ Escalate from XS/S to M/L/XL when any of these appear:
 - API/data/business-flow changes together
 - large ingest or monorepo
 - Workers would need to discover missing document structure
+- a single Planner would likely collapse several domains into one or two broad docs
 
 ## Repair loop
 
