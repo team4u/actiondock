@@ -42,6 +42,7 @@ validate-lite 不承诺全仓库链接完整性。若发现影响超出 changed 
 - 是否暴露明显 secret、token、private key 或完整敏感连接串。
 - 是否错误要求 `.knowledge_base/` 布局。
 - 是否违反路径安全。
+- team_agent / native_subagent 模式下是否记录每个 changed substantive target 的 Worker delegate dispatch。
 
 ## 3. 文档颗粒度检查
 
@@ -110,6 +111,19 @@ Worker 输出 `proposed_extra_tasks` 后，如果任务既未执行、未 defer�
 - `structured` / `partitioned`：error。
 
 建议修复：要求 Planner 重新输出 Plan A，补充 `coverage_basis`、`scope_boundary` 和所有 missing leaf_docs。
+
+
+### worker_delegate_not_dispatched
+
+当 report 声称 `execution_mode=team_agent` 或 `execution_mode=native_subagent`，但 changed substantive docs 没有对应 Worker delegate dispatch 记录时报告。`worker_subagent_not_dispatched` 是兼容旧报告的别名。
+
+触发信号：
+
+- 多个 substantive target 由 Leader 一次性写入，没有 per-target Worker delegate 结果。
+- `worker_dispatch` 缺失或只写“handled by main agent”，但没有 serial fallback reason。
+- L/XL 或 `document_set_plan_required=true` 场景中，tasks 有多个 target_path，却没有 Worker delegate 派发摘要。
+
+严重度：warning；若导致多 target 混写、漏验证或覆盖人工内容，升级为 error。
 
 ### delegated_discovery_to_worker
 

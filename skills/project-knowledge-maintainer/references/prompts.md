@@ -215,7 +215,7 @@ Plan A 要求：
 
 ### 目标
 
-对 exactly one `target_path` 执行 `UPSERT` 或 `PRUNE`。Worker 可以读取相关证据，但只能写自己的 target。
+对 exactly one `target_path` 执行 `UPSERT` 或 `PRUNE`。在 `team_agent` 或 `native_subagent` 模式下，Worker 应是独立派发的执行代理；可以是 team agent member、team task、native subagent 或等价隔离执行单元。Worker 可以读取相关证据，但只能写自己的 target。
 
 ### 输出
 
@@ -261,6 +261,7 @@ Plan A 要求：
 
 ### Worker 规则
 
+- 在 `team_agent` 或 `native_subagent` 模式下，每个 Worker 代表一个实际派发的 Worker delegate；不要让 Leader 在同一上下文里代替多个 Worker 批量写。
 - 先读现有 target，再写入。
 - 默认最小编辑。
 - 保留人工段落、备注、TODO、历史上下文、外部链接和有用结构。
@@ -331,9 +332,13 @@ Plan A 要求：
 
 ## 5. Leader / serial 主控
 
+执行模式选择优先级：`team_agent` > `native_subagent` > `serial`。team agent 和 subagent 都可以承担 Worker delegate；team agent 可用时优先。
+
 Leader 负责：
 
 - 选择 execution mode。
+- team agent 可用且未被用户禁止时优先派发 Router / Planner / Worker / Validator team delegates；否则在 native_subagent 可用时派发对应 subagents。
+- 为每个唯一 target_path 派发一个 Worker delegate，并记录 worker dispatch；dispatch 记录需标明 delegate_type：team_agent / native_subagent / serial。
 - 串联 Router / Planner / Worker / Validator。
 - 合并相同 target_path 的任务。
 - 保证每个 target_path 只有一个 Worker 写。
@@ -342,6 +347,7 @@ Leader 负责：
 
 Leader 不应：
 
+- 在 team_agent 或 native_subagent 可用时跳过 Worker delegate。
 - 绕过 Worker 边界批量写多个 substantive docs。
 - 把未验证的 proposed task 当作已完成任务。
 - 在用户未授权时 commit、push 或 PR。
@@ -353,6 +359,7 @@ Leader 不应：
 ```text
 operation: refresh
 execution_mode: serial
+worker_dispatch: serial fallback; main agent emulated one Worker target at a time
 flow_profile: lite
 changed_files:
 - docs/ops/config/auth.md

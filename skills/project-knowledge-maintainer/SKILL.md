@@ -1,9 +1,9 @@
 ---
 name: project-knowledge-maintainer
-version: 4.4.1
-release: adaptive-flow-plan-a
-summary: Adaptive, evidence-first project knowledge maintainer with hard safety boundaries and scale-triggered planning depth.
-description: 初始化、刷新、吸收或验证一个由仓库证据驱动的项目知识库。适用于维护 ACTIONDOCK.md、docs/ 项目知识、.kb_inbox/ 人工材料，以及架构、API、数据、业务流程、Agent/工具、环境和运维诊断文档。v4.4.1 在自适应轻/重流程基础上收紧 Plan A：一旦启用 document_set_plan，Planner 必须先穷尽当前 scope 的预期 leaf docs，防止把规划责任转移给 Worker。
+version: 4.4.3
+release: adaptive-flow-plan-a-team-delegates
+summary: Adaptive, evidence-first project knowledge maintainer with Plan A completeness and mandatory Worker delegate dispatch via team agents or subagents.
+description: 初始化、刷新、吸收或验证一个由仓库证据驱动的项目知识库。适用于维护 ACTIONDOCK.md、docs/ 项目知识、.kb_inbox/ 人工材料，以及架构、API、数据、业务流程、Agent/工具、环境和运维诊断文档。v4.4.3 在自适应轻/重流程和 Plan A 全集规划基础上，强化执行代理边界：运行时支持 team agent 时优先使用 team agent；否则使用 native subagent；每个可写 target_path 必须由独立 Worker delegate 执行，Leader 不直接批量写正文档。
 ---
 
 # Project Knowledge Maintainer
@@ -21,12 +21,15 @@ L/XL:   Route → Document Set Plan → Task Plan → Phased Apply → Validate
 validate-only: Route-lite → Validate
 ```
 
-执行模式有两种：
+执行模式有三种，按优先级选择：
 
-- `native_subagent`：运行时支持原生 subagent 时，Router、Planner、Worker、Validator 可分工执行。
-- `serial`：运行时不支持 subagent、被宿主策略阻止，或用户禁止 subagent 时，当前主 agent 按同一角色边界串行执行。
+- `team_agent`：运行时支持 team agent / multi-agent team 且用户未禁止时优先使用。Router、Planner、Worker、Validator 由不同 team member 或可隔离执行代理承担；其中 Worker 是写入隔离的主要执行单元。
+- `native_subagent`：没有 team agent 但支持原生 subagent 且用户未禁止时使用。Router、Planner、Worker、Validator 按角色分工；其中 Worker 由独立 subagent 执行。
+- `serial`：运行时不支持 team agent / subagent、被宿主策略阻止，或用户禁止代理派发时，当前主 agent 按同一角色边界串行执行。
 
-Subagent 是并行与隔离优化，不是正确性的前提。该 skill 是 prompt-first；不要依赖 ActionDock Server、外部元数据库、后台轮询服务或随包 orchestrator 脚本。
+在 `team_agent` 或 `native_subagent` 模式下，**每个可写 `target_path` 必须派发给一个独立 Worker delegate**；delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元。同一 `target_path` 不得有多个 Worker 并发写。Leader 只负责编排、合并、报告和允许的入口/报告文件，不应绕过 Worker delegate 批量写 substantive docs。
+
+Team agent / subagent 是首选执行方式，不是装饰性描述：可用且未被用户禁止时必须使用。没有任何可派发执行代理能力时，必须显式降级为 `serial`，并记录 fallback reason。该 skill 是 prompt-first；不要依赖 ActionDock Server、外部元数据库、后台轮询服务或随包 orchestrator 脚本。
 
 ## 加载顺序
 
@@ -156,10 +159,11 @@ repair: true
 - XS/S 可直接更新已有 leaf doc。若只有 index 存在且本次只是补一行导航或状态，不必强行创建 leaf doc；若要写正文事实，则必须创建或建议创建 leaf doc。
 - Leaf substantive doc 必须包含 `证据与边界` 或 `Evidence and Boundaries`。Navigation/index doc 可以没有证据区，但不得承载完整正文。
 
-### 5. Worker 自主性边界
+### 5. Worker delegate 与自主性边界
 
-Worker 可以读取相关文件、已有文档和前序 phase 输出；写入归属仍按 target_path 唯一。
+Worker 不是普通 apply 步骤。在 `team_agent` 或 `native_subagent` 模式下，每个写入任务都应被派发给独立 Worker delegate；Worker delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元。Worker 可以读取相关文件、已有文档和前序 phase 输出，写入归属仍按 target_path 唯一。
 
+- Leader 不得在 `team_agent` 或 `native_subagent` 模式下绕过 Worker delegate 批量写 substantive docs；若必须由主 agent 写入，必须切换到 `serial` 并记录 fallback reason。
 - Worker 不得越过路径安全、secret 保护或 repo 外写入。
 - Worker 不得把正文事实塞进 index/navigation doc。
 - 在 M/L/XL 且存在 `document_set_plan` 时，Worker 不得直接创建规划外 leaf doc。
@@ -174,7 +178,8 @@ Worker 可以读取相关文件、已有文档和前序 phase 输出；写入归
 完成后只汇报：
 
 - operation mode
-- execution mode：`native_subagent` 或 `serial`
+- execution mode：`team_agent`、`native_subagent` 或 `serial`
+- worker dispatch：每个 target_path 是否由 Worker delegate 执行，以及使用 team agent / subagent / serial fallback 的原因
 - flow profile：`lite`、`standard`、`structured` 或 `partitioned`
 - 主要变更文件
 - 验证结果
@@ -188,6 +193,17 @@ Worker 可以读取相关文件、已有文档和前序 phase 输出；写入归
 当 `document_set_plan_required=true` 时，Plan A 的目标是“至少只能多不能少”：少建文档会导致长期知识库缺口；多列候选项可以通过 `defer`、`candidate` 和 `scope_boundary` 控制成本。
 
 Planner 可以不为证据不足的候选项创建空文档，但必须在 Plan A 里说明为什么 defer 或排除。不得把文档发现职责留给 Worker。
+
+## Worker delegate 强制派发原则
+
+当 execution mode 是 `team_agent` 或 `native_subagent` 时，Worker 必须是实际派发的执行代理，而不是 Leader 在同一上下文里顺手执行的 apply 段落。优先级是：team agent / multi-agent team > native subagent > serial fallback。
+
+- 每个唯一 `target_path` 对应一个 Worker delegate。
+- Worker delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元。
+- Worker delegate 只写自己的 `target_path`，但可读相关证据。
+- Leader 可以创建或更新报告、入口导航和调度记录，但不得绕过 Worker 写多个正文档。
+- 如果运行时无法创建 team agent 或 subagent delegate，必须改用 `serial`，并在最终报告中写明 fallback reason。
+- 对 L/XL 和 `document_set_plan_required=true` 的任务，缺少 Worker dispatch 记录应视为执行质量问题。
 
 ## 示例材料
 

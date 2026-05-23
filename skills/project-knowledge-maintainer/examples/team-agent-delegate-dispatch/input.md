@@ -1,0 +1,1 @@
+A structured refresh updates docs/api/http/orders.md and docs/api/http/payments.md. Runtime supports team_agent, but the report says Leader wrote both files directly without per-target Worker delegate dispatch.

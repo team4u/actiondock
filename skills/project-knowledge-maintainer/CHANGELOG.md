@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.3
+
+- Added `team_agent` as the preferred execution mode when the host supports team-agent / multi-agent-team orchestration.
+- Generalized Worker dispatch from Worker subagents to Worker delegates: team agent member, team task, native subagent, or equivalent isolated execution unit.
+- Set execution priority to `team_agent` > `native_subagent` > `serial`; serial remains a fallback only.
+- Added `worker_delegate_not_dispatched` as the main validation finding, while keeping `worker_subagent_not_dispatched` as a compatibility alias.
+- Added `examples/team-agent-delegate-dispatch` to catch Leader batch-writing when team agents are available.
+
+## 4.4.2
+
+- Strengthened native subagent execution: when native subagents are available and not forbidden, each writable `target_path` must be dispatched to a dedicated Worker subagent.
+- Clarified that serial execution is a fallback, not a shortcut around Worker boundaries.
+- Added `worker_dispatch` reporting expectations and a `worker_subagent_not_dispatched` validation finding.
+- Clarified that Leader may orchestrate, de-duplicate tasks, and write reports/entry navigation, but should not batch-write substantive docs in native_subagent mode.
+
 ## 4.4.1
 
 - Tightened `document_set_plan_required=true` into Plan A: Planner must enumerate the complete expected leaf-doc set before Worker execution.

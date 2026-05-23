@@ -1,8 +1,8 @@
 {
-  "version": "4.4.1",
-  "release": "adaptive-flow-plan-a",
+  "version": "4.4.3",
+  "release": "adaptive-flow-plan-a-team-delegates",
   "name": "project-knowledge-maintainer",
-  "description": "Adaptive project knowledge base maintainer with hard safety boundaries, scale-triggered planning depth, and lighter execution for coding agents such as Codex.",
+  "description": "Adaptive evidence-first project knowledge maintainer with Plan A completeness and mandatory Worker delegate dispatch via team agents or subagents.",
   "language": {
     "skillLanguage": "zh-Hans",
     "defaultDocumentLanguage": "zh-Hans",
@@ -200,8 +200,9 @@
       "Infra_Env_Planner",
       "Maintenance_Ops_Planner"
     ],
-    "worker": "Worker",
-    "validator": "Validator"
+    "worker": "Worker delegate",
+    "validator": "Validator",
+    "leader": "Leader"
   },
   "outputs": {
     "entry": "ACTIONDOCK.md",
@@ -460,8 +461,10 @@
       "blocked_by"
     ],
     "rules": [
-      "每个 Worker 只拥有一个 target_path；同一 target_path 不允许多个 Worker 并发写。",
-      "Worker 可以读取相关证据、相关已有文档和前序 phase 输出，但只能写自己的 target_path。",
+      "team_agent 或 native_subagent 模式下，每个可写 target_path 必须由一个独立 Worker delegate 执行；delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元；Leader 不得在同一上下文里代替多个 Worker 批量写。",
+      "如果无法派发 team agent / subagent Worker delegate，必须切换为 serial 模式并记录 fallback reason；serial 主 agent 每次只能模拟一个 Worker target。",
+      "每个 Worker delegate 只拥有一个 target_path；同一 target_path 不允许多个 Worker delegate 并发写。",
+      "Worker delegate 可以读取相关证据、相关已有文档和前序 phase 输出，但只能写自己的 target_path。",
       "serial 模式下，主 agent 可以临时进入 Worker role 写一个 target_path，但必须保持边界。",
       "默认做最小必要编辑；保留人工段落、备注、TODO、链接和上下文。",
       "除非证据表明整篇 stale、结构阻碍维护或用户要求重写，否则不要整体重写。",
@@ -506,7 +509,9 @@
       "检查 Worker proposed_extra_tasks 是否被处理、defer 或记录为 evidence gap。",
       "当 document_set_plan_required=true 时，检查 Plan A 是否少列 current scope 内可识别的 leaf docs；明显少列报告 planner_underplanning。",
       "检查 Planner 是否把文档发现职责交给 Worker；若是报告 delegated_discovery_to_worker。",
-      "检查 document_set_plan category 是否包含 coverage_basis、coverage_assertion、scope_boundary、excluded_candidates。"
+      "检查 document_set_plan category 是否包含 coverage_basis、coverage_assertion、scope_boundary、excluded_candidates。",
+      "当 execution_mode=team_agent 或 native_subagent 时，检查每个 changed substantive target 是否有对应 Worker delegate dispatch 记录。",
+      "如果 Leader 在 team_agent 或 native_subagent 可用时绕过 Worker delegate 批量写正文档，报告 worker_delegate_not_dispatched；worker_subagent_not_dispatched 为兼容旧别名。"
     ],
     "findingTypes": [
       "index_content_sink",
@@ -521,30 +526,67 @@
       "broken_link",
       "planner_underplanning",
       "delegated_discovery_to_worker",
-      "document_set_plan_incomplete_metadata"
+      "document_set_plan_incomplete_metadata",
+      "worker_subagent_not_dispatched",
+      "worker_delegate_not_dispatched"
     ]
   },
   "executionModes": {
+    "team_agent": {
+      "useWhenAvailable": true,
+      "priority": 1,
+      "requiredWhenAvailableAndNotForbidden": true,
+      "description": "Use team agent / multi-agent team first when supported by the runtime and not forbidden by the user.",
+      "spawnStrategy": {
+        "router": "at_most_one_routing_delegate_per_run",
+        "planner": "one_planning_delegate_per_active_domain_per_phase_when_flow_requires_planning",
+        "worker": "one_dedicated_worker_delegate_per_unique_target_path",
+        "validator": "one_or_more_read_only_validator_delegates_for_large_validation"
+      },
+      "workerDispatchRequired": true,
+      "workerDispatchRule": "one_dedicated_worker_delegate_per_unique_writable_target_path",
+      "allowedDelegateTypes": [
+        "team_agent_member",
+        "team_task",
+        "equivalent_isolated_execution_unit"
+      ],
+      "leaderMustNotBatchWriteSubstantiveDocs": true
+    },
     "native_subagent": {
       "useWhenAvailable": true,
+      "priority": 2,
+      "requiredWhenTeamAgentUnavailableAndNotForbidden": true,
+      "description": "Use native subagents when team_agent is unavailable but subagent dispatch is supported.",
       "spawnStrategy": {
         "router": "at_most_one_per_run",
         "planner": "one_per_active_domain_per_phase_when_flow_requires_planning",
-        "worker": "one_per_unique_target_path",
+        "worker": "one_dedicated_subagent_per_unique_target_path",
         "validator": "one_or_more_read_only_for_large_validation"
-      }
+      },
+      "workerDispatchRequired": true,
+      "workerDispatchRule": "one_dedicated_worker_subagent_per_unique_writable_target_path",
+      "leaderMustNotBatchWriteSubstantiveDocs": true
     },
     "serial": {
       "allowed": true,
       "fallbackReasons": [
+        "team_agent_unavailable",
+        "subagent_unavailable",
         "runtime_unavailable",
         "host_policy_blocked",
         "user_forbidden",
         "tooling_unavailable"
       ],
       "mustPreserveRoleBoundaries": true,
-      "mustRecordFallbackReason": true
+      "mustRecordFallbackReason": true,
+      "fallbackOnly": true,
+      "mainAgentEmulatesWorkerOneTargetAtATime": true
     },
+    "selectionPriority": [
+      "team_agent",
+      "native_subagent",
+      "serial"
+    ],
     "leaderMayWrite": [
       "ACTIONDOCK.md",
       "KNOWLEDGE_INIT_REPORT.md",
@@ -553,7 +595,14 @@
       "KNOWLEDGE_VALIDATE_REPORT.md",
       "docs/ops/maintenance/errors.md"
     ],
-    "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_mode_emulating_worker_for_exactly_one_target_path"
+    "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_mode_emulating_worker_for_exactly_one_target_path",
+    "workerDelegateAcceptedTypes": [
+      "team_agent_member",
+      "team_task",
+      "native_subagent",
+      "equivalent_isolated_execution_unit",
+      "serial_emulated_worker_when_fallback_recorded"
+    ]
   },
   "reportRequiredFieldsBase": [
     "operation",
@@ -563,7 +612,8 @@
     "files_changed",
     "validation_status",
     "evidence_gaps",
-    "scale"
+    "scale",
+    "worker_dispatch"
   ],
   "reportFieldsWhenRelevant": [
     "serial_fallback_reason",
@@ -716,5 +766,23 @@
       "purpose",
       "rotation_or_lookup_instruction_without_secret_value"
     ]
+  },
+  "leader": {
+    "delegateResponsibilities": [
+      "select execution mode using priority team_agent > native_subagent > serial",
+      "dispatch one Worker delegate per unique writable target_path",
+      "use team agent / multi-agent team first when supported and not forbidden",
+      "use native subagent when team agent is unavailable but subagent dispatch is supported",
+      "deduplicate tasks before dispatch",
+      "block later phases until prior-phase Worker results are complete or failed",
+      "merge Worker results and handle NEEDS_REPLAN",
+      "write reports and allowed navigation/entry files only"
+    ],
+    "mustNot": [
+      "batch-write multiple substantive docs in team_agent or native_subagent mode",
+      "treat Worker as a prose section instead of an actual dispatched delegate when team agents or subagents are available",
+      "choose serial merely for convenience when team_agent or native_subagent is available and not forbidden"
+    ],
+    "serialFallbackRule": "If team agent and Worker subagents cannot be dispatched, set execution_mode=serial, record fallback reason, and emulate exactly one Worker target at a time."
   }
 }

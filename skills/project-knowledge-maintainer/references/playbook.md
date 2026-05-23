@@ -10,7 +10,7 @@ L/XL:   Route → Document Set Plan → Task Plan → Phased Apply → Validate
 validate-only: Route-lite → Validate
 ```
 
-Router、Planner、Worker、Validator 是角色边界。Subagent 是执行优化，不是必需条件。serial 模式下，主 agent 可以按角色顺序执行，但不得混淆“规划”和“写入”的责任。
+Router、Planner、Worker、Validator 是角色边界。team agent / multi-agent team 可用时优先使用；否则使用 native subagent。Worker 必须作为写入隔离的执行代理使用；serial 只是 fallback，不是首选执行方式。serial 模式下，主 agent 可以按角色顺序执行，但不得混淆“规划”和“写入”的责任。
 
 ## 0. 输入约定
 
@@ -275,26 +275,43 @@ M/L/XL、repair=true 或 validate-only 大范围检查时使用 full validate，
 
 ## 7. 执行模式
 
+执行模式按优先级选择：`team_agent` > `native_subagent` > `serial`。team agent 和 subagent 都属于可接受的 delegated execution；差别只在宿主运行时提供的编排能力。
+
+### team_agent
+
+运行时支持 team agent / multi-agent team 且用户未禁止时，应优先使用该模式。它适合把 Router、Planner、Worker、Validator 分配给不同 team member 或 team task，减少单一上下文偷懒、串写和角色污染。
+
+派发规则：
+
+- Router：每次运行最多一个 routing delegate。
+- Planner：仅当 flow profile 需要 planning 时，每个 phase 的每个激活 domain 一个 planning delegate。
+- Worker：每个唯一 `target_path` 一个独立 Worker delegate；delegate 可以是 team member、team task 或等价隔离执行单元。
+- Validator：大范围验证时可以多个只读 validator delegate。
+
 ### native_subagent
 
-运行时支持时可以使用：
+没有 team agent 但支持 native subagent 且用户未禁止时，应使用该模式。它不是“可有可无的风格选择”；它是隔离 Worker 写入、提升并行度和降低上下文污染的首选 fallback。
+
+派发规则：
 
 - Router：每次运行最多一个。
 - Planner：仅当 flow profile 需要 planning 时，每个 phase 的每个激活 domain 一个。
-- Worker：每个唯一 `target_path` 一个。
+- Worker：每个唯一 `target_path` 一个独立 Worker subagent；这是没有 team agent 时写入正文档的默认方式。
 - Validator：大范围验证时可以多个只读 validator。
 
 同一 phase 的 Planner 可并行。同一 phase 的 Worker 只有在 `target_path` 不同时才可并行。phase N+1 必须等待 phase N 的 Worker 完成或失败。
 
+Leader 在 `team_agent` 或 `native_subagent` 模式下不得批量写多个 substantive docs；它只负责编排、任务去重、phase 阻塞、汇总 report，以及允许的入口/报告文件。如果 Leader 发现无法派发 Worker delegate，应切换到 serial 并记录 fallback reason。
+
 ### serial
 
-当没有 subagent 或用户禁止 subagent 时，主 agent 按同一边界串行执行。
+当没有 team agent / subagent、宿主策略阻止、工具不可用或用户禁止代理派发时，主 agent 按同一边界串行执行。serial 是 fallback；不要在 team_agent 或 native_subagent 可用时把它作为偷懒路径。
 
 serial 要求：
 
 - 仍按 Router / Planner / Worker / Validator 的职责切分。
 - 记录 `execution_mode=serial` 和 fallback reason。
-- Worker 写入时仍保持 one target_path ownership。
+- Worker 写入时仍保持 one target_path ownership；主 agent 每次只能模拟一个 Worker target。
 - 发现 `proposed_extra_tasks` 时可以回到 mini-plan，但必须在 report 记录；如果该任务本应由 Plan A 识别，同时记录 `planner_underplanning`。
 
 ## 8. 报告
@@ -308,6 +325,7 @@ serial 要求：
 - repo_baseline
 - files_changed
 - validation_status
+- worker_dispatch：team agent / native subagent 派发摘要，或 serial fallback reason
 - evidence_gaps
 
 按需包含：

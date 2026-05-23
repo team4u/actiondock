@@ -38,6 +38,7 @@ v4.4 起，示例按 flow profile 分层：
 17. `document-set-plan-data/`：Planner 先规划核心表和跨表事务子文档。
 18. `document-set-plan-monorepo/`：Planner 先规划 service/package 子文档清单。
 19. `document-set-plan-under-split/`：Validator 检查分类拆分不足和缺失 leaf docs。
+20. `team-agent-delegate-dispatch/`：team_agent 可用时，每个 target_path 必须有 Worker delegate dispatch。
 
 旧示例中仍出现 `document_set_plan` 的场景通常代表 M/L/XL 或 granularity 风险；XS/S 示例不应再把 `document_set_plan` 当成固定要求。
 
@@ -45,3 +46,5 @@ v4.4 起，示例按 flow profile 分层：
 ## v4.4.1 Plan A anti-underplanning
 
 - `planner-underplanning/`：Validator 应识别 Planner 只列一两个文件并把剩余发现交给 Worker 的问题，报告 `planner_underplanning` 和 `delegated_discovery_to_worker`。
+- `worker-subagent-dispatch/`：兼容旧名；Validator 应识别 native_subagent 模式下 Leader 绕过 Worker subagent 批量写正文档的问题，报告 `worker_delegate_not_dispatched` 或兼容别名 `worker_subagent_not_dispatched`。
+- `team-agent-delegate-dispatch/`：Validator 应识别 team_agent 可用时 Leader 绕过 Worker delegate 批量写正文档的问题，报告 `worker_delegate_not_dispatched`。
