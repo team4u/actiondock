@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.3.0
+
+- Added `references/document-set-planning.md`.
+- Planner must now output `document_set_plan` before write tasks.
+- Added child-document statuses: `create`, `update`, `keep`, `defer`, `deprecate`, `prune_candidate`.
+- Added validation findings: `missing_required_leaf_doc`, `index_without_leaf_docs`, `category_under_split`, `document_set_plan_missing`, `unplanned_leaf_doc`.
+- Added document-set planning examples for flows, API, data, monorepo, and under-split validation.
+
+
 ## 4.2.0
 
 - Added `references/document-granularity.md`.

@@ -1,0 +1,23 @@
+{
+  "status": "FAIL",
+  "findings": [
+    {
+      "severity": "error",
+      "path": "docs/domain/flows/index.md",
+      "issue": "category_under_split: multiple independent business flows are stored in one index document instead of planned leaf docs.",
+      "suggested_repair": "Create a document_set_plan for business_flows and split checkout/refund/registration/inventory into leaf docs."
+    },
+    {
+      "severity": "error",
+      "path": "docs/domain/flows/index.md",
+      "issue": "index_without_leaf_docs: index lists concrete flows without corresponding leaf documents.",
+      "suggested_repair": "Create docs/domain/flows/<flow>.md files and leave the index as navigation only."
+    },
+    {
+      "severity": "warning",
+      "path": "Planner output",
+      "issue": "document_set_plan_missing for business_flows.",
+      "suggested_repair": "Planner must output document_set_plan before tasks."
+    }
+  ]
+}

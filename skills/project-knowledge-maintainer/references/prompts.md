@@ -72,6 +72,7 @@
 - Router 输出的 scale、change_types、workspace_scope、special_flags 和 noise_filters。
 - `domain-map.md` 中允许的目标路径。
 - `document-granularity.md` 中 index 与 leaf doc 的拆分规则。
+- `document-set-planning.md` 中每个分类的子文档清单规划规则。
 - `evidence-search.md` 中的技术栈探测策略。
 - 当前 domain 的现有 docs tree。
 - 前序 phase 结果摘要。
@@ -94,6 +95,10 @@
 - `rename_move` 优先更新或迁移已有文档，在任务中附带 `rename_map`。
 - `breaking_change` 必须生成兼容性或迁移边界任务，或在 skipped 中说明为什么不适用。
 - `generated_or_format_only` 只有在存在独立语义证据时才生成正式文档任务。
+- 必须先输出 `document_set_plan`，再输出 `tasks`。
+- 对每个激活分类，必须列出预期 leaf docs，并标记 `create/update/keep/defer/deprecate/prune_candidate`。
+- `priority=must` 的 leaf doc 必须创建、更新或明确 defer；不得因为 Worker 保守而少写。
+- 每个由子文档规划产生的任务必须带 `from_document_set_plan` 和 `document_set_item_path`。
 - 对 API 资源组、事件族、业务流程、状态机、核心表、跨表事务、配置域、runbook、诊断路径、service/package，必须优先规划 leaf doc。
 - `stale_doc_refresh` 可以指定 `edit_mode=full_rewrite_with_preservation`，但必须给出证据。
 
@@ -101,6 +106,31 @@
 
 ```json
 {
+  "document_set_plan": [
+    {
+      "category": "data_tables",
+      "domain": "Data_Model_Planner",
+      "index_path": "docs/data/index.md",
+      "planning_basis": [
+        "db/migrations/20260522_add_user_status.sql",
+        "src/models/user.ts"
+      ],
+      "leaf_docs": [
+        {
+          "path": "docs/data/tables/users.md",
+          "title": "Users Table",
+          "status": "update",
+          "priority": "must",
+          "reason": "users.status semantics changed in migration and model evidence.",
+          "evidence_paths": [
+            "db/migrations/20260522_add_user_status.sql",
+            "src/models/user.ts"
+          ]
+        }
+      ],
+      "index_policy": "docs/data/index.md links to table and transaction leaf docs only."
+    }
+  ],
   "tasks": [
     {
       "task_id": "data-users-status",
@@ -225,6 +255,11 @@
 - stale docs 场景检查 edit_mode 和人工内容保留说明。
 - noise-heavy 场景检查 report 是否列出 noise_filters。
 - 检查 `index_content_sink`：index/navigation doc 是否承载多个具体流程、接口、表、配置、runbook 或诊断正文。
+- 检查 `document_set_plan_missing`：激活 domain 是否没有输出子文档清单规划。
+- 检查 `missing_required_leaf_doc`：must leaf docs 是否未创建、未更新也未明确 defer。
+- 检查 `index_without_leaf_docs`：index 是否列出实体但没有对应 leaf docs。
+- 检查 `category_under_split`：多个独立流程/API/配置/诊断/service 是否被挤在一个文档。
+- 检查 `unplanned_leaf_doc`：Worker 是否写了 Planner 未规划的 leaf doc。
 
 ### Output
 

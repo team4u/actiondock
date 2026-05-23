@@ -25,3 +25,12 @@
 12. `granularity-api-split`：HTTP API 资源组详情不能堆进 `docs/api/http.md`。
 13. `granularity-config-split`：配置域详情不能堆进 `docs/ops/config/index.md`。
 14. `granularity-index-violation`：Validator 应识别 index 被当作正文容器的违规。
+
+
+## v4.3 Document Set Planning examples
+
+- `document-set-plan-flows/`：Planner 先规划业务流程子文档清单，再创建 flow leaf docs 和 index 链接任务。
+- `document-set-plan-api/`：Planner 先规划 API resource 子文档清单，再创建 resource leaf docs。
+- `document-set-plan-data/`：Planner 先规划核心表和跨表事务子文档。
+- `document-set-plan-monorepo/`：Planner 先规划 service/package 子文档清单。
+- `document-set-plan-under-split/`：Validator 检查分类拆分不足和缺失 leaf docs。

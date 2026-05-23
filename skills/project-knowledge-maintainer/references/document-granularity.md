@@ -166,3 +166,15 @@ Leaf doc 路径应稳定、可读、可维护：
 - 避免：`docs/domain/flows/index.md` 承载所有 payment/order/user 流程
 - 避免：`docs/api/http.md` 承载所有接口详情
 - 避免：`docs/ops/config/index.md` 承载所有 env 变量细节
+
+
+## 6. 与 document-set-planning.md 的关系
+
+本文件规定 index 与 leaf doc 的颗粒度边界；`document-set-planning.md` 规定每个分类应该有哪些 leaf docs。
+
+执行顺序：
+
+1. Planner 先用 `document-set-planning.md` 输出 `document_set_plan`。
+2. Planner 再用本文件检查每个 leaf doc 是否应独立成文、每个 index 是否只做导航。
+3. Worker 只执行 Planner 规划的 leaf/index tasks。
+4. Validator 同时检查 `index_content_sink` 和 `missing_required_leaf_doc`。

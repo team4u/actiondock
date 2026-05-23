@@ -1,4 +1,52 @@
 {
+  "document_set_plan": [
+    {
+      "category": "data_tables",
+      "domain": "Data_Model_Planner",
+      "index_path": "docs/data/index.md",
+      "planning_basis": [
+        "db/migrations/20260522_add_user_status.sql",
+        "src/users/user.service.ts"
+      ],
+      "leaf_docs": [
+        {
+          "path": "docs/data/tables/users.md",
+          "title": "Users",
+          "status": "update",
+          "priority": "must",
+          "reason": "Update users.status field semantics. Preserve existing manual notes; do not rewrite unrelated sections.",
+          "evidence_paths": [
+            "db/migrations/20260522_add_user_status.sql",
+            "src/users/user.service.ts"
+          ]
+        }
+      ],
+      "index_policy": "docs/data/index.md links to leaf docs only."
+    },
+    {
+      "category": "business_flows",
+      "domain": "Business_Flow_Planner",
+      "index_path": "docs/domain/flows/index.md",
+      "planning_basis": [
+        "src/users/user.service.ts",
+        "db/migrations/20260522_add_user_status.sql"
+      ],
+      "leaf_docs": [
+        {
+          "path": "docs/domain/flows/user-registration.md",
+          "title": "User Registration",
+          "status": "update",
+          "priority": "must",
+          "reason": "Reflect user status transition if registration logic changed. Keep existing flow diagram unless stale.",
+          "evidence_paths": [
+            "src/users/user.service.ts",
+            "db/migrations/20260522_add_user_status.sql"
+          ]
+        }
+      ],
+      "index_policy": "docs/domain/flows/index.md links to leaf docs only."
+    }
+  ],
   "tasks": [
     {
       "task_id": "data-users-status-refresh",
@@ -12,7 +60,11 @@
       ],
       "depends_on": [],
       "confidence": "high",
-      "clue": "Update users.status field semantics. Preserve existing manual notes; do not rewrite unrelated sections."
+      "clue": "Update users.status field semantics. Preserve existing manual notes; do not rewrite unrelated sections.",
+      "from_document_set_plan": "data_tables",
+      "document_set_item_path": "docs/data/tables/users.md",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true
     },
     {
       "task_id": "flow-user-registration-status-refresh",
@@ -28,7 +80,11 @@
         "data-users-status-refresh"
       ],
       "confidence": "medium",
-      "clue": "Reflect user status transition if registration logic changed. Keep existing flow diagram unless stale."
+      "clue": "Reflect user status transition if registration logic changed. Keep existing flow diagram unless stale.",
+      "from_document_set_plan": "business_flows",
+      "document_set_item_path": "docs/domain/flows/user-registration.md",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true
     }
   ],
   "skipped": []

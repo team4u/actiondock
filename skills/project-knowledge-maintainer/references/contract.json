@@ -1,7 +1,7 @@
 {
-  "version": "4.2.0",
+  "version": "4.3.0",
   "name": "project-knowledge-maintainer",
-  "description": "Project knowledge base maintainer skill with scenario routing, safe path handling, document granularity, and index-to-leaf documentation enforcement.",
+  "description": "Project knowledge base maintainer skill with scenario routing, safe path handling, document granularity, and Planner-led document set planning.",
   "language": {
     "skillLanguage": "zh-Hans",
     "defaultDocumentLanguage": "zh-Hans",
@@ -73,7 +73,8 @@
   },
   "pipeline": [
     "route",
-    "plan",
+    "plan_document_set",
+    "plan_tasks",
     "apply",
     "validate"
   ],
@@ -84,6 +85,7 @@
     "references/evidence-search.md",
     "references/scenario-matrix.md",
     "references/document-granularity.md",
+    "references/document-set-planning.md",
     "references/prompts.md",
     "references/validator.md",
     "references/actiondock-template.md"
@@ -241,6 +243,12 @@
       "reason"
     ],
     "rules": [
+      "Planner 必须先输出 document_set_plan，再输出 tasks；document_set_plan 是每个激活分类的子文档清单规划。",
+      "每个激活 domain 至少规划一个相关 category；即使没有写入任务，也必须用 keep/defer/skipped 说明子文档状态。",
+      "document_set_plan 必须区分 create、update、keep、defer、deprecate、prune_candidate；defer 必须给出 defer_reason。",
+      "priority=must 且 status=create/update/deprecate 的 leaf doc 必须转成具体 UPSERT 任务；Worker 不负责决定少写哪些子文档。",
+      "由子文档规划产生的任务必须带 from_document_set_plan 和 document_set_item_path。",
+      "Worker 不得创建 document_set_plan 之外的 leaf doc；如果发现需要额外子文档，应要求 Planner 增补而不是自行扩张。",
       "Planner 只读证据并产出 target_path 级任务；不写文件。",
       "一个任务对应一个最终 target_path。",
       "优先更新已有 leaf substantive doc；不要把 index/navigation doc 当作正文承载页。",
@@ -266,7 +274,14 @@
       "doc_kind",
       "leaf_doc_required",
       "granularity_reason",
-      "index_update_for"
+      "index_update_for",
+      "from_document_set_plan",
+      "document_set_item_path"
+    ],
+    "outputRequiredFields": [
+      "document_set_plan",
+      "tasks",
+      "skipped"
     ]
   },
   "worker": {
@@ -302,7 +317,10 @@
       "XL 场景只写当前 workspace_scope 相关事实，不把局部事实推广为全仓库事实。",
       "Worker 不得把 substantive long-form content 写入 index.md；index.md 只允许链接、短说明和状态标记。",
       "如果 Worker 收到 index.md 任务，但证据需要正文内容，必须安全失败或在 warnings 中要求新增 leaf doc 任务，不得把正文塞进 index。",
-      "Leaf substantive doc 必须包含证据与边界；index/navigation doc 不写长篇证据区。"
+      "Leaf substantive doc 必须包含证据与边界；index/navigation doc 不写长篇证据区。",
+      "Worker 必须严格执行 Planner 下发的 target_path；不得自行减少 must-level leaf docs。",
+      "Worker 不得自行创建 document_set_plan 之外的 leaf doc；发现需要新子文档时，在 warnings 中要求 Planner 增补任务。",
+      "Worker 输出 warnings 时应指出 document_set_item_path 或 from_document_set_plan，便于 Validator 追踪。"
     ]
   },
   "validator": {
@@ -337,7 +355,12 @@
       "rename_move 场景检查新旧重复文档和 old_path → new_path 记录。",
       "materially_stale_docs 场景检查 edit_mode 与保留人工内容说明。",
       "检查 index_content_sink：index/navigation doc 不得承载多个具体流程、实体、接口、配置、runbook 或诊断正文。",
-      "如果 index.md 已成为事实主来源，应报告 warning 或 error，并建议拆分为 leaf docs。"
+      "如果 index.md 已成为事实主来源，应报告 warning 或 error，并建议拆分为 leaf docs。",
+      "检查 document_set_plan 是否存在；每个激活 domain 应先有子文档清单规划。",
+      "检查 priority=must 的 leaf docs 是否创建、更新或明确 defer，并有 reason/defer_reason。",
+      "检查 index 是否链接本轮创建或更新的 must leaf docs。",
+      "检查 unplanned_leaf_doc：Worker 不应创建 document_set_plan 之外的 leaf doc。",
+      "检查 category_under_split：多个独立流程、API、配置、诊断或 service 被挤在一个 leaf/index 文档里。"
     ],
     "scenarioChecks": [
       "workspace_or_service_index_for_monorepo",
@@ -348,10 +371,20 @@
       "noise_filter_reported_for_xl",
       "index_content_sink_detection",
       "leaf_doc_required_for_concrete_entities",
-      "index_only_navigation_check"
+      "index_only_navigation_check",
+      "missing_required_leaf_doc",
+      "index_without_leaf_docs",
+      "category_under_split",
+      "document_set_plan_missing",
+      "unplanned_leaf_doc"
     ],
     "findingTypes": [
-      "index_content_sink"
+      "index_content_sink",
+      "missing_required_leaf_doc",
+      "index_without_leaf_docs",
+      "category_under_split",
+      "document_set_plan_missing",
+      "unplanned_leaf_doc"
     ]
   },
   "executionModes": {
@@ -404,7 +437,10 @@
     "special_flags",
     "noise_filters",
     "edit_modes",
-    "scenario_findings"
+    "scenario_findings",
+    "document_set_plan_summary",
+    "must_leaf_docs",
+    "deferred_leaf_docs"
   ],
   "richnessFloor": {
     "requiredForSubstantiveDocs": [
@@ -627,7 +663,7 @@
       }
     ]
   },
-  "release": "4.2.0",
+  "release": "4.3.0",
   "documentGranularity": {
     "principle": "Index is navigation-only; leaf docs carry durable project knowledge.",
     "navigationOnlyPaths": [
@@ -676,5 +712,110 @@
     ],
     "plannerRule": "If only index.md exists and the change touches a concrete entity, create a leaf doc task and a separate index navigation update; do not append substantive content to index.md.",
     "validatorFindingType": "index_content_sink"
+  },
+  "documentSetPlanning": {
+    "principle": "Planner plans the document set before producing write tasks.",
+    "plannerOutputRequiredFields": [
+      "document_set_plan",
+      "tasks",
+      "skipped"
+    ],
+    "planItemRequiredFields": [
+      "category",
+      "domain",
+      "index_path",
+      "planning_basis",
+      "leaf_docs",
+      "index_policy"
+    ],
+    "leafDocRequiredFields": [
+      "path",
+      "title",
+      "status",
+      "priority",
+      "reason",
+      "evidence_paths"
+    ],
+    "leafDocOptionalFields": [
+      "defer_reason",
+      "existing_path",
+      "replacement_path",
+      "related_index_path",
+      "workspace_scope",
+      "change_types"
+    ],
+    "leafDocStatusValues": [
+      "create",
+      "update",
+      "keep",
+      "defer",
+      "deprecate",
+      "prune_candidate"
+    ],
+    "leafDocPriorityValues": [
+      "must",
+      "should",
+      "candidate"
+    ],
+    "taskLinkFields": [
+      "from_document_set_plan",
+      "document_set_item_path"
+    ],
+    "categories": {
+      "business_flows": {
+        "index_path": "docs/domain/flows/index.md",
+        "leaf_pattern": "docs/domain/flows/<flow-name>.md"
+      },
+      "state_machines": {
+        "index_path": "docs/domain/flows/index.md",
+        "leaf_pattern": "docs/domain/state-machines/<machine-name>.md"
+      },
+      "api_http_resources": {
+        "index_path": "docs/api/http.md",
+        "leaf_pattern": "docs/api/http/<resource>.md"
+      },
+      "api_event_families": {
+        "index_path": "docs/api/events.md",
+        "leaf_pattern": "docs/api/events/<event-family>.md"
+      },
+      "data_tables": {
+        "index_path": "docs/data/index.md",
+        "leaf_pattern": "docs/data/tables/<table>.md"
+      },
+      "data_transactions": {
+        "index_path": "docs/data/index.md",
+        "leaf_pattern": "docs/data/transactions/<transaction>.md"
+      },
+      "config_domains": {
+        "index_path": "docs/ops/config/index.md",
+        "leaf_pattern": "docs/ops/config/<config-domain>.md"
+      },
+      "runbooks": {
+        "index_path": "docs/ops/maintenance/index.md",
+        "leaf_pattern": "docs/ops/maintenance/<operation>.md"
+      },
+      "diagnosis_paths": {
+        "index_path": "docs/diagnosis/index.md",
+        "leaf_pattern": "docs/diagnosis/<symptom-or-failure>.md"
+      },
+      "services": {
+        "index_path": "docs/code/workspaces.md",
+        "leaf_pattern": "docs/services/<service>.md"
+      },
+      "packages": {
+        "index_path": "docs/code/workspaces.md",
+        "leaf_pattern": "docs/packages/<package>.md"
+      },
+      "integrations": {
+        "index_path": "docs/integrations/index.md",
+        "leaf_pattern": "docs/integrations/<provider>.md"
+      }
+    },
+    "rules": [
+      "Planner MUST produce document_set_plan before tasks.",
+      "For each activated category, Planner MUST identify expected leaf docs.",
+      "Worker MUST execute assigned leaf-doc tasks and MUST NOT reduce the document set.",
+      "Validator MUST verify all must-level leaf docs are created, updated, or explicitly deferred with reason."
+    ]
   }
 }

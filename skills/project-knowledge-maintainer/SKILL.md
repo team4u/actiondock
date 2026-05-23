@@ -12,7 +12,7 @@ description: 初始化、刷新、吸收或验证一个由仓库证据驱动的�
 该 skill 采用固定流水线：
 
 ```text
-Route → Plan → Apply → Validate
+Route → Document Set Plan → Task Plan → Apply → Validate
 ```
 
 它可以在两种模式下执行：
@@ -34,9 +34,10 @@ Route → Plan → Apply → Validate
 4. `references/evidence-search.md`：不同语言、框架和仓库形态的证据发现策略。
 5. `references/scenario-matrix.md`：小更新、大更新、大仓库、rename、breaking、stale 等真实项目场景策略。
 6. `references/document-granularity.md`：索引页与正文档的拆分规则，防止把长期事实堆进 index。
-7. `references/prompts.md`：Router / Planner / Worker / Validator 的角色契约。
-8. `references/validator.md`：基础验证与场景专项验证规则。
-9. `references/actiondock-template.md`：创建或刷新 `ACTIONDOCK.md` 前读取。
+7. `references/document-set-planning.md`：Planner 的子文档清单规划规则，规定每个分类下应有哪些 leaf docs。
+8. `references/prompts.md`：Router / Planner / Worker / Validator 的角色契约。
+9. `references/validator.md`：基础验证与场景专项验证规则。
+10. `references/actiondock-template.md`：创建或刷新 `ACTIONDOCK.md` 前读取。
 
 ## 推荐调用格式
 
@@ -123,6 +124,21 @@ Router 必须先识别真实变更场景，再做 domain 路由：
 - 默认跳过 generated / dependency / build 输出目录，除非项目明确把它们作为源码：`node_modules/`、`dist/`、`build/`、`target/`、`.git/`、`.cache/`、`coverage/`。
 
 
+
+## 子文档清单规划规则
+
+Planner 必须先输出 `document_set_plan`，再输出写入 `tasks`。`document_set_plan` 用来规划每个激活分类下应该有哪些 leaf docs，而不是单篇文档内的标题大纲。
+
+硬规则：
+
+- Business Flow、API、Data、Config、Runbook、Diagnosis、Service、Package 等分类都必须先规划子文档清单。
+- 每个 leaf doc 必须标记 `create`、`update`、`keep`、`defer`、`deprecate` 或 `prune_candidate`。
+- `priority=must` 的 leaf doc 必须创建、更新，或明确 `defer_reason`。
+- Worker 只能执行 Planner 规划出的 `target_path`，不得自行减少 must leaf docs，也不得自行创建规划外 leaf doc。
+- Validator 必须检查 `missing_required_leaf_doc`、`index_without_leaf_docs`、`category_under_split`、`document_set_plan_missing` 和 `unplanned_leaf_doc`。
+
+该规则解决“Worker 写得太少、只写一个 index 或总览、不主动拆子文档”的问题。
+
 ## 文档颗粒度规则
 
 - `index.md`、`ACTIONDOCK.md`、`docs/code/workspaces.md`、`docs/api/http.md` 这类入口页默认只做导航、目录和状态总览。
@@ -172,5 +188,10 @@ Router 必须先识别真实变更场景，再做 domain 路由：
 - `granularity-api-split/`
 - `granularity-config-split/`
 - `granularity-index-violation/`
+- `document-set-plan-flows/`
+- `document-set-plan-api/`
+- `document-set-plan-data/`
+- `document-set-plan-monorepo/`
+- `document-set-plan-under-split/`
 
 这些示例用于验证 Router、Planner、Worker 和 Validator 的行为边界，不是运行时必须加载的材料。

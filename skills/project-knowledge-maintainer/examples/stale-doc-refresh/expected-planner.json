@@ -1,4 +1,31 @@
 {
+  "document_set_plan": [
+    {
+      "category": "business_flows",
+      "domain": "Business_Flow_Planner",
+      "index_path": "docs/domain/flows/index.md",
+      "planning_basis": [
+        "src/payments/payment.service.ts",
+        "src/payments/refund.service.ts",
+        "src/payments/workers/refund.worker.ts"
+      ],
+      "leaf_docs": [
+        {
+          "path": "docs/domain/flows/payment.md",
+          "title": "Payment",
+          "status": "update",
+          "priority": "must",
+          "reason": "Existing payment flow doc conflicts with current async payment/refund implementation; rewrite while preserving manual notes.",
+          "evidence_paths": [
+            "src/payments/payment.service.ts",
+            "src/payments/refund.service.ts",
+            "src/payments/workers/refund.worker.ts"
+          ]
+        }
+      ],
+      "index_policy": "docs/domain/flows/index.md links to leaf docs only."
+    }
+  ],
   "tasks": [
     {
       "task_id": "stale-payment-flow-refresh",
@@ -19,7 +46,11 @@
         "stale_doc_refresh",
         "business_rule_change"
       ],
-      "edit_mode": "full_rewrite_with_preservation"
+      "edit_mode": "full_rewrite_with_preservation",
+      "from_document_set_plan": "business_flows",
+      "document_set_item_path": "docs/domain/flows/payment.md",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true
     }
   ],
   "skipped": []

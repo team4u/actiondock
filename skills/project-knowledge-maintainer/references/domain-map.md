@@ -25,6 +25,22 @@
 
 `domain-map.md` 决定“该写到哪里”；`evidence-search.md` 决定“先去哪里找证据”。Planner 可以用 `evidence-search.md` 提高召回率，但不能因此扩大写入范围或绕过路径安全。
 
+
+
+## 子文档清单规划
+
+Planner 在使用本 domain map 选择 target 前，必须读取 `references/document-set-planning.md`。`domain-map.md` 只说明“允许写到哪里”；`document-set-planning.md` 规定“这个分类下应该有哪些子文档”。
+
+规则：
+
+- 对 Business Flow，先规划 `business_flows` 和必要的 `state_machines` leaf docs。
+- 对 API，先规划 `api_http_resources`、`api_event_families` 或 `integrations` leaf docs。
+- 对 Data，先规划 `data_tables` 和 `data_transactions` leaf docs。
+- 对 Infra/Env，先规划 `config_domains` 和外部依赖 leaf docs。
+- 对 Maintenance/Ops，先规划 `runbooks` 和 `diagnosis_paths` leaf docs。
+- 对 monorepo，先规划 `services` 和 `packages` leaf docs。
+- 只有完成 document_set_plan 后，才能把 must leaf docs 转成具体 `UPSERT` tasks。
+
 ## 索引页与正文档
 
 读取 `references/document-granularity.md` 后再决定 target_path。硬规则：

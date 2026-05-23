@@ -3,7 +3,7 @@
 该 skill 只暴露一个稳定流程：
 
 ```text
-Route → Plan → Apply → Validate
+Route → Document Set Plan → Task Plan → Apply → Validate
 ```
 
 不要把复杂度暴露为一套组织架构。Router、Planner、Worker、Validator 是角色边界；subagent 只是可选执行模式。
@@ -111,16 +111,19 @@ Router 在选择 domain 前必须读取 `references/scenario-matrix.md`，输出
 
 ## 2. Plan
 
-每个激活 domain 运行一个 Planner。Planner 只读证据，产出 target_path 级任务。
+每个激活 domain 运行一个 Planner。Planner 只读证据，先产出子文档清单规划，再产出 target_path 级任务。
 
-Planner 输出：
+Planner 输出必须包含两层：
 
 ```json
 {
+  "document_set_plan": [],
   "tasks": [],
   "skipped": []
 }
 ```
+
+第一层 `document_set_plan` 回答“这个分类下应该有哪些子文档”；第二层 `tasks` 才回答“本轮具体写哪些 target_path”。
 
 任务必须是：
 
@@ -135,6 +138,22 @@ Planner 输出：
 - 输出绝对路径、`..`、通配符或 repo 外路径
 - 输出 wildcard target，例如 `docs/data/tables/*.md`
 
+### 子文档清单规划
+
+Planner 必须读取 `references/document-set-planning.md`。
+
+硬规则：
+
+- 在生成 `tasks` 前，必须先生成 `document_set_plan`。
+- 对每个激活分类，列出预期 leaf docs，而不是只写一个 index 或总览页。
+- `document_set_plan.leaf_docs[].status` 只能是 `create`、`update`、`keep`、`defer`、`deprecate`、`prune_candidate`。
+- `document_set_plan.leaf_docs[].priority` 只能是 `must`、`should`、`candidate`。
+- `priority=must` 且 `status=create|update|deprecate` 的 leaf doc 必须转成具体 `UPSERT` 任务。
+- `status=defer` 必须提供 `defer_reason`，不得创建空文档。
+- 每个由子文档规划产生的任务必须带 `from_document_set_plan` 和 `document_set_item_path`。
+- Worker 不能自行缩减 Planner 的子文档清单；如果证据显示还缺子文档，应要求 Planner 增补任务。
+
+典型分类包括：`business_flows`、`api_http_resources`、`data_tables`、`data_transactions`、`config_domains`、`runbooks`、`diagnosis_paths`、`services`、`packages`。
 
 ### 文档颗粒度规划
 
@@ -161,7 +180,7 @@ Planner 必须读取 `references/document-granularity.md`。
 
 每个唯一 `target_path` 只允许一个 Worker 拥有。
 
-Worker 负责 exactly one target：
+Worker 负责 exactly one target。Worker 不决定“这个分类应该有哪些子文档”，只执行 Planner 的 `document_set_plan` 派生任务：
 
 - `UPSERT`：读取现有 target、证据文件和必要的前序 phase 文档；产出长期可维护文档。
 - `PRUNE`：只删除指定普通文件，不删除目录。
@@ -217,6 +236,11 @@ Validator 只读检查：
 - substantive docs 是否包含 `证据与边界` 或 `Evidence and Boundaries`。
 - navigation/index docs 是否链接到正文档，或明确说明暂无证据 / 不适用。
 - navigation/index docs 是否出现 `index_content_sink`：承载多个具体流程、接口、表、配置、runbook 或诊断正文。
+- Planner 是否输出 `document_set_plan`。
+- `priority=must` 的 leaf docs 是否存在对应任务、结果文件或明确 defer。
+- index 是否链接本轮创建/更新的 must leaf docs。
+- 是否出现 `category_under_split`：多个独立子文档被挤在同一个文档中。
+- 是否出现 `unplanned_leaf_doc`：Worker 创建了 Planner 未规划的 leaf doc。
 - docs 是否引用临时路径作为最终证据。
 - changed files 是否有合理 domain 覆盖。
 - inbox 文件是否被吸收、保留或拒绝，并有原因。

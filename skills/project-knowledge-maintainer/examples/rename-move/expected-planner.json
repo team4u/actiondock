@@ -1,4 +1,29 @@
 {
+  "document_set_plan": [
+    {
+      "category": "business_flows",
+      "domain": "Business_Flow_Planner",
+      "index_path": "docs/domain/flows/index.md",
+      "planning_basis": [
+        "src/accounts/account.service.ts",
+        "src/accounts/account.controller.ts"
+      ],
+      "leaf_docs": [
+        {
+          "path": "docs/domain/flows/user-registration.md",
+          "title": "User Registration",
+          "status": "update",
+          "priority": "must",
+          "reason": "Update existing user registration flow doc for users→accounts move rather than creating duplicate account-registration doc.",
+          "evidence_paths": [
+            "src/accounts/account.service.ts",
+            "src/accounts/account.controller.ts"
+          ]
+        }
+      ],
+      "index_policy": "docs/domain/flows/index.md links to leaf docs only."
+    }
+  ],
   "tasks": [
     {
       "task_id": "rename-users-to-accounts-flow",
@@ -24,7 +49,11 @@
           "old_path": "src/users/user.service.ts",
           "new_path": "src/accounts/account.service.ts"
         }
-      ]
+      ],
+      "from_document_set_plan": "business_flows",
+      "document_set_item_path": "docs/domain/flows/user-registration.md",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true
     }
   ],
   "skipped": [

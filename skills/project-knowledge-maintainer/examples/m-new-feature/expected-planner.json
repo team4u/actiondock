@@ -1,4 +1,50 @@
 {
+  "document_set_plan": [
+    {
+      "category": "data_tables",
+      "domain": "Data_Model_Planner",
+      "index_path": "docs/data/index.md",
+      "planning_basis": [
+        "db/migrations/20260523_add_coupon_tables.sql"
+      ],
+      "leaf_docs": [
+        {
+          "path": "docs/data/tables/coupons.md",
+          "title": "Coupons",
+          "status": "create",
+          "priority": "must",
+          "reason": "Document coupon tables and constraints.",
+          "evidence_paths": [
+            "db/migrations/20260523_add_coupon_tables.sql"
+          ]
+        }
+      ],
+      "index_policy": "docs/data/index.md links to leaf docs only."
+    },
+    {
+      "category": "business_flows",
+      "domain": "Business_Flow_Planner",
+      "index_path": "docs/domain/flows/index.md",
+      "planning_basis": [
+        "src/coupons/coupon.service.ts",
+        "src/orders/checkout.service.ts"
+      ],
+      "leaf_docs": [
+        {
+          "path": "docs/domain/flows/checkout.md",
+          "title": "Checkout",
+          "status": "create",
+          "priority": "must",
+          "reason": "Document coupon validation and redemption in checkout.",
+          "evidence_paths": [
+            "src/coupons/coupon.service.ts",
+            "src/orders/checkout.service.ts"
+          ]
+        }
+      ],
+      "index_policy": "docs/domain/flows/index.md links to leaf docs only."
+    }
+  ],
   "tasks": [
     {
       "task_id": "data-coupons",
@@ -16,7 +62,11 @@
       "change_types": [
         "schema_change"
       ],
-      "edit_mode": "minimal_edit"
+      "edit_mode": "minimal_edit",
+      "from_document_set_plan": "data_tables",
+      "document_set_item_path": "docs/data/tables/coupons.md",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true
     },
     {
       "task_id": "flow-checkout-coupon",
@@ -37,7 +87,11 @@
       "change_types": [
         "business_rule_change"
       ],
-      "edit_mode": "minimal_edit"
+      "edit_mode": "minimal_edit",
+      "from_document_set_plan": "business_flows",
+      "document_set_item_path": "docs/domain/flows/checkout.md",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true
     }
   ],
   "skipped": []

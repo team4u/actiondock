@@ -37,6 +37,41 @@ Validator 必须检查 index 和入口页是否只做导航。
 
 建议修复：拆分为 leaf docs，并让 index 只保留链接、短说明和状态标记。
 
+
+
+### 子文档清单规划 / document_set_plan
+
+Validator 必须检查 Planner 是否先完成子文档清单规划。
+
+触发 `document_set_plan_missing`：
+
+- 激活 domain 有写入任务，但 Planner output 没有 `document_set_plan`。
+- `document_set_plan` 没有覆盖对应 category，例如 API 任务没有 `api_http_resources`，流程任务没有 `business_flows`。
+
+触发 `missing_required_leaf_doc`：
+
+- `document_set_plan.leaf_docs[]` 中 `priority=must` 且 `status=create|update|deprecate`，但没有对应 task、结果文件或失败记录。
+- `priority=must` 且 `status=defer`，但没有 `defer_reason`。
+
+触发 `index_without_leaf_docs`：
+
+- index/navigation doc 列出具体流程、资源、配置、服务或诊断项，但没有对应 leaf doc。
+- index 链接缺失，或只保留文字清单而不链接已创建 leaf doc。
+
+触发 `category_under_split`：
+
+- 多个独立业务流程挤在一个 flow 文档。
+- 多个 API resource 挤在 `docs/api/http.md` 或单个 resource 文档中。
+- 多个配置域挤在一个 config 文档中。
+- 多个诊断路径或 runbook 挤在一个文档中。
+- monorepo 中多个 service/package 的细节挤在 `docs/code/workspaces.md`。
+
+触发 `unplanned_leaf_doc`：
+
+- Worker 创建或修改的 leaf doc 不在 Planner `document_set_plan` 中，也不是明确的 repair 任务。
+
+建议修复：让 Planner 重新输出完整 `document_set_plan`，再由 Worker 按清单创建/更新 leaf docs 和对应 index 链接。
+
 ### 大仓库 / monorepo
 
 - `workspace_scope` 非空时，检查是否存在 `docs/code/workspaces.md` 或等价 workspace/service 索引。
