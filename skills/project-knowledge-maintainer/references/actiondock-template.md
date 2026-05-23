@@ -32,7 +32,6 @@
 ## 最近一次维护
 
 - Mode:
-- Execution policy:
 - Execution mode:
 - Serial fallback reason:
 - Git baseline:
@@ -61,3 +60,11 @@
 - `待建立 / 暂无证据` 不使用 Markdown 链接，避免初始化后立即断链。
 - `明确不适用` 需要有仓库证据，例如没有相关依赖、路由、schema、worker 或部署配置。
 - 如果索引页本身没有 `证据与边界`，它必须链接到至少一个含有证据区的正文档，或明确说明当前没有已建立正文档。
+
+
+## 模板使用约束
+
+- `ACTIONDOCK.md` 只做入口，不承载完整业务流程、接口 schema、数据表字段、runbook 或诊断步骤。
+- 已建立区只链接真实存在或本轮创建的 leaf docs / 入口 docs。
+- 待建立 / 暂无证据 / 不适用区不要使用 Markdown 链接。
+- 如果发现某个领域只有 index，但本次新增具体流程/接口/配置/诊断，应创建 leaf doc 后再链接。

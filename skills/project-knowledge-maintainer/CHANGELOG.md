@@ -2,11 +2,12 @@
 
 ## 4.2.0
 
-- 将执行策略从“`native_subagent`/`serial` 二选一”改为契约化的 `subagent_required`、`subagent_preferred`、`serial_only`，默认值为 `subagent_required`。
-- 在 `contract.json` 中新增 `executionModes`、`defaultExecutionMode`、`executionPolicy`，并补充真实执行模式、能力信号优先级、required failure message、serial fallback 触发条件。
-- 更新 `SKILL.md` 和 `playbook.md`，明确 subagent 是支持环境下的强制执行模型，不再把它描述为纯优化项。
-- 更新 `prompts.md`，新增 `Role Execution Boundary`，要求 Router / Planner / Worker / Validator 在 `subagent_required` 下必须作为真实子代理隔离执行。
-- 更新 `ACTIONDOCK` 模板与报告字段，新增 `execution_policy`，保留 `execution_mode` 用于记录实际运行方式。
+- Added `references/document-granularity.md`.
+- Enforced navigation-only semantics for `index.md`, `ACTIONDOCK.md`, entry-style `http.md` / `events.md`, and workspace indexes.
+- Required leaf substantive docs for named flows, API resource groups, tables, transactions, config domains, runbooks, diagnosis paths, services, and packages.
+- Added `index_content_sink` validator finding for index pages that become long-form content containers.
+- Updated Planner/Worker/Validator contracts to prevent appending full content into index docs.
+- Added granularity examples for flow, API, config, and validator violation cases.
 
 ## 4.1.1
 

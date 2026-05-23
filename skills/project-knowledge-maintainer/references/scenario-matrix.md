@@ -65,6 +65,17 @@ Router 在路由前先做降噪。Planner 仍可读取被降噪文件作为辅�
 - API 契约：router/controller/DTO/OpenAPI/protobuf/GraphQL schema。
 - 部署与环境：Docker、compose、k8s、helm、CI、`.env.example`。
 
+
+## 3A. 文档颗粒度策略
+
+场景分类之后，Planner 必须应用 `references/document-granularity.md`：
+
+- `index.md` 只能做导航和状态总览。
+- 主业务流程、API 资源组、事件族、数据表、跨表事务、配置域、runbook、诊断路径、service/package 必须拆成 leaf docs。
+- 如果本次变更是 XS/S，但触及一个新的具体实体，也应创建 leaf doc，而不是追加到 index。
+- 如果本次变更是 M/L/XL，且涉及多个具体实体，必须按实体拆分多个 leaf docs，避免形成新的大杂烩。
+- Validator 应把 index 正文堆积识别为 `index_content_sink`。
+
 ## 4. 大仓库 / monorepo 策略
 
 当仓库包含 `apps/`、`packages/`、`services/`、`libs/`、`infra/`、`terraform/`、`charts/`，或 changedFiles 跨多个独立服务时，Router 必须输出 `workspace_scope`。
@@ -168,6 +179,7 @@ Report 必须写明：
 Validator 除基础检查外，还要检查：
 
 - 大仓库是否有 workspace/service 索引或清楚标记不适用。
+- index/入口页是否只做导航，没有承载 leaf doc 应承载的正文。
 - breaking change 是否有兼容性说明。
 - rename 后是否产生重复文档。
 - stale 文档是否被修复、标记或合理保留。

@@ -20,3 +20,8 @@
 8. `xl-monorepo-refresh`：超大仓库，先识别 workspace 并降噪。
 9. `rename-move`：模块路径迁移，优先迁移已有文档。
 10. `stale-doc-refresh`：长期过期文档，允许保留人工内容后整体重写。
+
+11. `granularity-flow-split`：已有 `docs/domain/flows/index.md` 时，新业务流程必须拆成 leaf doc。
+12. `granularity-api-split`：HTTP API 资源组详情不能堆进 `docs/api/http.md`。
+13. `granularity-config-split`：配置域详情不能堆进 `docs/ops/config/index.md`。
+14. `granularity-index-violation`：Validator 应识别 index 被当作正文容器的违规。

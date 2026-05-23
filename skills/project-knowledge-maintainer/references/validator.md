@@ -10,10 +10,32 @@ Validator 是只读角色。该文件补充 `contract.json` 与 `prompts.md` 中
 - `docs/` 内部相对链接存在。
 - substantive docs 包含 `证据与边界` 或 `Evidence and Boundaries`。
 - navigation/index docs 不强制证据区，但必须链接到正文档或说明暂无证据。
+- navigation/index docs 不得成为正文事实容器。
 - 文档不泄露 token、password、private key、完整敏感连接串。
 - 没有要求创建 `.knowledge_base/` 物理目录，除非用户明确要求。
 
 ## 场景专项检查
+
+
+### 文档颗粒度 / index_content_sink
+
+Validator 必须检查 index 和入口页是否只做导航。
+
+触发 `index_content_sink`：
+
+- `index.md` 里出现多个具体业务流程、API 资源、数据表、配置域、runbook 或诊断正文。
+- `docs/api/http.md` 或 `docs/api/events.md` 承载完整资源/事件详情，而不是链接到 leaf docs。
+- `docs/data/index.md` 承载完整字段目录。
+- `docs/domain/flows/index.md` 承载完整流程步骤或多个 Mermaid 流程图。
+- `docs/ops/config/index.md` 承载多个配置域的详细 env 表。
+- `docs/diagnosis/index.md` 承载具体排障步骤。
+
+严重度：
+
+- `warning`：index 有少量正文，但还不是主要事实来源。
+- `error`：index 已替代 leaf docs，承载多个长期事实实体。
+
+建议修复：拆分为 leaf docs，并让 index 只保留链接、短说明和状态标记。
 
 ### 大仓库 / monorepo
 

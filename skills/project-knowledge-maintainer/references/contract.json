@@ -1,7 +1,7 @@
 {
   "version": "4.2.0",
   "name": "project-knowledge-maintainer",
-  "description": "初始化、刷新、吸收或验证一个由仓库证据驱动的项目知识库。",
+  "description": "Project knowledge base maintainer skill with scenario routing, safe path handling, document granularity, and index-to-leaf documentation enforcement.",
   "language": {
     "skillLanguage": "zh-Hans",
     "defaultDocumentLanguage": "zh-Hans",
@@ -14,7 +14,6 @@
     ],
     "optional": [
       "operation",
-      "executionMode",
       "changedFiles",
       "inboxPaths",
       "repair",
@@ -23,7 +22,6 @@
     ],
     "defaults": {
       "operation": "auto",
-      "executionMode": "subagent_required",
       "repair": false
     }
   },
@@ -85,6 +83,7 @@
     "references/domain-map.md",
     "references/evidence-search.md",
     "references/scenario-matrix.md",
+    "references/document-granularity.md",
     "references/prompts.md",
     "references/validator.md",
     "references/actiondock-template.md"
@@ -244,14 +243,16 @@
     "rules": [
       "Planner 只读证据并产出 target_path 级任务；不写文件。",
       "一个任务对应一个最终 target_path。",
-      "优先更新已有相关文档，避免碎片化重复文档。",
+      "优先更新已有 leaf substantive doc；不要把 index/navigation doc 当作正文承载页。",
+      "如果只有 index.md 存在，且变更涉及具体流程、接口、表、配置、runbook、诊断、service 或 package，Planner 必须创建独立 leaf doc，并另建 index 链接任务。",
       "无证据支持时返回 tasks: [] 和 skipped，不发明 NOOP。",
       "PRUNE target_path 必须是正式输出路径，或 operation=ingest 且位于 .kb_inbox/ 的已成功吸收材料。",
       "Planner 必须把 Router 的 scale/change_types 传递到相关任务或 skipped 中。",
       "L/XL 任务应遵守 scenario-matrix 的 phase 原则：若涉及 Data/Infra/workspace boundary，必须先处理底层事实；若仅涉及 API 契约，可先处理 API，但 Architecture/ACTIONDOCK 必须最后汇总。",
       "rename_move 任务必须优先指向已有相关文档，并在 rename_map 中记录 old_path 与 new_path。",
       "breaking_change 任务必须包含 compatibility_required 或 breaking_impact。",
-      "generated_or_format_only 只能在存在独立语义证据时触发正式文档任务。"
+      "generated_or_format_only 只能在存在独立语义证据时触发正式文档任务。",
+      "target_path 以 /index.md 结尾时，只能生成 navigation update 任务，不得承载完整正文。"
     ],
     "taskOptionalFields": [
       "scale",
@@ -261,7 +262,11 @@
       "breaking_impact",
       "rename_map",
       "noise_filters",
-      "compatibility_required"
+      "compatibility_required",
+      "doc_kind",
+      "leaf_doc_required",
+      "granularity_reason",
+      "index_update_for"
     ]
   },
   "worker": {
@@ -287,14 +292,17 @@
     "rules": [
       "每个 Worker 只拥有一个 target_path。",
       "Worker 是唯一可写或删除该 target_path 的角色。",
-      "只有在 execution policy 允许 serial 时，主 agent 才可以临时进入 Worker role 写一个 target_path，并且必须保持同一 JSON 输出和边界。",
+      "serial 模式下，主 agent 可以临时进入 Worker role 写一个 target_path，但必须保持同一 JSON 输出和边界。",
       "默认做最小必要编辑；保留人工段落、备注、TODO、链接和上下文。",
       "除非证据表明整篇 stale，否则不要整体重写。",
       "UPSERT 时必须先读现有 target，再写入；证据不足时安全失败，不写 partial content。",
       "若 edit_mode=full_rewrite_with_preservation，必须保留人工 TODO、备注、历史背景和有效链接，并在 scenario_notes 说明原因。",
       "breaking_change 相关文档必须说明旧行为、新行为、影响对象和迁移边界。",
       "rename_move 场景不得无证据创建重复文档；优先迁移或更新已有目标文档。",
-      "XL 场景只写当前 workspace_scope 相关事实，不把局部事实推广为全仓库事实。"
+      "XL 场景只写当前 workspace_scope 相关事实，不把局部事实推广为全仓库事实。",
+      "Worker 不得把 substantive long-form content 写入 index.md；index.md 只允许链接、短说明和状态标记。",
+      "如果 Worker 收到 index.md 任务，但证据需要正文内容，必须安全失败或在 warnings 中要求新增 leaf doc 任务，不得把正文塞进 index。",
+      "Leaf substantive doc 必须包含证据与边界；index/navigation doc 不写长篇证据区。"
     ]
   },
   "validator": {
@@ -327,7 +335,9 @@
       "monorepo/XL 场景检查 workspace/service 索引和 ACTIONDOCK 是否只做入口。",
       "breaking_change 场景检查兼容性说明和迁移边界。",
       "rename_move 场景检查新旧重复文档和 old_path → new_path 记录。",
-      "materially_stale_docs 场景检查 edit_mode 与保留人工内容说明。"
+      "materially_stale_docs 场景检查 edit_mode 与保留人工内容说明。",
+      "检查 index_content_sink：index/navigation doc 不得承载多个具体流程、实体、接口、配置、runbook 或诊断正文。",
+      "如果 index.md 已成为事实主来源，应报告 warning 或 error，并建议拆分为 leaf docs。"
     ],
     "scenarioChecks": [
       "workspace_or_service_index_for_monorepo",
@@ -335,70 +345,36 @@
       "duplicate_doc_detection_after_rename",
       "stale_doc_edit_mode_recorded",
       "actiondock_entry_only_not_detail_dump",
-      "noise_filter_reported_for_xl"
+      "noise_filter_reported_for_xl",
+      "index_content_sink_detection",
+      "leaf_doc_required_for_concrete_entities",
+      "index_only_navigation_check"
+    ],
+    "findingTypes": [
+      "index_content_sink"
     ]
   },
-  "executionModes": [
-    "subagent_required",
-    "subagent_preferred",
-    "serial_only"
-  ],
-  "defaultExecutionMode": "subagent_required",
-  "executionPolicy": {
-    "actualExecutionModes": [
-      "subagent",
-      "serial"
-    ],
-    "capabilitySignals": {
-      "userOrIDEStatesSubagentSupported": "treat_as_supported_unless_actual_subagent_creation_or_call_fails",
-      "mustNotSpeculateSubagentUnsupported": true
-    },
-    "requiredSubagentsWhenAvailable": [
-      "Router_Subagent",
-      "Planner_Subagent",
-      "Domain_Worker_Subagent",
-      "Validator_Subagent"
-    ],
-    "modes": {
-      "subagent_required": {
-        "serialFallbackAllowed": false,
-        "mustUseRealSubagentsWhenSupported": true,
-        "stopOnSubagentUnavailable": true,
-        "requiredFailureMessage": "Subagent execution is required by this skill, but the environment did not expose a usable subagent interface.",
-        "spawnStrategy": {
-          "router": "exactly_one_subagent_per_run",
-          "planner": "one_subagent_per_active_domain_per_phase",
-          "worker": "one_subagent_per_unique_target_path",
-          "validator": "exactly_one_or_more_read_only_subagents_for_large_validation"
-        }
-      },
-      "subagent_preferred": {
-        "serialFallbackAllowed": true,
-        "allowedFallbackReasons": [
-          "runtime_unavailable",
-          "host_policy_blocked",
-          "tooling_unavailable",
-          "actual_subagent_creation_failed"
-        ],
-        "mustRecordFallbackReason": true,
-        "spawnStrategy": {
-          "router": "at_most_one_subagent_per_run",
-          "planner": "one_subagent_per_active_domain_per_phase",
-          "worker": "one_subagent_per_unique_target_path",
-          "validator": "one_or_more_read_only_subagents_for_large_validation"
-        }
-      },
-      "serial_only": {
-        "serialFallbackAllowed": true,
-        "requiresUserOrPolicySelection": true,
-        "mustPreserveRoleBoundaries": true
+  "executionModes": {
+    "native_subagent": {
+      "useWhenAvailable": true,
+      "spawnStrategy": {
+        "router": "at_most_one_per_run",
+        "planner": "one_per_active_domain_per_phase",
+        "worker": "one_per_unique_target_path",
+        "validator": "one_or_more_read_only_for_large_validation"
       }
     },
-    "serialExecutionAllowedOnlyWhen": [
-      "execution_policy_is_serial_only",
-      "execution_policy_is_subagent_preferred_and_actual_subagent_creation_failed",
-      "user_explicitly_allows_serial_fallback"
-    ],
+    "serial": {
+      "allowed": true,
+      "fallbackReasons": [
+        "runtime_unavailable",
+        "host_policy_blocked",
+        "user_forbidden",
+        "tooling_unavailable"
+      ],
+      "mustPreserveRoleBoundaries": true,
+      "mustRecordFallbackReason": true
+    },
     "leaderMayWrite": [
       "ACTIONDOCK.md",
       "KNOWLEDGE_INIT_REPORT.md",
@@ -407,11 +383,10 @@
       "KNOWLEDGE_VALIDATE_REPORT.md",
       "docs/ops/maintenance/errors.md"
     ],
-    "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_execution_is_allowed_by_policy_and_leader_is_emulating_worker_for_exactly_one_target_path"
+    "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_mode_emulating_worker_for_exactly_one_target_path"
   },
   "reportRequiredFields": [
     "operation",
-    "execution_policy",
     "execution_mode",
     "serial_fallback_reason",
     "repo_baseline",
@@ -652,5 +627,54 @@
       }
     ]
   },
-  "release": "4.1.1"
+  "release": "4.2.0",
+  "documentGranularity": {
+    "principle": "Index is navigation-only; leaf docs carry durable project knowledge.",
+    "navigationOnlyPaths": [
+      "ACTIONDOCK.md",
+      "docs/code/index.md",
+      "docs/code/workspaces.md",
+      "docs/api/http.md",
+      "docs/api/events.md",
+      "docs/data/index.md",
+      "docs/domain/flows/index.md",
+      "docs/ops/config/index.md",
+      "docs/diagnosis/index.md"
+    ],
+    "leafDocRequiredFor": [
+      "named_business_flow",
+      "state_machine",
+      "api_resource_group",
+      "api_version",
+      "event_family",
+      "database_table",
+      "cross_table_transaction",
+      "config_domain",
+      "external_integration",
+      "runbook",
+      "diagnosis_path",
+      "service",
+      "package",
+      "breaking_change_migration_path"
+    ],
+    "indexAllowedContent": [
+      "one_line_scope",
+      "links_to_leaf_docs",
+      "status_markers",
+      "short_maintenance_notes",
+      "待建立/暂无证据/不适用"
+    ],
+    "indexForbiddenContent": [
+      "full_flow_steps",
+      "full_api_schema",
+      "database_field_catalog",
+      "runbook_procedure",
+      "diagnosis_steps",
+      "detailed_state_machine",
+      "multi_entity_long_form_content",
+      "long_evidence_section"
+    ],
+    "plannerRule": "If only index.md exists and the change touches a concrete entity, create a leaf doc task and a separate index navigation update; do not append substantive content to index.md.",
+    "validatorFindingType": "index_content_sink"
+  }
 }

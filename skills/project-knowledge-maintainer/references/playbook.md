@@ -6,19 +6,7 @@
 Route → Plan → Apply → Validate
 ```
 
-不要把复杂度暴露为一套组织架构。Router、Planner、Worker、Validator 是角色边界；当 policy 要求 subagent 时，这些角色必须作为真实子代理存在，而不是主 agent 的自我角色扮演。
-
-## 执行策略
-
-先解析 `execution policy`，再决定实际 `execution mode`：
-
-- `subagent_required`：默认值。必须使用真实 subagent；不能用就停止并报告。
-- `subagent_preferred`：优先使用真实 subagent；实际创建失败后可串行降级。
-- `serial_only`：只允许主 agent 串行执行。
-
-输入字段名保留为 `executionMode`，它表示 policy 选择，而不是最终实际运行方式。
-
-如果用户或 IDE 明确声明“支持 subagent”，这必须被视为环境能力信号。执行器不得仅凭猜测覆盖该信号；只有真实的 subagent 创建/调用失败，才可认定不可用。
+不要把复杂度暴露为一套组织架构。Router、Planner、Worker、Validator 是角色边界；subagent 只是可选执行模式。
 
 ## 0. 输入约定
 
@@ -27,7 +15,6 @@ Route → Plan → Apply → Validate
 ```yaml
 repoPath: .
 operation: auto
-executionMode: subagent_required
 changedFiles: []
 inboxPaths: []
 repair: false
@@ -40,14 +27,12 @@ repair: false
 ```yaml
 repoPath: .
 operation: validate
-executionMode: subagent_required
 repair: false
 ```
 
 ```yaml
 repoPath: .
 operation: refresh
-executionMode: subagent_required
 changedFiles:
   - src/users/user.service.ts
   - db/migrations/20260522_add_user_status.sql
@@ -56,7 +41,6 @@ changedFiles:
 ```yaml
 repoPath: .
 operation: ingest
-executionMode: subagent_required
 inboxPaths:
   - .kb_inbox/payment-timeout-runbook.md
 ```
@@ -71,7 +55,7 @@ Router 决定：
 - ingest 时每个 inbox item 的分类
 - 哪些 domain 被跳过，以及原因
 
-Router 不写文件，不阅读大量实现细节，不创建 Worker 正文任务。
+Router 不写文件，不阅读大量实现细节，不创建 Worker 正文任务。Router 还应保留 granularity 风险信号，例如本次变更是否需要 leaf doc，而不是 index 追加。
 
 ### 场景分类
 
@@ -151,6 +135,19 @@ Planner 输出：
 - 输出绝对路径、`..`、通配符或 repo 外路径
 - 输出 wildcard target，例如 `docs/data/tables/*.md`
 
+
+### 文档颗粒度规划
+
+Planner 必须读取 `references/document-granularity.md`。
+
+硬规则：
+
+- `index.md` 只能作为 navigation target。
+- 主业务流程、API 资源组、事件族、数据库表、跨表事务、配置域、runbook、诊断路径、service、package 都必须优先进入独立 leaf substantive doc。
+- 如果只有 index 存在，Planner 应输出两个任务：先 leaf doc UPSERT，再 index navigation UPSERT。
+- 不要用“优先更新已有文档”作为理由把正文继续追加到 index。
+- 只有在任务目标是“更新链接、目录、状态标记”时，target_path 才应是 index。
+
 ### PRUNE 规则
 
 `PRUNE target_path` 必须满足二选一：
@@ -189,6 +186,16 @@ Worker 负责 exactly one target：
 - `delete_deprecate`：删除代码不等于立刻删文档；仍在线上或仍有迁移价值时改为 deprecated 说明。
 - `XL`：只写当前 workspace_scope 相关事实，不把局部事实推广为全仓库事实。
 
+
+### Index 与 leaf doc 写入规则
+
+Worker 必须遵守：
+
+- `index.md`、入口型 `http.md`、入口型 `events.md`、`workspaces.md` 只能写导航、链接、简短状态和范围说明。
+- 不得在 index 里写完整流程、完整 API schema、表字段目录、runbook 步骤、诊断步骤或多个实体的长正文。
+- 如果 index 任务需要正文内容，Worker 应失败并报告需要 leaf doc，而不是把正文塞进 index。
+- Leaf substantive doc 必须包含 `证据与边界`。
+
 ### 原子写入
 
 `UPSERT` 必须：
@@ -209,6 +216,7 @@ Validator 只读检查：
 - docs 链接是否指向存在文件。
 - substantive docs 是否包含 `证据与边界` 或 `Evidence and Boundaries`。
 - navigation/index docs 是否链接到正文档，或明确说明暂无证据 / 不适用。
+- navigation/index docs 是否出现 `index_content_sink`：承载多个具体流程、接口、表、配置、runbook 或诊断正文。
 - docs 是否引用临时路径作为最终证据。
 - changed files 是否有合理 domain 覆盖。
 - inbox 文件是否被吸收、保留或拒绝，并有原因。
@@ -233,9 +241,9 @@ Validator 只读检查：
 
 ## 执行模式
 
-### subagent
+### native_subagent
 
-当 `execution policy` 允许且 subagent 能力可用时，必须使用：
+运行时支持时可以使用：
 
 - Router：每次运行最多一个。
 - Planner：每个 phase 的每个激活 domain 一个。
@@ -246,15 +254,7 @@ Validator 只读检查：
 
 ### serial
 
-只有在以下情况之一才允许 serial：
-
-1. `execution policy=serial_only`
-2. `execution policy=subagent_preferred` 且实际创建 subagent 失败
-3. 用户明确允许降级到 serial
-
-若 `execution policy=subagent_required`，serial fallback 默认禁用。此时只要无法创建可用 subagent，就必须停止并报告：
-
-`Subagent execution is required by this skill, but the environment did not expose a usable subagent interface.`
+当 subagent 不可用时，serial 是一等执行模式，不是降级破坏。
 
 主 agent 必须按角色边界依次执行：
 
@@ -267,7 +267,7 @@ serial 模式下，主 agent 可以“以 Worker role”写一个具体 `target_
 - 一次只处理一个 target。
 - 使用同一 Worker contract。
 - 不在 Planner 阶段提前写正文。
-- 在报告中记录 `execution_policy`、`execution_mode=serial` 和 fallback reason。
+- 在报告中记录 `execution_mode=serial` 和 fallback reason。
 
 ## Richness Floor
 
@@ -292,6 +292,7 @@ navigation/index docs 可以更短，但必须做到：
 - 不制造断链。
 - 不把待建立项目伪装成已完成事实。
 - 链接到有证据区的正文档，或明确标记暂无证据 / 不适用。
+- 不承载完整正文；正文应拆到 leaf substantive docs。
 
 ## Coverage Floor
 
@@ -376,7 +377,6 @@ Worker command 或文件操作失败时：
 每次运行结束写对应 report，并在最终响应中简述。报告至少包含：
 
 - operation
-- execution_policy
 - execution_mode
 - serial_fallback_reason
 - repo_baseline
