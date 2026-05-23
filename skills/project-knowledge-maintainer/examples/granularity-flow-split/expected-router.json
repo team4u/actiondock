@@ -25,5 +25,8 @@
       "reason": "no_schema_change_in_changedFiles"
     }
   ],
-  "reasoning_summary": "Checkout changes require API/flow refresh and leaf-doc granularity."
+  "reasoning_summary": "Checkout changes require API/flow refresh and leaf-doc granularity.",
+  "flow_profile": "standard",
+  "document_set_plan_required": true,
+  "document_set_plan_reason": "v4.4: scale 或文档颗粒度风险要求先规划 leaf docs。"
 }

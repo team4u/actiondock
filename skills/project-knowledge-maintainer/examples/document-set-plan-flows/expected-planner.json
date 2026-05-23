@@ -15,7 +15,9 @@
           "status": "create",
           "priority": "must",
           "reason": "Checkout crosses order and payment modules and has ordered business steps.",
-          "evidence_paths": ["src/orders/checkout.service.ts"]
+          "evidence_paths": [
+            "src/orders/checkout.service.ts"
+          ]
         },
         {
           "path": "docs/domain/flows/payment-refund.md",
@@ -23,7 +25,9 @@
           "status": "create",
           "priority": "must",
           "reason": "Refund has a distinct lifecycle and failure path.",
-          "evidence_paths": ["src/payments/refund.service.ts"]
+          "evidence_paths": [
+            "src/payments/refund.service.ts"
+          ]
         },
         {
           "path": "docs/domain/flows/inventory-reservation.md",
@@ -35,7 +39,14 @@
           "defer_reason": "insufficient_evidence"
         }
       ],
-      "index_policy": "docs/domain/flows/index.md links to flow leaf docs only; it must not contain flow bodies."
+      "index_policy": "docs/domain/flows/index.md links to flow leaf docs only; it must not contain flow bodies.",
+      "coverage_basis": [
+        "src/orders/checkout.service.ts",
+        "src/payments/refund.service.ts"
+      ],
+      "coverage_assertion": "Plan A covers all leaf docs visible in the current router scope and existing docs tree for this category.",
+      "scope_boundary": "Scope is limited to the scenario evidence in this fixture.",
+      "excluded_candidates": []
     }
   ],
   "tasks": [
@@ -45,7 +56,9 @@
       "domain": "Business_Flow_Planner",
       "target_path": "docs/domain/flows/order-checkout.md",
       "focus_code_entity": "src/orders/checkout.service.ts",
-      "evidence_paths": ["src/orders/checkout.service.ts"],
+      "evidence_paths": [
+        "src/orders/checkout.service.ts"
+      ],
       "depends_on": [],
       "confidence": "high",
       "clue": "Create checkout flow leaf doc. Do not put flow body in index.",
@@ -60,7 +73,9 @@
       "domain": "Business_Flow_Planner",
       "target_path": "docs/domain/flows/payment-refund.md",
       "focus_code_entity": "src/payments/refund.service.ts",
-      "evidence_paths": ["src/payments/refund.service.ts"],
+      "evidence_paths": [
+        "src/payments/refund.service.ts"
+      ],
       "depends_on": [],
       "confidence": "high",
       "clue": "Create refund flow leaf doc.",
@@ -75,8 +90,14 @@
       "domain": "Business_Flow_Planner",
       "target_path": "docs/domain/flows/index.md",
       "focus_code_entity": "docs/domain/flows/index.md",
-      "evidence_paths": ["docs/domain/flows/order-checkout.md", "docs/domain/flows/payment-refund.md"],
-      "depends_on": ["flow-order-checkout", "flow-payment-refund"],
+      "evidence_paths": [
+        "docs/domain/flows/order-checkout.md",
+        "docs/domain/flows/payment-refund.md"
+      ],
+      "depends_on": [
+        "flow-order-checkout",
+        "flow-payment-refund"
+      ],
       "confidence": "high",
       "clue": "Update index links only.",
       "doc_kind": "navigation",

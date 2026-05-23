@@ -4,28 +4,141 @@
       "category": "services",
       "domain": "Architecture_Planner",
       "index_path": "docs/code/workspaces.md",
-      "planning_basis": ["services/billing/src/invoice.ts", "services/notification/src/email.ts"],
-      "leaf_docs": [
-        {"path": "docs/services/billing.md", "title": "Billing Service", "status": "update", "priority": "must", "reason": "Billing service changed and is deployable.", "evidence_paths": ["services/billing/src/invoice.ts"]},
-        {"path": "docs/services/notification.md", "title": "Notification Service", "status": "update", "priority": "must", "reason": "Notification service changed and is deployable.", "evidence_paths": ["services/notification/src/email.ts"]}
+      "planning_basis": [
+        "services/billing/src/invoice.ts",
+        "services/notification/src/email.ts"
       ],
-      "index_policy": "docs/code/workspaces.md links to service/package leaf docs only."
+      "leaf_docs": [
+        {
+          "path": "docs/services/billing.md",
+          "title": "Billing Service",
+          "status": "update",
+          "priority": "must",
+          "reason": "Billing service changed and is deployable.",
+          "evidence_paths": [
+            "services/billing/src/invoice.ts"
+          ]
+        },
+        {
+          "path": "docs/services/notification.md",
+          "title": "Notification Service",
+          "status": "update",
+          "priority": "must",
+          "reason": "Notification service changed and is deployable.",
+          "evidence_paths": [
+            "services/notification/src/email.ts"
+          ]
+        }
+      ],
+      "index_policy": "docs/code/workspaces.md links to service/package leaf docs only.",
+      "coverage_basis": [
+        "services/billing/src/invoice.ts",
+        "services/notification/src/email.ts"
+      ],
+      "coverage_assertion": "Plan A covers all leaf docs visible in the current router scope and existing docs tree for this category.",
+      "scope_boundary": "Scope is limited to the scenario evidence in this fixture.",
+      "excluded_candidates": []
     },
     {
       "category": "packages",
       "domain": "Architecture_Planner",
       "index_path": "docs/code/workspaces.md",
-      "planning_basis": ["packages/shared-db/schema.prisma"],
-      "leaf_docs": [
-        {"path": "docs/packages/shared-db.md", "title": "Shared DB Package", "status": "update", "priority": "must", "reason": "Shared package affects multiple downstream services.", "evidence_paths": ["packages/shared-db/schema.prisma"]}
+      "planning_basis": [
+        "packages/shared-db/schema.prisma"
       ],
-      "index_policy": "docs/code/workspaces.md links to package leaf docs only."
+      "leaf_docs": [
+        {
+          "path": "docs/packages/shared-db.md",
+          "title": "Shared DB Package",
+          "status": "update",
+          "priority": "must",
+          "reason": "Shared package affects multiple downstream services.",
+          "evidence_paths": [
+            "packages/shared-db/schema.prisma"
+          ]
+        }
+      ],
+      "index_policy": "docs/code/workspaces.md links to package leaf docs only.",
+      "coverage_basis": [
+        "packages/shared-db/schema.prisma"
+      ],
+      "coverage_assertion": "Plan A covers all leaf docs visible in the current router scope and existing docs tree for this category.",
+      "scope_boundary": "Scope is limited to the scenario evidence in this fixture.",
+      "excluded_candidates": []
     }
   ],
   "tasks": [
-    {"task_id": "service-billing-doc", "action": "UPSERT", "domain": "Architecture_Planner", "target_path": "docs/services/billing.md", "focus_code_entity": "services/billing/src/invoice.ts", "evidence_paths": ["services/billing/src/invoice.ts"], "depends_on": [], "confidence": "high", "clue": "Update Billing service leaf doc.", "doc_kind": "leaf_substantive", "leaf_doc_required": true, "workspace_scope": [{"scope_id": "billing", "kind": "service", "root_path": "services/billing", "reason": "changed file under billing service"}], "from_document_set_plan": "services", "document_set_item_path": "docs/services/billing.md"},
-    {"task_id": "package-shared-db-doc", "action": "UPSERT", "domain": "Architecture_Planner", "target_path": "docs/packages/shared-db.md", "focus_code_entity": "packages/shared-db/schema.prisma", "evidence_paths": ["packages/shared-db/schema.prisma"], "depends_on": [], "confidence": "high", "clue": "Update shared-db package leaf doc and downstream impact boundaries.", "doc_kind": "leaf_substantive", "leaf_doc_required": true, "workspace_scope": [{"scope_id": "shared-db", "kind": "package", "root_path": "packages/shared-db", "reason": "changed shared package schema"}], "from_document_set_plan": "packages", "document_set_item_path": "docs/packages/shared-db.md"},
-    {"task_id": "workspaces-index-links", "action": "UPSERT", "domain": "Architecture_Planner", "target_path": "docs/code/workspaces.md", "focus_code_entity": "docs/code/workspaces.md", "evidence_paths": ["docs/services/billing.md", "docs/packages/shared-db.md"], "depends_on": ["service-billing-doc", "package-shared-db-doc"], "confidence": "high", "clue": "Update workspace index links only.", "doc_kind": "navigation", "leaf_doc_required": false, "from_document_set_plan": "services", "index_update_for": "docs/services/billing.md"}
+    {
+      "task_id": "service-billing-doc",
+      "action": "UPSERT",
+      "domain": "Architecture_Planner",
+      "target_path": "docs/services/billing.md",
+      "focus_code_entity": "services/billing/src/invoice.ts",
+      "evidence_paths": [
+        "services/billing/src/invoice.ts"
+      ],
+      "depends_on": [],
+      "confidence": "high",
+      "clue": "Update Billing service leaf doc.",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true,
+      "workspace_scope": [
+        {
+          "scope_id": "billing",
+          "kind": "service",
+          "root_path": "services/billing",
+          "reason": "changed file under billing service"
+        }
+      ],
+      "from_document_set_plan": "services",
+      "document_set_item_path": "docs/services/billing.md"
+    },
+    {
+      "task_id": "package-shared-db-doc",
+      "action": "UPSERT",
+      "domain": "Architecture_Planner",
+      "target_path": "docs/packages/shared-db.md",
+      "focus_code_entity": "packages/shared-db/schema.prisma",
+      "evidence_paths": [
+        "packages/shared-db/schema.prisma"
+      ],
+      "depends_on": [],
+      "confidence": "high",
+      "clue": "Update shared-db package leaf doc and downstream impact boundaries.",
+      "doc_kind": "leaf_substantive",
+      "leaf_doc_required": true,
+      "workspace_scope": [
+        {
+          "scope_id": "shared-db",
+          "kind": "package",
+          "root_path": "packages/shared-db",
+          "reason": "changed shared package schema"
+        }
+      ],
+      "from_document_set_plan": "packages",
+      "document_set_item_path": "docs/packages/shared-db.md"
+    },
+    {
+      "task_id": "workspaces-index-links",
+      "action": "UPSERT",
+      "domain": "Architecture_Planner",
+      "target_path": "docs/code/workspaces.md",
+      "focus_code_entity": "docs/code/workspaces.md",
+      "evidence_paths": [
+        "docs/services/billing.md",
+        "docs/packages/shared-db.md"
+      ],
+      "depends_on": [
+        "service-billing-doc",
+        "package-shared-db-doc"
+      ],
+      "confidence": "high",
+      "clue": "Update workspace index links only.",
+      "doc_kind": "navigation",
+      "leaf_doc_required": false,
+      "from_document_set_plan": "services",
+      "index_update_for": "docs/services/billing.md"
+    }
   ],
   "skipped": []
 }

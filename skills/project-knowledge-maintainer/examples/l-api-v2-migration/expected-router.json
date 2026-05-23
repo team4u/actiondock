@@ -36,5 +36,8 @@
   ],
   "inbox_classification": [],
   "skipped": [],
-  "reasoning_summary": "API v2 migration contains possibly breaking field rename."
+  "reasoning_summary": "API v2 migration contains possibly breaking field rename.",
+  "flow_profile": "structured",
+  "document_set_plan_required": true,
+  "document_set_plan_reason": "v4.4: scale 或文档颗粒度风险要求先规划 leaf docs。"
 }

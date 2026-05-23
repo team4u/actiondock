@@ -16,8 +16,8 @@
     {
       "severity": "warning",
       "path": "Planner output",
-      "issue": "document_set_plan_missing for business_flows.",
-      "suggested_repair": "Planner must output document_set_plan before tasks."
+      "issue": "document_set_plan_missing_when_required: business_flows has category_under_split, so document_set_plan is required.",
+      "suggested_repair": "Planner should output document_set_plan before tasks for this repair scope."
     }
   ]
 }

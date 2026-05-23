@@ -1,12 +1,16 @@
-# Playbook：统一流水线
+# Playbook：自适应流水线
 
-该 skill 只暴露一个稳定流程：
+该 skill 不再把所有任务都压进同一个重流程。安全、证据和路径边界始终固定；规划深度按规模和风险触发。
 
 ```text
-Route → Document Set Plan → Task Plan → Apply → Validate
+XS/S:   Route-lite → Apply → Validate-lite
+M:      Route → Task Plan → Apply → Validate
+        若存在 leaf doc / index / 多实体拆分风险，插入 Document Set Plan
+L/XL:   Route → Document Set Plan → Task Plan → Phased Apply → Validate
+validate-only: Route-lite → Validate
 ```
 
-不要把复杂度暴露为一套组织架构。Router、Planner、Worker、Validator 是角色边界；subagent 只是可选执行模式。
+Router、Planner、Worker、Validator 是角色边界。Subagent 是执行优化，不是必需条件。serial 模式下，主 agent 可以按角色顺序执行，但不得混淆“规划”和“写入”的责任。
 
 ## 0. 输入约定
 
@@ -22,70 +26,25 @@ repair: false
 
 只有 `repoPath` 必填。`operation` 缺省为 `auto`，`repair` 缺省为 `false`。
 
-常见调用：
+可选控制项：
 
 ```yaml
-repoPath: .
-operation: validate
-repair: false
+forceDocumentSetPlan: false
+maxPlanningDepth: auto   # auto | lite | standard | structured | partitioned
 ```
 
-```yaml
-repoPath: .
-operation: refresh
-changedFiles:
-  - src/users/user.service.ts
-  - db/migrations/20260522_add_user_status.sql
-```
-
-```yaml
-repoPath: .
-operation: ingest
-inboxPaths:
-  - .kb_inbox/payment-timeout-runbook.md
-```
-
-## 1. Route
+## 1. Route / Route-lite
 
 Router 决定：
 
-- operation：`init`、`refresh`、`ingest`、`validate`
+- resolved operation：`init`、`refresh`、`ingest`、`validate`
+- scale：`XS`、`S`、`M`、`L`、`XL`
+- flow profile：`lite`、`standard`、`structured`、`partitioned`、`validate_only`
 - 激活哪些 documentation domain
-- phase 顺序
-- ingest 时每个 inbox item 的分类
-- 哪些 domain 被跳过，以及原因
+- 是否需要 `document_set_plan`
+- 是否需要 phase、workspace scope、noise filter 或专项验证
 
-Router 不写文件，不阅读大量实现细节，不创建 Worker 正文任务。Router 还应保留 granularity 风险信号，例如本次变更是否需要 leaf doc，而不是 index 追加。
-
-### 场景分类
-
-Router 在选择 domain 前必须读取 `references/scenario-matrix.md`，输出：
-
-- `scale`: `XS` / `S` / `M` / `L` / `XL`
-- `change_types`: 一个或多个真实变更类型
-- `workspace_scope`: monorepo 或多服务场景中的受影响 workspace/service/package
-- `special_flags`: rename、breaking、stale、noise-heavy、lockfile-only 等风险标记
-- `noise_filters`: 被降噪的 changed files 及原因
-
-默认策略：
-
-| Scale | 策略 |
-|---|---|
-| `XS` / `S` | 最小编辑，尽量只改一个目标文档 |
-| `M` | 多 domain 更新，合并同 target 任务 |
-| `L` | 分 phase，先底层事实，再业务/接口，最后架构/入口 |
-| `XL` | 先识别 workspace/service/package，过滤噪音，分批维护 |
-
-如果 changedFiles 数量很大，Router 必须先识别并记录 generated、build output、format-only、lockfile-only 等噪音；不得让这些噪音直接触发业务事实文档。
-
-### 大仓库规则
-
-出现 `apps/`、`packages/`、`services/`、`libs/`、`infra/`、`terraform/`、`charts/` 等结构时：
-
-1. 先建立或更新 `docs/code/workspaces.md` 或等价索引。
-2. 只刷新受影响 workspace / service / package 的正式 docs。
-3. 共享包变化要判断是否影响多个 downstream service；证据不足时写入 evidence gaps。
-4. `ACTIONDOCK.md` 只链接入口，不展开所有 service 细节。
+Router 不写文件，不起草正文，不创建最终文档内容。
 
 ### operation 选择
 
@@ -97,7 +56,7 @@ Router 在选择 domain 前必须读取 `references/scenario-matrix.md`，输出
 | 4 | 未明确指定操作，且 `ACTIONDOCK.md` 或 `docs/` 缺失 | `init` |
 | 5 | 未明确指定操作，且已有正式知识库 | `refresh` |
 
-若 `operation=auto`：先按用户明确意图选择，再按仓库状态选择；不要因为 `.kb_inbox/` 存在就自动 ingest，除非用户明确要求处理它。
+若 `operation=auto`：先按用户明确意图选择，再按仓库状态选择；不要因为 `.kb_inbox/` 存在就自动 ingest。
 
 ### refresh baseline
 
@@ -109,65 +68,87 @@ Router 在选择 domain 前必须读取 `references/scenario-matrix.md`，输出
 
 若 Git 不可用，改为扫描仓库结构和文件修改线索，并在报告中记录 baseline 不完整。
 
-## 2. Plan
+### scale 判定
 
-每个激活 domain 运行一个 Planner。Planner 只读证据，先产出子文档清单规划，再产出 target_path 级任务。
+| Scale | 常见信号 | 默认流程 |
+|---|---|---|
+| `XS` | 单个 env、脚本命令、文档链接、小配置名更新 | `lite` |
+| `S` | 少量相关文件，一个已知 leaf doc 可覆盖 | `lite` |
+| `M` | 多 domain、新 endpoint、新表、新 flow、小型功能 | `standard` |
+| `L` | breaking、迁移、大功能、多模块重构 | `structured` |
+| `XL` | monorepo、多 service、大量 changedFiles、噪音重 | `partitioned` |
 
-Planner 输出必须包含两层：
+不要仅凭 changedFiles 数量判断规模。要先过滤 generated、format-only、build output、dependency output、lockfile-only auxiliary 和 vendor noise。
 
-```json
-{
-  "document_set_plan": [],
-  "tasks": [],
-  "skipped": []
-}
-```
+### domain 输出策略
 
-第一层 `document_set_plan` 回答“这个分类下应该有哪些子文档”；第二层 `tasks` 才回答“本轮具体写哪些 target_path”。
+七个 domain 必须隐式考虑：Architecture、API、Data、Business Flow、Agent/Tool、Infra/Env、Maintenance/Ops。
 
-任务必须是：
+输出规则：
+
+- XS/S：只输出 activated domains；跳过的 domain 不必逐个列出。
+- M：输出 activated domains；对有风险、被用户点名或被证据阻塞的 skipped domain 说明原因。
+- L/XL：输出 activated domains、material skipped domains、phase 和降噪结果。
+
+## 2. Document Set Plan：按需启用
+
+`document_set_plan` 是“分类下应该有哪些 leaf docs”的清单规划，不是单篇文档的大纲。
+
+必须启用的情况：
+
+- scale 为 `L` 或 `XL`。
+- scale 为 `M` 且涉及新增业务流程、API resource、数据表、跨表事务、配置域、runbook、诊断路径、service 或 package。
+- 目标可能是入口页，但证据需要正文档承载。
+- `operation=init` 且仓库不是明显 XS/S。
+- `operation=ingest` 且多个 inbox item 需要分流或拆成 runbook / diagnosis / config 文档。
+- Validator 发现 `index_content_sink`、`category_under_split`、`missing_required_leaf_doc` 或 `document_set_plan_missing_when_required`。
+- 用户指定 `forceDocumentSetPlan=true`。
+
+### Plan A 完整性
+
+当 `document_set_plan_required=true` 时，Planner 的 Plan A 必须先回答“当前 scope 下应该有哪些 leaf docs”，再回答“本轮写哪些 target_path”。
+
+Plan A 必须：
+
+- 读取或检查 relevant existing docs tree，避免重复建文档或漏掉已有文档。
+- 根据 routes/controllers/events/migrations/services/packages/config/runbook/inbox 等证据信号枚举预期 leaf docs。
+- 把 leaf docs 分为 `must`、`should`、`candidate`，用 `create/update/keep/defer/deprecate/prune_candidate` 表示状态。
+- 对证据不足项使用 `defer` 或 `candidate`，不要直接省略。
+- 在每个 category 上写 `coverage_basis`、`coverage_assertion`、`scope_boundary` 和 `excluded_candidates`。
+
+Plan A 禁止：
+
+- 只列 1-2 个目标文件后让 Worker 自行补充。
+- 用“先写 index / overview，后续再拆”替代 leaf doc 规划。
+- 把明显应独立的 flow、API resource、table、config、runbook、diagnosis、service 或 package 合并到一个正文档。
+
+可以省略的情况：
+
+- XS/S 只更新一个已存在 leaf doc。
+- 只修复导航链接、标题、状态标记或 `ACTIONDOCK.md` 入口。
+- validate-only 且 `repair=false`。
+- 明确无新实体、无 index 风险、无多文档拆分需求。
+
+## 3. Task Plan
+
+Planner 只读证据，输出 target_path 级任务。
+
+允许 action：
 
 - `UPSERT`：创建或更新一个具体 Markdown 文件。
 - `PRUNE`：删除一个确认 stale 的普通文件，或删除一个已成功吸收的 `.kb_inbox/` 文件。
 
 禁止 Planner：
 
-- 写文件
-- 直接起草最终正文
-- 发明没有证据的任务
-- 输出绝对路径、`..`、通配符或 repo 外路径
-- 输出 wildcard target，例如 `docs/data/tables/*.md`
+- 写文件。
+- 直接起草最终正文。
+- 发明没有证据的任务。
+- 输出绝对路径、`..`、通配符或 repo 外路径。
+- 输出 wildcard target，例如 `docs/data/tables/*.md`。
 
-### 子文档清单规划
+### task 规则
 
-Planner 必须读取 `references/document-set-planning.md`。
-
-硬规则：
-
-- 在生成 `tasks` 前，必须先生成 `document_set_plan`。
-- 对每个激活分类，列出预期 leaf docs，而不是只写一个 index 或总览页。
-- `document_set_plan.leaf_docs[].status` 只能是 `create`、`update`、`keep`、`defer`、`deprecate`、`prune_candidate`。
-- `document_set_plan.leaf_docs[].priority` 只能是 `must`、`should`、`candidate`。
-- `priority=must` 且 `status=create|update|deprecate` 的 leaf doc 必须转成具体 `UPSERT` 任务。
-- `status=defer` 必须提供 `defer_reason`，不得创建空文档。
-- 每个由子文档规划产生的任务必须带 `from_document_set_plan` 和 `document_set_item_path`。
-- Worker 不能自行缩减 Planner 的子文档清单；如果证据显示还缺子文档，应要求 Planner 增补任务。
-
-典型分类包括：`business_flows`、`api_http_resources`、`data_tables`、`data_transactions`、`config_domains`、`runbooks`、`diagnosis_paths`、`services`、`packages`。
-
-### 文档颗粒度规划
-
-Planner 必须读取 `references/document-granularity.md`。
-
-硬规则：
-
-- `index.md` 只能作为 navigation target。
-- 主业务流程、API 资源组、事件族、数据库表、跨表事务、配置域、runbook、诊断路径、service、package 都必须优先进入独立 leaf substantive doc。
-- 如果只有 index 存在，Planner 应输出两个任务：先 leaf doc UPSERT，再 index navigation UPSERT。
-- 不要用“优先更新已有文档”作为理由把正文继续追加到 index。
-- 只有在任务目标是“更新链接、目录、状态标记”时，target_path 才应是 index。
-
-### PRUNE 规则
+每个 task 对应一个最终 `target_path`。多个 Planner 指向同一个 `target_path` 时，Leader 合并任务，不丢弃 evidence、clue、dependency 或低 confidence 警告。
 
 `PRUNE target_path` 必须满足二选一：
 
@@ -176,16 +157,14 @@ Planner 必须读取 `references/document-granularity.md`。
 
 不得删除目录。不得为了“整理”而清空 `.kb_inbox/`。未吸收、unsafe、unrelated、preserve_for_human 的 inbox item 必须保留，并在报告中说明。
 
-## 3. Apply
+## 4. Apply
 
-每个唯一 `target_path` 只允许一个 Worker 拥有。
+每个唯一 `target_path` 只允许一个 Worker 拥有。Worker 可以读取相关证据和相关文档，但只能写自己的 target。
 
-Worker 负责 exactly one target。Worker 不决定“这个分类应该有哪些子文档”，只执行 Planner 的 `document_set_plan` 派生任务：
+Worker 负责：
 
-- `UPSERT`：读取现有 target、证据文件和必要的前序 phase 文档；产出长期可维护文档。
+- `UPSERT`：读取现有 target、证据文件和必要前序文档；产出长期可维护文档。
 - `PRUNE`：只删除指定普通文件，不删除目录。
-
-多个 Planner 指向同一个 `target_path` 时，Leader 合并任务，不丢弃任何 evidence、clue、dependency 或低 confidence 警告。
 
 ### 最小编辑原则
 
@@ -197,22 +176,41 @@ Worker 负责 exactly one target。Worker 不决定“这个分类应该有哪�
 - 只有在证据表明整篇文档 materially stale、结构阻碍维护，或用户明确要求重写时，才允许整体重构。
 - 整体重构时必须在 report 中说明原因和主要保留/删除内容。
 
-### 特殊场景 Apply 规则
+### Worker 自主性
 
-- `rename_move`：优先迁移或更新已有相关文档，不创建重复新旧事实页；report 记录 old_path → new_path。
-- `breaking_change`：相关文档必须说明旧行为、新行为、影响对象和迁移边界；必要时维护 `docs/api/compatibility.md` 或 `docs/domain/migrations.md`。
-- `stale_doc_refresh`：只有 materially stale 时允许 `full_rewrite_with_preservation`，并保留人工 TODO、备注、历史背景、有效链接。
-- `delete_deprecate`：删除代码不等于立刻删文档；仍在线上或仍有迁移价值时改为 deprecated 说明。
-- `XL`：只写当前 workspace_scope 相关事实，不把局部事实推广为全仓库事实。
+Worker 不需要等 Planner 指定每一个读取文件；可以为了完成 target 读取相关代码、测试、配置、现有 docs 和前序 phase 输出。
 
+但 Worker 不得：
+
+- 写非自己拥有的 target_path。
+- 创建 repo 外文件。
+- 把正文事实写入 index/navigation doc。
+- 泄露 secret。
+- 在 document_set_plan 生效时直接创建规划外 leaf doc。
+
+如果 Worker 发现需要额外 leaf doc：
+
+```json
+{
+  "status": "NEEDS_REPLAN",
+  "target_path": "docs/domain/flows/index.md",
+  "proposed_extra_tasks": [
+    {
+      "action": "UPSERT",
+      "target_path": "docs/domain/flows/checkout.md",
+      "reason": "index 任务证据实际包含 checkout 主流程正文。"
+    }
+  ]
+}
+```
+
+serial 模式下，主 agent 可回到 mini-plan 补一轮；native_subagent 模式下，Leader 合并 proposed task 后再派发 Worker。但这只是异常溢出机制。如果 proposed task 在 Plan A 阶段应当可识别，Validator 应报告 `planner_underplanning`，而不是把它视为正常 Worker 自主发挥。
 
 ### Index 与 leaf doc 写入规则
 
-Worker 必须遵守：
-
 - `index.md`、入口型 `http.md`、入口型 `events.md`、`workspaces.md` 只能写导航、链接、简短状态和范围说明。
 - 不得在 index 里写完整流程、完整 API schema、表字段目录、runbook 步骤、诊断步骤或多个实体的长正文。
-- 如果 index 任务需要正文内容，Worker 应失败并报告需要 leaf doc，而不是把正文塞进 index。
+- 如果 index 任务需要正文内容，Worker 应返回 `NEEDS_REPLAN` 或 warning，要求新增 leaf doc 任务。
 - Leaf substantive doc 必须包含 `证据与边界`。
 
 ### 原子写入
@@ -225,26 +223,40 @@ Worker 必须遵守：
 
 证据不足、路径不安全或写入失败时，不要覆盖旧文件。
 
-## 4. Validate
+## 5. Validate / Validate-lite
 
-Validator 只读检查：
+Validator 只读检查。`validate` 模式默认不改正文档。只有用户明确要求修复，或输入 `repair=true`，才可从 Validator findings 进入 Plan/Apply repair 流程。
+
+### validate-lite
+
+XS/S 默认使用 validate-lite，检查：
+
+- 变更目标文件是否存在。
+- 新增或修改链接是否有效。
+- substantive doc 是否有 `证据与边界`。
+- navigation/index 是否没有承载长正文。
+- 是否暴露明显 secret、token、private key 或完整敏感连接串。
+- target path 是否安全。
+
+### full validate
+
+M/L/XL、repair=true 或 validate-only 大范围检查时使用 full validate，额外检查：
 
 - `ACTIONDOCK.md` 是否存在。
 - `ACTIONDOCK.md` 的“已建立”链接是否指向存在文件。
 - `ACTIONDOCK.md` 的“待建立 / 暂无证据”项是否避免使用 Markdown 链接。
 - docs 链接是否指向存在文件。
-- substantive docs 是否包含 `证据与边界` 或 `Evidence and Boundaries`。
 - navigation/index docs 是否链接到正文档，或明确说明暂无证据 / 不适用。
-- navigation/index docs 是否出现 `index_content_sink`：承载多个具体流程、接口、表、配置、runbook 或诊断正文。
-- Planner 是否输出 `document_set_plan`。
+- 是否出现 `index_content_sink` 或 `category_under_split`。
+- `document_set_plan_required=true` 时是否存在 document_set_plan。
 - `priority=must` 的 leaf docs 是否存在对应任务、结果文件或明确 defer。
 - index 是否链接本轮创建/更新的 must leaf docs。
-- 是否出现 `category_under_split`：多个独立子文档被挤在同一个文档中。
-- 是否出现 `unplanned_leaf_doc`：Worker 创建了 Planner 未规划的 leaf doc。
+- Worker 提出的 `proposed_extra_tasks` 是否被执行、defer 或记录为 evidence gap。
+- Plan A 是否明显漏掉 current scope 内可识别的 leaf docs。
+- Planner 是否把发现职责推给 Worker；若是，报告 `delegated_discovery_to_worker`。
 - docs 是否引用临时路径作为最终证据。
 - changed files 是否有合理 domain 覆盖。
 - inbox 文件是否被吸收、保留或拒绝，并有原因。
-- 是否暴露明显 secret、token、private key 或完整敏感连接串。
 - 是否错误要求 `.knowledge_base/` 布局。
 - 大仓库是否有 workspace/service 索引或明确不适用。
 - breaking change 是否有兼容性说明。
@@ -252,25 +264,23 @@ Validator 只读检查：
 - stale docs 是否记录 edit_mode 和保留人工内容。
 - XL 场景是否报告 changedFiles 降噪结果。
 
-`validate` 模式默认不改正文档。只有用户明确要求修复，或输入 `repair=true`，才可从 Validator findings 进入 Plan/Apply repair 流程。
-
-## Operation 矩阵
+## 6. Operation 矩阵
 
 | Operation | Route | Plan | Apply | Validate |
 |---|---|---|---|---|
-| `init` | 使用默认 phase，并根据证据跳过无关 domain | 为激活 domain 生成初始 docs 任务 | 创建 `ACTIONDOCK.md`、正式 docs 和 init report | 检查入口、链接、证据与边界 |
-| `refresh` | 根据 changed files 和 docs tree 路由 | 生成 UPSERT/PRUNE 任务 | 分 phase 更新或修剪 docs | 检查变更是否反映到正式 docs |
-| `ingest` | 分类 inbox，再路由到 domain | 将 inbox 材料转成正式文档任务或保留理由 | 吸收材料；成功后才清理已处理 inbox 文件 | 检查每个 inbox item 的处理结果 |
+| `init` | 缺失入口时初始化；按仓库规模决定 lite/standard/structured | 小仓库可直接建入口；非平凡仓库使用 document_set_plan | 创建 `ACTIONDOCK.md`、正式 docs 和 init report | 检查入口、链接、证据与边界 |
+| `refresh` | 根据 changed files 和 docs tree 路由 | XS/S 轻量；M+ 按风险规划 | 分 target 更新 docs | 检查变更是否反映到正式 docs |
+| `ingest` | 分类 inbox，再路由到 domain | 单条材料可轻量；多条或多类型材料需 document_set_plan | 吸收材料；成功后才清理已处理 inbox 文件 | 检查每个 inbox item 的处理结果 |
 | `validate` | 决定验证范围 | 默认不生成写任务 | 默认不写 | 生成 validate report |
 
-## 执行模式
+## 7. 执行模式
 
 ### native_subagent
 
 运行时支持时可以使用：
 
 - Router：每次运行最多一个。
-- Planner：每个 phase 的每个激活 domain 一个。
+- Planner：仅当 flow profile 需要 planning 时，每个 phase 的每个激活 domain 一个。
 - Worker：每个唯一 `target_path` 一个。
 - Validator：大范围验证时可以多个只读 validator。
 
@@ -278,137 +288,42 @@ Validator 只读检查：
 
 ### serial
 
-当 subagent 不可用时，serial 是一等执行模式，不是降级破坏。
+当没有 subagent 或用户禁止 subagent 时，主 agent 按同一边界串行执行。
 
-主 agent 必须按角色边界依次执行：
+serial 要求：
 
-```text
-Router role → Planner role(s) → Worker role per target_path → Validator role
-```
+- 仍按 Router / Planner / Worker / Validator 的职责切分。
+- 记录 `execution_mode=serial` 和 fallback reason。
+- Worker 写入时仍保持 one target_path ownership。
+- 发现 `proposed_extra_tasks` 时可以回到 mini-plan，但必须在 report 记录；如果该任务本应由 Plan A 识别，同时记录 `planner_underplanning`。
 
-serial 模式下，主 agent 可以“以 Worker role”写一个具体 `target_path`，但必须：
+## 8. 报告
 
-- 一次只处理一个 target。
-- 使用同一 Worker contract。
-- 不在 Planner 阶段提前写正文。
-- 在报告中记录 `execution_mode=serial` 和 fallback reason。
-
-## Richness Floor
-
-不要把长期知识库写成短摘要。
-
-每个 substantive docs 应尽量包含：
-
-- 目的与范围
-- 当前行为
-- 关键文件
-- 关键流程或生命周期
-- 接口、契约或 schema
-- 数据与状态
-- 运维说明
-- 证据与边界
-- 维护备注
-
-不是每篇都需要所有章节，但 Worker 必须写出能让后续维护者接手项目的 durable project knowledge。证据不足时，写已确认事实，并在 `证据与边界` 中列出缺口。
-
-navigation/index docs 可以更短，但必须做到：
-
-- 不制造断链。
-- 不把待建立项目伪装成已完成事实。
-- 链接到有证据区的正文档，或明确标记暂无证据 / 不适用。
-- 不承载完整正文；正文应拆到 leaf substantive docs。
-
-## Coverage Floor
-
-七个 documentation domain 都必须被考虑：
-
-1. Architecture
-2. API
-3. Data
-4. Business Flow
-5. Agent / Tool
-6. Infra / Env
-7. Maintenance / Ops
-
-跳过 domain 必须记录原因：
-
-- `no_relevant_evidence`
-- `unchanged_from_current_docs`
-- `outside_requested_scope`
-- `blocked_by_missing_files`
-- `unsafe_path`
-- `insufficient_confidence`
-
-## 证据规则
-
-证据优先级：
-
-1. 当前仓库源码、配置、DDL、迁移、脚本、测试。
-2. 现有正式 docs。
-3. `.kb_inbox/` 人工材料。
-4. 日志、注释和生成文本。
-
-证据冲突时，以当前仓库文件为准，并在文档或报告中说明冲突。
-
-使用 `references/evidence-search.md` 选择技术栈相关证据路径；它只指导读取，不扩大写入范围。
-
-## 敏感信息规则
-
-不要写入：
-
-- 真实 token、API key、password、private key
-- 完整数据库连接串
-- 私有证书内容
-- 可用于直接访问生产系统的敏感凭据
-
-可以写入：
-
-- 环境变量名
-- 配置文件路径
-- 脱敏示例
-- 用途说明
-- 本地开发所需的非敏感步骤
-
-## 路径安全
-
-写入或删除前必须检查：
-
-- 拒绝绝对路径。
-- 拒绝包含 `..` 的路径。
-- 拒绝通配符。
-- `forbiddenSegments` 按路径段匹配。
-- 目标必须在 repoPath 内。
-- 新文件先 resolve 父目录真实路径。
-- symlink 不能逃逸 repoPath。
-- 正式输出只能在 `ACTIONDOCK.md`、报告文件或 `docs/` 下。
-- inbox cleanup 只能处理已成功吸收、且显式列为 cleanup task 的 `.kb_inbox/` 普通文件。
-- 不删除目录。
-
-## 失败策略
-
-Worker command 或文件操作失败时：
-
-1. 记录 command、exit code、stdout 摘要和 stderr。
-2. 将错误文本反馈给同一 Worker，让它重新发现证据或选择安全失败。
-3. 每个任务最多重试 `contract.json` 中的 `worker.maxRetries` 次。
-4. 仍失败时，不覆盖旧文件，不写 partial doc。
-5. 标记任务 `FAILED`。
-6. mutating operation 下写入或追加 `docs/ops/maintenance/errors.md`。
-7. 在 operation report 中记录失败和人工处理建议。
-
-## 报告要求
-
-每次运行结束写对应 report，并在最终响应中简述。报告至少包含：
+完成响应和 report 应包含基础字段：
 
 - operation
 - execution_mode
-- serial_fallback_reason
+- flow_profile
+- scale
 - repo_baseline
-- changed_files
-- activated_domains
-- skipped_domains
-- tasks_completed
-- tasks_failed
 - files_changed
 - validation_status
 - evidence_gaps
+
+按需包含：
+
+- changed_files
+- activated_domains
+- skipped_domains
+- tasks_completed / tasks_failed
+- change_types
+- workspace_scope
+- special_flags
+- noise_filters
+- edit_modes
+- scenario_findings
+- document_set_plan_summary
+- must_leaf_docs / deferred_leaf_docs
+- proposed_extra_tasks
+
+XS/S 不需要为了填表而输出空的全量字段。

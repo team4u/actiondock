@@ -21,7 +21,14 @@
           ]
         }
       ],
-      "index_policy": "docs/api/http.md links to leaf docs only."
+      "index_policy": "docs/api/http.md links to leaf docs only.",
+      "coverage_basis": [
+        "src/routes/orders.ts",
+        "src/dto/order.dto.ts"
+      ],
+      "coverage_assertion": "Plan A covers all leaf docs visible in the current router scope and existing docs tree for this category.",
+      "scope_boundary": "Scope is limited to the scenario evidence in this fixture.",
+      "excluded_candidates": []
     }
   ],
   "tasks": [

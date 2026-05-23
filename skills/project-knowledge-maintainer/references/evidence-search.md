@@ -1,6 +1,6 @@
 # Evidence Search：证据发现策略
 
-该文件帮助 Planner 在不同技术栈中快速找到足够证据。它不是允许写入范围；写入范围仍由 `contract.json` 和 `domain-map.md` 决定。
+该文件帮助 Router / Planner / Worker 在不同技术栈中快速找到足够证据。它不是允许写入范围；写入范围仍由 `contract.json` 和 `domain-map.md` 决定。XS/S 只查完成目标所需的最小证据；M/L/XL 按 domain 和 phase 扩展证据搜索。
 
 ## 通用探测顺序
 

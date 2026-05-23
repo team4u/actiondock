@@ -1,128 +1,166 @@
-# Scenario Matrix：真实项目变更场景矩阵
+# Scenario Matrix：真实项目场景策略
 
-该文件用于让 Router 在进入 domain 路由前，先判断真实项目变更的规模、类型和特殊风险。它不替代 `domain-map.md`；它决定“用什么策略处理”，`domain-map.md` 决定“写到哪里”。
+本文件帮助 Router 判断 scale、flow profile、change types、workspace scope 和专项检查。
 
-## 1. 变更规模分级
+## 1. Scale 与 flow profile
 
-| Scale | 名称 | 典型信号 | 默认策略 |
+| Scale | 典型场景 | flow_profile | 规划深度 |
 |---|---|---|---|
-| `XS` | 极小更新 | 1-3 个文件；单字段、单 env、单错误码、单命令 | 单 target 最小编辑 |
-| `S` | 小更新 | 单接口、单配置、单脚本、单表字段、单 runbook | 单 domain 或少量 target 最小编辑 |
-| `M` | 中等更新 | 新功能同时影响 API/Data/Flow；2-4 个 domain | 多 domain refresh，合并同 target 任务 |
-| `L` | 大更新 | 模块重构、数据库大迁移、API v2、鉴权体系变化 | 分 phase：底层事实 → 业务/接口 → 架构/入口 |
-| `XL` | 超大更新 / 大仓库 | monorepo、多服务、上百/上千 changed files、大规模 rename | 先分区、降噪、分批维护；禁止无边界全仓库重写 |
+| `XS` | 单个 env、命令、链接、注释级事实、小配置名 | `lite` | 不强制 Planner / document_set_plan |
+| `S` | 少量相关文件、一个已知 leaf doc 可覆盖 | `lite` | 可用轻量 task list |
+| `M` | 新 endpoint、新表、小型功能、多 domain 但范围明确 | `standard` | task plan；有拆分风险时 document_set_plan |
+| `L` | breaking change、迁移、大功能、多模块重构 | `structured` | 强制 document_set_plan + phase |
+| `XL` | monorepo、多服务、大量 changedFiles、噪音重 | `partitioned` | workspace scope + noise filter + 分区 document_set_plan |
 
-Scale 是执行策略提示，不是质量等级。小变更也必须有证据，大变更也必须尽量最小编辑。
+## 2. 小更新策略：XS/S
 
-## 2. 变更类型
+目标：让 Codex 等 coding agent 直接完成低风险维护，不被重流程拖慢。
 
-Router 应从 changedFiles、Git diff 摘要、用户请求和仓库结构中识别以下 `change_type`。一个运行可以有多个类型。
+适用信号：
 
-| change_type | 典型证据 | 常见 domain |
+- 变更集中在 1-3 个文件。
+- 只影响一个已有 leaf doc。
+- 没有新业务实体、API resource、表、runbook、service 或 package。
+- 没有 breaking、rename、stale、monorepo 扩散风险。
+
+流程：
+
+1. Route-lite。
+2. 直接更新目标 leaf doc 或入口链接。
+3. Validate-lite。
+4. Report 写清楚 scope 是轻量验证。
+
+不得做：
+
+- 为了流程完整性而列出七个 skipped domain。
+- 为了小改动强制生成 document_set_plan。
+- 把正文写入 index。
+
+## 3. 中等更新策略：M
+
+适用信号：
+
+- 新增 API endpoint/resource。
+- 新增或修改数据库表 / migration。
+- 新增业务流程。
+- 新配置域影响运行行为。
+- 一个 feature 横跨 2-3 个 domain。
+
+流程：
+
+1. Route。
+2. 判断是否需要 document_set_plan。
+3. Task Plan。
+4. Apply。
+5. Validate。
+
+M 必须启用 document_set_plan 的情况：
+
+- 新 leaf doc 预计出现。
+- 目标 index 可能承载正文。
+- 多个实体需要拆分。
+- ingest 内容需要分流。
+
+## 4. 大更新策略：L
+
+适用信号：
+
+- breaking change。
+- API v2 / schema migration。
+- 业务状态流重构。
+- 多模块重构。
+- 旧文档 materially stale。
+
+流程：
+
+1. Route。
+2. 分 phase。
+3. Document Set Plan。
+4. Task Plan。
+5. Phased Apply。
+6. Full Validate。
+
+phase 原则：
+
+- 先 Data / Infra / workspace boundary。
+- 再 API / Business Flow / Agent Tool。
+- 最后 Architecture / ACTIONDOCK / navigation。
+
+API-only 大更新可以跳过无关 Data/Infra phase，但 Architecture/ACTIONDOCK 仍最后汇总。
+
+## 5. 超大仓库策略：XL
+
+适用信号：
+
+- monorepo。
+- 大量 changedFiles。
+- 多 service / package。
+- generated 或 lockfile 噪音重。
+- 一个共享包可能影响多个 downstream。
+
+流程：
+
+1. 识别 workspace / service / package scope。
+2. 降噪。
+3. 只刷新受影响 partition。
+4. 每个 partition 做 document_set_plan。
+5. 最后更新 workspace index 和 ACTIONDOCK。
+
+规则：
+
+- 不把局部 service 事实写成全仓库事实。
+- 共享包变化要判断 downstream；证据不足时写 evidence gap。
+- `ACTIONDOCK.md` 只链接入口，不展开所有 service 细节。
+
+## 6. change types
+
+| change_type | 触发信号 | 常见 domain |
 |---|---|---|
-| `api_change` | route/controller/DTO/OpenAPI/GraphQL/protobuf 变化 | API、Business Flow |
-| `schema_change` | migration、DDL、ORM entity、schema.prisma、model 变化 | Data、Business Flow |
-| `business_rule_change` | service/usecase/state machine/job/listener 流程变化 | Business Flow、Architecture |
-| `infra_change` | Docker、compose、k8s、helm、CI、env、config 变化 | Infra/Env、Ops |
-| `dependency_change` | package manifest、lockfile、go.mod、Gemfile 等 | Infra/Env、Dev/Test |
-| `test_workflow_change` | test config、scripts、fixtures、CI test job 变化 | Infra/Env、Agent/Tool |
-| `ops_runbook_change` | runbook、incident、diagnosis、manual operation | Maintenance/Ops |
-| `rename_move` | Git rename/move、路径整体迁移、模块名替换 | Architecture、相关 domain |
-| `delete_deprecate` | 文件/接口/字段/模块删除或 deprecated 标记 | 相关 domain、Compatibility |
-| `generated_or_format_only` | 只改 generated/build/format 输出，无语义变化 | 通常跳过 |
-| `breaking_change` | 删除/重命名契约、鉴权改变、状态枚举/事件 payload 变化 | API、Data、Business Flow、Ops |
-| `stale_doc_refresh` | 现有 docs 与当前代码大面积冲突 | 相关 domain、ACTIONDOCK |
-| `monorepo_workspace_change` | apps/packages/services/libs/infra 分区变化 | Architecture、受影响 service/package |
+| `api` | router/controller/schema/protobuf/GraphQL 变化 | API, Business Flow |
+| `schema` | migration/DDL/ORM/entity/SQL 变化 | Data, Business Flow, API |
+| `business_rule` | service/use-case/state machine/job/listener 变化 | Business Flow, API, Data |
+| `infra` | Docker/K8s/CI/env/config/deploy 变化 | Infra/Env, Maintenance/Ops |
+| `dependency` | package manager、lockfile、runtime dependency 变化 | Infra/Env, Agent/Tool |
+| `test_workflow` | test scripts、CI test matrix、fixtures 变化 | Agent/Tool, Infra/Env |
+| `ops_runbook` | runbook、logs、monitoring、manual ops 变化 | Maintenance/Ops |
+| `rename_move` | path rename、module move、package rename | affected domain + Architecture |
+| `delete_deprecate` | feature/file/API/table deletion | affected domain + compatibility |
+| `breaking_change` | contract 破坏、字段删除、权限语义改变 | API, Data, Business Flow |
+| `stale_docs` | docs 与代码大面积冲突 | affected domain |
+| `monorepo_workspace` | workspace/service/package 边界变化 | Architecture, affected domain |
+| `config` | env/config default/validation 变化 | Infra/Env |
+| `agent_tool` | script/CLI/tooling 变化 | Agent/Tool |
 
-## 3. changedFiles 降噪规则
+## 7. 降噪规则
 
-Router 在路由前先做降噪。Planner 仍可读取被降噪文件作为辅助证据，但不要让噪音决定正式任务。
+大量 changedFiles 时先分类：
 
-`noise_filters[].classification` 使用以下枚举：
+| classification | 示例 | 默认处理 |
+|---|---|---|
+| `generated_or_format_only` | generated client、formatter-only diff | 不触发业务文档，除非有语义证据 |
+| `build_output` | dist/build/target | 跳过 |
+| `dependency_output` | vendor/node_modules | 跳过 |
+| `format_only` | whitespace/prettier only | 跳过或低优先级 |
+| `lockfile_only_auxiliary` | 仅 lockfile 且 manifest 无变化 | 记录，不单独触发正文 |
+| `outside_scope` | 用户范围外 | 跳过并说明 |
+| `test_snapshot_noise` | 大量 snapshot | 只在测试契约变化时处理 |
+| `vendor_or_third_party` | third_party/vendor | 跳过 |
+| `semantic_auxiliary` | 支持性文件，有语义但非主证据 | 作为辅助证据 |
 
-- `generated_or_format_only`：生成代码或纯格式化输出。
-- `build_output`：构建产物，例如 `dist/`、`build/`、`target/`。
-- `dependency_output`：依赖目录或供应商代码，例如 `node_modules/`、`vendor/`。
-- `format_only`：仅 whitespace、import sort、lint fix。
-- `lockfile_only_auxiliary`：lockfile 只能作为依赖辅助证据。
-- `outside_scope`：不属于本次 workspace / user scope 的变更。
-- `test_snapshot_noise`：snapshot 或金丝雀输出变更，缺少语义证据。
-- `vendor_or_third_party`：第三方复制代码或 vendor 目录。
-- `semantic_auxiliary`：可读作辅助证据，但不足以单独触发正式文档任务。
+## 8. rename / move
 
-默认降权或跳过：
+检测到 rename/move 时：
 
-- generated 文件：`generated/`、`__generated__/`、OpenAPI generated client、Prisma generated client。
-- build 输出：`dist/`、`build/`、`target/`、`.next/`、`coverage/`。
-- dependency 目录：`node_modules/`、`vendor/`。
-- 纯格式化变更：只有 whitespace、import sort、lint fix，且无语义证据。
-- lockfile-only 变更：只有 lockfile 时，通常更新依赖说明；不要推导业务变化。
-
-强证据文件即使很少也要保留：
-
-- manifest：`package.json`、`pyproject.toml`、`go.mod`、`Gemfile`、`pom.xml`、`Cargo.toml`。
-- schema/migration：`migrations/`、`schema.prisma`、DDL、ORM entity。
-- API 契约：router/controller/DTO/OpenAPI/protobuf/GraphQL schema。
-- 部署与环境：Docker、compose、k8s、helm、CI、`.env.example`。
-
-
-## 3A. 文档颗粒度策略
-
-场景分类之后，Planner 必须应用 `references/document-granularity.md`：
-
-- `index.md` 只能做导航和状态总览。
-- 主业务流程、API 资源组、事件族、数据表、跨表事务、配置域、runbook、诊断路径、service/package 必须拆成 leaf docs。
-- 如果本次变更是 XS/S，但触及一个新的具体实体，也应创建 leaf doc，而不是追加到 index。
-- 如果本次变更是 M/L/XL，且涉及多个具体实体，必须按实体拆分多个 leaf docs，避免形成新的大杂烩。
-- Validator 应把 index 正文堆积识别为 `index_content_sink`。
-
-## 4. 大仓库 / monorepo 策略
-
-当仓库包含 `apps/`、`packages/`、`services/`、`libs/`、`infra/`、`terraform/`、`charts/`，或 changedFiles 跨多个独立服务时，Router 必须输出 `workspace_scope`。
-
-处理顺序：
-
-1. 识别 workspace / service / package 边界。
-2. 判断 changedFiles 属于哪个分区。
-3. 只刷新受影响分区和共享依赖的知识文档。
-4. `ACTIONDOCK.md` 只做总入口，不堆积每个服务细节。
-5. 对每个 service/package 优先使用局部文档，例如：
-   - `docs/services/<service>.md`
-   - `docs/packages/<package>.md`
-   - `docs/code/workspaces.md`
-
-禁止：
-
-- 因为是大仓库就重写全部 docs。
-- 在没有证据的情况下为所有 service 生成空文档。
-- 把一个 service 的事实推广到所有 service。
-
-## 5. L / XL 分阶段策略
-
-大更新应按 phase 执行；若变更只涉及 API 契约，可跳过无关的 Data/Infra phase，但 Architecture / ACTIONDOCK 仍必须最后汇总：
-
-1. **Phase 0：范围与底层事实**  
-   若涉及 Data / Infra / workspace boundary，先确认；API-only 变更可跳过。
-2. **Phase 1：业务与契约**  
-   API / Business Flow / Events / Tool 文档更新。
-3. **Phase 2：架构与入口**  
-   Architecture / ACTIONDOCK / report 最后汇总。
-4. **Phase 3：专项验证**  
-   检查 breaking、rename 重复文档、stale docs、service coverage。
-
-## 6. rename / move 策略
-
-检测到 `rename_move` 时：
-
-- 优先迁移或更新已有相关文档，不要直接创建重复新文档。
+- 优先迁移或更新已有相关文档。
 - 输出 old_path → new_path 映射到 report。
-- 若旧文档只描述已迁移实体，可改名或 UPSERT 后 PRUNE；若是综合页，则更新相关章节。
+- 若旧文档只描述已迁移实体，可改名或 UPSERT 后 PRUNE。
+- 若是综合页，则更新相关章节。
 - 旧文档只有确认无引用、无有效内容、无人工 TODO 后才允许 PRUNE。
-- Validator 必须检查是否出现新旧重复文档。
+- Validator 检查新旧重复文档。
 
-## 7. breaking change 策略
+## 9. breaking change
 
-以下情况必须标记 `breaking_change` 或 `possibly_breaking_change`：
+以下情况标记 `breaking_change` 或 `possibly_breaking_change`：
 
 - API 删除字段、重命名字段、改变必填性、改变返回结构。
 - 鉴权/权限规则改变。
@@ -131,21 +169,16 @@ Router 在路由前先做降噪。Planner 仍可读取被降噪文件作为辅�
 - 事件 topic、payload、routing key、consumer contract 改变。
 - 删除 CLI 参数、环境变量或运维命令。
 
-建议目标文档：
+文档必须说明：
 
-- `docs/api/compatibility.md`
-- `docs/domain/migrations.md`
-- 相关 API/Data/Flow 正文档的兼容性章节
+- 旧行为。
+- 新行为。
+- 影响对象。
+- 迁移边界。
 
-Worker 应记录：
+## 10. stale docs
 
-- 影响对象：clients、workers、consumers、operators、migrations。
-- 迁移说明：旧行为、新行为、注意事项。
-- 证据路径与不确定边界。
-
-## 8. stale docs 策略
-
-默认仍是最小编辑。但如果旧文档与当前代码大面积冲突，允许 `full_rewrite_with_preservation`。
+默认最小编辑。只有 materially stale 时允许 `full_rewrite_with_preservation`。
 
 判断信号：
 
@@ -153,35 +186,8 @@ Worker 应记录：
 - 文档描述的主要模块、路由、表或命令已经不存在。
 - 文档结构阻碍维护，局部修补会制造更多矛盾。
 
-整体重写时必须保留：
+整体重写必须保留：
 
 - 人工 TODO、备注、历史背景、未解决问题。
 - 仍有效的外部链接和运维注意事项。
 - 旧文档中与当前代码不冲突的事实。
-
-Report 必须写明：
-
-- `edit_mode: full_rewrite_with_preservation`
-- 为什么不是最小编辑。
-- 保留了哪些人工内容，移除了哪些 stale 内容。
-
-## 9. 删除 / deprecated 策略
-
-对于 `delete_deprecate`：
-
-- 删除代码不等于立刻删除文档。
-- 如果功能仍在线上、仍有兼容窗口或仍有历史操作价值，应改为 deprecated 说明。
-- 如果正式文档只描述已删除且无保留价值的实体，可 PRUNE。
-- PRUNE 前必须检查 ACTIONDOCK 和 docs 内部链接。
-
-## 10. Validator 专项检查
-
-Validator 除基础检查外，还要检查：
-
-- 大仓库是否有 workspace/service 索引或清楚标记不适用。
-- index/入口页是否只做导航，没有承载 leaf doc 应承载的正文。
-- breaking change 是否有兼容性说明。
-- rename 后是否产生重复文档。
-- stale 文档是否被修复、标记或合理保留。
-- `ACTIONDOCK.md` 是否只作为入口，没有堆积 service 细节。
-- XL 场景是否报告降噪规则、workspace_scope 和 skipped noise。

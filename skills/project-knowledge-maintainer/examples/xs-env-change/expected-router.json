@@ -23,5 +23,7 @@
       "reason": "no_relevant_evidence"
     }
   ],
-  "reasoning_summary": "env template and config changed."
+  "reasoning_summary": "env template and config changed.",
+  "flow_profile": "lite",
+  "document_set_plan_required": false
 }

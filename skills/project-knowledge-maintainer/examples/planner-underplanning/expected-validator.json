@@ -1,0 +1,17 @@
+{
+  "status": "FAIL",
+  "findings": [
+    {
+      "severity": "error",
+      "path": "planner-output.json",
+      "issue": "planner_underplanning: Plan A lists only docs/api/http/orders.md while evidence includes payments and webhooks resources.",
+      "suggested_repair": "Re-run Planner and enumerate all in-scope api_http_resources as must/should/candidate/defer before creating tasks."
+    },
+    {
+      "severity": "error",
+      "path": "planner-output.json",
+      "issue": "delegated_discovery_to_worker: Planner says remaining API docs should be discovered by Worker.",
+      "suggested_repair": "Remove delegated discovery language; Worker may only report unexpected overflow via NEEDS_REPLAN."
+    }
+  ]
+}

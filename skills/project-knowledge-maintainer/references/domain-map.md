@@ -2,6 +2,8 @@
 
 这些 domain 是逻辑路由领域，正式输出仍在 `docs/` 下。表中的 wildcard 只是目标模式；Planner 必须输出具体 Markdown 路径，例如 `docs/data/tables/users.md`，不能输出 `docs/data/tables/*.md`。
 
+v4.4 起，七个 domain 必须被隐式考虑，但 XS/S 不需要机械输出所有 skipped domain。
+
 | 领域 | Planner | 证据范围 | 正式目标 |
 |---|---|---|---|
 | 01 架构总览 | `Architecture_Planner` | 根 manifest、模块布局、build 文件、框架配置、现有架构文档 | `docs/code/architecture.md`, `docs/code/modules.md`, `docs/code/index.md` |
@@ -20,34 +22,30 @@
 - Maintenance/Ops 只在证据支持可执行步骤、查询、决策标准或排障路径时写入 runbook/diagnosis。
 - Agent/Tool 文档应帮助自动化 agent 或维护者理解可用命令、搜索策略和工具边界。
 
+## 自适应输出规则
 
-## 与 evidence-search.md 的关系
+- XS/S：只输出实际激活的 domain 和必要 evidence gap。
+- M：输出激活 domain；对被证据阻塞或用户点名但未处理的 domain 输出 skipped reason。
+- L/XL：输出激活 domain、phase、workspace scope、material skipped domain 和 noise filters。
 
-`domain-map.md` 决定“该写到哪里”；`evidence-search.md` 决定“先去哪里找证据”。Planner 可以用 `evidence-search.md` 提高召回率，但不能因此扩大写入范围或绕过路径安全。
+## 与 document-set-planning 的关系
 
+`domain-map.md` 决定“该写到哪里”；`document-set-planning.md` 决定“是否需要先规划这个分类下的 leaf docs”。
 
+必须读取 `references/document-set-planning.md` 的情况：
 
-## 子文档清单规划
-
-Planner 在使用本 domain map 选择 target 前，必须读取 `references/document-set-planning.md`。`domain-map.md` 只说明“允许写到哪里”；`document-set-planning.md` 规定“这个分类下应该有哪些子文档”。
-
-规则：
-
-- 对 Business Flow，先规划 `business_flows` 和必要的 `state_machines` leaf docs。
-- 对 API，先规划 `api_http_resources`、`api_event_families` 或 `integrations` leaf docs。
-- 对 Data，先规划 `data_tables` 和 `data_transactions` leaf docs。
-- 对 Infra/Env，先规划 `config_domains` 和外部依赖 leaf docs。
-- 对 Maintenance/Ops，先规划 `runbooks` 和 `diagnosis_paths` leaf docs。
-- 对 monorepo，先规划 `services` 和 `packages` leaf docs。
-- 只有完成 document_set_plan 后，才能把 must leaf docs 转成具体 `UPSERT` tasks。
+- scale 为 L/XL。
+- M 且新增或重大更新 leaf doc。
+- 目标是入口页但证据需要正文事实。
+- Validator 已发现拆分不足。
 
 ## 索引页与正文档
 
-读取 `references/document-granularity.md` 后再决定 target_path。硬规则：
+读取 `references/document-granularity.md` 后再决定 target_path。核心规则：
 
-- `index.md`、入口型 `http.md`、入口型 `events.md`、`workspaces.md` 只能做 navigation/index doc，不承载完整正文。
-- 表、接口资源组、业务流程、状态机、配置域、runbook、诊断路径、service、package 都是 leaf substantive doc，必须有独立文件并包含 `证据与边界`。
-- 如果某领域目前只有 index 文件存在，Planner 必须创建 leaf doc，再更新 index 链接它；不得把完整正文追加进 index。
+- `index.md`、入口型 `http.md` / `events.md`、`workspaces.md` 只能做 navigation/index doc。
+- 表、接口资源组、业务流程、状态机、配置域、runbook、诊断路径、service、package 是 leaf substantive doc。
+- 如果某领域目前只有 index 文件存在，但本次需要写正文事实，Planner 创建 leaf doc，再更新 index 链接它。
 - 初始化时若某领域暂无证据，不要创建空正文档；在 `ACTIONDOCK.md` 的“待建立 / 暂无证据”中标记即可。
 
 ## 大仓库 / workspace 目标路径
@@ -64,24 +62,6 @@ Planner 在使用本 domain map 选择 target 前，必须读取 `references/doc
 
 规则：
 
-- `ACTIONDOCK.md` 只链接这些入口，不展开每个 service 的全部细节。
+- `ACTIONDOCK.md` 只链接这些入口，不展开每个 service 细节。
 - service/package 文档是 substantive doc，必须包含证据与边界。
 - 不要为没有证据的 service/package 创建空文档；可在 workspace 索引中标记“暂无证据”。
-
-## 推荐 leaf 路径示例
-
-| 实体类型 | 推荐路径 |
-|---|---|
-| 业务流程 | `docs/domain/flows/<flow-name>.md` |
-| 状态机 | `docs/domain/state-machines/<machine-name>.md` |
-| HTTP 资源组 | `docs/api/http/<resource>.md` |
-| 事件族 | `docs/api/events/<event-family>.md` |
-| 核心数据表 | `docs/data/tables/<table>.md` |
-| 跨表事务 | `docs/data/transactions/<transaction>.md` |
-| 配置域 | `docs/ops/config/<config-domain>.md` |
-| 诊断路径 | `docs/diagnosis/<symptom-or-failure>.md` |
-| 维护 runbook | `docs/ops/maintenance/<operation>.md` |
-| 服务 | `docs/services/<service>.md` |
-| package | `docs/packages/<package>.md` |
-
-Index 或入口页只负责链接这些 leaf docs。

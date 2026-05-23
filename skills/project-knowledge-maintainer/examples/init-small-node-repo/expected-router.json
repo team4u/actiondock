@@ -50,5 +50,7 @@
       "reason": "no_relevant_evidence"
     }
   ],
-  "reasoning_summary": "初始化缺失知识库，只激活有证据的领域，ACTIONDOCK 待建立项不应产生断链。"
+  "reasoning_summary": "初始化缺失知识库，只激活有证据的领域，ACTIONDOCK 待建立项不应产生断链。",
+  "flow_profile": "lite",
+  "document_set_plan_required": false
 }

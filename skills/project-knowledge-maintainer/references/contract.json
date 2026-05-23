@@ -1,7 +1,8 @@
 {
-  "version": "4.3.0",
+  "version": "4.4.1",
+  "release": "adaptive-flow-plan-a",
   "name": "project-knowledge-maintainer",
-  "description": "Project knowledge base maintainer skill with scenario routing, safe path handling, document granularity, and Planner-led document set planning.",
+  "description": "Adaptive project knowledge base maintainer with hard safety boundaries, scale-triggered planning depth, and lighter execution for coding agents such as Codex.",
   "language": {
     "skillLanguage": "zh-Hans",
     "defaultDocumentLanguage": "zh-Hans",
@@ -18,11 +19,15 @@
       "inboxPaths",
       "repair",
       "scenarioHint",
-      "workspaceScopeHint"
+      "workspaceScopeHint",
+      "forceDocumentSetPlan",
+      "maxPlanningDepth"
     ],
     "defaults": {
       "operation": "auto",
-      "repair": false
+      "repair": false,
+      "forceDocumentSetPlan": false,
+      "maxPlanningDepth": "auto"
     }
   },
   "inputOperations": [
@@ -38,15 +43,8 @@
     "ingest",
     "validate"
   ],
-  "operations": [
-    "auto",
-    "init",
-    "refresh",
-    "ingest",
-    "validate"
-  ],
   "operationResolution": {
-    "rule": "operation=auto 是合法输入值；Router 必须先尊重用户明确意图，再按仓库状态解析为 init、refresh、ingest 或 validate 之一。",
+    "rule": "operation=auto 是合法输入值；Router 先尊重用户明确意图，再按仓库状态解析为 init、refresh、ingest 或 validate 之一。",
     "autoResolution": [
       {
         "when": "用户明确要求只验证、检查知识库状态，或 operation=validate",
@@ -71,19 +69,120 @@
     ],
     "outputRule": "Router output 的 operation 字段应写 resolved operation，不写 auto。"
   },
-  "pipeline": [
-    "route",
-    "plan_document_set",
-    "plan_tasks",
-    "apply",
-    "validate"
-  ],
+  "adaptiveFlow": {
+    "profiles": {
+      "lite": {
+        "scale": [
+          "XS",
+          "S"
+        ],
+        "pipeline": [
+          "route_lite",
+          "apply",
+          "validate_lite"
+        ],
+        "documentSetPlan": "not_required_unless_granularity_risk",
+        "domainOutput": "activated_only",
+        "taskPlan": "optional_minimal_task_list",
+        "validateDepth": "changed_targets_and_entry_links"
+      },
+      "standard": {
+        "scale": [
+          "M"
+        ],
+        "pipeline": [
+          "route",
+          "task_plan",
+          "apply",
+          "validate"
+        ],
+        "documentSetPlan": "required_when_new_leaf_docs_or_index_risk",
+        "domainOutput": "activated_plus_risky_skips",
+        "taskPlan": "required",
+        "validateDepth": "changed_targets_and_related_navigation"
+      },
+      "structured": {
+        "scale": [
+          "L"
+        ],
+        "pipeline": [
+          "route",
+          "document_set_plan",
+          "task_plan",
+          "phased_apply",
+          "validate"
+        ],
+        "documentSetPlan": "required",
+        "domainOutput": "activated_plus_material_skips",
+        "taskPlan": "required",
+        "validateDepth": "full_changed_scope"
+      },
+      "partitioned": {
+        "scale": [
+          "XL"
+        ],
+        "pipeline": [
+          "route",
+          "workspace_scope",
+          "noise_filter",
+          "document_set_plan",
+          "task_plan",
+          "phased_apply",
+          "validate"
+        ],
+        "documentSetPlan": "required_per_workspace_or_partition",
+        "domainOutput": "activated_plus_material_skips",
+        "taskPlan": "required_per_partition",
+        "validateDepth": "partition_and_cross_entry_consistency"
+      },
+      "validate_only": {
+        "scale": [
+          "XS",
+          "S",
+          "M",
+          "L",
+          "XL"
+        ],
+        "pipeline": [
+          "route_lite",
+          "validate"
+        ],
+        "documentSetPlan": "not_applicable_unless_repair",
+        "domainOutput": "validation_scope_only",
+        "taskPlan": "not_applicable_unless_repair",
+        "validateDepth": "requested_scope"
+      }
+    },
+    "documentSetPlanRequiredWhen": [
+      "scale_in_L_or_XL",
+      "forceDocumentSetPlan_true",
+      "scale_M_and_new_leaf_doc_expected",
+      "target_is_navigation_but_evidence_requires_substantive_leaf",
+      "operation_init_for_nontrivial_repo",
+      "operation_ingest_with_multiple_inbox_items_or_runbook_diagnosis_split",
+      "validator_finding_index_content_sink",
+      "validator_finding_category_under_split",
+      "validator_finding_missing_required_leaf_doc",
+      "validator_finding_document_set_plan_missing_when_required",
+      "user_requests_plan_a_or_complete_document_set",
+      "validator_finding_planner_underplanning",
+      "validator_finding_delegated_discovery_to_worker"
+    ],
+    "documentSetPlanOptionalWhen": [
+      "scale_XS_or_S_without_new_entity",
+      "single_existing_leaf_doc_update",
+      "navigation_only_link_or_status_update",
+      "validate_without_repair"
+    ],
+    "miniPlanAllowed": true,
+    "miniPlanRule": "Worker proposed_extra_tasks is an overflow/replan mechanism only. If the missing leaf doc was discoverable during Plan A, Validator must report planner_underplanning; Planner must not delegate normal document discovery to Worker."
+  },
   "references": [
     "references/contract.json",
     "references/playbook.md",
+    "references/scenario-matrix.md",
     "references/domain-map.md",
     "references/evidence-search.md",
-    "references/scenario-matrix.md",
     "references/document-granularity.md",
     "references/document-set-planning.md",
     "references/prompts.md",
@@ -126,50 +225,25 @@
     "Infra_Env_Planner",
     "Maintenance_Ops_Planner"
   ],
-  "phaseDefaultsByOperation": {
-    "init": [
-      {
-        "phase_num": 0,
-        "domains_to_activate": [
-          "Data_Model_Planner",
-          "Infra_Env_Planner"
-        ],
-        "reason": "先稳定数据模型和运行环境。"
-      },
-      {
-        "phase_num": 1,
-        "domains_to_activate": [
-          "API_Spec_Planner",
-          "Business_Flow_Planner",
-          "Agent_Tool_Planner"
-        ],
-        "reason": "再整理接口、业务流程和工具上下文。"
-      },
-      {
-        "phase_num": 2,
-        "domains_to_activate": [
-          "Architecture_Planner",
-          "Maintenance_Ops_Planner"
-        ],
-        "reason": "最后汇总架构视图和维护运维知识。"
-      }
-    ],
-    "refresh": "router_routed_from_changed_files",
-    "ingest": "router_classify_inbox_then_route",
-    "validate": "read_only_validation"
-  },
   "router": {
-    "outputFields": [
+    "outputFieldsBase": [
       "operation",
       "scale",
+      "flow_profile",
+      "changed_files_basis",
+      "activated_domains",
+      "reasoning_summary"
+    ],
+    "outputFieldsWhenRelevant": [
       "phases",
       "inbox_classification",
-      "skipped",
+      "skipped_domains",
       "change_types",
       "workspace_scope",
       "special_flags",
       "noise_filters",
-      "reasoning_summary"
+      "document_set_plan_required",
+      "document_set_plan_reason"
     ],
     "phaseFields": [
       "phase_num",
@@ -177,22 +251,22 @@
       "reason",
       "selection_mode"
     ],
+    "rules": [
+      "Router 只做范围、领域、阶段、规模和 inbox 分类；不写文件、不产出正文。",
+      "XS/S 使用 route-lite：输出必要字段即可，不机械列出七个 domain 的 skipped reason。",
+      "M/L/XL 输出 activated domains；只有 material skip、风险 skip 或用户范围冲突需要显式 skipped_domains。",
+      "domains_to_activate 只能包含 documentationDomains 中的 Planner 名称。",
+      "operation=auto 时，不因 .kb_inbox/ 存在自动 ingest；只有用户明确要求处理 inbox 时才 ingest。",
+      "大量 changedFiles 时必须先降噪，记录 generated、format-only、lockfile-only、build 输出等 skipped noise。",
+      "monorepo 或多服务仓库必须输出 workspace_scope；不知道时输出空数组并说明证据不足。",
+      "Router 决定 document_set_plan_required；XS/S 默认 false，L/XL 默认 true，M 按 granularity 风险判断。"
+    ],
     "inboxClassificationValues": [
       "ops_or_diagnosis",
       "change_intent",
       "unrelated",
       "unsafe",
       "preserve_for_human"
-    ],
-    "rules": [
-      "Router 只做范围、领域、阶段和 inbox 分类；不写文件、不产出 Worker 正文任务。",
-      "domains_to_activate 只能包含 documentationDomains 中的 Planner 名称。",
-      "Triage 是 Router 的分类职责，不是单独 documentation domain。",
-      "operation=auto 时，不因 .kb_inbox/ 存在自动 ingest；只有用户明确要求处理 inbox 时才 ingest。",
-      "Router 必须读取 scenario-matrix.md 并先做 scale/change_type 分类。",
-      "大量 changedFiles 时必须先降噪，记录 generated、format-only、lockfile-only、build 输出等 skipped noise。",
-      "monorepo 或多服务仓库必须输出 workspace_scope；不知道时输出空数组并说明证据不足。",
-      "noise_filters[].classification 必须使用 noiseFilterClassificationValues 中的枚举值。"
     ],
     "workspaceScopeFields": [
       "scope_id",
@@ -238,32 +312,60 @@
       "medium",
       "low"
     ],
-    "skippedFields": [
-      "item",
-      "reason"
-    ],
+    "outputShapes": {
+      "lite": {
+        "required": [
+          "tasks",
+          "skipped"
+        ],
+        "optional": [
+          "document_set_plan"
+        ]
+      },
+      "standard": {
+        "required": [
+          "tasks",
+          "skipped"
+        ],
+        "optional": [
+          "document_set_plan"
+        ]
+      },
+      "structured": {
+        "required": [
+          "document_set_plan",
+          "tasks",
+          "skipped"
+        ]
+      },
+      "partitioned": {
+        "required": [
+          "document_set_plan",
+          "tasks",
+          "skipped"
+        ]
+      }
+    },
     "rules": [
-      "Planner 必须先输出 document_set_plan，再输出 tasks；document_set_plan 是每个激活分类的子文档清单规划。",
-      "每个激活 domain 至少规划一个相关 category；即使没有写入任务，也必须用 keep/defer/skipped 说明子文档状态。",
-      "document_set_plan 必须区分 create、update、keep、defer、deprecate、prune_candidate；defer 必须给出 defer_reason。",
-      "priority=must 且 status=create/update/deprecate 的 leaf doc 必须转成具体 UPSERT 任务；Worker 不负责决定少写哪些子文档。",
-      "由子文档规划产生的任务必须带 from_document_set_plan 和 document_set_item_path。",
-      "Worker 不得创建 document_set_plan 之外的 leaf doc；如果发现需要额外子文档，应要求 Planner 增补而不是自行扩张。",
+      "显然少列 leaf docs 应被 Validator 报告为 planner_underplanning。",
+      "Planner 不得把“剩余文档发现 / 子文档补充 / 实体拆分”交给 Worker；proposed_extra_tasks 只是异常溢出机制。",
+      "Plan A 每个 category 必须包含 coverage_basis、coverage_assertion、scope_boundary、excluded_candidates。",
+      "Plan A 必须覆盖 existing、must、should、candidate；证据不足但有结构信号时使用 defer/candidate，不得省略。",
+      "当 document_set_plan_required=true 时，Planner 必须先输出 Plan A：当前 scope 下完整预期 leaf-doc 集合，再输出 tasks。",
       "Planner 只读证据并产出 target_path 级任务；不写文件。",
+      "XS/S 可直接产出最小 task list；除非 Router 标记 document_set_plan_required，否则不强制 document_set_plan。",
+      "M 若涉及新 leaf doc、index 风险或多实体拆分，必须先产出 document_set_plan。",
+      "L/XL 必须先产出 document_set_plan，再产出 tasks。",
       "一个任务对应一个最终 target_path。",
       "优先更新已有 leaf substantive doc；不要把 index/navigation doc 当作正文承载页。",
-      "如果只有 index.md 存在，且变更涉及具体流程、接口、表、配置、runbook、诊断、service 或 package，Planner 必须创建独立 leaf doc，并另建 index 链接任务。",
+      "如果只有 index.md 存在且需要写正文事实，Planner 应创建 leaf doc 任务，并可另建 index navigation 任务。",
       "无证据支持时返回 tasks: [] 和 skipped，不发明 NOOP。",
       "PRUNE target_path 必须是正式输出路径，或 operation=ingest 且位于 .kb_inbox/ 的已成功吸收材料。",
-      "Planner 必须把 Router 的 scale/change_types 传递到相关任务或 skipped 中。",
-      "L/XL 任务应遵守 scenario-matrix 的 phase 原则：若涉及 Data/Infra/workspace boundary，必须先处理底层事实；若仅涉及 API 契约，可先处理 API，但 Architecture/ACTIONDOCK 必须最后汇总。",
-      "rename_move 任务必须优先指向已有相关文档，并在 rename_map 中记录 old_path 与 new_path。",
-      "breaking_change 任务必须包含 compatibility_required 或 breaking_impact。",
-      "generated_or_format_only 只能在存在独立语义证据时触发正式文档任务。",
-      "target_path 以 /index.md 结尾时，只能生成 navigation update 任务，不得承载完整正文。"
+      "target_path 以 /index.md 结尾或为入口型 http.md/events.md/workspaces.md 时，只能生成 navigation update 任务。"
     ],
     "taskOptionalFields": [
       "scale",
+      "flow_profile",
       "change_types",
       "workspace_scope",
       "edit_mode",
@@ -276,12 +378,60 @@
       "granularity_reason",
       "index_update_for",
       "from_document_set_plan",
-      "document_set_item_path"
+      "document_set_item_path",
+      "proposed_followup"
+    ]
+  },
+  "documentSetPlan": {
+    "requiredFields": [
+      "category",
+      "index_path",
+      "leaf_docs",
+      "coverage_basis",
+      "coverage_assertion",
+      "scope_boundary",
+      "excluded_candidates"
     ],
-    "outputRequiredFields": [
-      "document_set_plan",
-      "tasks",
-      "skipped"
+    "leafDocFields": [
+      "path",
+      "title",
+      "status",
+      "priority",
+      "reason",
+      "evidence_paths"
+    ],
+    "optionalLeafDocFields": [
+      "defer_reason",
+      "index_path",
+      "owner_domain",
+      "workspace_scope"
+    ],
+    "statuses": [
+      "create",
+      "update",
+      "keep",
+      "defer",
+      "deprecate",
+      "prune_candidate"
+    ],
+    "priorities": [
+      "must",
+      "should",
+      "candidate"
+    ],
+    "rule": "document_set_plan 是分类下 leaf docs 的全集规划，不是单篇文档标题大纲；只有 required_when 触发时才是硬要求，但一旦触发即必须完整。",
+    "categoryCompletenessFields": [
+      "coverage_basis",
+      "coverage_assertion",
+      "scope_boundary",
+      "excluded_candidates"
+    ],
+    "completenessRule": "When document_set_plan_required=true, Planner must enumerate the expected leaf-doc set for the current scope before producing tasks. It must prefer defer/candidate items over omission and must not delegate discovery to Worker.",
+    "leafDocCoverageClasses": [
+      "existing",
+      "must",
+      "should",
+      "candidate"
     ]
   },
   "worker": {
@@ -292,7 +442,8 @@
     ],
     "statusValues": [
       "COMPLETED",
-      "FAILED"
+      "FAILED",
+      "NEEDS_REPLAN"
     ],
     "outputRequiredFields": [
       "status",
@@ -304,23 +455,22 @@
       "edit_mode",
       "scenario_notes"
     ],
+    "outputOptionalFields": [
+      "proposed_extra_tasks",
+      "blocked_by"
+    ],
     "rules": [
-      "每个 Worker 只拥有一个 target_path。",
-      "Worker 是唯一可写或删除该 target_path 的角色。",
-      "serial 模式下，主 agent 可以临时进入 Worker role 写一个 target_path，但必须保持同一 JSON 输出和边界。",
+      "每个 Worker 只拥有一个 target_path；同一 target_path 不允许多个 Worker 并发写。",
+      "Worker 可以读取相关证据、相关已有文档和前序 phase 输出，但只能写自己的 target_path。",
+      "serial 模式下，主 agent 可以临时进入 Worker role 写一个 target_path，但必须保持边界。",
       "默认做最小必要编辑；保留人工段落、备注、TODO、链接和上下文。",
-      "除非证据表明整篇 stale，否则不要整体重写。",
+      "除非证据表明整篇 stale、结构阻碍维护或用户要求重写，否则不要整体重写。",
       "UPSERT 时必须先读现有 target，再写入；证据不足时安全失败，不写 partial content。",
-      "若 edit_mode=full_rewrite_with_preservation，必须保留人工 TODO、备注、历史背景和有效链接，并在 scenario_notes 说明原因。",
-      "breaking_change 相关文档必须说明旧行为、新行为、影响对象和迁移边界。",
-      "rename_move 场景不得无证据创建重复文档；优先迁移或更新已有目标文档。",
-      "XL 场景只写当前 workspace_scope 相关事实，不把局部事实推广为全仓库事实。",
-      "Worker 不得把 substantive long-form content 写入 index.md；index.md 只允许链接、短说明和状态标记。",
-      "如果 Worker 收到 index.md 任务，但证据需要正文内容，必须安全失败或在 warnings 中要求新增 leaf doc 任务，不得把正文塞进 index。",
+      "Worker 不得把 substantive long-form content 写入 index/navigation doc。",
+      "在 document_set_plan 生效时，Worker 不得自行创建规划外 leaf doc；发现需要额外子文档时输出 proposed_extra_tasks 并返回 NEEDS_REPLAN 或 warning。",
       "Leaf substantive doc 必须包含证据与边界；index/navigation doc 不写长篇证据区。",
-      "Worker 必须严格执行 Planner 下发的 target_path；不得自行减少 must-level leaf docs。",
-      "Worker 不得自行创建 document_set_plan 之外的 leaf doc；发现需要新子文档时，在 warnings 中要求 Planner 增补任务。",
-      "Worker 输出 warnings 时应指出 document_set_item_path 或 from_document_set_plan，便于 Validator 追踪。"
+      "proposed_extra_tasks 只能用于异常溢出；不得把 Planner 本应完成的 Plan A 全集规划转移给 Worker。",
+      "若发现 Planner 明显漏规 leaf docs，Worker 应返回 NEEDS_REPLAN，并指出 missing document_set_item_path 或 proposed target。"
     ]
   },
   "validator": {
@@ -347,44 +497,31 @@
     "rules": [
       "Validator 只读；不写、不删、不格式化正文档。",
       "validate 模式只有在用户明确 repair=true 或明确要求修复时才可进入 Apply。",
+      "XS/S 默认 validate-lite：检查 changed targets、入口链接、secret 暴露和明显路径问题。",
+      "M/L/XL 或 repair=true 使用完整验证。",
       "只对 substantive docs 强制要求 证据与边界；navigation/index docs 按导航完整性检查。",
-      "ACTIONDOCK.md 的已建立链接必须存在；待建立/暂无证据项不应使用 Markdown 链接。",
-      "读取 validator.md 的基础检查和场景专项检查。",
-      "monorepo/XL 场景检查 workspace/service 索引和 ACTIONDOCK 是否只做入口。",
-      "breaking_change 场景检查兼容性说明和迁移边界。",
-      "rename_move 场景检查新旧重复文档和 old_path → new_path 记录。",
-      "materially_stale_docs 场景检查 edit_mode 与保留人工内容说明。",
       "检查 index_content_sink：index/navigation doc 不得承载多个具体流程、实体、接口、配置、runbook 或诊断正文。",
-      "如果 index.md 已成为事实主来源，应报告 warning 或 error，并建议拆分为 leaf docs。",
-      "检查 document_set_plan 是否存在；每个激活 domain 应先有子文档清单规划。",
+      "只有 document_set_plan_required=true 时，缺失 document_set_plan 才报告 error；否则最多报告 info 或不报告。",
       "检查 priority=must 的 leaf docs 是否创建、更新或明确 defer，并有 reason/defer_reason。",
-      "检查 index 是否链接本轮创建或更新的 must leaf docs。",
-      "检查 unplanned_leaf_doc：Worker 不应创建 document_set_plan 之外的 leaf doc。",
-      "检查 category_under_split：多个独立流程、API、配置、诊断或 service 被挤在一个 leaf/index 文档里。"
-    ],
-    "scenarioChecks": [
-      "workspace_or_service_index_for_monorepo",
-      "compatibility_note_for_breaking_change",
-      "duplicate_doc_detection_after_rename",
-      "stale_doc_edit_mode_recorded",
-      "actiondock_entry_only_not_detail_dump",
-      "noise_filter_reported_for_xl",
-      "index_content_sink_detection",
-      "leaf_doc_required_for_concrete_entities",
-      "index_only_navigation_check",
-      "missing_required_leaf_doc",
-      "index_without_leaf_docs",
-      "category_under_split",
-      "document_set_plan_missing",
-      "unplanned_leaf_doc"
+      "检查 Worker proposed_extra_tasks 是否被处理、defer 或记录为 evidence gap。",
+      "当 document_set_plan_required=true 时，检查 Plan A 是否少列 current scope 内可识别的 leaf docs；明显少列报告 planner_underplanning。",
+      "检查 Planner 是否把文档发现职责交给 Worker；若是报告 delegated_discovery_to_worker。",
+      "检查 document_set_plan category 是否包含 coverage_basis、coverage_assertion、scope_boundary、excluded_candidates。"
     ],
     "findingTypes": [
       "index_content_sink",
       "missing_required_leaf_doc",
       "index_without_leaf_docs",
       "category_under_split",
-      "document_set_plan_missing",
-      "unplanned_leaf_doc"
+      "document_set_plan_missing_when_required",
+      "unplanned_leaf_doc",
+      "proposed_extra_task_unresolved",
+      "secret_exposure",
+      "unsafe_path",
+      "broken_link",
+      "planner_underplanning",
+      "delegated_discovery_to_worker",
+      "document_set_plan_incomplete_metadata"
     ]
   },
   "executionModes": {
@@ -392,7 +529,7 @@
       "useWhenAvailable": true,
       "spawnStrategy": {
         "router": "at_most_one_per_run",
-        "planner": "one_per_active_domain_per_phase",
+        "planner": "one_per_active_domain_per_phase_when_flow_requires_planning",
         "worker": "one_per_unique_target_path",
         "validator": "one_or_more_read_only_for_large_validation"
       }
@@ -418,20 +555,23 @@
     ],
     "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_mode_emulating_worker_for_exactly_one_target_path"
   },
-  "reportRequiredFields": [
+  "reportRequiredFieldsBase": [
     "operation",
     "execution_mode",
-    "serial_fallback_reason",
+    "flow_profile",
     "repo_baseline",
+    "files_changed",
+    "validation_status",
+    "evidence_gaps",
+    "scale"
+  ],
+  "reportFieldsWhenRelevant": [
+    "serial_fallback_reason",
     "changed_files",
     "activated_domains",
     "skipped_domains",
     "tasks_completed",
     "tasks_failed",
-    "files_changed",
-    "validation_status",
-    "evidence_gaps",
-    "scale",
     "change_types",
     "workspace_scope",
     "special_flags",
@@ -440,7 +580,10 @@
     "scenario_findings",
     "document_set_plan_summary",
     "must_leaf_docs",
-    "deferred_leaf_docs"
+    "deferred_leaf_docs",
+    "proposed_extra_tasks",
+    "plan_a_coverage_summary",
+    "planner_underplanning_findings"
   ],
   "richnessFloor": {
     "requiredForSubstantiveDocs": [
@@ -466,18 +609,26 @@
       "维护备注"
     ],
     "navigationDocsExemptFromEvidenceSection": true,
-    "rule": "不要用短摘要替代长期可维护文档。证据不足时写已确认事实，并明确列出缺口。"
+    "rule": "不要用短摘要替代长期可维护文档。XS/S 可做局部最小编辑；新 substantive doc 仍需包含证据与边界。"
   },
   "coverageFloor": {
-    "domainsMustBeConsidered": true,
-    "skipRequiresRecordedReason": true,
+    "domainsMustBeConsideredImplicitly": true,
+    "explicitSkipRequiredWhen": [
+      "M_or_larger_material_domain",
+      "user_requested_domain",
+      "risk_or_conflict",
+      "blocked_by_missing_files",
+      "unsafe_path"
+    ],
+    "xs_s_do_not_require_all_skips": true,
     "allowedSkipReasons": [
       "no_relevant_evidence",
       "unchanged_from_current_docs",
       "outside_requested_scope",
       "blocked_by_missing_files",
       "unsafe_path",
-      "insufficient_confidence"
+      "insufficient_confidence",
+      "deferred_by_scale_lite"
     ]
   },
   "pathSafety": {
@@ -520,302 +671,50 @@
       "XL"
     ],
     "changeTypes": [
-      "api_change",
-      "schema_change",
-      "business_rule_change",
-      "infra_change",
-      "dependency_change",
-      "test_workflow_change",
-      "ops_runbook_change",
+      "api",
+      "schema",
+      "business_rule",
+      "infra",
+      "dependency",
+      "test_workflow",
+      "ops_runbook",
       "rename_move",
       "delete_deprecate",
       "generated_or_format_only",
       "breaking_change",
-      "stale_doc_refresh",
-      "monorepo_workspace_change"
+      "possibly_breaking_change",
+      "stale_docs",
+      "monorepo_workspace",
+      "config",
+      "agent_tool"
     ],
     "specialFlags": [
-      "monorepo",
-      "large_changed_files",
-      "rename_move",
-      "breaking_or_possibly_breaking",
-      "materially_stale_docs",
-      "delete_or_deprecate",
+      "rename",
+      "breaking",
+      "possibly_breaking",
+      "stale",
       "noise_heavy",
       "lockfile_only",
-      "generated_only"
-    ],
-    "editModes": [
-      "minimal_edit",
-      "section_rewrite",
-      "full_rewrite_with_preservation",
-      "prune_after_validation"
-    ],
-    "rules": [
-      "Router 必须在 domain 路由前识别 scale、change_types、workspace_scope 和 special_flags。",
-      "XS/S 默认 minimal_edit；M 允许多 domain 合并；L/XL 必须分 phase；API-only 大更新可以跳过无关 Data/Infra phase，但 Architecture/ACTIONDOCK 仍最后汇总。",
-      "XL 场景必须先识别 workspace/service/package，并报告降噪结果。",
-      "rename_move 场景优先迁移已有文档，避免重复创建新旧文档。",
-      "breaking_change 或 possibly breaking 场景必须生成兼容性或迁移边界任务。",
-      "materially_stale_docs 场景允许 full_rewrite_with_preservation，但必须保留人工内容并写入 report。"
-    ],
-    "noiseFilterClassificationValues": [
-      "generated_or_format_only",
-      "build_output",
-      "dependency_output",
-      "format_only",
-      "lockfile_only_auxiliary",
-      "outside_scope",
-      "test_snapshot_noise",
-      "vendor_or_third_party",
-      "semantic_auxiliary"
+      "monorepo",
+      "index_granularity_risk",
+      "needs_leaf_doc"
     ]
   },
-  "phaseDefaultsByScale": {
-    "XS": [
-      {
-        "phase_num": 0,
-        "domains_to_activate": [],
-        "reason": "极小变更只激活必要 domain；Router 必须填入最小相关 domains。",
-        "selection_mode": "router_selected_minimal"
-      }
+  "secretSafety": {
+    "forbiddenContent": [
+      "real_token",
+      "password",
+      "private_key",
+      "full_connection_string",
+      "session_cookie",
+      "api_key_value"
     ],
-    "S": [
-      {
-        "phase_num": 0,
-        "domains_to_activate": [],
-        "reason": "小变更默认最小编辑；Router 必须填入最小相关 domains。",
-        "selection_mode": "router_selected_minimal"
-      }
-    ],
-    "M": [
-      {
-        "phase_num": 0,
-        "domains_to_activate": [
-          "Data_Model_Planner",
-          "Infra_Env_Planner"
-        ],
-        "reason": "先确认底层事实。"
-      },
-      {
-        "phase_num": 1,
-        "domains_to_activate": [
-          "API_Spec_Planner",
-          "Business_Flow_Planner",
-          "Agent_Tool_Planner"
-        ],
-        "reason": "再更新契约、流程和工具。"
-      }
-    ],
-    "L": [
-      {
-        "phase_num": 0,
-        "domains_to_activate": [
-          "Data_Model_Planner",
-          "Infra_Env_Planner"
-        ],
-        "reason": "若变更涉及 Data / Infra / workspace boundary，先确认底层事实；API-only 大更新可跳过此 phase。"
-      },
-      {
-        "phase_num": 1,
-        "domains_to_activate": [
-          "API_Spec_Planner",
-          "Business_Flow_Planner",
-          "Agent_Tool_Planner",
-          "Maintenance_Ops_Planner"
-        ],
-        "reason": "再更新业务、接口、工具和运维。"
-      },
-      {
-        "phase_num": 2,
-        "domains_to_activate": [
-          "Architecture_Planner"
-        ],
-        "reason": "最后汇总架构入口。"
-      }
-    ],
-    "XL": [
-      {
-        "phase_num": 0,
-        "domains_to_activate": [
-          "Architecture_Planner",
-          "Data_Model_Planner",
-          "Infra_Env_Planner"
-        ],
-        "reason": "先分区、降噪、确认 workspace；若涉及 Data / Infra，再确认底层事实。"
-      },
-      {
-        "phase_num": 1,
-        "domains_to_activate": [
-          "API_Spec_Planner",
-          "Business_Flow_Planner",
-          "Agent_Tool_Planner",
-          "Maintenance_Ops_Planner"
-        ],
-        "reason": "只更新受影响 workspace/service 的契约、流程和运维。"
-      },
-      {
-        "phase_num": 2,
-        "domains_to_activate": [
-          "Architecture_Planner"
-        ],
-        "reason": "最后刷新索引和 ACTIONDOCK。"
-      }
-    ]
-  },
-  "release": "4.3.0",
-  "documentGranularity": {
-    "principle": "Index is navigation-only; leaf docs carry durable project knowledge.",
-    "navigationOnlyPaths": [
-      "ACTIONDOCK.md",
-      "docs/code/index.md",
-      "docs/code/workspaces.md",
-      "docs/api/http.md",
-      "docs/api/events.md",
-      "docs/data/index.md",
-      "docs/domain/flows/index.md",
-      "docs/ops/config/index.md",
-      "docs/diagnosis/index.md"
-    ],
-    "leafDocRequiredFor": [
-      "named_business_flow",
-      "state_machine",
-      "api_resource_group",
-      "api_version",
-      "event_family",
-      "database_table",
-      "cross_table_transaction",
-      "config_domain",
-      "external_integration",
-      "runbook",
-      "diagnosis_path",
-      "service",
-      "package",
-      "breaking_change_migration_path"
-    ],
-    "indexAllowedContent": [
-      "one_line_scope",
-      "links_to_leaf_docs",
-      "status_markers",
-      "short_maintenance_notes",
-      "待建立/暂无证据/不适用"
-    ],
-    "indexForbiddenContent": [
-      "full_flow_steps",
-      "full_api_schema",
-      "database_field_catalog",
-      "runbook_procedure",
-      "diagnosis_steps",
-      "detailed_state_machine",
-      "multi_entity_long_form_content",
-      "long_evidence_section"
-    ],
-    "plannerRule": "If only index.md exists and the change touches a concrete entity, create a leaf doc task and a separate index navigation update; do not append substantive content to index.md.",
-    "validatorFindingType": "index_content_sink"
-  },
-  "documentSetPlanning": {
-    "principle": "Planner plans the document set before producing write tasks.",
-    "plannerOutputRequiredFields": [
-      "document_set_plan",
-      "tasks",
-      "skipped"
-    ],
-    "planItemRequiredFields": [
-      "category",
-      "domain",
-      "index_path",
-      "planning_basis",
-      "leaf_docs",
-      "index_policy"
-    ],
-    "leafDocRequiredFields": [
-      "path",
-      "title",
-      "status",
-      "priority",
-      "reason",
-      "evidence_paths"
-    ],
-    "leafDocOptionalFields": [
-      "defer_reason",
-      "existing_path",
-      "replacement_path",
-      "related_index_path",
-      "workspace_scope",
-      "change_types"
-    ],
-    "leafDocStatusValues": [
-      "create",
-      "update",
-      "keep",
-      "defer",
-      "deprecate",
-      "prune_candidate"
-    ],
-    "leafDocPriorityValues": [
-      "must",
-      "should",
-      "candidate"
-    ],
-    "taskLinkFields": [
-      "from_document_set_plan",
-      "document_set_item_path"
-    ],
-    "categories": {
-      "business_flows": {
-        "index_path": "docs/domain/flows/index.md",
-        "leaf_pattern": "docs/domain/flows/<flow-name>.md"
-      },
-      "state_machines": {
-        "index_path": "docs/domain/flows/index.md",
-        "leaf_pattern": "docs/domain/state-machines/<machine-name>.md"
-      },
-      "api_http_resources": {
-        "index_path": "docs/api/http.md",
-        "leaf_pattern": "docs/api/http/<resource>.md"
-      },
-      "api_event_families": {
-        "index_path": "docs/api/events.md",
-        "leaf_pattern": "docs/api/events/<event-family>.md"
-      },
-      "data_tables": {
-        "index_path": "docs/data/index.md",
-        "leaf_pattern": "docs/data/tables/<table>.md"
-      },
-      "data_transactions": {
-        "index_path": "docs/data/index.md",
-        "leaf_pattern": "docs/data/transactions/<transaction>.md"
-      },
-      "config_domains": {
-        "index_path": "docs/ops/config/index.md",
-        "leaf_pattern": "docs/ops/config/<config-domain>.md"
-      },
-      "runbooks": {
-        "index_path": "docs/ops/maintenance/index.md",
-        "leaf_pattern": "docs/ops/maintenance/<operation>.md"
-      },
-      "diagnosis_paths": {
-        "index_path": "docs/diagnosis/index.md",
-        "leaf_pattern": "docs/diagnosis/<symptom-or-failure>.md"
-      },
-      "services": {
-        "index_path": "docs/code/workspaces.md",
-        "leaf_pattern": "docs/services/<service>.md"
-      },
-      "packages": {
-        "index_path": "docs/code/workspaces.md",
-        "leaf_pattern": "docs/packages/<package>.md"
-      },
-      "integrations": {
-        "index_path": "docs/integrations/index.md",
-        "leaf_pattern": "docs/integrations/<provider>.md"
-      }
-    },
-    "rules": [
-      "Planner MUST produce document_set_plan before tasks.",
-      "For each activated category, Planner MUST identify expected leaf docs.",
-      "Worker MUST execute assigned leaf-doc tasks and MUST NOT reduce the document set.",
-      "Validator MUST verify all must-level leaf docs are created, updated, or explicitly deferred with reason."
+    "allowedContent": [
+      "variable_name",
+      "redacted_example",
+      "source_path",
+      "purpose",
+      "rotation_or_lookup_instruction_without_secret_value"
     ]
   }
 }

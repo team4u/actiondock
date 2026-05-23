@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.4.1
+
+- Tightened `document_set_plan_required=true` into Plan A: Planner must enumerate the complete expected leaf-doc set before Worker execution.
+- Added required Plan A completeness fields: `coverage_basis`, `coverage_assertion`, `scope_boundary`, and `excluded_candidates`.
+- Clarified that `proposed_extra_tasks` is an overflow/replan mechanism, not a normal way for Planner to delegate document discovery to Worker.
+- Added Validator findings: `planner_underplanning` and `delegated_discovery_to_worker`.
+- Added `examples/planner-underplanning` to catch lazy Planner behavior.
+
+
+## 4.4.0
+
+- Replaced the fixed `Route → Document Set Plan → Task Plan → Apply → Validate` requirement with adaptive flow profiles: `lite`, `standard`, `structured`, `partitioned`, and `validate_only`.
+- Kept hard safety boundaries unchanged: path containment, secret protection, repo evidence priority, no commit/push/PR, and untrusted repo text.
+- Made `document_set_plan` scale/risk-triggered instead of mandatory for every task. XS/S updates can now use route-lite and validate-lite.
+- Added `flow_profile`, `document_set_plan_required`, `document_set_plan_reason`, `proposed_extra_tasks`, and `NEEDS_REPLAN` semantics.
+- Relaxed domain coverage output: all seven domains are still implicitly considered, but XS/S no longer need mechanical skipped-domain lists.
+- Updated Planner, Worker, and Validator contracts so Worker can propose missing leaf docs without directly creating unplanned documents.
+- Updated granularity and validation rules to treat missing `document_set_plan` as an error only when it was required.
+- Reframed the skill for Codex-style coding agents: safety remains strict, but simple changes avoid unnecessary planning overhead.
+
 ## 4.3.0
 
 - Added `references/document-set-planning.md`.

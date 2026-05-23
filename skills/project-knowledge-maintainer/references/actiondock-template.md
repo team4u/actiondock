@@ -31,8 +31,9 @@
 
 ## 最近一次维护
 
-- Mode:
+- Operation mode:
 - Execution mode:
+- Flow profile:
 - Serial fallback reason:
 - Git baseline:
 - Changed files:

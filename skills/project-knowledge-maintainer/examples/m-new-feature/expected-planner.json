@@ -19,7 +19,13 @@
           ]
         }
       ],
-      "index_policy": "docs/data/index.md links to leaf docs only."
+      "index_policy": "docs/data/index.md links to leaf docs only.",
+      "coverage_basis": [
+        "db/migrations/20260523_add_coupon_tables.sql"
+      ],
+      "coverage_assertion": "Plan A covers all leaf docs visible in the current router scope and existing docs tree for this category.",
+      "scope_boundary": "Scope is limited to the scenario evidence in this fixture.",
+      "excluded_candidates": []
     },
     {
       "category": "business_flows",
@@ -42,7 +48,14 @@
           ]
         }
       ],
-      "index_policy": "docs/domain/flows/index.md links to leaf docs only."
+      "index_policy": "docs/domain/flows/index.md links to leaf docs only.",
+      "coverage_basis": [
+        "src/coupons/coupon.service.ts",
+        "src/orders/checkout.service.ts"
+      ],
+      "coverage_assertion": "Plan A covers all leaf docs visible in the current router scope and existing docs tree for this category.",
+      "scope_boundary": "Scope is limited to the scenario evidence in this fixture.",
+      "excluded_candidates": []
     }
   ],
   "tasks": [
