@@ -1,17 +1,29 @@
 {
   "status": "FAIL",
+  "completion_allowed": false,
+  "delegate_result_check": {
+    "ok": true
+  },
+  "plan_a_check": {
+    "ok": false,
+    "reason": "Plan A is incomplete and delegates discovery to Workers."
+  },
   "findings": [
     {
-      "severity": "error",
-      "path": "planner-output.json",
-      "issue": "planner_underplanning: Plan A lists only docs/api/http/orders.md while evidence includes payments and webhooks resources.",
-      "suggested_repair": "Re-run Planner and enumerate all in-scope api_http_resources as must/should/candidate/defer before creating tasks."
+      "id": "planner_underplanning",
+      "severity": "hard",
+      "message": "Planner omitted obvious required API/data/infra leaf docs.",
+      "affected_paths": [
+        "docs/index.md"
+      ],
+      "repair_required": true
     },
     {
-      "severity": "error",
-      "path": "planner-output.json",
-      "issue": "delegated_discovery_to_worker: Planner says remaining API docs should be discovered by Worker.",
-      "suggested_repair": "Remove delegated discovery language; Worker may only report unexpected overflow via NEEDS_REPLAN."
+      "id": "delegated_discovery_to_worker",
+      "severity": "hard",
+      "message": "Planner assigned document discovery to Workers instead of producing Plan A.",
+      "affected_paths": [],
+      "repair_required": true
     }
   ]
 }

@@ -1,1 +1,0 @@
-A structured refresh uses team_agent mode and dispatches Worker delegates for docs/api/http/orders.md and docs/api/http/payments.md. The orders Worker returns slowly. The Leader does not wait and writes docs/api/http/orders.md itself, then reports both targets completed and validation PASS.

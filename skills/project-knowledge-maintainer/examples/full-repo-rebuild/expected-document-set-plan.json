@@ -1,0 +1,83 @@
+{
+  "coverage_basis": [
+    "services/*",
+    "migrations/*",
+    "infra/*",
+    "docs/*",
+    "tests/*"
+  ],
+  "coverage_assertion": "Plan A covers architecture, API, data, flows, infra, and operations. Agent/tool domain is candidate pending evidence.",
+  "scope_boundary": "Current repo knowledge base only; external product docs excluded unless cited in repo.",
+  "documents": [
+    {
+      "target_path": "docs/index.md",
+      "category": "existing",
+      "domain": "other",
+      "reason": "Top-level navigation surface.",
+      "evidence_basis": [
+        "docs/index.md"
+      ],
+      "expected_content": [
+        "links to domain indexes",
+        "short maintenance note"
+      ],
+      "dependencies": [],
+      "phase": 1,
+      "owner_stage": "worker"
+    },
+    {
+      "target_path": "docs/architecture/services.md",
+      "category": "must",
+      "domain": "architecture",
+      "reason": "Services are visible in repo layout and need durable architecture map.",
+      "evidence_basis": [
+        "services/*"
+      ],
+      "expected_content": [
+        "service responsibilities",
+        "dependencies",
+        "runtime boundaries"
+      ],
+      "dependencies": [],
+      "phase": 1,
+      "owner_stage": "worker"
+    },
+    {
+      "target_path": "docs/api/index.md",
+      "category": "must",
+      "domain": "api",
+      "reason": "API section needs navigation index.",
+      "evidence_basis": [
+        "services/*/routes*"
+      ],
+      "expected_content": [
+        "links to API leaf docs"
+      ],
+      "dependencies": [],
+      "phase": 1,
+      "owner_stage": "worker"
+    },
+    {
+      "target_path": "docs/data/index.md",
+      "category": "must",
+      "domain": "data",
+      "reason": "Migrations indicate database documentation is required.",
+      "evidence_basis": [
+        "migrations/*"
+      ],
+      "expected_content": [
+        "links to table docs",
+        "schema ownership notes"
+      ],
+      "dependencies": [],
+      "phase": 1,
+      "owner_stage": "worker"
+    }
+  ],
+  "excluded_candidates": [
+    {
+      "target_path": "docs/agent-tools/index.md",
+      "reason": "No agent/tool code found in initial evidence."
+    }
+  ]
+}

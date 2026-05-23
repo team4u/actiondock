@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ValidationReport",
+  "type": "object",
+  "required": [
+    "status",
+    "findings",
+    "delegate_result_check",
+    "plan_a_check",
+    "completion_allowed"
+  ],
+  "properties": {
+    "status": {
+      "enum": [
+        "PASS",
+        "PASS_WITH_NOTES",
+        "FAIL",
+        "BLOCKED"
+      ]
+    },
+    "completion_allowed": {
+      "type": "boolean"
+    },
+    "delegate_result_check": {
+      "type": "object"
+    },
+    "plan_a_check": {
+      "type": "object"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "message",
+          "affected_paths",
+          "repair_required"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "hard",
+              "major",
+              "minor",
+              "note"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "affected_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "repair_required": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

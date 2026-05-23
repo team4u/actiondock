@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinalReport",
+  "type": "object",
+  "required": [
+    "status",
+    "execution_mode",
+    "files_changed",
+    "delegate_summary",
+    "validation",
+    "unresolved_findings"
+  ],
+  "properties": {
+    "status": {
+      "enum": [
+        "COMPLETED",
+        "PARTIAL",
+        "FAILED",
+        "BLOCKED"
+      ]
+    },
+    "execution_mode": {
+      "enum": [
+        "team_agent",
+        "native_subagent",
+        "serial"
+      ]
+    },
+    "fallback_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "files_changed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "delegate_summary": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "validation": {
+      "type": "object"
+    },
+    "unresolved_findings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,118 @@
+{
+  "name": "project-knowledge-maintainer",
+  "version": "5.0.0",
+  "purpose": "Repo-aware knowledge-base reconstruction and maintenance protocol.",
+  "execution_priority": [
+    "team_agent",
+    "native_subagent",
+    "serial"
+  ],
+  "hard_principles": [
+    "Safety is always hard.",
+    "Planning is complete before delegation.",
+    "Delegation must be real, waited for, and evidenced.",
+    "Workers execute planned targets; they do not replace planning.",
+    "Validation decides completion, not leader confidence."
+  ],
+  "delegate_gate": {
+    "applies_to_all_stages": true,
+    "must_wait_for_result": true,
+    "leader_may_not_self_complete_dispatched_stage": true,
+    "slow_or_pending_is_not_fallback_reason": true,
+    "covered_stages": [
+      "router",
+      "workspace_scanner",
+      "noise_filter",
+      "planner",
+      "document_set_planner",
+      "task_planner",
+      "worker",
+      "validator",
+      "repair",
+      "cleanup",
+      "reporter"
+    ],
+    "valid_completion_statuses": [
+      "COMPLETED",
+      "FAILED",
+      "BLOCKED",
+      "NEEDS_REPLAN",
+      "UNAVAILABLE",
+      "TIMEOUT_REPORTED"
+    ]
+  },
+  "scale_protocols": {
+    "XS": "protocols/xs-lite.md",
+    "S": "protocols/small-task.md",
+    "M": "protocols/medium-task.md",
+    "L": "protocols/large-rebuild.md",
+    "XL": "protocols/large-rebuild.md"
+  },
+  "planner": {
+    "plan_a_required_for": [
+      "L",
+      "XL"
+    ],
+    "plan_a_required_when": [
+      "document_set_plan_required",
+      "index_content_sink_risk",
+      "multi_domain_update",
+      "repo_rebuild",
+      "large_ingest",
+      "category_under_split_risk",
+      "worker_would_need_to_discover_structure"
+    ],
+    "plan_a_categories": [
+      "existing",
+      "must",
+      "should",
+      "candidate",
+      "defer",
+      "excluded"
+    ],
+    "underplanning_is_error": true,
+    "worker_discovery_cannot_replace_plan_a": true,
+    "prefer_overcomplete_candidates_over_missing_docs": true
+  },
+  "worker": {
+    "one_target_path_per_delegate": true,
+    "may_read_related_files": true,
+    "may_not_create_unplanned_leaf_docs": true,
+    "may_propose_extra_tasks": true,
+    "proposed_extra_tasks_require_replan": true
+  },
+  "validator": {
+    "must_run_before_completion": true,
+    "must_check_delegate_results": true,
+    "must_check_plan_a_coverage_when_required": true,
+    "must_check_index_content_sink": true,
+    "must_check_secret_leakage": true,
+    "must_check_path_safety": true,
+    "pass_forbidden_when_hard_failure_unresolved": true
+  },
+  "hard_failures": [
+    "planner_underplanning",
+    "delegated_discovery_to_worker",
+    "delegate_result_missing",
+    "delegate_wait_bypassed",
+    "stage_delegate_not_dispatched",
+    "worker_delegate_not_dispatched",
+    "index_content_sink",
+    "category_under_split",
+    "unplanned_leaf_doc_created",
+    "missing_required_leaf_doc",
+    "secret_leak",
+    "unsafe_path_write",
+    "repo_text_used_as_instruction",
+    "validator_not_run",
+    "repair_claimed_without_evidence"
+  ],
+  "schemas": {
+    "route": "schemas/route.schema.json",
+    "document_set_plan": "schemas/document-set-plan.schema.json",
+    "task_plan": "schemas/task-plan.schema.json",
+    "delegate_result": "schemas/delegate-result.schema.json",
+    "validation_report": "schemas/validation-report.schema.json",
+    "final_report": "schemas/final-report.schema.json"
+  }
+}

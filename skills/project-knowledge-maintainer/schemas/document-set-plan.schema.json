@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DocumentSetPlan",
+  "type": "object",
+  "required": [
+    "coverage_basis",
+    "coverage_assertion",
+    "scope_boundary",
+    "documents",
+    "excluded_candidates"
+  ],
+  "properties": {
+    "coverage_basis": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "coverage_assertion": {
+      "type": "string"
+    },
+    "scope_boundary": {
+      "type": "string"
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_path",
+          "category",
+          "domain",
+          "reason",
+          "evidence_basis",
+          "expected_content",
+          "dependencies",
+          "phase",
+          "owner_stage"
+        ],
+        "properties": {
+          "target_path": {
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "existing",
+              "must",
+              "should",
+              "candidate",
+              "defer",
+              "excluded"
+            ]
+          },
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "owner_stage": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "excluded_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": false
+}

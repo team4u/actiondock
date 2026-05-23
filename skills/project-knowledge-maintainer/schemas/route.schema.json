@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Route",
+  "type": "object",
+  "required": [
+    "scale",
+    "protocol",
+    "execution_mode",
+    "document_set_plan_required",
+    "delegated_stages",
+    "safety_risks"
+  ],
+  "properties": {
+    "scale": {
+      "enum": [
+        "XS",
+        "S",
+        "M",
+        "L",
+        "XL"
+      ]
+    },
+    "protocol": {
+      "enum": [
+        "xs-lite",
+        "small-task",
+        "medium-task",
+        "large-rebuild",
+        "repair-loop"
+      ]
+    },
+    "execution_mode": {
+      "enum": [
+        "team_agent",
+        "native_subagent",
+        "serial"
+      ]
+    },
+    "fallback_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "document_set_plan_required": {
+      "type": "boolean"
+    },
+    "delegated_stages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "safety_risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

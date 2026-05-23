@@ -1,3 +1,3 @@
-# Scenario
+Planner output only lists `docs/index.md` and says workers should discover all other required docs for API, data, and infra.
 
-`document_set_plan_required=true` for API docs. Evidence includes orders, payments, and webhooks controllers, but Planner only lists orders and says Worker can discover the rest.
+Expected: validation failure.
