@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.2.0
+
+- 将执行策略从“`native_subagent`/`serial` 二选一”改为契约化的 `subagent_required`、`subagent_preferred`、`serial_only`，默认值为 `subagent_required`。
+- 在 `contract.json` 中新增 `executionModes`、`defaultExecutionMode`、`executionPolicy`，并补充真实执行模式、能力信号优先级、required failure message、serial fallback 触发条件。
+- 更新 `SKILL.md` 和 `playbook.md`，明确 subagent 是支持环境下的强制执行模型，不再把它描述为纯优化项。
+- 更新 `prompts.md`，新增 `Role Execution Boundary`，要求 Router / Planner / Worker / Validator 在 `subagent_required` 下必须作为真实子代理隔离执行。
+- 更新 `ACTIONDOCK` 模板与报告字段，新增 `execution_policy`，保留 `execution_mode` 用于记录实际运行方式。
+
 ## 4.1.1
 
 - 将 `contract.json` 的 `version` 改为字符串，并统一 `release` 为 `4.1.1`。

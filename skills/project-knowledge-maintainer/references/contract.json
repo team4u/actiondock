@@ -1,5 +1,5 @@
 {
-  "version": "4.1.1",
+  "version": "4.2.0",
   "name": "project-knowledge-maintainer",
   "description": "初始化、刷新、吸收或验证一个由仓库证据驱动的项目知识库。",
   "language": {
@@ -14,6 +14,7 @@
     ],
     "optional": [
       "operation",
+      "executionMode",
       "changedFiles",
       "inboxPaths",
       "repair",
@@ -22,6 +23,7 @@
     ],
     "defaults": {
       "operation": "auto",
+      "executionMode": "subagent_required",
       "repair": false
     }
   },
@@ -285,7 +287,7 @@
     "rules": [
       "每个 Worker 只拥有一个 target_path。",
       "Worker 是唯一可写或删除该 target_path 的角色。",
-      "serial 模式下，主 agent 可以临时进入 Worker role 写一个 target_path，但必须保持同一 JSON 输出和边界。",
+      "只有在 execution policy 允许 serial 时，主 agent 才可以临时进入 Worker role 写一个 target_path，并且必须保持同一 JSON 输出和边界。",
       "默认做最小必要编辑；保留人工段落、备注、TODO、链接和上下文。",
       "除非证据表明整篇 stale，否则不要整体重写。",
       "UPSERT 时必须先读现有 target，再写入；证据不足时安全失败，不写 partial content。",
@@ -336,27 +338,67 @@
       "noise_filter_reported_for_xl"
     ]
   },
-  "executionModes": {
-    "native_subagent": {
-      "useWhenAvailable": true,
-      "spawnStrategy": {
-        "router": "at_most_one_per_run",
-        "planner": "one_per_active_domain_per_phase",
-        "worker": "one_per_unique_target_path",
-        "validator": "one_or_more_read_only_for_large_validation"
+  "executionModes": [
+    "subagent_required",
+    "subagent_preferred",
+    "serial_only"
+  ],
+  "defaultExecutionMode": "subagent_required",
+  "executionPolicy": {
+    "actualExecutionModes": [
+      "subagent",
+      "serial"
+    ],
+    "capabilitySignals": {
+      "userOrIDEStatesSubagentSupported": "treat_as_supported_unless_actual_subagent_creation_or_call_fails",
+      "mustNotSpeculateSubagentUnsupported": true
+    },
+    "requiredSubagentsWhenAvailable": [
+      "Router_Subagent",
+      "Planner_Subagent",
+      "Domain_Worker_Subagent",
+      "Validator_Subagent"
+    ],
+    "modes": {
+      "subagent_required": {
+        "serialFallbackAllowed": false,
+        "mustUseRealSubagentsWhenSupported": true,
+        "stopOnSubagentUnavailable": true,
+        "requiredFailureMessage": "Subagent execution is required by this skill, but the environment did not expose a usable subagent interface.",
+        "spawnStrategy": {
+          "router": "exactly_one_subagent_per_run",
+          "planner": "one_subagent_per_active_domain_per_phase",
+          "worker": "one_subagent_per_unique_target_path",
+          "validator": "exactly_one_or_more_read_only_subagents_for_large_validation"
+        }
+      },
+      "subagent_preferred": {
+        "serialFallbackAllowed": true,
+        "allowedFallbackReasons": [
+          "runtime_unavailable",
+          "host_policy_blocked",
+          "tooling_unavailable",
+          "actual_subagent_creation_failed"
+        ],
+        "mustRecordFallbackReason": true,
+        "spawnStrategy": {
+          "router": "at_most_one_subagent_per_run",
+          "planner": "one_subagent_per_active_domain_per_phase",
+          "worker": "one_subagent_per_unique_target_path",
+          "validator": "one_or_more_read_only_subagents_for_large_validation"
+        }
+      },
+      "serial_only": {
+        "serialFallbackAllowed": true,
+        "requiresUserOrPolicySelection": true,
+        "mustPreserveRoleBoundaries": true
       }
     },
-    "serial": {
-      "allowed": true,
-      "fallbackReasons": [
-        "runtime_unavailable",
-        "host_policy_blocked",
-        "user_forbidden",
-        "tooling_unavailable"
-      ],
-      "mustPreserveRoleBoundaries": true,
-      "mustRecordFallbackReason": true
-    },
+    "serialExecutionAllowedOnlyWhen": [
+      "execution_policy_is_serial_only",
+      "execution_policy_is_subagent_preferred_and_actual_subagent_creation_failed",
+      "user_explicitly_allows_serial_fallback"
+    ],
     "leaderMayWrite": [
       "ACTIONDOCK.md",
       "KNOWLEDGE_INIT_REPORT.md",
@@ -365,10 +407,11 @@
       "KNOWLEDGE_VALIDATE_REPORT.md",
       "docs/ops/maintenance/errors.md"
     ],
-    "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_mode_emulating_worker_for_exactly_one_target_path"
+    "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_execution_is_allowed_by_policy_and_leader_is_emulating_worker_for_exactly_one_target_path"
   },
   "reportRequiredFields": [
     "operation",
+    "execution_policy",
     "execution_mode",
     "serial_fallback_reason",
     "repo_baseline",

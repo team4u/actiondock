@@ -32,6 +32,7 @@
 ## 最近一次维护
 
 - Mode:
+- Execution policy:
 - Execution mode:
 - Serial fallback reason:
 - Git baseline:

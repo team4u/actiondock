@@ -2,6 +2,27 @@
 
 实际执行时，角色必须返回 contract 要求的 JSON。下面的 Markdown 示例仅用于说明；实际 JSON 不要包在 Markdown code fence 中。
 
+## Role Execution Boundary
+
+当 subagent capability 可用时，每个角色必须作为真实子代理运行，而不是同一个主 agent 响应里的“角色扮演段落”。
+
+当 `execution policy=subagent_required` 时，主 agent 不得把 Router、Planner、Worker、Validator 合并成一个隐藏推理过程。
+
+要求的子代理边界：
+
+- `Router_Subagent`
+- `Planner_Subagent`
+- `Domain_Worker_Subagent(s)`
+- `Validator_Subagent`
+
+主 agent 只允许：
+
+- 在子代理之间传递输入；
+- 执行路径安全与写入边界检查；
+- 汇总结果并生成最终报告。
+
+如果用户声明 IDE 支持 subagent，这个声明必须被视为环境能力信号，除非真实的子代理创建或调用失败。
+
 ## Router Prompt Contract
 
 ### Role
@@ -22,6 +43,7 @@
 - 只做路由、场景分类和 inbox 分类，不写文件。
 - 不阅读大量实现细节；实现证据由 Planner 读取。
 - 不创建 Worker 正文任务。
+- 当 `execution policy=subagent_required` 时，Router 必须作为独立 `Router_Subagent` 执行。
 - `domains_to_activate` 只能使用七个 documentation domain 的 Planner 名称。
 - ingest 分类是 Router 职责，不要输出 `Triage_Planner` 作为 domain。
 - 数据模型和 infra 依赖通常放在较早 phase。
@@ -81,6 +103,7 @@
 - 只读取足够证据来规划安全任务。
 - 不写、不删、不格式化文件。
 - 不起草最终 Markdown 正文。
+- 当 `execution policy=subagent_required` 时，每个激活 domain 的 Planner 必须作为独立 `Planner_Subagent` 执行。
 - 优先更新已有相关文档，避免碎片化重复文档。
 - 一个任务对应一个最终 `target_path`。
 - 已删除代码实体：若 doc 只描述该实体，发 `PRUNE`；若 doc 是综合页，发 `UPSERT` 并在 clue 中要求移除 stale section。
@@ -148,6 +171,7 @@
 - 一次只处理一个 `target_path`。
 - 除被分配的 `target_path` 外，不碰其他文件；错误日志或 inbox cleanup 必须作为显式任务出现。
 - `PRUNE` 只删除普通文件，不删除目录。
+- 当 `execution policy=subagent_required` 时，每个 `target_path` 必须由独立 `Domain_Worker_Subagent` 拥有。
 - `UPSERT` 时先读现有 target，再读 source evidence 和必要前序 docs。
 - 默认做最小必要编辑：保留人工段落、备注、TODO、链接和上下文。
 - 不为了风格一致而整体重写。只有证据表明整篇 stale、结构阻碍维护或用户明确要求重写时，才整体重构。
@@ -202,6 +226,7 @@
 ### Rules
 
 - 不写、不删、不格式化，也不起草替换正文。
+- 当 `execution policy=subagent_required` 时，Validator 必须作为独立 `Validator_Subagent` 执行。
 - 检查链接、缺失目标、stale 或临时 evidence path、明显 secrets、changed files 的合理覆盖。
 - 只对 substantive docs 强制要求 `证据与边界` / `Evidence and Boundaries`。
 - navigation/index docs 可以没有证据区，但必须链接到有证据区的正文档，或明确标记暂无证据 / 不适用。

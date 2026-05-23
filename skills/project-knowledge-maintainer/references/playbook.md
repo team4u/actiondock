@@ -6,7 +6,19 @@
 Route → Plan → Apply → Validate
 ```
 
-不要把复杂度暴露为一套组织架构。Router、Planner、Worker、Validator 是角色边界；subagent 只是可选执行模式。
+不要把复杂度暴露为一套组织架构。Router、Planner、Worker、Validator 是角色边界；当 policy 要求 subagent 时，这些角色必须作为真实子代理存在，而不是主 agent 的自我角色扮演。
+
+## 执行策略
+
+先解析 `execution policy`，再决定实际 `execution mode`：
+
+- `subagent_required`：默认值。必须使用真实 subagent；不能用就停止并报告。
+- `subagent_preferred`：优先使用真实 subagent；实际创建失败后可串行降级。
+- `serial_only`：只允许主 agent 串行执行。
+
+输入字段名保留为 `executionMode`，它表示 policy 选择，而不是最终实际运行方式。
+
+如果用户或 IDE 明确声明“支持 subagent”，这必须被视为环境能力信号。执行器不得仅凭猜测覆盖该信号；只有真实的 subagent 创建/调用失败，才可认定不可用。
 
 ## 0. 输入约定
 
@@ -15,6 +27,7 @@ Route → Plan → Apply → Validate
 ```yaml
 repoPath: .
 operation: auto
+executionMode: subagent_required
 changedFiles: []
 inboxPaths: []
 repair: false
@@ -27,12 +40,14 @@ repair: false
 ```yaml
 repoPath: .
 operation: validate
+executionMode: subagent_required
 repair: false
 ```
 
 ```yaml
 repoPath: .
 operation: refresh
+executionMode: subagent_required
 changedFiles:
   - src/users/user.service.ts
   - db/migrations/20260522_add_user_status.sql
@@ -41,6 +56,7 @@ changedFiles:
 ```yaml
 repoPath: .
 operation: ingest
+executionMode: subagent_required
 inboxPaths:
   - .kb_inbox/payment-timeout-runbook.md
 ```
@@ -217,9 +233,9 @@ Validator 只读检查：
 
 ## 执行模式
 
-### native_subagent
+### subagent
 
-运行时支持时可以使用：
+当 `execution policy` 允许且 subagent 能力可用时，必须使用：
 
 - Router：每次运行最多一个。
 - Planner：每个 phase 的每个激活 domain 一个。
@@ -230,7 +246,15 @@ Validator 只读检查：
 
 ### serial
 
-当 subagent 不可用时，serial 是一等执行模式，不是降级破坏。
+只有在以下情况之一才允许 serial：
+
+1. `execution policy=serial_only`
+2. `execution policy=subagent_preferred` 且实际创建 subagent 失败
+3. 用户明确允许降级到 serial
+
+若 `execution policy=subagent_required`，serial fallback 默认禁用。此时只要无法创建可用 subagent，就必须停止并报告：
+
+`Subagent execution is required by this skill, but the environment did not expose a usable subagent interface.`
 
 主 agent 必须按角色边界依次执行：
 
@@ -243,7 +267,7 @@ serial 模式下，主 agent 可以“以 Worker role”写一个具体 `target_
 - 一次只处理一个 target。
 - 使用同一 Worker contract。
 - 不在 Planner 阶段提前写正文。
-- 在报告中记录 `execution_mode=serial` 和 fallback reason。
+- 在报告中记录 `execution_policy`、`execution_mode=serial` 和 fallback reason。
 
 ## Richness Floor
 
@@ -352,6 +376,7 @@ Worker command 或文件操作失败时：
 每次运行结束写对应 report，并在最终响应中简述。报告至少包含：
 
 - operation
+- execution_policy
 - execution_mode
 - serial_fallback_reason
 - repo_baseline
