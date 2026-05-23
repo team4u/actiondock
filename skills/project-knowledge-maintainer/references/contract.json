@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge-maintainer",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "purpose": "Repo-aware knowledge-base reconstruction and maintenance protocol.",
   "execution_priority": [
     "team_agent",
@@ -114,5 +114,30 @@
     "delegate_result": "schemas/delegate-result.schema.json",
     "validation_report": "schemas/validation-report.schema.json",
     "final_report": "schemas/final-report.schema.json"
+  },
+  "release": "protocol-rewrite-compatible-format",
+  "skill_layout": {
+    "entrypoint": "SKILL.md",
+    "metadata": "YAML frontmatter in SKILL.md",
+    "control_plane": "references/contract.json",
+    "formatter": "references/formatter.md",
+    "schemas": "schemas/*.schema.json",
+    "examples": "examples/*"
+  },
+  "formatter": {
+    "reference": "references/formatter.md",
+    "required": true,
+    "applies_to": [
+      "ACTIONDOCK.md",
+      "docs/**/*.md",
+      "final_report",
+      "delegate_result_summary"
+    ],
+    "rules": [
+      "Use stable Markdown headings.",
+      "Index documents are navigation surfaces only.",
+      "Substantive leaf docs include Evidence and Boundaries.",
+      "Final reports include execution mode, delegate results, changed files, validation status, and blockers."
+    ]
   }
 }

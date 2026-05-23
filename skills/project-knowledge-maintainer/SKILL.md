@@ -1,66 +1,66 @@
+---
+name: project-knowledge-maintainer
+version: 5.0.1
+release: protocol-rewrite-compatible-format
+summary: Repo-aware project knowledge maintainer with compatible skill metadata, formatter rules, Plan A completeness, and all-stage delegate gates.
+description: Maintains ACTIONDOCK.md, docs/ project knowledge, and .kb_inbox/ materials from repository evidence. Uses adaptive XS/S/M/L/XL protocols, prioritizes team agents over native subagents over serial fallback, enforces Plan A complete document-set planning when required, waits for all delegated stage results, and validates before completion.
+---
+
 # Project Knowledge Maintainer
 
-Use this skill when the user asks to create, repair, reorganize, refresh, or validate project knowledge documents from a repository, codebase, configuration set, database schema, API surface, tests, runbooks, or existing documentation.
+Use this skill when the user asks to create, repair, reorganize, refresh, ingest, or validate a repository-backed project knowledge base.
 
-## Core mandate
+The skill maintains long-lived project knowledge from evidence. It should not merely summarize files. It should plan the document structure, delegate execution where available, update or create maintainable documents, and validate before claiming completion.
 
-Maintain a project knowledge base from evidence. Do not merely summarize. Build or update a maintainable document structure with explicit planning, delegated execution where available, and validation before completion.
+## Required load order
 
-## Control plane
+Read only what is needed for the current task, but preserve this control-plane order:
 
-Read these files as the governing protocol:
-
-1. `contract.json`
-2. `rules/hard-safety.md`
-3. `rules/evidence-priority.md`
-4. `rules/execution-modes.md`
-5. `rules/delegate-gates.md`
-6. `rules/planner-plan-a.md`
-7. `rules/worker-rules.md`
-8. `rules/validator-rules.md`
-9. `rules/document-granularity.md`
-
-Then choose one protocol:
-
-- `protocols/xs-lite.md`
-- `protocols/small-task.md`
-- `protocols/medium-task.md`
-- `protocols/large-rebuild.md`
-- `protocols/repair-loop.md`
+1. `references/contract.json` — canonical version, role states, delegate gate, hard failures, schema pointers, and formatter requirement.
+2. `references/playbook.md` — adaptive execution protocols and scale routing.
+3. `references/formatter.md` — required Markdown/output formatting rules.
+4. `references/prompts.md` — Router, Planner, Document Set Planner, Worker, Validator, Repair, and Reporter role contracts.
+5. `references/validator.md` — validation rules and hard failure registry.
+6. `references/document-set-planning.md` — Plan A / Plan B rules; required for L/XL or any `document_set_plan_required=true` task.
+7. `references/document-granularity.md` — index-vs-leaf document split rules.
+8. `references/domain-map.md` — canonical knowledge domains and recommended paths.
+9. `references/evidence-search.md` — evidence discovery strategy.
+10. `references/scenario-matrix.md` — scale and scenario mapping.
+11. `references/actiondock-template.md` — ACTIONDOCK format.
 
 ## Execution priority
 
-Use this priority order unless the user explicitly forbids delegation or the environment does not support it:
+Use the highest available execution mode unless the user explicitly forbids delegation or the environment lacks support:
 
 ```text
 team_agent > native_subagent > serial
 ```
 
-`team_agent` means a dedicated team member, team task, team role, or equivalent external agent lane. `native_subagent` means a system-provided subagent or equivalent isolated execution unit. `serial` means the leader performs work inline only because delegation is unavailable or explicitly forbidden.
+`team_agent` means a dedicated team member, team task, team role, or equivalent external agent lane. `native_subagent` means a system-provided subagent or equivalent isolated execution unit. `serial` means the leader performs work inline only because delegation is unavailable, explicitly forbidden, or permitted by the XS/S protocol.
 
 ## All-stage delegate gate
 
-If any stage is delegated, the leader must wait for an explicit delegate result before advancing past that stage. This applies to Router, Workspace Scanner, Noise Filter, Planner, Document Set Planner, Task Planner, Worker, Validator, Repair, Cleanup, and Reporter.
+If any stage is delegated, the leader must wait for an explicit delegate result before advancing past that stage.
+
+This applies to:
+
+- Router
+- Workspace Scanner
+- Noise Filter
+- Planner
+- Document Set Planner
+- Task Planner
+- Worker
+- Validator
+- Repair
+- Cleanup
+- Reporter
 
 The leader may not complete a delegated stage by doing the work itself while the delegate is slow, pending, or not yet returned. Slow return, impatience, saving time, or convenience is not a valid fallback reason.
 
-## Scale selection
-
-Classify the task before planning:
-
-| Scale | Use when | Protocol |
-|---|---|---|
-| XS | one file, typo, link, small env note | `xs-lite` |
-| S | one small doc area or local update | `small-task` |
-| M | multiple docs or domains, no full rebuild | `medium-task` |
-| L | broad feature, API/data/flow refresh, knowledge-base repair | `large-rebuild` |
-| XL | monorepo, large ingest, full reconstruction, high ambiguity | `large-rebuild` |
-
-Escalate scale when evidence shows multiple domains, under-split documents, index content sink risk, stale generated docs, or a broad source scan requirement.
-
 ## Plan A / Plan B
 
-When `document_set_plan_required=true`, Planner must produce Plan A before any Worker tasks:
+When `document_set_plan_required=true`, Planner must produce Plan A before Worker tasks:
 
 - Plan A is the complete expected document set.
 - Plan B is the execution batch derived from Plan A.
@@ -69,18 +69,42 @@ When `document_set_plan_required=true`, Planner must produce Plan A before any W
 
 Planner must not say “workers will discover the rest” or equivalent.
 
+## Formatter requirement
+
+All created or updated knowledge files and final reports must follow `references/formatter.md`.
+
+Key formatting rules:
+
+- `ACTIONDOCK.md` and `index.md` files are navigation surfaces, not content sinks.
+- Substantive leaf docs must include an evidence section.
+- Final reports must include execution mode, delegate result summary, changed files, validation status, unresolved blockers, and fallback reasons if any.
+- Do not emit raw internal prompts or verbose logs as user-facing output.
+
+## Scale selection
+
+| Scale | Use when | Protocol |
+|---|---|---|
+| XS | one file, typo, link, small env note | lite |
+| S | one small doc area or local update | small |
+| M | multiple docs or domains, no full rebuild | medium |
+| L | broad feature, API/data/flow refresh, knowledge-base repair | structured rebuild |
+| XL | monorepo, large ingest, full reconstruction, high ambiguity | partitioned rebuild |
+
+Escalate scale when evidence shows multiple domains, under-split documents, index content sink risk, stale generated docs, broad source scan requirement, or when Workers would otherwise need to discover the document structure.
+
 ## Completion rule
 
-Do not claim completion until validation has run and all hard failures are either resolved, explicitly blocked, or reported as failed. Validator determines completion. Leader confidence is not sufficient.
+Do not claim completion until validation has run and all hard failures are resolved, explicitly blocked, or reported as failed. Validator decides completion. Leader confidence is not sufficient.
 
-## Output expectations
+## Final response expectations
 
-Final response or final report must include:
+Return a concise final report with:
 
+- operation mode
+- execution mode and fallback reason, if any
+- delegate result summary
+- flow profile / scale
 - files created or updated
 - evidence used
-- execution mode and fallback reasons, if any
-- delegate result summary
 - validation status
-- unresolved findings or blockers
-- next actions only when work is incomplete
+- unresolved findings, blockers, or next required action
