@@ -6,11 +6,11 @@ Use native subagents whenever the runtime supports them. Follow `references/ockb
 
 The current main agent is the Leader.
 
-- run deterministic `preflight`
-- derive candidate targets from evidence and `knowledge-map`
+- run deterministic preflight
+- derive candidate targets from evidence, domain defaults, existing docs, and `knowledge-map`
 - classify candidates as `write`, `defer`, or `skip`
-- decide the run profile
-- spawn `Chief`, `Impact Analyzer`, Planner, and Worker subagents only when the chosen profile needs them
+- decide the run profile, defaulting to `standard`
+- spawn Chief, Impact Analyzer, Planner, and Worker subagents when the chosen profile needs them
 - validate role outputs against the contract JSON
 - deduplicate tasks by `target_path`
 - enforce path safety before any Worker runs
@@ -22,26 +22,25 @@ The current main agent is the Leader.
 
 ## Spawn Granularity
 
-- `Chief`: 0 or 1 per run; required for `standard` and `deep`, usually skipped for `thin`
-- `Impact Analyzer`: at most 1 per run, only for ownership or scope ambiguity
-- Planner: 1 per active domain per phase for `standard` and `deep`; 1 per narrow target bundle only when a `thin` run still needs planning
+- Chief: 1 per `standard` or `deep` run; 0 only for obviously safe `thin` runs
+- Impact Analyzer: at most 1 per run, only for ownership or scope ambiguity
+- Planner: 1 per active domain per phase for `standard` and `deep`; optional only for obvious `thin` ownership
 - Worker: 1 per unique `target_path`
 
-## Right-size Subagents
+## Profile Discipline
 
-Subagents are for single responsibility and context control, not maximum parallelism.
+Profiles control orchestration cost, not output quality.
 
-- Do not spawn planners for targets that deterministic preflight already resolved.
-- `thin` runs should often skip `Chief`, `Impact Analyzer`, and Planner subagents entirely.
-- Do not spawn planners or Workers for deferred or skipped candidates.
-- Use `maxFanout` from the contract input to cap concurrent Worker tasks.
-- When a target is uncertain, record an evidence gap or review note before widening the run.
-- Keep each subagent prompt narrow: pass the operation, assigned target, relevant paths, and only the evidence context it needs.
+- `thin` may skip Chief and Planner only when the Leader can prove ownership and significance from local evidence.
+- `standard` preserves the older Chief-led phase skeleton and is the default.
+- `deep` preserves full phase barriers, broad validation, and ownership repair.
+- If an `UPSERT` exists in any profile, the Worker must follow the full depth standard from `prompt-worker.md`.
 
 ## Parallelism
 
-- Planner subagents in the same phase may run in parallel when their target sets do not overlap.
+- Planner subagents in the same phase may run in parallel when their evidence sets do not overlap.
 - Worker subagents in the same phase may run in parallel only when their `target_path` values differ.
+- Keep concurrent Workers within `maxFanout`.
 - Do not start the next phase in a `standard` or `deep` run until the current phase's Workers have completed or failed.
 - A failed target does not block unrelated targets.
 - When one target fails and later targets depend on it, pass the missing context forward as an evidence gap.
@@ -53,11 +52,13 @@ Each Worker owns one target file.
 - A Worker may write or prune only its assigned `target_path`.
 - No other Worker or Planner may write that path.
 - The Leader may reject, merge, or reroute tasks before Workers start, but must not edit the target body content directly.
-- By default a Worker may read only:
+- By default a Worker may read:
   - its current target
   - its assigned `evidence_paths`
   - `existing_doc_paths`
-  - any explicitly assigned supporting docs
+  - prior-phase docs explicitly assigned by the Planner or Leader
+  - supporting source files needed to resolve imports, table references, routes, or call paths from assigned evidence
+- If the Worker needs broader exploration, use the retry and widening rules in `failure-policy.md`.
 
 ## Fallback Reporting
 
@@ -81,9 +82,10 @@ When subagents are used, record:
 {
   "subagent_mode": "native_subagents",
   "subagent_unavailable_fallback": false,
+  "fallback_reason": null,
   "chief_agent": "spawned",
   "impact_analyzer": "not_needed",
-  "planner_agents": ["Data@phase0"],
+  "planner_agents": ["Data_Model_Planner@phase0"],
   "worker_agents": ["docs/data/schema.md"]
 }
 ```

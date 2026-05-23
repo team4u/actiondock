@@ -9,7 +9,7 @@ Classify the failure before retrying.
   - retry with the error text and the same assigned evidence
 - Missing or conflicting evidence:
   - do not loop blindly
-  - retry once with a narrow evidence rediscovery step limited to likely owner paths
+  - retry once with a narrow evidence rediscovery step limited to likely owner paths, imports, tests, routes, migrations, config, or prior-phase docs related to the assigned target
 - Validation failure after write:
   - allow one repair pass for the same target
 
@@ -17,7 +17,7 @@ Allow at most 3 attempts total for one target.
 
 ## No Dirty Writes
 
-If evidence remains unavailable or the Worker cannot confidently assemble the document after all retries:
+If evidence remains unavailable or the Worker cannot confidently assemble a deep, evidence-bound document after all retries:
 
 - do not overwrite the target with partial content
 - preserve the previous version of the target file

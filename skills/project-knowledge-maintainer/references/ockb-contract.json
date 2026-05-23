@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "inputs": {
     "required": ["repoPath"],
     "optional": [
@@ -10,6 +10,7 @@
       "projectName",
       "audience",
       "detailLevel",
+      "profile",
       "maxFanout",
       "allowNewDocs",
       "forceFullValidate"
@@ -18,7 +19,8 @@
       "operation": "auto",
       "resume": true,
       "audience": "future agents and engineers",
-      "detailLevel": "evidence-bound",
+      "detailLevel": "evidence-bound and decision-useful",
+      "profile": "standard",
       "maxFanout": 4,
       "allowNewDocs": true,
       "forceFullValidate": false
@@ -40,72 +42,90 @@
     "errorLog": "docs/ops/maintenance/errors.md"
   },
   "domains": [
-    "Architecture",
-    "API",
-    "Data",
-    "BusinessFlow",
-    "AgentTooling",
-    "InfraEnv",
-    "MaintenanceOps",
-    "Triage"
+    "Chief_Architect",
+    "API_Spec_Planner",
+    "Data_Model_Planner",
+    "Business_Flow_Planner",
+    "Agent_Tool_Planner",
+    "Infra_Env_Planner",
+    "Maintenance_Ops_Planner",
+    "Triage_Planner"
   ],
   "phaseDefaults": [
     {
       "phase_num": 0,
-      "domains_to_activate": ["Data", "InfraEnv", "Triage"]
+      "domains_to_activate": ["Data_Model_Planner", "Infra_Env_Planner", "Triage_Planner"]
     },
     {
       "phase_num": 1,
-      "domains_to_activate": ["API", "BusinessFlow", "AgentTooling"]
+      "domains_to_activate": ["API_Spec_Planner", "Business_Flow_Planner", "Agent_Tool_Planner"]
     },
     {
       "phase_num": 2,
-      "domains_to_activate": ["Architecture", "MaintenanceOps"]
+      "domains_to_activate": ["Chief_Architect", "Maintenance_Ops_Planner"]
     }
   ],
+  "profiles": {
+    "thin": {
+      "maxChangedFiles": 5,
+      "maxTargets": 2,
+      "chiefMode": "skip_only_when_obvious",
+      "plannerMode": "skip_only_when_owner_and_significance_are_obvious",
+      "docDepth": "full_for_any_upsert"
+    },
+    "standard": {
+      "default": true,
+      "chiefMode": "required",
+      "plannerMode": "one_per_active_domain_per_phase",
+      "docDepth": "full"
+    },
+    "deep": {
+      "chiefMode": "required",
+      "plannerMode": "one_per_active_domain_per_phase",
+      "strictPhaseBarriers": true,
+      "ownershipRepair": true,
+      "docDepth": "full"
+    }
+  },
   "chiefOutput": {
     "required": ["profile", "phases"],
     "phaseFields": ["phase_num", "domains_to_activate"],
     "optionalPhaseFields": ["reason"]
   },
-  "profiles": {
-    "thin": {
-      "maxChangedFiles": 5,
-      "maxTargets": 2,
-      "broadChangeTriggers": ["build-root", "schema-root", "infra-root"],
-      "chiefMode": "skip_by_default",
-      "plannerMode": "target_scoped_or_skip"
-    },
-    "standard": {
-      "maxChangedFiles": 25,
-      "maxTargets": 5,
-      "chiefMode": "required",
-      "plannerMode": "per_active_domain_per_phase"
-    },
-    "deep": {
-      "requiresFullValidate": true,
-      "chiefMode": "required",
-      "plannerMode": "per_active_domain_per_phase",
-      "strictPhaseBarriers": true
-    }
-  },
   "targetTask": {
     "required": [
-      "mode",
+      "action",
       "target_path",
       "kind",
       "evidence_paths",
       "existing_doc_paths",
       "confidence",
-      "nav_impact"
+      "nav_impact",
+      "focus_code_entity",
+      "clue"
     ],
-    "modeValues": ["create", "update", "prune"],
+    "actionValues": ["UPSERT", "PRUNE"],
     "confidenceValues": ["high", "medium", "low"]
   },
   "plannerOutput": {
     "required": ["tasks", "deferred", "skipped"],
     "deferredItemFields": ["target_path", "evidence_paths", "impact", "reason"],
-    "skippedItemFields": ["item", "reason"]
+    "skippedItemFields": ["item", "impact", "reason"]
+  },
+  "impactAnalyzerOutput": {
+    "required": ["decisions"],
+    "decisionFields": [
+      "decision",
+      "impact",
+      "target_path",
+      "action",
+      "kind",
+      "evidence_paths",
+      "existing_doc_paths",
+      "confidence",
+      "nav_impact",
+      "reason"
+    ]
   },
   "knowledgeImpact": {
     "levels": ["material", "minor", "noise"],
@@ -114,13 +134,18 @@
     "deferLimitPerTarget": 5
   },
   "operationReportFields": [
+    "operation",
+    "profile",
     "updated_targets",
     "deferred_updates",
     "skipped_low_significance",
-    "evidence_gaps"
+    "failed_tasks",
+    "evidence_gaps",
+    "validation_status"
   ],
   "worker": {
     "maxRetries": 3,
+    "allowedActions": ["UPSERT", "PRUNE"],
     "statusValues": ["COMPLETED", "FAILED", "SKIPPED"]
   },
   "subagents": {
@@ -128,6 +153,12 @@
     "serialFallbackAllowed": true,
     "fallbackReasons": ["runtime_unavailable", "host_policy_blocked", "user_forbidden"],
     "roles": ["chief", "impact_analyzer", "planner", "worker"],
+    "spawnStrategy": {
+      "chief": "one_per_standard_or_deep_run",
+      "impact_analyzer": "zero_or_one_per_run",
+      "planner": "one_per_active_domain_per_phase",
+      "worker": "one_per_unique_target_path"
+    },
     "leaderMayWrite": [
       "ACTIONDOCK.md",
       "KNOWLEDGE_INIT_REPORT.md",
@@ -165,6 +196,7 @@
     "freshness_recorded",
     "owner_mapping_present",
     "duplicate_or_orphan_docs",
-    "sensitive_data_redacted"
+    "sensitive_data_redacted",
+    "doc_depth_matches_kind"
   ]
 }

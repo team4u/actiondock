@@ -2,7 +2,7 @@
 
 `docs/_meta/knowledge-map.json` is the machine-owned index for formal knowledge coverage.
 
-Use it to reduce duplicate scanning, avoid fragmented docs, and make validation deterministic.
+Use it to reduce duplicate scanning, avoid fragmented docs, remember deferred evidence, and make validation deterministic. Do not use it to justify shallow Worker output for an approved `UPSERT`.
 
 ## Purpose
 
@@ -23,7 +23,7 @@ Each entry should be small and deterministic:
     {
       "target_path": "docs/data/schema.md",
       "kind": "data-schema",
-      "domain": "Data",
+      "domain": "Data_Model_Planner",
       "owner_key": "schema:core-db",
       "evidence_paths": [
         "db/migrations/V12__add_user_status.sql",
@@ -48,14 +48,15 @@ Each entry should be small and deterministic:
 ## Rules
 
 - `target_path` must be unique across entries.
+- `domain` must use a domain from `ockb-contract.json`.
 - `owner_key` identifies one canonical doc owner for one logical topic cluster.
 - Prefer updating an existing owner entry over creating a new one.
-- Use `knowledge-map` to make `thin` routing deterministic before escalating to Chief or Planner work.
+- Use `knowledge-map` to make ownership deterministic before escalating to Chief, Impact Analyzer, or Planner work.
 - `confidence` is `high`, `medium`, or `low`.
 - `nav_impact=true` means the target should be considered when regenerating `ACTIONDOCK.md`.
 - `pending_evidence` is optional and only for `defer` decisions that already map to this owner.
 - Keep `pending_evidence` capped to 5 items per entry; merge or replace older related items instead of growing it unbounded.
-- Clear pending evidence when a later `write` task absorbs it into the target doc.
+- Clear pending evidence when a later `UPSERT` absorbs it into the target doc.
 - Remove entries only when the target is truly pruned; otherwise refresh them in place.
 
 ## When to Create a New Entry
