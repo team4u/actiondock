@@ -29,9 +29,12 @@ If evidence remains unavailable or the Worker cannot confidently assemble the do
 
 Before a Worker writes or deletes:
 
-- Resolve the target relative to `repoPath`.
 - Reject absolute paths.
 - Reject paths containing `..`.
 - Reject wildcards.
+- Resolve both `repoPath` and `target_path` to real paths.
+- Reject targets whose resolved real path is outside `repoPath`.
+- Reject symlink targets unless the resolved path remains inside `repoPath`.
 - Reject targets outside `ACTIONDOCK.md`, operation reports, or `docs/`.
-- Reject directory deletion.
+- For `UPSERT`, write to a temporary file in the same directory, validate it, then atomically rename it over the target.
+- Never delete directories, symlinks to directories, or paths outside formal outputs.

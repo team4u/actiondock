@@ -1,6 +1,6 @@
 # Validate Workflow
 
-Do not rewrite substantive docs unless the user explicitly asks for fixes. The Leader may perform the read-only validation directly or spawn read-only validation subagents for large repositories. Check:
+Do not rewrite substantive docs unless the user explicitly asks for fixes. Use the `read_only_validation` operation default from `ockb-contract.json`. The Leader may perform the read-only validation directly or spawn Validator subagents for large repositories. Check:
 
 - `ACTIONDOCK.md` exists and links to relevant `docs/` areas.
 - docs links point to existing files.
@@ -11,7 +11,7 @@ Do not rewrite substantive docs unless the user explicitly asks for fixes. The L
 - no obvious secrets are exposed in docs.
 - no `.knowledge_base/` layout is required unless the user requested it.
 
-Write `KNOWLEDGE_VALIDATE_REPORT.md` with pass/fail status, findings, suggested repair tasks, and subagent mode.
+Write `KNOWLEDGE_VALIDATE_REPORT.md` with pass/fail status, findings, suggested repair tasks, and subagent mode. Do not spawn Workers or modify substantive docs during validation.
 
 ## Completion Criteria
 

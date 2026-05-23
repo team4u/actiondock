@@ -2,9 +2,11 @@
 
 Use these OCKB domains as logical routing domains. Formal output remains under `docs/`.
 
+Wildcard targets are target patterns only. A Planner must emit a concrete Markdown path such as `docs/data/tables/users.md`, never the wildcard pattern itself.
+
 | OCKB base domain | Planner | Evidence scope | Formal targets |
 |---|---|---|---|
-| 01 Architecture Overview | `Chief_Architect` | root manifests, module layout, build files, framework config, existing architecture docs | `docs/code/architecture.md`, `docs/code/modules.md`, `docs/code/index.md` |
+| 01 Architecture Overview | `Architecture_Planner` | root manifests, module layout, build files, framework config, existing architecture docs | `docs/code/architecture.md`, `docs/code/modules.md`, `docs/code/index.md` |
 | 02 API Specifications | `API_Spec_Planner` | controllers, routers, OpenAPI/Swagger, protobuf, GraphQL schemas, DTOs, event producers/consumers | `docs/api/http.md`, `docs/api/events.md`, `docs/integrations/*.md` |
 | 03 Data Models | `Data_Model_Planner` | DDL, migrations, ORM entities, repositories, mappers, SQL, schema tests | `docs/data/index.md`, `docs/data/schema.md`, `docs/data/tables/*.md`, `docs/data/transactions.md` |
 | 04 Business Flows | `Business_Flow_Planner` | service/use-case code, jobs, listeners, state machines, business tests | `docs/domain/flows/index.md`, `docs/domain/flows/*.md`, `docs/domain/state-machines/*.md`, `docs/domain/rules.md` |

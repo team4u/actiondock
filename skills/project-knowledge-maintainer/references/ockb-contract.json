@@ -8,8 +8,23 @@
     }
   },
   "operations": ["init", "refresh", "ingest", "validate"],
+  "roles": {
+    "chief": "Chief_Architect",
+    "planners": [
+      "Architecture_Planner",
+      "API_Spec_Planner",
+      "Data_Model_Planner",
+      "Business_Flow_Planner",
+      "Agent_Tool_Planner",
+      "Infra_Env_Planner",
+      "Maintenance_Ops_Planner",
+      "Triage_Planner"
+    ],
+    "validator": "Validator"
+  },
   "outputs": {
     "entry": "ACTIONDOCK.md",
+    "entryTemplate": "references/actiondock-template.md",
     "formalRoot": "docs",
     "inboxRoot": ".kb_inbox",
     "reports": {
@@ -21,7 +36,7 @@
     "errorLog": "docs/ops/maintenance/errors.md"
   },
   "domains": [
-    "Chief_Architect",
+    "Architecture_Planner",
     "API_Spec_Planner",
     "Data_Model_Planner",
     "Business_Flow_Planner",
@@ -30,33 +45,76 @@
     "Maintenance_Ops_Planner",
     "Triage_Planner"
   ],
-  "phaseDefaults": [
-    {
-      "phase_num": 0,
-      "domains_to_activate": ["Data_Model_Planner", "Infra_Env_Planner", "Triage_Planner"]
-    },
-    {
-      "phase_num": 1,
-      "domains_to_activate": ["API_Spec_Planner", "Business_Flow_Planner", "Agent_Tool_Planner"]
-    },
-    {
-      "phase_num": 2,
-      "domains_to_activate": ["Chief_Architect", "Maintenance_Ops_Planner"]
-    }
-  ],
+  "phaseDefaultsByOperation": {
+    "init": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": ["Data_Model_Planner", "Infra_Env_Planner"]
+      },
+      {
+        "phase_num": 1,
+        "domains_to_activate": ["API_Spec_Planner", "Business_Flow_Planner", "Agent_Tool_Planner"]
+      },
+      {
+        "phase_num": 2,
+        "domains_to_activate": ["Architecture_Planner", "Maintenance_Ops_Planner"]
+      }
+    ],
+    "refresh": "chief_routed",
+    "ingest": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": ["Triage_Planner"]
+      },
+      {
+        "phase_num": 1,
+        "domains_to_activate": ["chief_routed_from_triage"]
+      }
+    ],
+    "validate": "read_only_validation"
+  },
+  "planner": {
+    "taskFields": [
+      "task_id",
+      "action",
+      "domain",
+      "target_path",
+      "focus_code_entity",
+      "evidence_paths",
+      "depends_on",
+      "confidence",
+      "clue"
+    ],
+    "allowedConfidence": ["high", "medium", "low"],
+    "skippedFields": ["item", "reason"]
+  },
   "worker": {
     "maxRetries": 3,
     "allowedActions": ["UPSERT", "PRUNE"],
-    "statusValues": ["COMPLETED", "FAILED"]
+    "statusValues": ["COMPLETED", "FAILED"],
+    "outputFields": [
+      "status",
+      "target_path",
+      "files_read",
+      "files_changed",
+      "evidence_gaps",
+      "warnings"
+    ]
+  },
+  "validator": {
+    "statusValues": ["PASS", "PASS_WITH_WARNINGS", "FAIL"],
+    "findingFields": ["severity", "path", "issue", "suggested_repair"],
+    "severityValues": ["error", "warning", "info"]
   },
   "subagents": {
     "requiredWhenAvailable": true,
     "serialFallbackAllowed": true,
     "fallbackReasons": ["runtime_unavailable", "host_policy_blocked", "user_forbidden"],
     "spawnStrategy": {
-      "chief": "one_per_run",
+      "chief": "at_most_one_per_run_when_routing_requires",
       "planner": "one_per_active_domain_per_phase",
-      "worker": "one_per_unique_target_path"
+      "worker": "one_per_unique_target_path",
+      "validator": "one_or_more_read_only_for_large_validation"
     },
     "leaderMayWrite": [
       "ACTIONDOCK.md",
@@ -71,11 +129,12 @@
       "fallback_reason",
       "chief_agent",
       "planner_agents",
-      "worker_agents"
+      "worker_agents",
+      "validator_agents"
     ]
   },
   "pathSafety": {
-    "allowedFormalPrefixes": [
+    "allowedTargetPatterns": [
       "ACTIONDOCK.md",
       "KNOWLEDGE_INIT_REPORT.md",
       "KNOWLEDGE_UPDATE_REPORT.md",
@@ -85,6 +144,10 @@
     ],
     "forbiddenSegments": ["..", ".git", "node_modules", "dist", "build", "target", ".cache", "coverage"],
     "forbidAbsolutePaths": true,
-    "forbidWildcards": true
+    "forbidWildcardsInResolvedTargets": true,
+    "requireRealpathContainment": true,
+    "rejectSymlinkEscape": true,
+    "requireAtomicUpsert": true,
+    "forbidDirectoryDeletion": true
   }
 }

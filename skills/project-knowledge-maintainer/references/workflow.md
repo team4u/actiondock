@@ -11,6 +11,10 @@ If `operation` is `auto`, choose `init` when no formal knowledge base exists, ot
 
 ## Routing Notes
 
+- Use `phaseDefaultsByOperation` from `ockb-contract.json` as the default routing source.
+- For `refresh`, ask the Chief to route from changed paths and docs tree only.
+- For `ingest`, run `Triage_Planner` first, then route change-intent material to the responsible Planner domains.
+- For `validate`, run read-only validation only; do not spawn Workers unless the user explicitly asks for repair.
 - Prefer data and infra updates before flows and API docs when both changed.
 - Prefer business-flow docs over endpoint catalogs when source evidence shows end-to-end state or table changes.
 - Prefer diagnosis/runbook docs only when evidence supports actionable steps, queries, or decision criteria.

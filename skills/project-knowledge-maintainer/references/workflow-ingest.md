@@ -5,10 +5,11 @@
    - pure troubleshooting or operations knowledge
    - code/data/API/business-flow change intent
    - unrelated or unsafe material
-3. Spawn Worker subagents to archive pure operations material under `docs/ops/maintenance/` or `docs/diagnosis/`.
-4. Convert change-intent material into tasks for the appropriate domain Planner subagents.
-5. After successful absorption, let the responsible Worker remove or empty only the processed inbox source files. Preserve unprocessed files and report why.
-6. Let the Leader write `KNOWLEDGE_INGEST_REPORT.md`.
+3. Spawn the Chief subagent only for triage results that need cross-domain routing.
+4. Spawn Worker subagents to archive pure operations material under `docs/ops/maintenance/` or `docs/diagnosis/`.
+5. Convert change-intent material into tasks for the appropriate domain Planner subagents.
+6. After successful absorption, let the responsible Worker remove or empty only the processed inbox source files. Preserve unprocessed files and report why.
+7. Let the Leader update `ACTIONDOCK.md` using `references/actiondock-template.md` when navigation changes and write `KNOWLEDGE_INGEST_REPORT.md`.
 
 ## Completion Criteria
 

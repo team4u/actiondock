@@ -2,10 +2,10 @@
 
 1. Build a changed-file list from user input or Git.
 2. Inspect existing `ACTIONDOCK.md` and affected `docs/` pages.
-3. Spawn the Chief subagent from changed paths and docs tree only.
+3. Spawn the Chief subagent from changed paths and docs tree only, then use its phases as `chief_routed`.
 4. Spawn domain Planner subagents to produce `UPSERT` or `PRUNE` tasks.
 5. Spawn Worker subagents phase by phase. Later phases may read docs written by earlier phases.
-6. Let the Leader update navigation and write `KNOWLEDGE_UPDATE_REPORT.md`.
+6. Let the Leader update navigation using `references/actiondock-template.md` and write `KNOWLEDGE_UPDATE_REPORT.md`.
 
 ## Completion Criteria
 

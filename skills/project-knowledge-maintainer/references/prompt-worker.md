@@ -12,6 +12,8 @@ You are a senior engineering technical writer. Converge one target Markdown file
 - `target_path`
 - `focus_code_entity`
 - `clue`
+- `evidence_paths`
+- `task_id` or merged task IDs
 - domain context
 - prior phase docs if relevant
 
@@ -35,6 +37,14 @@ Return only JSON after finishing:
 {
   "status": "COMPLETED",
   "target_path": "docs/domain/flows/user-registration.md",
+  "files_read": [
+    "src/services/registration.ts",
+    "docs/data/tables/users.md"
+  ],
+  "files_changed": [
+    "docs/domain/flows/user-registration.md"
+  ],
+  "evidence_gaps": [],
   "warnings": []
 }
 ```
