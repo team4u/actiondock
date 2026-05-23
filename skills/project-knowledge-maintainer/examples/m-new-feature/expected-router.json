@@ -1,0 +1,32 @@
+{
+  "operation": "refresh",
+  "scale": "M",
+  "change_types": [
+    "api_change",
+    "schema_change",
+    "business_rule_change"
+  ],
+  "workspace_scope": [],
+  "special_flags": [],
+  "noise_filters": [],
+  "phases": [
+    {
+      "phase_num": 0,
+      "domains_to_activate": [
+        "Data_Model_Planner"
+      ],
+      "reason": "先更新 coupon 数据模型。"
+    },
+    {
+      "phase_num": 1,
+      "domains_to_activate": [
+        "API_Spec_Planner",
+        "Business_Flow_Planner"
+      ],
+      "reason": "再更新 API 和 checkout 流程。"
+    }
+  ],
+  "inbox_classification": [],
+  "skipped": [],
+  "reasoning_summary": "new feature spans data, API, and business flow."
+}

@@ -1,0 +1,76 @@
+{
+  "operation": "refresh",
+  "scale": "XL",
+  "change_types": [
+    "api_change",
+    "schema_change",
+    "business_rule_change",
+    "monorepo_workspace_change"
+  ],
+  "workspace_scope": [
+    {
+      "scope_id": "services/billing",
+      "kind": "service",
+      "root_path": "services/billing",
+      "reason": "billing routes and workers changed"
+    },
+    {
+      "scope_id": "packages/shared-db",
+      "kind": "package",
+      "root_path": "packages/shared-db",
+      "reason": "shared schema changed"
+    }
+  ],
+  "special_flags": [
+    "monorepo",
+    "large_changed_files",
+    "noise_heavy"
+  ],
+  "noise_filters": [
+    {
+      "item": "packages/generated-client/src/index.ts",
+      "classification": "generated_or_format_only",
+      "reason": "generated client should not drive business docs"
+    },
+    {
+      "item": "dist/bundle.js",
+      "classification": "build_output",
+      "reason": "build artifact"
+    },
+    {
+      "item": "pnpm-lock.yaml",
+      "classification": "lockfile_only_auxiliary",
+      "reason": "use only as dependency evidence"
+    }
+  ],
+  "phases": [
+    {
+      "phase_num": 0,
+      "domains_to_activate": [
+        "Architecture_Planner",
+        "Data_Model_Planner",
+        "Infra_Env_Planner"
+      ],
+      "reason": "first identify workspace scope and shared schema impact"
+    },
+    {
+      "phase_num": 1,
+      "domains_to_activate": [
+        "API_Spec_Planner",
+        "Business_Flow_Planner",
+        "Maintenance_Ops_Planner"
+      ],
+      "reason": "update billing service contracts and workers"
+    },
+    {
+      "phase_num": 2,
+      "domains_to_activate": [
+        "Architecture_Planner"
+      ],
+      "reason": "refresh workspace index and ACTIONDOCK links"
+    }
+  ],
+  "inbox_classification": [],
+  "skipped": [],
+  "reasoning_summary": "monorepo update limited to billing and shared-db with noise filtered."
+}

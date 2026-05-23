@@ -1,0 +1,27 @@
+{
+  "operation": "refresh",
+  "scale": "XS",
+  "change_types": [
+    "infra_change"
+  ],
+  "workspace_scope": [],
+  "special_flags": [],
+  "noise_filters": [],
+  "phases": [
+    {
+      "phase_num": 0,
+      "domains_to_activate": [
+        "Infra_Env_Planner"
+      ],
+      "reason": "单个环境变量更新，只需配置文档最小编辑。"
+    }
+  ],
+  "inbox_classification": [],
+  "skipped": [
+    {
+      "item": "API_Spec_Planner",
+      "reason": "no_relevant_evidence"
+    }
+  ],
+  "reasoning_summary": "env template and config changed."
+}

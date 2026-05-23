@@ -1,0 +1,613 @@
+{
+  "version": "4.1.1",
+  "name": "project-knowledge-maintainer",
+  "description": "初始化、刷新、吸收或验证一个由仓库证据驱动的项目知识库。",
+  "language": {
+    "skillLanguage": "zh-Hans",
+    "defaultDocumentLanguage": "zh-Hans",
+    "preserveExistingProjectLanguageWhenClear": true,
+    "keepIdentifiersPathsAndJsonKeysInOriginalLanguage": true
+  },
+  "inputs": {
+    "required": [
+      "repoPath"
+    ],
+    "optional": [
+      "operation",
+      "changedFiles",
+      "inboxPaths",
+      "repair",
+      "scenarioHint",
+      "workspaceScopeHint"
+    ],
+    "defaults": {
+      "operation": "auto",
+      "repair": false
+    }
+  },
+  "inputOperations": [
+    "auto",
+    "init",
+    "refresh",
+    "ingest",
+    "validate"
+  ],
+  "resolvedOperations": [
+    "init",
+    "refresh",
+    "ingest",
+    "validate"
+  ],
+  "operations": [
+    "auto",
+    "init",
+    "refresh",
+    "ingest",
+    "validate"
+  ],
+  "operationResolution": {
+    "rule": "operation=auto 是合法输入值；Router 必须先尊重用户明确意图，再按仓库状态解析为 init、refresh、ingest 或 validate 之一。",
+    "autoResolution": [
+      {
+        "when": "用户明确要求只验证、检查知识库状态，或 operation=validate",
+        "resolvedOperation": "validate"
+      },
+      {
+        "when": "用户明确要求处理 inboxPaths、吸收 .kb_inbox/ 材料，或 operation=ingest",
+        "resolvedOperation": "ingest"
+      },
+      {
+        "when": "用户明确要求初始化，或 operation=init",
+        "resolvedOperation": "init"
+      },
+      {
+        "when": "未明确指定操作，且 ACTIONDOCK.md 或 docs/ 缺失",
+        "resolvedOperation": "init"
+      },
+      {
+        "when": "未明确指定操作，且已有正式知识库",
+        "resolvedOperation": "refresh"
+      }
+    ],
+    "outputRule": "Router output 的 operation 字段应写 resolved operation，不写 auto。"
+  },
+  "pipeline": [
+    "route",
+    "plan",
+    "apply",
+    "validate"
+  ],
+  "references": [
+    "references/contract.json",
+    "references/playbook.md",
+    "references/domain-map.md",
+    "references/evidence-search.md",
+    "references/scenario-matrix.md",
+    "references/prompts.md",
+    "references/validator.md",
+    "references/actiondock-template.md"
+  ],
+  "roles": {
+    "router": "Router",
+    "planners": [
+      "Architecture_Planner",
+      "API_Spec_Planner",
+      "Data_Model_Planner",
+      "Business_Flow_Planner",
+      "Agent_Tool_Planner",
+      "Infra_Env_Planner",
+      "Maintenance_Ops_Planner"
+    ],
+    "worker": "Worker",
+    "validator": "Validator"
+  },
+  "outputs": {
+    "entry": "ACTIONDOCK.md",
+    "entryTemplate": "references/actiondock-template.md",
+    "formalRoot": "docs",
+    "inboxRoot": ".kb_inbox",
+    "reports": {
+      "init": "KNOWLEDGE_INIT_REPORT.md",
+      "refresh": "KNOWLEDGE_UPDATE_REPORT.md",
+      "ingest": "KNOWLEDGE_INGEST_REPORT.md",
+      "validate": "KNOWLEDGE_VALIDATE_REPORT.md"
+    },
+    "errorLog": "docs/ops/maintenance/errors.md"
+  },
+  "documentationDomains": [
+    "Architecture_Planner",
+    "API_Spec_Planner",
+    "Data_Model_Planner",
+    "Business_Flow_Planner",
+    "Agent_Tool_Planner",
+    "Infra_Env_Planner",
+    "Maintenance_Ops_Planner"
+  ],
+  "phaseDefaultsByOperation": {
+    "init": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": [
+          "Data_Model_Planner",
+          "Infra_Env_Planner"
+        ],
+        "reason": "先稳定数据模型和运行环境。"
+      },
+      {
+        "phase_num": 1,
+        "domains_to_activate": [
+          "API_Spec_Planner",
+          "Business_Flow_Planner",
+          "Agent_Tool_Planner"
+        ],
+        "reason": "再整理接口、业务流程和工具上下文。"
+      },
+      {
+        "phase_num": 2,
+        "domains_to_activate": [
+          "Architecture_Planner",
+          "Maintenance_Ops_Planner"
+        ],
+        "reason": "最后汇总架构视图和维护运维知识。"
+      }
+    ],
+    "refresh": "router_routed_from_changed_files",
+    "ingest": "router_classify_inbox_then_route",
+    "validate": "read_only_validation"
+  },
+  "router": {
+    "outputFields": [
+      "operation",
+      "scale",
+      "phases",
+      "inbox_classification",
+      "skipped",
+      "change_types",
+      "workspace_scope",
+      "special_flags",
+      "noise_filters",
+      "reasoning_summary"
+    ],
+    "phaseFields": [
+      "phase_num",
+      "domains_to_activate",
+      "reason",
+      "selection_mode"
+    ],
+    "inboxClassificationValues": [
+      "ops_or_diagnosis",
+      "change_intent",
+      "unrelated",
+      "unsafe",
+      "preserve_for_human"
+    ],
+    "rules": [
+      "Router 只做范围、领域、阶段和 inbox 分类；不写文件、不产出 Worker 正文任务。",
+      "domains_to_activate 只能包含 documentationDomains 中的 Planner 名称。",
+      "Triage 是 Router 的分类职责，不是单独 documentation domain。",
+      "operation=auto 时，不因 .kb_inbox/ 存在自动 ingest；只有用户明确要求处理 inbox 时才 ingest。",
+      "Router 必须读取 scenario-matrix.md 并先做 scale/change_type 分类。",
+      "大量 changedFiles 时必须先降噪，记录 generated、format-only、lockfile-only、build 输出等 skipped noise。",
+      "monorepo 或多服务仓库必须输出 workspace_scope；不知道时输出空数组并说明证据不足。",
+      "noise_filters[].classification 必须使用 noiseFilterClassificationValues 中的枚举值。"
+    ],
+    "workspaceScopeFields": [
+      "scope_id",
+      "kind",
+      "root_path",
+      "reason"
+    ],
+    "noiseFilterFields": [
+      "item",
+      "classification",
+      "reason"
+    ],
+    "noiseFilterClassificationValues": [
+      "generated_or_format_only",
+      "build_output",
+      "dependency_output",
+      "format_only",
+      "lockfile_only_auxiliary",
+      "outside_scope",
+      "test_snapshot_noise",
+      "vendor_or_third_party",
+      "semantic_auxiliary"
+    ]
+  },
+  "planner": {
+    "taskRequiredFields": [
+      "task_id",
+      "action",
+      "domain",
+      "target_path",
+      "focus_code_entity",
+      "evidence_paths",
+      "depends_on",
+      "confidence",
+      "clue"
+    ],
+    "allowedActions": [
+      "UPSERT",
+      "PRUNE"
+    ],
+    "allowedConfidence": [
+      "high",
+      "medium",
+      "low"
+    ],
+    "skippedFields": [
+      "item",
+      "reason"
+    ],
+    "rules": [
+      "Planner 只读证据并产出 target_path 级任务；不写文件。",
+      "一个任务对应一个最终 target_path。",
+      "优先更新已有相关文档，避免碎片化重复文档。",
+      "无证据支持时返回 tasks: [] 和 skipped，不发明 NOOP。",
+      "PRUNE target_path 必须是正式输出路径，或 operation=ingest 且位于 .kb_inbox/ 的已成功吸收材料。",
+      "Planner 必须把 Router 的 scale/change_types 传递到相关任务或 skipped 中。",
+      "L/XL 任务应遵守 scenario-matrix 的 phase 原则：若涉及 Data/Infra/workspace boundary，必须先处理底层事实；若仅涉及 API 契约，可先处理 API，但 Architecture/ACTIONDOCK 必须最后汇总。",
+      "rename_move 任务必须优先指向已有相关文档，并在 rename_map 中记录 old_path 与 new_path。",
+      "breaking_change 任务必须包含 compatibility_required 或 breaking_impact。",
+      "generated_or_format_only 只能在存在独立语义证据时触发正式文档任务。"
+    ],
+    "taskOptionalFields": [
+      "scale",
+      "change_types",
+      "workspace_scope",
+      "edit_mode",
+      "breaking_impact",
+      "rename_map",
+      "noise_filters",
+      "compatibility_required"
+    ]
+  },
+  "worker": {
+    "maxRetries": 3,
+    "allowedActions": [
+      "UPSERT",
+      "PRUNE"
+    ],
+    "statusValues": [
+      "COMPLETED",
+      "FAILED"
+    ],
+    "outputRequiredFields": [
+      "status",
+      "target_path",
+      "files_read",
+      "files_changed",
+      "evidence_gaps",
+      "warnings",
+      "edit_mode",
+      "scenario_notes"
+    ],
+    "rules": [
+      "每个 Worker 只拥有一个 target_path。",
+      "Worker 是唯一可写或删除该 target_path 的角色。",
+      "serial 模式下，主 agent 可以临时进入 Worker role 写一个 target_path，但必须保持同一 JSON 输出和边界。",
+      "默认做最小必要编辑；保留人工段落、备注、TODO、链接和上下文。",
+      "除非证据表明整篇 stale，否则不要整体重写。",
+      "UPSERT 时必须先读现有 target，再写入；证据不足时安全失败，不写 partial content。",
+      "若 edit_mode=full_rewrite_with_preservation，必须保留人工 TODO、备注、历史背景和有效链接，并在 scenario_notes 说明原因。",
+      "breaking_change 相关文档必须说明旧行为、新行为、影响对象和迁移边界。",
+      "rename_move 场景不得无证据创建重复文档；优先迁移或更新已有目标文档。",
+      "XL 场景只写当前 workspace_scope 相关事实，不把局部事实推广为全仓库事实。"
+    ]
+  },
+  "validator": {
+    "statusValues": [
+      "PASS",
+      "PASS_WITH_WARNINGS",
+      "FAIL"
+    ],
+    "findingFields": [
+      "severity",
+      "path",
+      "issue",
+      "suggested_repair"
+    ],
+    "severityValues": [
+      "error",
+      "warning",
+      "info"
+    ],
+    "docKinds": {
+      "substantive": "承载项目事实、流程、接口、数据、配置、运维步骤的正文档，必须包含证据与边界。",
+      "navigation": "只做目录、索引或跳转的页面，可以没有证据区，但必须链接到有证据区的正文档或明确暂无证据。"
+    },
+    "rules": [
+      "Validator 只读；不写、不删、不格式化正文档。",
+      "validate 模式只有在用户明确 repair=true 或明确要求修复时才可进入 Apply。",
+      "只对 substantive docs 强制要求 证据与边界；navigation/index docs 按导航完整性检查。",
+      "ACTIONDOCK.md 的已建立链接必须存在；待建立/暂无证据项不应使用 Markdown 链接。",
+      "读取 validator.md 的基础检查和场景专项检查。",
+      "monorepo/XL 场景检查 workspace/service 索引和 ACTIONDOCK 是否只做入口。",
+      "breaking_change 场景检查兼容性说明和迁移边界。",
+      "rename_move 场景检查新旧重复文档和 old_path → new_path 记录。",
+      "materially_stale_docs 场景检查 edit_mode 与保留人工内容说明。"
+    ],
+    "scenarioChecks": [
+      "workspace_or_service_index_for_monorepo",
+      "compatibility_note_for_breaking_change",
+      "duplicate_doc_detection_after_rename",
+      "stale_doc_edit_mode_recorded",
+      "actiondock_entry_only_not_detail_dump",
+      "noise_filter_reported_for_xl"
+    ]
+  },
+  "executionModes": {
+    "native_subagent": {
+      "useWhenAvailable": true,
+      "spawnStrategy": {
+        "router": "at_most_one_per_run",
+        "planner": "one_per_active_domain_per_phase",
+        "worker": "one_per_unique_target_path",
+        "validator": "one_or_more_read_only_for_large_validation"
+      }
+    },
+    "serial": {
+      "allowed": true,
+      "fallbackReasons": [
+        "runtime_unavailable",
+        "host_policy_blocked",
+        "user_forbidden",
+        "tooling_unavailable"
+      ],
+      "mustPreserveRoleBoundaries": true,
+      "mustRecordFallbackReason": true
+    },
+    "leaderMayWrite": [
+      "ACTIONDOCK.md",
+      "KNOWLEDGE_INIT_REPORT.md",
+      "KNOWLEDGE_UPDATE_REPORT.md",
+      "KNOWLEDGE_INGEST_REPORT.md",
+      "KNOWLEDGE_VALIDATE_REPORT.md",
+      "docs/ops/maintenance/errors.md"
+    ],
+    "leaderMayWriteSubstantiveDocsOnlyWhen": "serial_mode_emulating_worker_for_exactly_one_target_path"
+  },
+  "reportRequiredFields": [
+    "operation",
+    "execution_mode",
+    "serial_fallback_reason",
+    "repo_baseline",
+    "changed_files",
+    "activated_domains",
+    "skipped_domains",
+    "tasks_completed",
+    "tasks_failed",
+    "files_changed",
+    "validation_status",
+    "evidence_gaps",
+    "scale",
+    "change_types",
+    "workspace_scope",
+    "special_flags",
+    "noise_filters",
+    "edit_modes",
+    "scenario_findings"
+  ],
+  "richnessFloor": {
+    "requiredForSubstantiveDocs": [
+      "purpose_and_scope",
+      "current_behavior",
+      "key_files",
+      "important_flows_or_lifecycle_when_applicable",
+      "interfaces_contracts_or_schemas_when_applicable",
+      "operational_notes_when_applicable",
+      "evidence_paths",
+      "boundaries_gaps_unknowns",
+      "maintenance_notes"
+    ],
+    "preferredChineseSectionHeadings": [
+      "目的与范围",
+      "当前行为",
+      "关键文件",
+      "关键流程",
+      "接口与契约",
+      "数据与状态",
+      "运维说明",
+      "证据与边界",
+      "维护备注"
+    ],
+    "navigationDocsExemptFromEvidenceSection": true,
+    "rule": "不要用短摘要替代长期可维护文档。证据不足时写已确认事实，并明确列出缺口。"
+  },
+  "coverageFloor": {
+    "domainsMustBeConsidered": true,
+    "skipRequiresRecordedReason": true,
+    "allowedSkipReasons": [
+      "no_relevant_evidence",
+      "unchanged_from_current_docs",
+      "outside_requested_scope",
+      "blocked_by_missing_files",
+      "unsafe_path",
+      "insufficient_confidence"
+    ]
+  },
+  "pathSafety": {
+    "allowedTargetPatterns": [
+      "ACTIONDOCK.md",
+      "KNOWLEDGE_INIT_REPORT.md",
+      "KNOWLEDGE_UPDATE_REPORT.md",
+      "KNOWLEDGE_INGEST_REPORT.md",
+      "KNOWLEDGE_VALIDATE_REPORT.md",
+      "docs/"
+    ],
+    "allowedInboxCleanupRoot": ".kb_inbox/",
+    "forbiddenSegments": [
+      "..",
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      "target",
+      ".cache",
+      "coverage"
+    ],
+    "forbidAbsolutePaths": true,
+    "forbidWildcardsInResolvedTargets": true,
+    "requireRealpathContainment": true,
+    "rejectSymlinkEscape": true,
+    "requireAtomicUpsert": true,
+    "forbidDirectoryDeletion": true,
+    "newFileRule": "若 target_path 尚不存在，先 resolve 其父目录真实路径；父目录必须在 repoPath 内且不能通过 symlink 逃逸。",
+    "segmentRule": "forbiddenSegments 按路径段匹配，不按普通子串匹配。",
+    "pruneTargetRule": "PRUNE target_path 必须满足二选一：1) 正式输出路径；2) operation=ingest 且位于 .kb_inbox/，并且该 inbox item 已成功吸收。",
+    "deleteRule": "PRUNE 只能删除普通文件；inbox cleanup 只能删除已成功吸收且被任务显式指定的 .kb_inbox/ 文件。"
+  },
+  "scenario": {
+    "scaleValues": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "changeTypes": [
+      "api_change",
+      "schema_change",
+      "business_rule_change",
+      "infra_change",
+      "dependency_change",
+      "test_workflow_change",
+      "ops_runbook_change",
+      "rename_move",
+      "delete_deprecate",
+      "generated_or_format_only",
+      "breaking_change",
+      "stale_doc_refresh",
+      "monorepo_workspace_change"
+    ],
+    "specialFlags": [
+      "monorepo",
+      "large_changed_files",
+      "rename_move",
+      "breaking_or_possibly_breaking",
+      "materially_stale_docs",
+      "delete_or_deprecate",
+      "noise_heavy",
+      "lockfile_only",
+      "generated_only"
+    ],
+    "editModes": [
+      "minimal_edit",
+      "section_rewrite",
+      "full_rewrite_with_preservation",
+      "prune_after_validation"
+    ],
+    "rules": [
+      "Router 必须在 domain 路由前识别 scale、change_types、workspace_scope 和 special_flags。",
+      "XS/S 默认 minimal_edit；M 允许多 domain 合并；L/XL 必须分 phase；API-only 大更新可以跳过无关 Data/Infra phase，但 Architecture/ACTIONDOCK 仍最后汇总。",
+      "XL 场景必须先识别 workspace/service/package，并报告降噪结果。",
+      "rename_move 场景优先迁移已有文档，避免重复创建新旧文档。",
+      "breaking_change 或 possibly breaking 场景必须生成兼容性或迁移边界任务。",
+      "materially_stale_docs 场景允许 full_rewrite_with_preservation，但必须保留人工内容并写入 report。"
+    ],
+    "noiseFilterClassificationValues": [
+      "generated_or_format_only",
+      "build_output",
+      "dependency_output",
+      "format_only",
+      "lockfile_only_auxiliary",
+      "outside_scope",
+      "test_snapshot_noise",
+      "vendor_or_third_party",
+      "semantic_auxiliary"
+    ]
+  },
+  "phaseDefaultsByScale": {
+    "XS": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": [],
+        "reason": "极小变更只激活必要 domain；Router 必须填入最小相关 domains。",
+        "selection_mode": "router_selected_minimal"
+      }
+    ],
+    "S": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": [],
+        "reason": "小变更默认最小编辑；Router 必须填入最小相关 domains。",
+        "selection_mode": "router_selected_minimal"
+      }
+    ],
+    "M": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": [
+          "Data_Model_Planner",
+          "Infra_Env_Planner"
+        ],
+        "reason": "先确认底层事实。"
+      },
+      {
+        "phase_num": 1,
+        "domains_to_activate": [
+          "API_Spec_Planner",
+          "Business_Flow_Planner",
+          "Agent_Tool_Planner"
+        ],
+        "reason": "再更新契约、流程和工具。"
+      }
+    ],
+    "L": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": [
+          "Data_Model_Planner",
+          "Infra_Env_Planner"
+        ],
+        "reason": "若变更涉及 Data / Infra / workspace boundary，先确认底层事实；API-only 大更新可跳过此 phase。"
+      },
+      {
+        "phase_num": 1,
+        "domains_to_activate": [
+          "API_Spec_Planner",
+          "Business_Flow_Planner",
+          "Agent_Tool_Planner",
+          "Maintenance_Ops_Planner"
+        ],
+        "reason": "再更新业务、接口、工具和运维。"
+      },
+      {
+        "phase_num": 2,
+        "domains_to_activate": [
+          "Architecture_Planner"
+        ],
+        "reason": "最后汇总架构入口。"
+      }
+    ],
+    "XL": [
+      {
+        "phase_num": 0,
+        "domains_to_activate": [
+          "Architecture_Planner",
+          "Data_Model_Planner",
+          "Infra_Env_Planner"
+        ],
+        "reason": "先分区、降噪、确认 workspace；若涉及 Data / Infra，再确认底层事实。"
+      },
+      {
+        "phase_num": 1,
+        "domains_to_activate": [
+          "API_Spec_Planner",
+          "Business_Flow_Planner",
+          "Agent_Tool_Planner",
+          "Maintenance_Ops_Planner"
+        ],
+        "reason": "只更新受影响 workspace/service 的契约、流程和运维。"
+      },
+      {
+        "phase_num": 2,
+        "domains_to_activate": [
+          "Architecture_Planner"
+        ],
+        "reason": "最后刷新索引和 ACTIONDOCK。"
+      }
+    ]
+  },
+  "release": "4.1.1"
+}

@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "task_id": "stale-payment-flow-refresh",
+      "action": "UPSERT",
+      "domain": "Business_Flow_Planner",
+      "target_path": "docs/domain/flows/payment.md",
+      "focus_code_entity": "src/payments/payment.service.ts",
+      "evidence_paths": [
+        "src/payments/payment.service.ts",
+        "src/payments/refund.service.ts",
+        "src/payments/workers/refund.worker.ts"
+      ],
+      "depends_on": [],
+      "confidence": "medium",
+      "clue": "Existing payment flow doc conflicts with current async payment/refund implementation; rewrite while preserving manual notes.",
+      "scale": "L",
+      "change_types": [
+        "stale_doc_refresh",
+        "business_rule_change"
+      ],
+      "edit_mode": "full_rewrite_with_preservation"
+    }
+  ],
+  "skipped": []
+}

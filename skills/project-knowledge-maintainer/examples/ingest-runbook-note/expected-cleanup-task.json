@@ -1,0 +1,36 @@
+{
+  "tasks": [
+    {
+      "task_id": "ingest-payment-timeout-runbook",
+      "action": "UPSERT",
+      "domain": "Maintenance_Ops_Planner",
+      "target_path": "docs/ops/maintenance/payments.md",
+      "focus_code_entity": ".kb_inbox/payment-timeout-runbook.md",
+      "evidence_paths": [
+        ".kb_inbox/payment-timeout-runbook.md",
+        "src/payments/payment-worker.ts",
+        "src/payments/provider-client.ts"
+      ],
+      "depends_on": [],
+      "confidence": "medium",
+      "clue": "Merge runbook into existing payment maintenance doc; mark human-only claims as evidence gaps if not confirmed by code."
+    },
+    {
+      "task_id": "cleanup-payment-timeout-runbook-inbox",
+      "action": "PRUNE",
+      "domain": "Maintenance_Ops_Planner",
+      "target_path": ".kb_inbox/payment-timeout-runbook.md",
+      "focus_code_entity": ".kb_inbox/payment-timeout-runbook.md",
+      "evidence_paths": [
+        ".kb_inbox/payment-timeout-runbook.md",
+        "docs/ops/maintenance/payments.md"
+      ],
+      "depends_on": [
+        "ingest-payment-timeout-runbook"
+      ],
+      "confidence": "high",
+      "clue": "Delete inbox file only after UPSERT completed and validator confirms absorption."
+    }
+  ],
+  "skipped": []
+}

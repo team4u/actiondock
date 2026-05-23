@@ -1,0 +1,44 @@
+{
+  "tasks": [
+    {
+      "task_id": "data-coupons",
+      "action": "UPSERT",
+      "domain": "Data_Model_Planner",
+      "target_path": "docs/data/tables/coupons.md",
+      "focus_code_entity": "db/migrations/20260523_add_coupon_tables.sql",
+      "evidence_paths": [
+        "db/migrations/20260523_add_coupon_tables.sql"
+      ],
+      "depends_on": [],
+      "confidence": "high",
+      "clue": "Document coupon tables and constraints.",
+      "scale": "M",
+      "change_types": [
+        "schema_change"
+      ],
+      "edit_mode": "minimal_edit"
+    },
+    {
+      "task_id": "flow-checkout-coupon",
+      "action": "UPSERT",
+      "domain": "Business_Flow_Planner",
+      "target_path": "docs/domain/flows/checkout.md",
+      "focus_code_entity": "src/orders/checkout.service.ts",
+      "evidence_paths": [
+        "src/coupons/coupon.service.ts",
+        "src/orders/checkout.service.ts"
+      ],
+      "depends_on": [
+        "data-coupons"
+      ],
+      "confidence": "high",
+      "clue": "Document coupon validation and redemption in checkout.",
+      "scale": "M",
+      "change_types": [
+        "business_rule_change"
+      ],
+      "edit_mode": "minimal_edit"
+    }
+  ],
+  "skipped": []
+}

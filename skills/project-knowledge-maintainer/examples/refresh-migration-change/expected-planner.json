@@ -1,0 +1,35 @@
+{
+  "tasks": [
+    {
+      "task_id": "data-users-status-refresh",
+      "action": "UPSERT",
+      "domain": "Data_Model_Planner",
+      "target_path": "docs/data/tables/users.md",
+      "focus_code_entity": "db/migrations/20260522_add_user_status.sql",
+      "evidence_paths": [
+        "db/migrations/20260522_add_user_status.sql",
+        "src/users/user.service.ts"
+      ],
+      "depends_on": [],
+      "confidence": "high",
+      "clue": "Update users.status field semantics. Preserve existing manual notes; do not rewrite unrelated sections."
+    },
+    {
+      "task_id": "flow-user-registration-status-refresh",
+      "action": "UPSERT",
+      "domain": "Business_Flow_Planner",
+      "target_path": "docs/domain/flows/user-registration.md",
+      "focus_code_entity": "src/users/user.service.ts",
+      "evidence_paths": [
+        "src/users/user.service.ts",
+        "db/migrations/20260522_add_user_status.sql"
+      ],
+      "depends_on": [
+        "data-users-status-refresh"
+      ],
+      "confidence": "medium",
+      "clue": "Reflect user status transition if registration logic changed. Keep existing flow diagram unless stale."
+    }
+  ],
+  "skipped": []
+}

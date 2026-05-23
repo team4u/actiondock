@@ -1,0 +1,36 @@
+{
+  "tasks": [
+    {
+      "task_id": "rename-users-to-accounts-flow",
+      "action": "UPSERT",
+      "domain": "Business_Flow_Planner",
+      "target_path": "docs/domain/flows/user-registration.md",
+      "focus_code_entity": "src/accounts/account.service.ts",
+      "evidence_paths": [
+        "src/accounts/account.service.ts",
+        "src/accounts/account.controller.ts"
+      ],
+      "depends_on": [],
+      "confidence": "high",
+      "clue": "Update existing user registration flow doc for users→accounts move rather than creating duplicate account-registration doc.",
+      "scale": "L",
+      "change_types": [
+        "rename_move",
+        "business_rule_change"
+      ],
+      "edit_mode": "section_rewrite",
+      "rename_map": [
+        {
+          "old_path": "src/users/user.service.ts",
+          "new_path": "src/accounts/account.service.ts"
+        }
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "item": "docs/domain/flows/account-registration.md",
+      "reason": "avoid_duplicate_after_rename"
+    }
+  ]
+}

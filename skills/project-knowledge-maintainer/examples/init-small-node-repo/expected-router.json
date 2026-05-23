@@ -1,0 +1,54 @@
+{
+  "operation": "init",
+  "scale": "S",
+  "change_types": [
+    "infra_change",
+    "api_change"
+  ],
+  "workspace_scope": [],
+  "special_flags": [],
+  "noise_filters": [],
+  "phases": [
+    {
+      "phase_num": 0,
+      "domains_to_activate": [
+        "Infra_Env_Planner"
+      ],
+      "reason": "存在 package.json 与 .env.example，先建立本地开发与配置知识。"
+    },
+    {
+      "phase_num": 1,
+      "domains_to_activate": [
+        "API_Spec_Planner"
+      ],
+      "reason": "存在 health route，可建立最小 HTTP API 文档。"
+    },
+    {
+      "phase_num": 2,
+      "domains_to_activate": [
+        "Architecture_Planner"
+      ],
+      "reason": "最后建立入口和架构索引。"
+    }
+  ],
+  "inbox_classification": [],
+  "skipped": [
+    {
+      "item": "Data_Model_Planner",
+      "reason": "no_relevant_evidence"
+    },
+    {
+      "item": "Business_Flow_Planner",
+      "reason": "no_relevant_evidence"
+    },
+    {
+      "item": "Agent_Tool_Planner",
+      "reason": "no_relevant_evidence"
+    },
+    {
+      "item": "Maintenance_Ops_Planner",
+      "reason": "no_relevant_evidence"
+    }
+  ],
+  "reasoning_summary": "初始化缺失知识库，只激活有证据的领域，ACTIONDOCK 待建立项不应产生断链。"
+}

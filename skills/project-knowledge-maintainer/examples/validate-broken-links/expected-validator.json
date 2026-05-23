@@ -1,0 +1,17 @@
+{
+  "status": "FAIL",
+  "findings": [
+    {
+      "severity": "error",
+      "path": "ACTIONDOCK.md",
+      "issue": "已建立 section links to missing docs/api/http.md.",
+      "suggested_repair": "Move HTTP API to 待建立 / 暂无证据 or create docs/api/http.md from real route evidence."
+    },
+    {
+      "severity": "warning",
+      "path": "docs/domain/flows/checkout.md",
+      "issue": "Substantive flow doc lacks 证据与边界 section.",
+      "suggested_repair": "Add evidence paths and known boundaries for checkout flow."
+    }
+  ]
+}

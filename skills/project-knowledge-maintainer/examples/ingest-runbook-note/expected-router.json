@@ -1,0 +1,30 @@
+{
+  "operation": "ingest",
+  "scale": "S",
+  "change_types": [
+    "ops_runbook_change",
+    "business_rule_change"
+  ],
+  "workspace_scope": [],
+  "special_flags": [],
+  "noise_filters": [],
+  "phases": [
+    {
+      "phase_num": 0,
+      "domains_to_activate": [
+        "Maintenance_Ops_Planner",
+        "Business_Flow_Planner"
+      ],
+      "reason": "Inbox 是排障 runbook，且可能涉及支付状态流。"
+    }
+  ],
+  "inbox_classification": [
+    {
+      "path": ".kb_inbox/payment-timeout-runbook.md",
+      "classification": "ops_or_diagnosis",
+      "reason": "包含排障步骤和支付超时上下文。"
+    }
+  ],
+  "skipped": [],
+  "reasoning_summary": "只处理用户指定 inbox；成功吸收后才能生成 cleanup PRUNE。"
+}
