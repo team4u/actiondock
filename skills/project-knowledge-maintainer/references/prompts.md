@@ -13,7 +13,7 @@ Return JSON matching `schemas/route.schema.json`.
 Must decide:
 
 - task scale: XS/S/M/L/XL
-- execution mode: team_agent/native_subagent/serial
+- execution mode: subagent/serial
 - whether document_set_plan_required is true
 - which stages require delegates
 - which domains require Domain Planner delegates

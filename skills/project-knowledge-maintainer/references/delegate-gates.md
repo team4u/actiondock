@@ -1,6 +1,6 @@
 # All-Stage Delegate Gates
 
-A delegate gate applies whenever any stage is assigned to a team agent, native subagent, or equivalent execution delegate.
+A delegate gate applies whenever any stage is assigned to a subagent, subagent, or equivalent execution delegate.
 
 ## Stages covered
 

@@ -10,7 +10,7 @@
 | index has substantial content | M/L | Split to leaf docs; validator checks `index_content_sink` |
 | Planner lists only one or two docs but scope implies many | L/XL | hard failure: `planner_underplanning` |
 | Worker asked to discover missing docs | M/L/XL | hard failure: `delegated_discovery_to_worker` |
-| team agent pending and leader self-completes | any delegated | hard failure: `delegate_wait_bypassed` |
+| subagent pending and leader self-completes | any delegated | hard failure: `delegate_wait_bypassed` |
 | Validator not run | any | hard failure: `validator_not_run` |
 
 Use `candidate`, `defer`, and `excluded` entries in Plan A to avoid underplanning while controlling execution cost.

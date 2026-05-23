@@ -1,10 +1,9 @@
 {
   "name": "project-knowledge-maintainer",
-  "version": "5.1.0",
+  "version": "5.1.2",
   "purpose": "Repo-aware knowledge-base reconstruction and maintenance protocol.",
   "execution_priority": [
-    "team_agent",
-    "native_subagent",
+    "subagent",
     "serial"
   ],
   "hard_principles": [
@@ -142,7 +141,7 @@
     "final_report": "schemas/final-report.schema.json",
     "domain_plan": "schemas/domain-plan.schema.json"
   },
-  "release": "domain-partitioned-planning",
+  "release": "subagent-only-domain-planning",
   "skill_layout": {
     "entrypoint": "SKILL.md",
     "metadata": "YAML frontmatter in SKILL.md",

@@ -17,8 +17,7 @@
       "properties": {
         "execution_mode": {
           "enum": [
-            "team_agent",
-            "native_subagent",
+            "subagent",
             "serial"
           ]
         },

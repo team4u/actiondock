@@ -90,9 +90,9 @@ Final reports must include a compact delegate table when delegation was used:
 
 | Stage | Delegate type | Status | Result received | Summary |
 |---|---|---:|---:|---|
-| Router | team_agent | COMPLETED | yes | ... |
-| Planner | team_agent | COMPLETED | yes | ... |
-| Worker: `docs/api/http/orders.md` | team_agent | COMPLETED | yes | ... |
+| Router | subagent | COMPLETED | yes | ... |
+| Planner | subagent | COMPLETED | yes | ... |
+| Worker: `docs/api/http/orders.md` | subagent | COMPLETED | yes | ... |
 
 If a delegate did not return, do not mark the dependent stage complete. Use `WAITING`, `BLOCKED`, `FAILED`, `TIMEOUT_REPORTED`, or `UNAVAILABLE`.
 

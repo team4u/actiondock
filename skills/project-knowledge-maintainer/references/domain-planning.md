@@ -12,7 +12,7 @@ Global Planner
 
 ## Required domain fan-out
 
-For every activated or plausible domain, assign one Domain Planner delegate when `team_agent` or `native_subagent` execution is available. If delegation is unavailable, the leader may run serial domain-planning passes, but each pass must still produce a separate domain plan result.
+For every activated or plausible domain, assign one Domain Planner delegate when `subagent` execution is available. If delegation is unavailable, the leader may run serial domain-planning passes, but each pass must still produce a separate domain plan result.
 
 Canonical domains:
 

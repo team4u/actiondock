@@ -1,9 +1,9 @@
 ---
 name: project-knowledge-maintainer
-version: 5.1.0
-release: domain-partitioned-planning
+version: 5.1.2
+release: subagent-only-domain-planning
 summary: Repo-aware project knowledge maintainer with compatible skill metadata, formatter rules, domain-partitioned Plan A planning, and all-stage delegate gates.
-description: Maintains ACTIONDOCK.md, docs/ project knowledge, and .kb_inbox/ materials from repository evidence. Uses adaptive XS/S/M/L/XL protocols, prioritizes team agents over native subagents over serial fallback, enforces domain-partitioned Plan A complete document-set planning when required, waits for all delegated stage results, and validates before completion.
+description: Maintains ACTIONDOCK.md, docs/ project knowledge, and .kb_inbox/ materials from repository evidence. Uses adaptive XS/S/M/L/XL protocols, uses subagents before serial fallback, enforces domain-partitioned Plan A complete document-set planning when required, waits for all delegated stage results, and validates before completion.
 ---
 
 # Project Knowledge Maintainer
@@ -34,10 +34,10 @@ Read only what is needed for the current task, but preserve this control-plane o
 Use the highest available execution mode unless the user explicitly forbids delegation or the environment lacks support:
 
 ```text
-team_agent > native_subagent > serial
+subagent > serial
 ```
 
-`team_agent` means a dedicated team member, team task, team role, or equivalent external agent lane. `native_subagent` means a system-provided subagent or equivalent isolated execution unit. `serial` means the leader performs work inline only because delegation is unavailable, explicitly forbidden, or permitted by the XS/S protocol.
+`subagent` means a system-provided subagent or equivalent isolated execution unit. `serial` means the leader performs work inline only because delegation is unavailable, explicitly forbidden, or permitted by the XS/S protocol.
 
 ## All-stage delegate gate
 

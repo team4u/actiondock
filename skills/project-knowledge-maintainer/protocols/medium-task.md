@@ -21,4 +21,4 @@ Set `document_set_plan_required=true` and upgrade to Plan A when any of these ar
 
 ## Delegation
 
-Use `team_agent` or `native_subagent` when available. If Plan A is triggered, assign Domain Planner delegates before Worker delegates. Each planned target path should receive a dedicated Worker delegate unless the task is explicitly serial.
+Use `subagent` when available. If Plan A is triggered, assign Domain Planner delegates before Worker delegates. Each planned target path should receive a dedicated Worker delegate unless the task is explicitly serial.

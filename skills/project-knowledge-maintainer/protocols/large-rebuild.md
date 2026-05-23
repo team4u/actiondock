@@ -24,7 +24,7 @@ Route
 - Plan A is required.
 - Domain Planner fan-out is required for every activated or plausible domain.
 - Domain coverage matrix is required.
-- Delegate use is required when team agents or subagents are available.
+- Delegate use is required when subagents are available.
 - All delegated stages are gated.
 - Validation is full, not lite.
 

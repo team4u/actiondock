@@ -15,7 +15,7 @@ XL: Route → Workspace Partition → Noise Filter → Domain Planner Fan-out �
 ## Execution priority
 
 ```text
-team_agent > native_subagent > serial
+subagent > serial
 ```
 
 Use the highest available mode unless the user forbids delegation or the runtime cannot create delegates.

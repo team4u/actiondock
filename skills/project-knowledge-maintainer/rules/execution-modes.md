@@ -3,14 +3,14 @@
 ## Priority
 
 ```text
-team_agent > native_subagent > serial
+subagent > serial
 ```
 
-Use the highest available mode unless the user forbids it.
+Use `subagent` whenever the environment provides subagents or equivalent isolated task agents, unless the user explicitly forbids delegation or the selected XS/S protocol permits inline execution.
 
-## team_agent
+## subagent
 
-Use when the environment supports team agents, team tasks, agent members, or equivalent distributed roles. This mode is preferred for M/L/XL tasks and for any stage that benefits from separation of concerns.
+Use when the environment supports system-provided subagents, isolated task agents, or equivalent delegate lanes. This mode is preferred for M/L/XL tasks and for any stage that benefits from separation of concerns.
 
 Eligible delegated roles:
 
@@ -18,6 +18,7 @@ Eligible delegated roles:
 - Workspace Scanner
 - Noise Filter
 - Planner
+- Domain Planner
 - Document Set Planner
 - Task Planner
 - Worker
@@ -26,18 +27,16 @@ Eligible delegated roles:
 - Cleanup
 - Reporter
 
-## native_subagent
-
-Use when system-native subagents or isolated task agents are available but team agents are not.
+A delegated stage is not complete until its subagent result is received and recorded.
 
 ## serial
 
 Use only when:
 
-- team agents are unavailable and native subagents are unavailable;
+- subagents are unavailable;
 - the user explicitly forbids delegation;
 - the environment rejects delegate creation;
-- a delegate returns `UNAVAILABLE` and no equivalent delegate lane exists;
+- a delegate returns `UNAVAILABLE` and no equivalent isolated delegate lane exists;
 - the task is XS/S and the selected protocol permits inline execution.
 
 Invalid fallback reasons:
@@ -50,4 +49,4 @@ Invalid fallback reasons:
 - leader thinks it can do better
 - avoiding coordination overhead on M/L/XL tasks
 
-A serial fallback must be recorded with `fallback_reason`, `attempted_mode`, and `evidence`.
+A serial fallback must be recorded with `fallback_reason`, `attempted_mode`, and evidence.
