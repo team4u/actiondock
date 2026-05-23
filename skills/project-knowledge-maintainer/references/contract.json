@@ -1,8 +1,8 @@
 {
-  "version": "4.4.3",
-  "release": "adaptive-flow-plan-a-team-delegates",
+  "version": "4.4.5",
+  "release": "adaptive-flow-plan-a-all-stage-delegate-gates",
   "name": "project-knowledge-maintainer",
-  "description": "Adaptive evidence-first project knowledge maintainer with Plan A completeness and mandatory Worker delegate dispatch via team agents or subagents.",
+  "description": "Adaptive evidence-first project knowledge maintainer with Plan A completeness, mandatory delegated execution, and all-stage delegate-result gates.",
   "language": {
     "skillLanguage": "zh-Hans",
     "defaultDocumentLanguage": "zh-Hans",
@@ -202,7 +202,20 @@
     ],
     "worker": "Worker delegate",
     "validator": "Validator",
-    "leader": "Leader"
+    "leader": "Leader",
+    "delegatedStages": [
+      "Router",
+      "Workspace_Noise_Filter",
+      "Planner",
+      "Document_Set_Planner",
+      "Task_Planner",
+      "Worker",
+      "Validator",
+      "Repair_Planner",
+      "Repair_Worker",
+      "Cleanup",
+      "Reporter"
+    ]
   },
   "outputs": {
     "entry": "ACTIONDOCK.md",
@@ -511,7 +524,13 @@
       "检查 Planner 是否把文档发现职责交给 Worker；若是报告 delegated_discovery_to_worker。",
       "检查 document_set_plan category 是否包含 coverage_basis、coverage_assertion、scope_boundary、excluded_candidates。",
       "当 execution_mode=team_agent 或 native_subagent 时，检查每个 changed substantive target 是否有对应 Worker delegate dispatch 记录。",
-      "如果 Leader 在 team_agent 或 native_subagent 可用时绕过 Worker delegate 批量写正文档，报告 worker_delegate_not_dispatched；worker_subagent_not_dispatched 为兼容旧别名。"
+      "如果 Leader 在 team_agent 或 native_subagent 可用时绕过 Worker delegate 批量写正文档，报告 worker_delegate_not_dispatched；worker_subagent_not_dispatched 为兼容旧别名。",
+      "当 execution_mode=team_agent 或 native_subagent 时，检查每个派发的 delegate 是否有明确返回状态；缺失结果报告 delegate_result_missing。",
+      "如果 Leader 因 team agent / subagent 返回慢、等待中或未返回而自行推进或写入，报告 delegate_wait_bypassed。",
+      "slow / pending / not yet returned 不是 serial fallback reason；若用作 fallback reason，报告 error。",
+      "当 execution_mode=team_agent 或 native_subagent 时，检查每个已派发 stage delegate 是否有明确返回状态；缺失结果报告 delegate_result_missing。",
+      "如果 Leader 因 team agent / subagent 返回慢、等待中或未返回而自行推进任一已派发阶段，报告 delegate_wait_bypassed。",
+      "当 structured/partitioned 或 repair/cleanup/report 阶段声称 delegated execution 但缺少非 Worker 阶段 dispatch 记录时，报告 stage_delegate_not_dispatched。"
     ],
     "findingTypes": [
       "index_content_sink",
@@ -528,7 +547,10 @@
       "delegated_discovery_to_worker",
       "document_set_plan_incomplete_metadata",
       "worker_subagent_not_dispatched",
-      "worker_delegate_not_dispatched"
+      "worker_delegate_not_dispatched",
+      "delegate_result_missing",
+      "delegate_wait_bypassed",
+      "stage_delegate_not_dispatched"
     ]
   },
   "executionModes": {
@@ -536,12 +558,17 @@
       "useWhenAvailable": true,
       "priority": 1,
       "requiredWhenAvailableAndNotForbidden": true,
-      "description": "Use team agent / multi-agent team first when supported by the runtime and not forbidden by the user.",
+      "description": "Use team agent / multi-agent team first when supported by the runtime and not forbidden by the user. Any dispatched stage must return before dependent stages proceed.",
       "spawnStrategy": {
         "router": "at_most_one_routing_delegate_per_run",
+        "workspace_noise_filter": "one_scope_filter_delegate_when_partitioned_or_noise_filter_required",
         "planner": "one_planning_delegate_per_active_domain_per_phase_when_flow_requires_planning",
+        "document_set_planner": "one_document_set_planning_delegate_per_active_domain_when_required",
+        "task_planner": "one_task_planning_delegate_per_phase_when_required",
         "worker": "one_dedicated_worker_delegate_per_unique_target_path",
-        "validator": "one_or_more_read_only_validator_delegates_for_large_validation"
+        "validator": "one_or_more_read_only_validator_delegates_for_large_validation",
+        "repair": "one_repair_planner_or_worker_delegate_per_finding_or_target_when_repair_enabled",
+        "cleanup_reporter": "one_delegate_when_cleanup_or_report_generation_is_delegated"
       },
       "workerDispatchRequired": true,
       "workerDispatchRule": "one_dedicated_worker_delegate_per_unique_writable_target_path",
@@ -550,22 +577,57 @@
         "team_task",
         "equivalent_isolated_execution_unit"
       ],
-      "leaderMustNotBatchWriteSubstantiveDocs": true
+      "leaderMustNotBatchWriteSubstantiveDocs": true,
+      "delegateWaitGateRequired": true,
+      "mustWaitForDelegateResultsBeforeDependentPhase": true,
+      "slowDelegateIsNotFallbackReason": true,
+      "requiredDelegateResultStatuses": [
+        "COMPLETED",
+        "FAILED",
+        "BLOCKED",
+        "NEEDS_REPLAN",
+        "WAITING",
+        "TIMEOUT_REPORTED",
+        "UNAVAILABLE"
+      ],
+      "leaderMustNotSelfCompletePendingDelegateWork": true,
+      "allStageDelegateWaitGateRequired": true,
+      "mustNotSelfCompleteAnyDispatchedStage": true
     },
     "native_subagent": {
       "useWhenAvailable": true,
       "priority": 2,
       "requiredWhenTeamAgentUnavailableAndNotForbidden": true,
-      "description": "Use native subagents when team_agent is unavailable but subagent dispatch is supported.",
+      "description": "Use native subagents when team_agent is unavailable but subagent dispatch is supported. Any dispatched stage must return before dependent stages proceed.",
       "spawnStrategy": {
         "router": "at_most_one_per_run",
+        "workspace_noise_filter": "one_scope_filter_subagent_when_partitioned_or_noise_filter_required",
         "planner": "one_per_active_domain_per_phase_when_flow_requires_planning",
+        "document_set_planner": "one_document_set_planning_subagent_per_active_domain_when_required",
+        "task_planner": "one_task_planning_subagent_per_phase_when_required",
         "worker": "one_dedicated_subagent_per_unique_target_path",
-        "validator": "one_or_more_read_only_for_large_validation"
+        "validator": "one_or_more_read_only_for_large_validation",
+        "repair": "one_repair_planner_or_worker_subagent_per_finding_or_target_when_repair_enabled",
+        "cleanup_reporter": "one_subagent_when_cleanup_or_report_generation_is_delegated"
       },
       "workerDispatchRequired": true,
       "workerDispatchRule": "one_dedicated_worker_subagent_per_unique_writable_target_path",
-      "leaderMustNotBatchWriteSubstantiveDocs": true
+      "leaderMustNotBatchWriteSubstantiveDocs": true,
+      "delegateWaitGateRequired": true,
+      "mustWaitForDelegateResultsBeforeDependentPhase": true,
+      "slowDelegateIsNotFallbackReason": true,
+      "requiredDelegateResultStatuses": [
+        "COMPLETED",
+        "FAILED",
+        "BLOCKED",
+        "NEEDS_REPLAN",
+        "WAITING",
+        "TIMEOUT_REPORTED",
+        "UNAVAILABLE"
+      ],
+      "leaderMustNotSelfCompletePendingDelegateWork": true,
+      "allStageDelegateWaitGateRequired": true,
+      "mustNotSelfCompleteAnyDispatchedStage": true
     },
     "serial": {
       "allowed": true,
@@ -602,7 +664,18 @@
       "native_subagent",
       "equivalent_isolated_execution_unit",
       "serial_emulated_worker_when_fallback_recorded"
-    ]
+    ],
+    "invalidFallbackReasons": [
+      "delegate_slow",
+      "delegate_pending",
+      "impatience",
+      "save_time",
+      "result_not_yet_returned",
+      "stage_result_missing",
+      "waiting_for_team_agent"
+    ],
+    "waitGateRule": "After dispatching any stage delegate, including Router, workspace/noise filter, Planner, Document Set Planner, Task Planner, Worker, Validator, Repair, Cleanup, or Reporter, Leader must wait for an explicit result, failure, blocker, timeout report, or unavailable status before entering dependent phases. Pending/slow delegates cannot be converted into serial self-execution.",
+    "phaseBlockingRule": "phase N+1 may start only after all required phase N delegates have returned COMPLETED or have been recorded and handled as FAILED, BLOCKED, NEEDS_REPLAN, TIMEOUT_REPORTED, or UNAVAILABLE."
   },
   "reportRequiredFieldsBase": [
     "operation",
@@ -613,7 +686,9 @@
     "validation_status",
     "evidence_gaps",
     "scale",
-    "worker_dispatch"
+    "delegate_dispatch",
+    "worker_dispatch",
+    "delegate_wait_status"
   ],
   "reportFieldsWhenRelevant": [
     "serial_fallback_reason",
@@ -633,7 +708,12 @@
     "deferred_leaf_docs",
     "proposed_extra_tasks",
     "plan_a_coverage_summary",
-    "planner_underplanning_findings"
+    "planner_underplanning_findings",
+    "delegate_results",
+    "tasks_blocked",
+    "tasks_waiting",
+    "stage_delegate_results",
+    "delegate_stage_wait_status"
   ],
   "richnessFloor": {
     "requiredForSubstantiveDocs": [
@@ -770,19 +850,71 @@
   "leader": {
     "delegateResponsibilities": [
       "select execution mode using priority team_agent > native_subagent > serial",
+      "dispatch stage delegates when team_agent/native_subagent is available and the stage is non-trivial or explicitly delegated",
       "dispatch one Worker delegate per unique writable target_path",
       "use team agent / multi-agent team first when supported and not forbidden",
       "use native subagent when team agent is unavailable but subagent dispatch is supported",
       "deduplicate tasks before dispatch",
-      "block later phases until prior-phase Worker results are complete or failed",
+      "block dependent phases until all prerequisite stage delegate results are complete, failed, blocked, timeout-reported, or unavailable",
       "merge Worker results and handle NEEDS_REPLAN",
-      "write reports and allowed navigation/entry files only"
+      "write reports and allowed navigation/entry files only after prerequisite delegates returned or were recorded as blocked/failed/waiting"
     ],
     "mustNot": [
+      "self-complete any dispatched stage in team_agent or native_subagent mode",
       "batch-write multiple substantive docs in team_agent or native_subagent mode",
       "treat Worker as a prose section instead of an actual dispatched delegate when team agents or subagents are available",
       "choose serial merely for convenience when team_agent or native_subagent is available and not forbidden"
     ],
-    "serialFallbackRule": "If team agent and Worker subagents cannot be dispatched, set execution_mode=serial, record fallback reason, and emulate exactly one Worker target at a time."
+    "serialFallbackRule": "If team agent and subagent delegates cannot be dispatched, set execution_mode=serial before dispatching work, record fallback reason, and preserve role boundaries. After a delegate has been dispatched, Leader must wait for an explicit UNAVAILABLE/FAILED/BLOCKED/TIMEOUT_REPORTED result before rerouting; slow/pending is not enough.",
+    "delegateWaitResponsibilities": [
+      "wait for Router delegate result before Planner",
+      "wait for workspace/noise delegate result before scoped planning",
+      "wait for Planner / Document Set Planner / Task Planner delegate result before Worker dispatch",
+      "wait for every Worker delegate result before marking target_path completed",
+      "wait for Validator delegate result before reporting PASS",
+      "wait for Repair delegate result before marking findings resolved or re-validating",
+      "wait for Cleanup/Reporter delegate result before deleting inbox, archiving materials, or reporting completed",
+      "do not self-complete pending or slow delegate work at any stage",
+      "record WAITING/BLOCKED/FAILED/TIMEOUT_REPORTED when result is unavailable instead of bypassing delegate"
+    ]
+  },
+  "delegateWaitGate": {
+    "requiredWhenExecutionModeIn": [
+      "team_agent",
+      "native_subagent"
+    ],
+    "appliesTo": [
+      "Router",
+      "Workspace_Noise_Filter",
+      "Planner",
+      "Document_Set_Planner",
+      "Task_Planner",
+      "Worker",
+      "Validator",
+      "Repair_Planner",
+      "Repair_Worker",
+      "Cleanup",
+      "Reporter"
+    ],
+    "acceptedResultStatuses": [
+      "COMPLETED",
+      "FAILED",
+      "BLOCKED",
+      "NEEDS_REPLAN",
+      "WAITING",
+      "TIMEOUT_REPORTED",
+      "UNAVAILABLE"
+    ],
+    "pendingResultPolicy": "do_not_proceed_do_not_self_execute_record_waiting_or_blocked",
+    "invalidBypassReasons": [
+      "slow",
+      "pending",
+      "not_yet_returned",
+      "impatience",
+      "save_time",
+      "waiting_for_team_agent"
+    ],
+    "stageGateRule": "Every dispatched stage delegate must produce a result record before dependent stages proceed. This applies to non-Worker stages as well as Worker delegates.",
+    "reportRequirement": "delegate_dispatch, worker_dispatch, delegate_results, and stage_delegate_results must include stage, delegate_status, result_received, and result_summary for each dispatched stage or target."
   }
 }

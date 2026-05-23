@@ -233,7 +233,7 @@ Worker 可返回：
 }
 ```
 
-但 `proposed_extra_tasks` 是**异常溢出机制**，不是正常规划机制。若 Worker 提出的是当前 evidence / existing docs tree 中显然可识别的 leaf doc，Validator 应同时报告 Planner `planner_underplanning`。serial 模式可以回到 mini-plan 补一轮；native_subagent 模式由 Leader 合并任务后派发新 Worker。
+但 `proposed_extra_tasks` 是**异常溢出机制**，不是正常规划机制。若 Worker 提出的是当前 evidence / existing docs tree 中显然可识别的 leaf doc，Validator 应同时报告 Planner `planner_underplanning`。serial 模式可以回到 mini-plan 补一轮；team_agent / native_subagent 模式由 Leader 等待当前 delegate 结果、合并任务后再派发新 Worker。
 
 ## 10. Validator 语义
 

@@ -10,7 +10,7 @@ L/XL:   Route → Document Set Plan → Task Plan → Phased Apply → Validate
 validate-only: Route-lite → Validate
 ```
 
-Router、Planner、Worker、Validator 是角色边界。team agent / multi-agent team 可用时优先使用；否则使用 native subagent。Worker 必须作为写入隔离的执行代理使用；serial 只是 fallback，不是首选执行方式。serial 模式下，主 agent 可以按角色顺序执行，但不得混淆“规划”和“写入”的责任。
+Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair、Cleanup/Reporter 都是角色边界。team agent / multi-agent team 可用时优先使用；否则使用 native subagent。任何已派发阶段都必须等待 delegate 结果；Worker 仍必须作为写入隔离的执行代理使用。serial 只是 fallback，不是首选执行方式。serial 模式下，主 agent 可以按角色顺序执行，但不得混淆各阶段责任。
 
 ## 0. 输入约定
 
@@ -279,14 +279,16 @@ M/L/XL、repair=true 或 validate-only 大范围检查时使用 full validate，
 
 ### team_agent
 
-运行时支持 team agent / multi-agent team 且用户未禁止时，应优先使用该模式。它适合把 Router、Planner、Worker、Validator 分配给不同 team member 或 team task，减少单一上下文偷懒、串写和角色污染。
+运行时支持 team agent / multi-agent team 且用户未禁止时，应优先使用该模式。它适合把 Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair、Cleanup/Reporter 分配给不同 team member 或 team task，减少单一上下文偷懒、串写和角色污染。
 
 派发规则：
 
 - Router：每次运行最多一个 routing delegate。
-- Planner：仅当 flow profile 需要 planning 时，每个 phase 的每个激活 domain 一个 planning delegate。
+- Workspace/noise filter：XL、monorepo 或 changedFiles 很多时可独立派发。
+- Planner / Document Set Planner / Task Planner：仅当 flow profile 需要 planning 时，每个 phase 的每个激活 domain 一个 planning delegate；Plan A 和 task plan 可以同一 delegate，也可以拆成两个 delegate。
 - Worker：每个唯一 `target_path` 一个独立 Worker delegate；delegate 可以是 team member、team task 或等价隔离执行单元。
 - Validator：大范围验证时可以多个只读 validator delegate。
+- Repair / Cleanup / Reporter：如果派发给 team member 或 team task，也必须遵守 wait gate；尤其 cleanup 不得在 ingest delegate 结果缺失时提前删除 inbox。
 
 ### native_subagent
 
@@ -295,13 +297,31 @@ M/L/XL、repair=true 或 validate-only 大范围检查时使用 full validate，
 派发规则：
 
 - Router：每次运行最多一个。
-- Planner：仅当 flow profile 需要 planning 时，每个 phase 的每个激活 domain 一个。
+- Workspace/noise filter：XL、monorepo 或 changedFiles 很多时可独立派发。
+- Planner / Document Set Planner / Task Planner：仅当 flow profile 需要 planning 时，每个 phase 的每个激活 domain 一个；Plan A 和 task plan 可以同一 subagent，也可以拆成两个 subagent。
 - Worker：每个唯一 `target_path` 一个独立 Worker subagent；这是没有 team agent 时写入正文档的默认方式。
 - Validator：大范围验证时可以多个只读 validator。
+- Repair / Cleanup / Reporter：如果派发给 subagent，也必须遵守 wait gate。
 
-同一 phase 的 Planner 可并行。同一 phase 的 Worker 只有在 `target_path` 不同时才可并行。phase N+1 必须等待 phase N 的 Worker 完成或失败。
+同一 phase 的 Planner 可并行。同一 phase 的 Worker 只有在 `target_path` 不同时才可并行。phase N+1 必须等待 phase N 的所有必需 delegate 返回明确状态（COMPLETED、FAILED、BLOCKED、NEEDS_REPLAN、TIMEOUT_REPORTED 或 UNAVAILABLE）并处理后，才可推进。
 
-Leader 在 `team_agent` 或 `native_subagent` 模式下不得批量写多个 substantive docs；它只负责编排、任务去重、phase 阻塞、汇总 report，以及允许的入口/报告文件。如果 Leader 发现无法派发 Worker delegate，应切换到 serial 并记录 fallback reason。
+Leader 在 `team_agent` 或 `native_subagent` 模式下不得批量写多个 substantive docs，也不得接管任何已派发阶段；它只负责编排、任务去重、phase 阻塞、汇总 report，以及允许的入口/报告文件。如果 Leader 发现无法派发所需 delegate，应在派发前切换到 serial 并记录 fallback reason；已派发后必须等待该 delegate 的明确结果或不可用/失败/阻塞状态。
+
+Leader 也不得因为 team agent / subagent 返回慢而自行执行对应任务。已派发 delegate 后，Leader 必须等待明确结果、失败或阻塞状态。慢返回、未返回、等待中都不是 serial fallback reason；只能记录为 `delegate_waiting`、`delegate_timeout`、`BLOCKED` 或 `FAILED`，并停止依赖该结果的后续推进。
+
+### all-stage delegate wait gate
+
+一旦选择 `team_agent` 或 `native_subagent`，所有已派发阶段都必须通过 wait gate：
+
+- Router gate：等待 route result。
+- Workspace/noise gate：等待 workspace scope、changedFiles 降噪和 skip reason。
+- Planner gate：等待 Plan A / document_set_plan / task plan。
+- Worker gate：等待每个 target_path 的 Worker result。
+- Validator gate：等待验证结果。
+- Repair gate：等待 repair plan、repair task result 和 re-validation trigger。
+- Cleanup/Reporter gate：等待 cleanup/report result；不得在依赖结果缺失时删除 inbox、归档材料或输出 completed。
+
+允许并行派发多个同 phase delegate，但不允许跳过等待。若有 delegate 返回 `NEEDS_REPLAN`，先回到 planning gate；若返回 `FAILED` 或 `BLOCKED`，记录并停止依赖该结果的下游任务；若未返回，不能由 Leader 自己做，只能把任务保持为等待/阻塞/失败。
 
 ### serial
 
@@ -309,7 +329,7 @@ Leader 在 `team_agent` 或 `native_subagent` 模式下不得批量写多个 sub
 
 serial 要求：
 
-- 仍按 Router / Planner / Worker / Validator 的职责切分。
+- 仍按 Router / workspace/noise filter / Planner / Document Set Planner / Task Planner / Worker / Validator / Repair / Cleanup/Reporter 的职责切分。
 - 记录 `execution_mode=serial` 和 fallback reason。
 - Worker 写入时仍保持 one target_path ownership；主 agent 每次只能模拟一个 Worker target。
 - 发现 `proposed_extra_tasks` 时可以回到 mini-plan，但必须在 report 记录；如果该任务本应由 Plan A 识别，同时记录 `planner_underplanning`。
@@ -325,7 +345,7 @@ serial 要求：
 - repo_baseline
 - files_changed
 - validation_status
-- worker_dispatch：team agent / native subagent 派发摘要，或 serial fallback reason
+- worker_dispatch：team agent / native subagent 派发摘要、每个 delegate 的返回状态，或 serial fallback reason
 - evidence_gaps
 
 按需包含：
@@ -333,7 +353,7 @@ serial 要求：
 - changed_files
 - activated_domains
 - skipped_domains
-- tasks_completed / tasks_failed
+- tasks_completed / tasks_failed / tasks_blocked / tasks_waiting
 - change_types
 - workspace_scope
 - special_flags

@@ -1,9 +1,9 @@
 ---
 name: project-knowledge-maintainer
-version: 4.4.3
-release: adaptive-flow-plan-a-team-delegates
-summary: Adaptive, evidence-first project knowledge maintainer with Plan A completeness and mandatory Worker delegate dispatch via team agents or subagents.
-description: 初始化、刷新、吸收或验证一个由仓库证据驱动的项目知识库。适用于维护 ACTIONDOCK.md、docs/ 项目知识、.kb_inbox/ 人工材料，以及架构、API、数据、业务流程、Agent/工具、环境和运维诊断文档。v4.4.3 在自适应轻/重流程和 Plan A 全集规划基础上，强化执行代理边界：运行时支持 team agent 时优先使用 team agent；否则使用 native subagent；每个可写 target_path 必须由独立 Worker delegate 执行，Leader 不直接批量写正文档。
+version: 4.4.5
+release: adaptive-flow-plan-a-all-stage-delegate-gates
+summary: Adaptive, evidence-first project knowledge maintainer with Plan A completeness, mandatory delegated execution, and all-stage delegate-result gates.
+description: 初始化、刷新、吸收或验证一个由仓库证据驱动的项目知识库。适用于维护 ACTIONDOCK.md、docs/ 项目知识、.kb_inbox/ 人工材料，以及架构、API、数据、业务流程、Agent/工具、环境和运维诊断文档。v4.4.5 在自适应轻/重流程、Plan A 全集规划和 team delegate 优先基础上，强化所有阶段的等待边界：运行时支持 team agent 时优先使用 team agent；否则使用 native subagent；Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair 和 Cleanup/Reporter 等任何已派发阶段都必须等 delegate 返回明确结果后才能推进。
 ---
 
 # Project Knowledge Maintainer
@@ -23,11 +23,13 @@ validate-only: Route-lite → Validate
 
 执行模式有三种，按优先级选择：
 
-- `team_agent`：运行时支持 team agent / multi-agent team 且用户未禁止时优先使用。Router、Planner、Worker、Validator 由不同 team member 或可隔离执行代理承担；其中 Worker 是写入隔离的主要执行单元。
-- `native_subagent`：没有 team agent 但支持原生 subagent 且用户未禁止时使用。Router、Planner、Worker、Validator 按角色分工；其中 Worker 由独立 subagent 执行。
+- `team_agent`：运行时支持 team agent / multi-agent team 且用户未禁止时优先使用。Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair、Cleanup/Reporter 等阶段可由不同 team member、team task 或可隔离执行代理承担。
+- `native_subagent`：没有 team agent 但支持原生 subagent 且用户未禁止时使用。上述阶段可按角色分工派发给 subagent；其中 Worker 仍是写入隔离的主要执行单元。
 - `serial`：运行时不支持 team agent / subagent、被宿主策略阻止，或用户禁止代理派发时，当前主 agent 按同一角色边界串行执行。
 
-在 `team_agent` 或 `native_subagent` 模式下，**每个可写 `target_path` 必须派发给一个独立 Worker delegate**；delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元。同一 `target_path` 不得有多个 Worker 并发写。Leader 只负责编排、合并、报告和允许的入口/报告文件，不应绕过 Worker delegate 批量写 substantive docs。
+在 `team_agent` 或 `native_subagent` 模式下，**任何被派发的阶段都是真实 delegate，不是 Leader 的提示性备注**。每个可写 `target_path` 仍必须派发给一个独立 Worker delegate；非写入阶段也必须有对应的 delegate result record。同一 `target_path` 不得有多个 Worker 并发写。Leader 只负责编排、去重、等待、合并、报告和允许的入口/报告文件，不应绕过 delegate 自行补做已派发阶段。
+
+**All-stage delegate wait gate 是硬门槛**：一旦派发任何 Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair、Cleanup 或 Reporter delegate，Leader 必须等待该 delegate 返回明确结果、失败状态、阻塞状态或可记录的不可用状态后，才能进入依赖它的下一阶段。慢返回不是 fallback reason；不得因为 team agent 或 subagent 响应慢就切换为 serial 或由 Leader 自己完成。
 
 Team agent / subagent 是首选执行方式，不是装饰性描述：可用且未被用户禁止时必须使用。没有任何可派发执行代理能力时，必须显式降级为 `serial`，并记录 fallback reason。该 skill 是 prompt-first；不要依赖 ActionDock Server、外部元数据库、后台轮询服务或随包 orchestrator 脚本。
 
@@ -45,7 +47,7 @@ Team agent / subagent 是首选执行方式，不是装饰性描述：可用且�
 
 6. `references/document-granularity.md`：索引页与正文档的拆分规则。
 7. `references/document-set-planning.md`：子文档清单规划规则；M/L/XL 或存在 granularity 风险时读取。
-8. `references/prompts.md`：Router / Planner / Worker / Validator 的角色契约。
+8. `references/prompts.md`：Router / workspace-noise / Planner / Document Set Planner / Task Planner / Worker / Validator / Repair / Cleanup/Reporter 的角色契约。
 9. `references/validator.md`：基础验证与场景专项验证规则。
 10. `references/actiondock-template.md`：创建或刷新 `ACTIONDOCK.md` 前读取。
 
@@ -159,11 +161,13 @@ repair: true
 - XS/S 可直接更新已有 leaf doc。若只有 index 存在且本次只是补一行导航或状态，不必强行创建 leaf doc；若要写正文事实，则必须创建或建议创建 leaf doc。
 - Leaf substantive doc 必须包含 `证据与边界` 或 `Evidence and Boundaries`。Navigation/index doc 可以没有证据区，但不得承载完整正文。
 
-### 5. Worker delegate 与自主性边界
+### 5. Delegate 与自主性边界
 
-Worker 不是普通 apply 步骤。在 `team_agent` 或 `native_subagent` 模式下，每个写入任务都应被派发给独立 Worker delegate；Worker delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元。Worker 可以读取相关文件、已有文档和前序 phase 输出，写入归属仍按 target_path 唯一。
+任何 delegate 都不是普通说明文本。在 `team_agent` 或 `native_subagent` 模式下，Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair、Cleanup/Reporter 只要被派发，就必须由对应 delegate 产出结果。Leader 不得因等待时间、上下文便利或“自己更快”而接管该阶段。
 
-- Leader 不得在 `team_agent` 或 `native_subagent` 模式下绕过 Worker delegate 批量写 substantive docs；若必须由主 agent 写入，必须切换到 `serial` 并记录 fallback reason。
+- Leader 不得在 `team_agent` 或 `native_subagent` 模式下绕过已派发 delegate 自行完成同一阶段；若必须由主 agent 执行，必须在派发前选择 `serial`，或在 delegate 明确返回 `UNAVAILABLE` / `FAILED` 后重新路由并记录原因。
+- Leader 必须等待已派发 delegate 的明确结果：`COMPLETED`、`FAILED`、`NEEDS_REPLAN`、`BLOCKED`、`WAITING`、`TIMEOUT_REPORTED` 或 `UNAVAILABLE`。没有 delegate 结果时，不得进入依赖阶段，不得把任务视为完成，也不得自行补写。
+- 每个写入任务仍必须派发给独立 Worker delegate；Worker delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元。Worker 可以读取相关文件、已有文档和前序 phase 输出，写入归属仍按 target_path 唯一。
 - Worker 不得越过路径安全、secret 保护或 repo 外写入。
 - Worker 不得把正文事实塞进 index/navigation doc。
 - 在 M/L/XL 且存在 `document_set_plan` 时，Worker 不得直接创建规划外 leaf doc。
@@ -179,7 +183,7 @@ Worker 不是普通 apply 步骤。在 `team_agent` 或 `native_subagent` 模式
 
 - operation mode
 - execution mode：`team_agent`、`native_subagent` 或 `serial`
-- worker dispatch：每个 target_path 是否由 Worker delegate 执行，以及使用 team agent / subagent / serial fallback 的原因
+- delegate dispatch：所有被派发阶段的 delegate_type、delegate_status、result_received、result_summary；另列每个 target_path 的 Worker delegate 记录和 fallback reason
 - flow profile：`lite`、`standard`、`structured` 或 `partitioned`
 - 主要变更文件
 - 验证结果
@@ -194,16 +198,34 @@ Worker 不是普通 apply 步骤。在 `team_agent` 或 `native_subagent` 模式
 
 Planner 可以不为证据不足的候选项创建空文档，但必须在 Plan A 里说明为什么 defer 或排除。不得把文档发现职责留给 Worker。
 
-## Worker delegate 强制派发原则
+## Delegate 强制派发原则
 
-当 execution mode 是 `team_agent` 或 `native_subagent` 时，Worker 必须是实际派发的执行代理，而不是 Leader 在同一上下文里顺手执行的 apply 段落。优先级是：team agent / multi-agent team > native subagent > serial fallback。
+当 execution mode 是 `team_agent` 或 `native_subagent` 时，所有被拆出的阶段都必须作为真实 delegate 派发和等待；不是只有 Worker 需要 delegate。优先级是：team agent / multi-agent team > native subagent > serial fallback。
 
-- 每个唯一 `target_path` 对应一个 Worker delegate。
-- Worker delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元。
-- Worker delegate 只写自己的 `target_path`，但可读相关证据。
-- Leader 可以创建或更新报告、入口导航和调度记录，但不得绕过 Worker 写多个正文档。
-- 如果运行时无法创建 team agent 或 subagent delegate，必须改用 `serial`，并在最终报告中写明 fallback reason。
-- 对 L/XL 和 `document_set_plan_required=true` 的任务，缺少 Worker dispatch 记录应视为执行质量问题。
+- Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair、Cleanup/Reporter 任何一个环节只要派发，就必须有 delegate result。
+- 每个唯一 `target_path` 对应一个 Worker delegate。Worker delegate 可以是 team agent member、team task、native subagent 或等价隔离执行单元；只写自己的 `target_path`，但可读相关证据。
+- Leader 必须等待每个已派发 delegate 返回明确结果，再推进依赖阶段；不得把“仍在等待 / 未返回”当作失败、完成或 serial fallback。
+- 如果 delegate 返回 `NEEDS_REPLAN`，Leader 必须先进入 replan gate；如果返回 `FAILED` 或 `BLOCKED`，必须记录失败/阻塞并停止依赖该结果的后续推进，除非重新派发修复 delegate。
+- Leader 可以创建或更新报告、入口导航和调度记录，但不得绕过已派发 delegate 自行完成同一阶段；尤其不得绕过 Worker 写多个正文档。
+- 如果运行时无法创建 team agent 或 subagent delegate，必须在派发前改用 `serial`，并在最终报告中写明 fallback reason。已派发后只有明确 `UNAVAILABLE` / `FAILED` / `BLOCKED` / `TIMEOUT_REPORTED` 才能触发重新路由，且不能把原任务标为 completed。
+- “delegate 返回慢、暂未完成、不耐烦、节省时间”都不是 serial fallback reason。
+- 对 L/XL 和 `document_set_plan_required=true` 的任务，缺少任一必需阶段 delegate dispatch/result 记录应视为执行质量问题。
+
+## All-stage delegate wait gate 强制等待原则
+
+当 execution mode 是 `team_agent` 或 `native_subagent` 时，阶段推进必须由 delegate 结果驱动，而不是由 Leader 的耐心或时间偏好驱动。
+
+- Router delegate 未返回 route 结果时，不得进入 Planner。
+- Workspace/noise filter delegate 未返回范围和降噪结果时，不得进入依赖该范围的 Planner。
+- Planner / Document Set Planner / Task Planner delegate 未返回完整 Plan A 或任务计划时，不得派发 Worker。
+- Worker delegate 未返回明确状态时，不得把对应 `target_path` 标记为已完成，不得由 Leader 自行补写。
+- Validator delegate 未返回验证结果时，不得宣称整体 validation `PASS`。
+- Repair delegate 未返回修复计划或修复结果时，不得进入下一轮验证，也不得把 finding 标记为 resolved。
+- Cleanup / Reporter delegate 未返回结果时，不得删除 inbox、归档材料或提交最终完成报告。
+- phase N+1 必须等待 phase N 所有必需 delegate 返回 `COMPLETED`，或返回可报告的 `FAILED` / `BLOCKED` / `NEEDS_REPLAN` / `TIMEOUT_REPORTED` / `UNAVAILABLE` 并处理后，才可推进。
+- 允许记录 `delegate_waiting` 或 `delegate_timeout` 作为未完成/阻塞状态；不允许把等待状态转换成 Leader 自行执行。
+
+最终报告必须能看出每个派发的 delegate 是否返回结果。缺少结果的任务只能报告为 waiting、skipped、blocked 或 failed，不能报告为 completed。
 
 ## 示例材料
 

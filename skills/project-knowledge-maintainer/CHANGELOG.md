@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.4.5 - All-stage delegate gates
+
+- Expanded delegate wait gates from Worker-centric enforcement to every dispatched stage: Router, workspace/noise filter, Planner, Document Set Planner, Task Planner, Worker, Validator, Repair, Cleanup, and Reporter.
+- Leader may not self-complete any dispatched stage because a team agent or subagent is slow, pending, or not yet returned.
+- Added stage-level delegate dispatch/reporting expectations: `stage`, `delegate_type`, `delegate_status`, `result_received`, and `result_summary`.
+- Added validator finding: `stage_delegate_not_dispatched`.
+- Added fixture: `examples/all-stage-delegate-gate/`.
+
+## 4.4.4 - Team delegate wait gates
+
+- Added mandatory delegate wait gates for team_agent and native_subagent execution.
+- Leader must wait for Router / Planner / Worker / Validator delegate results before dependent phases proceed.
+- Slow, pending, or not-yet-returned delegates are not valid serial fallback reasons.
+- Added report requirements for delegate_status and result_received.
+- Added validator findings: delegate_result_missing and delegate_wait_bypassed.
+- Added fixture: examples/delegate-wait-gate/.
+
+
 ## 4.4.3
 
 - Added `team_agent` as the preferred execution mode when the host supports team-agent / multi-agent-team orchestration.

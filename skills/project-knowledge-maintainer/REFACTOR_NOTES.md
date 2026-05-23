@@ -52,3 +52,12 @@ Team agent is now the preferred execution mode when supported by the runtime and
 
 Validator now reports `worker_delegate_not_dispatched` when the Leader batch-writes substantive docs despite available team agents or subagents. The older `worker_subagent_not_dispatched` finding remains a compatibility alias.
 
+
+
+## 4.4.4 delegate wait gate
+
+This release prevents Leader impatience: after team agent or subagent dispatch, the Leader may not self-complete dependent work while waiting. It must wait for explicit delegate output or report blocked/failed/waiting.
+
+## 4.4.5 all-stage delegate gate
+
+The wait gate is no longer Worker-centric. If team_agent or native_subagent mode dispatches any stage delegate—Router, workspace/noise filter, Planner, Document Set Planner, Task Planner, Worker, Validator, Repair, Cleanup, or Reporter—the Leader must wait for a concrete result before moving to dependent work. Slow/pending delegates cannot be converted into Leader self-execution.

@@ -120,10 +120,57 @@ Worker 输出 `proposed_extra_tasks` 后，如果任务既未执行、未 defer�
 触发信号：
 
 - 多个 substantive target 由 Leader 一次性写入，没有 per-target Worker delegate 结果。
-- `worker_dispatch` 缺失或只写“handled by main agent”，但没有 serial fallback reason。
+- `worker_dispatch` 缺失、只写“handled by main agent”，或只有 dispatched 没有 result_received / delegate_status。
 - L/XL 或 `document_set_plan_required=true` 场景中，tasks 有多个 target_path，却没有 Worker delegate 派发摘要。
 
 严重度：warning；若导致多 target 混写、漏验证或覆盖人工内容，升级为 error。
+
+### delegate_result_missing
+
+当 `execution_mode=team_agent` 或 `execution_mode=native_subagent`，report 中有任何已派发 stage delegate 但缺少明确返回结果，或 Leader 在结果返回前推进依赖阶段时报告。
+
+触发信号：
+
+- `delegate_dispatch` / `worker_dispatch` 只记录“dispatched”，没有 `stage`、`delegate_status`、`result_received` 或 result summary。
+- Router / workspace-noise / Planner / Document Set Planner / Task Planner delegate 未返回，但下游阶段已经开始。
+- Leader 把等待中的 Worker target 标记为 completed。
+- phase N+1 在 phase N 的任一必需 delegate 未返回明确结果前开始。
+- Validator delegate 未返回，但最终报告宣称 validation `PASS`。
+- Repair delegate 未返回，但 finding 被标记 resolved 或触发 re-validation。
+- Cleanup / Reporter delegate 未返回，但 inbox 被删除、材料被归档或最终报告写 completed。
+- report 使用“slow / no response / still waiting”作为 Leader 自行执行的理由。
+
+严重度：error。
+
+建议修复：等待 delegate 返回；或记录为 blocked/failed/waiting/timeout_reported 并停止依赖阶段。不得由 Leader 自行补做已派发阶段。
+
+### delegate_wait_bypassed
+
+当 Leader 因 team agent / subagent 返回慢而绕过任何已派发 delegate，自行完成该阶段、正文写入、验证、修复、cleanup 或最终报告时报告。
+
+触发信号：
+
+- 文本出现“team agent slow, main agent handled it”、“subagent did not respond, leader completed”。
+- 选择了 team_agent/native_subagent，但 Router、workspace/noise filter、Planner、Document Set Planner、Task Planner、Worker、Validator、Repair、Cleanup 或 Reporter 工作由主 agent 在等待期间直接完成。
+- changed substantive docs 由主 agent 在 Worker delegate 等待期间直接写入。
+- fallback reason 是 slow / impatience / save time / pending，而不是不可用、策略阻止、用户禁止或工具不可用。
+
+严重度：error。
+
+建议修复：恢复 all-stage delegate wait gate；已派发任务必须等待明确结果，或标记 blocked/failed/waiting。
+
+### stage_delegate_not_dispatched
+
+当 execution mode 选择 `team_agent` 或 `native_subagent`，且某个非平凡阶段被计划为 delegated execution，但报告缺少该阶段 delegate dispatch/result 记录时报告。该 finding 覆盖非 Worker 阶段；Worker 仍优先使用 `worker_delegate_not_dispatched`。
+
+触发信号：
+
+- flow profile 是 `structured` 或 `partitioned`，但 Router / workspace-noise / Planner / Document Set Planner / Validator 没有 delegate dispatch 记录。
+- repair=true 且声称使用 team_agent/native_subagent，但 repair plan 或 repair apply 没有 delegate result。
+- ingest 后 cleanup 删除 inbox，但 cleanup delegate 未派发或无结果。
+- Leader 只记录 worker_dispatch，不记录其他已派发阶段的 delegate_results。
+
+严重度：warning；如果导致跳过 planning、漏验证、误删 inbox 或错误报告 PASS，升级为 error。
 
 ### delegated_discovery_to_worker
 

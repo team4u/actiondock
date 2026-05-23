@@ -1,6 +1,6 @@
 # Prompts：角色契约
 
-这些 prompt 是行为契约，不是必须逐字复制的模板。v4.4 的核心变化是：小任务用轻流程，大任务才使用完整 Planner / Document Set Plan。
+这些 prompt 是行为契约，不是必须逐字复制的模板。v4.4 的核心变化是：小任务用轻流程，大任务才使用完整 Planner / Document Set Plan；v4.4.5 要求所有已派发阶段都必须等待 delegate 结果。
 
 ## 1. Router / Route-lite
 
@@ -332,25 +332,55 @@ Plan A 要求：
 
 ## 5. Leader / serial 主控
 
-执行模式选择优先级：`team_agent` > `native_subagent` > `serial`。team agent 和 subagent 都可以承担 Worker delegate；team agent 可用时优先。
+执行模式选择优先级：`team_agent` > `native_subagent` > `serial`。team agent 和 subagent 都可以承担任一阶段 delegate；team agent 可用时优先。
 
 Leader 负责：
 
 - 选择 execution mode。
-- team agent 可用且未被用户禁止时优先派发 Router / Planner / Worker / Validator team delegates；否则在 native_subagent 可用时派发对应 subagents。
-- 为每个唯一 target_path 派发一个 Worker delegate，并记录 worker dispatch；dispatch 记录需标明 delegate_type：team_agent / native_subagent / serial。
-- 串联 Router / Planner / Worker / Validator。
+- team agent 可用且未被用户禁止时优先派发 Router / workspace-noise / Planner / Document Set Planner / Task Planner / Worker / Validator / Repair / Cleanup / Reporter team delegates；否则在 native_subagent 可用时派发对应 subagents。
+- 为每个被派发阶段记录 delegate dispatch；为每个唯一 target_path 额外派发一个 Worker delegate。dispatch 记录需标明 stage、delegate_type：team_agent / native_subagent / serial、delegate_status、result_received 和 result_summary。
+- 串联 Router / workspace-noise / Planner / Document Set Planner / Task Planner / Worker / Validator / Repair / Cleanup / Reporter，并在每个阶段设置 wait gate。
 - 合并相同 target_path 的任务。
 - 保证每个 target_path 只有一个 Worker 写。
-- 处理 Worker 的 `NEEDS_REPLAN`。
-- 写 report 和必要入口文件。
+- 等待每个派发 delegate 返回明确结果后处理 `COMPLETED` / `FAILED` / `BLOCKED` / `NEEDS_REPLAN` / `WAITING` / `TIMEOUT_REPORTED` / `UNAVAILABLE`。
+- 只有在对应 delegate 结果已返回或被记录为失败/阻塞后，才写 report 和必要入口文件。
 
 Leader 不应：
 
-- 在 team_agent 或 native_subagent 可用时跳过 Worker delegate。
+- 在 team_agent 或 native_subagent 可用时跳过任何应派发或已派发的 stage delegate，尤其不能跳过 Worker delegate。
+- 因为 delegate 返回慢、等待中或未返回，就切换为 serial 或自行完成。
 - 绕过 Worker 边界批量写多个 substantive docs。
-- 把未验证的 proposed task 当作已完成任务。
+- 把未返回结果的 delegate task、未验证的 proposed task、等待中的 target 或等待中的 cleanup/report 当作已完成任务。
 - 在用户未授权时 commit、push 或 PR。
+
+### All-stage delegate wait gate prompt
+
+在 `team_agent` 或 `native_subagent` 模式下，Leader 必须对每个派发阶段执行以下判断：
+
+```text
+if delegate_dispatched(stage) and result_not_received(stage):
+  do_not_execute_that_stage_in_leader
+  do_not_mark_stage_or_downstream_completed
+  record status as WAITING/BLOCKED/FAILED/TIMEOUT_REPORTED according to runtime signal
+  stop dependent phase
+
+if planner_or_document_set_result == NEEDS_REPLAN:
+  re-enter planning gate before any Worker dispatch
+
+if worker_result == NEEDS_REPLAN:
+  re-enter Planner gate before any new Worker write
+
+if validator_result == FAILED or BLOCKED:
+  do not report PASS; enter repair gate only when repair=true or user asked for repair
+
+if cleanup_or_reporter_result_missing:
+  do not delete inbox, archive materials, or report completed
+
+if any_delegate_result == FAILED or BLOCKED:
+  record failure/blocker and do not validate dependent work as completed
+```
+
+慢不是 fallback。只有运行时明确不支持派发、宿主策略阻止、用户禁止或工具不可用，才允许 serial fallback；已派发的 delegate 必须先返回明确不可用、失败或阻塞结果，Leader 才能重新路由。
 
 ## 6. 最终响应格式
 
@@ -359,7 +389,7 @@ Leader 不应：
 ```text
 operation: refresh
 execution_mode: serial
-worker_dispatch: serial fallback; main agent emulated one Worker target at a time
+delegate_dispatch: serial fallback; main agent emulated stages one at a time; worker target_path ownership preserved; result_received=true
 flow_profile: lite
 changed_files:
 - docs/ops/config/auth.md
