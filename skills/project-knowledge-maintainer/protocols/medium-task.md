@@ -1,11 +1,25 @@
 # Medium Task Protocol
 
-Use for multiple docs or light multi-domain updates without full reconstruction.
+Use for multiple docs or selective multi-domain updates when a full repository rebuild is not required.
 
 Flow:
 
 ```text
-Route → Scope check → Task Plan or selective Domain Planning → Sub Agent execution → Validate → Report
+Route
+→ Scope Scan
+→ Selective Domain Planner or Mini Plan A
+→ Task Plan B
+→ Worker execution
+→ Validation
+→ Report
 ```
 
-Use Plan A when there is index content sink risk, category under-split risk, or the document set is unclear.
+Escalate to Large / XL when any of these appear:
+
+- the update crosses API/data/business-flow/infra boundaries;
+- document structure is unclear;
+- existing docs are under-split;
+- Workers would need to discover missing target docs;
+- the user wants higher coverage or more documents.
+
+Default execution still includes `existing + must + should` for the selected scope.

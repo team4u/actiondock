@@ -27,10 +27,12 @@ Worker is complete only when:
 - Modify unrelated target paths.
 - Treat unsupported assumptions as facts.
 - Claim completion because text was written.
+- Move missing leaf-doc content into an assigned index doc as a workaround.
 
 Hard failures:
 
 - `worker_created_unplanned_leaf_doc`
 - `task_not_derived_from_plan_a`
 - `worker_output_too_shallow`
+- `index_content_sink`
 - `secret_leak`

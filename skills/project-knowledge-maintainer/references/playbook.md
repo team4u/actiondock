@@ -27,7 +27,8 @@ Escalate from XS/S to M/L/XL when any appear:
 - API/data/business-flow changes together;
 - large ingest or repo-wide scan;
 - Workers would need to discover missing document structure;
-- a single Planner would likely collapse several domains into one or two broad docs.
+- a single Planner would likely collapse several domains into one or two broad docs;
+- the user wants broader documentation coverage or says the current document set is too small.
 
 ## Scenario matrix
 
@@ -36,8 +37,9 @@ Escalate from XS/S to M/L/XL when any appear:
 | Fix broken doc link | XS | validate link target |
 | Update one env var doc | S | secret safety, evidence path |
 | Add docs for a feature touching API and DB | M | selective Domain Planner or Plan A if structure risk |
-| Rebuild docs from repo evidence | L | Domain Planners, Plan A validation, Workers, Output Validator |
+| Rebuild docs from repo evidence | L | Domain Planners, preserving Plan A merge, Plan A validation, Workers, Output Validator |
 | Ingest large `.kb_inbox/` archive | XL | noise filter, Domain Planners, phased Plan B, repair loop |
+| Increase documentation coverage | L | Domain Planner breadth check, `must + should` default execution, evidenced candidates in high-coverage mode |
 
 ## Core flows
 
@@ -45,6 +47,6 @@ Escalate from XS/S to M/L/XL when any appear:
 XS: Route-lite → Apply → Validate-lite → Report
 S:  Route-lite → Mini Plan → Apply → Validate-lite → Report
 M:  Route → Task Plan or selective Plan A → Sub Agent execution → Validate → Report
-L:  Route → Scope Scan → Domain Planners → Plan A → Plan A Validate → Plan B → Workers → Output Validate → Repair if needed → Report
-XL: Route → Scope Partition → Noise Filter → Domain Planners → Plan A → Plan A Validate → Phased Plan B → Workers → Output Validate → Repair if needed → Report
+L:  Route → Scope Scan → Domain Planners → Preserving Plan A merge → Plan A Validate → Plan B → Workers → Output Validate → Repair if needed → Report
+XL: Route → Scope Partition → Noise Filter → Domain Planners → Preserving Plan A merge → Plan A Validate → Phased Plan B → Workers → Output Validate → Repair if needed → Report
 ```

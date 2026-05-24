@@ -1,8 +1,8 @@
 ---
 name: project-knowledge-maintainer
-version: 5.2.1
-release: quality-pass-subagents
-summary: Repository-backed project knowledge maintainer with lean runtime loading, Sub Agent delegation, Domain Planner Plan A, success loops, formatter, and validator gates.
+version: 5.3.0
+release: coverage-expanded-planning
+summary: Repository-backed project knowledge maintainer with Domain Planner fan-out, preserving Plan A merge, high-coverage document inventory, Sub Agent execution, formatter, and validator gates.
 description: Use when maintaining, rebuilding, validating, or ingesting repository-backed project knowledge bases, including ACTIONDOCK.md, docs/, and .kb_inbox/. Do not use for ordinary code edits unless the task changes project knowledge docs.
 ---
 
@@ -37,9 +37,12 @@ Role prompts and schemas are loaded per stage. Examples are eval fixtures only; 
 
 1. A stage is not complete because an action was attempted. It is complete only when success criteria are satisfied by evidence and validation.
 2. Planner owns document discovery. Worker owns execution of planned documents.
-3. Use `subagent > serial`; serial is a fallback, not a convenience mode.
-4. If a stage is delegated to a Sub Agent, wait for its explicit result before advancing.
-5. Validator decides completion. Leader confidence is not completion.
+3. Domain Planners should surface enough `leaf`, `runbook`, and `reference` docs to avoid index-only plans.
+4. Global Planner performs preserving merge: normalize paths, dedupe, merge dependencies, assign phases, and record exclusions. It must not compress a domain inventory to reduce work.
+5. Plan B defaults to `existing + must + should`. High-coverage or repair mode may also execute evidenced `candidate` documents.
+6. Use `subagent > serial`; serial is a fallback, not a convenience mode.
+7. If a stage is delegated to a Sub Agent, wait for its explicit result before advancing.
+8. Validator decides completion. Leader confidence is not completion.
 
 ## Completion
 

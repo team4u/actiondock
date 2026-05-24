@@ -1,8 +1,8 @@
 {
   "name": "project-knowledge-maintainer",
-  "version": "5.2.1",
-  "release": "quality-pass-subagents",
-  "purpose": "Repo-aware project knowledge-base reconstruction and maintenance protocol with lean runtime loading and success-loop validation.",
+  "version": "5.3.0",
+  "release": "coverage-expanded-planning",
+  "purpose": "Repo-aware project knowledge-base reconstruction and maintenance protocol with Domain Planner fan-out, preserving Plan A merge, high-coverage inventory, and success-loop validation.",
   "execution_modes": {
     "priority": [
       "subagent",
@@ -77,7 +77,28 @@
     "global_plan_a_must_merge_domain_plans": true,
     "worker_discovery_cannot_replace_plan_a": true,
     "underplanning_is_hard_failure": true,
-    "prefer_overcomplete_candidates_over_missing_docs": true
+    "prefer_overcomplete_candidates_over_missing_docs": true,
+    "global_plan_a_merge_role": "preserving_merge_not_compression",
+    "global_plan_a_may_normalize_dedupe_phase": true,
+    "global_plan_a_may_not_reduce_work_for_convenience": true,
+    "global_plan_a_must_preserve_should_or_record_decision": true,
+    "default_plan_b_execution_categories": [
+      "existing",
+      "must",
+      "should"
+    ],
+    "high_coverage_plan_b_execution_categories": [
+      "existing",
+      "must",
+      "should",
+      "candidate"
+    ],
+    "candidate_execution_requires_scope": [
+      "high_coverage",
+      "repair",
+      "explicit_user_scope"
+    ],
+    "active_domain_index_only_is_hard_failure_when_leaf_evidence_exists": true
   },
   "domain_planning": {
     "domains": [
@@ -92,7 +113,10 @@
     ],
     "each_activated_domain_requires_domain_plan": true,
     "domain_plan_must_include_inventory": true,
-    "domain_plan_must_self_check_completeness": true
+    "domain_plan_must_self_check_completeness": true,
+    "prefer_leaf_docs_over_index_sinks": true,
+    "prefer_candidates_over_omissions": true,
+    "active_domain_requires_leaf_doc_when_leaf_evidence_exists": true
   },
   "worker": {
     "one_target_path_per_worker": true,
@@ -100,7 +124,8 @@
     "may_read_related_files": true,
     "may_not_create_unplanned_leaf_docs": true,
     "may_propose_extra_tasks": true,
-    "proposed_extra_tasks_trigger_replan": true
+    "proposed_extra_tasks_trigger_replan": true,
+    "may_not_move_missing_leaf_content_into_index": true
   },
   "validator": {
     "must_validate_plan_a_before_worker_execution": true,
@@ -158,7 +183,12 @@
     "plan_a_only_index_docs",
     "missing_infra_env_doc",
     "subagent_pending_leader_self_completes",
-    "repair_claimed_without_revalidation"
+    "repair_claimed_without_revalidation",
+    "global_planner_compressed_inventory",
+    "should_doc_dropped_without_reason",
+    "active_domain_index_only",
+    "plan_b_skipped_should_without_reason",
+    "candidate_executed_without_high_coverage_scope"
   ],
   "trigger": {
     "use_when": [
@@ -213,6 +243,11 @@
       ],
       "package_quality_audit": [
         "references/self-audit.md"
+      ],
+      "task_planning": [
+        "references/document-set-planning.md",
+        "prompts/task-planner.md",
+        "schemas/task-plan.schema.json"
       ]
     }
   },
@@ -249,10 +284,12 @@
       "formatter_present",
       "contract_valid_json",
       "schemas_valid_json",
-      "no_subagent_terms",
       "hot_path_lean",
       "examples_marked_as_fixtures",
-      "hard_failures_registered"
+      "hard_failures_registered",
+      "delegation_terminology_consistent",
+      "global_planner_preserving_merge",
+      "default_plan_b_includes_should"
     ]
   },
   "eval_fixtures": {

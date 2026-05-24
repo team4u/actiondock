@@ -2,6 +2,12 @@
   "domain": "api",
   "status": "PASS",
   "activation_status": "active",
+  "coverage_profile": {
+    "leaf_evidence_found": true,
+    "index_only_justified": false,
+    "coverage_level": "normal",
+    "notes": "Route and test evidence support at least one API leaf document."
+  },
   "evidence_scanned": [
     "src/routes/orders.ts",
     "tests/api/orders.test.ts"
@@ -30,7 +36,9 @@
         "does not invent unsupported fields"
       ],
       "phase": 2,
-      "source_domain_plan": "api"
+      "source_domain_plan": "api",
+      "dependencies": [],
+      "execution_eligibility": "execute_default"
     }
   ],
   "excluded_documents": [],
@@ -38,6 +46,7 @@
     "index_content_sink_risk": false,
     "under_split_risk": false,
     "obvious_missing_docs": [],
-    "coverage_assertion": "API inventory covers discovered route evidence."
+    "coverage_assertion": "API inventory covers discovered route evidence.",
+    "active_domain_index_only_risk": false
   }
 }
