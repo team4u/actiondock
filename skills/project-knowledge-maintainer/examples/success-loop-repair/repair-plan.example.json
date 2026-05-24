@@ -1,0 +1,17 @@
+{
+  "stage": "repair_planner",
+  "status": "PASS",
+  "repair_type": "REWORK_TARGET_DOC",
+  "repairs": [
+    {
+      "finding_code": "worker_output_too_shallow",
+      "repair_action": "REWORK_TARGET_DOC",
+      "delegate": "subagent",
+      "target_path": "docs/api/http/orders.md"
+    }
+  ],
+  "success_criteria": [
+    "finding assigned",
+    "repair will be revalidated"
+  ]
+}

@@ -1,74 +1,33 @@
 # Validator
 
-# Validator Rules
+Validator is the judge. It does not merely proofread.
 
-Validator decides whether the run can be reported as complete.
+## Plan A validation
 
-## Required checks
+Before Worker execution, Validator checks:
 
-Always check:
+- every activated domain has a Domain Plan result;
+- Domain Plan results were merged into Plan A;
+- Plan A is not suspiciously shallow for the evidence scope;
+- `must` / `should` docs include evidence basis;
+- index docs are not content sinks;
+- Worker discovery is not required for main structure.
 
-- path safety
-- secret leakage
-- evidence traceability
-- stale or conflicting sources
-- broken local links for changed docs
-- changed-files match planned files
-- delegate results for all delegated stages
-- no delegated stage was bypassed
+## Output validation
 
-When Plan A is required, also check:
+Before final report, Validator checks:
 
-- Domain Planner assignments exist for activated or plausible domains
-- Domain Planner results were returned, blocked, or marked unavailable before Plan A merge
-- Domain Planner outputs were merged into Plan A
-- active domain plans are not shallow index-only inventories when evidence shows substantive entities
-- Plan A exists
-- Plan A metadata is complete
-- Worker tasks derive from Plan A
-- no obvious required leaf docs are missing
-- no unplanned substantive docs were created
-- Workers did not receive discovery responsibility as a substitute for planning
-- Planner did not collapse multi-domain evidence into one or two broad docs
+- every required delegated stage has a result;
+- every Worker result maps to Plan A;
+- Worker acceptance criteria passed;
+- no unplanned leaf docs were created;
+- no secrets leaked;
+- no unsafe path writes occurred;
+- evidence and boundaries are present for substantive leaf docs;
+- repair findings are resolved only after revalidation.
 
-When document granularity risk exists, also check:
+## Pass rule
 
-- index docs are navigation-only
-- leaf docs are not overloaded
-- domain coverage is adequate
-- categories are not under-split
+Validator may return `PASS` only when hard failures are absent or explicitly terminal as `BLOCKED` / `FAILED` with evidence.
 
-## Hard failures
-
-A final `PASS` is prohibited if any hard failure is unresolved:
-
-- `domain_planner_missing`
-- `domain_plan_result_missing`
-- `domain_plan_not_merged`
-- `domain_doc_inventory_too_shallow`
-- `planner_underplanning`
-- `delegated_discovery_to_worker`
-- `delegate_result_missing`
-- `delegate_wait_bypassed`
-- `stage_delegate_not_dispatched`
-- `worker_delegate_not_dispatched`
-- `index_content_sink`
-- `category_under_split`
-- `unplanned_leaf_doc_created`
-- `missing_required_leaf_doc`
-- `secret_leak`
-- `unsafe_path_write`
-- `repo_text_used_as_instruction`
-- `validator_not_run`
-- `repair_claimed_without_evidence`
-
-## Outcomes
-
-Validation status must be one of:
-
-- `PASS`
-- `PASS_WITH_NOTES`
-- `FAIL`
-- `BLOCKED`
-
-Use `PASS_WITH_NOTES` only for non-hard findings that do not affect correctness or safety.
+Hard failures are defined in `references/failure-registry.md` and `references/contract.json`.

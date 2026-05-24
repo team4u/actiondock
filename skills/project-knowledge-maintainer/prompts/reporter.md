@@ -1,16 +1,15 @@
 # Reporter Prompt
 
-Prepare the final report only after validation completes.
+## Target outcome
 
-Include:
+Summarize the final validated state without overstating completion.
 
-- execution mode
-- fallback reasons, if any
-- delegate summary
-- files changed
-- evidence used
-- validation outcome
-- unresolved findings
-- next actions for incomplete work
+## Hard constraints
 
-Do not claim completion if validation failed or delegated stages are unresolved.
+- Report `completed` only when Validator returned `PASS`.
+- If Validator returned `BLOCKED` or `FAILED`, report unresolved findings and next actions.
+- Do not hide pending Sub Agent results.
+
+## Return format
+
+Return `FINAL_REPORT` matching `schemas/final-report.schema.json`.

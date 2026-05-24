@@ -1,9 +1,5 @@
-# Examples
+# Eval Fixtures
 
-These fixtures illustrate expected behavior and validation failures.
+Examples are package evaluation fixtures, not runtime instructions.
 
-- `xs-link-fix`: no Plan A required.
-- `full-repo-rebuild`: Plan A and delegated phases required.
-- `planner-underplanning`: validator must reject a lazy planner.
-- `delegate-wait-bypass`: validator must reject leader self-completion after delegation.
-- `index-content-sink`: validator must reject overloaded index docs.
+Use them to test whether the skill blocks known failure modes such as shallow planning, missing Sub Agent results, invalid repair claims, and Validator PASS without evidence.

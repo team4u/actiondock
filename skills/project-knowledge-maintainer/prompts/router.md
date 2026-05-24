@@ -1,15 +1,16 @@
 # Router Prompt
 
-Classify the user's request and select the protocol.
+## Target outcome
 
-Return JSON matching `schemas/route.schema.json`.
+Classify task scale and choose the lightest safe protocol.
 
-Must decide:
+## Success criteria
 
-- task scale: XS/S/M/L/XL
-- execution mode: subagent/serial
-- whether document_set_plan_required is true
-- which stages require delegates
-- whether any immediate safety risk exists
+- Scope is classified as XS, S, M, L, or XL.
+- Escalation triggers from `references/playbook.md` are considered.
+- Execution mode is `subagent` unless valid serial fallback applies.
+- Stage-specific references are identified.
 
-Do not perform Planner work. Do not write docs.
+## Return format
+
+Return a route result matching `schemas/route.schema.json`.

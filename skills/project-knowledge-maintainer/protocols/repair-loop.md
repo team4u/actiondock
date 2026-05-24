@@ -1,27 +1,15 @@
-# Protocol: Repair Loop
+# Repair Loop
 
-Use when Validator reports hard failures or important non-hard findings.
+Repair is driven by Validator findings.
 
-## Flow
+Flow:
 
 ```text
-Validation Findings → Repair Plan → Repair Delegates → Delegate Wait Gate → Re-validate → Report
+Validator FAIL
+→ Repair Planner classifies findings
+→ Replan or dispatch repair Workers
+→ Wait for Sub Agent results
+→ Revalidate
 ```
 
-## Repair plan
-
-For each finding include:
-
-- finding id
-- severity
-- affected paths
-- required repair action
-- assigned delegate
-- acceptance criteria
-
-## Repair constraints
-
-- Do not mark resolved without evidence.
-- Do not let Leader repair a delegated finding while Repair delegate is pending.
-- If repair requires new docs not in Plan A, route back to Planner.
-- Re-run Validator after repair.
+Do not mark a finding resolved without evidence and revalidation.

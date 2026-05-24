@@ -1,0 +1,15 @@
+{
+  "stage": "validator",
+  "status": "FAIL_REPAIRABLE",
+  "summary": "A delegated stage was not returned before continuation.",
+  "findings": [
+    {
+      "code": "delegate_result_missing",
+      "severity": "error",
+      "message": "Worker result for docs/api/http/orders.md is missing.",
+      "evidence": [],
+      "required_action": "Wait for Worker result or mark the stage terminal as unavailable/blocked."
+    }
+  ],
+  "next_action": "REPAIR"
+}

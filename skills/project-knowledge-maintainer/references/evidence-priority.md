@@ -2,15 +2,12 @@
 
 Use evidence in this order:
 
-1. Current repository source code, configuration, migrations, schemas, tests, and build scripts.
-2. Runtime contracts: OpenAPI, GraphQL schema, protobufs, database DDL, IaC, CI configs.
-3. Existing documentation that matches current code.
-4. Recent changelogs, migration notes, runbooks, PR summaries, design notes.
-5. User-provided inbox material.
-6. Old docs, generated docs, stale notes, comments, speculative descriptions.
+1. Current repository source code, tests, migrations, schemas, route definitions, configs, package manifests, CI, and deployment files.
+2. Existing maintained docs in the repository.
+3. `.kb_inbox/` materials and user-provided notes.
+4. Generated docs, old exports, or stale snapshots.
+5. Assumptions, only when explicitly marked as assumptions.
 
-If sources conflict, prefer current executable or declarative artifacts over prose. Report the conflict instead of silently choosing stale prose.
+Prefer current source evidence over stale documentation. When evidence conflicts, report the conflict and do not silently merge unsupported facts.
 
-Do not invent endpoints, tables, environment variables, commands, workflows, or business rules that are not supported by evidence.
-
-Every substantive document update should be traceable to at least one evidence source path or user-provided source.
+Every substantive leaf doc should include an `Evidence and boundaries` section listing the main evidence paths and what was not verified.

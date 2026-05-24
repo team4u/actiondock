@@ -1,6 +1,6 @@
-# Domain-Partitioned Planning
+# Domain Planning
 
-When Plan A is required, planning is not a single general-purpose pass. It is a two-level planning protocol:
+When Plan A is required, planning is domain-partitioned.
 
 ```text
 Global Planner
@@ -10,11 +10,7 @@ Global Planner
 → Plan B task plan
 ```
 
-## Required domain fan-out
-
-For every activated or plausible domain, assign one Domain Planner delegate when `subagent` execution is available. If delegation is unavailable, the leader may run serial domain-planning passes, but each pass must still produce a separate domain plan result.
-
-Canonical domains:
+## Canonical domains
 
 - `architecture`
 - `api`
@@ -25,79 +21,53 @@ Canonical domains:
 - `maintenance_ops`
 - `other`
 
-A domain is activated when repo evidence, existing docs, inbox material, tests, configuration, migrations, routes, jobs, prompts, deployment files, or user request scope indicate it may need durable knowledge.
+A domain is activated when repository evidence, existing docs, inbox material, tests, configuration, migrations, routes, jobs, prompts, deployment files, or user request scope indicate durable knowledge may be needed.
 
-## Domain Planner responsibility
+## Domain Planner success criteria
 
-Each Domain Planner must produce a domain document inventory before any Worker task is written.
+A Domain Planner is complete only when it can show:
 
-For each domain, return:
+- relevant evidence was scanned;
+- domain entities or lack of entities are identified;
+- documents are classified as `existing`, `must`, `should`, `candidate`, `defer`, or `excluded`;
+- index documents are separated from leaf documents;
+- each `must` / `should` document has evidence basis;
+- obvious missing leaf docs are not left to Workers;
+- the self-check reports under-split and index-sink risks.
 
-- `domain`
-- `activation_status`: `active`, `candidate`, or `excluded`
-- `evidence_scanned`
-- `domain_entities_found`
-- `recommended_documents`
-- `excluded_documents`
-- `coverage_assertion`
-- `thin_plan_risk`
-- `open_questions`
-
-`recommended_documents` must use the same categories as Plan A:
-
-- `existing`
-- `must`
-- `should`
-- `candidate`
-- `defer`
-- `excluded`
-
-The Domain Planner should prefer an over-complete inventory with `candidate` and `defer` entries over a shallow plan.
+Prefer over-complete `candidate` / `defer` entries over a shallow inventory.
 
 ## Minimum depth rule
 
-An active domain cannot be represented only by a broad index file when evidence shows substantive entities.
+Do not enforce a fixed document count. Enforce evidence-sensitive depth.
 
 Examples:
 
-- API evidence with routes/controllers must produce endpoint or bounded-context leaf docs, plus auth/errors when evidenced.
-- Data evidence with migrations/models must produce table/entity/lifecycle leaf docs, not only `docs/data/index.md`.
-- Business-flow evidence must produce flow/state/edge-case leaf docs, not only `docs/flows/index.md`.
-- Infra/env evidence must produce local-dev/env/config/deploy/runbook leaf docs as applicable.
+- API routes/controllers normally need endpoint or bounded-context leaf docs, plus auth/errors when evidenced.
+- Data models/migrations normally need table/entity/lifecycle leaf docs.
+- Business flows normally need flow/state/edge-case docs.
+- Infra/env evidence normally needs local-dev/env/config/deploy/runbook docs where applicable.
 
-Do not enforce a fixed minimum document count. Instead, check evidence complexity. A domain plan is too shallow when it fails to split clearly distinct entities, operations, routes, tables, flows, tools, or runbooks into maintainable leaf docs.
+An active domain represented only by an index file is a risk and must be justified.
 
-## Global Planner merge responsibility
+## Global Planner merge
 
-The Global Planner must merge all domain plan results into Plan A.
+Global Planner must wait for Domain Planner results before merging Plan A.
 
 The merge must include:
 
-- all `must` documents from active domain plans
-- justified `should`, `candidate`, and `defer` documents
-- `excluded` entries for domains or docs considered out of scope
-- cross-domain dependencies, such as API docs depending on data schemas or flows depending on API and jobs
-- de-duplication of overlapping docs
-- path normalization under the canonical docs structure
+- all `must` documents from active domain plans;
+- justified `should`, `candidate`, and `defer` documents;
+- `excluded` entries for considered out-of-scope docs;
+- cross-domain dependencies;
+- de-duplication and path normalization.
 
-The Global Planner may not drop a Domain Planner's `must` document without recording a merge decision and reason.
+Global Planner may not drop a Domain Planner `must` document without a recorded merge decision and reason.
 
-## Prohibited shortcuts
-
-The Planner must not:
-
-- create only a few broad docs for a multi-domain request
-- skip Domain Planner fan-out when Plan A is required
-- use Worker discovery as a substitute for domain planning
-- collapse active domains into one overloaded `architecture.md`, `index.md`, or `overview.md`
-- finalize Plan B until domain plan results have been received or explicitly marked `UNAVAILABLE` / `BLOCKED`
-
-## Hard failures
+Hard failures:
 
 - `domain_planner_missing`
 - `domain_plan_result_missing`
-- `domain_plan_not_merged`
 - `domain_doc_inventory_too_shallow`
-- `planner_underplanning`
-- `category_under_split`
-- `delegated_discovery_to_worker`
+- `domain_plan_not_merged`
+- `shallow_global_plan`

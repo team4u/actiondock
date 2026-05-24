@@ -1,52 +1,38 @@
 # Execution Modes
 
-## Priority
+Use this priority:
 
 ```text
 subagent > serial
 ```
 
-Use `subagent` whenever the environment provides subagents or equivalent isolated task agents, unless the user explicitly forbids delegation or the selected XS/S protocol permits inline execution.
+## Sub Agent mode
 
-## subagent
+Use Sub Agents for non-trivial stages when the runtime supports them. A Sub Agent may be a system-provided isolated execution unit or equivalent delegated execution context.
 
-Use when the environment supports system-provided subagents, isolated task agents, or equivalent delegate lanes. This mode is preferred for M/L/XL tasks and for any stage that benefits from separation of concerns.
+Use Sub Agents especially for:
 
-Eligible delegated roles:
+- Domain Planner fan-out
+- Plan A validation
+- Worker execution by `target_path`
+- Output validation
+- Repair work
 
-- Router
-- Workspace Scanner
-- Noise Filter
-- Planner
-- Domain Planner
-- Document Set Planner
-- Task Planner
-- Worker
-- Validator
-- Repair
-- Cleanup
-- Reporter
+## Serial fallback
 
-A delegated stage is not complete until its subagent result is received and recorded.
+Serial is allowed only when:
 
-## serial
-
-Use only when:
-
-- subagents are unavailable;
-- the user explicitly forbids delegation;
-- the environment rejects delegate creation;
-- a delegate returns `UNAVAILABLE` and no equivalent isolated delegate lane exists;
-- the task is XS/S and the selected protocol permits inline execution.
+- Sub Agents are unavailable;
+- the user explicitly disables Sub Agents;
+- the runtime rejects delegation;
+- the task is XS/S and the protocol allows inline execution.
 
 Invalid fallback reasons:
 
-- delegate is slow
-- delegate is pending
-- leader is impatient
-- saving time
-- convenience
-- leader thinks it can do better
-- avoiding coordination overhead on M/L/XL tasks
+- Sub Agent is slow;
+- Sub Agent is pending;
+- leader is impatient;
+- leader wants to save time;
+- leader prefers to do it directly.
 
-A serial fallback must be recorded with `fallback_reason`, `attempted_mode`, and evidence.
+Record every fallback reason in the final report.

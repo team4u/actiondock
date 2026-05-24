@@ -1,136 +1,78 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "TaskPlan",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskPlanB",
   "type": "object",
   "required": [
-    "tasks",
-    "phases",
-    "delegate_policy"
+    "plan_b_id",
+    "derived_from_plan_a",
+    "phases"
   ],
   "properties": {
-    "delegate_policy": {
-      "type": "object",
-      "required": [
-        "execution_mode",
-        "must_wait_for_results"
-      ],
-      "properties": {
-        "execution_mode": {
-          "enum": [
-            "subagent",
-            "serial"
-          ]
-        },
-        "must_wait_for_results": {
-          "const": true
-        }
-      },
-      "additionalProperties": false
+    "plan_b_id": {
+      "type": "string"
+    },
+    "derived_from_plan_a": {
+      "type": "string"
     },
     "phases": {
       "type": "array",
       "items": {
-        "type": "object"
-      }
-    },
-    "tasks": {
-      "type": "array",
-      "items": {
         "type": "object",
         "required": [
-          "task_id",
-          "stage",
-          "target_path",
-          "derived_from_plan_a",
-          "delegate_required",
-          "acceptance_criteria"
+          "phase",
+          "purpose",
+          "tasks"
         ],
         "properties": {
-          "task_id": {
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "purpose": {
             "type": "string"
           },
-          "stage": {
-            "type": "string"
-          },
-          "target_path": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "derived_from_plan_a": {
-            "type": "boolean"
-          },
-          "delegate_required": {
-            "type": "boolean"
-          },
-          "assigned_delegate": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "inputs": {
+          "tasks": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "object",
+              "required": [
+                "task_id",
+                "target_path",
+                "delegate",
+                "acceptance_criteria",
+                "plan_a_ref"
+              ],
+              "properties": {
+                "task_id": {
+                  "type": "string"
+                },
+                "target_path": {
+                  "type": "string"
+                },
+                "delegate": {
+                  "enum": [
+                    "subagent",
+                    "serial"
+                  ]
+                },
+                "inputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "acceptance_criteria": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "plan_a_ref": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
             }
-          },
-          "acceptance_criteria": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "additionalProperties": false
-      }
-    },
-    "domain_planner_assignments": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "domain",
-          "delegate_required",
-          "assigned_delegate",
-          "status"
-        ],
-        "properties": {
-          "domain": {
-            "enum": [
-              "architecture",
-              "api",
-              "data",
-              "business_flow",
-              "agent_tool",
-              "infra_env",
-              "maintenance_ops",
-              "other"
-            ]
-          },
-          "delegate_required": {
-            "type": "boolean"
-          },
-          "assigned_delegate": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "enum": [
-              "PLANNED",
-              "DISPATCHED",
-              "COMPLETED",
-              "FAILED",
-              "BLOCKED",
-              "UNAVAILABLE",
-              "TIMEOUT_REPORTED"
-            ]
-          },
-          "reason": {
-            "type": "string"
           }
         },
         "additionalProperties": false

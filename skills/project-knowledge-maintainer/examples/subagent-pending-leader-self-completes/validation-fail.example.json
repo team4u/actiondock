@@ -1,0 +1,18 @@
+{
+  "stage": "validator",
+  "status": "BLOCKED",
+  "summary": "Leader attempted to complete a delegated stage before the Sub Agent returned.",
+  "findings": [
+    {
+      "code": "subagent_pending_leader_self_completes",
+      "severity": "error",
+      "message": "The Domain Planner Sub Agent was still pending, but the leader advanced to Plan A and marked the stage complete.",
+      "evidence": [
+        "delegate_dispatch:domain_planner:api",
+        "missing DOMAIN_PLAN_RESULT"
+      ],
+      "required_action": "Wait for the Sub Agent result, or report the stage as blocked/unavailable. Do not self-complete the delegated stage."
+    }
+  ],
+  "next_action": "STOP_BLOCKED"
+}

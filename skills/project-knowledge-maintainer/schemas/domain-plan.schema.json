@@ -1,17 +1,16 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "DomainPlan",
   "type": "object",
   "required": [
     "domain",
+    "status",
     "activation_status",
     "evidence_scanned",
     "domain_entities_found",
     "recommended_documents",
     "excluded_documents",
-    "coverage_assertion",
-    "thin_plan_risk",
-    "open_questions"
+    "self_check"
   ],
   "properties": {
     "domain": {
@@ -24,6 +23,16 @@
         "infra_env",
         "maintenance_ops",
         "other"
+      ]
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL_REPAIRABLE",
+        "FAIL_NEEDS_REPLAN",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE",
+        "UNAVAILABLE"
       ]
     },
     "activation_status": {
@@ -42,30 +51,7 @@
     "domain_entities_found": {
       "type": "array",
       "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "kind",
-          "evidence_basis"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "evidence_basis": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "notes": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
+        "type": "string"
       }
     },
     "recommended_documents": {
@@ -74,14 +60,30 @@
         "type": "object",
         "required": [
           "target_path",
+          "domain",
           "category",
+          "doc_type",
           "reason",
           "evidence_basis",
-          "expected_content"
+          "expected_content",
+          "acceptance_criteria",
+          "phase"
         ],
         "properties": {
           "target_path": {
             "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
           },
           "category": {
             "enum": [
@@ -91,6 +93,16 @@
               "candidate",
               "defer",
               "excluded"
+            ]
+          },
+          "doc_type": {
+            "enum": [
+              "actiondock",
+              "index",
+              "leaf",
+              "runbook",
+              "reference",
+              "other"
             ]
           },
           "reason": {
@@ -108,11 +120,18 @@
               "type": "string"
             }
           },
-          "dependencies": {
+          "acceptance_criteria": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_domain_plan": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -124,11 +143,50 @@
         "type": "object",
         "required": [
           "target_path",
-          "reason"
+          "domain",
+          "category",
+          "doc_type",
+          "reason",
+          "evidence_basis",
+          "expected_content",
+          "acceptance_criteria",
+          "phase"
         ],
         "properties": {
           "target_path": {
             "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "category": {
+            "enum": [
+              "existing",
+              "must",
+              "should",
+              "candidate",
+              "defer",
+              "excluded"
+            ]
+          },
+          "doc_type": {
+            "enum": [
+              "actiondock",
+              "index",
+              "leaf",
+              "runbook",
+              "reference",
+              "other"
+            ]
           },
           "reason": {
             "type": "string"
@@ -138,22 +196,56 @@
             "items": {
               "type": "string"
             }
+          },
+          "expected_content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_domain_plan": {
+            "type": "string"
           }
         },
         "additionalProperties": false
       }
     },
-    "coverage_assertion": {
-      "type": "string"
-    },
-    "thin_plan_risk": {
-      "type": "boolean"
-    },
-    "open_questions": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
+    "self_check": {
+      "type": "object",
+      "required": [
+        "index_content_sink_risk",
+        "under_split_risk",
+        "obvious_missing_docs",
+        "coverage_assertion"
+      ],
+      "properties": {
+        "index_content_sink_risk": {
+          "type": "boolean"
+        },
+        "under_split_risk": {
+          "type": "boolean"
+        },
+        "obvious_missing_docs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "coverage_assertion": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

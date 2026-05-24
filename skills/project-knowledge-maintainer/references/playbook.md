@@ -1,61 +1,50 @@
 # Playbook
 
-## Core flow
+## Runtime loading rule
 
-Choose the lightest protocol that can safely complete the task.
+Choose the lightest safe protocol and load only the references needed for the active stage. Do not load examples during normal runs.
+
+Choose the lightest protocol that can safely reach validated completion.
+
+## Scale routing
+
+| Scale | Use when | Protocol |
+|---|---|---|
+| XS | typo, link, one-line env note, one local edit | `protocols/xs-lite.md` |
+| S | one small doc area, local update, no structure risk | `protocols/small-task.md` |
+| M | multiple docs or domains, no full rebuild | `protocols/medium-task.md` |
+| L | broad feature, API/data/flow refresh, knowledge-base repair | `protocols/large-rebuild.md` |
+| XL | monorepo, large ingest, full reconstruction, high ambiguity | `protocols/large-rebuild.md` |
+
+## Escalation triggers
+
+Escalate from XS/S to M/L/XL when any appear:
+
+- multiple knowledge domains;
+- multiple target docs;
+- index content sink risk;
+- under-split existing docs;
+- API/data/business-flow changes together;
+- large ingest or repo-wide scan;
+- Workers would need to discover missing document structure;
+- a single Planner would likely collapse several domains into one or two broad docs.
+
+## Scenario matrix
+
+| Scenario | Minimum scale | Required extras |
+|---|---:|---|
+| Fix broken doc link | XS | validate link target |
+| Update one env var doc | S | secret safety, evidence path |
+| Add docs for a feature touching API and DB | M | selective Domain Planner or Plan A if structure risk |
+| Rebuild docs from repo evidence | L | Domain Planners, Plan A validation, Workers, Output Validator |
+| Ingest large `.kb_inbox/` archive | XL | noise filter, Domain Planners, phased Plan B, repair loop |
+
+## Core flows
 
 ```text
 XS: Route-lite → Apply → Validate-lite → Report
 S:  Route-lite → Mini Plan → Apply → Validate-lite → Report
-M:  Route → Task Plan → Delegate Dispatch → Delegate Wait Gate → Integration → Validate → Report
-L:  Route → Workspace Scan → Noise Filter → Domain Planner Fan-out → Plan A Merge → Plan B → Delegates → Gate → Integration → Validate → Repair if needed → Report
-XL: Route → Workspace Partition → Noise Filter → Domain Planner Fan-out → Plan A Merge → Phased Plan B → Delegates → Gate → Integration → Validate → Repair if needed → Report
+M:  Route → Task Plan or selective Plan A → Sub Agent execution → Validate → Report
+L:  Route → Scope Scan → Domain Planners → Plan A → Plan A Validate → Plan B → Workers → Output Validate → Repair if needed → Report
+XL: Route → Scope Partition → Noise Filter → Domain Planners → Plan A → Plan A Validate → Phased Plan B → Workers → Output Validate → Repair if needed → Report
 ```
-
-## Execution priority
-
-```text
-subagent > serial
-```
-
-Use the highest available mode unless the user forbids delegation or the runtime cannot create delegates.
-
-Serial fallback is valid only when delegation is unavailable, explicitly forbidden, rejected by the environment, or the selected XS/S protocol permits inline execution. Delegate slowness or pending status is not a fallback reason.
-
-## Delegate wait gate
-
-Every delegated stage must return an explicit result before dependent stages proceed.
-
-Valid completion statuses:
-
-- `COMPLETED`
-- `FAILED`
-- `BLOCKED`
-- `NEEDS_REPLAN`
-- `UNAVAILABLE`
-- `TIMEOUT_REPORTED`
-
-`WAITING` is an interim status, not completion.
-
-## Domain planning, Plan A, and Plan B
-
-When `document_set_plan_required=true`, Planner must first run domain-partitioned planning. Each activated or plausible domain receives a Domain Planner pass. The Global Planner merges domain plans into Plan A, the complete expected document set. Plan B is the executable task batch derived from Plan A.
-
-Workers may propose extra tasks but cannot create unplanned substantive leaf docs.
-
-## Scale triggers
-
-Escalate from XS/S to M/L/XL when any of these appear:
-
-- multiple knowledge domains
-- multiple target docs
-- index content sink risk
-- under-split existing docs
-- API/data/business-flow changes together
-- large ingest or monorepo
-- Workers would need to discover missing document structure
-- a single Planner would likely collapse several domains into one or two broad docs
-
-## Repair loop
-
-Validator findings drive repair. Repairs must be planned, delegated when possible, waited for, and revalidated. Do not mark a finding resolved without evidence.

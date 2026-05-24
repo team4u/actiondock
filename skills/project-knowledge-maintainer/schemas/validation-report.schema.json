@@ -1,70 +1,79 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ValidationReport",
   "type": "object",
   "required": [
+    "stage",
     "status",
+    "summary",
     "findings",
-    "delegate_result_check",
-    "plan_a_check",
-    "completion_allowed"
+    "next_action"
   ],
   "properties": {
+    "stage": {
+      "const": "validator"
+    },
     "status": {
       "enum": [
         "PASS",
-        "PASS_WITH_NOTES",
-        "FAIL",
-        "BLOCKED"
+        "FAIL_REPAIRABLE",
+        "FAIL_NEEDS_REPLAN",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE",
+        "UNAVAILABLE"
       ]
     },
-    "completion_allowed": {
-      "type": "boolean"
-    },
-    "delegate_result_check": {
-      "type": "object"
-    },
-    "plan_a_check": {
-      "type": "object"
+    "summary": {
+      "type": "string"
     },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
         "required": [
-          "id",
+          "code",
           "severity",
           "message",
-          "affected_paths",
-          "repair_required"
+          "evidence",
+          "required_action"
         ],
         "properties": {
-          "id": {
+          "code": {
             "type": "string"
           },
           "severity": {
             "enum": [
-              "hard",
-              "major",
-              "minor",
-              "note"
+              "info",
+              "warning",
+              "error"
             ]
+          },
+          "target_path": {
+            "type": "string"
           },
           "message": {
             "type": "string"
           },
-          "affected_paths": {
+          "evidence": {
             "type": "array",
             "items": {
               "type": "string"
             }
           },
-          "repair_required": {
-            "type": "boolean"
+          "required_action": {
+            "type": "string"
           }
         },
         "additionalProperties": false
       }
+    },
+    "next_action": {
+      "enum": [
+        "FINALIZE",
+        "REPAIR",
+        "REPLAN",
+        "STOP_BLOCKED"
+      ]
     }
   },
   "additionalProperties": false

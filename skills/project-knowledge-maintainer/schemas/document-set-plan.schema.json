@@ -1,28 +1,41 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "DocumentSetPlan",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DocumentSetPlanA",
   "type": "object",
   "required": [
-    "domain_merge_decisions",
-    "domain_plan_results",
-    "coverage_basis",
-    "coverage_assertion",
-    "scope_boundary",
+    "plan_id",
+    "status",
+    "source_domain_plans",
+    "coverage_summary",
     "documents",
-    "excluded_candidates"
+    "excluded_candidates",
+    "self_check"
   ],
   "properties": {
-    "coverage_basis": {
+    "plan_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL_REPAIRABLE",
+        "FAIL_NEEDS_REPLAN",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE",
+        "UNAVAILABLE"
+      ]
+    },
+    "source_domain_plans": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "coverage_assertion": {
-      "type": "string"
-    },
-    "scope_boundary": {
-      "type": "string"
+    "coverage_summary": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "documents": {
       "type": "array",
@@ -30,18 +43,30 @@
         "type": "object",
         "required": [
           "target_path",
-          "category",
           "domain",
+          "category",
+          "doc_type",
           "reason",
           "evidence_basis",
           "expected_content",
-          "dependencies",
-          "phase",
-          "owner_stage"
+          "acceptance_criteria",
+          "phase"
         ],
         "properties": {
           "target_path": {
             "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
           },
           "category": {
             "enum": [
@@ -53,15 +78,13 @@
               "excluded"
             ]
           },
-          "domain": {
+          "doc_type": {
             "enum": [
-              "architecture",
-              "api",
-              "data",
-              "business_flow",
-              "agent_tool",
-              "infra_env",
-              "maintenance_ops",
+              "actiondock",
+              "index",
+              "leaf",
+              "runbook",
+              "reference",
               "other"
             ]
           },
@@ -80,7 +103,7 @@
               "type": "string"
             }
           },
-          "dependencies": {
+          "acceptance_criteria": {
             "type": "array",
             "items": {
               "type": "string"
@@ -90,7 +113,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "owner_stage": {
+          "source_domain_plan": {
             "type": "string"
           }
         },
@@ -100,19 +123,22 @@
     "excluded_candidates": {
       "type": "array",
       "items": {
-        "type": "object"
-      }
-    },
-    "domain_plan_results": {
-      "type": "array",
-      "items": {
         "type": "object",
         "required": [
+          "target_path",
           "domain",
-          "result_status",
-          "summary"
+          "category",
+          "doc_type",
+          "reason",
+          "evidence_basis",
+          "expected_content",
+          "acceptance_criteria",
+          "phase"
         ],
         "properties": {
+          "target_path": {
+            "type": "string"
+          },
           "domain": {
             "enum": [
               "architecture",
@@ -125,63 +151,85 @@
               "other"
             ]
           },
-          "result_status": {
+          "category": {
             "enum": [
-              "COMPLETED",
-              "FAILED",
-              "BLOCKED",
-              "NEEDS_REPLAN",
-              "UNAVAILABLE",
-              "TIMEOUT_REPORTED"
+              "existing",
+              "must",
+              "should",
+              "candidate",
+              "defer",
+              "excluded"
             ]
           },
-          "summary": {
-            "type": "string"
-          },
-          "result_ref": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "thin_plan_risk": {
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false
-      }
-    },
-    "domain_merge_decisions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "domain",
-          "decision",
-          "reason"
-        ],
-        "properties": {
-          "domain": {
+          "doc_type": {
             "enum": [
-              "architecture",
-              "api",
-              "data",
-              "business_flow",
-              "agent_tool",
-              "infra_env",
-              "maintenance_ops",
+              "actiondock",
+              "index",
+              "leaf",
+              "runbook",
+              "reference",
               "other"
             ]
-          },
-          "decision": {
-            "type": "string"
           },
           "reason": {
             "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_domain_plan": {
+            "type": "string"
           }
         },
         "additionalProperties": false
       }
+    },
+    "self_check": {
+      "type": "object",
+      "required": [
+        "all_activated_domains_merged",
+        "no_missing_domain_plans",
+        "no_index_content_sink",
+        "no_obvious_underplanning",
+        "worker_discovery_not_required_for_main_structure"
+      ],
+      "properties": {
+        "all_activated_domains_merged": {
+          "type": "boolean"
+        },
+        "no_missing_domain_plans": {
+          "type": "boolean"
+        },
+        "no_index_content_sink": {
+          "type": "boolean"
+        },
+        "no_obvious_underplanning": {
+          "type": "boolean"
+        },
+        "worker_discovery_not_required_for_main_structure": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

@@ -1,0 +1,19 @@
+{
+  "stage": "validator",
+  "status": "FAIL_NEEDS_REPLAN",
+  "summary": "Plan A contains only index or overview docs despite leaf-level evidence.",
+  "findings": [
+    {
+      "code": "plan_a_only_index_docs",
+      "severity": "error",
+      "message": "Plan A uses docs/index.md and docs/api/index.md as the only planned docs while API and data leaf evidence exists.",
+      "evidence": [
+        "DOCUMENT_SET_PLAN_A",
+        "src/routes/orders.ts",
+        "db/migrations/001_orders.sql"
+      ],
+      "required_action": "Rebuild Plan A with leaf docs for activated API and data domains."
+    }
+  ],
+  "next_action": "REPLAN"
+}

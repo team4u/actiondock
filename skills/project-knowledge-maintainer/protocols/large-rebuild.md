@@ -1,58 +1,20 @@
-# Protocol: Large / XL Rebuild
+# Large / XL Rebuild Protocol
 
-Use for broad refreshes, monorepos, full knowledge-base reconstruction, large ingest, stale documentation repair, or high ambiguity.
+Use for repository-wide refresh, large ingest, knowledge-base repair, or high ambiguity.
 
-## Flow
+Flow:
 
 ```text
 Route
-→ Workspace Scan
-→ Noise Filter
-→ Domain Planner Fan-out
-→ Document Set Plan A Merge
+→ Scope Scan / Noise Filter
+→ Domain Planner fan-out
+→ Global Plan A merge
+→ Plan A validation
 → Task Plan B
-→ Delegate Dispatch
-→ Delegate Wait Gate
-→ Integration
-→ Validator
-→ Repair Loop if needed
-→ Final Report
+→ Worker Sub Agents
+→ Output validation
+→ Repair loop if needed
+→ Final report
 ```
 
-## Mandatory features
-
-- Plan A is required.
-- Domain Planner fan-out is required for every activated or plausible domain.
-- Domain coverage matrix is required.
-- Delegate use is required when subagents are available.
-- All delegated stages are gated.
-- Validation is full, not lite.
-
-## Domain coverage matrix
-
-Planner must explicitly consider:
-
-- architecture
-- api
-- data
-- business_flow
-- agent_tool
-- infra_env
-- maintenance_ops
-
-Only activated domains need Worker tasks, but each activated or plausible domain must have a Domain Planner result or an explicit `UNAVAILABLE` / `BLOCKED` delegate result. Skipped domains must be justified for L/XL.
-
-## Noise filter
-
-Separate durable facts from:
-
-- stale docs
-- generated output
-- deprecated examples
-- test fixtures that do not represent runtime behavior
-- speculative notes
-- old inbox material
-
-## Completion
-
-Do not report completion if Domain Planner results are missing, Plan A is incomplete, delegated stages are unresolved, validation failed, or repair was claimed without evidence.
+No Worker execution begins until Plan A validation returns `PASS`, `BLOCKED`, or an explicit accepted terminal state.

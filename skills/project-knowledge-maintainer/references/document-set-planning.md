@@ -1,62 +1,46 @@
-# Planner: Domain-Partitioned Plan A and Plan B
+# Document Set Planning
 
-Planner is responsible for complete structure planning. Worker is responsible for executing assigned targets. When Plan A is required, planning must be domain-partitioned before it is merged.
+Plan A is the complete expected document set. Plan B is the executable batch derived from Plan A.
 
-## Plan A
+## When Plan A is required
 
-When `document_set_plan_required=true`, Planner must produce Plan A: the complete expected document set. Plan A must be created by merging domain-specific plans, not by a single shallow global list.
+Plan A is required for L/XL tasks and when any of these are true:
 
-Plan A must include all known or reasonably expected documents categorized as:
+- `document_set_plan_required=true`
+- multi-domain update
+- repository-wide refresh or reconstruction
+- large ingest
+- index content sink risk
+- category under-split risk
+- Worker would otherwise need to discover the main document structure
 
-- `existing`: already exists and should be preserved, updated, moved, or validated
-- `must`: required for the current knowledge base to be complete
-- `should`: strongly recommended but may be deferred if scope is constrained
-- `candidate`: plausible but needs additional evidence
-- `defer`: intentionally delayed, with reason
-- `excluded`: considered but out of scope, with reason
+## Plan A categories
 
-Before listing final documents, collect or produce domain plan results as defined in `references/domain-planning.md`. For each planned document include:
+Every planned document belongs to one category:
+
+- `existing`: exists and should remain/update
+- `must`: required for this scope
+- `should`: useful but may be phased
+- `candidate`: plausible; needs more evidence or lower priority
+- `defer`: intentionally delayed
+- `excluded`: considered and not in scope
+
+## Plan A document fields
+
+Each `existing`, `must`, `should`, and `candidate` document should include:
 
 - `target_path`
-- `category`
 - `domain`
+- `doc_type`: `index`, `leaf`, `runbook`, `reference`, or `actiondock`
 - `reason`
 - `evidence_basis`
 - `expected_content`
-- `dependencies`
+- `acceptance_criteria`
 - `phase`
-- `owner_stage`
-
-## Plan A completeness standard
-
-Plan A should be over-complete rather than under-complete. Domain Planners should first over-enumerate likely docs inside their domain; the Global Planner should then merge and normalize. A broad request that produces only one or two documents is a hard underplanning signal unless every domain plan explicitly shows why no other docs are needed. It is acceptable to include `candidate`, `defer`, or `excluded` entries. It is not acceptable to omit obvious required leaf docs.
-
-Planner must not write:
-
-- “workers will discover the remaining docs”
-- “worker should decide what docs to create”
-- “add files as needed” without listing expected candidates
-- “TBD by worker” as a substitute for document-set coverage
-- “single overview covers this domain” when evidence shows multiple routes, tables, jobs, flows, tools, or runbooks
+- `source_domain_plan`
 
 ## Plan B
 
-Plan B is the execution task plan. It must be derived from Plan A.
+Plan B converts Plan A into phases and Worker tasks. Every Worker task must map to one Plan A document. Do not create tasks that are not derived from Plan A.
 
-Each Worker task must map to one planned `target_path` unless it is a scan-only or validation-only task. Plan B may not be emitted until required Domain Planner results have been received, blocked, or explicitly unavailable. A Worker may propose extra tasks but may not create unplanned substantive leaf docs.
-
-## Replan trigger
-
-If a Worker identifies a missing document, it must return `NEEDS_REPLAN` or include `proposed_extra_tasks`. The leader must route back to Planner or Document Set Planner before any unplanned doc is created.
-
-## Hard failures
-
-- `planner_underplanning`
-- `delegated_discovery_to_worker`
-- `missing_required_leaf_doc`
-- `unplanned_leaf_doc_created`
-- `document_set_plan_incomplete_metadata`
-- `domain_planner_missing`
-- `domain_plan_result_missing`
-- `domain_plan_not_merged`
-- `domain_doc_inventory_too_shallow`
+Workers may propose extra tasks. Proposed extra tasks trigger replan; they are not permission to write unplanned leaf docs.

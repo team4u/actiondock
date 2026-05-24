@@ -1,0 +1,18 @@
+{
+  "stage": "validator",
+  "status": "FAIL_REPAIRABLE",
+  "summary": "Repair was claimed without a follow-up Validator pass.",
+  "findings": [
+    {
+      "code": "repair_claimed_without_revalidation",
+      "severity": "error",
+      "message": "The report says the finding was fixed, but no post-repair VALIDATION_REPORT exists.",
+      "evidence": [
+        "REPAIR_PLAN",
+        "missing post-repair VALIDATION_REPORT"
+      ],
+      "required_action": "Run Validator after repair and only then mark the finding resolved."
+    }
+  ],
+  "next_action": "REPAIR"
+}

@@ -1,0 +1,19 @@
+{
+  "stage": "validator",
+  "status": "FAIL_NEEDS_REPLAN",
+  "summary": "Worker created a leaf doc that was not derived from Plan A.",
+  "findings": [
+    {
+      "code": "worker_created_unplanned_leaf_doc",
+      "severity": "error",
+      "target_path": "docs/api/errors.md",
+      "message": "The Worker created docs/api/errors.md even though it was not present in Plan A.",
+      "evidence": [
+        "WORKER_RESULT:docs/api/http/orders.md",
+        "DOCUMENT_SET_PLAN_A"
+      ],
+      "required_action": "Return to Domain Planner / Global Planner, add the doc to Plan A if justified, then derive a Worker task."
+    }
+  ],
+  "next_action": "REPLAN"
+}

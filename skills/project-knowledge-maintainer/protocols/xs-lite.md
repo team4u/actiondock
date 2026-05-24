@@ -1,28 +1,18 @@
-# Protocol: XS Lite
+# XS Lite Protocol
 
-Use for one-file, low-risk edits such as typo fixes, link fixes, tiny env note updates, and small corrections.
+Use for one local change with no structure risk.
 
-## Flow
+Flow:
 
 ```text
 Route-lite → Apply → Validate-lite → Report
 ```
 
-## Requirements
+Success criteria:
 
-- Hard safety applies.
-- Evidence priority applies.
-- Delegation is optional unless the environment requires it.
-- No Plan A required.
-- No document-set plan required unless the change reveals granularity or coverage risk.
+- target path is safe;
+- change is evidence-backed or user-specified;
+- formatting remains valid;
+- no secrets are introduced.
 
-## Validate-lite
-
-Check:
-
-- changed path is safe
-- no secret leakage
-- local links affected by the change are valid
-- change is supported by evidence or user instruction
-
-Escalate to S/M if the edit touches multiple docs, multiple domains, or reveals stale structure.
+Sub Agent delegation is optional for XS.

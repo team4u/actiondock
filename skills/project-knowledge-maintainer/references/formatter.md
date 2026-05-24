@@ -1,6 +1,6 @@
 # Formatter
 
-This file defines the required formatting rules for generated or updated project knowledge artifacts.
+This file defines required formatting rules for generated or updated project knowledge artifacts.
 
 ## General Markdown rules
 
@@ -28,7 +28,7 @@ Rules:
 
 - Link only to documents that exist or are created in the same run.
 - Do not use broken placeholder links.
-- Do not store full API, data, business-flow, runbook, or troubleshooting content in ACTIONDOCK.
+- Do not store full API, data, business-flow, runbook, or troubleshooting content in `ACTIONDOCK.md`.
 
 ## Index document format
 
@@ -84,17 +84,21 @@ Commands, runbook notes, migration notes, or caveats when supported by evidence.
 
 The `Evidence and boundaries` section is required for substantive leaf docs.
 
-## Delegate result summary format
+## Required machine-readable blocks
 
-Final reports must include a compact delegate table when delegation was used:
+For required stage outputs, use exactly one fenced JSON block preceded by the block name:
 
-| Stage | Delegate type | Status | Result received | Summary |
-|---|---|---:|---:|---|
-| Router | subagent | COMPLETED | yes | ... |
-| Planner | subagent | COMPLETED | yes | ... |
-| Worker: `docs/api/http/orders.md` | subagent | COMPLETED | yes | ... |
+- `ROUTE_RESULT`
+- `STAGE_RESULT`
+- `DOMAIN_PLAN_RESULT`
+- `DOCUMENT_SET_PLAN_A`
+- `TASK_PLAN_B`
+- `WORKER_RESULT`
+- `VALIDATION_REPORT`
+- `REPAIR_PLAN`
+- `FINAL_REPORT`
 
-If a delegate did not return, do not mark the dependent stage complete. Use `WAITING`, `BLOCKED`, `FAILED`, `TIMEOUT_REPORTED`, or `UNAVAILABLE`.
+Do not mix required machine-readable stage outputs with long freeform prose.
 
 ## Final response format
 
