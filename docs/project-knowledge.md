@@ -84,14 +84,18 @@ flowchart TD
 
 项目仓库被解析出来之后，并不意味着它就在当前本地文件系统里，也不意味着任何调用方都可以直接用本地文件命令扫仓库。ActionDock 把这部分能力收敛到内置系统插件，让目录浏览、文本读取、环境探测和受控 Shell 执行都通过统一门面完成。
 
-核心动作只有四个：
+核心动作有八个，涵盖文件读写、搜索和系统信息：
 
 | 动作 | 说明 |
 |------|------|
-| `listDirectory` | 列出目录内容 |
-| `viewTextFile` | 读取文本文件 |
-| `getSystemInfo` | 获取系统信息 |
-| `executeShellCommand` | 执行 Shell 命令 |
+| `viewTextFile` | 读取文本文件，支持行范围指定 |
+| `listDirectory` | 列出目录内容，返回文件和子目录 |
+| `writeTextFile` | 写入或覆盖文件内容，支持范围替换 |
+| `insertTextFile` | 在指定行号插入内容 |
+| `findFiles` | 按名称模式搜索文件 |
+| `searchText` | 在文件中搜索文本内容 |
+| `getSystemInfo` | 获取工作区、系统、Shell 和命令信息 |
+| `executeShellCommand` | 执行 Shell 命令，支持超时和输出限制 |
 
 这几个动作看上去只是工具接口，但设计价值在于它们把"仓库内容访问"从"调用方自己的本地假设"里剥离出来了。
 
