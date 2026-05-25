@@ -103,7 +103,7 @@ actiondock repository sync <repositoryId> --json
 | `listDirectory` | 列出目录下的文件和子目录 |
 | `viewTextFile` | 读取文本文件内容（支持行范围） |
 | `writeTextFile` | 创建或覆盖文本文件 |
-| `executeShellCommand` | 在项目目录下执行 Shell 命令（默认 Bash，Windows 优先 Git Bash；可通过 `shellPath` 指定 Shell，`allowedCommands` 限制可执行命令，支持超时设置） |
+| `executeShellCommand` | 在项目目录下执行 Shell 命令（Linux/macOS 默认 bash 兼容 Shell，Windows 默认 PowerShell、失败时回退 cmd；可通过 `shellPath` 指定 Shell，并按常见 Shell 自动匹配参数，`allowedCommands` 限制可执行命令，支持超时设置） |
 | `getSystemInfo` | 探测系统信息：工作区路径、系统环境（OS、Java 版本）、PATH 环境变量、可用 Shell（bash/sh/PowerShell/cmd）、常用命令版本（bash、python、python3、node、npm、npx、git、java、mvn），支持 `additionalCommands` 补充探测更多命令 |
 
 通过 CLI 调用：
@@ -121,7 +121,7 @@ actiondock plugin invoke actiondock-workspace viewTextFile \
 
 # 在项目目录下执行 Shell 命令
 actiondock plugin invoke actiondock-workspace executeShellCommand \
-  --args-json '{"command":"find <root>/src -name *.java | head -20"}' --json
+  --args-json '{"command":"git status --short"}' --json
 
 # 探测系统信息（工作区、Shell、常用命令版本等）
 actiondock plugin invoke actiondock-workspace getSystemInfo --json

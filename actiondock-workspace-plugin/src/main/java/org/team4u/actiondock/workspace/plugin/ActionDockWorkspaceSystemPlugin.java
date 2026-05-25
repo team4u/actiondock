@@ -551,22 +551,37 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         boolean windows = osName.contains("win");
         List<List<String>> candidates = new ArrayList<>();
         if (shellPath != null) {
-            candidates.add(List.of(shellPath, "-lc"));
+            candidates.add(shellCommand(shellPath));
             return candidates;
         }
         if (windows) {
-            candidates.add(List.of("bash.exe", "-lc"));
-            candidates.add(List.of("C:\\Program Files\\Git\\bin\\bash.exe", "-lc"));
-            candidates.add(List.of("C:\\Program Files\\Git\\usr\\bin\\bash.exe", "-lc"));
-            candidates.add(List.of("C:\\Program Files (x86)\\Git\\bin\\bash.exe", "-lc"));
-            candidates.add(List.of("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"));
-            candidates.add(List.of("cmd.exe", "/d", "/s", "/c"));
+            candidates.add(shellCommand("powershell.exe"));
+            candidates.add(shellCommand("cmd.exe"));
         } else {
-            candidates.add(List.of("bash", "-lc"));
-            candidates.add(List.of("/bin/bash", "-lc"));
-            candidates.add(List.of("/bin/sh", "-lc"));
+            candidates.add(shellCommand("bash"));
+            candidates.add(shellCommand("/bin/bash"));
+            candidates.add(shellCommand("/bin/sh"));
         }
         return candidates;
+    }
+
+    private List<String> shellCommand(String shellPath) {
+        String executableName = shellExecutableName(shellPath);
+        if (executableName.equals("powershell") || executableName.equals("powershell.exe")
+                || executableName.equals("pwsh") || executableName.equals("pwsh.exe")) {
+            return List.of(shellPath, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command");
+        }
+        if (executableName.equals("cmd") || executableName.equals("cmd.exe")) {
+            return List.of(shellPath, "/d", "/s", "/c");
+        }
+        return List.of(shellPath, "-lc");
+    }
+
+    private String shellExecutableName(String shellPath) {
+        String normalized = shellPath == null ? "" : shellPath.replace('\\', '/');
+        int separator = normalized.lastIndexOf('/');
+        String name = separator >= 0 ? normalized.substring(separator + 1) : normalized;
+        return name.toLowerCase();
     }
 
     private Path resolveExecutable(String executable) {

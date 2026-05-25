@@ -259,14 +259,14 @@
     {
       "action": "executeShellCommand",
       "title": "Execute Shell Command",
-      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions. Bash is the preferred shell on all platforms: on Linux/macOS it uses bash directly; on Windows it tries Git Bash first and only falls back to PowerShell or cmd.exe if bash is unavailable. Use 'shellPath' to override the default shell, or 'allowedCommands' to restrict which commands may run.",
+      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions. On Linux/macOS it prefers bash-compatible shells; on Windows it uses PowerShell first and falls back to cmd.exe if PowerShell is unavailable. Use 'shellPath' to override the default shell, or 'allowedCommands' to restrict which commands may run.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "command": {
             "type": "string",
             "title": "Command",
-            "description": "The shell command string to execute. Prefer bash syntax for cross-platform compatibility."
+            "description": "The shell command string to execute. The command syntax must match the selected shell."
           },
           "cwd": {
             "type": "string",
@@ -294,7 +294,7 @@
           "shellPath": {
             "type": "string",
             "title": "Shell Path",
-            "description": "Explicit path to the shell executable. Overrides auto-detected shell (e.g. '/bin/bash', 'C:\\Program Files\\Git\\bin\\bash.exe')."
+            "description": "Explicit path to the shell executable. Overrides auto-detected shell and applies matching shell arguments for common shells such as '/bin/bash', 'C:\\Windows\\System32\\cmd.exe', or 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'."
           },
           "baseDir": {
             "type": "string",

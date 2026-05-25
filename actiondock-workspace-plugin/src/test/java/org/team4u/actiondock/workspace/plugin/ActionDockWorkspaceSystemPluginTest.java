@@ -202,6 +202,33 @@ class ActionDockWorkspaceSystemPluginTest {
     }
 
     @Test
+    void getSystemInfoPrefersNativeWindowsShells() {
+        String originalOsName = System.getProperty("os.name");
+        System.setProperty("os.name", "Windows 11");
+        try {
+            ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(
+                    tempDir.toString(),
+                    command -> switch (command) {
+                        case "powershell.exe", "cmd.exe" -> tempDir.resolve(command);
+                        default -> null;
+                    }
+            );
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = (Map<String, Object>) plugin.invoke("getSystemInfo", null, Map.of());
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> shells = (List<Map<String, Object>>) result.get("shells");
+
+            assertThat(shells)
+                    .extracting(entry -> entry.get("name"))
+                    .containsExactly("powershell.exe", "cmd.exe");
+        } finally {
+            restoreOsName(originalOsName);
+        }
+    }
+
+    @Test
     void getSystemInfoReportsRequestedShellPathFirst() {
         ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
 
@@ -257,5 +284,72 @@ class ActionDockWorkspaceSystemPluginTest {
                 .containsEntry("name", shellPath)
                 .containsEntry("available", false)
                 .containsEntry("resolvedPath", null);
+    }
+
+    @Test
+    void executeShellCommandUsesPowerShellArgumentsForExplicitOverride() throws Exception {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+        Path shellPath = createEchoShell("powershell.exe");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+                "command", "Write-Output hello",
+                "allowedCommands", List.of("Write-Output"),
+                "shellPath", shellPath.toString()
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result.get("shell")).isEqualTo(List.of(
+                shellPath.toString(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"
+        ));
+        assertThat((String) result.get("stdout")).isEqualTo("""
+                -NoProfile
+                -ExecutionPolicy
+                Bypass
+                -Command
+                Write-Output hello
+                """);
+    }
+
+    @Test
+    void executeShellCommandUsesCmdArgumentsForExplicitOverride() throws Exception {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+        Path shellPath = createEchoShell("cmd.exe");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+                "command", "dir",
+                "allowedCommands", List.of("dir"),
+                "shellPath", shellPath.toString()
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result.get("shell")).isEqualTo(List.of(
+                shellPath.toString(), "/d", "/s", "/c"
+        ));
+        assertThat((String) result.get("stdout")).isEqualTo("""
+                /d
+                /s
+                /c
+                dir
+                """);
+    }
+
+    private Path createEchoShell(String fileName) throws Exception {
+        Path shell = tempDir.resolve(fileName);
+        Files.writeString(shell, """
+                #!/bin/sh
+                printf '%s\\n' "$@"
+                """, StandardCharsets.UTF_8);
+        assertThat(shell.toFile().setExecutable(true, false)).isTrue();
+        return shell;
+    }
+
+    private void restoreOsName(String originalOsName) {
+        if (originalOsName == null) {
+            System.clearProperty("os.name");
+            return;
+        }
+        System.setProperty("os.name", originalOsName);
     }
 }
