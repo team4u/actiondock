@@ -387,7 +387,7 @@ export function ScriptLibraryPage() {
       scheduleCount = 0;
     }
 
-    await modal.confirm({
+    modal.confirm({
       title: "更新仓库安装脚本",
       okText: "更新",
       cancelText: "取消",
@@ -438,23 +438,24 @@ export function ScriptLibraryPage() {
             <Text type="secondary">该脚本没有声明插件依赖。</Text>
           )}
         </Space>
-      )
+      ),
+      onOk: async () => {
+        setActionKey(`update:${tool.id}`);
+        try {
+          await updateRepositoryToolLocalAsset(tool.repositoryId, tool.repositoryScriptId, {
+            installSchedules,
+            installScriptDependencies,
+            installPluginDependencies
+          });
+          messageApi.success("脚本已更新");
+          await loadData();
+        } catch (error) {
+          messageApi.error(getErrorMessage(error, "更新脚本失败"));
+        } finally {
+          setActionKey(null);
+        }
+      }
     });
-
-    setActionKey(`update:${tool.id}`);
-    try {
-      await updateRepositoryToolLocalAsset(tool.repositoryId, tool.repositoryScriptId, {
-        installSchedules,
-        installScriptDependencies,
-        installPluginDependencies
-      });
-      messageApi.success("脚本已更新");
-      await loadData();
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "更新脚本失败"));
-    } finally {
-      setActionKey(null);
-    }
   };
 
   const diffEditorTheme =

@@ -91,6 +91,150 @@ class ActionDockWorkspaceSystemPluginTest {
     }
 
     @Test
+    void findFilesReturnsSortedFilesWithGlobsAndDefaultExcludes() throws Exception {
+        Files.createDirectories(tempDir.resolve("src/main"));
+        Files.createDirectories(tempDir.resolve("target/classes"));
+        Files.writeString(tempDir.resolve("src/main/App.java"), "class App {}", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("src/main/AppTest.java"), "class AppTest {}", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("target/classes/App.class"), "binary", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("findFiles", null, Map.of(
+                "path", ".",
+                "includeGlobs", List.of("**/*.java"),
+                "excludeGlobs", List.of("**/*Test.java")
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("resultCount", 1);
+        assertThat((List<Map<String, Object>>) result.get("files"))
+                .extracting(entry -> entry.get("relativePath"))
+                .containsExactly("src/main/App.java");
+        assertThat(result).containsEntry("truncated", false);
+    }
+
+    @Test
+    void findFilesCanDisableDefaultExcludesAndReturnDirectories() throws Exception {
+        Files.createDirectories(tempDir.resolve("target/classes"));
+        Files.writeString(tempDir.resolve("target/classes/App.class"), "binary", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("findFiles", null, Map.of(
+                "path", ".",
+                "fileType", "directory",
+                "includeDefaultExcludes", false,
+                "includeGlobs", List.of("target/classes")
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat((List<Map<String, Object>>) result.get("files"))
+                .extracting(entry -> entry.get("relativePath"))
+                .containsExactly("target/classes");
+    }
+
+    @Test
+    void searchTextDefaultsToRegexAndReturnsMatchCoordinates() throws Exception {
+        Files.createDirectories(tempDir.resolve("src"));
+        Files.writeString(tempDir.resolve("src/app.txt"), "alpha-123\nbeta-456\n", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("searchText", null, Map.of(
+                "query", "[a-z]+-\\d+",
+                "path", "src"
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("matchCount", 2);
+        assertThat(result).containsEntry("matchedFileCount", 1);
+        assertThat((List<Map<String, Object>>) result.get("matches"))
+                .extracting(entry -> entry.get("matchText"))
+                .containsExactly("alpha-123", "beta-456");
+        assertThat(((List<Map<String, Object>>) result.get("matches")).getFirst())
+                .containsEntry("relativePath", "src/app.txt")
+                .containsEntry("lineNumber", 1)
+                .containsEntry("startColumn", 1)
+                .containsEntry("endColumn", 10);
+    }
+
+    @Test
+    void searchTextSupportsLiteralCaseInsensitiveContextAndLimits() throws Exception {
+        Files.writeString(tempDir.resolve("notes.txt"), "before\nAlpha\nmiddle\nalpha\nnext\n", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("searchText", null, Map.of(
+                "query", "alpha",
+                "regex", false,
+                "caseSensitive", false,
+                "contextLines", 1,
+                "maxMatches", 1
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("matchCount", 1);
+        assertThat(result).containsEntry("truncated", true);
+        Map<String, Object> match = ((List<Map<String, Object>>) result.get("matches")).getFirst();
+        assertThat(match).containsEntry("matchText", "Alpha");
+        assertThat((List<String>) match.get("before")).containsExactly("before");
+        assertThat((List<String>) match.get("after")).containsExactly("middle");
+    }
+
+    @Test
+    void searchTextReturnsErrorForInvalidRegex() throws Exception {
+        Files.writeString(tempDir.resolve("notes.txt"), "alpha\n", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("searchText", null, Map.of(
+                "query", "["
+        ));
+
+        assertThat(result).containsEntry("ok", false);
+        assertThat(String.valueOf(result.get("error"))).contains("Invalid regex");
+    }
+
+    @Test
+    void searchTextRespectsGitIgnoreDirectoryNegationAndNestedRules() throws Exception {
+        Files.createDirectories(tempDir.resolve("logs/keep"));
+        Files.createDirectories(tempDir.resolve("module"));
+        Files.writeString(tempDir.resolve(".gitignore"), "logs/\n!logs/keep/\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("logs/app.log"), "needle hidden\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("logs/keep/app.log"), "needle kept\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("module/.gitignore"), "*.tmp\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("module/a.tmp"), "needle tmp\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("module/a.txt"), "needle txt\n", StandardCharsets.UTF_8);
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("searchText", null, Map.of(
+                "query", "needle",
+                "regex", false,
+                "includeDefaultExcludes", false
+        ));
+
+        assertThat(result).containsEntry("ok", true);
+        assertThat((List<Map<String, Object>>) result.get("matches"))
+                .extracting(entry -> entry.get("relativePath"))
+                .containsExactly("logs/keep/app.log", "module/a.txt");
+    }
+
+    @Test
+    void searchActionsRejectPathsOutsideBaseDir() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("findFiles", null, Map.of(
+                "path", tempDir.getParent().toString()
+        ));
+
+        assertThat(result).containsEntry("ok", false);
+        assertThat(String.valueOf(result.get("error"))).contains("outside the allowed base directory");
+    }
+
+    @Test
     void executeShellCommandRespectsAllowedCommands() {
         ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
 

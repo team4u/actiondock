@@ -320,8 +320,8 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     }
   }, [knowledgeDetailOpen, loadData, messageApi, openKnowledgeDetail]);
 
-  const handleKnowledgeUninstall = useCallback(async (descriptor: RepositoryKnowledgeDescriptor) => {
-    await modal.confirm({
+  const handleKnowledgeUninstall = useCallback((descriptor: RepositoryKnowledgeDescriptor) => {
+    modal.confirm({
       title: "卸载知识源",
       okText: "卸载",
       okButtonProps: { danger: true },
@@ -331,20 +331,22 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
           <Text>将删除知识源安装时自动创建的项目仓库。</Text>
           <Text code>{descriptor.repositoryId}/{descriptor.knowledgeId}</Text>
         </Space>
-      )
+      ),
+      onOk: async () => {
+        setKnowledgeActionKey(`uninstall:${descriptor.repositoryId}:${descriptor.knowledgeId}`);
+        try {
+          await uninstallRepositoryKnowledge(descriptor.repositoryId, descriptor.knowledgeId);
+          messageApi.success("知识源已卸载");
+          setKnowledgeDetailOpen(false);
+          setKnowledgeDetail(null);
+          await loadData();
+        } catch (error) {
+          messageApi.error(getErrorMessage(error, "卸载知识源失败"));
+        } finally {
+          setKnowledgeActionKey(null);
+        }
+      }
     });
-    setKnowledgeActionKey(`uninstall:${descriptor.repositoryId}:${descriptor.knowledgeId}`);
-    try {
-      await uninstallRepositoryKnowledge(descriptor.repositoryId, descriptor.knowledgeId);
-      messageApi.success("知识源已卸载");
-      setKnowledgeDetailOpen(false);
-      setKnowledgeDetail(null);
-      await loadData();
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "卸载知识源失败"));
-    } finally {
-      setKnowledgeActionKey(null);
-    }
   }, [loadData, messageApi, modal]);
 
   const handleRepositoryPluginAction = useCallback(async (
@@ -691,8 +693,8 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     }
   }, [loadData, messageApi, modal, openPackageDetail, packageDetail, packageDetailOpen]);
 
-  const handlePackageUninstall = useCallback(async (descriptor: CapabilityPackageDescriptor) => {
-    await modal.confirm({
+  const handlePackageUninstall = useCallback((descriptor: CapabilityPackageDescriptor) => {
+    modal.confirm({
       title: "卸载能力包",
       okText: "卸载",
       okButtonProps: { danger: true },
@@ -702,24 +704,26 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
           <Text>将删除该能力包安装出的脚本、Agent、工具集、模型、定时任务和执行预设。</Text>
           <Text code>{descriptor.repositoryId}/{descriptor.packageId}</Text>
         </Space>
-      )
+      ),
+      onOk: async () => {
+        setPackageActionKey(`uninstall:${descriptor.repositoryId}:${descriptor.packageId}`);
+        try {
+          await uninstallCapabilityPackage(descriptor.repositoryId, descriptor.packageId);
+          messageApi.success("能力包已卸载");
+          setPackageDetailOpen(false);
+          setPackageDetail(null);
+          await loadData();
+        } catch (error) {
+          messageApi.error(getErrorMessage(error, "卸载能力包失败"));
+        } finally {
+          setPackageActionKey(null);
+        }
+      }
     });
-    setPackageActionKey(`uninstall:${descriptor.repositoryId}:${descriptor.packageId}`);
-    try {
-      await uninstallCapabilityPackage(descriptor.repositoryId, descriptor.packageId);
-      messageApi.success("能力包已卸载");
-      setPackageDetailOpen(false);
-      setPackageDetail(null);
-      await loadData();
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "卸载能力包失败"));
-    } finally {
-      setPackageActionKey(null);
-    }
   }, [loadData, messageApi, modal]);
 
-  const handleInstalledResourceUninstall = useCallback(async (resource: InstalledResourceView) => {
-    await modal.confirm({
+  const handleInstalledResourceUninstall = useCallback((resource: InstalledResourceView) => {
+    modal.confirm({
       title: "卸载已安装资源",
       okText: "卸载",
       okButtonProps: { danger: true },
@@ -730,18 +734,20 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
           <Text code>{resource.type}:{resource.id}</Text>
           {resource.orphan ? <Text type="warning">来源仓库已删除，卸载将使用本地安装记录完成清理。</Text> : null}
         </Space>
-      )
+      ),
+      onOk: async () => {
+        setInstalledResourceActionKey(`uninstall:${resource.type}:${resource.id}`);
+        try {
+          await uninstallInstalledResource(resource.type, resource.id);
+          messageApi.success("资源已卸载");
+          await loadData();
+        } catch (error) {
+          messageApi.error(getErrorMessage(error, "卸载资源失败"));
+        } finally {
+          setInstalledResourceActionKey(null);
+        }
+      }
     });
-    setInstalledResourceActionKey(`uninstall:${resource.type}:${resource.id}`);
-    try {
-      await uninstallInstalledResource(resource.type, resource.id);
-      messageApi.success("资源已卸载");
-      await loadData();
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "卸载资源失败"));
-    } finally {
-      setInstalledResourceActionKey(null);
-    }
   }, [loadData, messageApi, modal]);
 
   return {

@@ -75,6 +75,8 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
                 case "listDirectory" -> listDirectory(values);
                 case "writeTextFile" -> writeTextFile(values);
                 case "insertTextFile" -> insertTextFile(values);
+                case "findFiles" -> findFiles(values);
+                case "searchText" -> searchText(values);
                 case "getSystemInfo" -> getSystemInfo(values);
                 case "executeShellCommand" -> executeShellCommand(values);
                 default -> throw new IllegalArgumentException("Unsupported workspace action: " + action);
@@ -83,6 +85,22 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
             throw exception;
         } catch (Exception exception) {
             throw new PluginRuntimeException("Workspace action failed: " + exception.getMessage(), exception);
+        }
+    }
+
+    private Map<String, Object> findFiles(Map<String, Object> values) throws IOException {
+        try {
+            return new WorkspaceSearchSupport(baseDir(values), this::validatePath).findFiles(values);
+        } catch (IOException exception) {
+            return error(exception.getMessage());
+        }
+    }
+
+    private Map<String, Object> searchText(Map<String, Object> values) throws IOException {
+        try {
+            return new WorkspaceSearchSupport(baseDir(values), this::validatePath).searchText(values);
+        } catch (IOException exception) {
+            return error(exception.getMessage());
         }
     }
 

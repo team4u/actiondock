@@ -12,6 +12,8 @@
 - `viewTextFile`
 - `writeTextFile`
 - `insertTextFile`
+- `findFiles`
+- `searchText`
 - `getSystemInfo`
 - `executeShellCommand`
 
@@ -36,6 +38,31 @@ result = plugins.invoke("actiondock-workspace", "listDirectory", {
 return {"files": result["files"]}
 ```
 
+## 文件发现示例
+
+```groovy
+def result = plugins.invoke("actiondock-workspace", "findFiles", [
+  path: ".",
+  includeGlobs: ["**/*.java"],
+  excludeGlobs: ["**/*Test.java"]
+])
+
+return [files: result.files]
+```
+
+## 文本搜索示例
+
+```python
+result = plugins.invoke("actiondock-workspace", "searchText", {
+  "query": "TODO|FIXME",
+  "path": ".",
+  "includeGlobs": ["**/*.java"],
+  "contextLines": 1
+})
+
+return {"matches": result["matches"]}
+```
+
 ## 环境探测示例
 
 ```groovy
@@ -55,6 +82,8 @@ return [
 - `path` / `cwd` 默认相对当前工作目录解析
 - 所有路径访问都限制在 `baseDir` 范围内
 - `writeTextFile` 通过 `ranges` 支持局部替换
+- `findFiles` / `searchText` 默认跳过 `.git`、`target`、`node_modules` 等常见生成目录，并会轻量处理 `.gitignore`
+- `searchText` 默认使用正则匹配；如需普通字符串搜索，传入 `regex: false`
 - `getSystemInfo` 默认只返回 PATH 拆分、shell/命令探测结果，不暴露完整环境变量
 - `executeShellCommand` 失败时会附带 `availableEnvironment`，返回当前自动探测到的可用 shell 和常用命令，帮助调用方调整下一条命令
 
