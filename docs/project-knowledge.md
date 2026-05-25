@@ -1,4 +1,4 @@
-# 从痛点到设计到使用：项目知识库如何真正进入 AI 工作流
+# 项目知识库：让 AI 真正理解你的项目
 
 AI 辅助编程已经很常见，但一旦问题进入具体项目，模型最容易失手的地方往往不是语法，也不是框架 API，而是项目事实。它知道"怎么写"，却不知道"这个项目到底是什么样子"。
 
@@ -16,7 +16,7 @@ AI 辅助编程已经很常见，但一旦问题进入具体项目，模型最�
 
 第三个问题更基础：系统不能假设项目一定在本地。只要 ActionDock 运行在远端，或者项目仓库位于另一台机器，直接用本地文件命令扫描仓库的做法就会失效。知识入口和工作区访问如果没有明确边界，AI 的行为很快会从"理解项目"滑向"碰运气"。
 
-### 路径选择：为什么不用 RAG
+### 为什么不用 RAG
 
 提到项目知识，很容易想到 RAG（Retrieval-Augmented Generation）。向量嵌入、语义检索、分块索引——这套组合已经成为"给 AI 喂项目信息"的标准答案。但 ActionDock 没有走这条路。
 
@@ -28,9 +28,9 @@ RAG 要跑起来，至少需要一套嵌入服务、分块策略、向量数据�
 
 实际证据来自 Claude Code 本身。Claude Code 的文件导航能力几乎完全建立在 grep、find、glob 这些基础工具上。没有向量索引，没有语义检索，没有分块——AI 根据任务判断应该搜什么、去哪里搜，然后直接读取原始文件。这种"入口引导 + 按需检索 + 原文直读"的模式，在大量真实代码理解场景中已经被验证是高效且可靠的。
 
-ActionDock 借鉴的就是这个思路。项目知识系统不维护索引，不做嵌入，不做检索排序；它做的是：定义一个稳定入口（`ACTIONDOCK.md`），提供受控的工作区浏览能力（`actiondock-workspace`），然后让 AI 根据任务需要自己决定下一步该读哪个文件。知识生产层负责把入口和文档准备好；消费层负责沿着入口直接读原文、验证结论、定位脚本。
+ActionDock 选择的是"把路修好，让 AI 自己走"，而不是"把沿途风景都拍下来，再让 AI 看照片猜路"。
 
-简单说，ActionDock 选择的是"把路修好，让 AI 自己走"，而不是"把沿途风景都拍下来，再让 AI 看照片猜路"。
+---
 
 ## 设计：为什么这条链路要拆开
 
@@ -38,38 +38,35 @@ ActionDock 借鉴的就是这个思路。项目知识系统不维护索引，不
 
 项目知识的第一步不是写文章，而是定义维护规则。如果把维护要求散落在一次性 Prompt 里，AI 会倾向于用一次性上下文代替持续有效的知识——模型会把"这次对话里提到的"当成"项目里一直存在的"。
 
-为什么会这样？因为项目事实散在代码、配置、DDL、测试、日志和现有文档里。如果没有先约束证据来源，模型很难区分"这次推断出来的结论"和"从原始证据推导出来的事实"。一次性 Prompt 可以临时补上下文，但无法约束知识必须绑定到可验证的证据上。
+为什么会这样？因为项目事实散在代码、配置、DDL、测试、日志和现有文档里。如果没有先约束证据来源，模型很难区分"这次推断出来的结论"和"从原始证据推导出来的事实"。
 
-所以 ActionDock 把这部分能力放进 `project-knowledge-maintainer` 技能，让知识生成过程本身成为可维护的约束。
+ActionDock 把这部分能力放进 `project-knowledge-maintainer` 技能，让知识生成过程本身成为可维护的约束。Skill 的价值在于把这些设计取舍固化成可重复执行的入口。
 
-这也是为什么它不是一段模板 Prompt。模板可以复用措辞，但很难稳定承载路径白名单、输出契约、失败策略和子代理角色边界；这些规则如果每次都靠人临场补充，知识维护过程本身就不可靠。Skill 的价值在于把这些设计取舍固化成可重复执行的入口。
+这套 Skill 不是固定的重流程模板，而是先做路由，再决定展开到什么深度。它的热路径非常克制：运行前先读 `references/contract.json`、`references/formatter.md` 和 `references/playbook.md`，然后根据任务规模在 XS / S / M / L / XL 之间选择协议。小修补走轻路径，大范围刷新才会展开完整链路。
 
-更重要的是，这套 Skill 不是固定的重流程模板，而是先做路由，再决定展开到什么深度。它的热路径非常克制：运行前先读 `references/contract.json`、`references/formatter.md` 和 `references/playbook.md`，然后根据任务规模在 XS / S / M / L / XL 之间选择协议。小修补走轻路径，大范围刷新、知识库修复或大批量资料吸收，才会展开完整链路。
+**证据边界。** 结论必须回到代码、配置、DDL、测试、日志或现有文档；证据不足时，允许跳过，允许写入报告，但不允许伪造内容。`contract.json` 把证据优先级和失败条件写进去。没有证据就不产出，空心文档进不了正式知识库。
 
-**第一层约束是证据边界。** 结论必须回到代码、配置、DDL、测试、日志或现有文档；证据不足时，允许跳过，允许写入报告，但不允许伪造内容。这种约束不是靠"告诉 AI 不要造假"来实现的，而是靠把证据优先级和失败条件写进 `contract.json`。没有证据就不产出，空心文档进不了正式知识库。
+**规划边界。** 先形成完整的文档预期，再进入执行。Skill 把这一步拆成 `Plan A` 和 `Plan B`：`Plan A` 描述这个范围内应该有哪些文档，`Plan B` 再从里面挑出本轮真正执行的批次。
 
-**第二层约束是规划边界。** 现在的核心不是"先写文档再补结构"，而是先形成完整的文档预期，再进入执行。Skill 把这一步拆成 `Plan A` 和 `Plan B`：`Plan A` 描述这个范围内应该有哪些文档，`Plan B` 再从里面挑出本轮真正执行的批次。这样可以避免模型为了省事只写总览，或者把本该拆开的内容塞回 index。
+**角色边界。** 大任务里，文档结构由 `Domain Planner` 负责发现，不再交给执行阶段临场决定。各领域先分别产出文档库存，再由 `Global Planner` 做 preserving merge，保留文档广度、规范路径、记录依赖，但不能为了减少工作量把领域规划压扁。
 
-**第三层约束是角色边界。** 大任务里，文档结构由 `Domain Planner` 负责发现，不再交给执行阶段临场决定。各领域先分别产出文档库存，再由 `Global Planner` 做 preserving merge，保留文档广度、规范路径、记录依赖，但不能为了减少工作量把领域规划压扁。到了执行阶段，`Worker` 只负责完成已经规划好的目标文档，而不是一边写一边发明新的主结构。
-
-**第四层约束是完成边界。** 这套 Skill 明确要求 `subagent > serial`，并且把"动作做过"和"阶段完成"严格区分开。阶段被委派后必须等待结果，`Leader` 不能因为子代理慢、剩余工作看起来简单，或者自己觉得已经差不多，就直接宣布完成。最终是否完成，不由主观信心决定，而由 `Validator` 判断：Plan A 是否过浅、Plan B 是否合理、Worker 输出是否有证据和边界、安全规则是否被满足。
-
-这几层约束分别压住不同的风险：证据边界控制事实来源，规划边界控制知识库结构，角色边界控制上下文分工，完成边界控制验证和收尾。模型仍然可以判断，但每一次判断都被限制在可复查、可失败、可继续修复的范围内。
+**完成边界。** 这套 Skill 明确要求 `subagent > serial`，并且把"动作做过"和"阶段完成"严格区分开。阶段被委派后必须等待结果，最终是否完成不由主观信心决定，而由 `Validator` 判断。
 
 ```mermaid
 flowchart TD
   A[项目证据<br/>code / config / DDL / tests / logs / docs] --> B[project-knowledge-maintainer]
   B --> C[Route<br/>XS / S / M / L / XL]
-  C --> D[Domain Planners<br/>按领域发现文档库存]
-  D --> E[Global Plan A<br/>preserving merge]
-  E --> F[Plan B<br/>本轮执行批次]
-  F --> G[Workers<br/>单文档执行]
-  G --> H[Validator / Repair]
-  H --> I[docs/ 与 ACTIONDOCK.md]
-  B -->|证据不足或路径不安全| I[跳过 / 失败 / 记录]
+  C --> D{任务规模}
+  D -->|小任务| E[轻量更新/验证]
+  D -->|大任务| F[Scope Scan]
+  F --> G[Domain Planners<br/>按领域发现文档库存]
+  G --> H[Global Plan A<br/>preserving merge]
+  H --> I[Plan B<br/>本轮执行批次]
+  I --> J[Workers<br/>单文档执行]
+  J --> K[Validator / Repair]
+  E --> L[docs/ 与 ACTIONDOCK.md]
+  K --> L
 ```
-
-从执行链路上看，小任务可以只走轻量更新和验证；一旦任务涉及多个知识领域、知识库重建、index 内容过重、或者 Worker 否则需要自己发现主文档结构，就会升级到更完整的流程：`Route -> Scope Scan -> Domain Planners -> Global Plan A -> Plan A Validate -> Plan B -> Workers -> Output Validate -> Repair`。知识库在这里不是一次性生成的快照附件，而是跟着仓库持续演进、并且始终处在验证闭环里的产物。
 
 ### 2. 入口收敛到 `ACTIONDOCK.md`
 
@@ -85,24 +82,24 @@ flowchart TD
 
 如果说 `ACTIONDOCK.md` 解决的是"从哪里开始读"，那么 `actiondock-workspace` 解决的就是"接下来如何真的去读"。
 
-项目仓库被解析出来之后，并不意味着它就在当前本地文件系统里，也不意味着任何调用方都可以直接用本地文件命令扫仓库。ActionDock 把这部分能力收敛到内置系统插件 `actiondock-workspace`，让目录浏览、文本读取、环境探测和受控 Shell 执行都通过统一门面完成。
+项目仓库被解析出来之后，并不意味着它就在当前本地文件系统里，也不意味着任何调用方都可以直接用本地文件命令扫仓库。ActionDock 把这部分能力收敛到内置系统插件，让目录浏览、文本读取、环境探测和受控 Shell 执行都通过统一门面完成。
 
 核心动作只有四个：
 
-- `listDirectory`
-- `viewTextFile`
-- `getSystemInfo`
-- `executeShellCommand`
+| 动作 | 说明 |
+|------|------|
+| `listDirectory` | 列出目录内容 |
+| `viewTextFile` | 读取文本文件 |
+| `getSystemInfo` | 获取系统信息 |
+| `executeShellCommand` | 执行 Shell 命令 |
 
 这几个动作看上去只是工具接口，但设计价值在于它们把"仓库内容访问"从"调用方自己的本地假设"里剥离出来了。
 
 **项目可能运行在远端。** 此时 `repository resolve` 返回的是项目根路径和入口内容，后续继续读目录、读文件、执行命令，都必须走系统插件，不能默认用调用方所在机器的本地文件命令代替。
 
-**访问需要受控。** `actiondock-workspace` 会把路径访问限制在 `baseDir` 范围内；Shell 执行支持 `allowedCommands`、超时和输出限制，失败时会返回自动探测到的可用 shell / 命令环境；`getSystemInfo` 默认只返回工作区、Shell 和常用命令探测结果，不会无边界暴露完整环境。
+**访问需要受控。** `actiondock-workspace` 会把路径访问限制在 `baseDir` 范围内；Shell 执行支持 `allowedCommands`、超时和输出限制，失败时会返回自动探测到的可用 shell / 命令环境；`getSystemInfo` 默认只返回工作区、Shell 和常用命令探测结果。
 
 **能力需要统一。** 无论是脚本运行时里的 `plugins.invoke(...)`，还是通过 CLI 的 `actiondock plugin invoke actiondock-workspace ...`，调用的是同一套动作和参数约定。Groovy、Python、CLI 和 Agent 最终共享同一个"如何进入工作区"的能力面。
-
-没有这一层，项目知识消费只能停留在"知道入口文件存在"；有了这一层，入口之后的浏览、验证和执行才真正闭环。
 
 ### 4. 搜索知识和执行脚本分层
 
@@ -110,8 +107,10 @@ flowchart TD
 
 ActionDock 继续分层：
 
-- `actiondock-project-knowledge-searcher` 负责指导 AI 先找入口、再找文档、再找脚本
-- `actiondock-cli` 负责真正列出脚本、查看参数 schema、执行脚本和读取执行结果
+| 层级 | 职责 | 工具 |
+|------|------|------|
+| 搜索者 | 指导 AI 先找入口、再找文档、再找脚本 | `actiondock-project-knowledge-searcher` |
+| 执行者 | 真正列出脚本、查看参数 schema、执行 | `actiondock-cli` |
 
 这两层分开的意义很实际。搜索者解决的是"应该看什么、应该用什么"；CLI 解决的是"具体怎么调用"。如果把两者混在一起，AI 很容易直接跳到执行层，却没有先补齐脚本需要的项目上下文。
 
@@ -124,8 +123,6 @@ ActionDock 继续分层：
 典型场景是生产告警排查。假设某个支付服务出现异常，合理的处理顺序是这样的：
 
 ### 1. 先取入口，而不是先扫源码
-
-先解析项目仓库：
 
 ```bash
 actiondock repository resolve --repository-id billing-service --json
@@ -178,15 +175,37 @@ ActionDock 对此采用的是知识源机制。项目知识可以作为 `CAPABIL
 
 ---
 
+## 架构全景
+
+```mermaid
+flowchart TB
+  subgraph Production[知识生产层]
+    A[project-knowledge-maintainer<br/>Skill]
+  end
+
+  A -->|docs/ 与 ACTIONDOCK.md| Consumption[消费层]
+
+  subgraph Consumption[知识消费层]
+    B[ACTIONDOCK.md<br/>入口]
+    C[actiondock-workspace<br/>浏览]
+    D[searcher + CLI<br/>执行]
+  end
+
+  B --> C
+  C --> D
+```
+
+---
+
 ## 结语
 
 项目知识库真正有价值的地方，不是把所有信息都集中到一起，而是让 AI 在进入一个陌生项目时不至于走错第一步。
 
 ActionDock 的做法并不追求把平台变成一个全知全能的知识系统，而是把几个关键边界固定下来：
 
-- 知识怎么生产，由 Skill 和契约约束
-- 知识从哪里进入，由 `ACTIONDOCK.md` 统一
-- 项目内容怎么继续浏览，由 `actiondock-workspace` 承担
-- 知识怎么转成动作，由搜索者和 CLI 分层衔接
+- **知识怎么生产**：由 Skill 和契约约束
+- **知识从哪里进入**：由 `ACTIONDOCK.md` 统一
+- **项目内容怎么继续浏览**：由 `actiondock-workspace` 承担
+- **知识怎么转成动作**：由搜索者和 CLI 分层衔接
 
 当这些边界清楚之后，项目知识才不再是一份"给人看的补充材料"，而是真正进入 AI 工作流的一部分。
