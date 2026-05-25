@@ -384,10 +384,24 @@ export class ActionDockClient {
     async getPluginConfig(pluginId) {
         return this.requestJson(`/api/plugins/${pluginId}/config`);
     }
-    async savePluginConfig(pluginId, config) {
-        return this.requestJson(`/api/plugins/${pluginId}/config`, {
+    async listPluginConfigs(pluginId) {
+        return this.requestJson(`/api/plugins/${pluginId}/configs`);
+    }
+    async getNamedPluginConfig(pluginId, configName) {
+        return this.requestJson(`/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`);
+    }
+    async savePluginConfig(pluginId, config, configName) {
+        const pathname = configName
+            ? `/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`
+            : `/api/plugins/${pluginId}/config`;
+        return this.requestJson(pathname, {
             method: "PUT",
             body: JSON.stringify({ config })
+        });
+    }
+    async deletePluginConfig(pluginId, configName) {
+        await this.requestJson(`/api/plugins/${pluginId}/configs/${encodeURIComponent(configName)}`, {
+            method: "DELETE"
         });
     }
     async invokePlugin(pluginId, action, payload) {
