@@ -1,8 +1,5 @@
 ---
 name: project-knowledge-maintainer
-version: 5.3.0
-release: coverage-expanded-planning
-summary: Repository-backed project knowledge maintainer with Domain Planner fan-out, preserving Plan A merge, high-coverage document inventory, Sub Agent execution, formatter, and validator gates.
 description: Use when maintaining, rebuilding, validating, or ingesting repository-backed project knowledge bases, including ACTIONDOCK.md, docs/, and .kb_inbox/. Do not use for ordinary code edits unless the task changes project knowledge docs.
 ---
 
