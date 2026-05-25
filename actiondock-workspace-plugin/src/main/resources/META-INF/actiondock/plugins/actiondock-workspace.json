@@ -259,7 +259,7 @@
     {
       "action": "executeShellCommand",
       "title": "Execute Shell Command",
-      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions. On Linux/macOS it prefers bash-compatible shells; on Windows it uses PowerShell first and falls back to cmd.exe if PowerShell is unavailable. Use 'shellPath' to override the default shell, or 'allowedCommands' to restrict which commands may run.",
+      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions. On Linux/macOS it prefers bash-compatible shells; on Windows it uses PowerShell first and falls back to cmd.exe if PowerShell is unavailable. Use 'shellPath' to override the default shell, or 'allowedCommands' to restrict which commands may run. When execution fails, the result includes a compact auto-detected available environment to help callers adapt their next command.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -320,6 +320,15 @@
           "cwd": {
             "type": "string"
           },
+          "message": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "shell": {
+            "type": "array"
+          },
           "exitCode": {
             "type": "integer"
           },
@@ -334,6 +343,23 @@
           },
           "timedOut": {
             "type": "boolean"
+          },
+          "stdoutTruncated": {
+            "type": "boolean"
+          },
+          "stderrTruncated": {
+            "type": "boolean"
+          },
+          "availableEnvironment": {
+            "type": "object",
+            "properties": {
+              "shells": {
+                "type": "array"
+              },
+              "commands": {
+                "type": "array"
+              }
+            }
           }
         }
       },

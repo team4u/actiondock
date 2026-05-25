@@ -95,7 +95,7 @@ Skill 本身支持 `init`、`refresh`、`ingest` 和 `validate`，并会根据�
 
 **项目可能运行在远端。** 此时 `repository resolve` 返回的是项目根路径和入口内容，后续继续读目录、读文件、执行命令，都必须走系统插件，不能默认用调用方所在机器的本地文件命令代替。
 
-**访问需要受控。** `actiondock-workspace` 会把路径访问限制在 `baseDir` 范围内；Shell 执行支持 `allowedCommands`、超时和输出限制；`getSystemInfo` 默认只返回工作区、Shell 和常用命令探测结果，不会无边界暴露完整环境。
+**访问需要受控。** `actiondock-workspace` 会把路径访问限制在 `baseDir` 范围内；Shell 执行支持 `allowedCommands`、超时和输出限制，失败时会返回自动探测到的可用 shell / 命令环境；`getSystemInfo` 默认只返回工作区、Shell 和常用命令探测结果，不会无边界暴露完整环境。
 
 **能力需要统一。** 无论是脚本运行时里的 `plugins.invoke(...)`，还是通过 CLI 的 `actiondock plugin invoke actiondock-workspace ...`，调用的是同一套动作和参数约定。Groovy、Python、CLI 和 Agent 最终共享同一个"如何进入工作区"的能力面。
 

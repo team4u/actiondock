@@ -92,7 +92,7 @@ class ActionDockWorkspaceSystemPluginTest {
 
     @Test
     void executeShellCommandRespectsAllowedCommands() {
-        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
@@ -102,6 +102,8 @@ class ActionDockWorkspaceSystemPluginTest {
 
         assertThat(result).containsEntry("ok", false);
         assertThat(result).containsEntry("error", "Command is not allowed by allowedCommands: pwd");
+        assertThat(result).containsKey("availableEnvironment");
+        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
     }
 
     @Test
@@ -117,6 +119,58 @@ class ActionDockWorkspaceSystemPluginTest {
         assertThat(result).containsEntry("ok", true);
         assertThat(result).containsEntry("timedOut", false);
         assertThat(result.get("stdout")).isEqualTo("hello");
+        assertThat(result).doesNotContainKey("availableEnvironment");
+    }
+
+    @Test
+    void executeShellCommandReturnsAvailableEnvironmentOnNonZeroExit() throws Exception {
+        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
+        Path shellPath = createExitShell("bash", 7);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+                "command", "exit 7",
+                "allowedCommands", List.of("exit"),
+                "shellPath", shellPath.toString()
+        ));
+
+        assertThat(result).containsEntry("ok", false);
+        assertThat(result).containsEntry("exitCode", 7);
+        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
+    }
+
+    @Test
+    void executeShellCommandReturnsAvailableEnvironmentOnTimeout() throws Exception {
+        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
+        Path shellPath = createSleepShell("bash");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+                "command", "sleep 2",
+                "allowedCommands", List.of("sleep"),
+                "timeoutSeconds", 1,
+                "shellPath", shellPath.toString()
+        ));
+
+        assertThat(result).containsEntry("ok", false);
+        assertThat(result).containsEntry("timedOut", true);
+        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
+    }
+
+    @Test
+    void executeShellCommandReturnsAvailableEnvironmentWhenNoUsableShellExists() {
+        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+                "command", "echo hello",
+                "allowedCommands", List.of("echo"),
+                "shellPath", tempDir.resolve("missing").resolve("bash").toString()
+        ));
+
+        assertThat(result).containsEntry("ok", false);
+        assertThat(String.valueOf(result.get("error"))).contains(tempDir.resolve("missing").resolve("bash").toString());
+        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
     }
 
     @Test
@@ -343,6 +397,57 @@ class ActionDockWorkspaceSystemPluginTest {
                 """, StandardCharsets.UTF_8);
         assertThat(shell.toFile().setExecutable(true, false)).isTrue();
         return shell;
+    }
+
+    private Path createExitShell(String fileName, int exitCode) throws Exception {
+        Path shell = tempDir.resolve(fileName);
+        Files.writeString(shell, """
+                #!/bin/sh
+                exit %d
+                """.formatted(exitCode), StandardCharsets.UTF_8);
+        assertThat(shell.toFile().setExecutable(true, false)).isTrue();
+        return shell;
+    }
+
+    private Path createSleepShell(String fileName) throws Exception {
+        Path shell = tempDir.resolve(fileName);
+        Files.writeString(shell, """
+                #!/bin/sh
+                sleep 2
+                """, StandardCharsets.UTF_8);
+        assertThat(shell.toFile().setExecutable(true, false)).isTrue();
+        return shell;
+    }
+
+    private ActionDockWorkspaceSystemPlugin pluginWithDetectedEnvironment() {
+        List<String> availableCommands = List.of("bash", "git");
+        return new ActionDockWorkspaceSystemPlugin(
+                tempDir.toString(),
+                command -> availableCommands.contains(command) ? tempDir.resolve(command) : null
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assertAvailableEnvironment(Map<String, Object> result,
+                                            List<String> expectedShells,
+                                            List<String> expectedCommands) {
+        Map<String, Object> availableEnvironment = (Map<String, Object>) result.get("availableEnvironment");
+        List<Map<String, Object>> shells = (List<Map<String, Object>>) availableEnvironment.get("shells");
+        List<Map<String, Object>> commands = (List<Map<String, Object>>) availableEnvironment.get("commands");
+
+        assertThat(shells)
+                .extracting(entry -> entry.get("name"))
+                .containsExactlyElementsOf(expectedShells);
+        assertThat(shells)
+                .allSatisfy(entry -> assertThat(entry).containsOnlyKeys("name", "resolvedPath"));
+
+        assertThat(commands)
+                .extracting(entry -> entry.get("name"))
+                .containsExactlyElementsOf(expectedCommands);
+        assertThat(commands)
+                .allSatisfy(entry -> assertThat(entry).containsKeys(
+                        "name", "resolvedPath", "versionText", "versionExitCode", "versionTimedOut"
+                ));
     }
 
     private void restoreOsName(String originalOsName) {

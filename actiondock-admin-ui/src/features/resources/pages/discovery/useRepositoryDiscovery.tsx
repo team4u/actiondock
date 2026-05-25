@@ -1,4 +1,4 @@
-import { Checkbox, Descriptions, Input, Modal, Select, Space, Typography } from "antd";
+import { App, Checkbox, Descriptions, Input, Select, Space, Typography } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
@@ -73,7 +73,7 @@ const { Text } = Typography;
 
 interface UseRepositoryDiscoveryParams {
   messageApi: MessageInstance;
-  modal: ReturnType<typeof Modal.useModal>[0];
+  modal: ReturnType<typeof App.useApp>["modal"];
   navigate: NavigateFunction;
 }
 

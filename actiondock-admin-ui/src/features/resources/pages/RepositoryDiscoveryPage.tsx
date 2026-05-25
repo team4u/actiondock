@@ -1,4 +1,4 @@
-import { Button, Card, Modal, Space, Typography, message } from "antd";
+import { App, Button, Card, Space, Typography, message } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../../../components/common/PageHeader";
@@ -16,13 +16,12 @@ export function RepositoryDiscoveryPage() {
   const colorMode = useColorMode();
   const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const [messageApi, contextHolder] = message.useMessage();
-  const [modal, modalContextHolder] = Modal.useModal();
+  const { modal } = App.useApp();
   const discovery = useRepositoryDiscovery({ messageApi, modal, navigate });
 
   return (
     <>
       {contextHolder}
-      {modalContextHolder}
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <PageHeader
           title="发现"

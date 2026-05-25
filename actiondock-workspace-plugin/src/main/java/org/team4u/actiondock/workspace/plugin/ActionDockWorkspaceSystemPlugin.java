@@ -290,29 +290,37 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         int maxOutputBytes = intValue(values.get("maxOutputBytes"), DEFAULT_MAX_OUTPUT_BYTES);
         Path baseDir = baseDir(values);
         String cwdValue = optionalString(values.get("cwd"));
-        Path cwd = cwdValue == null ? baseDir : validatePath(cwdValue, baseDir);
+        Path cwd;
+        try {
+            cwd = cwdValue == null ? baseDir : validatePath(cwdValue, baseDir);
+        } catch (IOException exception) {
+            return shellCommandFailure(exception.getMessage());
+        }
         if (!Files.exists(cwd)) {
             Files.createDirectories(cwd);
         }
         if (!Files.isDirectory(cwd)) {
-            return error("cwd is not a directory: " + cwd);
+            return shellCommandFailure("cwd is not a directory: " + cwd);
         }
 
         List<List<String>> shellCandidates = shellCandidates(values);
         Set<String> allowedCommands = stringSet(values.get("allowedCommands"));
         if (!allowedCommands.isEmpty() && !allowed(command, allowedCommands)) {
-            return error("Command is not allowed by allowedCommands: " + command);
+            return shellCommandFailure("Command is not allowed by allowedCommands: " + command);
         }
 
         IOException lastStartError = null;
         for (List<String> shell : shellCandidates) {
             try {
-                return runProcess(shell, command, cwd, envMap(values.get("env")), timeoutSeconds, maxOutputBytes);
+                return withAvailableEnvironmentOnFailure(
+                        runProcess(shell, command, cwd, envMap(values.get("env")), timeoutSeconds, maxOutputBytes)
+                );
             } catch (IOException exception) {
                 lastStartError = exception;
             }
         }
-        throw lastStartError == null ? new IOException("No usable shell found.") : lastStartError;
+        String message = lastStartError == null ? "No usable shell found." : lastStartError.getMessage();
+        return shellCommandFailure(message);
     }
 
     private Map<String, Object> getSystemInfo(Map<String, Object> values) throws IOException, InterruptedException {
@@ -370,6 +378,18 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         result.put("timedOut", !finished);
         result.put("stdoutTruncated", stdout.size() >= maxOutputBytes);
         result.put("stderrTruncated", stderr.size() >= maxOutputBytes);
+        return result;
+    }
+
+    private Map<String, Object> shellCommandFailure(String message) throws IOException, InterruptedException {
+        return withAvailableEnvironmentOnFailure(error(message));
+    }
+
+    private Map<String, Object> withAvailableEnvironmentOnFailure(Map<String, Object> result) throws IOException, InterruptedException {
+        if (Boolean.TRUE.equals(result.get("ok"))) {
+            return result;
+        }
+        result.put("availableEnvironment", availableEnvironment());
         return result;
     }
 
@@ -434,6 +454,44 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
             item.put("name", executable);
             item.put("available", resolved != null);
             item.put("resolvedPath", resolved == null ? null : resolved.toString());
+            result.add(item);
+        }
+        return result;
+    }
+
+    private Map<String, Object> availableEnvironment() throws IOException, InterruptedException {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("shells", availableShellInfo());
+        result.put("commands", availableCommandInfo());
+        return result;
+    }
+
+    private List<Map<String, Object>> availableShellInfo() {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> shell : shellInfo(Map.of())) {
+            if (!Boolean.TRUE.equals(shell.get("available"))) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", shell.get("name"));
+            item.put("resolvedPath", shell.get("resolvedPath"));
+            result.add(item);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> availableCommandInfo() throws IOException, InterruptedException {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> command : commandInfo(Map.of())) {
+            if (!Boolean.TRUE.equals(command.get("available"))) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", command.get("name"));
+            item.put("resolvedPath", command.get("resolvedPath"));
+            item.put("versionText", command.get("versionText"));
+            item.put("versionExitCode", command.get("versionExitCode"));
+            item.put("versionTimedOut", command.get("versionTimedOut"));
             result.add(item);
         }
         return result;

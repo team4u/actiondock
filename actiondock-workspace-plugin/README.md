@@ -56,6 +56,7 @@ return [
 - 所有路径访问都限制在 `baseDir` 范围内
 - `writeTextFile` 通过 `ranges` 支持局部替换
 - `getSystemInfo` 默认只返回 PATH 拆分、shell/命令探测结果，不暴露完整环境变量
+- `executeShellCommand` 失败时会附带 `availableEnvironment`，返回当前自动探测到的可用 shell 和常用命令，帮助调用方调整下一条命令
 
 ## 相关模块
 
