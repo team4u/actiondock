@@ -379,6 +379,8 @@ export function ScriptLibraryPage() {
     let installScriptDependencies = Boolean(descriptor?.scriptDependencies.length);
     let installPluginDependencies = Boolean(descriptor?.pluginDependencies.length);
     let scheduleCount = 0;
+    const repositoryId = tool.repositoryId;
+    const repositoryScriptId = tool.repositoryScriptId;
 
     try {
       const detail = await getRepositoryScript(tool.repositoryId, tool.repositoryScriptId);
@@ -442,7 +444,7 @@ export function ScriptLibraryPage() {
       onOk: async () => {
         setActionKey(`update:${tool.id}`);
         try {
-          await updateRepositoryToolLocalAsset(tool.repositoryId, tool.repositoryScriptId, {
+          await updateRepositoryToolLocalAsset(repositoryId, repositoryScriptId, {
             installSchedules,
             installScriptDependencies,
             installPluginDependencies

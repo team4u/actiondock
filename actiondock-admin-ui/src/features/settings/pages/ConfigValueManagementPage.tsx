@@ -300,17 +300,16 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
     if (!detailDirty) {
       return true;
     }
-    let confirmed = false;
-    await modal.confirm({
-      title,
-      okText: "放弃修改",
-      cancelText: "继续编辑",
-      content: <Text>{content}</Text>,
-      onOk: () => {
-        confirmed = true;
-      }
+    return new Promise<boolean>((resolve) => {
+      modal.confirm({
+        title,
+        okText: "放弃修改",
+        cancelText: "继续编辑",
+        content: <Text>{content}</Text>,
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false)
+      });
     });
-    return confirmed;
   };
 
   const openCreate = () => {
@@ -370,31 +369,30 @@ export function ConfigValueManagementPage({ embedded = false }: ConfigValueManag
   const confirmSaveImpact = async (targetDetail: ConfigValueDetail): Promise<boolean> => {
     const summary = buildImpactSummary(targetDetail);
     const preview = buildImpactPreview(targetDetail);
-    let confirmed = false;
-    await modal.confirm({
-      title: "确认更新配置值",
-      okText: "继续保存",
-      cancelText: "取消",
-      width: 700,
-      content: (
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Text>本次修改会影响以下运行链路：</Text>
-          <Space direction="vertical" size={4} style={{ width: "100%" }}>
-            {summary.map((line) => <Text key={line}>{line}</Text>)}
+    return new Promise<boolean>((resolve) => {
+      modal.confirm({
+        title: "确认更新配置值",
+        okText: "继续保存",
+        cancelText: "取消",
+        width: 700,
+        content: (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Text>本次修改会影响以下运行链路：</Text>
+            <Space direction="vertical" size={4} style={{ width: "100%" }}>
+              {summary.map((line) => <Text key={line}>{line}</Text>)}
+            </Space>
+            {preview.length > 0 ? (
+              <>
+                <Text strong>受影响脚本预览</Text>
+                <pre className="script-import-result__code">{preview.join("\n")}</pre>
+              </>
+            ) : null}
           </Space>
-          {preview.length > 0 ? (
-            <>
-              <Text strong>受影响脚本预览</Text>
-              <pre className="script-import-result__code">{preview.join("\n")}</pre>
-            </>
-          ) : null}
-        </Space>
-      ),
-      onOk: () => {
-        confirmed = true;
-      }
+        ),
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false)
+      });
     });
-    return confirmed;
   };
 
   const handleCreateSubmit = async () => {

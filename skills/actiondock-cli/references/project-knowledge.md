@@ -103,6 +103,8 @@ actiondock repository sync <repositoryId> --json
 | `listDirectory` | 列出目录下的文件和子目录 |
 | `viewTextFile` | 读取文本文件内容（支持行范围） |
 | `writeTextFile` | 创建或覆盖文本文件 |
+| `findFiles` | 跨平台查找文件或目录，支持 `includeGlobs` / `excludeGlobs`、默认跳过常见生成目录，并轻量处理 `.gitignore` |
+| `searchText` | 跨平台搜索 UTF-8 文本文件，默认按正则匹配，支持普通字符串搜索、大小写、上下文行、glob 过滤和结果上限 |
 | `executeShellCommand` | 在项目目录下执行 Shell 命令（Linux/macOS 默认 bash 兼容 Shell，Windows 默认 PowerShell、失败时回退 cmd；可通过 `shellPath` 指定 Shell，并按常见 Shell 自动匹配参数，`allowedCommands` 限制可执行命令，支持超时设置；失败时返回自动探测到的可用 shell/命令环境） |
 | `getSystemInfo` | 探测系统信息：工作区路径、系统环境（OS、Java 版本）、PATH 环境变量、可用 Shell（bash/sh/PowerShell/cmd）、常用命令版本（bash、python、python3、node、npm、npx、git、java、mvn），支持 `additionalCommands` 补充探测更多命令 |
 
@@ -118,6 +120,18 @@ actiondock plugin invoke actiondock-workspace viewTextFile --path <root>/docs/ar
 # 读取文件指定行范围
 actiondock plugin invoke actiondock-workspace viewTextFile \
   --args-json '{"path":"<root>/README.md","viewRange":"1,50"}' --json
+
+# 查找 Java 源文件，默认会跳过 target、node_modules、.git 等目录
+actiondock plugin invoke actiondock-workspace findFiles \
+  --args-json '{"path":"<root>","includeGlobs":["**/*.java"],"excludeGlobs":["**/*Test.java"]}' --json
+
+# 搜索文本。query 默认按正则解释；普通字符串搜索可传 regex=false
+actiondock plugin invoke actiondock-workspace searchText \
+  --args-json '{"path":"<root>","query":"TODO|FIXME","includeGlobs":["**/*.java"],"contextLines":1}' --json
+
+# 普通字符串、不区分大小写搜索
+actiondock plugin invoke actiondock-workspace searchText \
+  --args-json '{"path":"<root>","query":"actiondock","regex":false,"caseSensitive":false}' --json
 
 # 在项目目录下执行 Shell 命令
 actiondock plugin invoke actiondock-workspace executeShellCommand \
@@ -150,7 +164,7 @@ actiondock plugin get actiondock-workspace --json
 - `ACTIONDOCK.md`: 项目知识入口文件
 - `project repository`: 被注册为 `purpose=PROJECT` 的仓库
 - `knowledge source`: CAPABILITY 仓库中的知识源指针，安装后自动注册为 PROJECT 仓库
-- `actiondock-workspace`: 内置系统插件，提供目录浏览、文件读写和 Shell 命令执行能力，浏览知识库时需配合使用
+- `actiondock-workspace`: 内置系统插件，提供目录浏览、文本读取/写入、跨平台文件查找、文本搜索和 Shell 命令执行能力，浏览知识库时需配合使用
 
 ## 通过知识源安装
 
