@@ -379,8 +379,8 @@ export function ScriptLibraryPage() {
     let installScriptDependencies = Boolean(descriptor?.scriptDependencies.length);
     let installPluginDependencies = Boolean(descriptor?.pluginDependencies.length);
     let scheduleCount = 0;
-    const repositoryId = tool.repositoryId;
-    const repositoryScriptId = tool.repositoryScriptId;
+    const repositoryId = tool.repositoryId!;
+    const repositoryScriptId = tool.repositoryScriptId!;
 
     try {
       const detail = await getRepositoryScript(tool.repositoryId, tool.repositoryScriptId);
