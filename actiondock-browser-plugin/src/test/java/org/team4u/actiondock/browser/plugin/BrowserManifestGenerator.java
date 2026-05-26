@@ -19,7 +19,7 @@ final class BrowserManifestGenerator {
         manifest.put("pluginId", "actiondock-browser");
         manifest.put("name", "ActionDock Browser");
         manifest.put("description", "AI-first Playwright browser gateway. Actions are intentionally precise so AI can call browser operations without guessing hidden op-specific params.");
-        manifest.put("version", "0.3.0");
+        manifest.put("version", "0.1.0");
         manifest.put("configSchema", configSchema());
         manifest.put("defaultConfig", Map.of(
                 "defaultBrowser", "chromium",

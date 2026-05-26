@@ -8,12 +8,22 @@
         <version>0.3.0</version>
     </parent>
     <artifactId>actiondock-browser-plugin</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
 
     <dependencies>
         <dependency>
             <groupId>org.team4u</groupId>
             <artifactId>actiondock-plugin-api</artifactId>
-            <version>${project.version}</version>
+            <version>${project.parent.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.pf4j</groupId>
+            <artifactId>pf4j</artifactId>
+            <version>${pf4j.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -28,4 +38,53 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessors>
+                        <annotationProcessor>org.pf4j.processor.ExtensionAnnotationProcessor</annotationProcessor>
+                    </annotationProcessors>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pf4j</groupId>
+                        <artifactId>pf4j</artifactId>
+                        <version>${pf4j.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Plugin-Id>actiondock-browser</Plugin-Id>
+                            <Plugin-Class>org.team4u.actiondock.browser.plugin.ActionDockBrowserPlugin</Plugin-Class>
+                            <Plugin-Version>${project.version}</Plugin-Version>
+                            <Plugin-Provider>team4u</Plugin-Provider>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.3</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -101,6 +101,17 @@ class ActionDockBrowserSystemPluginTest {
                 .hasMessageContaining("defaultBrowser");
     }
 
+    @Test
+    void pf4jExtensionUsesInstallablePluginMetadata() {
+        ActionDockBrowserPluginExtension plugin = new ActionDockBrowserPluginExtension();
+
+        PluginManifest manifest = PluginManifestLoader.load(plugin.getClass(), plugin.id());
+
+        assertThat(plugin.id()).isEqualTo("actiondock-browser");
+        assertThat(manifest.getPluginId()).isEqualTo("actiondock-browser");
+        assertThat(manifest.getVersion()).isEqualTo("0.1.0");
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> propertiesOf(Map<String, Object> schema) {
         return (Map<String, Object>) schema.get("properties");

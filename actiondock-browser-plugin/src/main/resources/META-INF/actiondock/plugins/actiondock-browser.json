@@ -2,7 +2,7 @@
   "pluginId" : "actiondock-browser",
   "name" : "ActionDock Browser",
   "description" : "AI-first Playwright browser gateway. Actions are intentionally precise so AI can call browser operations without guessing hidden op-specific params.",
-  "version" : "0.3.0",
+  "version" : "0.1.0",
   "configSchema" : {
     "properties" : {
       "defaultBrowser" : {
