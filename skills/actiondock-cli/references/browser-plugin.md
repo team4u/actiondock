@@ -13,11 +13,12 @@ actiondock plugin invoke actiondock-browser <action> --flag value --json
 ## 标准工作流
 
 ```bash
-actiondock plugin invoke actiondock-browser open --session run1 --url https://example.com --json
-actiondock plugin invoke actiondock-browser snapshot --session run1 --limit 80 --json > /tmp/browser-snapshot.json
+actiondock plugin invoke actiondock-browser open --json
+actiondock plugin invoke actiondock-browser open --session <open返回的session> --url https://example.com --json
+actiondock plugin invoke actiondock-browser snapshot --session <open返回的session> --limit 80 --json > /tmp/browser-snapshot.json
 ```
 
-`snapshot` 返回：
+`open` 不传 `--session` 时会自动生成并返回 `session`。`open` 也可以不传 `--url`，用于先创建浏览器上下文，再设置 Cookie、Storage 或网络规则。后续动作必须传这个返回值。`snapshot` 返回：
 
 - `url` / `title`
 - `visibleText`
@@ -31,7 +32,7 @@ actiondock plugin invoke actiondock-browser snapshot --session run1 --limit 80 -
 后续操作直接把 `elements[].ref` 作为字符串传给 `--target`：
 
 ```bash
-actiondock plugin invoke actiondock-browser click --session run1 --target @e2 --json
+actiondock plugin invoke actiondock-browser click --session <open返回的session> --target @e2 --json
 ```
 
 ## 目标选择器
@@ -115,14 +116,14 @@ actiondock plugin invoke actiondock-browser waitForTimeout --session run1 --time
 
 ## 会话和 Tab
 
-浏览器上下文动作必须显式传 `--session`。每个自动化流程使用自己的 session 名，避免多个流程误共享或误关闭同一个浏览器：
+`open` 可以不传 `--session`，插件会自动生成一个公开 session 名并返回；也可以不传 `--url`，只创建浏览器上下文。后续浏览器上下文动作必须显式传这个返回值：
 
 ```bash
-actiondock plugin invoke actiondock-browser open --session run1 --url https://example.com --json
-actiondock plugin invoke actiondock-browser snapshot --session run1 --json
+actiondock plugin invoke actiondock-browser open --json
+actiondock plugin invoke actiondock-browser snapshot --session <open返回的session> --json
 ```
 
-`sessionList` 是例外，不需要 `--session`。
+如果需要固定名字复用，也可以在 `open` 时显式传 `--session run1`。`sessionList` 是例外，不需要 `--session`。
 
 Tab：
 
