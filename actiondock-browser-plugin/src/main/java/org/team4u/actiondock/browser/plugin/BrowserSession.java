@@ -34,6 +34,7 @@ final class BrowserSession implements AutoCloseable {
     private final Map<String, Map<String, Map<String, Object>>> pageRefs = new LinkedHashMap<>();
     private final Map<String, Dialog> dialogs = new LinkedHashMap<>();
     private final Map<String, Download> downloads = new LinkedHashMap<>();
+    private final Map<String, AutoCloseable> routes = new LinkedHashMap<>();
     private final List<Map<String, Object>> events = new ArrayList<>();
     private final Instant createdAt;
     private final ReentrantLock lock = new ReentrantLock();
@@ -41,6 +42,7 @@ final class BrowserSession implements AutoCloseable {
     private int nextEventId = 1;
     private int nextDialogId = 1;
     private int nextDownloadId = 1;
+    private int nextRouteId = 1;
     private volatile Instant lastAccessAt;
     private volatile boolean closed;
     private String activePageId;
@@ -248,6 +250,20 @@ final class BrowserSession implements AutoCloseable {
         return download;
     }
 
+    String rememberRoute(AutoCloseable route) {
+        String routeId = "r" + nextRouteId++;
+        routes.put(routeId, route);
+        return routeId;
+    }
+
+    AutoCloseable takeRoute(String routeId) {
+        AutoCloseable route = routes.remove(routeId);
+        if (route == null) {
+            throw new IllegalArgumentException("Route not found: " + routeId);
+        }
+        return route;
+    }
+
     Instant createdAt() {
         return createdAt;
     }
@@ -282,6 +298,13 @@ final class BrowserSession implements AutoCloseable {
             }
             closed = true;
             try {
+                for (AutoCloseable route : routes.values()) {
+                    try {
+                        route.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+                routes.clear();
                 browser.close();
             } finally {
                 playwright.close();

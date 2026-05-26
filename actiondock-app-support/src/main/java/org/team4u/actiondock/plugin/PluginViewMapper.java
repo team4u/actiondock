@@ -161,7 +161,8 @@ class PluginViewMapper {
                 .setDescription(actionMetadata.getDescription())
                 .setInputSchema(actionMetadata.getInputSchema())
                 .setOutputSchema(actionMetadata.getOutputSchema())
-                .setExampleArgs(actionMetadata.getExampleArgs());
+                .setExampleArgs(actionMetadata.getExampleArgs())
+                .setAiHints(actionMetadata.getAiHints());
     }
 
     private static PluginActionView toActionView(PluginActionManifest action) {
@@ -175,7 +176,8 @@ class PluginViewMapper {
                 .setDescription(action.getDescription())
                 .setInputSchema(action.getInputSchema())
                 .setOutputSchema(action.getOutputSchema())
-                .setExampleArgs(action.getExampleArgs());
+                .setExampleArgs(action.getExampleArgs())
+                .setAiHints(action.getAiHints());
     }
 
     static PluginRegistration toRegistration(PluginManifest manifest,

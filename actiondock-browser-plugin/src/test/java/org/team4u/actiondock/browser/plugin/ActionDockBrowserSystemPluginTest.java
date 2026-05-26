@@ -22,16 +22,33 @@ class ActionDockBrowserSystemPluginTest {
                 .contains(
                         "sessionCreate",
                         "observe",
-                        "act",
+                        "capabilities",
+                        "goto",
+                        "click",
+                        "fill",
+                        "setChecked",
+                        "waitForSelector",
+                        "pageList",
+                        "cookiesGet",
+                        "networkRoute",
+                        "mouse",
+                        "advancedAction",
                         "evaluate",
-                        "wait",
-                        "pages",
                         "events",
                         "sessionInfo",
                         "sessionList",
                         "sessionClose"
                 )
-                .doesNotContain("click", "fill", "goto", "setChecked", "screenshot");
+                .doesNotContain("act", "wait", "pages");
+
+        assertThat(manifest.getActions().stream()
+                .filter(action -> "setChecked".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getInputSchema())
+                .extractingByKey("required")
+                .asList()
+                .contains("sessionId", "target", "checked");
     }
 
     @Test

@@ -289,6 +289,43 @@ class PluginControllerTest {
     }
 
     @Test
+    void invokeReturnsPluginRuntimeStatusAndCode(CapturedOutput output) throws Exception {
+        when(pluginRuntimeService.invokeForDebug(
+                eq("demo-plugin"),
+                eq("echo"),
+                eq(Map.of("message", "hello")),
+                eq(Map.of("name", "Alice")),
+                eq(false),
+                eq(null)
+        )).thenThrow(new org.team4u.actiondock.plugin.api.PluginRuntimeException(
+                400,
+                "PLUGIN_INVALID_ARGUMENTS",
+                "message is required",
+                Map.of("pluginId", "demo-plugin", "action", "echo")
+        ));
+
+        mockMvc.perform(post("/api/plugins/demo-plugin/actions/echo/invoke")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "args": {"message":"hello"},
+                                  "scriptInput": {"name":"Alice"},
+                                  "responseView": "RESULT"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.msg").value("message is required"))
+                .andExpect(jsonPath("$.data.code").value("PLUGIN_INVALID_ARGUMENTS"))
+                .andExpect(jsonPath("$.data.pluginId").value("demo-plugin"))
+                .andExpect(jsonPath("$.data.action").value("echo"))
+                .andExpect(jsonPath("$.data.stackTrace").doesNotExist());
+
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("API exception status=400 code=PLUGIN_INVALID_ARGUMENTS");
+    }
+
+    @Test
     void installLogsBadRequestWhenPluginValidationFails(CapturedOutput output) throws Exception {
         when(pluginRuntimeService.install(eq("demo.jar"), any(byte[].class)))
                 .thenThrow(new IllegalArgumentException("bad plugin"));

@@ -26,4 +26,8 @@ final class BrowserActionRegistry {
         }
         return action.handle(context, args == null ? Map.of() : args);
     }
+
+    Map<String, BrowserAction> actions() {
+        return Map.copyOf(actions);
+    }
 }

@@ -733,6 +733,34 @@ class PluginRuntimeServiceTest {
                 .hasMessage("插件调用失败 failing-system-plugin/explode: downstream boom");
     }
 
+    @Test
+    void invokePreservesPluginRuntimeMetadata() {
+        AppProperties.Plugins properties = new AppProperties.Plugins();
+        properties.setDir(tempDir.toString());
+        PluginRuntimeService service = new PluginRuntimeService(
+                jsonCodec,
+                new InMemoryPluginRegistryRepository(),
+                properties,
+                ConfigValueApplicationService.disabled(),
+                List.of(new InvalidArgsSystemPlugin())
+        );
+
+        assertThatThrownBy(() -> service.invoke(
+                "invalid-args-system-plugin",
+                "explode",
+                new ScriptDefinition().setId("script-1"),
+                new ScriptExecutionContext().setExecutionId("exec-1"),
+                Map.of(),
+                Map.of()
+        ))
+                .isInstanceOfSatisfying(PluginRuntimeException.class, exception -> {
+                    assertThat(exception.getStatus()).isEqualTo(400);
+                    assertThat(exception.getCode()).isEqualTo("PLUGIN_INVALID_ARGUMENTS");
+                    assertThat(exception.getDetails()).containsEntry("pluginId", "invalid-args-system-plugin")
+                            .containsEntry("action", "explode");
+                });
+    }
+
     private static final class SystemConfigurablePlugin implements ActionDockPlugin {
         private final List<Map<String, Object>> validatedConfigs = new ArrayList<>();
 
@@ -1034,6 +1062,18 @@ class PluginRuntimeServiceTest {
         @Override
         public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
             throw new PluginRuntimeException("downstream boom");
+        }
+    }
+
+    private static final class InvalidArgsSystemPlugin implements ActionDockPlugin {
+        @Override
+        public String id() {
+            return "invalid-args-system-plugin";
+        }
+
+        @Override
+        public Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) {
+            throw new PluginRuntimeException(400, "PLUGIN_INVALID_ARGUMENTS", "bad args");
         }
     }
 

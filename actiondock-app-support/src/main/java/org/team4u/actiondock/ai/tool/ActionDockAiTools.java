@@ -318,7 +318,9 @@ public final class ActionDockAiTools {
                 "title", value(action.getTitle()),
                 "description", value(action.getDescription()),
                 "inputSchema", action.getInputSchema(),
-                "outputSchema", action.getOutputSchema()
+                "outputSchema", action.getOutputSchema(),
+                "exampleArgs", action.getExampleArgs(),
+                "aiHints", action.getAiHints()
         );
     }
 

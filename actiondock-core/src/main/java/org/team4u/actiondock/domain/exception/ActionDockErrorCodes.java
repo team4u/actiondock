@@ -15,6 +15,8 @@ public final class ActionDockErrorCodes {
     public static final String EXECUTION_IN_PROGRESS = "EXECUTION_IN_PROGRESS";
     public static final String EXECUTION_NOT_FOUND = "EXECUTION_NOT_FOUND";
     public static final String PLUGIN_ACTION_NOT_FOUND = "PLUGIN_ACTION_NOT_FOUND";
+    public static final String PLUGIN_INVALID_ARGUMENTS = "PLUGIN_INVALID_ARGUMENTS";
+    public static final String PLUGIN_ACTION_FAILED = "PLUGIN_ACTION_FAILED";
     public static final String PLUGIN_CONFIG_NOT_FOUND = "PLUGIN_CONFIG_NOT_FOUND";
     public static final String PLUGIN_EXISTS = "PLUGIN_EXISTS";
     public static final String PLUGIN_NOT_FOUND = "PLUGIN_NOT_FOUND";

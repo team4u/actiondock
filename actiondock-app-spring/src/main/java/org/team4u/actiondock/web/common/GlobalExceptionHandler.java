@@ -11,6 +11,7 @@ import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.exception.UpstreamConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflictException;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
+import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -127,6 +128,24 @@ public class GlobalExceptionHandler {
                         "pluginId", exception.getPluginId(),
                         "conflicts", exception.getConflicts()
                 )
+        ));
+    }
+
+    @ExceptionHandler(PluginRuntimeException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handlePluginRuntime(PluginRuntimeException exception,
+                                                                               HttpServletRequest request) {
+        int status = exception.getStatus() <= 0 ? 500 : exception.getStatus();
+        String code = exception.getCode() == null || exception.getCode().isBlank()
+                ? ActionDockErrorCodes.PLUGIN_ACTION_FAILED
+                : exception.getCode();
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("code", code);
+        data.putAll(exception.getDetails());
+        logException(exception, status, code, request);
+        return ResponseEntity.status(status).body(ApiResponse.error(
+                ErrorDetailSupport.summarize(exception),
+                status,
+                data
         ));
     }
 

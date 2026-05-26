@@ -16,6 +16,10 @@ final class Args {
         return value;
     }
 
+    static boolean has(Map<String, Object> args, String key) {
+        return args != null && args.containsKey(key) && args.get(key) != null;
+    }
+
     static String optionalString(Map<String, Object> args, String key, String defaultValue) {
         Object value = args == null ? null : args.get(key);
         if (value == null) {
@@ -56,6 +60,14 @@ final class Args {
             return number.doubleValue();
         }
         return Double.parseDouble(String.valueOf(value));
+    }
+
+    static double requiredDouble(Map<String, Object> args, String key) {
+        Double value = optionalDouble(args, key);
+        if (value == null) {
+            throw new IllegalArgumentException(key + " is required");
+        }
+        return value;
     }
 
     static Map<String, Object> optionalMap(Map<String, Object> args, String key) {

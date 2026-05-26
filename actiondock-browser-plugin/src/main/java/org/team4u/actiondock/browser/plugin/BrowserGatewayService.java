@@ -11,8 +11,13 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Request;
 import com.microsoft.playwright.Response;
+import com.microsoft.playwright.Route;
+import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.options.Geolocation;
 import com.microsoft.playwright.options.LoadState;
+import com.microsoft.playwright.options.Cookie;
+import com.microsoft.playwright.options.Margin;
+import com.microsoft.playwright.options.RequestOptions;
 import com.microsoft.playwright.options.WaitForSelectorState;
 import com.microsoft.playwright.options.WaitUntilState;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
@@ -22,6 +27,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 final class BrowserGatewayService {
     private static final int MAX_WAIT_TIMEOUT_MS = 120000;
@@ -178,11 +184,162 @@ final class BrowserGatewayService {
             result.put("ariaSnapshot", safeAriaSnapshot(page));
             result.put("visibleText", observed.get("visibleText"));
             result.put("elements", elements);
+            result.put("suggestedActions", suggestedActions(elements));
             result.put("forms", observed.getOrDefault("forms", List.of()));
             result.put("frames", frames(page));
             result.put("events", session.events(resolvedPageId, List.of(), 0, false));
             return result;
         });
+    }
+
+    Map<String, Object> gotoPage(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "goto", Map.of("url", Args.requiredString(args, "url")), options(args, "waitUntil", "timeoutMs"));
+    }
+
+    Map<String, Object> reloadPage(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "reload", Map.of(), options(args, "waitUntil", "timeoutMs"));
+    }
+
+    Map<String, Object> goBack(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "goBack", Map.of(), options(args, "waitUntil", "timeoutMs"));
+    }
+
+    Map<String, Object> goForward(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "goForward", Map.of(), options(args, "waitUntil", "timeoutMs"));
+    }
+
+    Map<String, Object> click(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "click", Map.of());
+    }
+
+    Map<String, Object> doubleClick(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "dblclick", Map.of());
+    }
+
+    Map<String, Object> hover(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "hover", Map.of());
+    }
+
+    Map<String, Object> fill(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "fill", Map.of("value", Args.requiredString(args, "value")));
+    }
+
+    Map<String, Object> typeText(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "type", Map.of("text", Args.requiredString(args, "text")));
+    }
+
+    Map<String, Object> clear(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "clear", Map.of());
+    }
+
+    Map<String, Object> press(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "press", Map.of("key", Args.requiredString(args, "key")), Map.of());
+    }
+
+    Map<String, Object> check(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "check", Map.of());
+    }
+
+    Map<String, Object> uncheck(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "uncheck", Map.of());
+    }
+
+    Map<String, Object> setChecked(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "setChecked", Map.of("checked", Args.optionalBoolean(args, "checked", true)));
+    }
+
+    Map<String, Object> selectOption(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (Args.has(args, "values")) {
+            values.put("values", Args.optionalStringList(args, "values"));
+        } else {
+            values.put("value", Args.requiredString(args, "value"));
+        }
+        return targetedOp(context, args, "selectOption", values);
+    }
+
+    Map<String, Object> setInputFiles(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (Args.has(args, "paths")) {
+            values.put("paths", Args.optionalStringList(args, "paths"));
+        } else {
+            values.put("path", Args.requiredString(args, "path"));
+        }
+        return targetedOp(context, args, "setInputFiles", values);
+    }
+
+    Map<String, Object> focus(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "focus", Map.of());
+    }
+
+    Map<String, Object> blur(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "blur", Map.of());
+    }
+
+    Map<String, Object> scrollIntoView(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "scrollIntoView", Map.of());
+    }
+
+    Map<String, Object> selectText(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "selectText", Map.of());
+    }
+
+    Map<String, Object> tap(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "tap", Map.of());
+    }
+
+    Map<String, Object> dispatchEvent(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("type", Args.requiredString(args, "type"));
+        if (Args.has(args, "eventInit")) {
+            values.put("eventInit", args.get("eventInit"));
+        }
+        return targetedOp(context, args, "dispatchEvent", values);
+    }
+
+    Map<String, Object> dragTo(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "dragTo", Map.of("target", Args.optionalMap(args, "destination")));
+    }
+
+    Map<String, Object> setContent(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "setContent", Map.of("html", Args.requiredString(args, "html")), Map.of());
+    }
+
+    Map<String, Object> addScriptTag(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "addScriptTag", tagValues(args), Map.of());
+    }
+
+    Map<String, Object> addStyleTag(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "addStyleTag", tagValues(args), Map.of());
+    }
+
+    Map<String, Object> screenshotPage(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "screenshot", artifactValues(args), Map.of());
+    }
+
+    Map<String, Object> screenshotLocator(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return targetedOp(context, args, "locatorScreenshot", artifactValues(args));
+    }
+
+    Map<String, Object> savePdf(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "pdf", pdfValues(args), Map.of());
+    }
+
+    Map<String, Object> dialogAccept(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("dialogId", Args.requiredString(args, "dialogId"));
+        values.put("promptText", Args.optionalString(args, "promptText", ""));
+        return op(context, args, "dialogAccept", values, Map.of());
+    }
+
+    Map<String, Object> dialogDismiss(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return op(context, args, "dialogDismiss", Map.of("dialogId", Args.requiredString(args, "dialogId")), Map.of());
+    }
+
+    Map<String, Object> downloadSaveAs(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        Map<String, Object> values = artifactValues(args);
+        values.put("downloadId", Args.requiredString(args, "downloadId"));
+        return op(context, args, "downloadSaveAs", values, Map.of());
     }
 
     Map<String, Object> act(ScriptPluginContext context, Map<String, Object> args) throws Exception {
@@ -460,6 +617,46 @@ final class BrowserGatewayService {
         });
     }
 
+    Map<String, Object> waitForLoadState(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "loadState");
+    }
+
+    Map<String, Object> waitForSelector(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "selector");
+    }
+
+    Map<String, Object> waitForUrl(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "url");
+    }
+
+    Map<String, Object> waitForFunction(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "function");
+    }
+
+    Map<String, Object> waitForRequest(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "request");
+    }
+
+    Map<String, Object> waitForResponse(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "response");
+    }
+
+    Map<String, Object> waitForConsole(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "console");
+    }
+
+    Map<String, Object> waitForPopup(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "popup");
+    }
+
+    Map<String, Object> waitForDownload(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "download");
+    }
+
+    Map<String, Object> waitForTimeout(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return waitKind(context, args, "timeout");
+    }
+
     Map<String, Object> pages(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         BrowserSession session = requireSession(context, args);
         String op = Args.requiredString(args, "op");
@@ -505,6 +702,26 @@ final class BrowserGatewayService {
         });
     }
 
+    Map<String, Object> pageList(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return pageOp(context, args, "list");
+    }
+
+    Map<String, Object> pageNew(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return pageOp(context, args, "new");
+    }
+
+    Map<String, Object> pageSwitch(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return pageOp(context, args, "switch");
+    }
+
+    Map<String, Object> pageClose(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return pageOp(context, args, "close");
+    }
+
+    Map<String, Object> pageBringToFront(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return pageOp(context, args, "bringToFront");
+    }
+
     Map<String, Object> events(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         BrowserSession session = requireSession(context, args);
         return session.withLock(() -> {
@@ -523,8 +740,351 @@ final class BrowserGatewayService {
         });
     }
 
+    Map<String, Object> cookiesGet(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            List<String> urls = Args.optionalStringList(args, "urls");
+            List<Cookie> cookies = urls.isEmpty() ? session.context().cookies() : session.context().cookies(urls);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("cookies", cookies.stream().map(BrowserGatewayService::cookieMap).toList());
+            return result;
+        });
+    }
+
+    Map<String, Object> cookiesSet(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        List<Map<String, Object>> values = Args.requiredMapList(args, "cookies");
+        return session.withLock(() -> {
+            session.context().addCookies(values.stream().map(BrowserGatewayService::cookie).toList());
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("count", values.size());
+            return result;
+        });
+    }
+
+    Map<String, Object> cookiesClear(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            session.context().clearCookies();
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("cleared", true);
+            return result;
+        });
+    }
+
+    Map<String, Object> storageState(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
+        return session.withLock(() -> {
+            BrowserContext.StorageStateOptions options = new BrowserContext.StorageStateOptions();
+            if (Args.has(args, "stateName") || Args.has(args, "path") || Args.has(args, "storageStatePath")) {
+                options.setPath(pathResolver.resolveStatePath(config, args, true));
+            }
+            if (Args.has(args, "indexedDB")) {
+                options.setIndexedDB(Args.optionalBoolean(args, "indexedDB", false));
+            }
+            String state = session.context().storageState(options);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("state", state);
+            result.put("path", options.path == null ? null : options.path.toString());
+            return result;
+        });
+    }
+
+    Map<String, Object> permissionsGrant(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        List<String> permissions = Args.optionalStringList(args, "permissions");
+        if (permissions.isEmpty()) {
+            throw new IllegalArgumentException("permissions is required");
+        }
+        return session.withLock(() -> {
+            BrowserContext.GrantPermissionsOptions options = new BrowserContext.GrantPermissionsOptions();
+            String origin = Args.optionalString(args, "origin", null);
+            if (!Args.isBlank(origin)) {
+                options.setOrigin(origin);
+            }
+            session.context().grantPermissions(permissions, options);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("permissions", permissions);
+            result.put("origin", origin);
+            return result;
+        });
+    }
+
+    Map<String, Object> permissionsClear(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            session.context().clearPermissions();
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("cleared", true);
+            return result;
+        });
+    }
+
+    Map<String, Object> networkRoute(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        String url = Args.requiredString(args, "url");
+        String action = Args.optionalString(args, "routeAction", "abort");
+        return session.withLock(() -> {
+            AutoCloseable route = session.context().route(url, item -> handleRoute(item, args, action));
+            String routeId = session.rememberRoute(route);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("routeId", routeId);
+            result.put("url", url);
+            result.put("routeAction", action);
+            return result;
+        });
+    }
+
+    Map<String, Object> networkUnroute(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            if (Args.has(args, "routeId")) {
+                session.takeRoute(Args.requiredString(args, "routeId")).close();
+            } else if (Args.has(args, "url")) {
+                session.context().unroute(Args.requiredString(args, "url"));
+            } else {
+                session.context().unrouteAll();
+            }
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("removed", true);
+            return result;
+        });
+    }
+
+    Map<String, Object> networkSetOffline(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            boolean offline = Args.optionalBoolean(args, "offline", true);
+            session.context().setOffline(offline);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("offline", offline);
+            return result;
+        });
+    }
+
+    Map<String, Object> networkSetExtraHTTPHeaders(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            Map<String, String> headers = stringMap(Args.optionalMap(args, "headers"));
+            session.context().setExtraHTTPHeaders(headers);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("headers", headers);
+            return result;
+        });
+    }
+
+    Map<String, Object> httpRequest(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        String url = Args.requiredString(args, "url");
+        String method = Args.optionalString(args, "method", "GET").toUpperCase();
+        return session.withLock(() -> {
+            RequestOptions options = RequestOptions.create().setMethod(method);
+            applyRequestOptions(options, args);
+            APIResponse response = session.context().request().fetch(url, options);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("response", apiResponseMap(response, Args.optionalInt(args, "maxBodyLength", 4000)));
+            return result;
+        });
+    }
+
+    Map<String, Object> mouse(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        String pageId = Args.optionalString(args, "pageId", null);
+        String op = Args.requiredString(args, "op");
+        return session.withLock(() -> {
+            Page page = session.page(pageId);
+            double x = Args.requiredDouble(args, "x");
+            double y = Args.requiredDouble(args, "y");
+            switch (op) {
+                case "click" -> page.mouse().click(x, y);
+                case "doubleClick", "dblclick" -> page.mouse().dblclick(x, y);
+                case "move" -> page.mouse().move(x, y);
+                case "down" -> page.mouse().down();
+                case "up" -> page.mouse().up();
+                case "wheel" -> page.mouse().wheel(Args.optionalDouble(args, "deltaX") == null ? 0 : Args.optionalDouble(args, "deltaX"),
+                        Args.optionalDouble(args, "deltaY") == null ? 0 : Args.optionalDouble(args, "deltaY"));
+                default -> throw new IllegalArgumentException("Unsupported mouse op: " + op);
+            }
+            Map<String, Object> result = pageResult(session, resolvedPageId(session, pageId), page);
+            result.put("op", op);
+            return result;
+        });
+    }
+
+    Map<String, Object> keyboard(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        String pageId = Args.optionalString(args, "pageId", null);
+        String op = Args.requiredString(args, "op");
+        return session.withLock(() -> {
+            Page page = session.page(pageId);
+            switch (op) {
+                case "press" -> page.keyboard().press(Args.requiredString(args, "key"));
+                case "down" -> page.keyboard().down(Args.requiredString(args, "key"));
+                case "up" -> page.keyboard().up(Args.requiredString(args, "key"));
+                case "type" -> page.keyboard().type(Args.requiredString(args, "text"));
+                case "insertText" -> page.keyboard().insertText(Args.requiredString(args, "text"));
+                default -> throw new IllegalArgumentException("Unsupported keyboard op: " + op);
+            }
+            Map<String, Object> result = pageResult(session, resolvedPageId(session, pageId), page);
+            result.put("op", op);
+            return result;
+        });
+    }
+
+    Map<String, Object> touchscreenTap(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        String pageId = Args.optionalString(args, "pageId", null);
+        return session.withLock(() -> {
+            Page page = session.page(pageId);
+            page.touchscreen().tap(Args.requiredDouble(args, "x"), Args.requiredDouble(args, "y"));
+            return pageResult(session, resolvedPageId(session, pageId), page);
+        });
+    }
+
+    Map<String, Object> viewportSet(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        String pageId = Args.optionalString(args, "pageId", null);
+        return session.withLock(() -> {
+            Page page = session.page(pageId);
+            page.setViewportSize(Args.optionalInt(args, "width", 1280), Args.optionalInt(args, "height", 720));
+            return pageResult(session, resolvedPageId(session, pageId), page);
+        });
+    }
+
+    Map<String, Object> geolocationSet(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            Geolocation value = new Geolocation(Args.requiredDouble(args, "latitude"), Args.requiredDouble(args, "longitude"));
+            Double accuracy = Args.optionalDouble(args, "accuracy");
+            if (accuracy != null) {
+                value.setAccuracy(accuracy);
+            }
+            session.context().setGeolocation(value);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            return result;
+        });
+    }
+
+    Map<String, Object> emulateMedia(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        String pageId = Args.optionalString(args, "pageId", null);
+        return session.withLock(() -> {
+            Page page = session.page(pageId);
+            Page.EmulateMediaOptions options = new Page.EmulateMediaOptions();
+            String colorScheme = Args.optionalString(args, "colorScheme", null);
+            if (!Args.isBlank(colorScheme)) options.setColorScheme(BrowserEnums.colorScheme(colorScheme));
+            String media = Args.optionalString(args, "media", null);
+            if (!Args.isBlank(media)) options.setMedia(BrowserEnums.media(media));
+            String reducedMotion = Args.optionalString(args, "reducedMotion", null);
+            if (!Args.isBlank(reducedMotion)) options.setReducedMotion(BrowserEnums.reducedMotion(reducedMotion));
+            String forcedColors = Args.optionalString(args, "forcedColors", null);
+            if (!Args.isBlank(forcedColors)) options.setForcedColors(BrowserEnums.forcedColors(forcedColors));
+            String contrast = Args.optionalString(args, "contrast", null);
+            if (!Args.isBlank(contrast)) options.setContrast(BrowserEnums.contrast(contrast));
+            page.emulateMedia(options);
+            return pageResult(session, resolvedPageId(session, pageId), page);
+        });
+    }
+
     private Locator target(BrowserSession session, Page page, String pageId, Map<String, Object> target) {
         return targetResolver.locator(session, page, pageId, target);
+    }
+
+    private Map<String, Object> targetedOp(ScriptPluginContext context, Map<String, Object> args, String op, Map<String, Object> values) throws Exception {
+        return op(context, args, op, values, Map.of());
+    }
+
+    private Map<String, Object> op(ScriptPluginContext context,
+                                   Map<String, Object> args,
+                                   String op,
+                                   Map<String, Object> values,
+                                   Map<String, Object> options) throws Exception {
+        Map<String, Object> call = new LinkedHashMap<>();
+        call.put("sessionId", Args.requiredString(args, "sessionId"));
+        call.put("op", op);
+        if (Args.has(args, "pageId")) {
+            call.put("pageId", args.get("pageId"));
+        }
+        Map<String, Object> target = Args.optionalMap(args, "target");
+        if (!target.isEmpty()) {
+            call.put("target", target);
+        }
+        call.put("args", values == null ? Map.of() : values);
+        call.put("options", options == null ? Map.of() : options);
+        return act(context, call);
+    }
+
+    private Map<String, Object> waitKind(ScriptPluginContext context, Map<String, Object> args, String kind) throws Exception {
+        Map<String, Object> call = new LinkedHashMap<>(args);
+        call.put("for", kind);
+        return waitFor(context, call);
+    }
+
+    private Map<String, Object> pageOp(ScriptPluginContext context, Map<String, Object> args, String op) throws Exception {
+        Map<String, Object> call = new LinkedHashMap<>(args);
+        call.put("op", op);
+        return pages(context, call);
+    }
+
+    private static Map<String, Object> options(Map<String, Object> args, String... keys) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String key : keys) {
+            if (Args.has(args, key)) {
+                result.put(key, args.get(key));
+            }
+        }
+        return result;
+    }
+
+    private static Map<String, Object> tagValues(Map<String, Object> args) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (String key : List.of("content", "url", "path")) {
+            if (Args.has(args, key)) {
+                values.put(key, args.get(key));
+            }
+        }
+        if (values.isEmpty()) {
+            throw new IllegalArgumentException("one of content, url, or path is required");
+        }
+        return values;
+    }
+
+    private static Map<String, Object> artifactValues(Map<String, Object> args) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (String key : List.of("name", "path", "fullPage", "printBackground")) {
+            if (Args.has(args, key)) {
+                values.put(key, args.get(key));
+            }
+        }
+        return values;
+    }
+
+    private static Map<String, Object> pdfValues(Map<String, Object> args) {
+        Map<String, Object> values = artifactValues(args);
+        for (String key : List.of("format", "landscape", "scale", "pageRanges", "width", "height",
+                "displayHeaderFooter", "headerTemplate", "footerTemplate", "preferCSSPageSize", "outline", "tagged")) {
+            if (Args.has(args, key)) {
+                values.put(key, args.get(key));
+            }
+        }
+        Map<String, Object> margin = Args.optionalMap(args, "margin");
+        if (!margin.isEmpty()) {
+            values.put("margin", margin);
+        }
+        return values;
     }
 
     private void applyContextOptions(Browser.NewContextOptions options, BrowserPluginConfig config, Map<String, Object> args) throws Exception {
@@ -613,6 +1173,36 @@ final class BrowserGatewayService {
         if (values.containsKey("printBackground")) {
             options.setPrintBackground(Args.optionalBoolean(values, "printBackground", false));
         }
+        if (values.containsKey("landscape")) options.setLandscape(Args.optionalBoolean(values, "landscape", false));
+        Double scale = Args.optionalDouble(values, "scale");
+        if (scale != null) options.setScale(scale);
+        String pageRanges = Args.optionalString(values, "pageRanges", null);
+        if (!Args.isBlank(pageRanges)) options.setPageRanges(pageRanges);
+        String width = Args.optionalString(values, "width", null);
+        if (!Args.isBlank(width)) options.setWidth(width);
+        String height = Args.optionalString(values, "height", null);
+        if (!Args.isBlank(height)) options.setHeight(height);
+        if (values.containsKey("displayHeaderFooter")) options.setDisplayHeaderFooter(Args.optionalBoolean(values, "displayHeaderFooter", false));
+        String headerTemplate = Args.optionalString(values, "headerTemplate", null);
+        if (!Args.isBlank(headerTemplate)) options.setHeaderTemplate(headerTemplate);
+        String footerTemplate = Args.optionalString(values, "footerTemplate", null);
+        if (!Args.isBlank(footerTemplate)) options.setFooterTemplate(footerTemplate);
+        if (values.containsKey("preferCSSPageSize")) options.setPreferCSSPageSize(Args.optionalBoolean(values, "preferCSSPageSize", false));
+        if (values.containsKey("outline")) options.setOutline(Args.optionalBoolean(values, "outline", false));
+        if (values.containsKey("tagged")) options.setTagged(Args.optionalBoolean(values, "tagged", false));
+        Map<String, Object> marginValues = Args.optionalMap(values, "margin");
+        if (!marginValues.isEmpty()) {
+            Margin margin = new Margin();
+            String top = Args.optionalString(marginValues, "top", null);
+            if (!Args.isBlank(top)) margin.setTop(top);
+            String right = Args.optionalString(marginValues, "right", null);
+            if (!Args.isBlank(right)) margin.setRight(right);
+            String bottom = Args.optionalString(marginValues, "bottom", null);
+            if (!Args.isBlank(bottom)) margin.setBottom(bottom);
+            String left = Args.optionalString(marginValues, "left", null);
+            if (!Args.isBlank(left)) margin.setLeft(left);
+            options.setMargin(margin);
+        }
         page.pdf(options);
         return Map.of("path", path.toString());
     }
@@ -667,6 +1257,30 @@ final class BrowserGatewayService {
         return frames;
     }
 
+    private static List<Map<String, Object>> suggestedActions(List<Map<String, Object>> elements) {
+        List<Map<String, Object>> suggestions = new ArrayList<>();
+        for (Map<String, Object> element : elements) {
+            String ref = String.valueOf(element.get("ref"));
+            String role = String.valueOf(element.getOrDefault("role", ""));
+            String tag = String.valueOf(element.getOrDefault("tag", ""));
+            Object checked = element.get("checked");
+            Map<String, Object> target = Map.of("ref", ref);
+            if (Boolean.TRUE.equals(checked) || Boolean.FALSE.equals(checked) || "checkbox".equals(role) || "radio".equals(role)) {
+                suggestions.add(Map.of("action", "setChecked", "target", target, "argsTemplate", Map.of("checked", !Boolean.TRUE.equals(checked))));
+            } else if ("textbox".equals(role) || "searchbox".equals(role) || "textarea".equals(tag) || "input".equals(tag)) {
+                suggestions.add(Map.of("action", "fill", "target", target, "argsTemplate", Map.of("value", "")));
+            } else if ("combobox".equals(role) || "select".equals(tag)) {
+                suggestions.add(Map.of("action", "selectOption", "target", target, "argsTemplate", Map.of("value", "")));
+            } else {
+                suggestions.add(Map.of("action", "click", "target", target, "argsTemplate", Map.of()));
+            }
+            if (suggestions.size() >= 20) {
+                break;
+            }
+        }
+        return suggestions;
+    }
+
     private static Map<String, Object> requestMap(Request request) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("url", request.url());
@@ -675,6 +1289,102 @@ final class BrowserGatewayService {
         item.put("navigation", request.isNavigationRequest());
         item.put("failure", request.failure());
         return item;
+    }
+
+    private static Map<String, Object> apiResponseMap(APIResponse response, int maxBodyLength) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("url", response.url());
+        item.put("status", response.status());
+        item.put("statusText", response.statusText());
+        item.put("ok", response.ok());
+        item.put("headers", response.headers());
+        String text = response.text();
+        item.put("body", text == null ? null : text.substring(0, Math.min(Math.max(maxBodyLength, 0), text.length())));
+        return item;
+    }
+
+    private static Map<String, Object> cookieMap(Cookie cookie) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("name", cookie.name);
+        item.put("value", cookie.value);
+        item.put("domain", cookie.domain);
+        item.put("path", cookie.path);
+        item.put("url", cookie.url);
+        item.put("expires", cookie.expires);
+        item.put("httpOnly", cookie.httpOnly);
+        item.put("secure", cookie.secure);
+        item.put("sameSite", cookie.sameSite == null ? null : cookie.sameSite.name().toLowerCase());
+        return item;
+    }
+
+    private static Cookie cookie(Map<String, Object> value) {
+        Cookie cookie = new Cookie(Args.requiredString(value, "name"), Args.requiredString(value, "value"));
+        String url = Args.optionalString(value, "url", null);
+        if (!Args.isBlank(url)) cookie.setUrl(url);
+        String domain = Args.optionalString(value, "domain", null);
+        if (!Args.isBlank(domain)) cookie.setDomain(domain);
+        String path = Args.optionalString(value, "path", null);
+        if (!Args.isBlank(path)) cookie.setPath(path);
+        Double expires = Args.optionalDouble(value, "expires");
+        if (expires != null) cookie.setExpires(expires);
+        if (value.containsKey("httpOnly")) cookie.setHttpOnly(Args.optionalBoolean(value, "httpOnly", false));
+        if (value.containsKey("secure")) cookie.setSecure(Args.optionalBoolean(value, "secure", false));
+        String sameSite = Args.optionalString(value, "sameSite", null);
+        if (!Args.isBlank(sameSite)) cookie.setSameSite(BrowserEnums.sameSite(sameSite));
+        String partitionKey = Args.optionalString(value, "partitionKey", null);
+        if (!Args.isBlank(partitionKey)) cookie.setPartitionKey(partitionKey);
+        return cookie;
+    }
+
+    private static Map<String, String> stringMap(Map<String, Object> values) {
+        Map<String, String> result = new LinkedHashMap<>();
+        values.forEach((key, value) -> result.put(key, value == null ? "" : String.valueOf(value)));
+        return result;
+    }
+
+    private static void applyRequestOptions(RequestOptions options, Map<String, Object> args) {
+        Map<String, Object> headers = Args.optionalMap(args, "headers");
+        headers.forEach((key, value) -> options.setHeader(key, value == null ? "" : String.valueOf(value)));
+        Map<String, Object> query = Args.optionalMap(args, "query");
+        query.forEach((key, value) -> options.setQueryParam(key, value == null ? "" : String.valueOf(value)));
+        if (Args.has(args, "data")) {
+            options.setData(args.get("data"));
+        }
+        if (Args.has(args, "timeoutMs")) {
+            options.setTimeout(Args.optionalInt(args, "timeoutMs", 30000));
+        }
+        if (Args.has(args, "failOnStatusCode")) {
+            options.setFailOnStatusCode(Args.optionalBoolean(args, "failOnStatusCode", false));
+        }
+    }
+
+    private static void handleRoute(Route route, Map<String, Object> args, String action) {
+        switch (action) {
+            case "abort" -> route.abort(Args.optionalString(args, "errorCode", "failed"));
+            case "continue", "resume" -> {
+                Route.ResumeOptions options = new Route.ResumeOptions();
+                Map<String, Object> headers = Args.optionalMap(args, "headers");
+                if (!headers.isEmpty()) options.setHeaders(stringMap(headers));
+                String method = Args.optionalString(args, "method", null);
+                if (!Args.isBlank(method)) options.setMethod(method);
+                String url = Args.optionalString(args, "replacementUrl", null);
+                if (!Args.isBlank(url)) options.setUrl(url);
+                if (Args.has(args, "postData")) options.setPostData(String.valueOf(args.get("postData")));
+                route.resume(options);
+            }
+            case "fulfill" -> {
+                Route.FulfillOptions options = new Route.FulfillOptions();
+                options.setStatus(Args.optionalInt(args, "status", 200));
+                String body = Args.optionalString(args, "body", "");
+                options.setBody(body);
+                String contentType = Args.optionalString(args, "contentType", null);
+                if (!Args.isBlank(contentType)) options.setContentType(contentType);
+                Map<String, Object> headers = Args.optionalMap(args, "headers");
+                if (!headers.isEmpty()) options.setHeaders(stringMap(headers));
+                route.fulfill(options);
+            }
+            default -> throw new IllegalArgumentException("Unsupported routeAction: " + action);
+        }
     }
 
     private static Map<String, Object> responseMap(Response response) {

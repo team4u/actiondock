@@ -36,7 +36,7 @@ public class ActionDockBrowserSystemPlugin implements ActionDockPlugin {
         } catch (PluginRuntimeException exception) {
             throw exception;
         } catch (Exception exception) {
-            throw new PluginRuntimeException("Browser action failed: " + exception.getMessage(), exception);
+            throw BrowserErrors.wrap(action, exception);
         }
     }
 }

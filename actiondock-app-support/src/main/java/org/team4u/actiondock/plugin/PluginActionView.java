@@ -15,6 +15,7 @@ public class PluginActionView {
     private Map<String, Object> inputSchema = new LinkedHashMap<>();
     private Map<String, Object> outputSchema = new LinkedHashMap<>();
     private Map<String, Object> exampleArgs = new LinkedHashMap<>();
+    private Map<String, Object> aiHints = new LinkedHashMap<>();
 
     public String getAction() {
         return action;
@@ -67,6 +68,15 @@ public class PluginActionView {
 
     public PluginActionView setExampleArgs(Map<String, Object> exampleArgs) {
         this.exampleArgs = exampleArgs == null ? new LinkedHashMap<>() : new LinkedHashMap<>(exampleArgs);
+        return this;
+    }
+
+    public Map<String, Object> getAiHints() {
+        return aiHints;
+    }
+
+    public PluginActionView setAiHints(Map<String, Object> aiHints) {
+        this.aiHints = aiHints == null ? new LinkedHashMap<>() : new LinkedHashMap<>(aiHints);
         return this;
     }
 }

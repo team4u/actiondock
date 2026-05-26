@@ -801,6 +801,18 @@ public class PluginRuntimeService {
         if (message.startsWith(prefix) && exception instanceof PluginRuntimeException pluginRuntimeException) {
             return pluginRuntimeException;
         }
+        if (exception instanceof PluginRuntimeException pluginRuntimeException) {
+            Map<String, Object> details = new LinkedHashMap<>(pluginRuntimeException.getDetails());
+            details.putIfAbsent("pluginId", pluginId);
+            details.putIfAbsent("action", action);
+            return new PluginRuntimeException(
+                    pluginRuntimeException.getStatus(),
+                    pluginRuntimeException.getCode(),
+                    message.startsWith(prefix) ? message : prefix + message,
+                    details,
+                    pluginRuntimeException
+            );
+        }
         return new PluginRuntimeException(
                 message.startsWith(prefix) ? message : prefix + message,
                 exception

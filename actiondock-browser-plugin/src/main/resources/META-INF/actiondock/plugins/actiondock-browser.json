@@ -1,341 +1,3489 @@
 {
-  "pluginId": "actiondock-browser",
-  "name": "ActionDock Browser",
-  "description": "AI-first Playwright browser gateway. Use observe to understand the page, then act/evaluate/wait/pages/events to complete browser tasks.",
-  "version": "0.3.0",
-  "configSchema": {
-    "type": "object",
-    "properties": {
-      "defaultBrowser": {
-        "type": "string",
-        "enum": ["chromium", "firefox", "webkit"],
-        "title": "Default Browser"
+  "pluginId" : "actiondock-browser",
+  "name" : "ActionDock Browser",
+  "description" : "AI-first Playwright browser gateway. Actions are intentionally precise so AI can call browser operations without guessing hidden op-specific params.",
+  "version" : "0.3.0",
+  "configSchema" : {
+    "type" : "object",
+    "properties" : {
+      "defaultBrowser" : {
+        "type" : "string",
+        "title" : "Default Browser",
+        "enum" : [ "chromium", "firefox", "webkit" ]
       },
-      "headless": {
-        "type": "boolean",
-        "title": "Headless"
+      "headless" : {
+        "title" : "Headless",
+        "type" : "boolean"
       },
-      "defaultTimeoutMs": {
-        "type": "integer",
-        "title": "Default Timeout Milliseconds"
+      "defaultTimeoutMs" : {
+        "title" : "Default Timeout Milliseconds",
+        "type" : "integer"
       },
-      "sessionTtlSeconds": {
-        "type": "integer",
-        "title": "Session TTL Seconds"
+      "sessionTtlSeconds" : {
+        "title" : "Session TTL Seconds",
+        "type" : "integer"
       },
-      "maxSessions": {
-        "type": "integer",
-        "title": "Max Sessions"
+      "maxSessions" : {
+        "title" : "Max Sessions",
+        "type" : "integer"
       },
-      "stateDir": {
-        "type": "string",
-        "title": "State Directory"
+      "stateDir" : {
+        "title" : "State Directory",
+        "type" : "string"
       },
-      "artifactDir": {
-        "type": "string",
-        "title": "Artifact Directory"
+      "artifactDir" : {
+        "title" : "Artifact Directory",
+        "type" : "string"
       },
-      "downloadDir": {
-        "type": "string",
-        "title": "Download Directory"
+      "downloadDir" : {
+        "title" : "Download Directory",
+        "type" : "string"
       },
-      "allowedHosts": {
-        "type": "array",
-        "items": { "type": "string" },
-        "title": "Allowed Hosts"
+      "allowedHosts" : {
+        "type" : "array",
+        "items" : {
+          "type" : "string"
+        },
+        "title" : "Allowed Hosts"
       },
-      "includeCookieValueByDefault": {
-        "type": "boolean",
-        "title": "Include Cookie Value By Default"
+      "includeCookieValueByDefault" : {
+        "title" : "Include Cookie Value By Default",
+        "type" : "boolean"
       }
     }
   },
-  "defaultConfig": {
-    "defaultBrowser": "chromium",
-    "headless": true,
-    "defaultTimeoutMs": 30000,
-    "sessionTtlSeconds": 600,
-    "maxSessions": 10,
-    "stateDir": ".actiondock/browser-state",
-    "artifactDir": ".actiondock/browser-artifacts",
-    "downloadDir": ".actiondock/browser-downloads",
-    "allowedHosts": [],
-    "includeCookieValueByDefault": false
+  "defaultConfig" : {
+    "maxSessions" : 10,
+    "defaultTimeoutMs" : 30000,
+    "includeCookieValueByDefault" : false,
+    "downloadDir" : ".actiondock/browser-downloads",
+    "allowedHosts" : [ ],
+    "headless" : true,
+    "sessionTtlSeconds" : 600,
+    "artifactDir" : ".actiondock/browser-artifacts",
+    "stateDir" : ".actiondock/browser-state",
+    "defaultBrowser" : "chromium"
   },
-  "actions": [
-    {
-      "action": "sessionCreate",
-      "title": "Create Browser Session",
-      "description": "Create a Playwright browser session and return sessionId plus the first pageId. Supports common browser context options.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "browser": { "type": "string", "enum": ["chromium", "firefox", "webkit"] },
-          "headless": { "type": "boolean" },
-          "timeoutMs": { "type": "integer" },
-          "viewport": { "type": "object" },
-          "userAgent": { "type": "string" },
-          "locale": { "type": "string" },
-          "timezoneId": { "type": "string" },
-          "permissions": { "type": "array", "items": { "type": "string" } },
-          "geolocation": { "type": "object" },
-          "extraHTTPHeaders": { "type": "object" },
-          "httpCredentials": { "type": "object" },
-          "ignoreHTTPSErrors": { "type": "boolean" },
-          "javaScriptEnabled": { "type": "boolean" },
-          "isMobile": { "type": "boolean" },
-          "hasTouch": { "type": "boolean" },
-          "stateName": { "type": "string" },
-          "storageStatePath": { "type": "string" }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "browser": { "type": "string" },
-          "headless": { "type": "boolean" }
-        }
-      },
-      "exampleArgs": { "browser": "chromium", "headless": true }
+  "actions" : [ {
+    "action" : "sessionCreate",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
     },
-    {
-      "action": "observe",
-      "title": "Observe Page",
-      "description": "Read the current page for AI planning. Returns URL, title, ARIA snapshot, visible text, forms, frames, recent events, and actionable element refs such as e1/e2 for use by act/evaluate/wait.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "limit": { "type": "integer" },
-          "maxTextLength": { "type": "integer" }
+    "description" : "Create a Playwright session and first page.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "browser" : {
+          "enum" : [ "chromium", "firefox", "webkit" ],
+          "type" : "string"
         },
-        "required": ["sessionId"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "url": { "type": "string" },
-          "title": { "type": "string" },
-          "ariaSnapshot": { "type": "string" },
-          "visibleText": { "type": "string" },
-          "elements": { "type": "array" },
-          "forms": { "type": "array" },
-          "frames": { "type": "array" },
-          "events": { "type": "array" }
-        }
-      },
-      "exampleArgs": { "sessionId": "br_xxx", "limit": 80 }
-    },
-    {
-      "action": "act",
-      "title": "Perform Browser Action",
-      "description": "Perform a Playwright action. Use target.ref from observe when possible. Common ops: goto, reload, back, forward, click, dblclick, hover, fill, type, clear, press, check, uncheck, setChecked, selectOption, setInputFiles, focus, blur, scrollIntoView, selectText, tap, dispatchEvent, dragTo, setContent, addScriptTag, addStyleTag, screenshot, locatorScreenshot, pdf, dialogAccept, dialogDismiss, downloadSaveAs.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "op": { "type": "string" },
-          "target": { "type": "object" },
-          "args": { "type": "object" },
-          "options": { "type": "object" }
+        "headless" : {
+          "type" : "boolean"
         },
-        "required": ["sessionId", "op"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "url": { "type": "string" },
-          "title": { "type": "string" },
-          "op": { "type": "string" },
-          "data": { "type": "object" }
+        "timeoutMs" : {
+          "type" : "integer"
+        },
+        "viewport" : {
+          "type" : "object",
+          "properties" : {
+            "width" : {
+              "type" : "integer"
+            },
+            "height" : {
+              "type" : "integer"
+            }
+          },
+          "required" : [ "width", "height" ]
+        },
+        "userAgent" : {
+          "type" : "string"
+        },
+        "locale" : {
+          "type" : "string"
+        },
+        "timezoneId" : {
+          "type" : "string"
+        },
+        "permissions" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "geolocation" : {
+          "type" : "object",
+          "properties" : {
+            "latitude" : {
+              "type" : "number"
+            },
+            "longitude" : {
+              "type" : "number"
+            },
+            "accuracy" : {
+              "type" : "number"
+            }
+          },
+          "required" : [ "latitude", "longitude" ]
+        },
+        "extraHTTPHeaders" : {
+          "type" : "object",
+          "properties" : { }
+        },
+        "httpCredentials" : {
+          "type" : "object",
+          "properties" : {
+            "username" : {
+              "type" : "string"
+            },
+            "password" : {
+              "type" : "string"
+            }
+          },
+          "required" : [ "username", "password" ]
+        },
+        "ignoreHTTPSErrors" : {
+          "type" : "boolean"
+        },
+        "javaScriptEnabled" : {
+          "type" : "boolean"
+        },
+        "isMobile" : {
+          "type" : "boolean"
+        },
+        "hasTouch" : {
+          "type" : "boolean"
+        },
+        "stateName" : {
+          "type" : "string"
+        },
+        "storageStatePath" : {
+          "type" : "string"
         }
-      },
-      "exampleArgs": {
-        "sessionId": "br_xxx",
-        "op": "setChecked",
-        "target": { "ref": "e3" },
-        "args": { "checked": true }
       }
     },
-    {
-      "action": "evaluate",
-      "title": "Evaluate JavaScript",
-      "description": "Run unrestricted Playwright JavaScript evaluation on the page, a locator, or all matching locators. Scopes: page, locator, all.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "scope": { "type": "string", "enum": ["page", "locator", "all"] },
-          "target": { "type": "object" },
-          "expression": { "type": "string" },
-          "arg": {}
-        },
-        "required": ["sessionId", "expression"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "value": {}
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "browser" : "chromium",
+      "headless" : true
+    },
+    "title" : "Create Browser Session"
+  }, {
+    "action" : "sessionClose",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Close a session and release resources.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
         }
       },
-      "exampleArgs": {
-        "sessionId": "br_xxx",
-        "scope": "page",
-        "expression": "() => document.title"
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Close Browser Session"
+  }, {
+    "action" : "sessionInfo",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Read active page and session metadata.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Get Session Info"
+  }, {
+    "action" : "sessionList",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "List active browser sessions for the current script execution.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : { },
+    "title" : "List Sessions"
+  }, {
+    "action" : "capabilities",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Return exact action schemas, target schema, and AI workflow hints.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : { },
+    "title" : "Browser Capabilities"
+  }, {
+    "action" : "observe",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Read URL, title, ARIA snapshot, visible text, actionable refs, forms, frames, events, and suggested next actions.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "limit" : {
+          "type" : "integer"
+        },
+        "maxTextLength" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "limit" : 80
+    },
+    "title" : "Observe Page"
+  }, {
+    "action" : "goto",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Navigate current page to URL.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "waitUntil" : {
+          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "url" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "https://example.com"
+    },
+    "title" : "Navigate"
+  }, {
+    "action" : "reload",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Reload current page.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "waitUntil" : {
+          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Reload Page"
+  }, {
+    "action" : "goBack",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Go back in page history.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "waitUntil" : {
+          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Go Back"
+  }, {
+    "action" : "goForward",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Go forward in page history.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "waitUntil" : {
+          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Go Forward"
+  }, {
+    "action" : "click",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
       }
     },
-    {
-      "action": "wait",
-      "title": "Wait For Browser Condition",
-      "description": "Wait for a browser condition. Kinds: loadState, selector, url, function, request, response, console, popup, download, timeout.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "for": { "type": "string" },
-          "target": { "type": "object" },
-          "url": { "type": "string" },
-          "state": { "type": "string" },
-          "expression": { "type": "string" },
-          "arg": {},
-          "timeoutMs": { "type": "integer" }
+    "title" : "Click"
+  }, {
+    "action" : "doubleClick",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
         },
-        "required": ["sessionId", "for"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "for": { "type": "string" },
-          "data": { "type": "object" }
-        }
-      },
-      "exampleArgs": { "sessionId": "br_xxx", "for": "selector", "target": { "text": "完成" }, "timeoutMs": 30000 }
-    },
-    {
-      "action": "pages",
-      "title": "Manage Pages",
-      "description": "Manage pages/tabs. Ops: list, new, switch, close, bringToFront.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": { "type": "string" },
-          "op": { "type": "string" },
-          "pageId": { "type": "string" },
-          "url": { "type": "string" }
+        "pageId" : {
+          "type" : "string"
         },
-        "required": ["sessionId", "op"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "activePageId": { "type": "string" },
-          "op": { "type": "string" },
-          "data": {}
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
         }
       },
-      "exampleArgs": { "sessionId": "br_xxx", "op": "list" }
+      "required" : [ "sessionId", "target" ]
     },
-    {
-      "action": "events",
-      "title": "Read Browser Events",
-      "description": "Read buffered browser events such as console, pageError, request, response, popup, download, and dialog. Use clear=true to reset the buffer.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": { "type": "string" },
-          "pageId": { "type": "string" },
-          "types": { "type": "array", "items": { "type": "string" } },
-          "sinceId": { "type": "integer" },
-          "clear": { "type": "boolean" }
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
+    },
+    "title" : "Double Click"
+  }, {
+    "action" : "hover",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
         },
-        "required": ["sessionId"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "events": { "type": "array" },
-          "count": { "type": "integer" },
-          "cleared": { "type": "boolean" }
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
         }
       },
-      "exampleArgs": { "sessionId": "br_xxx", "types": ["console", "pageError"] }
+      "required" : [ "sessionId", "target" ]
     },
-    {
-      "action": "sessionInfo",
-      "title": "Get Session Info",
-      "description": "Read browser session metadata, active page, and open pages.",
-      "inputSchema": {
-        "type": "object",
-        "properties": { "sessionId": { "type": "string" } },
-        "required": ["sessionId"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "activePageId": { "type": "string" },
-          "pages": { "type": "array" }
-        }
-      },
-      "exampleArgs": { "sessionId": "br_xxx" }
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    {
-      "action": "sessionList",
-      "title": "List Sessions",
-      "description": "List active browser sessions owned by current script execution.",
-      "inputSchema": { "type": "object", "properties": {} },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessions": { "type": "array" },
-          "count": { "type": "integer" }
-        }
-      },
-      "exampleArgs": {}
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    {
-      "action": "sessionClose",
-      "title": "Close Browser Session",
-      "description": "Close a browser session and release Playwright resources.",
-      "inputSchema": {
-        "type": "object",
-        "properties": { "sessionId": { "type": "string" } },
-        "required": ["sessionId"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "ok": { "type": "boolean" },
-          "sessionId": { "type": "string" },
-          "closed": { "type": "boolean" }
+    "title" : "Hover"
+  }, {
+    "action" : "clear",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
         }
       },
-      "exampleArgs": { "sessionId": "br_xxx" }
-    }
-  ]
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
+    },
+    "title" : "Clear"
+  }, {
+    "action" : "focus",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
+    },
+    "title" : "Focus"
+  }, {
+    "action" : "blur",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
+    },
+    "title" : "Blur"
+  }, {
+    "action" : "scrollIntoView",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
+    },
+    "title" : "Scroll Into View"
+  }, {
+    "action" : "selectText",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
+    },
+    "title" : "Select Text"
+  }, {
+    "action" : "tap",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
+    },
+    "title" : "Tap"
+  }, {
+    "action" : "fill",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Set text value on an input, textarea, select-like editable, or contenteditable target.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "value" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "target", "value" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates.",
+      "warning" : "Do not use fill for checkbox/radio. Use setChecked/check/uncheck."
+    },
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e2"
+      },
+      "value" : "hello",
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Fill Text"
+  }, {
+    "action" : "typeText",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Type text into target like real keystrokes.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "text" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "target", "text" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e2"
+      },
+      "sessionId" : "br_xxx",
+      "text" : "hello"
+    },
+    "title" : "Type Text"
+  }, {
+    "action" : "press",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Press a key globally or on a target.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "key" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "key" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "key" : "Enter"
+    },
+    "title" : "Press Key"
+  }, {
+    "action" : "check",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Check a checkbox or radio target.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e3"
+      }
+    },
+    "title" : "Check"
+  }, {
+    "action" : "uncheck",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Uncheck a checkbox target.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e3"
+      }
+    },
+    "title" : "Uncheck"
+  }, {
+    "action" : "setChecked",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Set checkbox/radio checked state. Prefer this over fill for checkboxes.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "checked" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "sessionId", "target", "checked" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e3"
+      },
+      "sessionId" : "br_xxx",
+      "checked" : true
+    },
+    "title" : "Set Checked"
+  }, {
+    "action" : "selectOption",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Select one or more select options by value.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "value" : {
+          "type" : "string"
+        },
+        "values" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e4"
+      },
+      "value" : "US",
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Select Option"
+  }, {
+    "action" : "setInputFiles",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Set file input paths relative to workspace.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "path" : {
+          "type" : "string"
+        },
+        "paths" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e5"
+      },
+      "sessionId" : "br_xxx",
+      "path" : "upload.txt"
+    },
+    "title" : "Set Input Files"
+  }, {
+    "action" : "dispatchEvent",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Dispatch DOM event on target.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "type" : {
+          "type" : "string"
+        },
+        "eventInit" : {
+          "type" : "object",
+          "properties" : { }
+        }
+      },
+      "required" : [ "sessionId", "target", "type" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "type" : "change",
+      "target" : {
+        "ref" : "e1"
+      },
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Dispatch Event"
+  }, {
+    "action" : "dragTo",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Drag source target to destination target.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "destination" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target", "destination" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e1"
+      },
+      "destination" : {
+        "ref" : "e2"
+      },
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Drag To"
+  }, {
+    "action" : "setContent",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Replace page HTML.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "html" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "html" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "html" : "<html></html>"
+    },
+    "title" : "Set Page Content"
+  }, {
+    "action" : "addScriptTag",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Inject script by content, URL, or workspace path.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "content" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "content" : "window.x=1"
+    },
+    "title" : "Add Script Tag"
+  }, {
+    "action" : "addStyleTag",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Inject style by content, URL, or workspace path.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "content" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "content" : "body{outline:0}"
+    },
+    "title" : "Add Style Tag"
+  }, {
+    "action" : "screenshot",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Save page screenshot under artifact directory.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "name" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        },
+        "fullPage" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "fullPage" : true,
+      "sessionId" : "br_xxx",
+      "name" : "page"
+    },
+    "title" : "Screenshot Page"
+  }, {
+    "action" : "locatorScreenshot",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Save target screenshot under artifact directory.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "name" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        },
+        "fullPage" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e1"
+      },
+      "sessionId" : "br_xxx",
+      "name" : "button"
+    },
+    "title" : "Screenshot Locator"
+  }, {
+    "action" : "pdf",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Save page PDF under artifact directory.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "name" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        },
+        "fullPage" : {
+          "type" : "boolean"
+        },
+        "format" : {
+          "type" : "string"
+        },
+        "printBackground" : {
+          "type" : "boolean"
+        },
+        "landscape" : {
+          "type" : "boolean"
+        },
+        "scale" : {
+          "type" : "number"
+        },
+        "pageRanges" : {
+          "type" : "string"
+        },
+        "width" : {
+          "type" : "string"
+        },
+        "height" : {
+          "type" : "string"
+        },
+        "margin" : {
+          "type" : "object",
+          "properties" : { }
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "name" : "page",
+      "format" : "A4"
+    },
+    "title" : "Save PDF"
+  }, {
+    "action" : "dialogAccept",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Accept a dialog from events/observe.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "dialogId" : {
+          "type" : "string"
+        },
+        "promptText" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "dialogId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "dialogId" : "d1"
+    },
+    "title" : "Accept Dialog"
+  }, {
+    "action" : "dialogDismiss",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Dismiss a dialog from events/observe.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "dialogId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "dialogId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "dialogId" : "d1"
+    },
+    "title" : "Dismiss Dialog"
+  }, {
+    "action" : "downloadSaveAs",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Save a download from events/waitForDownload.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "downloadId" : {
+          "type" : "string"
+        },
+        "name" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "downloadId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "downloadId" : "dl1",
+      "sessionId" : "br_xxx",
+      "name" : "file.bin"
+    },
+    "title" : "Save Download"
+  }, {
+    "action" : "evaluate",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Run unrestricted JS on page, one locator, or all matching locators.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "scope" : {
+          "enum" : [ "page", "locator", "all" ],
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "expression" : {
+          "type" : "string"
+        },
+        "arg" : {
+          "type" : "object",
+          "properties" : { }
+        }
+      },
+      "required" : [ "sessionId", "expression" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "escapeHatch" : true
+    },
+    "exampleArgs" : {
+      "expression" : "() => document.title",
+      "sessionId" : "br_xxx",
+      "scope" : "page"
+    },
+    "title" : "Evaluate JavaScript"
+  }, {
+    "action" : "waitForLoadState",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait for load/domcontentloaded/networkidle.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "state" : {
+          "enum" : [ "load", "domcontentloaded", "networkidle" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "state" : "load"
+    },
+    "title" : "Wait For Load State"
+  }, {
+    "action" : "waitForSelector",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait for target state.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "state" : {
+          "enum" : [ "attached", "detached", "visible", "hidden" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "text" : "Done"
+      }
+    },
+    "title" : "Wait For Selector"
+  }, {
+    "action" : "waitForUrl",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait until URL matches string/pattern accepted by Playwright.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "url" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "**/done"
+    },
+    "title" : "Wait For URL"
+  }, {
+    "action" : "waitForFunction",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait until JS expression returns truthy.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "expression" : {
+          "type" : "string"
+        },
+        "arg" : {
+          "type" : "object",
+          "properties" : { }
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "expression" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "expression" : "() => window.ready === true",
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Wait For Function"
+  }, {
+    "action" : "waitForRequest",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait for matching request URL.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "url" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "**/api/**"
+    },
+    "title" : "Wait For Request"
+  }, {
+    "action" : "waitForResponse",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait for matching response URL.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "url" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "**/api/**"
+    },
+    "title" : "Wait For Response"
+  }, {
+    "action" : "waitForConsole",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait for next console message.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Wait For Console"
+  }, {
+    "action" : "waitForPopup",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait for popup and register pageId.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Wait For Popup"
+  }, {
+    "action" : "waitForDownload",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Wait for download and return downloadId.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Wait For Download"
+  }, {
+    "action" : "waitForTimeout",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Sleep for timeoutMs.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "timeoutMs" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "timeoutMs" : 1000
+    },
+    "title" : "Wait Timeout"
+  }, {
+    "action" : "pageList",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "List tabs/pages.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "List Pages"
+  }, {
+    "action" : "pageNew",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Create and switch to a new page.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "https://example.com"
+    },
+    "title" : "New Page"
+  }, {
+    "action" : "pageSwitch",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Switch active page.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "pageId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "pageId" : "p2"
+    },
+    "title" : "Switch Page"
+  }, {
+    "action" : "pageClose",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Close a page.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "pageId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "pageId" : "p2"
+    },
+    "title" : "Close Page"
+  }, {
+    "action" : "pageBringToFront",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Bring page to front and switch active page.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "pageId" : "p1"
+    },
+    "title" : "Bring Page To Front"
+  }, {
+    "action" : "events",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Read buffered console, request, response, popup, download, dialog and page errors.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "types" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "sinceId" : {
+          "type" : "integer"
+        },
+        "clear" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "types" : [ "console", "pageError" ]
+    },
+    "title" : "Read Events"
+  }, {
+    "action" : "cookiesGet",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Read browser context cookies.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "urls" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Get Cookies"
+  }, {
+    "action" : "cookiesSet",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Add browser context cookies.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "cookies" : {
+          "items" : {
+            "type" : "object",
+            "properties" : { }
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [ "sessionId", "cookies" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "cookies" : [ {
+        "value" : "1",
+        "name" : "sid",
+        "url" : "https://example.com"
+      } ]
+    },
+    "title" : "Set Cookies"
+  }, {
+    "action" : "cookiesClear",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Clear context cookies.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Clear Cookies"
+  }, {
+    "action" : "storageState",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Return storage state and optionally save it.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "stateName" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        },
+        "storageStatePath" : {
+          "type" : "string"
+        },
+        "indexedDB" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "stateName" : "login",
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Storage State"
+  }, {
+    "action" : "permissionsGrant",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Grant context permissions.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "permissions" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "origin" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "permissions" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "permissions" : [ "geolocation" ],
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Grant Permissions"
+  }, {
+    "action" : "permissionsClear",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Clear granted permissions.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Clear Permissions"
+  }, {
+    "action" : "networkRoute",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Abort, continue, or fulfill matching requests.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "routeAction" : {
+          "enum" : [ "abort", "continue", "fulfill" ],
+          "type" : "string"
+        },
+        "status" : {
+          "type" : "integer"
+        },
+        "body" : {
+          "type" : "string"
+        },
+        "headers" : {
+          "type" : "object",
+          "properties" : { }
+        },
+        "contentType" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "url" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "**/*.png",
+      "routeAction" : "abort"
+    },
+    "title" : "Route Network"
+  }, {
+    "action" : "networkUnroute",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Remove one route by routeId/url or all routes.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "routeId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "routeId" : "r1",
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Remove Route"
+  }, {
+    "action" : "networkSetOffline",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Toggle browser context offline mode.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "offline" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "offline" : true
+    },
+    "title" : "Set Offline"
+  }, {
+    "action" : "networkSetExtraHTTPHeaders",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Set extra HTTP headers.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "headers" : {
+          "type" : "object",
+          "properties" : { }
+        }
+      },
+      "required" : [ "sessionId", "headers" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "headers" : {
+        "X-Test" : "1"
+      }
+    },
+    "title" : "Set Headers"
+  }, {
+    "action" : "httpRequest",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Send HTTP request using browser context cookies.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "method" : {
+          "type" : "string"
+        },
+        "headers" : {
+          "type" : "object",
+          "properties" : { }
+        },
+        "query" : {
+          "type" : "object",
+          "properties" : { }
+        },
+        "data" : {
+          "type" : "object",
+          "properties" : { }
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        },
+        "maxBodyLength" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "url" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "method" : "GET",
+      "sessionId" : "br_xxx",
+      "url" : "https://example.com/api"
+    },
+    "title" : "HTTP Request"
+  }, {
+    "action" : "mouse",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Mouse click/doubleClick/move/down/up/wheel by coordinates.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "op" : {
+          "enum" : [ "click", "doubleClick", "move", "down", "up", "wheel" ],
+          "type" : "string"
+        },
+        "x" : {
+          "type" : "number"
+        },
+        "y" : {
+          "type" : "number"
+        },
+        "deltaX" : {
+          "type" : "number"
+        },
+        "deltaY" : {
+          "type" : "number"
+        }
+      },
+      "required" : [ "sessionId", "op", "x", "y" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "x" : 100,
+      "sessionId" : "br_xxx",
+      "op" : "click",
+      "y" : 200
+    },
+    "title" : "Mouse"
+  }, {
+    "action" : "keyboard",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Keyboard press/down/up/type/insertText.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "op" : {
+          "enum" : [ "press", "down", "up", "type", "insertText" ],
+          "type" : "string"
+        },
+        "key" : {
+          "type" : "string"
+        },
+        "text" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "op" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "op" : "press",
+      "sessionId" : "br_xxx",
+      "key" : "Enter"
+    },
+    "title" : "Keyboard"
+  }, {
+    "action" : "touchscreenTap",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Tap by coordinates.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "x" : {
+          "type" : "number"
+        },
+        "y" : {
+          "type" : "number"
+        }
+      },
+      "required" : [ "sessionId", "x", "y" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "x" : 100,
+      "y" : 200,
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Touchscreen Tap"
+  }, {
+    "action" : "viewportSet",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Set page viewport size.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "width" : {
+          "type" : "integer"
+        },
+        "height" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "width", "height" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "width" : 1280,
+      "height" : 720
+    },
+    "title" : "Set Viewport"
+  }, {
+    "action" : "geolocationSet",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Set context geolocation.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "latitude" : {
+          "type" : "number"
+        },
+        "longitude" : {
+          "type" : "number"
+        },
+        "accuracy" : {
+          "type" : "number"
+        }
+      },
+      "required" : [ "sessionId", "latitude", "longitude" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "latitude" : 30.0,
+      "sessionId" : "br_xxx",
+      "longitude" : 120.0
+    },
+    "title" : "Set Geolocation"
+  }, {
+    "action" : "emulateMedia",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Set media/color/reduced motion emulation.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "media" : {
+          "enum" : [ "screen", "print" ],
+          "type" : "string"
+        },
+        "colorScheme" : {
+          "enum" : [ "light", "dark", "no-preference" ],
+          "type" : "string"
+        },
+        "reducedMotion" : {
+          "enum" : [ "reduce", "no-preference" ],
+          "type" : "string"
+        },
+        "forcedColors" : {
+          "enum" : [ "active", "none" ],
+          "type" : "string"
+        },
+        "contrast" : {
+          "enum" : [ "more", "no-preference" ],
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "exampleArgs" : {
+      "colorScheme" : "dark",
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Emulate Media"
+  }, {
+    "action" : "advancedAction",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    },
+    "description" : "Escape hatch for less common operations. Params are op, target, args, options.",
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            }
+          }
+        },
+        "args" : {
+          "type" : "object",
+          "properties" : { }
+        },
+        "options" : {
+          "type" : "object",
+          "properties" : { }
+        }
+      },
+      "required" : [ "sessionId", "op" ]
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "escapeHatch" : true
+    },
+    "exampleArgs" : {
+      "op" : "click",
+      "target" : {
+        "ref" : "e1"
+      },
+      "sessionId" : "br_xxx"
+    },
+    "title" : "Advanced Playwright Action"
+  } ]
 }

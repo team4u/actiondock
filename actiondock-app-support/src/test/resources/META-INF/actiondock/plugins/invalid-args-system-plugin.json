@@ -1,0 +1,31 @@
+{
+  "pluginId": "invalid-args-system-plugin",
+  "name": "Invalid Args System Plugin",
+  "description": "Test system plugin with configurable defaults.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "prefix": {
+        "type": "string",
+        "title": "Prefix"
+      }
+    }
+  },
+  "defaultConfig": {
+    "prefix": "system"
+  },
+  "actions": [
+    {
+      "action": "explode",
+      "title": "Explode",
+      "description": "Explode with plugin config.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "outputSchema": {
+        "type": "object"
+      }
+    }
+  ]
+}
