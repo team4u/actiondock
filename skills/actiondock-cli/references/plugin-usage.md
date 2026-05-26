@@ -4,6 +4,11 @@
 
 本文件只覆盖 `plugin` 命令。脚本执行见 `references/script-execution.md`，脚本源码内 `plugins.invoke(...)` 见 `references/script-runtime-calls.md`。
 
+专项系统插件的场景化指引见：
+
+- 浏览器自动化 / `actiondock-browser`：`references/browser-plugin.md`
+- 项目知识库浏览 / `actiondock-workspace`：`references/project-knowledge.md`
+
 ---
 
 ## 1. 渐进式浏览插件

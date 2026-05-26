@@ -2,6 +2,8 @@
 
 当问题依赖某个业务项目自身的文档、数据库说明、流程说明或 runbook 时，先不要直接扫源码，先通过 ActionDock 解析项目知识入口。
 
+本文件只覆盖项目知识入口解析和 `actiondock-workspace` 系统插件的常见场景。通用 `plugin` 命令、动态 flag、`--args-json` / `--args-file` 规则见 `references/plugin-usage.md`。
+
 ## 目标
 
 用最少的平台能力，稳定拿到：
@@ -108,6 +110,12 @@ actiondock repository sync <repositoryId> --json
 | `executeShellCommand` | 在项目目录下执行 Shell 命令（Linux/macOS 默认 bash 兼容 Shell，Windows 默认 PowerShell、失败时回退 cmd；可通过 `shellPath` 指定 Shell，并按常见 Shell 自动匹配参数，`allowedCommands` 限制可执行命令，支持超时设置；失败时返回自动探测到的可用 shell/命令环境） |
 | `getSystemInfo` | 探测系统信息：工作区路径、系统环境（OS、Java 版本）、PATH 环境变量、可用 Shell（bash/sh/PowerShell/cmd）、常用命令版本（bash、python、python3、node、npm、npx、git、java、mvn），支持 `additionalCommands` 补充探测更多命令 |
 
+参数使用原则：
+
+- `path`、`query`、`viewRange`、`command`、`regex`、`caseSensitive`、`contextLines`、`maxResults` 这类简单顶层字段，优先直接写 flag。
+- `includeGlobs`、`excludeGlobs`、`additionalCommands`、`allowedCommands`、`env` 这类数组或对象字段，使用 `--args-json` / `--args-file`。
+- 混合传参时，`--args-json` / `--args-file` 提供复杂字段，动态 flag 提供或覆盖简单字段。
+
 通过 CLI 调用：
 
 ```bash
@@ -119,23 +127,36 @@ actiondock plugin invoke actiondock-workspace viewTextFile --path <root>/docs/ar
 
 # 读取文件指定行范围
 actiondock plugin invoke actiondock-workspace viewTextFile \
-  --args-json '{"path":"<root>/README.md","viewRange":"1,50"}' --json
+  --path <root>/README.md \
+  --viewRange 1,50 \
+  --json
 
-# 查找 Java 源文件，默认会跳过 target、node_modules、.git 等目录
+# 查找 Java 源文件；数组字段用 JSON，path 用扁平 flag
 actiondock plugin invoke actiondock-workspace findFiles \
-  --args-json '{"path":"<root>","includeGlobs":["**/*.java"],"excludeGlobs":["**/*Test.java"]}' --json
+  --path <root> \
+  --args-json '{"includeGlobs":["**/*.java"],"excludeGlobs":["**/*Test.java"]}' \
+  --json
 
-# 搜索文本。query 默认按正则解释；普通字符串搜索可传 regex=false
+# 搜索文本。query 默认按正则解释；数组字段用 JSON
 actiondock plugin invoke actiondock-workspace searchText \
-  --args-json '{"path":"<root>","query":"TODO|FIXME","includeGlobs":["**/*.java"],"contextLines":1}' --json
+  --path <root> \
+  --query 'TODO|FIXME' \
+  --contextLines 1 \
+  --args-json '{"includeGlobs":["**/*.java"]}' \
+  --json
 
 # 普通字符串、不区分大小写搜索
 actiondock plugin invoke actiondock-workspace searchText \
-  --args-json '{"path":"<root>","query":"actiondock","regex":false,"caseSensitive":false}' --json
+  --path <root> \
+  --query actiondock \
+  --regex false \
+  --caseSensitive false \
+  --json
 
 # 在项目目录下执行 Shell 命令
 actiondock plugin invoke actiondock-workspace executeShellCommand \
-  --args-json '{"command":"git status --short"}' --json
+  --command 'git status --short' \
+  --json
 
 # 探测系统信息（工作区、Shell、常用命令版本等）
 actiondock plugin invoke actiondock-workspace getSystemInfo --json
