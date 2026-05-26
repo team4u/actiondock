@@ -590,7 +590,9 @@ class PluginRuntimeServiceTest {
         assertThat(references).extracting(PluginReferenceView::getPluginId)
                 .containsExactly("actiondock-browser");
         assertThat(references.getFirst().getActions()).extracting(PluginActionView::getAction)
-                .contains("sessionCreate", "observe", "act", "evaluate", "wait", "pages", "events");
+                .contains("sessionCreate", "observe", "capabilities", "goto", "click", "fill",
+                        "setChecked", "waitForSelector", "pageList", "advancedAction", "evaluate", "events")
+                .doesNotContain("act", "wait", "pages");
     }
 
     @Test

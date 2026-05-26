@@ -4,6 +4,7 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.AriaRole;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
@@ -12,14 +13,27 @@ final class TargetResolver {
         if (target == null || target.isEmpty()) {
             throw new IllegalArgumentException("target is required for this operation");
         }
+        Map<String, Object> resolvedTarget = resolveTarget(session, pageId, target);
+
+        Locator locator = baseLocator(page, resolvedTarget);
+        int index = Args.optionalInt(resolvedTarget, "index", 0);
+        return index > 0 ? locator.nth(index) : locator;
+    }
+
+    private Map<String, Object> resolveTarget(BrowserSession session, String pageId, Map<String, Object> target) {
         String ref = Args.optionalString(target, "ref", null);
-        if (!Args.isBlank(ref)) {
-            return locator(session, page, pageId, session.ref(pageId, ref));
+        if (Args.isBlank(ref)) {
+            return target;
         }
 
-        Locator locator = baseLocator(page, target);
-        int index = Args.optionalInt(target, "index", 0);
-        return index > 0 ? locator.nth(index) : locator;
+        Map<String, Object> resolvedTarget = new LinkedHashMap<>(session.ref(pageId, ref));
+        resolvedTarget.remove("ref");
+        target.forEach((key, value) -> {
+            if (!"ref".equals(key)) {
+                resolvedTarget.put(key, value);
+            }
+        });
+        return resolvedTarget;
     }
 
     private Locator baseLocator(Page page, Map<String, Object> target) {
