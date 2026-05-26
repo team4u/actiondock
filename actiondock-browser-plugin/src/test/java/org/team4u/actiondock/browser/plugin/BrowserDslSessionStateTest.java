@@ -21,6 +21,23 @@ class BrowserDslSessionStateTest {
     }
 
     @Test
+    void generatesPublicSessionNameForOpenWhenOmitted() {
+        BrowserDslSessions sessions = new BrowserDslSessions(mock(BrowserGatewayService.class));
+
+        String generated = sessions.sessionNameForOpen(new ScriptPluginContext(), Map.of());
+
+        assertThat(generated).startsWith("s_").hasSize(12);
+    }
+
+    @Test
+    void usesExplicitSessionNameForOpenWhenProvided() {
+        BrowserDslSessions sessions = new BrowserDslSessions(mock(BrowserGatewayService.class));
+
+        assertThat(sessions.sessionNameForOpen(new ScriptPluginContext(), Map.of("session", " admin ")))
+                .isEqualTo("admin");
+    }
+
+    @Test
     void resolvesNamedSessionAcrossDslInstances() throws Exception {
         ScriptPluginContext context = new ScriptPluginContext();
         BrowserGatewayService service = mock(BrowserGatewayService.class);

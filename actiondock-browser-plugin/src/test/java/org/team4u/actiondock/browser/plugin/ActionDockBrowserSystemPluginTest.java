@@ -98,7 +98,15 @@ class ActionDockBrowserSystemPluginTest {
                 .findFirst()
                 .orElseThrow()
                 .getExampleArgs();
-        assertThat(openAction).containsEntry("session", "run1");
+        assertThat(openAction).doesNotContainKeys("session", "url");
+        Map<String, Object> openHints = manifest.getActions().stream()
+                .filter(action -> "open".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getAiHints();
+        assertThat(openHints)
+                .containsEntry("sessionGeneratedWhenOmitted", true)
+                .doesNotContainKey("sessionRequired");
 
         Map<String, Object> sessionListSchema = manifest.getActions().stream()
                 .filter(action -> "sessionList".equals(action.getAction()))

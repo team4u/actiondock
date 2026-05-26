@@ -133,11 +133,11 @@ final class BrowserDslActions implements BrowserActionRegistrar {
     }
 
     private Map<String, Object> open(ScriptPluginContext context, Map<String, Object> args) throws Exception {
-        String session = sessions.sessionName(args);
+        String session = sessions.sessionNameForOpen(context, args);
         if (Args.optionalBoolean(args, "fresh", false)) {
             tabs.forgetSession(context, session);
         }
-        String sessionId = sessions.open(context, args, Args.optionalBoolean(args, "fresh", false));
+        String sessionId = sessions.open(context, session, args, Args.optionalBoolean(args, "fresh", false));
         BrowserDslContext dsl = new BrowserDslContext(context, args, session, sessionId, tabs.pageId(context, session, args));
         return pageActions.open(dsl);
     }

@@ -17,19 +17,19 @@ final class BrowserActionSpecs {
         Map<String, Object> result = Results.ok();
         result.put("actions", actions());
         result.put("selector", Map.of("ref", "@e1 from snapshot", "css", "css:#submit", "selector", "#submit or .item"));
-        result.put("workflow", List.of("Choose a session name and pass --session on browser-context actions.", "open --session run1 -> snapshot --session run1 -> click --session run1 --target @e1", "Use snapshot elements[].ref as --target @e1.", "Use findClick/findFill for semantic locators."));
+        result.put("workflow", List.of("Call open first; if --session is omitted, use the returned session value in later actions.", "open -> snapshot --session <returned-session> -> click --session <returned-session> --target @e1", "Use snapshot elements[].ref as --target @e1.", "Use findClick/findFill for semantic locators."));
         return result;
     }
 
     static List<Map<String, Object>> actions() {
         List<Map<String, Object>> actions = new ArrayList<>();
-        add(actions, "open", "Open", "Open or reuse a named browser session and optionally navigate.", schema(
+        add(actions, "open", "Open", "Create or reuse a browser session and optionally navigate.", schema(
                 p("session", str()), p("url", str()), p("fresh", bool()), p("browser", enumSchema("chromium", "firefox", "webkit")),
                 p("headless", bool()), p("timeoutMs", integer()), p("waitUntil", enumSchema("load", "domcontentloaded", "networkidle", "commit")),
                 p("viewportWidth", integer()), p("viewportHeight", integer()), p("userAgent", str()), p("locale", str()),
                 p("timezoneId", str()), p("stateName", str()), p("storageStatePath", str()), p("headersJson", str()),
                 p("credentialsJson", str()), p("label", str())
-        ), pageResult(), Map.of("url", "https://example.com"));
+        ), pageResult(), Map.of());
         add(actions, "snapshot", "Snapshot", "Read page text, refs, forms, frames, events, and suggestions.", pageSchema(
                 p("limit", integer()), p("maxTextLength", integer())
         ), snapshotResult(), Map.of("limit", 80));
@@ -194,7 +194,7 @@ final class BrowserActionSpecs {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> exampleArgs(String action, Map<String, Object> inputSchema, Map<String, Object> exampleArgs) {
         Map<String, Object> properties = (Map<String, Object>) inputSchema.getOrDefault("properties", Map.of());
-        if (!properties.containsKey("session") || exampleArgs.containsKey("session")) {
+        if (!properties.containsKey("session") || exampleArgs.containsKey("session") || "open".equals(action)) {
             return exampleArgs;
         }
         Map<String, Object> result = new LinkedHashMap<>();
@@ -209,8 +209,11 @@ final class BrowserActionSpecs {
         hints.put("forAi", true);
         hints.put("flatArgs", true);
         Map<String, Object> properties = (Map<String, Object>) inputSchema.getOrDefault("properties", Map.of());
-        if (properties.containsKey("session") && !"sessionList".equals(action)) {
+        if (properties.containsKey("session") && !List.of("open", "sessionList").contains(action)) {
             hints.put("sessionRequired", true);
+        }
+        if ("open".equals(action)) {
+            hints.put("sessionGeneratedWhenOmitted", true);
         }
         if (List.of("eval", "batch").contains(action)) hints.put("escapeHatch", true);
         return hints;

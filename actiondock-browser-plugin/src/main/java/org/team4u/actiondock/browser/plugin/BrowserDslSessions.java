@@ -4,6 +4,7 @@ import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 final class BrowserDslSessions {
@@ -24,6 +25,21 @@ final class BrowserDslSessions {
         return session.trim();
     }
 
+    String sessionNameForOpen(ScriptPluginContext context, Map<String, Object> args) {
+        String session = Args.optionalString(args, "session", null);
+        if (!Args.isBlank(session)) {
+            return session.trim();
+        }
+        String ownerPrefix = BrowserSessionManager.ownerKey(context) + "\u0000";
+        for (int attempt = 0; attempt < 10; attempt++) {
+            String candidate = "s_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+            if (!sessionIds.containsKey(ownerPrefix + candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Cannot allocate browser session name");
+    }
+
     String resolveRequired(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         String session = sessionName(args);
         String key = key(context, session);
@@ -40,8 +56,7 @@ final class BrowserDslSessions {
         }
     }
 
-    String open(ScriptPluginContext context, Map<String, Object> args, boolean fresh) throws Exception {
-        String session = sessionName(args);
+    String open(ScriptPluginContext context, String session, Map<String, Object> args, boolean fresh) throws Exception {
         String key = key(context, session);
         String sessionId = sessionIds.get(key);
         if (!fresh && !Args.isBlank(sessionId)) {
