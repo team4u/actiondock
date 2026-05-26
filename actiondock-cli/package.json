@@ -31,7 +31,7 @@
     "build:runtime": "node ./scripts/build-runtime.mjs",
     "jdeploy:package": "jdeploy package && node ./scripts/patch-jdeploy-bundle.mjs",
     "pack:dry-run": "npm pack --dry-run",
-    "prepack": "npm run build && npm run build:runtime && npm run jdeploy:package"
+    "prepack": "npm run build && npm run build:runtime && npm run jdeploy:package && cp ../README.md ./README.md"
   },
   "dependencies": {
     "@oclif/core": "^4.10.6",
