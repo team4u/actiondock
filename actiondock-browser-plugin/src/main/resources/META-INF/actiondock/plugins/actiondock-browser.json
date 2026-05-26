@@ -1,4 +1,5 @@
 {
+  "id" : "actiondock-browser",
   "pluginId" : "actiondock-browser",
   "name" : "ActionDock Browser",
   "description" : "AI-first Playwright browser gateway. Actions are intentionally precise so AI can call browser operations without guessing hidden op-specific params.",

@@ -3,7 +3,9 @@ package org.team4u.actiondock.browser.plugin;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginManifestLoader;
+import org.team4u.actiondock.plugin.api.PluginObjectMappers;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -110,6 +112,18 @@ class ActionDockBrowserSystemPluginTest {
         assertThat(plugin.id()).isEqualTo("actiondock-browser");
         assertThat(manifest.getPluginId()).isEqualTo("actiondock-browser");
         assertThat(manifest.getVersion()).isEqualTo("0.1.0");
+    }
+
+    @Test
+    void manifestCarriesLegacyIdAliasForInstallers() throws Exception {
+        try (InputStream inputStream = ActionDockBrowserPluginExtension.class.getClassLoader()
+                .getResourceAsStream("META-INF/actiondock/plugins/actiondock-browser.json")) {
+            assertThat(inputStream).isNotNull();
+            Map<String, Object> manifest = PluginObjectMappers.DEFAULT.readValue(inputStream, Map.class);
+            assertThat(manifest)
+                    .containsEntry("id", "actiondock-browser")
+                    .containsEntry("pluginId", "actiondock-browser");
+        }
     }
 
     @SuppressWarnings("unchecked")

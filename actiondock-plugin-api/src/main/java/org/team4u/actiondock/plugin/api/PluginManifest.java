@@ -1,5 +1,7 @@
 package org.team4u.actiondock.plugin.api;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.Map;
  * @author jay.wu
  */
 public class PluginManifest {
+    @JsonAlias("id")
     private String pluginId;
     private String name;
     private String description;

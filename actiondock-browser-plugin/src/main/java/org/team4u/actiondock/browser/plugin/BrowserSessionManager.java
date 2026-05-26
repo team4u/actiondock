@@ -10,7 +10,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 final class BrowserSessionManager {
-    private final ConcurrentHashMap<String, BrowserSession> sessions = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, BrowserSession> sharedSessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, BrowserSession> sessions = sharedSessions;
 
     String newSessionId() {
         return "br_" + UUID.randomUUID().toString().replace("-", "");
