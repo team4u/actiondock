@@ -151,7 +151,8 @@ final class BrowserDslPageActions {
 
         Map<String, Object> result = service.execute(dsl.context(), executeCall(dsl, internalOp(op), target, values, options));
         result.put("session", dsl.session());
-        result.put("op", op);
+        result.remove("op");
+        result.put("action", actionName(op));
         return tabs.transformResult(dsl.context(), dsl.session(), result);
     }
 
@@ -231,7 +232,8 @@ final class BrowserDslPageActions {
 
     private Map<String, Object> finish(BrowserDslContext dsl, String op, Map<String, Object> result) {
         result.put("session", dsl.session());
-        result.put("op", op);
+        result.remove("op");
+        result.put("action", "find" + Character.toUpperCase(op.charAt(0)) + op.substring(1));
         return tabs.transformResult(dsl.context(), dsl.session(), result);
     }
 
@@ -287,6 +289,14 @@ final class BrowserDslPageActions {
             case "forward" -> "goForward";
             case "addScript" -> "addScriptTag";
             case "addStyle" -> "addStyleTag";
+            default -> op;
+        };
+    }
+
+    private static String actionName(String op) {
+        return switch (op) {
+            case "doubleClick" -> "dblclick";
+            case "scrollinto" -> "scrollIntoView";
             default -> op;
         };
     }

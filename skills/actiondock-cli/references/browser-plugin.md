@@ -13,8 +13,8 @@ actiondock plugin invoke actiondock-browser <action> --flag value --json
 ## 标准工作流
 
 ```bash
-actiondock plugin invoke actiondock-browser open --url https://example.com --json
-actiondock plugin invoke actiondock-browser snapshot --limit 80 --json > /tmp/browser-snapshot.json
+actiondock plugin invoke actiondock-browser open --session run1 --url https://example.com --json
+actiondock plugin invoke actiondock-browser snapshot --session run1 --limit 80 --json > /tmp/browser-snapshot.json
 ```
 
 `snapshot` 返回：
@@ -31,7 +31,7 @@ actiondock plugin invoke actiondock-browser snapshot --limit 80 --json > /tmp/br
 后续操作直接把 `elements[].ref` 作为字符串传给 `--target`：
 
 ```bash
-actiondock plugin invoke actiondock-browser click --target @e2 --json
+actiondock plugin invoke actiondock-browser click --session run1 --target @e2 --json
 ```
 
 ## 目标选择器
@@ -45,13 +45,13 @@ actiondock plugin invoke actiondock-browser click --target @e2 --json
 语义定位使用专门 action：
 
 ```bash
-actiondock plugin invoke actiondock-browser findClick \
+actiondock plugin invoke actiondock-browser findClick --session run1 \
   --by role \
   --query button \
   --name Submit \
   --json
 
-actiondock plugin invoke actiondock-browser findFill \
+actiondock plugin invoke actiondock-browser findFill --session run1 \
   --by label \
   --query Email \
   --text hello@example.com \
@@ -65,117 +65,119 @@ actiondock plugin invoke actiondock-browser findFill \
 ### 点击和输入
 
 ```bash
-actiondock plugin invoke actiondock-browser click --target @e2 --json
-actiondock plugin invoke actiondock-browser dblclick --target @e2 --json
-actiondock plugin invoke actiondock-browser fill --target @e3 --text hello@example.com --json
-actiondock plugin invoke actiondock-browser type --target @e3 --text hello --json
-actiondock plugin invoke actiondock-browser press --key Enter --json
+actiondock plugin invoke actiondock-browser click --session run1 --target @e2 --json
+actiondock plugin invoke actiondock-browser dblclick --session run1 --target @e2 --json
+actiondock plugin invoke actiondock-browser fill --session run1 --target @e3 --text hello@example.com --json
+actiondock plugin invoke actiondock-browser type --session run1 --target @e3 --text hello --json
+actiondock plugin invoke actiondock-browser press --session run1 --key Enter --json
 ```
 
 复选框和单选框：
 
 ```bash
-actiondock plugin invoke actiondock-browser check --target @e4 --json
-actiondock plugin invoke actiondock-browser uncheck --target @e4 --json
+actiondock plugin invoke actiondock-browser check --session run1 --target @e4 --json
+actiondock plugin invoke actiondock-browser uncheck --session run1 --target @e4 --json
 ```
 
 选择框、上传、拖拽：
 
 ```bash
-actiondock plugin invoke actiondock-browser select --target @e5 --value US --json
-actiondock plugin invoke actiondock-browser upload --target @e6 --path ./upload.txt --json
-actiondock plugin invoke actiondock-browser drag --target @e1 --to @e2 --json
+actiondock plugin invoke actiondock-browser select --session run1 --target @e5 --value US --json
+actiondock plugin invoke actiondock-browser upload --session run1 --target @e6 --path ./upload.txt --json
+actiondock plugin invoke actiondock-browser drag --session run1 --target @e1 --to @e2 --json
 ```
 
 ### 读取和判断
 
 ```bash
-actiondock plugin invoke actiondock-browser getTitle --json
-actiondock plugin invoke actiondock-browser getUrl --json
-actiondock plugin invoke actiondock-browser getText --target @e1 --json
-actiondock plugin invoke actiondock-browser getAttr --target @e1 --name href --json
+actiondock plugin invoke actiondock-browser getTitle --session run1 --json
+actiondock plugin invoke actiondock-browser getUrl --session run1 --json
+actiondock plugin invoke actiondock-browser getText --session run1 --target @e1 --json
+actiondock plugin invoke actiondock-browser getAttr --session run1 --target @e1 --name href --json
 
-actiondock plugin invoke actiondock-browser isVisible --target @e1 --json
-actiondock plugin invoke actiondock-browser isEnabled --target @e1 --json
-actiondock plugin invoke actiondock-browser isChecked --target @e1 --json
+actiondock plugin invoke actiondock-browser isVisible --session run1 --target @e1 --json
+actiondock plugin invoke actiondock-browser isEnabled --session run1 --target @e1 --json
+actiondock plugin invoke actiondock-browser isChecked --session run1 --target @e1 --json
 ```
 
 ### 等待
 
 ```bash
-actiondock plugin invoke actiondock-browser waitForLoad --state load --json
-actiondock plugin invoke actiondock-browser waitForElement --target @e1 --state visible --json
-actiondock plugin invoke actiondock-browser waitForText --text Welcome --json
-actiondock plugin invoke actiondock-browser waitForUrl --url '**/dashboard' --json
-actiondock plugin invoke actiondock-browser waitForResponse --value '**/api/**' --json
-actiondock plugin invoke actiondock-browser waitForTimeout --timeoutMs 1000 --json
+actiondock plugin invoke actiondock-browser waitForLoad --session run1 --state load --json
+actiondock plugin invoke actiondock-browser waitForElement --session run1 --target @e1 --state visible --json
+actiondock plugin invoke actiondock-browser waitForText --session run1 --text Welcome --json
+actiondock plugin invoke actiondock-browser waitForUrl --session run1 --url '**/dashboard' --json
+actiondock plugin invoke actiondock-browser waitForResponse --session run1 --value '**/api/**' --json
+actiondock plugin invoke actiondock-browser waitForTimeout --session run1 --timeoutMs 1000 --json
 ```
 
 页面跳转或明显 DOM 更新后，重新 `snapshot`，再使用新的 `@e1` 引用。
 
 ## 会话和 Tab
 
-默认会话名是 `default`。需要隔离时传 `--session`：
+浏览器上下文动作必须显式传 `--session`。每个自动化流程使用自己的 session 名，避免多个流程误共享或误关闭同一个浏览器：
 
 ```bash
-actiondock plugin invoke actiondock-browser open --session admin --url https://example.com --json
-actiondock plugin invoke actiondock-browser snapshot --session admin --json
+actiondock plugin invoke actiondock-browser open --session run1 --url https://example.com --json
+actiondock plugin invoke actiondock-browser snapshot --session run1 --json
 ```
+
+`sessionList` 是例外，不需要 `--session`。
 
 Tab：
 
 ```bash
-actiondock plugin invoke actiondock-browser tabList --json
-actiondock plugin invoke actiondock-browser tabNew --url https://docs.example.com --label docs --json
-actiondock plugin invoke actiondock-browser tabSwitch --tab docs --json
-actiondock plugin invoke actiondock-browser tabClose --tab docs --json
+actiondock plugin invoke actiondock-browser tabList --session run1 --json
+actiondock plugin invoke actiondock-browser tabNew --session run1 --url https://docs.example.com --label docs --json
+actiondock plugin invoke actiondock-browser tabSwitch --session run1 --tab docs --json
+actiondock plugin invoke actiondock-browser tabClose --session run1 --tab docs --json
 ```
 
 查看或关闭会话：
 
 ```bash
-actiondock plugin invoke actiondock-browser sessionInfo --json
+actiondock plugin invoke actiondock-browser sessionInfo --session run1 --json
 actiondock plugin invoke actiondock-browser sessionList --json
-actiondock plugin invoke actiondock-browser sessionClose --json
+actiondock plugin invoke actiondock-browser sessionClose --session run1 --json
 ```
 
 ## 截图、PDF、弹窗
 
 ```bash
-actiondock plugin invoke actiondock-browser screenshot --name page --fullPage true --json
-actiondock plugin invoke actiondock-browser screenshot --target @e1 --name element --json
-actiondock plugin invoke actiondock-browser pdf --name page --format A4 --json
+actiondock plugin invoke actiondock-browser screenshot --session run1 --name page --fullPage true --json
+actiondock plugin invoke actiondock-browser screenshot --session run1 --target @e1 --name element --json
+actiondock plugin invoke actiondock-browser pdf --session run1 --name page --format A4 --json
 ```
 
 Dialog：
 
 ```bash
-actiondock plugin invoke actiondock-browser dialogList --json
-actiondock plugin invoke actiondock-browser dialogAccept --id d1 --json
-actiondock plugin invoke actiondock-browser dialogDismiss --id d1 --json
+actiondock plugin invoke actiondock-browser dialogList --session run1 --json
+actiondock plugin invoke actiondock-browser dialogAccept --session run1 --id d1 --json
+actiondock plugin invoke actiondock-browser dialogDismiss --session run1 --id d1 --json
 ```
 
 ## Cookie、Storage、网络
 
 ```bash
-actiondock plugin invoke actiondock-browser cookiesList --json
-actiondock plugin invoke actiondock-browser cookiesSet --name sid --value 1 --url https://example.com --json
-actiondock plugin invoke actiondock-browser cookiesClear --json
+actiondock plugin invoke actiondock-browser cookiesList --session run1 --json
+actiondock plugin invoke actiondock-browser cookiesSet --session run1 --name sid --value 1 --url https://example.com --json
+actiondock plugin invoke actiondock-browser cookiesClear --session run1 --json
 
-actiondock plugin invoke actiondock-browser storageState --stateName login --json
-actiondock plugin invoke actiondock-browser storageGet --area local --key token --json
-actiondock plugin invoke actiondock-browser storageSet --area local --key token --value abc --json
-actiondock plugin invoke actiondock-browser storageClear --area local --json
+actiondock plugin invoke actiondock-browser storageState --session run1 --stateName login --json
+actiondock plugin invoke actiondock-browser storageGet --session run1 --area local --key token --json
+actiondock plugin invoke actiondock-browser storageSet --session run1 --area local --key token --value abc --json
+actiondock plugin invoke actiondock-browser storageClear --session run1 --area local --json
 
-actiondock plugin invoke actiondock-browser networkRequest --url https://example.com/api/me --method GET --json
-actiondock plugin invoke actiondock-browser networkRoute --url '**/*.png' --routeAction abort --json
-actiondock plugin invoke actiondock-browser networkOffline --value true --json
+actiondock plugin invoke actiondock-browser networkRequest --session run1 --url https://example.com/api/me --method GET --json
+actiondock plugin invoke actiondock-browser networkRoute --session run1 --url '**/*.png' --routeAction abort --json
+actiondock plugin invoke actiondock-browser networkOffline --session run1 --value true --json
 ```
 
 复杂 JSON 用字符串字段：
 
 ```bash
-actiondock plugin invoke actiondock-browser networkHeaders \
+actiondock plugin invoke actiondock-browser networkHeaders --session run1 \
   --headersJson '{"X-Test":"1"}' \
   --json
 ```
@@ -185,7 +187,7 @@ actiondock plugin invoke actiondock-browser networkHeaders \
 多步流程可以放到 `batch --commands`，每行一条短命令：
 
 ```bash
-actiondock plugin invoke actiondock-browser batch \
+actiondock plugin invoke actiondock-browser batch --session run1 \
   --commands $'open https://example.com\nsnapshot\nclick @e2\nwait url **/done' \
   --bail true \
   --json
@@ -196,11 +198,11 @@ actiondock plugin invoke actiondock-browser batch \
 常规动作不能满足时，用 `eval`：
 
 ```bash
-actiondock plugin invoke actiondock-browser eval \
+actiondock plugin invoke actiondock-browser eval --session run1 \
   --expression '() => document.body.innerText' \
   --json
 
-actiondock plugin invoke actiondock-browser eval \
+actiondock plugin invoke actiondock-browser eval --session run1 \
   --scope locator \
   --target @e1 \
   --expression 'el => el.outerHTML' \

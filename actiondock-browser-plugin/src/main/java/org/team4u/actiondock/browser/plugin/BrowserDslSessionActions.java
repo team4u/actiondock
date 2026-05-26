@@ -1,5 +1,6 @@
 package org.team4u.actiondock.browser.plugin;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 final class BrowserDslSessionActions {
@@ -18,11 +19,12 @@ final class BrowserDslSessionActions {
     }
 
     Map<String, Object> sessionList(BrowserDslContext dsl) {
-        return finish(dsl, "sessionList", service.sessionList(dsl.context()));
+        return finish(dsl, "sessionList", namedSessionList(dsl, service.sessionList(dsl.context())));
     }
 
     Map<String, Object> sessionClose(BrowserDslContext dsl) {
         sessions.forget(dsl.context(), dsl.session());
+        tabs.forgetSession(dsl.context(), dsl.session());
         return finish(dsl, "sessionClose", service.closeSession(dsl.context(), dsl.callArgs()));
     }
 
@@ -55,8 +57,38 @@ final class BrowserDslSessionActions {
     }
 
     private Map<String, Object> finish(BrowserDslContext dsl, String action, Map<String, Object> result) {
-        result.put("session", dsl.session());
+        if (!Args.isBlank(dsl.session())) {
+            result.put("session", dsl.session());
+        }
+        result.remove("op");
         result.put("action", action);
         return tabs.transformResult(dsl.context(), dsl.session(), result);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> namedSessionList(BrowserDslContext dsl, Map<String, Object> result) {
+        Map<String, String> names = sessions.namesForOwner(dsl.context());
+        Object sessionsValue = result.get("sessions");
+        if (!(sessionsValue instanceof java.util.List<?> list)) {
+            return result;
+        }
+        java.util.List<Map<String, Object>> transformed = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Map<String, Object> session = new LinkedHashMap<>();
+                map.forEach((key, value) -> {
+                    if (!"sessionId".equals(String.valueOf(key))) {
+                        session.put(String.valueOf(key), value);
+                    }
+                });
+                Object sessionId = map.get("sessionId");
+                if (sessionId != null && names.containsKey(String.valueOf(sessionId))) {
+                    session.put("session", names.get(String.valueOf(sessionId)));
+                }
+                transformed.add(session);
+            }
+        }
+        result.put("sessions", transformed);
+        return result;
     }
 }

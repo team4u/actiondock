@@ -17,7 +17,7 @@ final class BrowserActionSpecs {
         Map<String, Object> result = Results.ok();
         result.put("actions", actions());
         result.put("selector", Map.of("ref", "@e1 from snapshot", "css", "css:#submit", "selector", "#submit or .item"));
-        result.put("workflow", List.of("open -> snapshot -> click/fill/getText", "Use snapshot elements[].ref as --target @e1.", "Use findClick/findFill for semantic locators."));
+        result.put("workflow", List.of("Choose a session name and pass --session on browser-context actions.", "open --session run1 -> snapshot --session run1 -> click --session run1 --target @e1", "Use snapshot elements[].ref as --target @e1.", "Use findClick/findFill for semantic locators."));
         return result;
     }
 
@@ -64,7 +64,7 @@ final class BrowserActionSpecs {
         addArtifactsAndDialog(actions);
         addStateAndNetwork(actions);
         add(actions, "eval", "Eval", "Run JavaScript on page or locator.", pageSchema(p("scope", enumSchema("page", "locator", "all")), p("target", str()), p("expression", str()), p("argJson", str())), valueResult(), Map.of("expression", "() => document.title"));
-        add(actions, "batch", "Batch", "Run newline-separated browser DSL commands.", schema(p("session", str()), p("commands", str()), p("bail", bool())), obj(props(p("ok", bool()), p("results", arr(object())), p("count", integer()))), Map.of("commands", "open https://example.com\nsnapshot\nclick @e2"));
+        add(actions, "batch", "Batch", "Run newline-separated browser DSL commands.", schema(p("session", str()), p("commands", str()), p("bail", bool())), obj(props(p("ok", bool()), p("results", arr(object())), p("count", integer()))), Map.of("session", "run1", "commands", "open https://example.com\nsnapshot\nclick @e2"));
         add(actions, "capabilities", "Capabilities", "Return action schemas and workflow hints.", schema(), obj(props(p("ok", bool()), p("actions", arr(actionDescriptorSchema())), p("selector", object()), p("workflow", arr(str())))), Map.of());
         return actions;
     }
@@ -97,14 +97,14 @@ final class BrowserActionSpecs {
     }
 
     private static void addTabsAndSessions(List<Map<String, Object>> actions) {
-        add(actions, "tabList", "Tab List", "List tabs.", schema(p("session", str())), pageResult(), Map.of());
-        add(actions, "tabNew", "Tab New", "Create and switch to a new tab.", schema(p("session", str()), p("url", str()), p("label", str())), pageResult(), Map.of("url", "https://example.com", "label", "docs"));
+        add(actions, "tabList", "Tab List", "List tabs.", schema(p("session", str())), pageResult(), Map.of("session", "run1"));
+        add(actions, "tabNew", "Tab New", "Create and switch to a new tab.", schema(p("session", str()), p("url", str()), p("label", str())), pageResult(), Map.of("session", "run1", "url", "https://example.com", "label", "docs"));
         for (String action : List.of("tabSwitch", "tabClose", "tabBringToFront")) {
-            add(actions, action, title(action), "Operate a tab by id or label.", schema(p("session", str()), p("tab", str())), pageResult(), Map.of("tab", "docs"));
+            add(actions, action, title(action), "Operate a tab by id or label.", schema(p("session", str()), p("tab", str())), pageResult(), Map.of("session", "run1", "tab", "docs"));
         }
-        add(actions, "sessionInfo", "Session Info", "Show named session info.", schema(p("session", str())), sessionResult(), Map.of());
-        add(actions, "sessionList", "Session List", "List sessions.", schema(p("session", str())), sessionResult(), Map.of());
-        add(actions, "sessionClose", "Session Close", "Close named session.", schema(p("session", str())), sessionResult(), Map.of());
+        add(actions, "sessionInfo", "Session Info", "Show named session info.", schema(p("session", str())), sessionResult(), Map.of("session", "run1"));
+        add(actions, "sessionList", "Session List", "List sessions.", schema(), sessionResult(), Map.of());
+        add(actions, "sessionClose", "Session Close", "Close named session.", schema(p("session", str())), sessionResult(), Map.of("session", "run1"));
     }
 
     private static void addArtifactsAndDialog(List<Map<String, Object>> actions) {
@@ -188,13 +188,30 @@ final class BrowserActionSpecs {
     }
 
     private static void add(List<Map<String, Object>> actions, String action, String title, String description, Map<String, Object> inputSchema, Map<String, Object> outputSchema, Map<String, Object> exampleArgs) {
-        actions.add(new LinkedHashMap<>(Map.of("action", action, "title", title, "description", description, "inputSchema", inputSchema, "outputSchema", outputSchema, "exampleArgs", exampleArgs, "aiHints", aiHints(action))));
+        actions.add(new LinkedHashMap<>(Map.of("action", action, "title", title, "description", description, "inputSchema", inputSchema, "outputSchema", outputSchema, "exampleArgs", exampleArgs(action, inputSchema, exampleArgs), "aiHints", aiHints(action, inputSchema))));
     }
 
-    private static Map<String, Object> aiHints(String action) {
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> exampleArgs(String action, Map<String, Object> inputSchema, Map<String, Object> exampleArgs) {
+        Map<String, Object> properties = (Map<String, Object>) inputSchema.getOrDefault("properties", Map.of());
+        if (!properties.containsKey("session") || exampleArgs.containsKey("session")) {
+            return exampleArgs;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("session", "run1");
+        result.putAll(exampleArgs);
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> aiHints(String action, Map<String, Object> inputSchema) {
         Map<String, Object> hints = new LinkedHashMap<>();
         hints.put("forAi", true);
         hints.put("flatArgs", true);
+        Map<String, Object> properties = (Map<String, Object>) inputSchema.getOrDefault("properties", Map.of());
+        if (properties.containsKey("session") && !"sessionList".equals(action)) {
+            hints.put("sessionRequired", true);
+        }
         if (List.of("eval", "batch").contains(action)) hints.put("escapeHatch", true);
         return hints;
     }

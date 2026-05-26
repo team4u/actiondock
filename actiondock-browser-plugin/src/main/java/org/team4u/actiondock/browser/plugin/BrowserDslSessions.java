@@ -2,21 +2,26 @@ package org.team4u.actiondock.browser.plugin;
 
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 final class BrowserDslSessions {
-    static final String DEFAULT_SESSION = "default";
+    private static final ConcurrentHashMap<String, String> SHARED_SESSION_IDS = new ConcurrentHashMap<>();
 
     private final BrowserGatewayService service;
-    private final ConcurrentHashMap<String, String> sessionIds = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> sessionIds = SHARED_SESSION_IDS;
 
     BrowserDslSessions(BrowserGatewayService service) {
         this.service = service;
     }
 
     String sessionName(Map<String, Object> args) {
-        return Args.optionalString(args, "session", DEFAULT_SESSION);
+        String session = Args.optionalString(args, "session", null);
+        if (Args.isBlank(session)) {
+            throw new IllegalArgumentException("session is required; pass --session <name>");
+        }
+        return session.trim();
     }
 
     String resolveRequired(ScriptPluginContext context, Map<String, Object> args) throws Exception {
@@ -62,6 +67,23 @@ final class BrowserDslSessions {
 
     void forget(ScriptPluginContext context, String session) {
         sessionIds.remove(key(context, session));
+    }
+
+    void remember(ScriptPluginContext context, String session, String sessionId) {
+        if (!Args.isBlank(session) && !Args.isBlank(sessionId)) {
+            sessionIds.put(key(context, session), sessionId);
+        }
+    }
+
+    Map<String, String> namesForOwner(ScriptPluginContext context) {
+        String prefix = BrowserSessionManager.ownerKey(context) + "\u0000";
+        Map<String, String> result = new LinkedHashMap<>();
+        sessionIds.forEach((key, sessionId) -> {
+            if (key.startsWith(prefix)) {
+                result.put(sessionId, key.substring(prefix.length()));
+            }
+        });
+        return result;
     }
 
     private static Map<String, Object> createArgs(Map<String, Object> args) {

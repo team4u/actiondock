@@ -7,54 +7,53 @@
   "configSchema" : {
     "properties" : {
       "defaultBrowser" : {
-        "title" : "Default Browser",
         "type" : "string",
-        "enum" : [ "chromium", "firefox", "webkit" ]
+        "enum" : [ "chromium", "firefox", "webkit" ],
+        "title" : "Default Browser"
       },
       "headless" : {
-        "title" : "Headless",
-        "type" : "boolean"
+        "type" : "boolean",
+        "title" : "Headless"
       },
       "defaultTimeoutMs" : {
-        "title" : "Default Timeout Milliseconds",
-        "type" : "integer"
+        "type" : "integer",
+        "title" : "Default Timeout Milliseconds"
       },
       "sessionTtlSeconds" : {
-        "title" : "Session TTL Seconds",
-        "type" : "integer"
+        "type" : "integer",
+        "title" : "Session TTL Seconds"
       },
       "maxSessions" : {
-        "title" : "Max Sessions",
-        "type" : "integer"
+        "type" : "integer",
+        "title" : "Max Sessions"
       },
       "stateDir" : {
-        "title" : "State Directory",
-        "type" : "string"
+        "type" : "string",
+        "title" : "State Directory"
       },
       "artifactDir" : {
-        "title" : "Artifact Directory",
-        "type" : "string"
+        "type" : "string",
+        "title" : "Artifact Directory"
       },
       "downloadDir" : {
-        "title" : "Download Directory",
-        "type" : "string"
+        "type" : "string",
+        "title" : "Download Directory"
       },
       "allowedHosts" : {
+        "type" : "array",
+        "title" : "Allowed Hosts",
         "items" : {
           "type" : "string"
-        },
-        "type" : "array",
-        "title" : "Allowed Hosts"
+        }
       },
       "includeCookieValueByDefault" : {
-        "title" : "Include Cookie Value By Default",
-        "type" : "boolean"
+        "type" : "boolean",
+        "title" : "Include Cookie Value By Default"
       }
     },
     "type" : "object"
   },
   "defaultConfig" : {
-    "downloadDir" : ".actiondock/browser-downloads",
     "includeCookieValueByDefault" : false,
     "defaultTimeoutMs" : 30000,
     "maxSessions" : 10,
@@ -63,12 +62,44 @@
     "artifactDir" : ".actiondock/browser-artifacts",
     "sessionTtlSeconds" : 600,
     "headless" : true,
-    "allowedHosts" : [ ]
+    "allowedHosts" : [ ],
+    "downloadDir" : ".actiondock/browser-downloads"
   },
   "actions" : [ {
+    "description" : "Open or reuse a named browser session and optionally navigate.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "session" : {
+          "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "activeTab" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "open",
+    "title" : "Open",
+    "exampleArgs" : {
+      "session" : "run1",
+      "url" : "https://example.com"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -127,58 +158,8 @@
           "type" : "string"
         }
       }
-    },
-    "description" : "Open or reuse a named browser session and optionally navigate.",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "ok" : {
-          "type" : "boolean"
-        },
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "activeTab" : {
-          "type" : "string"
-        },
-        "url" : {
-          "type" : "string"
-        },
-        "title" : {
-          "type" : "string"
-        }
-      }
-    },
-    "action" : "open",
-    "title" : "Open",
-    "exampleArgs" : {
-      "url" : "https://example.com"
     }
   }, {
-    "aiHints" : {
-      "forAi" : true,
-      "flatArgs" : true
-    },
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "limit" : {
-          "type" : "integer"
-        },
-        "maxTextLength" : {
-          "type" : "integer"
-        }
-      }
-    },
     "description" : "Read page text, refs, forms, frames, events, and suggestions.",
     "outputSchema" : {
       "type" : "object",
@@ -300,12 +281,13 @@
     "action" : "snapshot",
     "title" : "Snapshot",
     "exampleArgs" : {
+      "session" : "run1",
       "limit" : 80
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -316,17 +298,15 @@
         "tab" : {
           "type" : "string"
         },
-        "target" : {
-          "type" : "string"
+        "limit" : {
+          "type" : "integer"
         },
-        "exact" : {
-          "type" : "boolean"
-        },
-        "index" : {
+        "maxTextLength" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Click target.",
     "outputSchema" : {
       "type" : "object",
@@ -354,12 +334,13 @@
     "action" : "click",
     "title" : "Click",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e2"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -380,7 +361,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Double-click target.",
     "outputSchema" : {
       "type" : "object",
@@ -408,12 +390,13 @@
     "action" : "dblclick",
     "title" : "Double Click",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e2"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -432,12 +415,10 @@
         },
         "index" : {
           "type" : "integer"
-        },
-        "text" : {
-          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Clear and fill target text.",
     "outputSchema" : {
       "type" : "object",
@@ -465,13 +446,14 @@
     "action" : "fill",
     "title" : "Fill",
     "exampleArgs" : {
+      "session" : "run1",
       "text" : "hello@example.com",
       "target" : "@e3"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -495,7 +477,8 @@
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Type text into target.",
     "outputSchema" : {
       "type" : "object",
@@ -523,13 +506,14 @@
     "action" : "type",
     "title" : "Type",
     "exampleArgs" : {
+      "session" : "run1",
       "text" : "hello",
       "target" : "@e3"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -543,11 +527,18 @@
         "target" : {
           "type" : "string"
         },
-        "key" : {
+        "exact" : {
+          "type" : "boolean"
+        },
+        "index" : {
+          "type" : "integer"
+        },
+        "text" : {
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Press key globally or on target.",
     "outputSchema" : {
       "type" : "object",
@@ -575,12 +566,13 @@
     "action" : "press",
     "title" : "Press",
     "exampleArgs" : {
+      "session" : "run1",
       "key" : "Enter"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -594,14 +586,12 @@
         "target" : {
           "type" : "string"
         },
-        "exact" : {
-          "type" : "boolean"
-        },
-        "index" : {
-          "type" : "integer"
+        "key" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Hover target.",
     "outputSchema" : {
       "type" : "object",
@@ -629,12 +619,13 @@
     "action" : "hover",
     "title" : "Hover",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e2"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -655,7 +646,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Focus target.",
     "outputSchema" : {
       "type" : "object",
@@ -683,12 +675,13 @@
     "action" : "focus",
     "title" : "Focus",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e2"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -709,7 +702,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Clear target value.",
     "outputSchema" : {
       "type" : "object",
@@ -737,12 +731,13 @@
     "action" : "clear",
     "title" : "Clear",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e2"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -761,12 +756,10 @@
         },
         "index" : {
           "type" : "integer"
-        },
-        "value" : {
-          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Select option value.",
     "outputSchema" : {
       "type" : "object",
@@ -794,13 +787,14 @@
     "action" : "select",
     "title" : "Select",
     "exampleArgs" : {
+      "session" : "run1",
       "value" : "US",
       "target" : "@e4"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -819,9 +813,13 @@
         },
         "index" : {
           "type" : "integer"
+        },
+        "value" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Check checkbox or radio.",
     "outputSchema" : {
       "type" : "object",
@@ -849,12 +847,13 @@
     "action" : "check",
     "title" : "Check",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e4"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -875,7 +874,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Uncheck checkbox.",
     "outputSchema" : {
       "type" : "object",
@@ -903,12 +903,13 @@
     "action" : "uncheck",
     "title" : "Uncheck",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e4"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -927,12 +928,10 @@
         },
         "index" : {
           "type" : "integer"
-        },
-        "path" : {
-          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Set file input path.",
     "outputSchema" : {
       "type" : "object",
@@ -960,13 +959,14 @@
     "action" : "upload",
     "title" : "Upload",
     "exampleArgs" : {
+      "session" : "run1",
       "path" : "./upload.txt",
       "target" : "@e5"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -986,11 +986,12 @@
         "index" : {
           "type" : "integer"
         },
-        "to" : {
+        "path" : {
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Drag target to another target.",
     "outputSchema" : {
       "type" : "object",
@@ -1018,13 +1019,14 @@
     "action" : "drag",
     "title" : "Drag",
     "exampleArgs" : {
+      "session" : "run1",
       "to" : "@e2",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1043,9 +1045,13 @@
         },
         "index" : {
           "type" : "integer"
+        },
+        "to" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Scroll target into view.",
     "outputSchema" : {
       "type" : "object",
@@ -1073,12 +1079,13 @@
     "action" : "scrollIntoView",
     "title" : "Scroll Into View",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e2"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1089,14 +1096,18 @@
         "tab" : {
           "type" : "string"
         },
-        "waitUntil" : {
+        "target" : {
           "type" : "string"
         },
-        "timeoutMs" : {
+        "exact" : {
+          "type" : "boolean"
+        },
+        "index" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Reload active tab.",
     "outputSchema" : {
       "type" : "object",
@@ -1123,11 +1134,13 @@
     },
     "action" : "reload",
     "title" : "Reload",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1145,7 +1158,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Go back in history.",
     "outputSchema" : {
       "type" : "object",
@@ -1172,11 +1186,13 @@
     },
     "action" : "back",
     "title" : "Back",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1194,7 +1210,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Go forward in history.",
     "outputSchema" : {
       "type" : "object",
@@ -1221,11 +1238,13 @@
     },
     "action" : "forward",
     "title" : "Forward",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1236,24 +1255,15 @@
         "tab" : {
           "type" : "string"
         },
-        "by" : {
-          "type" : "string",
-          "enum" : [ "role", "text", "label", "placeholder", "alt", "title", "testid", "css" ]
-        },
-        "query" : {
+        "waitUntil" : {
           "type" : "string"
         },
-        "name" : {
-          "type" : "string"
-        },
-        "exact" : {
-          "type" : "boolean"
-        },
-        "index" : {
+        "timeoutMs" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and run click.",
     "outputSchema" : {
       "type" : "object",
@@ -1281,14 +1291,15 @@
     "action" : "findClick",
     "title" : "Find Click",
     "exampleArgs" : {
+      "session" : "run1",
       "name" : "Submit",
       "by" : "role",
       "query" : "button"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1316,7 +1327,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and run hover.",
     "outputSchema" : {
       "type" : "object",
@@ -1344,14 +1356,15 @@
     "action" : "findHover",
     "title" : "Find Hover",
     "exampleArgs" : {
+      "session" : "run1",
       "name" : "Submit",
       "by" : "role",
       "query" : "button"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1379,7 +1392,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and run focus.",
     "outputSchema" : {
       "type" : "object",
@@ -1407,14 +1421,15 @@
     "action" : "findFocus",
     "title" : "Find Focus",
     "exampleArgs" : {
+      "session" : "run1",
       "name" : "Submit",
       "by" : "role",
       "query" : "button"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1442,7 +1457,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and run check.",
     "outputSchema" : {
       "type" : "object",
@@ -1470,14 +1486,15 @@
     "action" : "findCheck",
     "title" : "Find Check",
     "exampleArgs" : {
+      "session" : "run1",
       "name" : "Submit",
       "by" : "role",
       "query" : "button"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1505,7 +1522,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and run uncheck.",
     "outputSchema" : {
       "type" : "object",
@@ -1533,14 +1551,15 @@
     "action" : "findUncheck",
     "title" : "Find Uncheck",
     "exampleArgs" : {
+      "session" : "run1",
       "name" : "Submit",
       "by" : "role",
       "query" : "button"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1568,7 +1587,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and run text.",
     "outputSchema" : {
       "type" : "object",
@@ -1596,14 +1616,15 @@
     "action" : "findText",
     "title" : "Find Text",
     "exampleArgs" : {
+      "session" : "run1",
       "name" : "Submit",
       "by" : "role",
       "query" : "button"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1629,12 +1650,10 @@
         },
         "index" : {
           "type" : "integer"
-        },
-        "text" : {
-          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and fill text.",
     "outputSchema" : {
       "type" : "object",
@@ -1662,14 +1681,15 @@
     "action" : "findFill",
     "title" : "Find Fill",
     "exampleArgs" : {
+      "session" : "run1",
       "text" : "hello@example.com",
       "by" : "label",
       "query" : "Email"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1700,7 +1720,8 @@
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Find by semantic locator and type text.",
     "outputSchema" : {
       "type" : "object",
@@ -1728,14 +1749,15 @@
     "action" : "findType",
     "title" : "Find Type",
     "exampleArgs" : {
+      "session" : "run1",
       "text" : "hello",
       "by" : "label",
       "query" : "Email"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1746,7 +1768,14 @@
         "tab" : {
           "type" : "string"
         },
-        "target" : {
+        "by" : {
+          "type" : "string",
+          "enum" : [ "role", "text", "label", "placeholder", "alt", "title", "testid", "css" ]
+        },
+        "query" : {
+          "type" : "string"
+        },
+        "name" : {
           "type" : "string"
         },
         "exact" : {
@@ -1754,9 +1783,13 @@
         },
         "index" : {
           "type" : "integer"
+        },
+        "text" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Read text from target.",
     "outputSchema" : {
       "type" : "object",
@@ -1779,12 +1812,13 @@
     "action" : "getText",
     "title" : "Get Text",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1805,7 +1839,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Read html from target.",
     "outputSchema" : {
       "type" : "object",
@@ -1828,12 +1863,13 @@
     "action" : "getHtml",
     "title" : "Get Html",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1854,7 +1890,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Read value from target.",
     "outputSchema" : {
       "type" : "object",
@@ -1877,12 +1914,13 @@
     "action" : "getValue",
     "title" : "Get Value",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1903,7 +1941,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Read count from target.",
     "outputSchema" : {
       "type" : "object",
@@ -1926,12 +1965,13 @@
     "action" : "getCount",
     "title" : "Get Count",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -1952,7 +1992,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Read box from target.",
     "outputSchema" : {
       "type" : "object",
@@ -1975,12 +2016,65 @@
     "action" : "getBox",
     "title" : "Get Box",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "session" : {
+          "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "string"
+        },
+        "exact" : {
+          "type" : "boolean"
+        },
+        "index" : {
+          "type" : "integer"
+        }
+      }
+    }
+  }, {
+    "description" : "Read an attribute from target.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "session" : {
+          "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "what" : {
+          "type" : "string"
+        },
+        "value" : { }
+      }
+    },
+    "action" : "getAttr",
+    "title" : "Get Attr",
+    "exampleArgs" : {
+      "session" : "run1",
+      "name" : "href",
+      "target" : "@e1"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2004,48 +2098,8 @@
           "type" : "string"
         }
       }
-    },
-    "description" : "Read an attribute from target.",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "ok" : {
-          "type" : "boolean"
-        },
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "what" : {
-          "type" : "string"
-        },
-        "value" : { }
-      }
-    },
-    "action" : "getAttr",
-    "title" : "Get Attr",
-    "exampleArgs" : {
-      "name" : "href",
-      "target" : "@e1"
     }
   }, {
-    "aiHints" : {
-      "forAi" : true,
-      "flatArgs" : true
-    },
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        }
-      }
-    },
     "description" : "Read page title.",
     "outputSchema" : {
       "type" : "object",
@@ -2067,11 +2121,13 @@
     },
     "action" : "getTitle",
     "title" : "Get Title",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2083,7 +2139,8 @@
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Read page URL.",
     "outputSchema" : {
       "type" : "object",
@@ -2105,11 +2162,13 @@
     },
     "action" : "getUrl",
     "title" : "Get URL",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2119,18 +2178,10 @@
         },
         "tab" : {
           "type" : "string"
-        },
-        "target" : {
-          "type" : "string"
-        },
-        "exact" : {
-          "type" : "boolean"
-        },
-        "index" : {
-          "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Check target state.",
     "outputSchema" : {
       "type" : "object",
@@ -2153,12 +2204,13 @@
     "action" : "isVisible",
     "title" : "Is Visible",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2179,7 +2231,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Check target state.",
     "outputSchema" : {
       "type" : "object",
@@ -2202,12 +2255,13 @@
     "action" : "isEnabled",
     "title" : "Is Enabled",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2228,7 +2282,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Check target state.",
     "outputSchema" : {
       "type" : "object",
@@ -2251,12 +2306,13 @@
     "action" : "isChecked",
     "title" : "Is Checked",
     "exampleArgs" : {
+      "session" : "run1",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2275,15 +2331,10 @@
         },
         "index" : {
           "type" : "integer"
-        },
-        "state" : {
-          "type" : "string"
-        },
-        "timeoutMs" : {
-          "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for target state.",
     "outputSchema" : {
       "type" : "object",
@@ -2311,13 +2362,14 @@
     "action" : "waitForElement",
     "title" : "Wait For Element",
     "exampleArgs" : {
+      "session" : "run1",
       "state" : "visible",
       "target" : "@e1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2328,14 +2380,24 @@
         "tab" : {
           "type" : "string"
         },
-        "text" : {
+        "target" : {
+          "type" : "string"
+        },
+        "exact" : {
+          "type" : "boolean"
+        },
+        "index" : {
+          "type" : "integer"
+        },
+        "state" : {
           "type" : "string"
         },
         "timeoutMs" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for body text.",
     "outputSchema" : {
       "type" : "object",
@@ -2363,12 +2425,13 @@
     "action" : "waitForText",
     "title" : "Wait For Text",
     "exampleArgs" : {
+      "session" : "run1",
       "text" : "Welcome"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2379,14 +2442,15 @@
         "tab" : {
           "type" : "string"
         },
-        "url" : {
+        "text" : {
           "type" : "string"
         },
         "timeoutMs" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for URL pattern.",
     "outputSchema" : {
       "type" : "object",
@@ -2414,12 +2478,13 @@
     "action" : "waitForUrl",
     "title" : "Wait For URL",
     "exampleArgs" : {
+      "session" : "run1",
       "url" : "**/dashboard"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2430,14 +2495,15 @@
         "tab" : {
           "type" : "string"
         },
-        "state" : {
+        "url" : {
           "type" : "string"
         },
         "timeoutMs" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for load state.",
     "outputSchema" : {
       "type" : "object",
@@ -2465,12 +2531,13 @@
     "action" : "waitForLoad",
     "title" : "Wait For Load",
     "exampleArgs" : {
+      "session" : "run1",
       "state" : "load"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2481,17 +2548,15 @@
         "tab" : {
           "type" : "string"
         },
-        "value" : {
-          "type" : "string"
-        },
-        "argJson" : {
+        "state" : {
           "type" : "string"
         },
         "timeoutMs" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for JS expression.",
     "outputSchema" : {
       "type" : "object",
@@ -2519,12 +2584,13 @@
     "action" : "waitForFunction",
     "title" : "Wait For Function",
     "exampleArgs" : {
+      "session" : "run1",
       "value" : "() => window.ready === true"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2538,11 +2604,15 @@
         "value" : {
           "type" : "string"
         },
+        "argJson" : {
+          "type" : "string"
+        },
         "timeoutMs" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for matching URL.",
     "outputSchema" : {
       "type" : "object",
@@ -2570,12 +2640,13 @@
     "action" : "waitForRequest",
     "title" : "Wait For Request",
     "exampleArgs" : {
+      "session" : "run1",
       "value" : "**/api/**"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2593,7 +2664,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for matching URL.",
     "outputSchema" : {
       "type" : "object",
@@ -2621,12 +2693,13 @@
     "action" : "waitForResponse",
     "title" : "Wait For Response",
     "exampleArgs" : {
+      "session" : "run1",
       "value" : "**/api/**"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2637,11 +2710,15 @@
         "tab" : {
           "type" : "string"
         },
+        "value" : {
+          "type" : "string"
+        },
         "timeoutMs" : {
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for browser event.",
     "outputSchema" : {
       "type" : "object",
@@ -2668,11 +2745,13 @@
     },
     "action" : "waitForConsole",
     "title" : "Wait For Console",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2687,7 +2766,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for browser event.",
     "outputSchema" : {
       "type" : "object",
@@ -2714,11 +2794,13 @@
     },
     "action" : "waitForPopup",
     "title" : "Wait For Popup",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2733,7 +2815,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Wait for browser event.",
     "outputSchema" : {
       "type" : "object",
@@ -2760,11 +2843,13 @@
     },
     "action" : "waitForDownload",
     "title" : "Wait For Download",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2779,7 +2864,8 @@
           "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "Sleep for timeoutMs.",
     "outputSchema" : {
       "type" : "object",
@@ -2807,21 +2893,29 @@
     "action" : "waitForTimeout",
     "title" : "Wait For Timeout",
     "exampleArgs" : {
+      "session" : "run1",
       "timeoutMs" : 1000
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
         "session" : {
           "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
         }
       }
-    },
+    }
+  }, {
     "description" : "List tabs.",
     "outputSchema" : {
       "type" : "object",
@@ -2848,26 +2942,23 @@
     },
     "action" : "tabList",
     "title" : "Tab List",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
         "session" : {
           "type" : "string"
-        },
-        "url" : {
-          "type" : "string"
-        },
-        "label" : {
-          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Create and switch to a new tab.",
     "outputSchema" : {
       "type" : "object",
@@ -2895,13 +2986,14 @@
     "action" : "tabNew",
     "title" : "Tab New",
     "exampleArgs" : {
-      "label" : "docs",
-      "url" : "https://example.com"
-    }
-  }, {
+      "session" : "run1",
+      "url" : "https://example.com",
+      "label" : "docs"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2909,11 +3001,15 @@
         "session" : {
           "type" : "string"
         },
-        "tab" : {
+        "url" : {
+          "type" : "string"
+        },
+        "label" : {
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Operate a tab by id or label.",
     "outputSchema" : {
       "type" : "object",
@@ -2941,12 +3037,13 @@
     "action" : "tabSwitch",
     "title" : "Tab Switch",
     "exampleArgs" : {
+      "session" : "run1",
       "tab" : "docs"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -2958,7 +3055,8 @@
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Operate a tab by id or label.",
     "outputSchema" : {
       "type" : "object",
@@ -2986,12 +3084,13 @@
     "action" : "tabClose",
     "title" : "Tab Close",
     "exampleArgs" : {
+      "session" : "run1",
       "tab" : "docs"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3003,7 +3102,8 @@
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Operate a tab by id or label.",
     "outputSchema" : {
       "type" : "object",
@@ -3031,21 +3131,26 @@
     "action" : "tabBringToFront",
     "title" : "Tab Bring To Front",
     "exampleArgs" : {
+      "session" : "run1",
       "tab" : "docs"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
         "session" : {
           "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Show named session info.",
     "outputSchema" : {
       "type" : "object",
@@ -3063,11 +3168,13 @@
     },
     "action" : "sessionInfo",
     "title" : "Session Info",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3076,7 +3183,8 @@
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "List sessions.",
     "outputSchema" : {
       "type" : "object",
@@ -3094,20 +3202,16 @@
     },
     "action" : "sessionList",
     "title" : "Session List",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : { },
     "aiHints" : {
       "forAi" : true,
       "flatArgs" : true
     },
     "inputSchema" : {
       "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        }
-      }
-    },
+      "properties" : { }
+    }
+  }, {
     "description" : "Close named session.",
     "outputSchema" : {
       "type" : "object",
@@ -3125,11 +3229,58 @@
     },
     "action" : "sessionClose",
     "title" : "Session Close",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "session" : {
+          "type" : "string"
+        }
+      }
+    }
+  }, {
+    "description" : "Take page or element screenshot.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "session" : {
+          "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "activeTab" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "screenshot",
+    "title" : "Screenshot",
+    "exampleArgs" : {
+      "session" : "run1",
+      "name" : "page",
+      "fullPage" : true
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3159,8 +3310,9 @@
           "type" : "boolean"
         }
       }
-    },
-    "description" : "Take page or element screenshot.",
+    }
+  }, {
+    "description" : "Save page as PDF.",
     "outputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3184,16 +3336,17 @@
         }
       }
     },
-    "action" : "screenshot",
-    "title" : "Screenshot",
+    "action" : "pdf",
+    "title" : "PDF",
     "exampleArgs" : {
+      "session" : "run1",
       "name" : "page",
-      "fullPage" : true
-    }
-  }, {
+      "format" : "A4"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3232,53 +3385,8 @@
           "type" : "string"
         }
       }
-    },
-    "description" : "Save page as PDF.",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "ok" : {
-          "type" : "boolean"
-        },
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "activeTab" : {
-          "type" : "string"
-        },
-        "url" : {
-          "type" : "string"
-        },
-        "title" : {
-          "type" : "string"
-        }
-      }
-    },
-    "action" : "pdf",
-    "title" : "PDF",
-    "exampleArgs" : {
-      "format" : "A4",
-      "name" : "page"
     }
   }, {
-    "aiHints" : {
-      "forAi" : true,
-      "flatArgs" : true
-    },
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        }
-      }
-    },
     "description" : "List pending dialogs.",
     "outputSchema" : {
       "type" : "object",
@@ -3305,11 +3413,13 @@
     },
     "action" : "dialogList",
     "title" : "Dialog List",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3319,15 +3429,10 @@
         },
         "tab" : {
           "type" : "string"
-        },
-        "id" : {
-          "type" : "string"
-        },
-        "text" : {
-          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Accept dialog by id.",
     "outputSchema" : {
       "type" : "object",
@@ -3355,12 +3460,13 @@
     "action" : "dialogAccept",
     "title" : "Dialog Accept",
     "exampleArgs" : {
+      "session" : "run1",
       "id" : "d1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3373,9 +3479,13 @@
         },
         "id" : {
           "type" : "string"
+        },
+        "text" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Dismiss dialog by id.",
     "outputSchema" : {
       "type" : "object",
@@ -3403,12 +3513,13 @@
     "action" : "dialogDismiss",
     "title" : "Dialog Dismiss",
     "exampleArgs" : {
+      "session" : "run1",
       "id" : "d1"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3416,11 +3527,15 @@
         "session" : {
           "type" : "string"
         },
-        "url" : {
+        "tab" : {
+          "type" : "string"
+        },
+        "id" : {
           "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "List cookies.",
     "outputSchema" : {
       "type" : "object",
@@ -3438,11 +3553,53 @@
     },
     "action" : "cookiesList",
     "title" : "Cookies List",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "session" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        }
+      }
+    }
+  }, {
+    "description" : "Set cookie via flat fields or cookiesJson.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "session" : {
+          "type" : "string"
+        },
+        "action" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "cookiesSet",
+    "title" : "Cookies Set",
+    "exampleArgs" : {
+      "session" : "run1",
+      "url" : "https://example.com",
+      "name" : "sid",
+      "value" : "1"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3481,42 +3638,8 @@
           "type" : "string"
         }
       }
-    },
-    "description" : "Set cookie via flat fields or cookiesJson.",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "ok" : {
-          "type" : "boolean"
-        },
-        "session" : {
-          "type" : "string"
-        },
-        "action" : {
-          "type" : "string"
-        }
-      }
-    },
-    "action" : "cookiesSet",
-    "title" : "Cookies Set",
-    "exampleArgs" : {
-      "value" : "1",
-      "url" : "https://example.com",
-      "name" : "sid"
     }
   }, {
-    "aiHints" : {
-      "forAi" : true,
-      "flatArgs" : true
-    },
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        }
-      }
-    },
     "description" : "Clear cookies.",
     "outputSchema" : {
       "type" : "object",
@@ -3534,11 +3657,52 @@
     },
     "action" : "cookiesClear",
     "title" : "Cookies Clear",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "session" : {
+          "type" : "string"
+        }
+      }
+    }
+  }, {
+    "description" : "Return or save storage state.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "session" : {
+          "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "what" : {
+          "type" : "string"
+        },
+        "value" : { }
+      }
+    },
+    "action" : "storageState",
+    "title" : "Storage State",
+    "exampleArgs" : {
+      "session" : "run1",
+      "stateName" : "login"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3562,54 +3726,8 @@
           "type" : "boolean"
         }
       }
-    },
-    "description" : "Return or save storage state.",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "ok" : {
-          "type" : "boolean"
-        },
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "what" : {
-          "type" : "string"
-        },
-        "value" : { }
-      }
-    },
-    "action" : "storageState",
-    "title" : "Storage State",
-    "exampleArgs" : {
-      "stateName" : "login"
     }
   }, {
-    "aiHints" : {
-      "forAi" : true,
-      "flatArgs" : true
-    },
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "area" : {
-          "type" : "string",
-          "enum" : [ "local", "session" ]
-        },
-        "key" : {
-          "type" : "string"
-        }
-      }
-    },
     "description" : "Read local/session storage.",
     "outputSchema" : {
       "type" : "object",
@@ -3632,13 +3750,14 @@
     "action" : "storageGet",
     "title" : "Storage Get",
     "exampleArgs" : {
+      "session" : "run1",
       "key" : "token",
       "area" : "local"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3655,12 +3774,10 @@
         },
         "key" : {
           "type" : "string"
-        },
-        "value" : {
-          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Set local/session storage.",
     "outputSchema" : {
       "type" : "object",
@@ -3683,14 +3800,15 @@
     "action" : "storageSet",
     "title" : "Storage Set",
     "exampleArgs" : {
-      "area" : "local",
+      "session" : "run1",
       "key" : "token",
-      "value" : "abc"
-    }
-  }, {
+      "value" : "abc",
+      "area" : "local"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3704,9 +3822,16 @@
         "area" : {
           "type" : "string",
           "enum" : [ "local", "session" ]
+        },
+        "key" : {
+          "type" : "string"
+        },
+        "value" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Clear local/session storage.",
     "outputSchema" : {
       "type" : "object",
@@ -3729,12 +3854,56 @@
     "action" : "storageClear",
     "title" : "Storage Clear",
     "exampleArgs" : {
+      "session" : "run1",
       "area" : "local"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "session" : {
+          "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "area" : {
+          "type" : "string",
+          "enum" : [ "local", "session" ]
+        }
+      }
+    }
+  }, {
+    "description" : "Send request with browser context.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "session" : {
+          "type" : "string"
+        },
+        "action" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "networkRequest",
+    "title" : "Network Request",
+    "exampleArgs" : {
+      "session" : "run1",
+      "url" : "https://example.com/api",
+      "method" : "GET"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3773,8 +3942,9 @@
           "type" : "boolean"
         }
       }
-    },
-    "description" : "Send request with browser context.",
+    }
+  }, {
+    "description" : "Route matching requests.",
     "outputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3789,16 +3959,17 @@
         }
       }
     },
-    "action" : "networkRequest",
-    "title" : "Network Request",
+    "action" : "networkRoute",
+    "title" : "Network Route",
     "exampleArgs" : {
-      "url" : "https://example.com/api",
-      "method" : "GET"
-    }
-  }, {
+      "session" : "run1",
+      "url" : "**/*.png",
+      "routeAction" : "abort"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3828,50 +3999,8 @@
           "type" : "string"
         }
       }
-    },
-    "description" : "Route matching requests.",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "ok" : {
-          "type" : "boolean"
-        },
-        "session" : {
-          "type" : "string"
-        },
-        "action" : {
-          "type" : "string"
-        }
-      }
-    },
-    "action" : "networkRoute",
-    "title" : "Network Route",
-    "exampleArgs" : {
-      "routeAction" : "abort",
-      "url" : "**/*.png"
     }
   }, {
-    "aiHints" : {
-      "forAi" : true,
-      "flatArgs" : true
-    },
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "routeId" : {
-          "type" : "string"
-        },
-        "url" : {
-          "type" : "string"
-        }
-      }
-    },
     "description" : "Remove route.",
     "outputSchema" : {
       "type" : "object",
@@ -3889,11 +4018,13 @@
     },
     "action" : "networkUnroute",
     "title" : "Network Unroute",
-    "exampleArgs" : { }
-  }, {
+    "exampleArgs" : {
+      "session" : "run1"
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3904,11 +4035,15 @@
         "tab" : {
           "type" : "string"
         },
-        "value" : {
-          "type" : "boolean"
+        "routeId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
         }
       }
-    },
+    }
+  }, {
     "description" : "Toggle offline mode.",
     "outputSchema" : {
       "type" : "object",
@@ -3927,12 +4062,13 @@
     "action" : "networkOffline",
     "title" : "Network Offline",
     "exampleArgs" : {
+      "session" : "run1",
       "value" : true
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3943,11 +4079,12 @@
         "tab" : {
           "type" : "string"
         },
-        "headersJson" : {
-          "type" : "string"
+        "value" : {
+          "type" : "boolean"
         }
       }
-    },
+    }
+  }, {
     "description" : "Set extra HTTP headers.",
     "outputSchema" : {
       "type" : "object",
@@ -3966,12 +4103,54 @@
     "action" : "networkHeaders",
     "title" : "Network Headers",
     "exampleArgs" : {
+      "session" : "run1",
       "headersJson" : "{\"X-Test\":\"1\"}"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "session" : {
+          "type" : "string"
+        },
+        "tab" : {
+          "type" : "string"
+        },
+        "headersJson" : {
+          "type" : "string"
+        }
+      }
+    }
+  }, {
+    "description" : "Read buffered browser events.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "session" : {
+          "type" : "string"
+        },
+        "action" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "networkEvents",
+    "title" : "Network Events",
+    "exampleArgs" : {
+      "session" : "run1",
+      "types" : "request,response"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "flatArgs" : true,
+      "sessionRequired" : true
     },
     "inputSchema" : {
       "type" : "object",
@@ -3992,8 +4171,9 @@
           "type" : "boolean"
         }
       }
-    },
-    "description" : "Read buffered browser events.",
+    }
+  }, {
+    "description" : "Run JavaScript on page or locator.",
     "outputSchema" : {
       "type" : "object",
       "properties" : {
@@ -4003,20 +4183,25 @@
         "session" : {
           "type" : "string"
         },
-        "action" : {
+        "tab" : {
           "type" : "string"
-        }
+        },
+        "what" : {
+          "type" : "string"
+        },
+        "value" : { }
       }
     },
-    "action" : "networkEvents",
-    "title" : "Network Events",
+    "action" : "eval",
+    "title" : "Eval",
     "exampleArgs" : {
-      "types" : "request,response"
-    }
-  }, {
+      "session" : "run1",
+      "expression" : "() => document.title"
+    },
     "aiHints" : {
       "forAi" : true,
       "flatArgs" : true,
+      "sessionRequired" : true,
       "escapeHatch" : true
     },
     "inputSchema" : {
@@ -4042,51 +4227,8 @@
           "type" : "string"
         }
       }
-    },
-    "description" : "Run JavaScript on page or locator.",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "ok" : {
-          "type" : "boolean"
-        },
-        "session" : {
-          "type" : "string"
-        },
-        "tab" : {
-          "type" : "string"
-        },
-        "what" : {
-          "type" : "string"
-        },
-        "value" : { }
-      }
-    },
-    "action" : "eval",
-    "title" : "Eval",
-    "exampleArgs" : {
-      "expression" : "() => document.title"
     }
   }, {
-    "aiHints" : {
-      "forAi" : true,
-      "flatArgs" : true,
-      "escapeHatch" : true
-    },
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "session" : {
-          "type" : "string"
-        },
-        "commands" : {
-          "type" : "string"
-        },
-        "bail" : {
-          "type" : "boolean"
-        }
-      }
-    },
     "description" : "Run newline-separated browser DSL commands.",
     "outputSchema" : {
       "type" : "object",
@@ -4109,17 +4251,30 @@
     "action" : "batch",
     "title" : "Batch",
     "exampleArgs" : {
+      "session" : "run1",
       "commands" : "open https://example.com\nsnapshot\nclick @e2"
-    }
-  }, {
+    },
     "aiHints" : {
       "forAi" : true,
-      "flatArgs" : true
+      "flatArgs" : true,
+      "sessionRequired" : true,
+      "escapeHatch" : true
     },
     "inputSchema" : {
       "type" : "object",
-      "properties" : { }
-    },
+      "properties" : {
+        "session" : {
+          "type" : "string"
+        },
+        "commands" : {
+          "type" : "string"
+        },
+        "bail" : {
+          "type" : "boolean"
+        }
+      }
+    }
+  }, {
     "description" : "Return action schemas and workflow hints.",
     "outputSchema" : {
       "type" : "object",
@@ -4174,6 +4329,14 @@
     },
     "action" : "capabilities",
     "title" : "Capabilities",
-    "exampleArgs" : { }
+    "exampleArgs" : { },
+    "aiHints" : {
+      "forAi" : true,
+      "flatArgs" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : { }
+    }
   } ]
 }

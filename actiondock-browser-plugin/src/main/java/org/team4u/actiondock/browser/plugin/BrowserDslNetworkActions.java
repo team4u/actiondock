@@ -80,7 +80,8 @@ final class BrowserDslNetworkActions {
             default -> throw new IllegalArgumentException("Unsupported network op: " + op);
         };
         result.put("session", dsl.session());
-        result.put("op", op);
+        result.remove("op");
+        result.put("action", "network" + Character.toUpperCase(op.charAt(0)) + op.substring(1));
         return tabs.transformResult(dsl.context(), dsl.session(), result);
     }
 

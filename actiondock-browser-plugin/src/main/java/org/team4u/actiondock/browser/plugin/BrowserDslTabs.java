@@ -8,10 +8,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 final class BrowserDslTabs {
-    private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> publicToPage = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> pageToPublic = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> labelToPage = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, AtomicInteger> counters = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> SHARED_PUBLIC_TO_PAGE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> SHARED_PAGE_TO_PUBLIC = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> SHARED_LABEL_TO_PAGE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, AtomicInteger> SHARED_COUNTERS = new ConcurrentHashMap<>();
+
+    private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> publicToPage = SHARED_PUBLIC_TO_PAGE;
+    private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> pageToPublic = SHARED_PAGE_TO_PUBLIC;
+    private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> labelToPage = SHARED_LABEL_TO_PAGE;
+    private final ConcurrentHashMap<String, AtomicInteger> counters = SHARED_COUNTERS;
 
     String pageId(ScriptPluginContext context, String session, Map<String, Object> args) {
         String tab = Args.optionalString(args, "tab", null);
@@ -50,6 +55,14 @@ final class BrowserDslTabs {
         if (!Args.isBlank(label) && !Args.isBlank(pageId)) {
             labelToPage.computeIfAbsent(key(context, session), ignored -> new ConcurrentHashMap<>()).put(label, pageId);
         }
+    }
+
+    void forgetSession(ScriptPluginContext context, String session) {
+        String key = key(context, session);
+        publicToPage.remove(key);
+        pageToPublic.remove(key);
+        labelToPage.remove(key);
+        counters.remove(key);
     }
 
     Map<String, Object> transformResult(ScriptPluginContext context, String session, Map<String, Object> result) {

@@ -41,7 +41,8 @@ final class BrowserDslDialogActions {
             default -> throw new IllegalArgumentException("Unsupported dialog op: " + op);
         };
         result.put("session", dsl.session());
-        result.put("op", op);
+        result.remove("op");
+        result.put("action", "list".equals(op) ? "dialogList" : "dialog" + Character.toUpperCase(op.charAt(0)) + op.substring(1));
         return tabs.transformResult(dsl.context(), dsl.session(), result);
     }
 

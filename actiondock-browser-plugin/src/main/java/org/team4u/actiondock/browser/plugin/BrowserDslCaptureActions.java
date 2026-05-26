@@ -46,7 +46,8 @@ final class BrowserDslCaptureActions {
             default -> throw new IllegalArgumentException("Unsupported capture op: " + op);
         };
         result.put("session", dsl.session());
-        result.put("op", op);
+        result.remove("op");
+        result.put("action", op);
         return tabs.transformResult(dsl.context(), dsl.session(), result);
     }
 

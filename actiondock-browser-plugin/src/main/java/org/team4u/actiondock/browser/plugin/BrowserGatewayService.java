@@ -863,13 +863,13 @@ final class BrowserGatewayService {
             String tag = String.valueOf(element.getOrDefault("tag", ""));
             Object checked = element.get("checked");
             if (Boolean.TRUE.equals(checked) || Boolean.FALSE.equals(checked) || "checkbox".equals(role) || "radio".equals(role)) {
-                suggestions.add(Map.of("action", "act", "op", Boolean.TRUE.equals(checked) ? "uncheck" : "check", "target", "@" + ref));
+                suggestions.add(Map.of("action", Boolean.TRUE.equals(checked) ? "uncheck" : "check", "target", "@" + ref));
             } else if ("textbox".equals(role) || "searchbox".equals(role) || "textarea".equals(tag) || "input".equals(tag)) {
-                suggestions.add(Map.of("action", "act", "op", "fill", "target", "@" + ref, "text", ""));
+                suggestions.add(Map.of("action", "fill", "target", "@" + ref, "text", ""));
             } else if ("combobox".equals(role) || "select".equals(tag)) {
-                suggestions.add(Map.of("action", "act", "op", "select", "target", "@" + ref, "value", ""));
+                suggestions.add(Map.of("action", "select", "target", "@" + ref, "value", ""));
             } else {
-                suggestions.add(Map.of("action", "act", "op", "click", "target", "@" + ref));
+                suggestions.add(Map.of("action", "click", "target", "@" + ref));
             }
             if (suggestions.size() >= 20) {
                 break;

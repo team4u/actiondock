@@ -105,7 +105,7 @@ final class BrowserDslActions implements BrowserActionRegistrar {
             case "tabClose" -> sessionActions.tabClose(context(context, args));
             case "tabBringToFront" -> sessionActions.tabBringToFront(context(context, args));
             case "sessionInfo" -> sessionActions.sessionInfo(context(context, args));
-            case "sessionList" -> sessionActions.sessionList(context(context, args));
+            case "sessionList" -> sessionActions.sessionList(listContext(context, args));
             case "sessionClose" -> sessionActions.sessionClose(context(context, args));
             case "screenshot" -> captureActions.screenshot(context(context, args));
             case "pdf" -> captureActions.pdf(context(context, args));
@@ -134,6 +134,9 @@ final class BrowserDslActions implements BrowserActionRegistrar {
 
     private Map<String, Object> open(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         String session = sessions.sessionName(args);
+        if (Args.optionalBoolean(args, "fresh", false)) {
+            tabs.forgetSession(context, session);
+        }
         String sessionId = sessions.open(context, args, Args.optionalBoolean(args, "fresh", false));
         BrowserDslContext dsl = new BrowserDslContext(context, args, session, sessionId, tabs.pageId(context, session, args));
         return pageActions.open(dsl);
@@ -143,5 +146,10 @@ final class BrowserDslActions implements BrowserActionRegistrar {
         String session = sessions.sessionName(args);
         String sessionId = sessions.resolveRequired(context, args);
         return new BrowserDslContext(context, args, session, sessionId, tabs.pageId(context, session, args));
+    }
+
+    private BrowserDslContext listContext(ScriptPluginContext context, Map<String, Object> args) {
+        String session = Args.optionalString(args, "session", null);
+        return new BrowserDslContext(context, args, session, null, null);
     }
 }

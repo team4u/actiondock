@@ -93,6 +93,20 @@ class ActionDockBrowserSystemPluginTest {
                 .extracting("type")
                 .isEqualTo("string");
 
+        Map<String, Object> openAction = manifest.getActions().stream()
+                .filter(action -> "open".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getExampleArgs();
+        assertThat(openAction).containsEntry("session", "run1");
+
+        Map<String, Object> sessionListSchema = manifest.getActions().stream()
+                .filter(action -> "sessionList".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getInputSchema();
+        assertThat(propertiesOf(sessionListSchema)).doesNotContainKey("session");
+
         Map<String, Object> pressSchema = manifest.getActions().stream()
                 .filter(action -> "press".equals(action.getAction()))
                 .findFirst()

@@ -50,7 +50,8 @@ final class BrowserDslStateActions {
             default -> throw new IllegalArgumentException("Unsupported cookies op: " + op);
         };
         result.put("session", dsl.session());
-        result.put("op", op);
+        result.remove("op");
+        result.put("action", "cookies" + Character.toUpperCase(op.charAt(0)) + op.substring(1));
         return tabs.transformResult(dsl.context(), dsl.session(), result);
     }
 
@@ -108,7 +109,16 @@ final class BrowserDslStateActions {
             default -> throw new IllegalArgumentException("Unsupported storage op: " + op);
         };
         result.put("session", dsl.session());
-        result.put("op", op);
+        result.put("action", storageActionName(op, dsl.args()));
         return tabs.transformResult(dsl.context(), dsl.session(), result);
+    }
+
+    private static String storageActionName(String op, Map<String, Object> args) {
+        return switch (op) {
+            case "state", "save" -> "storageState";
+            case "local", "session" -> Args.has(args, "value") ? "storageSet" : "storageGet";
+            case "clearLocal", "clearSession" -> "storageClear";
+            default -> op;
+        };
     }
 }
