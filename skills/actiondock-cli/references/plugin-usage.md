@@ -29,6 +29,12 @@ actiondock plugin list --json
 actiondock plugin get <plugin-id> --json
 ```
 
+如果插件 action 很多，或 schema 很大，优先直接写入文件，避免终端响应截断：
+
+```bash
+actiondock plugin get <plugin-id> --json > /tmp/<plugin-id>.plugin.json
+```
+
 重点看：
 
 - `actions`
@@ -76,6 +82,8 @@ actiondock plugin invoke <plugin-id> <action> --json
 3. 决定用动态 flag 还是 JSON / 文件输入
 4. 再执行 `plugin invoke`
 
+默认优先使用扁平入参，也就是把简单顶层字段直接展开成普通 flag。只有遇到对象、数组，或者终端里不适合内联的大 JSON，再退回 `--args-json` / `--args-file`。
+
 插件调用有三类输入，不能混用错：
 
 - action args 简单字段：直接用动态 flag，例如 `--name world`
@@ -111,6 +119,14 @@ actiondock plugin invoke my-plugin summarize \
 actiondock plugin invoke my-plugin summarize \
   --args-file ./plugin-args.json \
   --json
+```
+
+如果 schema 或结果内容本身很长，也优先把输出写文件：
+
+```bash
+actiondock plugin invoke my-plugin summarize \
+  --args-file ./plugin-args.json \
+  --json > /tmp/plugin-result.json
 ```
 
 ### 混合传参
@@ -199,3 +215,72 @@ actiondock plugin invoke my-plugin summarize \
   --response-view debug \
   --json
 ```
+
+### 浏览器插件：优先走扁平顶层字段，`target` 再单独用 JSON
+
+浏览器插件是最适合先看 schema 再调用的一类插件。推荐工作流：
+
+1. `sessionCreate`
+2. `goto`
+3. `observe`
+4. 用 `observe.elements[].ref` 回填 `target.ref`
+5. 对元素执行 `click` / `fill` / `setChecked` 等动作
+
+浏览器插件的 schema 和 action 列表通常较长，优先输出到文件：
+
+```bash
+actiondock plugin get actiondock-browser --json > /tmp/actiondock-browser.plugin.json
+actiondock plugin invoke actiondock-browser capabilities --json > /tmp/actiondock-browser.capabilities.json
+```
+
+如果只是顶层简单字段，直接用扁平 flag：
+
+```bash
+actiondock plugin invoke actiondock-browser sessionCreate \
+  --browser chromium \
+  --headless \
+  --json
+
+actiondock plugin invoke actiondock-browser goto \
+  --sessionId br_xxx \
+  --url https://example.com \
+  --json
+
+actiondock plugin invoke actiondock-browser observe \
+  --sessionId br_xxx \
+  --limit 80 \
+  --json > /tmp/browser-observe.json
+```
+
+`observe` 返回的元素定位对象是复杂字段，后续优先把 `target` 放进 `--args-json` 或 `--args-file`，而不是尝试拆成多个 flag：
+
+```bash
+actiondock plugin invoke actiondock-browser fill \
+  --sessionId br_xxx \
+  --value 'hello@example.com' \
+  --args-json '{"target":{"ref":"e3"}}' \
+  --json
+```
+
+对更稳定、可复用的浏览器动作，优先写文件：
+
+```bash
+cat > /tmp/browser-fill.json <<'JSON'
+{
+  "target": { "ref": "e3" }
+}
+JSON
+
+actiondock plugin invoke actiondock-browser fill \
+  --sessionId br_xxx \
+  --value 'hello@example.com' \
+  --args-file /tmp/browser-fill.json \
+  --json
+```
+
+补充约定：
+
+- `sessionId`、`pageId`、`url`、`value`、`checked`、`timeoutMs` 这类简单顶层字段，优先直接写 flag。
+- `target`、`destination`、`headers`、`cookies`、`viewport`、`geolocation` 这类对象或数组字段，优先 `--args-file`。
+- 复选框和单选框不要用 `fill`，改用 `setChecked` / `check` / `uncheck`。
+- 页面跳转、弹窗、明显 DOM 变化后，先重新 `observe`，再使用新的 `target.ref`。
