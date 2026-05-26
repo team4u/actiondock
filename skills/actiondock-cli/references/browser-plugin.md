@@ -2,412 +2,217 @@
 
 当用户需要打开网页、读取页面内容、点击元素、填写表单、处理弹窗/下载，或通过浏览器上下文发起请求时，使用 `actiondock-browser` 插件。
 
-本文件只覆盖浏览器插件的常见场景。通用 `plugin` 命令、动态 flag、`--args-json` / `--args-file` 规则见 `references/plugin-usage.md`。
+本插件保持 ActionDock 插件调用体系：
 
-## 目标
+```bash
+actiondock plugin invoke actiondock-browser <action> --flag value --json
+```
 
-用稳定、可观察的步骤完成浏览器任务：
-
-1. 创建浏览器会话
-2. 打开目标页面
-3. 观察页面结构和可操作元素
-4. 基于 `observe.elements[].ref` 操作页面
-5. 页面变化后重新观察
+设计原则：一个 action 表达一个清晰语义；入参保持扁平。不要使用嵌套 `target` 对象，也不要用通用 `--op` 字段。
 
 ## 标准工作流
 
 ```bash
-actiondock plugin invoke actiondock-browser sessionCreate \
-  --browser chromium \
-  --headless true \
-  --json
-
-actiondock plugin invoke actiondock-browser goto \
-  --sessionId <sessionId> \
-  --url https://example.com \
-  --json
-
-actiondock plugin invoke actiondock-browser observe \
-  --sessionId <sessionId> \
-  --limit 80 \
-  --json > /tmp/browser-observe.json
+actiondock plugin invoke actiondock-browser open --url https://example.com --json
+actiondock plugin invoke actiondock-browser snapshot --limit 80 --json > /tmp/browser-snapshot.json
 ```
 
-`observe` 返回页面摘要，重点看：
+`snapshot` 返回：
 
 - `url` / `title`
 - `visibleText`
 - `ariaSnapshot`
-- `elements[].ref`
+- `elements[].ref`，格式为 `@e1`
 - `forms`
 - `frames`
 - `events`
 - `suggestions`
 
-后续点击、填写、选择、截图元素时，优先使用 `observe.elements[].ref`：
+后续操作直接把 `elements[].ref` 作为字符串传给 `--target`：
 
 ```bash
-actiondock plugin invoke actiondock-browser click \
-  --sessionId <sessionId> \
-  --args-json '{"target":{"ref":"e1"}}' \
+actiondock plugin invoke actiondock-browser click --target @e2 --json
+```
+
+## 目标选择器
+
+`--target` 是一个字符串：
+
+- `@e1`: 来自最近一次 `snapshot` 的元素引用
+- `#submit` / `.item`: CSS selector
+- `css:button.primary`: 显式 CSS selector
+
+语义定位使用专门 action：
+
+```bash
+actiondock plugin invoke actiondock-browser findClick \
+  --by role \
+  --query button \
+  --name Submit \
+  --json
+
+actiondock plugin invoke actiondock-browser findFill \
+  --by label \
+  --query Email \
+  --text hello@example.com \
   --json
 ```
 
-## 参数约定
+可用 `--by`：`role`、`text`、`label`、`placeholder`、`alt`、`title`、`testid`、`css`。
 
-简单顶层字段优先直接写 flag：
+## 常用动作
+
+### 点击和输入
 
 ```bash
-actiondock plugin invoke actiondock-browser goto \
-  --sessionId <sessionId> \
-  --url https://example.com \
-  --timeoutMs 30000 \
-  --json
+actiondock plugin invoke actiondock-browser click --target @e2 --json
+actiondock plugin invoke actiondock-browser dblclick --target @e2 --json
+actiondock plugin invoke actiondock-browser fill --target @e3 --text hello@example.com --json
+actiondock plugin invoke actiondock-browser type --target @e3 --text hello --json
+actiondock plugin invoke actiondock-browser press --key Enter --json
 ```
 
-对象、数组或复杂字段使用 `--args-json` / `--args-file`：
+复选框和单选框：
 
 ```bash
-actiondock plugin invoke actiondock-browser sessionCreate \
-  --args-json '{"browser":"chromium","headless":true,"viewport":{"width":1280,"height":720}}' \
-  --json
+actiondock plugin invoke actiondock-browser check --target @e4 --json
+actiondock plugin invoke actiondock-browser uncheck --target @e4 --json
 ```
 
-常见复杂字段包括：
-
-- `target`
-- `destination`
-- `viewport`
-- `geolocation`
-- `headers`
-- `cookies`
-- `permissions`
-- `args`
-- `options`
-
-如果不确定 action 参数，先看 schema：
+选择框、上传、拖拽：
 
 ```bash
-actiondock plugin action actiondock-browser <action>
-actiondock plugin invoke actiondock-browser capabilities --json
+actiondock plugin invoke actiondock-browser select --target @e5 --value US --json
+actiondock plugin invoke actiondock-browser upload --target @e6 --path ./upload.txt --json
+actiondock plugin invoke actiondock-browser drag --target @e1 --to @e2 --json
 ```
 
-## 常见场景
-
-### 读取网页内容
-
-先用 `observe` 获取结构化摘要：
+### 读取和判断
 
 ```bash
-actiondock plugin invoke actiondock-browser observe \
-  --sessionId <sessionId> \
-  --limit 120 \
-  --maxTextLength 12000 \
-  --json > /tmp/browser-observe.json
+actiondock plugin invoke actiondock-browser getTitle --json
+actiondock plugin invoke actiondock-browser getUrl --json
+actiondock plugin invoke actiondock-browser getText --target @e1 --json
+actiondock plugin invoke actiondock-browser getAttr --target @e1 --name href --json
+
+actiondock plugin invoke actiondock-browser isVisible --target @e1 --json
+actiondock plugin invoke actiondock-browser isEnabled --target @e1 --json
+actiondock plugin invoke actiondock-browser isChecked --target @e1 --json
 ```
 
-需要完整 HTML 或正文文本时，用 `evaluate`：
+### 等待
 
 ```bash
-actiondock plugin invoke actiondock-browser evaluate \
-  --sessionId <sessionId> \
-  --expression '() => document.documentElement.outerHTML' \
-  --json > /tmp/page-html.json
-
-actiondock plugin invoke actiondock-browser evaluate \
-  --sessionId <sessionId> \
-  --expression '() => document.body?.innerText || ""' \
-  --json > /tmp/page-text.json
+actiondock plugin invoke actiondock-browser waitForLoad --state load --json
+actiondock plugin invoke actiondock-browser waitForElement --target @e1 --state visible --json
+actiondock plugin invoke actiondock-browser waitForText --text Welcome --json
+actiondock plugin invoke actiondock-browser waitForUrl --url '**/dashboard' --json
+actiondock plugin invoke actiondock-browser waitForResponse --value '**/api/**' --json
+actiondock plugin invoke actiondock-browser waitForTimeout --timeoutMs 1000 --json
 ```
 
-### 点击和基础元素操作
+页面跳转或明显 DOM 更新后，重新 `snapshot`，再使用新的 `@e1` 引用。
 
-点击、悬停、聚焦、清空、滚动到元素等动作都优先使用 `target.ref`：
+## 会话和 Tab
+
+默认会话名是 `default`。需要隔离时传 `--session`：
 
 ```bash
-actiondock plugin invoke actiondock-browser click \
-  --sessionId <sessionId> \
-  --args-json '{"target":{"ref":"e2"}}' \
-  --json
-
-actiondock plugin invoke actiondock-browser scrollIntoView \
-  --sessionId <sessionId> \
-  --args-json '{"target":{"ref":"e8"}}' \
-  --json
+actiondock plugin invoke actiondock-browser open --session admin --url https://example.com --json
+actiondock plugin invoke actiondock-browser snapshot --session admin --json
 ```
 
-如果没有稳定 `ref`，可用选择器或语义定位，但要先确认 schema：
+Tab：
 
 ```bash
-actiondock plugin invoke actiondock-browser click \
-  --sessionId <sessionId> \
-  --args-json '{"target":{"role":"button","name":"Submit","exact":true}}' \
-  --json
+actiondock plugin invoke actiondock-browser tabList --json
+actiondock plugin invoke actiondock-browser tabNew --url https://docs.example.com --label docs --json
+actiondock plugin invoke actiondock-browser tabSwitch --tab docs --json
+actiondock plugin invoke actiondock-browser tabClose --tab docs --json
 ```
 
-### 填写表单
-
-文本输入用 `fill` 或 `typeText`：
+查看或关闭会话：
 
 ```bash
-actiondock plugin invoke actiondock-browser fill \
-  --sessionId <sessionId> \
-  --value 'hello@example.com' \
-  --args-json '{"target":{"ref":"e3"}}' \
-  --json
-```
-
-选择框用 `selectOption`：
-
-```bash
-actiondock plugin invoke actiondock-browser selectOption \
-  --sessionId <sessionId> \
-  --value US \
-  --args-json '{"target":{"ref":"e4"}}' \
-  --json
-```
-
-复选框和单选框不要用 `fill`，使用 `setChecked` / `check` / `uncheck`：
-
-```bash
-actiondock plugin invoke actiondock-browser setChecked \
-  --sessionId <sessionId> \
-  --checked true \
-  --args-json '{"target":{"ref":"e5"}}' \
-  --json
-```
-
-文件上传用 `setInputFiles`，路径相对工作区：
-
-```bash
-actiondock plugin invoke actiondock-browser setInputFiles \
-  --sessionId <sessionId> \
-  --path ./upload.txt \
-  --args-json '{"target":{"ref":"e6"}}' \
-  --json
-```
-
-### 等待页面变化
-
-页面跳转、按钮触发 DOM 变化、弹窗、下载或网络请求后，先等待，再重新 `observe`：
-
-```bash
-actiondock plugin invoke actiondock-browser waitForLoadState \
-  --sessionId <sessionId> \
-  --state load \
-  --json
-
-actiondock plugin invoke actiondock-browser observe \
-  --sessionId <sessionId> \
-  --limit 80 \
-  --json > /tmp/browser-observe.json
-```
-
-常用等待动作：
-
-| 场景 | 动作 |
-|------|------|
-| 页面加载 | `waitForLoadState` |
-| 元素出现/消失 | `waitForSelector` |
-| URL 变化 | `waitForUrl` |
-| JS 条件满足 | `waitForFunction` |
-| 请求/响应出现 | `waitForRequest` / `waitForResponse` |
-| 控制台消息 | `waitForConsole` |
-| 弹出新页面 | `waitForPopup` |
-| 下载开始 | `waitForDownload` |
-
-`target.ref` 只代表某次 `observe` 的结果。导航、弹窗、明显 DOM 更新后，必须重新 `observe`，再使用新的 `target.ref`。
-
-### 多页面、弹窗和事件
-
-读取 buffered 事件：
-
-```bash
-actiondock plugin invoke actiondock-browser events \
-  --sessionId <sessionId> \
-  --json > /tmp/browser-events.json
-```
-
-等待新页面并切换：
-
-```bash
-actiondock plugin invoke actiondock-browser waitForPopup \
-  --sessionId <sessionId> \
-  --json
-
-actiondock plugin invoke actiondock-browser pageList \
-  --sessionId <sessionId> \
-  --json
-
-actiondock plugin invoke actiondock-browser pageSwitch \
-  --sessionId <sessionId> \
-  --pageId <pageId> \
-  --json
-```
-
-处理浏览器 dialog：
-
-```bash
-actiondock plugin invoke actiondock-browser dialogAccept \
-  --sessionId <sessionId> \
-  --dialogId <dialogId> \
-  --json
-```
-
-`dialogId` 来自 `observe.events` 或 `events`。
-
-### 下载和产物
-
-等待下载并保存：
-
-```bash
-actiondock plugin invoke actiondock-browser waitForDownload \
-  --sessionId <sessionId> \
-  --json
-
-actiondock plugin invoke actiondock-browser downloadSaveAs \
-  --sessionId <sessionId> \
-  --downloadId <downloadId> \
-  --name report.csv \
-  --json
-```
-
-截图或生成 PDF：
-
-```bash
-actiondock plugin invoke actiondock-browser screenshot \
-  --sessionId <sessionId> \
-  --name page \
-  --fullPage true \
-  --json
-
-actiondock plugin invoke actiondock-browser locatorScreenshot \
-  --sessionId <sessionId> \
-  --name submit-button \
-  --args-json '{"target":{"ref":"e7"}}' \
-  --json
-
-actiondock plugin invoke actiondock-browser pdf \
-  --sessionId <sessionId> \
-  --name page \
-  --format A4 \
-  --json
-```
-
-产物目录由插件配置控制，默认在浏览器 artifact/download 目录下。
-
-### 登录态、Cookie 和网络
-
-保存或复用登录态：
-
-```bash
-actiondock plugin invoke actiondock-browser storageState \
-  --sessionId <sessionId> \
-  --stateName login \
-  --json
-
-actiondock plugin invoke actiondock-browser sessionCreate \
-  --browser chromium \
-  --headless true \
-  --stateName login \
-  --json
-```
-
-读取、设置或清理 Cookie：
-
-```bash
-actiondock plugin invoke actiondock-browser cookiesGet \
-  --sessionId <sessionId> \
-  --json
-
-actiondock plugin invoke actiondock-browser cookiesSet \
-  --sessionId <sessionId> \
-  --args-json '{"cookies":[{"name":"sid","value":"1","url":"https://example.com"}]}' \
-  --json
-```
-
-使用浏览器上下文 Cookie 发起 HTTP 请求：
-
-```bash
-actiondock plugin invoke actiondock-browser httpRequest \
-  --sessionId <sessionId> \
-  --url https://example.com/api/me \
-  --method GET \
-  --json
-```
-
-网络拦截和离线模式：
-
-```bash
-actiondock plugin invoke actiondock-browser networkRoute \
-  --sessionId <sessionId> \
-  --url '**/*.png' \
-  --routeAction abort \
-  --json
-
-actiondock plugin invoke actiondock-browser networkSetOffline \
-  --sessionId <sessionId> \
-  --offline true \
-  --json
-```
-
-### 兜底能力
-
-常规动作不能满足时，用 `evaluate` 执行页面 JS：
-
-```bash
-actiondock plugin invoke actiondock-browser evaluate \
-  --sessionId <sessionId> \
-  --scope page \
-  --expression '() => window.location.href' \
-  --json
-```
-
-需要调用较少用的 Playwright 操作时，用 `advancedAction`：
-
-```bash
-actiondock plugin invoke actiondock-browser advancedAction \
-  --sessionId <sessionId> \
-  --op click \
-  --args-json '{"target":{"ref":"e1"},"options":{"button":"right"}}' \
-  --json
-```
-
-`evaluate` 和 `advancedAction` 是逃生口。优先使用精确 action，只有现有 action 不够时再用。
-
-## 会话管理
-
-查看会话：
-
-```bash
+actiondock plugin invoke actiondock-browser sessionInfo --json
 actiondock plugin invoke actiondock-browser sessionList --json
-actiondock plugin invoke actiondock-browser sessionInfo --sessionId <sessionId> --json
+actiondock plugin invoke actiondock-browser sessionClose --json
 ```
 
-任务结束后关闭会话：
+## 截图、PDF、弹窗
 
 ```bash
-actiondock plugin invoke actiondock-browser sessionClose \
-  --sessionId <sessionId> \
+actiondock plugin invoke actiondock-browser screenshot --name page --fullPage true --json
+actiondock plugin invoke actiondock-browser screenshot --target @e1 --name element --json
+actiondock plugin invoke actiondock-browser pdf --name page --format A4 --json
+```
+
+Dialog：
+
+```bash
+actiondock plugin invoke actiondock-browser dialogList --json
+actiondock plugin invoke actiondock-browser dialogAccept --id d1 --json
+actiondock plugin invoke actiondock-browser dialogDismiss --id d1 --json
+```
+
+## Cookie、Storage、网络
+
+```bash
+actiondock plugin invoke actiondock-browser cookiesList --json
+actiondock plugin invoke actiondock-browser cookiesSet --name sid --value 1 --url https://example.com --json
+actiondock plugin invoke actiondock-browser cookiesClear --json
+
+actiondock plugin invoke actiondock-browser storageState --stateName login --json
+actiondock plugin invoke actiondock-browser storageGet --area local --key token --json
+actiondock plugin invoke actiondock-browser storageSet --area local --key token --value abc --json
+actiondock plugin invoke actiondock-browser storageClear --area local --json
+
+actiondock plugin invoke actiondock-browser networkRequest --url https://example.com/api/me --method GET --json
+actiondock plugin invoke actiondock-browser networkRoute --url '**/*.png' --routeAction abort --json
+actiondock plugin invoke actiondock-browser networkOffline --value true --json
+```
+
+复杂 JSON 用字符串字段：
+
+```bash
+actiondock plugin invoke actiondock-browser networkHeaders \
+  --headersJson '{"X-Test":"1"}' \
+  --json
+```
+
+## Batch
+
+多步流程可以放到 `batch --commands`，每行一条短命令：
+
+```bash
+actiondock plugin invoke actiondock-browser batch \
+  --commands $'open https://example.com\nsnapshot\nclick @e2\nwait url **/done' \
+  --bail true \
+  --json
+```
+
+## 兜底能力
+
+常规动作不能满足时，用 `eval`：
+
+```bash
+actiondock plugin invoke actiondock-browser eval \
+  --expression '() => document.body.innerText' \
+  --json
+
+actiondock plugin invoke actiondock-browser eval \
+  --scope locator \
+  --target @e1 \
+  --expression 'el => el.outerHTML' \
   --json
 ```
 
 ## 排查顺序
 
-1. 插件是否存在：`actiondock plugin get actiondock-browser`；如果命令返回插件不存在，再提示先安装 `actiondock-browser` 插件
+1. 插件是否存在：`actiondock plugin get actiondock-browser`
 2. action 参数是否匹配：`actiondock plugin action actiondock-browser <action>`
-3. 会话是否仍有效：`sessionInfo` / `sessionList`
-4. 页面状态是否变化：重新 `observe`
-5. 元素 ref 是否过期：重新读取 `observe.elements`
-6. 是否需要等待：补 `waitForLoadState` / `waitForSelector` / `waitForResponse`
-7. 是否触发弹窗、下载或新页面：查看 `events`
-
-## 术语
-
-- `actiondock-browser`: 基于 Playwright 的浏览器插件，提供页面读取、操作、等待、事件、网络、截图和会话能力
-- `sessionId`: 浏览器会话 ID，绝大多数 action 都需要传入
-- `pageId`: 多页面/多 tab 场景下的页面 ID，不传时使用当前 active page
-- `observe`: 页面观察动作，返回结构化摘要和可操作元素
-- `target.ref`: `observe.elements[].ref` 中的临时元素引用，页面变化后需要重新获取
-- `evaluate`: 在页面或元素上执行 JavaScript 的兜底动作
-- `advancedAction`: 对少见 Playwright 操作的兜底动作
+3. 会话是否存在：`sessionInfo` / `sessionList`
+4. 页面是否变化：重新 `snapshot`
+5. 元素 ref 是否过期：重新读取 `snapshot.elements`
+6. 是否需要等待：补 `waitForLoad` / `waitForElement` / `waitForUrl` / `waitForResponse`
+7. 是否触发弹窗、下载或新 tab：查看 `dialogList`、`networkEvents`、`tabList`

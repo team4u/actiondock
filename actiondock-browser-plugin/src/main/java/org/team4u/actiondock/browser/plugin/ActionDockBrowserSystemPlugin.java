@@ -16,7 +16,7 @@ public class ActionDockBrowserSystemPlugin implements ActionDockPlugin {
         BrowserGatewayService browserService = new BrowserGatewayService(sessionManager, pathResolver);
 
         this.actions = new BrowserActionRegistry();
-        new BrowserGatewayActions(browserService).registerTo(actions);
+        new BrowserDslActions(browserService).registerTo(actions);
     }
 
     @Override

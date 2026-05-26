@@ -6,8 +6,9 @@ import org.team4u.actiondock.plugin.api.PluginManifestLoader;
 import org.team4u.actiondock.plugin.api.PluginObjectMappers;
 
 import java.io.InputStream;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,64 +24,91 @@ class ActionDockBrowserSystemPluginTest {
         assertThat(manifest.getActions())
                 .extracting("action")
                 .contains(
-                        "sessionCreate",
-                        "observe",
-                        "capabilities",
-                        "goto",
+                        "open",
+                        "snapshot",
                         "click",
                         "fill",
-                        "setChecked",
+                        "press",
+                        "getText",
+                        "getTitle",
+                        "isVisible",
+                        "waitForUrl",
+                        "findClick",
+                        "tabNew",
+                        "tabSwitch",
+                        "sessionInfo",
+                        "cookiesSet",
+                        "storageGet",
+                        "networkRequest",
+                        "eval",
+                        "batch",
+                        "capabilities"
+                )
+                .doesNotContain(
+                        "act",
+                        "find",
+                        "get",
+                        "is",
+                        "wait",
+                        "tab",
+                        "session",
+                        "capture",
+                        "dialog",
+                        "cookies",
+                        "storage",
+                        "network",
+                        "sessionCreate",
+                        "observe",
+                        "goto",
                         "waitForSelector",
                         "pageList",
                         "cookiesGet",
-                        "networkRoute",
-                        "mouse",
                         "advancedAction",
-                        "evaluate",
-                        "events",
-                        "sessionInfo",
-                        "sessionList",
-                        "sessionClose"
-                )
-                .doesNotContain("act", "wait", "pages");
+                        "evaluate"
+                );
 
-        assertThat(manifest.getActions().stream()
-                .filter(action -> "setChecked".equals(action.getAction()))
-                .findFirst()
-                .orElseThrow()
-                .getInputSchema())
-                .extractingByKey("required")
-                .asList()
-                .contains("sessionId", "target", "checked");
-
-        Map<String, Object> observeSchema = manifest.getActions().stream()
-                .filter(action -> "observe".equals(action.getAction()))
+        Map<String, Object> snapshotSchema = manifest.getActions().stream()
+                .filter(action -> "snapshot".equals(action.getAction()))
                 .findFirst()
                 .orElseThrow()
                 .getOutputSchema();
-        assertThat(propertiesOf(observeSchema))
-                .containsKeys("ok", "sessionId", "pageId", "url", "title", "elements", "suggestedActions", "events");
+        assertThat(propertiesOf(snapshotSchema))
+                .containsKeys("ok", "session", "tab", "url", "title", "elements", "suggestions", "events");
 
-        Map<String, Object> elementsSchema = nestedSchema(observeSchema, "elements");
+        Map<String, Object> elementsSchema = nestedSchema(snapshotSchema, "elements");
         assertThat(elementsSchema).containsEntry("type", "array");
         assertThat(propertiesOf((Map<String, Object>) elementsSchema.get("items")))
                 .containsKeys("ref", "selector", "role", "name", "label", "placeholder", "testId", "bounds");
 
-        Map<String, Object> targetSchema = manifest.getActions().stream()
+        Map<String, Object> fillSchema = manifest.getActions().stream()
                 .filter(action -> "fill".equals(action.getAction()))
                 .findFirst()
                 .orElseThrow()
                 .getInputSchema();
-        assertThat(propertiesOf(nestedSchema(targetSchema, "target")))
-                .containsKeys("altText", "index");
+        assertThat(propertiesOf(fillSchema))
+                .containsKeys("session", "tab", "target", "text", "exact", "index");
+        assertThat(propertiesOf(fillSchema)).doesNotContainKey("op");
+        assertThat(propertiesOf(fillSchema).get("target"))
+                .as("target is a flat selector string, not a nested schema")
+                .extracting("type")
+                .isEqualTo("string");
 
-        Map<String, Object> pdfSchema = manifest.getActions().stream()
-                .filter(action -> "pdf".equals(action.getAction()))
+        Map<String, Object> pressSchema = manifest.getActions().stream()
+                .filter(action -> "press".equals(action.getAction()))
                 .findFirst()
                 .orElseThrow()
                 .getInputSchema();
-        assertThat(propertiesOf(pdfSchema))
-                .containsKeys("displayHeaderFooter", "headerTemplate", "footerTemplate", "preferCSSPageSize", "outline", "tagged");
+        assertThat(propertiesOf(pressSchema)).containsKeys("key").doesNotContainKey("op");
+
+        Map<String, Object> cookiesSetSchema = manifest.getActions().stream()
+                .filter(action -> "cookiesSet".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getInputSchema();
+        assertThat(propertiesOf(cookiesSetSchema)).containsKeys("name", "value", "url", "cookiesJson").doesNotContainKey("op");
+
+        Set<String> actionNames = manifest.getActions().stream().map(action -> action.getAction()).collect(Collectors.toSet());
+        assertThat(actionNames).hasSizeGreaterThan(50);
     }
 
     @Test
