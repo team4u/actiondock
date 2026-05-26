@@ -14,10 +14,37 @@ final class BrowserPathResolver {
         return resolvePath(config.getArtifactDir(), args, "name", "path", ".png", createParent);
     }
 
+    Path resolvePdfPath(BrowserPluginConfig config, Map<String, Object> args, boolean createParent) throws IOException {
+        return resolvePath(config.getArtifactDir(), args, "name", "path", ".pdf", createParent);
+    }
+
+    Path resolveInputFilePath(String pathValue) throws IOException {
+        if (Args.isBlank(pathValue)) {
+            throw new IllegalArgumentException("path must not be blank");
+        }
+        Path root = Path.of(".").toAbsolutePath().normalize();
+        Path candidate = Path.of(pathValue);
+        if (candidate.isAbsolute()) {
+            throw new IllegalArgumentException("path must be relative to " + root);
+        }
+        Path resolved = root.resolve(candidate).toAbsolutePath().normalize();
+        if (!resolved.startsWith(root)) {
+            throw new IllegalArgumentException("path escapes allowed directory");
+        }
+        if (!Files.isRegularFile(resolved)) {
+            throw new IllegalArgumentException("path must point to an existing file: " + pathValue);
+        }
+        return resolved;
+    }
+
     Path resolveDownloadDir(BrowserPluginConfig config) throws IOException {
         Path path = Path.of(config.getDownloadDir()).toAbsolutePath().normalize();
         Files.createDirectories(path);
         return path;
+    }
+
+    Path resolveDownloadPath(BrowserPluginConfig config, Map<String, Object> args, boolean createParent) throws IOException {
+        return resolvePath(config.getDownloadDir(), args, "name", "path", "", createParent);
     }
 
     private Path resolvePath(String rootValue,

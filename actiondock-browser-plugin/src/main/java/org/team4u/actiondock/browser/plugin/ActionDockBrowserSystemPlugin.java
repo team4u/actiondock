@@ -13,18 +13,10 @@ public class ActionDockBrowserSystemPlugin implements ActionDockPlugin {
     public ActionDockBrowserSystemPlugin() {
         BrowserSessionManager sessionManager = new BrowserSessionManager();
         BrowserPathResolver pathResolver = new BrowserPathResolver();
-        BrowserHostPolicy hostPolicy = new BrowserHostPolicy();
-        BrowserPrimitiveService browserService = new BrowserPrimitiveService(sessionManager, pathResolver, hostPolicy);
+        BrowserGatewayService browserService = new BrowserGatewayService(sessionManager, pathResolver);
 
         this.actions = new BrowserActionRegistry();
-        new SessionActions(browserService).registerTo(actions);
-        new NavigationActions(browserService).registerTo(actions);
-        new WaitActions(browserService).registerTo(actions);
-        new InteractionActions(browserService).registerTo(actions);
-        new ReadActions(browserService).registerTo(actions);
-        new CookieActions(browserService).registerTo(actions);
-        new StorageActions(browserService).registerTo(actions);
-        new ArtifactActions(browserService).registerTo(actions);
+        new BrowserGatewayActions(browserService).registerTo(actions);
     }
 
     @Override

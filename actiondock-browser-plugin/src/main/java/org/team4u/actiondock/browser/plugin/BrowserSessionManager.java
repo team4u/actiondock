@@ -81,6 +81,8 @@ final class BrowserSessionManager {
             result.put("browser", session.browserName());
             result.put("url", session.page().url());
             result.put("title", session.page().title());
+            result.put("activePageId", session.activePageId());
+            result.put("pages", session.pagesInfo());
             result.put("createdAt", session.createdAt().toString());
             result.put("lastAccessAt", session.lastAccessAt().toString());
             return result;
@@ -96,6 +98,7 @@ final class BrowserSessionManager {
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("sessionId", session.sessionId());
                     item.put("browser", session.browserName());
+                    item.put("activePageId", session.activePageId());
                     item.put("createdAt", session.createdAt().toString());
                     item.put("lastAccessAt", session.lastAccessAt().toString());
                     item.put("closed", session.isClosed());

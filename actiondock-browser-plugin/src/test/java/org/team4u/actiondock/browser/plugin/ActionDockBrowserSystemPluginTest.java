@@ -19,7 +19,19 @@ class ActionDockBrowserSystemPluginTest {
         assertThat(plugin.id()).isEqualTo("actiondock-browser");
         assertThat(manifest.getActions())
                 .extracting("action")
-                .contains("sessionCreate", "goto", "getCookies", "storageStateSave", "screenshot");
+                .contains(
+                        "sessionCreate",
+                        "observe",
+                        "act",
+                        "evaluate",
+                        "wait",
+                        "pages",
+                        "events",
+                        "sessionInfo",
+                        "sessionList",
+                        "sessionClose"
+                )
+                .doesNotContain("click", "fill", "goto", "setChecked", "screenshot");
     }
 
     @Test
