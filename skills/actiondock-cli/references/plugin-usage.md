@@ -252,6 +252,20 @@ actiondock plugin invoke actiondock-browser observe \
   --json > /tmp/browser-observe.json
 ```
 
+`observe` 返回的是页面摘要，适合读取 `visibleText`、`elements`、`forms`、`ariaSnapshot` 等结构化信息，不返回完整页面源码。需要完整 HTML 或正文文本时，用 `evaluate`，并优先把输出写入文件：
+
+```bash
+actiondock plugin invoke actiondock-browser evaluate \
+  --sessionId br_xxx \
+  --expression '() => document.documentElement.outerHTML' \
+  --json > /tmp/page-html.json
+
+actiondock plugin invoke actiondock-browser evaluate \
+  --sessionId br_xxx \
+  --expression '() => document.body?.innerText || ""' \
+  --json > /tmp/page-text.json
+```
+
 `observe` 返回的元素定位对象是复杂字段，后续优先把 `target` 放进 `--args-json` 或 `--args-file`，而不是尝试拆成多个 flag：
 
 ```bash
