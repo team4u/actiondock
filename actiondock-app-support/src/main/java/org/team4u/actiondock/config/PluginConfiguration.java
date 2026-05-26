@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.team4u.actiondock.ai.core.AiAgentRuntimeImpl;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
+import org.team4u.actiondock.browser.plugin.ActionDockBrowserSystemPlugin;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -38,6 +39,11 @@ public class PluginConfiguration {
     @Bean
     public ActionDockPlugin actionDockWorkspaceSystemPlugin() {
         return new ActionDockWorkspaceSystemPlugin();
+    }
+
+    @Bean
+    public ActionDockPlugin actionDockBrowserSystemPlugin() {
+        return new ActionDockBrowserSystemPlugin();
     }
 
     @Bean
