@@ -1,0 +1,1059 @@
+{
+  "pluginId": "actiondock-browser",
+  "name": "ActionDock Browser",
+  "description": "Built-in browser automation system plugin that exposes Playwright primitives for scripts.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "defaultBrowser": {
+        "type": "string",
+        "enum": [
+          "chromium",
+          "firefox",
+          "webkit"
+        ],
+        "title": "Default Browser"
+      },
+      "headless": {
+        "type": "boolean",
+        "title": "Headless"
+      },
+      "defaultTimeoutMs": {
+        "type": "integer",
+        "title": "Default Timeout Milliseconds"
+      },
+      "sessionTtlSeconds": {
+        "type": "integer",
+        "title": "Session TTL Seconds"
+      },
+      "maxSessions": {
+        "type": "integer",
+        "title": "Max Sessions"
+      },
+      "stateDir": {
+        "type": "string",
+        "title": "State Directory"
+      },
+      "artifactDir": {
+        "type": "string",
+        "title": "Artifact Directory"
+      },
+      "downloadDir": {
+        "type": "string",
+        "title": "Download Directory"
+      },
+      "allowedHosts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "title": "Allowed Hosts"
+      },
+      "includeCookieValueByDefault": {
+        "type": "boolean",
+        "title": "Include Cookie Value By Default"
+      }
+    }
+  },
+  "defaultConfig": {
+    "defaultBrowser": "chromium",
+    "headless": true,
+    "defaultTimeoutMs": 30000,
+    "sessionTtlSeconds": 600,
+    "maxSessions": 10,
+    "stateDir": ".actiondock/browser-state",
+    "artifactDir": ".actiondock/browser-artifacts",
+    "downloadDir": ".actiondock/browser-downloads",
+    "allowedHosts": [],
+    "includeCookieValueByDefault": false
+  },
+  "actions": [
+    {
+      "action": "sessionCreate",
+      "title": "Create Browser Session",
+      "description": "Create a Playwright browser session and return a sessionId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "browser": {
+            "type": "string",
+            "enum": [
+              "chromium",
+              "firefox",
+              "webkit"
+            ]
+          },
+          "headless": {
+            "type": "boolean"
+          },
+          "timeoutMs": {
+            "type": "integer"
+          },
+          "viewport": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "integer"
+              },
+              "height": {
+                "type": "integer"
+              }
+            }
+          },
+          "userAgent": {
+            "type": "string"
+          },
+          "stateName": {
+            "type": "string"
+          },
+          "storageStatePath": {
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "browser": {
+            "type": "string"
+          },
+          "headless": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "browser": "chromium",
+        "headless": true
+      }
+    },
+    {
+      "action": "sessionClose",
+      "title": "Close Browser Session",
+      "description": "Close a browser session and release Playwright resources.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "closed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx"
+      }
+    },
+    {
+      "action": "sessionInfo",
+      "title": "Get Session Info",
+      "description": "Read current page URL, title, and session metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "browser": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx"
+      }
+    },
+    {
+      "action": "sessionList",
+      "title": "List Sessions",
+      "description": "List active browser sessions owned by current script execution.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "sessions": {
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "exampleArgs": {}
+    },
+    {
+      "action": "goto",
+      "title": "Go To URL",
+      "description": "Navigate current page to a URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "url": {
+            "type": "string"
+          },
+          "waitUntil": {
+            "type": "string",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle",
+              "commit"
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessionId",
+          "url"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "url": "https://example.com",
+        "waitUntil": "load"
+      }
+    },
+    {
+      "action": "waitForLoadState",
+      "title": "Wait For Load State",
+      "description": "Wait for page load state.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle"
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "state": "networkidle"
+      }
+    },
+    {
+      "action": "waitForSelector",
+      "title": "Wait For Selector",
+      "description": "Wait until a selector reaches a specific state.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "attached",
+              "detached",
+              "visible",
+              "hidden"
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "#app",
+        "state": "visible"
+      }
+    },
+    {
+      "action": "click",
+      "title": "Click",
+      "description": "Click a locator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "button[type='submit']"
+      }
+    },
+    {
+      "action": "fill",
+      "title": "Fill",
+      "description": "Fill a form field.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector",
+          "value"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "#username",
+        "value": "demo"
+      }
+    },
+    {
+      "action": "press",
+      "title": "Press Key",
+      "description": "Press a keyboard key globally or on a locator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "key"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "#search",
+        "key": "Enter"
+      }
+    },
+    {
+      "action": "textContent",
+      "title": "Text Content",
+      "description": "Read text from a locator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "body"
+      }
+    },
+    {
+      "action": "innerText",
+      "title": "Inner Text",
+      "description": "Read text from a locator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "body"
+      }
+    },
+    {
+      "action": "getAttribute",
+      "title": "Get Attribute",
+      "description": "Read an attribute from a locator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector",
+          "name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "a",
+        "name": "href"
+      }
+    },
+    {
+      "action": "isVisible",
+      "title": "Is Visible",
+      "description": "Check whether a locator is visible.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": "#captcha"
+      }
+    },
+    {
+      "action": "locatorCount",
+      "title": "Locator Count",
+      "description": "Count elements matching a locator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "selector"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "selector": ".item"
+      }
+    },
+    {
+      "action": "getCookies",
+      "title": "Get Cookies",
+      "description": "Read cookies from browser context. Use current page URL by default and can include HttpOnly cookies.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "currentPageOnly": {
+            "type": "boolean"
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "includeValue": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string"
+          },
+          "cookies": {
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "currentPageOnly": true,
+        "includeValue": true
+      }
+    },
+    {
+      "action": "setCookies",
+      "title": "Set Cookies",
+      "description": "Add cookies to browser context.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "cookies": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "cookies"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "cookies": [
+          {
+            "name": "SESSION",
+            "value": "xxx",
+            "domain": "example.com",
+            "path": "/"
+          }
+        ]
+      }
+    },
+    {
+      "action": "clearCookies",
+      "title": "Clear Cookies",
+      "description": "Clear all cookies in browser context.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx"
+      }
+    },
+    {
+      "action": "getLocalStorage",
+      "title": "Get Local Storage",
+      "description": "Read localStorage for current origin.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx"
+      }
+    },
+    {
+      "action": "setLocalStorage",
+      "title": "Set Local Storage",
+      "description": "Set localStorage items for current origin.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "items": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "sessionId",
+          "items"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "items": {
+          "token": "xxx"
+        }
+      }
+    },
+    {
+      "action": "getSessionStorage",
+      "title": "Get Session Storage",
+      "description": "Read sessionStorage for current origin.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx"
+      }
+    },
+    {
+      "action": "clearStorage",
+      "title": "Clear Web Storage",
+      "description": "Clear localStorage and/or sessionStorage for current origin.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "localStorage": {
+            "type": "boolean"
+          },
+          "sessionStorage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "localStorage": {
+            "type": "boolean"
+          },
+          "sessionStorage": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "localStorage": true,
+        "sessionStorage": true
+      }
+    },
+    {
+      "action": "storageStateSave",
+      "title": "Save Storage State",
+      "description": "Save cookies, localStorage and other Playwright storage state to the configured state directory.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "stateName": {
+            "type": "string"
+          },
+          "storageStatePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "stateName": "example"
+      }
+    },
+    {
+      "action": "screenshot",
+      "title": "Screenshot",
+      "description": "Save a page screenshot under the configured artifact directory.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "title": "Session ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "fullPage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "fullPage": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "sessionId": "br_xxx",
+        "name": "page",
+        "fullPage": true
+      }
+    }
+  ]
+}
