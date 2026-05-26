@@ -27,7 +27,14 @@ export default class PluginReferencesCommand extends BaseCommand {
             });
             const items = await client.listPluginReferences();
             if (flags.json) {
-                this.printJson(items);
+                this.printJson(items.map(item => ({
+                    ...item,
+                    actions: item.actions.map(a => ({
+                        action: a.action,
+                        title: a.title,
+                        description: a.description
+                    }))
+                })));
                 return;
             }
             this.log(renderPluginList(items));

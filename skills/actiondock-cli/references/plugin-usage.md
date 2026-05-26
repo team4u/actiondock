@@ -6,42 +6,52 @@
 
 ---
 
-## 1. 先确认插件信息
+## 1. 渐进式浏览插件
 
-### 列出已安装插件
+插件信息按层级披露，从粗到细，避免一次性暴露所有 schema 噪音：
+
+| 层级 | 命令 | 看到什么 |
+|------|------|---------|
+| L1 | `plugin list` | 所有插件名、版本、动作数量 |
+| L2 | `plugin get <id>` | 插件元信息 + 动作名/标题/一行描述 |
+| L3 | `plugin action <id> <action>` | 单个动作的完整 inputSchema / outputSchema / exampleArgs |
+| L4 | `plugin invoke <id> <action>` | 调用并返回结果 |
+
+### L1: 列出已安装插件
 
 ```bash
 actiondock plugin list --json
 ```
 
-适合回答这些问题：
+适合回答：当前装了哪些插件、插件是否已启动、动作数量。
 
-- 当前装了哪些插件
-- 插件是否已启动
-- 插件版本是什么
-- 动作数量（`actionCount`）
-
-`plugin list` 只返回插件摘要，不返回 action schema。需要参数结构时使用 `plugin get <plugin-id> --json`。
-
-### 查看某个插件详情
+### L2: 查看某个插件的全部动作（无 schema）
 
 ```bash
+actiondock plugin get <plugin-id>
 actiondock plugin get <plugin-id> --json
 ```
 
-如果插件 action 很多，或 schema 很大，优先直接写入文件，避免终端响应截断：
+文本模式展示每个动作的名称、标题和描述。`--json` 同样只返回 `{ action, title, description }`，不包含 inputSchema / outputSchema。
+
+需要某个动作的详细 schema 时，进入 L3。
+
+### L3: 查看单个动作的完整 schema
 
 ```bash
-actiondock plugin get <plugin-id> --json > /tmp/<plugin-id>.plugin.json
+actiondock plugin action <plugin-id> <action>
+actiondock plugin action <plugin-id> <action> --json
 ```
 
-重点看：
+文本模式展示：
+- Input: 每个参数的 `--name <type> [required] [default=X]` + 描述
+- JSON-only fields: 不适合扁平 flag 的对象/数组字段
+- Output: 完整 outputSchema
+- Example: exampleArgs 示例
 
-- `actions`
-- 每个 action 的 `inputSchema`
-- 每个 action 的 `outputSchema`
-- `description`
-- `exampleArgs`
+`--json` 返回单个动作的完整 `PluginActionDefinition` 对象（含 inputSchema、outputSchema、exampleArgs）。
+
+动作不存在时会列出所有可用动作名称。
 
 ### 查看脚本可引用的插件
 
@@ -49,21 +59,13 @@ actiondock plugin get <plugin-id> --json > /tmp/<plugin-id>.plugin.json
 actiondock plugin references --json
 ```
 
-当用户想在脚本源码里写 `plugins.invoke(...)` 时，优先用这个命令确认：
-
-- 可用的 `pluginId`
-- 每个插件暴露了哪些 action
+返回所有已启动插件的动作摘要（只有 action / title / description），不含 schema。
 
 ### 查看插件当前配置
 
 ```bash
 actiondock plugin config get <plugin-id> --json
 ```
-
-适合排查：
-
-- 为什么插件行为和预期不一致
-- 某个 action 是否依赖插件配置
 
 ---
 
@@ -77,8 +79,8 @@ actiondock plugin invoke <plugin-id> <action> --json
 
 推荐顺序：
 
-1. `plugin get <plugin-id> --json`
-2. 找到目标 action 的 `inputSchema`
+1. `plugin get <plugin-id>` — 找到目标动作名
+2. `plugin action <plugin-id> <action>` — 查看 inputSchema
 3. 决定用动态 flag 还是 JSON / 文件输入
 4. 再执行 `plugin invoke`
 
@@ -174,127 +176,47 @@ actiondock plugin invoke <plugin-id> <action> \
 ```
 
 适合查看：
-
 - 实际传入的 `args`
 - 实际传入的 `scriptInput`
 - 插件返回结果
 
 ### 常见判断顺序
 
-1. 插件是否存在：先看 `plugin list` / `plugin get`
-2. action 是否存在：看 `plugin.get(...).actions`
-3. 入参是否匹配：对照 `inputSchema`
-4. 是否需要 `scriptInput`
-5. 如果是 AI 插件，再核对 `modelProfile` / `agentProfile`
+1. 插件是否存在：先看 `plugin list`
+2. 动作列表：看 `plugin get <id>`
+3. 动作 schema 详情：看 `plugin action <id> <action>`
+4. 入参是否匹配：对照 inputSchema
+5. 是否需要 `scriptInput`
+6. 如果是 AI 插件，再核对 `modelProfile` / `agentProfile`
 
 ---
 
 ## 4. 常见场景
 
-### 先找插件再调用
+### 渐进式浏览再调用
 
 ```bash
-actiondock plugin references --json
-actiondock plugin get actiondock-ai --json
+actiondock plugin list --json
+actiondock plugin get actiondock-ai
+actiondock plugin action actiondock-ai chat
 actiondock plugin invoke actiondock-ai chat --args-json '{"modelProfile":"default-chat","messages":[{"role":"user","content":"hello"}]}' --json
 ```
 
 ### 调一个普通业务插件
 
 ```bash
-actiondock plugin get my-plugin --json
+actiondock plugin get my-plugin
+actiondock plugin action my-plugin hello
 actiondock plugin invoke my-plugin hello --name world --json
 ```
 
 ### 复杂对象入参
 
 ```bash
+actiondock plugin action my-plugin summarize
 actiondock plugin invoke my-plugin summarize \
   --args-file ./plugin-args.json \
   --script-input-file ./script-input.json \
   --response-view debug \
   --json
 ```
-
-### 浏览器插件：优先走扁平顶层字段，`target` 再单独用 JSON
-
-浏览器插件是最适合先看 schema 再调用的一类插件。推荐工作流：
-
-1. `sessionCreate`
-2. `goto`
-3. `observe`
-4. 用 `observe.elements[].ref` 回填 `target.ref`
-5. 对元素执行 `click` / `fill` / `setChecked` 等动作
-
-浏览器插件的 schema 和 action 列表通常较长，优先输出到文件：
-
-```bash
-actiondock plugin get actiondock-browser --json > /tmp/actiondock-browser.plugin.json
-actiondock plugin invoke actiondock-browser capabilities --json > /tmp/actiondock-browser.capabilities.json
-```
-
-如果只是顶层简单字段，直接用扁平 flag：
-
-```bash
-actiondock plugin invoke actiondock-browser sessionCreate \
-  --browser chromium \
-  --headless \
-  --json
-
-actiondock plugin invoke actiondock-browser goto \
-  --sessionId br_xxx \
-  --url https://example.com \
-  --json
-
-actiondock plugin invoke actiondock-browser observe \
-  --sessionId br_xxx \
-  --limit 80 \
-  --json > /tmp/browser-observe.json
-```
-
-`observe` 返回的是页面摘要，适合读取 `visibleText`、`elements`、`forms`、`ariaSnapshot` 等结构化信息，不返回完整页面源码。需要完整 HTML 或正文文本时，用 `evaluate`，并优先把输出写入文件：
-
-```bash
-actiondock plugin invoke actiondock-browser evaluate \
-  --sessionId br_xxx \
-  --expression '() => document.documentElement.outerHTML' \
-  --json > /tmp/page-html.json
-
-actiondock plugin invoke actiondock-browser evaluate \
-  --sessionId br_xxx \
-  --expression '() => document.body?.innerText || ""' \
-  --json > /tmp/page-text.json
-```
-
-`observe` 返回的元素定位对象是复杂字段，后续优先把 `target` 放进 `--args-json` 或 `--args-file`，而不是尝试拆成多个 flag：
-
-```bash
-actiondock plugin invoke actiondock-browser fill \
-  --sessionId br_xxx \
-  --value 'hello@example.com' \
-  --args-json '{"target":{"ref":"e3"}}' \
-  --json
-```
-
-对更稳定、可复用的浏览器动作，优先写文件：
-
-```bash
-cat > /tmp/browser-fill.json <<'JSON'
-{
-  "target": { "ref": "e3" }
-}
-JSON
-
-actiondock plugin invoke actiondock-browser fill \
-  --sessionId br_xxx \
-  --value 'hello@example.com' \
-  --args-file /tmp/browser-fill.json \
-  --json
-```
-
-补充约定：
-
-- `sessionId`、`pageId`、`url`、`value`、`checked`、`timeoutMs` 这类简单顶层字段，优先直接写 flag。
-- `target`、`destination`、`headers`、`cookies`、`viewport`、`geolocation` 这类对象或数组字段，优先 `--args-file`。
-- 复选框和单选框不要用 `fill`，改用 `setChecked` / `check` / `uncheck`。
-- 页面跳转、弹窗、明显 DOM 变化后，先重新 `observe`，再使用新的 `target.ref`。

@@ -1802,12 +1802,16 @@ describe("CLI integration", () => {
 
     const detail = await runCli(["plugin", "get", "plugin-a", "--server", baseUrl, "--json"]);
     expect(detail.status).toBe(0);
-    expect(JSON.parse(detail.stdout)).toEqual(
+    const detailJson = JSON.parse(detail.stdout);
+    expect(detailJson).toEqual(
       expect.objectContaining({
         pluginId: "plugin-a",
         version: "1.2.3"
       })
     );
+    expect(detailJson.actions).toEqual([
+      { action: "summarize", title: "Summarize", description: "Summarize a topic" }
+    ]);
 
     const detailText = await runCli(["plugin", "get", "plugin-a", "--server", baseUrl]);
     expect(detailText.status).toBe(0);
@@ -1824,6 +1828,33 @@ describe("CLI integration", () => {
         }
       })
     );
+  });
+
+  it("shows single action schema with plugin action command", async () => {
+    const actionJson = await runCli(["plugin", "action", "plugin-a", "summarize", "--server", baseUrl, "--json"]);
+    expect(actionJson.status).toBe(0);
+    const parsed = JSON.parse(actionJson.stdout);
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        action: "summarize",
+        title: "Summarize"
+      })
+    );
+    expect(parsed.inputSchema).toBeDefined();
+    expect(parsed.inputSchema.properties.topic).toBeDefined();
+
+    const actionText = await runCli(["plugin", "action", "plugin-a", "summarize", "--server", baseUrl]);
+    expect(actionText.status).toBe(0);
+    expect(actionText.stdout).toContain("Action: summarize (Summarize)");
+    expect(actionText.stdout).toContain("--topic <string> required");
+    expect(actionText.stdout).toContain("JSON-only fields:");
+    expect(actionText.stdout).toContain("payload <object>");
+
+    const notFound = await runCli(["plugin", "action", "plugin-a", "nonexistent", "--server", baseUrl, "--json"]);
+    expect(notFound.status).toBe(2);
+    expect(notFound.stderr).toContain("不存在动作 nonexistent");
+    expect(notFound.stderr).toContain("可用:");
+    expect(notFound.stderr).toContain("summarize");
   });
 
   it("uploads a plugin jar through multipart install", async () => {

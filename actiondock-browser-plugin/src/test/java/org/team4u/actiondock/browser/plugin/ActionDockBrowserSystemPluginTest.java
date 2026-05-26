@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginManifestLoader;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,6 +50,35 @@ class ActionDockBrowserSystemPluginTest {
                 .extractingByKey("required")
                 .asList()
                 .contains("sessionId", "target", "checked");
+
+        Map<String, Object> observeSchema = manifest.getActions().stream()
+                .filter(action -> "observe".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getOutputSchema();
+        assertThat(propertiesOf(observeSchema))
+                .containsKeys("ok", "sessionId", "pageId", "url", "title", "elements", "suggestedActions", "events");
+
+        Map<String, Object> elementsSchema = nestedSchema(observeSchema, "elements");
+        assertThat(elementsSchema).containsEntry("type", "array");
+        assertThat(propertiesOf((Map<String, Object>) elementsSchema.get("items")))
+                .containsKeys("ref", "selector", "role", "name", "label", "placeholder", "testId", "bounds");
+
+        Map<String, Object> targetSchema = manifest.getActions().stream()
+                .filter(action -> "fill".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getInputSchema();
+        assertThat(propertiesOf(nestedSchema(targetSchema, "target")))
+                .containsKeys("altText", "index");
+
+        Map<String, Object> pdfSchema = manifest.getActions().stream()
+                .filter(action -> "pdf".equals(action.getAction()))
+                .findFirst()
+                .orElseThrow()
+                .getInputSchema();
+        assertThat(propertiesOf(pdfSchema))
+                .containsKeys("displayHeaderFooter", "headerTemplate", "footerTemplate", "preferCSSPageSize", "outline", "tagged");
     }
 
     @Test
@@ -69,5 +99,15 @@ class ActionDockBrowserSystemPluginTest {
         assertThatThrownBy(() -> plugin.validateConfig(Map.of("defaultBrowser", "unknown")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("defaultBrowser");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> propertiesOf(Map<String, Object> schema) {
+        return (Map<String, Object>) schema.get("properties");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> nestedSchema(Map<String, Object> schema, String key) {
+        return (Map<String, Object>) propertiesOf(schema).get(key);
     }
 }

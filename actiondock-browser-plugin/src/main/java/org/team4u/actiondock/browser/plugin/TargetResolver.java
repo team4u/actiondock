@@ -13,11 +13,12 @@ final class TargetResolver {
         if (target == null || target.isEmpty()) {
             throw new IllegalArgumentException("target is required for this operation");
         }
+        String explicitSelector = Args.optionalString(target, "selector", null);
+        if (!Args.isBlank(explicitSelector)) {
+            return indexed(page.locator(explicitSelector), target);
+        }
         Map<String, Object> resolvedTarget = resolveTarget(session, pageId, target);
-
-        Locator locator = baseLocator(page, resolvedTarget);
-        int index = Args.optionalInt(resolvedTarget, "index", 0);
-        return index > 0 ? locator.nth(index) : locator;
+        return indexed(baseLocator(page, resolvedTarget), resolvedTarget);
     }
 
     private Map<String, Object> resolveTarget(BrowserSession session, String pageId, Map<String, Object> target) {
@@ -37,14 +38,30 @@ final class TargetResolver {
     }
 
     private Locator baseLocator(Page page, Map<String, Object> target) {
-        String selector = Args.optionalString(target, "selector", null);
-        if (!Args.isBlank(selector)) {
-            return page.locator(selector);
+        String testId = Args.optionalString(target, "testId", null);
+        if (!Args.isBlank(testId)) {
+            return page.getByTestId(testId);
+        }
+        String label = Args.optionalString(target, "label", null);
+        if (!Args.isBlank(label)) {
+            return page.getByLabel(label, new Page.GetByLabelOptions().setExact(Args.optionalBoolean(target, "exact", false)));
+        }
+        String placeholder = Args.optionalString(target, "placeholder", null);
+        if (!Args.isBlank(placeholder)) {
+            return page.getByPlaceholder(placeholder, new Page.GetByPlaceholderOptions().setExact(Args.optionalBoolean(target, "exact", false)));
         }
         String role = Args.optionalString(target, "role", null);
         if (!Args.isBlank(role)) {
             Page.GetByRoleOptions options = new Page.GetByRoleOptions();
-            String name = Args.optionalString(target, "name", Args.optionalString(target, "text", null));
+            String name = Args.optionalString(
+                    target,
+                    "name",
+                    Args.optionalString(
+                            target,
+                            "label",
+                            Args.optionalString(target, "placeholder", Args.optionalString(target, "text", null))
+                    )
+            );
             if (!Args.isBlank(name)) {
                 options.setName(name);
             }
@@ -57,14 +74,6 @@ final class TargetResolver {
         if (!Args.isBlank(text)) {
             return page.getByText(text, new Page.GetByTextOptions().setExact(Args.optionalBoolean(target, "exact", false)));
         }
-        String label = Args.optionalString(target, "label", null);
-        if (!Args.isBlank(label)) {
-            return page.getByLabel(label, new Page.GetByLabelOptions().setExact(Args.optionalBoolean(target, "exact", false)));
-        }
-        String placeholder = Args.optionalString(target, "placeholder", null);
-        if (!Args.isBlank(placeholder)) {
-            return page.getByPlaceholder(placeholder, new Page.GetByPlaceholderOptions().setExact(Args.optionalBoolean(target, "exact", false)));
-        }
         String alt = Args.optionalString(target, "alt", Args.optionalString(target, "altText", null));
         if (!Args.isBlank(alt)) {
             return page.getByAltText(alt, new Page.GetByAltTextOptions().setExact(Args.optionalBoolean(target, "exact", false)));
@@ -73,11 +82,16 @@ final class TargetResolver {
         if (!Args.isBlank(title)) {
             return page.getByTitle(title, new Page.GetByTitleOptions().setExact(Args.optionalBoolean(target, "exact", false)));
         }
-        String testId = Args.optionalString(target, "testId", null);
-        if (!Args.isBlank(testId)) {
-            return page.getByTestId(testId);
+        String selector = Args.optionalString(target, "selector", null);
+        if (!Args.isBlank(selector)) {
+            return page.locator(selector);
         }
         throw new IllegalArgumentException("target must include ref, selector, role, text, label, placeholder, altText, title, or testId");
+    }
+
+    private static Locator indexed(Locator locator, Map<String, Object> target) {
+        int index = Args.optionalInt(target, "index", 0);
+        return index > 0 ? locator.nth(index) : locator;
     }
 
     private static AriaRole role(String value) {

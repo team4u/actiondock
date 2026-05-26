@@ -1,11 +1,13 @@
 import { inspect } from "node:util";
 
+import { extractSchemaFields, splitSchemaFields } from "./schema.js";
 import type {
   AccessTokenView,
   ConfigValueDetailView,
   ConfigValueView,
   WebhookDefinition,
   ExecutionResponse,
+  PluginActionDefinition,
   PluginConfigView,
   PluginReferenceView,
   PluginSummaryView,
@@ -534,6 +536,51 @@ export function renderPluginDetail(plugin: PluginView | PluginReferenceView): st
       lines.push(`  ${action.action}${action.title ? ` (${action.title})` : ""}${action.description ? ` - ${action.description}` : ""}`);
     }
   }
+  return lines.join("\n");
+}
+
+export function renderPluginActionDetail(action: PluginActionDefinition): string {
+  const lines: string[] = [
+    `Action: ${action.action}${action.title ? ` (${action.title})` : ""}`
+  ];
+  if (action.description) {
+    lines.push(`Description: ${action.description}`);
+  }
+
+  if (action.inputSchema) {
+    const fields = extractSchemaFields(action.inputSchema);
+    if (fields.length > 0) {
+      const { flagFields, jsonOnlyFields } = splitSchemaFields(fields);
+      if (flagFields.length > 0) {
+        lines.push("Input:");
+        for (const f of flagFields) {
+          const req = f.required ? " required" : "";
+          const supp = formatSupplement(f);
+          lines.push(`  --${f.name} <${f.kind}>${req}${supp}`);
+        }
+      }
+      if (jsonOnlyFields.length > 0) {
+        lines.push("JSON-only fields:");
+        for (const f of jsonOnlyFields) {
+          const supp = formatSupplement(f);
+          lines.push(`  ${f.name} <${f.kind}>${supp}`);
+        }
+      }
+    } else {
+      lines.push("Input: (none)");
+    }
+  }
+
+  if (action.outputSchema && Object.keys(action.outputSchema).length > 0) {
+    lines.push("Output:");
+    lines.push(indent(formatValue(action.outputSchema)));
+  }
+
+  if (action.exampleArgs && Object.keys(action.exampleArgs).length > 0) {
+    lines.push("Example:");
+    lines.push(indent(formatValue(action.exampleArgs)));
+  }
+
   return lines.join("\n");
 }
 

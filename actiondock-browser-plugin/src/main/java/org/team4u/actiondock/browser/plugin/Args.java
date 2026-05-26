@@ -40,6 +40,13 @@ final class Args {
         return Boolean.parseBoolean(String.valueOf(value));
     }
 
+    static boolean requiredBoolean(Map<String, Object> args, String key) {
+        if (!has(args, key)) {
+            throw new IllegalArgumentException(key + " is required");
+        }
+        return optionalBoolean(args, key, false);
+    }
+
     static int optionalInt(Map<String, Object> args, String key, int defaultValue) {
         Object value = args == null ? null : args.get(key);
         if (value == null || String.valueOf(value).isBlank()) {

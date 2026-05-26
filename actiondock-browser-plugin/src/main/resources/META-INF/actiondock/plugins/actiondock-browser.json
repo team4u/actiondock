@@ -4,11 +4,10 @@
   "description" : "AI-first Playwright browser gateway. Actions are intentionally precise so AI can call browser operations without guessing hidden op-specific params.",
   "version" : "0.3.0",
   "configSchema" : {
-    "type" : "object",
     "properties" : {
       "defaultBrowser" : {
-        "type" : "string",
         "title" : "Default Browser",
+        "type" : "string",
         "enum" : [ "chromium", "firefox", "webkit" ]
       },
       "headless" : {
@@ -40,37 +39,39 @@
         "type" : "string"
       },
       "allowedHosts" : {
-        "type" : "array",
+        "title" : "Allowed Hosts",
         "items" : {
           "type" : "string"
         },
-        "title" : "Allowed Hosts"
+        "type" : "array"
       },
       "includeCookieValueByDefault" : {
         "title" : "Include Cookie Value By Default",
         "type" : "boolean"
       }
-    }
+    },
+    "type" : "object"
   },
   "defaultConfig" : {
-    "maxSessions" : 10,
-    "defaultTimeoutMs" : 30000,
-    "includeCookieValueByDefault" : false,
-    "downloadDir" : ".actiondock/browser-downloads",
     "allowedHosts" : [ ],
-    "headless" : true,
-    "sessionTtlSeconds" : 600,
-    "artifactDir" : ".actiondock/browser-artifacts",
+    "downloadDir" : ".actiondock/browser-downloads",
+    "includeCookieValueByDefault" : false,
+    "defaultTimeoutMs" : 30000,
+    "maxSessions" : 10,
+    "defaultBrowser" : "chromium",
     "stateDir" : ".actiondock/browser-state",
-    "defaultBrowser" : "chromium"
+    "artifactDir" : ".actiondock/browser-artifacts",
+    "sessionTtlSeconds" : 600,
+    "headless" : true
   },
   "actions" : [ {
-    "action" : "sessionCreate",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "headless" : true,
+      "browser" : "chromium"
     },
-    "description" : "Create a Playwright session and first page.",
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -106,10 +107,10 @@
           "type" : "string"
         },
         "permissions" : {
+          "type" : "array",
           "items" : {
             "type" : "string"
-          },
-          "type" : "array"
+          }
         },
         "geolocation" : {
           "type" : "object",
@@ -162,44 +163,75 @@
         }
       }
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Create a Playwright session and first page.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "message" : {
+          "type" : "string"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "browser" : {
+          "type" : "string"
+        },
+        "headless" : {
+          "type" : "boolean"
+        },
+        "pageId" : {
+          "type" : "string"
+        }
+      }
     },
-    "exampleArgs" : {
-      "browser" : "chromium",
-      "headless" : true
-    },
+    "action" : "sessionCreate",
     "title" : "Create Browser Session"
   }, {
-    "action" : "sessionClose",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
     },
     "description" : "Close a session and release resources.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "message" : {
+          "type" : "string"
+        },
         "sessionId" : {
           "type" : "string"
+        },
+        "closed" : {
+          "type" : "boolean"
         }
-      },
-      "required" : [ "sessionId" ]
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
+    "action" : "sessionClose",
     "title" : "Close Browser Session"
   }, {
-    "action" : "sessionInfo",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
     },
-    "description" : "Read active page and session metadata.",
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -209,52 +241,221 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Read active page and session metadata.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "browser" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "activePageId" : {
+          "type" : "string"
+        },
+        "pages" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "pageId" : {
+                "type" : "string"
+              },
+              "active" : {
+                "type" : "boolean"
+              },
+              "closed" : {
+                "type" : "boolean"
+              },
+              "url" : {
+                "type" : "string"
+              },
+              "title" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "createdAt" : {
+          "type" : "string"
+        },
+        "lastAccessAt" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "sessionInfo",
+    "title" : "Get Session Info"
+  }, {
+    "exampleArgs" : { },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Get Session Info"
-  }, {
-    "action" : "sessionList",
-    "outputSchema" : {
+    "inputSchema" : {
       "type" : "object",
       "properties" : { }
     },
     "description" : "List active browser sessions for the current script execution.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessions" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "sessionId" : {
+                "type" : "string"
+              },
+              "browser" : {
+                "type" : "string"
+              },
+              "activePageId" : {
+                "type" : "string"
+              },
+              "createdAt" : {
+                "type" : "string"
+              },
+              "lastAccessAt" : {
+                "type" : "string"
+              },
+              "closed" : {
+                "type" : "boolean"
+              }
+            }
+          }
+        },
+        "count" : {
+          "type" : "integer"
+        }
+      }
     },
+    "action" : "sessionList",
+    "title" : "List Sessions"
+  }, {
+    "exampleArgs" : { },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : { },
-    "title" : "List Sessions"
-  }, {
-    "action" : "capabilities",
-    "outputSchema" : {
+    "inputSchema" : {
       "type" : "object",
       "properties" : { }
     },
     "description" : "Return exact action schemas, target schema, and AI workflow hints.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "actions" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "action" : {
+                "type" : "string"
+              },
+              "title" : {
+                "type" : "string"
+              },
+              "description" : {
+                "type" : "string"
+              },
+              "inputSchema" : {
+                "type" : "object",
+                "properties" : { }
+              },
+              "outputSchema" : {
+                "type" : "object",
+                "properties" : { }
+              },
+              "exampleArgs" : {
+                "type" : "object",
+                "properties" : { }
+              },
+              "aiHints" : {
+                "type" : "object",
+                "properties" : { }
+              }
+            }
+          }
+        },
+        "targetSchema" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "altText" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
+            }
+          }
+        },
+        "workflow" : {
+          "type" : "array",
+          "items" : {
+            "type" : "string"
+          }
+        }
+      }
+    },
+    "action" : "capabilities",
+    "title" : "Browser Capabilities"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "limit" : 80
     },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : { },
-    "title" : "Browser Capabilities"
-  }, {
-    "action" : "observe",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Read URL, title, ARIA snapshot, visible text, actionable refs, forms, frames, events, and suggested next actions.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -273,21 +474,249 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Read URL, title, ARIA snapshot, visible text, actionable refs, forms, frames, events, and suggested next actions.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "ariaSnapshot" : {
+          "type" : "string"
+        },
+        "visibleText" : {
+          "type" : "string"
+        },
+        "elements" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "ref" : {
+                "type" : "string"
+              },
+              "selector" : {
+                "type" : "string"
+              },
+              "tag" : {
+                "type" : "string"
+              },
+              "type" : {
+                "type" : "string"
+              },
+              "role" : {
+                "type" : "string"
+              },
+              "name" : {
+                "type" : "string"
+              },
+              "text" : {
+                "type" : "string"
+              },
+              "label" : {
+                "type" : "string"
+              },
+              "placeholder" : {
+                "type" : "string"
+              },
+              "title" : {
+                "type" : "string"
+              },
+              "alt" : {
+                "type" : "string"
+              },
+              "testId" : {
+                "type" : "string"
+              },
+              "href" : {
+                "type" : "string"
+              },
+              "visible" : {
+                "type" : "boolean"
+              },
+              "enabled" : {
+                "type" : "boolean"
+              },
+              "checked" : {
+                "type" : "boolean"
+              },
+              "value" : {
+                "type" : "string"
+              },
+              "bounds" : {
+                "type" : "object",
+                "properties" : {
+                  "x" : {
+                    "type" : "number"
+                  },
+                  "y" : {
+                    "type" : "number"
+                  },
+                  "width" : {
+                    "type" : "number"
+                  },
+                  "height" : {
+                    "type" : "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "suggestedActions" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "action" : {
+                "type" : "string"
+              },
+              "target" : {
+                "type" : "object",
+                "properties" : {
+                  "ref" : {
+                    "type" : "string"
+                  },
+                  "selector" : {
+                    "type" : "string"
+                  },
+                  "role" : {
+                    "type" : "string"
+                  },
+                  "name" : {
+                    "type" : "string"
+                  },
+                  "text" : {
+                    "type" : "string"
+                  },
+                  "label" : {
+                    "type" : "string"
+                  },
+                  "placeholder" : {
+                    "type" : "string"
+                  },
+                  "alt" : {
+                    "type" : "string"
+                  },
+                  "altText" : {
+                    "type" : "string"
+                  },
+                  "title" : {
+                    "type" : "string"
+                  },
+                  "testId" : {
+                    "type" : "string"
+                  },
+                  "exact" : {
+                    "type" : "boolean"
+                  },
+                  "index" : {
+                    "type" : "integer"
+                  }
+                }
+              },
+              "argsTemplate" : {
+                "type" : "object",
+                "properties" : { }
+              }
+            }
+          }
+        },
+        "forms" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "index" : {
+                "type" : "integer"
+              },
+              "action" : {
+                "type" : "string"
+              },
+              "method" : {
+                "type" : "string"
+              },
+              "fields" : {
+                "type" : "array",
+                "items" : {
+                  "type" : "object",
+                  "properties" : {
+                    "name" : {
+                      "type" : "string"
+                    },
+                    "type" : {
+                      "type" : "string"
+                    },
+                    "value" : {
+                      "type" : "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "frames" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "name" : {
+                "type" : "string"
+              },
+              "url" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "events" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "id" : {
+                "type" : "integer"
+              },
+              "time" : {
+                "type" : "string"
+              },
+              "sessionId" : {
+                "type" : "string"
+              },
+              "pageId" : {
+                "type" : "string"
+              },
+              "type" : {
+                "type" : "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "action" : "observe",
+    "title" : "Observe Page"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "https://example.com"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "limit" : 80
-    },
-    "title" : "Observe Page"
-  }, {
-    "action" : "goto",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Navigate current page to URL.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -310,87 +739,146 @@
       },
       "required" : [ "sessionId", "url" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Navigate current page to URL.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "url" : "https://example.com"
-    },
+    "action" : "goto",
     "title" : "Navigate"
   }, {
-    "action" : "reload",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "waitUntil" : {
+          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
     },
     "description" : "Reload current page.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
         "pageId" : {
           "type" : "string"
         },
-        "waitUntil" : {
-          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+        "url" : {
           "type" : "string"
         },
-        "timeoutMs" : {
-          "type" : "integer"
-        }
-      },
-      "required" : [ "sessionId" ]
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
+    "action" : "reload",
     "title" : "Reload Page"
   }, {
-    "action" : "goBack",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "waitUntil" : {
+          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
     },
     "description" : "Go back in page history.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
         "pageId" : {
           "type" : "string"
         },
-        "waitUntil" : {
-          "enum" : [ "load", "domcontentloaded", "networkidle", "commit" ],
+        "url" : {
           "type" : "string"
         },
-        "timeoutMs" : {
-          "type" : "integer"
-        }
-      },
-      "required" : [ "sessionId" ]
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
+    "action" : "goBack",
     "title" : "Go Back"
   }, {
-    "action" : "goForward",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
     },
-    "description" : "Go forward in page history.",
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -410,20 +898,44 @@
       },
       "required" : [ "sessionId" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Go forward in page history.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
+    "action" : "goForward",
     "title" : "Go Forward"
   }, {
-    "action" : "click",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -460,6 +972,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -468,30 +983,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "click",
     "title" : "Click"
   }, {
-    "action" : "doubleClick",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -528,6 +1066,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -536,30 +1077,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "doubleClick",
     "title" : "Double Click"
   }, {
-    "action" : "hover",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -596,6 +1160,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -604,30 +1171,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "hover",
     "title" : "Hover"
   }, {
-    "action" : "clear",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -664,6 +1254,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -672,30 +1265,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "clear",
     "title" : "Clear"
   }, {
-    "action" : "focus",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -732,6 +1348,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -740,30 +1359,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "focus",
     "title" : "Focus"
   }, {
-    "action" : "blur",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -800,6 +1442,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -808,30 +1453,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "blur",
     "title" : "Blur"
   }, {
-    "action" : "scrollIntoView",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -868,6 +1536,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -876,30 +1547,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "scrollIntoView",
     "title" : "Scroll Into View"
   }, {
-    "action" : "selectText",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e1"
+      }
     },
-    "description" : "Run locator action using target.ref or selector.",
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -936,6 +1630,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -944,98 +1641,53 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e1"
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "selectText",
     "title" : "Select Text"
   }, {
-    "action" : "tap",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Run locator action using target.ref or selector.",
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "sessionId" : {
-          "type" : "string"
-        },
-        "pageId" : {
-          "type" : "string"
-        },
-        "target" : {
-          "type" : "object",
-          "properties" : {
-            "ref" : {
-              "type" : "string"
-            },
-            "selector" : {
-              "type" : "string"
-            },
-            "role" : {
-              "type" : "string"
-            },
-            "name" : {
-              "type" : "string"
-            },
-            "text" : {
-              "type" : "string"
-            },
-            "label" : {
-              "type" : "string"
-            },
-            "placeholder" : {
-              "type" : "string"
-            },
-            "alt" : {
-              "type" : "string"
-            },
-            "title" : {
-              "type" : "string"
-            },
-            "testId" : {
-              "type" : "string"
-            },
-            "exact" : {
-              "type" : "boolean"
-            }
-          }
-        }
-      },
-      "required" : [ "sessionId", "target" ]
-    },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
     "exampleArgs" : {
       "sessionId" : "br_xxx",
       "target" : {
         "ref" : "e1"
       }
     },
-    "title" : "Tap"
-  }, {
-    "action" : "fill",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    "description" : "Set text value on an input, textarea, select-like editable, or contenteditable target.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1072,6 +1724,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1080,6 +1735,105 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "description" : "Run locator action using target.ref or selector.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "tap",
+    "title" : "Tap"
+  }, {
+    "exampleArgs" : {
+      "value" : "hello",
+      "target" : {
+        "ref" : "e2"
+      },
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates.",
+      "warning" : "Do not use fill for checkbox/radio. Use setChecked/check/uncheck."
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "altText" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1089,26 +1843,45 @@
       },
       "required" : [ "sessionId", "target", "value" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates.",
-      "warning" : "Do not use fill for checkbox/radio. Use setChecked/check/uncheck."
+    "description" : "Set text value on an input, textarea, select-like editable, or contenteditable target.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
+    "action" : "fill",
+    "title" : "Fill Text"
+  }, {
     "exampleArgs" : {
       "target" : {
         "ref" : "e2"
       },
-      "value" : "hello",
+      "text" : "hello",
       "sessionId" : "br_xxx"
     },
-    "title" : "Fill Text"
-  }, {
-    "action" : "typeText",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    "description" : "Type text into target like real keystrokes.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1145,6 +1918,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1153,6 +1929,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1162,25 +1941,41 @@
       },
       "required" : [ "sessionId", "target", "text" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "target" : {
-        "ref" : "e2"
-      },
-      "sessionId" : "br_xxx",
-      "text" : "hello"
-    },
-    "title" : "Type Text"
-  }, {
-    "action" : "press",
+    "description" : "Type text into target like real keystrokes.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Press a key globally or on a target.",
+    "action" : "typeText",
+    "title" : "Type Text"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "key" : "Enter"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1217,6 +2012,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1225,6 +2023,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1234,157 +2035,138 @@
       },
       "required" : [ "sessionId", "key" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Press a key globally or on a target.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "key" : "Enter"
-    },
+    "action" : "press",
     "title" : "Press Key"
   }, {
-    "action" : "check",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "ref" : "e3"
+      }
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "altText" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
     },
     "description" : "Check a checkbox or radio target.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
         "pageId" : {
           "type" : "string"
         },
-        "target" : {
-          "type" : "object",
-          "properties" : {
-            "ref" : {
-              "type" : "string"
-            },
-            "selector" : {
-              "type" : "string"
-            },
-            "role" : {
-              "type" : "string"
-            },
-            "name" : {
-              "type" : "string"
-            },
-            "text" : {
-              "type" : "string"
-            },
-            "label" : {
-              "type" : "string"
-            },
-            "placeholder" : {
-              "type" : "string"
-            },
-            "alt" : {
-              "type" : "string"
-            },
-            "title" : {
-              "type" : "string"
-            },
-            "testId" : {
-              "type" : "string"
-            },
-            "exact" : {
-              "type" : "boolean"
-            }
-          }
-        }
-      },
-      "required" : [ "sessionId", "target" ]
-    },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "ref" : "e3"
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
       }
     },
+    "action" : "check",
     "title" : "Check"
   }, {
-    "action" : "uncheck",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Uncheck a checkbox target.",
-    "inputSchema" : {
-      "type" : "object",
-      "properties" : {
-        "sessionId" : {
-          "type" : "string"
-        },
-        "pageId" : {
-          "type" : "string"
-        },
-        "target" : {
-          "type" : "object",
-          "properties" : {
-            "ref" : {
-              "type" : "string"
-            },
-            "selector" : {
-              "type" : "string"
-            },
-            "role" : {
-              "type" : "string"
-            },
-            "name" : {
-              "type" : "string"
-            },
-            "text" : {
-              "type" : "string"
-            },
-            "label" : {
-              "type" : "string"
-            },
-            "placeholder" : {
-              "type" : "string"
-            },
-            "alt" : {
-              "type" : "string"
-            },
-            "title" : {
-              "type" : "string"
-            },
-            "testId" : {
-              "type" : "string"
-            },
-            "exact" : {
-              "type" : "boolean"
-            }
-          }
-        }
-      },
-      "required" : [ "sessionId", "target" ]
-    },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
     "exampleArgs" : {
       "sessionId" : "br_xxx",
       "target" : {
         "ref" : "e3"
       }
     },
-    "title" : "Uncheck"
-  }, {
-    "action" : "setChecked",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    "description" : "Set checkbox/radio checked state. Prefer this over fill for checkboxes.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1421,6 +2203,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1429,6 +2214,104 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
+            }
+          }
+        }
+      },
+      "required" : [ "sessionId", "target" ]
+    },
+    "description" : "Uncheck a checkbox target.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "uncheck",
+    "title" : "Uncheck"
+  }, {
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e3"
+      },
+      "checked" : true,
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "target" : {
+          "type" : "object",
+          "properties" : {
+            "ref" : {
+              "type" : "string"
+            },
+            "selector" : {
+              "type" : "string"
+            },
+            "role" : {
+              "type" : "string"
+            },
+            "name" : {
+              "type" : "string"
+            },
+            "text" : {
+              "type" : "string"
+            },
+            "label" : {
+              "type" : "string"
+            },
+            "placeholder" : {
+              "type" : "string"
+            },
+            "alt" : {
+              "type" : "string"
+            },
+            "altText" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "testId" : {
+              "type" : "string"
+            },
+            "exact" : {
+              "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1438,25 +2321,45 @@
       },
       "required" : [ "sessionId", "target", "checked" ]
     },
+    "description" : "Set checkbox/radio checked state. Prefer this over fill for checkboxes.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "setChecked",
+    "title" : "Set Checked"
+  }, {
+    "exampleArgs" : {
+      "value" : "US",
+      "target" : {
+        "ref" : "e4"
+      },
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true,
       "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    "exampleArgs" : {
-      "target" : {
-        "ref" : "e3"
-      },
-      "sessionId" : "br_xxx",
-      "checked" : true
-    },
-    "title" : "Set Checked"
-  }, {
-    "action" : "selectOption",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Select one or more select options by value.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1493,6 +2396,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1501,6 +2407,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1508,33 +2417,53 @@
           "type" : "string"
         },
         "values" : {
+          "type" : "array",
           "items" : {
             "type" : "string"
-          },
-          "type" : "array"
+          }
         }
       },
       "required" : [ "sessionId", "target" ]
+    },
+    "description" : "Select one or more select options by value.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "selectOption",
+    "title" : "Select Option"
+  }, {
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e5"
+      },
+      "path" : "upload.txt",
+      "sessionId" : "br_xxx"
     },
     "aiHints" : {
       "forAi" : true,
       "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    "exampleArgs" : {
-      "target" : {
-        "ref" : "e4"
-      },
-      "value" : "US",
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Select Option"
-  }, {
-    "action" : "setInputFiles",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Set file input paths relative to workspace.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1571,6 +2500,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1579,6 +2511,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1586,33 +2521,53 @@
           "type" : "string"
         },
         "paths" : {
+          "type" : "array",
           "items" : {
             "type" : "string"
-          },
-          "type" : "array"
+          }
         }
       },
       "required" : [ "sessionId", "target" ]
+    },
+    "description" : "Set file input paths relative to workspace.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "setInputFiles",
+    "title" : "Set Input Files"
+  }, {
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e1"
+      },
+      "type" : "change",
+      "sessionId" : "br_xxx"
     },
     "aiHints" : {
       "forAi" : true,
       "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    "exampleArgs" : {
-      "target" : {
-        "ref" : "e5"
-      },
-      "sessionId" : "br_xxx",
-      "path" : "upload.txt"
-    },
-    "title" : "Set Input Files"
-  }, {
-    "action" : "dispatchEvent",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Dispatch DOM event on target.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1649,6 +2604,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1657,6 +2615,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1670,25 +2631,47 @@
       },
       "required" : [ "sessionId", "target", "type" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    "description" : "Dispatch DOM event on target.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
+    "action" : "dispatchEvent",
+    "title" : "Dispatch Event"
+  }, {
     "exampleArgs" : {
-      "type" : "change",
+      "destination" : {
+        "ref" : "e2"
+      },
       "target" : {
         "ref" : "e1"
       },
       "sessionId" : "br_xxx"
     },
-    "title" : "Dispatch Event"
-  }, {
-    "action" : "dragTo",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
     },
-    "description" : "Drag source target to destination target.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1725,6 +2708,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1733,6 +2719,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1763,6 +2752,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1771,33 +2763,50 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         }
       },
       "required" : [ "sessionId", "target", "destination" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "target" : {
-        "ref" : "e1"
-      },
-      "destination" : {
-        "ref" : "e2"
-      },
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Drag To"
-  }, {
-    "action" : "setContent",
+    "description" : "Drag source target to destination target.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Replace page HTML.",
+    "action" : "dragTo",
+    "title" : "Drag To"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "html" : "<html></html>"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1813,57 +2822,41 @@
       },
       "required" : [ "sessionId", "html" ]
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "html" : "<html></html>"
-    },
-    "title" : "Set Page Content"
-  }, {
-    "action" : "addScriptTag",
+    "description" : "Replace page HTML.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Inject script by content, URL, or workspace path.",
-    "inputSchema" : {
-      "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
         "pageId" : {
           "type" : "string"
         },
-        "content" : {
-          "type" : "string"
-        },
         "url" : {
           "type" : "string"
         },
-        "path" : {
+        "title" : {
           "type" : "string"
-        }
-      },
-      "required" : [ "sessionId" ]
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
+    "action" : "setContent",
+    "title" : "Set Page Content"
+  }, {
     "exampleArgs" : {
       "sessionId" : "br_xxx",
       "content" : "window.x=1"
     },
-    "title" : "Add Script Tag"
-  }, {
-    "action" : "addStyleTag",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "aiHints" : {
+      "forAi" : true
     },
-    "description" : "Inject style by content, URL, or workspace path.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1885,21 +2878,98 @@
       },
       "required" : [ "sessionId" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Inject script by content, URL, or workspace path.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
+    "action" : "addScriptTag",
+    "title" : "Add Script Tag"
+  }, {
     "exampleArgs" : {
       "sessionId" : "br_xxx",
       "content" : "body{outline:0}"
     },
-    "title" : "Add Style Tag"
-  }, {
-    "action" : "screenshot",
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "content" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId" ]
+    },
+    "description" : "Inject style by content, URL, or workspace path.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Save page screenshot under artifact directory.",
+    "action" : "addStyleTag",
+    "title" : "Add Style Tag"
+  }, {
+    "exampleArgs" : {
+      "fullPage" : true,
+      "name" : "page",
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1921,22 +2991,45 @@
       },
       "required" : [ "sessionId" ]
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "fullPage" : true,
-      "sessionId" : "br_xxx",
-      "name" : "page"
-    },
-    "title" : "Screenshot Page"
-  }, {
-    "action" : "locatorScreenshot",
+    "description" : "Save page screenshot under artifact directory.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Save target screenshot under artifact directory.",
+    "action" : "screenshot",
+    "title" : "Screenshot Page"
+  }, {
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e1"
+      },
+      "name" : "button",
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -1973,6 +3066,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -1981,6 +3077,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -1996,25 +3095,42 @@
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "target" : {
-        "ref" : "e1"
-      },
-      "sessionId" : "br_xxx",
-      "name" : "button"
-    },
-    "title" : "Screenshot Locator"
-  }, {
-    "action" : "pdf",
+    "description" : "Save target screenshot under artifact directory.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Save page PDF under artifact directory.",
+    "action" : "locatorScreenshot",
+    "title" : "Screenshot Locator"
+  }, {
+    "exampleArgs" : {
+      "format" : "A4",
+      "name" : "page",
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2056,27 +3172,77 @@
         },
         "margin" : {
           "type" : "object",
-          "properties" : { }
+          "properties" : {
+            "top" : {
+              "type" : "string"
+            },
+            "right" : {
+              "type" : "string"
+            },
+            "bottom" : {
+              "type" : "string"
+            },
+            "left" : {
+              "type" : "string"
+            }
+          }
+        },
+        "displayHeaderFooter" : {
+          "type" : "boolean"
+        },
+        "headerTemplate" : {
+          "type" : "string"
+        },
+        "footerTemplate" : {
+          "type" : "string"
+        },
+        "preferCSSPageSize" : {
+          "type" : "boolean"
+        },
+        "outline" : {
+          "type" : "boolean"
+        },
+        "tagged" : {
+          "type" : "boolean"
         }
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Save page PDF under artifact directory.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "pdf",
+    "title" : "Save PDF"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "dialogId" : "d1"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "name" : "page",
-      "format" : "A4"
-    },
-    "title" : "Save PDF"
-  }, {
-    "action" : "dialogAccept",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Accept a dialog from events/observe.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2095,21 +3261,41 @@
       },
       "required" : [ "sessionId", "dialogId" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Accept a dialog from events/observe.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
+    "action" : "dialogAccept",
+    "title" : "Accept Dialog"
+  }, {
     "exampleArgs" : {
       "sessionId" : "br_xxx",
       "dialogId" : "d1"
     },
-    "title" : "Accept Dialog"
-  }, {
-    "action" : "dialogDismiss",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "aiHints" : {
+      "forAi" : true
     },
-    "description" : "Dismiss a dialog from events/observe.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2125,21 +3311,42 @@
       },
       "required" : [ "sessionId", "dialogId" ]
     },
+    "description" : "Dismiss a dialog from events/observe.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "dialogDismiss",
+    "title" : "Dismiss Dialog"
+  }, {
+    "exampleArgs" : {
+      "downloadId" : "dl1",
+      "name" : "file.bin",
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "dialogId" : "d1"
-    },
-    "title" : "Dismiss Dialog"
-  }, {
-    "action" : "downloadSaveAs",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Save a download from events/waitForDownload.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2161,22 +3368,43 @@
       },
       "required" : [ "sessionId", "downloadId" ]
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "downloadId" : "dl1",
-      "sessionId" : "br_xxx",
-      "name" : "file.bin"
-    },
-    "title" : "Save Download"
-  }, {
-    "action" : "evaluate",
+    "description" : "Save a download from events/waitForDownload.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Run unrestricted JS on page, one locator, or all matching locators.",
+    "action" : "downloadSaveAs",
+    "title" : "Save Download"
+  }, {
+    "exampleArgs" : {
+      "expression" : "() => document.title",
+      "scope" : "page",
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "escapeHatch" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2217,6 +3445,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -2225,6 +3456,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -2238,23 +3472,41 @@
       },
       "required" : [ "sessionId", "expression" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "escapeHatch" : true
-    },
-    "exampleArgs" : {
-      "expression" : "() => document.title",
-      "sessionId" : "br_xxx",
-      "scope" : "page"
-    },
-    "title" : "Evaluate JavaScript"
-  }, {
-    "action" : "waitForLoadState",
+    "description" : "Run unrestricted JS on page, one locator, or all matching locators.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "scope" : {
+          "type" : "string"
+        },
+        "value" : { }
+      }
     },
-    "description" : "Wait for load/domcontentloaded/networkidle.",
+    "action" : "evaluate",
+    "title" : "Evaluate JavaScript"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "state" : "load"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2274,21 +3526,44 @@
       },
       "required" : [ "sessionId" ]
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "state" : "load"
-    },
-    "title" : "Wait For Load State"
-  }, {
-    "action" : "waitForSelector",
+    "description" : "Wait for load/domcontentloaded/networkidle.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Wait for target state.",
+    "action" : "waitForLoadState",
+    "title" : "Wait For Load State"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "target" : {
+        "text" : "Done"
+      }
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2325,6 +3600,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -2333,6 +3611,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -2346,24 +3627,41 @@
       },
       "required" : [ "sessionId", "target" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "targetHint" : "Prefer target.ref from observe.elements. Re-observe after navigation or major DOM updates."
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "target" : {
-        "text" : "Done"
-      }
-    },
-    "title" : "Wait For Selector"
-  }, {
-    "action" : "waitForUrl",
+    "description" : "Wait for target state.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "description" : "Wait until URL matches string/pattern accepted by Playwright.",
+    "action" : "waitForSelector",
+    "title" : "Wait For Selector"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "**/done"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2382,21 +3680,41 @@
       },
       "required" : [ "sessionId", "url" ]
     },
+    "description" : "Wait until URL matches string/pattern accepted by Playwright.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "waitForUrl",
+    "title" : "Wait For URL"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "expression" : "() => window.ready === true"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "url" : "**/done"
-    },
-    "title" : "Wait For URL"
-  }, {
-    "action" : "waitForFunction",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Wait until JS expression returns truthy.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2419,24 +3737,66 @@
       },
       "required" : [ "sessionId", "expression" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Wait until JS expression returns truthy.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "exampleArgs" : {
-      "expression" : "() => window.ready === true",
-      "sessionId" : "br_xxx"
-    },
+    "action" : "waitForFunction",
     "title" : "Wait For Function"
   }, {
-    "action" : "waitForRequest",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "**/api/**"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId", "url" ]
     },
     "description" : "Wait for matching request URL.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
@@ -2446,27 +3806,25 @@
         "url" : {
           "type" : "string"
         },
-        "timeoutMs" : {
-          "type" : "integer"
-        }
-      },
-      "required" : [ "sessionId", "url" ]
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "url" : "**/api/**"
-    },
+    "action" : "waitForRequest",
     "title" : "Wait For Request"
   }, {
-    "action" : "waitForResponse",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "**/api/**"
     },
-    "description" : "Wait for matching response URL.",
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2485,79 +3843,138 @@
       },
       "required" : [ "sessionId", "url" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Wait for matching response URL.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "url" : "**/api/**"
-    },
+    "action" : "waitForResponse",
     "title" : "Wait For Response"
   }, {
-    "action" : "waitForConsole",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
     },
     "description" : "Wait for next console message.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
         "pageId" : {
           "type" : "string"
         },
-        "timeoutMs" : {
-          "type" : "integer"
-        }
-      },
-      "required" : [ "sessionId" ]
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
+    "action" : "waitForConsole",
     "title" : "Wait For Console"
   }, {
-    "action" : "waitForPopup",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "timeoutMs" : {
+          "type" : "integer"
+        }
+      },
+      "required" : [ "sessionId" ]
     },
     "description" : "Wait for popup and register pageId.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
         "pageId" : {
           "type" : "string"
         },
-        "timeoutMs" : {
-          "type" : "integer"
-        }
-      },
-      "required" : [ "sessionId" ]
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
+    "action" : "waitForPopup",
     "title" : "Wait For Popup"
   }, {
-    "action" : "waitForDownload",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
     },
-    "description" : "Wait for download and return downloadId.",
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2573,20 +3990,41 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Wait for download and return downloadId.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "waitForDownload",
+    "title" : "Wait For Download"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "timeoutMs" : 1000
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Wait For Download"
-  }, {
-    "action" : "waitForTimeout",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Sleep for timeoutMs.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2602,21 +4040,40 @@
       },
       "required" : [ "sessionId", "timeoutMs" ]
     },
+    "description" : "Sleep for timeoutMs.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "for" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
+    },
+    "action" : "waitForTimeout",
+    "title" : "Wait Timeout"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "timeoutMs" : 1000
-    },
-    "title" : "Wait Timeout"
-  }, {
-    "action" : "pageList",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "List tabs/pages.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2626,20 +4083,57 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "List tabs/pages.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "activePageId" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "pageId" : {
+                "type" : "string"
+              },
+              "active" : {
+                "type" : "boolean"
+              },
+              "closed" : {
+                "type" : "boolean"
+              },
+              "url" : {
+                "type" : "string"
+              },
+              "title" : {
+                "type" : "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "action" : "pageList",
+    "title" : "List Pages"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "url" : "https://example.com"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
-    "title" : "List Pages"
-  }, {
-    "action" : "pageNew",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Create and switch to a new page.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2655,48 +4149,108 @@
       },
       "required" : [ "sessionId" ]
     },
-    "aiHints" : {
-      "forAi" : true
+    "description" : "Create and switch to a new page.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "activePageId" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : {
+          "type" : "object",
+          "properties" : {
+            "pageId" : {
+              "type" : "string"
+            },
+            "url" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "closed" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      }
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "url" : "https://example.com"
-    },
+    "action" : "pageNew",
     "title" : "New Page"
   }, {
-    "action" : "pageSwitch",
-    "outputSchema" : {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "pageId" : "p2"
+    },
+    "aiHints" : {
+      "forAi" : true
+    },
+    "inputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        }
+      },
+      "required" : [ "sessionId", "pageId" ]
     },
     "description" : "Switch active page.",
-    "inputSchema" : {
+    "outputSchema" : {
       "type" : "object",
       "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
         "sessionId" : {
           "type" : "string"
         },
-        "pageId" : {
+        "activePageId" : {
           "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : {
+          "type" : "object",
+          "properties" : {
+            "pageId" : {
+              "type" : "string"
+            },
+            "url" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "closed" : {
+              "type" : "boolean"
+            }
+          }
         }
-      },
-      "required" : [ "sessionId", "pageId" ]
+      }
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "pageId" : "p2"
-    },
+    "action" : "pageSwitch",
     "title" : "Switch Page"
   }, {
-    "action" : "pageClose",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "pageId" : "p2"
     },
-    "description" : "Close a page.",
+    "aiHints" : {
+      "forAi" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2709,21 +4263,51 @@
       },
       "required" : [ "sessionId", "pageId" ]
     },
+    "description" : "Close a page.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "activePageId" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : {
+          "type" : "object",
+          "properties" : {
+            "pageId" : {
+              "type" : "string"
+            },
+            "url" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "closed" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      }
+    },
+    "action" : "pageClose",
+    "title" : "Close Page"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "pageId" : "p1"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "pageId" : "p2"
-    },
-    "title" : "Close Page"
-  }, {
-    "action" : "pageBringToFront",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Bring page to front and switch active page.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2736,21 +4320,51 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Bring page to front and switch active page.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "activePageId" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : {
+          "type" : "object",
+          "properties" : {
+            "pageId" : {
+              "type" : "string"
+            },
+            "url" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "closed" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      }
+    },
+    "action" : "pageBringToFront",
+    "title" : "Bring Page To Front"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "types" : [ "console", "pageError" ]
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "pageId" : "p1"
-    },
-    "title" : "Bring Page To Front"
-  }, {
-    "action" : "events",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Read buffered console, request, response, popup, download, dialog and page errors.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2761,10 +4375,10 @@
           "type" : "string"
         },
         "types" : {
+          "type" : "array",
           "items" : {
             "type" : "string"
-          },
-          "type" : "array"
+          }
         },
         "sinceId" : {
           "type" : "integer"
@@ -2775,21 +4389,59 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Read buffered console, request, response, popup, download, dialog and page errors.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "events" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "id" : {
+                "type" : "integer"
+              },
+              "time" : {
+                "type" : "string"
+              },
+              "sessionId" : {
+                "type" : "string"
+              },
+              "pageId" : {
+                "type" : "string"
+              },
+              "type" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "count" : {
+          "type" : "integer"
+        },
+        "cleared" : {
+          "type" : "boolean"
+        }
+      }
+    },
+    "action" : "events",
+    "title" : "Read Events"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "types" : [ "console", "pageError" ]
-    },
-    "title" : "Read Events"
-  }, {
-    "action" : "cookiesGet",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Read browser context cookies.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2800,28 +4452,75 @@
           "type" : "string"
         },
         "urls" : {
+          "type" : "array",
           "items" : {
             "type" : "string"
-          },
-          "type" : "array"
+          }
         }
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Read browser context cookies.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "cookies" : {
+          "type" : "array",
+          "items" : {
+            "type" : "object",
+            "properties" : {
+              "name" : {
+                "type" : "string"
+              },
+              "value" : {
+                "type" : "string"
+              },
+              "domain" : {
+                "type" : "string"
+              },
+              "path" : {
+                "type" : "string"
+              },
+              "url" : {
+                "type" : "string"
+              },
+              "expires" : {
+                "type" : "number"
+              },
+              "httpOnly" : {
+                "type" : "boolean"
+              },
+              "secure" : {
+                "type" : "boolean"
+              },
+              "sameSite" : {
+                "type" : "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "action" : "cookiesGet",
+    "title" : "Get Cookies"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "cookies" : [ {
+        "value" : "1",
+        "url" : "https://example.com",
+        "name" : "sid"
+      } ]
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Get Cookies"
-  }, {
-    "action" : "cookiesSet",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Add browser context cookies.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2832,34 +4531,39 @@
           "type" : "string"
         },
         "cookies" : {
+          "type" : "array",
           "items" : {
             "type" : "object",
             "properties" : { }
-          },
-          "type" : "array"
+          }
         }
       },
       "required" : [ "sessionId", "cookies" ]
     },
+    "description" : "Add browser context cookies.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "count" : {
+          "type" : "integer"
+        }
+      }
+    },
+    "action" : "cookiesSet",
+    "title" : "Set Cookies"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "cookies" : [ {
-        "value" : "1",
-        "name" : "sid",
-        "url" : "https://example.com"
-      } ]
-    },
-    "title" : "Set Cookies"
-  }, {
-    "action" : "cookiesClear",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Clear context cookies.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2869,20 +4573,34 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Clear context cookies.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "cleared" : {
+          "type" : "boolean"
+        },
+        "removed" : {
+          "type" : "boolean"
+        }
+      }
+    },
+    "action" : "cookiesClear",
+    "title" : "Clear Cookies"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "stateName" : "login"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Clear Cookies"
-  }, {
-    "action" : "storageState",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Return storage state and optionally save it.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2907,21 +4625,34 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Return storage state and optionally save it.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "state" : {
+          "type" : "string"
+        },
+        "path" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "storageState",
+    "title" : "Storage State"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "permissions" : [ "geolocation" ]
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "stateName" : "login",
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Storage State"
-  }, {
-    "action" : "permissionsGrant",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Grant context permissions.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2932,10 +4663,10 @@
           "type" : "string"
         },
         "permissions" : {
+          "type" : "array",
           "items" : {
             "type" : "string"
-          },
-          "type" : "array"
+          }
         },
         "origin" : {
           "type" : "string"
@@ -2943,21 +4674,36 @@
       },
       "required" : [ "sessionId", "permissions" ]
     },
+    "description" : "Grant context permissions.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "permissions" : {
+          "type" : "array",
+          "items" : {
+            "type" : "string"
+          }
+        },
+        "origin" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "permissionsGrant",
+    "title" : "Grant Permissions"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "permissions" : [ "geolocation" ],
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Grant Permissions"
-  }, {
-    "action" : "permissionsClear",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Clear granted permissions.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -2967,20 +4713,35 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Clear granted permissions.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "cleared" : {
+          "type" : "boolean"
+        },
+        "removed" : {
+          "type" : "boolean"
+        }
+      }
+    },
+    "action" : "permissionsClear",
+    "title" : "Clear Permissions"
+  }, {
+    "exampleArgs" : {
+      "routeAction" : "abort",
+      "url" : "**/*.png",
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Clear Permissions"
-  }, {
-    "action" : "networkRoute",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Abort, continue, or fulfill matching requests.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3013,22 +4774,37 @@
       },
       "required" : [ "sessionId", "url" ]
     },
+    "description" : "Abort, continue, or fulfill matching requests.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "routeId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "routeAction" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "networkRoute",
+    "title" : "Route Network"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "routeId" : "r1"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "url" : "**/*.png",
-      "routeAction" : "abort"
-    },
-    "title" : "Route Network"
-  }, {
-    "action" : "networkUnroute",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Remove one route by routeId/url or all routes.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3047,21 +4823,34 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Remove one route by routeId/url or all routes.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "cleared" : {
+          "type" : "boolean"
+        },
+        "removed" : {
+          "type" : "boolean"
+        }
+      }
+    },
+    "action" : "networkUnroute",
+    "title" : "Remove Route"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "offline" : true
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "routeId" : "r1",
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Remove Route"
-  }, {
-    "action" : "networkSetOffline",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Toggle browser context offline mode.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3077,21 +4866,33 @@
       },
       "required" : [ "sessionId" ]
     },
+    "description" : "Toggle browser context offline mode.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "offline" : {
+          "type" : "boolean"
+        }
+      }
+    },
+    "action" : "networkSetOffline",
+    "title" : "Set Offline"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "headers" : {
+        "X-Test" : "1"
+      }
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "offline" : true
-    },
-    "title" : "Set Offline"
-  }, {
-    "action" : "networkSetExtraHTTPHeaders",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Set extra HTTP headers.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3108,23 +4909,33 @@
       },
       "required" : [ "sessionId", "headers" ]
     },
+    "description" : "Set extra HTTP headers.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "headers" : {
+          "type" : "object",
+          "properties" : { }
+        }
+      }
+    },
+    "action" : "networkSetExtraHTTPHeaders",
+    "title" : "Set Headers"
+  }, {
+    "exampleArgs" : {
+      "method" : "GET",
+      "url" : "https://example.com/api",
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "headers" : {
-        "X-Test" : "1"
-      }
-    },
-    "title" : "Set Headers"
-  }, {
-    "action" : "httpRequest",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Send HTTP request using browser context cookies.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3157,26 +4968,61 @@
         },
         "maxBodyLength" : {
           "type" : "integer"
+        },
+        "failOnStatusCode" : {
+          "type" : "boolean"
         }
       },
       "required" : [ "sessionId", "url" ]
     },
+    "description" : "Send HTTP request using browser context cookies.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "response" : {
+          "type" : "object",
+          "properties" : {
+            "url" : {
+              "type" : "string"
+            },
+            "status" : {
+              "type" : "integer"
+            },
+            "statusText" : {
+              "type" : "string"
+            },
+            "ok" : {
+              "type" : "boolean"
+            },
+            "headers" : {
+              "type" : "object",
+              "properties" : { }
+            },
+            "body" : {
+              "type" : "string"
+            }
+          }
+        }
+      }
+    },
+    "action" : "httpRequest",
+    "title" : "HTTP Request"
+  }, {
+    "exampleArgs" : {
+      "y" : 200,
+      "op" : "click",
+      "sessionId" : "br_xxx",
+      "x" : 100
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "method" : "GET",
-      "sessionId" : "br_xxx",
-      "url" : "https://example.com/api"
-    },
-    "title" : "HTTP Request"
-  }, {
-    "action" : "mouse",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Mouse click/doubleClick/move/down/up/wheel by coordinates.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3205,23 +5051,41 @@
       },
       "required" : [ "sessionId", "op", "x", "y" ]
     },
+    "description" : "Mouse click/doubleClick/move/down/up/wheel by coordinates.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "mouse",
+    "title" : "Mouse"
+  }, {
+    "exampleArgs" : {
+      "op" : "press",
+      "key" : "Enter",
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "x" : 100,
-      "sessionId" : "br_xxx",
-      "op" : "click",
-      "y" : 200
-    },
-    "title" : "Mouse"
-  }, {
-    "action" : "keyboard",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Keyboard press/down/up/type/insertText.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3244,22 +5108,41 @@
       },
       "required" : [ "sessionId", "op" ]
     },
+    "description" : "Keyboard press/down/up/type/insertText.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "keyboard",
+    "title" : "Keyboard"
+  }, {
+    "exampleArgs" : {
+      "y" : 200,
+      "x" : 100,
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "op" : "press",
-      "sessionId" : "br_xxx",
-      "key" : "Enter"
-    },
-    "title" : "Keyboard"
-  }, {
-    "action" : "touchscreenTap",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Tap by coordinates.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3278,22 +5161,38 @@
       },
       "required" : [ "sessionId", "x", "y" ]
     },
+    "description" : "Tap by coordinates.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "touchscreenTap",
+    "title" : "Touchscreen Tap"
+  }, {
+    "exampleArgs" : {
+      "height" : 720,
+      "width" : 1280,
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "x" : 100,
-      "y" : 200,
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Touchscreen Tap"
-  }, {
-    "action" : "viewportSet",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Set page viewport size.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3312,22 +5211,38 @@
       },
       "required" : [ "sessionId", "width", "height" ]
     },
+    "description" : "Set page viewport size.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "viewportSet",
+    "title" : "Set Viewport"
+  }, {
+    "exampleArgs" : {
+      "latitude" : 30.0,
+      "longitude" : 120.0,
+      "sessionId" : "br_xxx"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "sessionId" : "br_xxx",
-      "width" : 1280,
-      "height" : 720
-    },
-    "title" : "Set Viewport"
-  }, {
-    "action" : "geolocationSet",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Set context geolocation.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3349,22 +5264,28 @@
       },
       "required" : [ "sessionId", "latitude", "longitude" ]
     },
+    "description" : "Set context geolocation.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        }
+      }
+    },
+    "action" : "geolocationSet",
+    "title" : "Set Geolocation"
+  }, {
+    "exampleArgs" : {
+      "sessionId" : "br_xxx",
+      "colorScheme" : "dark"
+    },
     "aiHints" : {
       "forAi" : true
     },
-    "exampleArgs" : {
-      "latitude" : 30.0,
-      "sessionId" : "br_xxx",
-      "longitude" : 120.0
-    },
-    "title" : "Set Geolocation"
-  }, {
-    "action" : "emulateMedia",
-    "outputSchema" : {
-      "type" : "object",
-      "properties" : { }
-    },
-    "description" : "Set media/color/reduced motion emulation.",
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3397,21 +5318,41 @@
       },
       "required" : [ "sessionId" ]
     },
-    "aiHints" : {
-      "forAi" : true
-    },
-    "exampleArgs" : {
-      "colorScheme" : "dark",
-      "sessionId" : "br_xxx"
-    },
-    "title" : "Emulate Media"
-  }, {
-    "action" : "advancedAction",
+    "description" : "Set media/color/reduced motion emulation.",
     "outputSchema" : {
       "type" : "object",
-      "properties" : { }
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      }
     },
-    "description" : "Escape hatch for less common operations. Params are op, target, args, options.",
+    "action" : "emulateMedia",
+    "title" : "Emulate Media"
+  }, {
+    "exampleArgs" : {
+      "target" : {
+        "ref" : "e1"
+      },
+      "op" : "click",
+      "sessionId" : "br_xxx"
+    },
+    "aiHints" : {
+      "forAi" : true,
+      "escapeHatch" : true
+    },
     "inputSchema" : {
       "type" : "object",
       "properties" : {
@@ -3451,6 +5392,9 @@
             "alt" : {
               "type" : "string"
             },
+            "altText" : {
+              "type" : "string"
+            },
             "title" : {
               "type" : "string"
             },
@@ -3459,6 +5403,9 @@
             },
             "exact" : {
               "type" : "boolean"
+            },
+            "index" : {
+              "type" : "integer"
             }
           }
         },
@@ -3473,17 +5420,32 @@
       },
       "required" : [ "sessionId", "op" ]
     },
-    "aiHints" : {
-      "forAi" : true,
-      "escapeHatch" : true
+    "description" : "Escape hatch for less common operations. Params are op, target, args, options.",
+    "outputSchema" : {
+      "type" : "object",
+      "properties" : {
+        "ok" : {
+          "type" : "boolean"
+        },
+        "sessionId" : {
+          "type" : "string"
+        },
+        "pageId" : {
+          "type" : "string"
+        },
+        "url" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "op" : {
+          "type" : "string"
+        },
+        "data" : { }
+      }
     },
-    "exampleArgs" : {
-      "op" : "click",
-      "target" : {
-        "ref" : "e1"
-      },
-      "sessionId" : "br_xxx"
-    },
+    "action" : "advancedAction",
     "title" : "Advanced Playwright Action"
   } ]
 }

@@ -34,6 +34,7 @@ final class BrowserGatewayService {
     private static final int DEFAULT_OBSERVE_LIMIT = 80;
     private static final String OBSERVE_SCRIPT = """
             ({ limit, maxTextLength }) => {
+              const textOf = (value) => typeof value === 'string' ? value.replace(/\\s+/g, ' ').trim() : '';
               const isVisible = (el) => {
                 const style = window.getComputedStyle(el);
                 const rect = el.getBoundingClientRect();
@@ -58,6 +59,35 @@ final class BrowserGatewayService {
                 }
                 return parts.join(' > ');
               };
+              const testIdOf = (el) => el.getAttribute('data-testid') || el.getAttribute('data-test-id') || el.getAttribute('testid') || null;
+              const labelOf = (el) => {
+                if (typeof el.labels !== 'undefined' && el.labels && el.labels.length) {
+                  const joined = Array.from(el.labels).map(label => textOf(label.innerText || label.textContent)).filter(Boolean).join(' ');
+                  if (joined) return joined;
+                }
+                const ariaLabelledBy = el.getAttribute('aria-labelledby');
+                if (ariaLabelledBy) {
+                  const joined = ariaLabelledBy.split(/\\s+/)
+                    .map(id => document.getElementById(id))
+                    .filter(Boolean)
+                    .map(node => textOf(node.innerText || node.textContent))
+                    .filter(Boolean)
+                    .join(' ');
+                  if (joined) return joined;
+                }
+                const parentLabel = el.closest('label');
+                if (parentLabel) {
+                  const text = textOf(parentLabel.innerText || parentLabel.textContent);
+                  if (text) return text;
+                }
+                return textOf(el.getAttribute('aria-label'));
+              };
+              const accessibleNameOf = (el, text, label) =>
+                textOf(el.getAttribute('aria-label')) ||
+                label ||
+                textOf(el.getAttribute('name')) ||
+                textOf(el.getAttribute('title')) ||
+                text;
               const roleOf = (el) => el.getAttribute('role') || ({
                 A: el.hasAttribute('href') ? 'link' : null,
                 BUTTON: 'button',
@@ -75,14 +105,28 @@ final class BrowserGatewayService {
                 .slice(0, limit)
                 .map((el, index) => {
                   const rect = el.getBoundingClientRect();
-                  const text = (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || '').replace(/\\s+/g, ' ').trim();
+                  const text = textOf(el.innerText || el.textContent || el.value || '');
+                  const label = labelOf(el);
+                  const placeholder = textOf(el.getAttribute('placeholder'));
+                  const title = textOf(el.getAttribute('title'));
+                  const alt = textOf(el.getAttribute('alt'));
+                  const href = textOf(el.getAttribute('href'));
+                  const testId = testIdOf(el);
+                  const type = textOf(el.getAttribute('type')) || el.tagName.toLowerCase();
                   const item = {
                     ref: `e${index + 1}`,
                     selector: cssPath(el),
                     tag: el.tagName.toLowerCase(),
+                    type,
                     role: roleOf(el),
-                    name: el.getAttribute('aria-label') || el.getAttribute('name') || el.getAttribute('title') || text,
+                    name: accessibleNameOf(el, text, label),
                     text: text.slice(0, 240),
+                    label: label || null,
+                    placeholder: placeholder || null,
+                    title: title || null,
+                    alt: alt || null,
+                    testId: testId || null,
+                    href: href || null,
                     visible: true,
                     enabled: !el.disabled,
                     checked: typeof el.checked === 'boolean' ? el.checked : null,
@@ -245,7 +289,7 @@ final class BrowserGatewayService {
     }
 
     Map<String, Object> setChecked(ScriptPluginContext context, Map<String, Object> args) throws Exception {
-        return targetedOp(context, args, "setChecked", Map.of("checked", Args.optionalBoolean(args, "checked", true)));
+        return targetedOp(context, args, "setChecked", Map.of("checked", Args.requiredBoolean(args, "checked")));
     }
 
     Map<String, Object> selectOption(ScriptPluginContext context, Map<String, Object> args) throws Exception {
@@ -415,7 +459,7 @@ final class BrowserGatewayService {
                     yield Map.of("checked", target(session, page, resolvedPageId, target).isChecked());
                 }
                 case "setChecked" -> {
-                    boolean checked = Args.optionalBoolean(values, "checked", true);
+                    boolean checked = Args.requiredBoolean(values, "checked");
                     Locator locator = target(session, page, resolvedPageId, target);
                     locator.setChecked(checked);
                     yield Map.of("checked", locator.isChecked());
