@@ -42,11 +42,6 @@
         </dependency>
         <dependency>
             <groupId>org.team4u</groupId>
-            <artifactId>actiondock-browser-plugin</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.team4u</groupId>
             <artifactId>actiondock-project-knowledge-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>

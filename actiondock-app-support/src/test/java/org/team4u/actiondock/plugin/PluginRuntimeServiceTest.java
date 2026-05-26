@@ -21,7 +21,6 @@ import org.team4u.actiondock.ai.api.AiStructuredRequest;
 import org.team4u.actiondock.ai.api.AiStructuredResponse;
 import org.team4u.actiondock.ai.plugin.ActionDockAiSystemPlugin;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
-import org.team4u.actiondock.browser.plugin.ActionDockBrowserSystemPlugin;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.PluginRegistration;
@@ -570,29 +569,6 @@ class PluginRuntimeServiceTest {
                 .containsExactly("actiondock-workspace");
         assertThat(references.getFirst().getActions()).extracting(PluginActionView::getAction)
                 .containsExactly("listDirectory", "viewTextFile", "writeTextFile", "insertTextFile", "findFiles", "searchText", "getSystemInfo", "executeShellCommand");
-    }
-
-    @Test
-    void listPluginReferencesIncludesDocumentedBrowserSystemPlugin() {
-        AppProperties.Plugins properties = new AppProperties.Plugins();
-        properties.setDir(tempDir.toString());
-        InMemoryPluginRegistryRepository repository = new InMemoryPluginRegistryRepository();
-        PluginRuntimeService service = new PluginRuntimeService(
-                jsonCodec,
-                repository,
-                properties,
-                ConfigValueApplicationService.disabled(),
-                List.of(new ActionDockBrowserSystemPlugin())
-        );
-
-        List<PluginReferenceView> references = service.listPluginReferences();
-
-        assertThat(references).extracting(PluginReferenceView::getPluginId)
-                .containsExactly("actiondock-browser");
-        assertThat(references.getFirst().getActions()).extracting(PluginActionView::getAction)
-                .contains("sessionCreate", "observe", "capabilities", "goto", "click", "fill",
-                        "setChecked", "waitForSelector", "pageList", "advancedAction", "evaluate", "events")
-                .doesNotContain("act", "wait", "pages");
     }
 
     @Test

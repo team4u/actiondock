@@ -1,8 +1,8 @@
 # 浏览器自动化
 
-当用户需要打开网页、读取页面内容、点击元素、填写表单、处理弹窗/下载，或通过浏览器上下文发起请求时，使用 `actiondock-browser` 系统插件。
+当用户需要打开网页、读取页面内容、点击元素、填写表单、处理弹窗/下载，或通过浏览器上下文发起请求时，使用 `actiondock-browser` 插件。
 
-本文件只覆盖浏览器系统插件的常见场景。通用 `plugin` 命令、动态 flag、`--args-json` / `--args-file` 规则见 `references/plugin-usage.md`。
+本文件只覆盖浏览器插件的常见场景。通用 `plugin` 命令、动态 flag、`--args-json` / `--args-file` 规则见 `references/plugin-usage.md`。
 
 ## 目标
 
@@ -394,7 +394,7 @@ actiondock plugin invoke actiondock-browser sessionClose \
 
 ## 排查顺序
 
-1. 插件是否存在：`actiondock plugin get actiondock-browser`
+1. 插件是否存在：`actiondock plugin get actiondock-browser`；如果命令返回插件不存在，再提示先安装 `actiondock-browser` 插件
 2. action 参数是否匹配：`actiondock plugin action actiondock-browser <action>`
 3. 会话是否仍有效：`sessionInfo` / `sessionList`
 4. 页面状态是否变化：重新 `observe`
@@ -404,7 +404,7 @@ actiondock plugin invoke actiondock-browser sessionClose \
 
 ## 术语
 
-- `actiondock-browser`: 内置浏览器系统插件，基于 Playwright 提供页面读取、操作、等待、事件、网络、截图和会话能力
+- `actiondock-browser`: 基于 Playwright 的浏览器插件，提供页面读取、操作、等待、事件、网络、截图和会话能力
 - `sessionId`: 浏览器会话 ID，绝大多数 action 都需要传入
 - `pageId`: 多页面/多 tab 场景下的页面 ID，不传时使用当前 active page
 - `observe`: 页面观察动作，返回结构化摘要和可操作元素

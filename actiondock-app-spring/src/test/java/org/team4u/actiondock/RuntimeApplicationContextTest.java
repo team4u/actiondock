@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.team4u.actiondock.bootstrap.SampleDataInitializer;
+import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.web.common.AdminUiController;
 import org.team4u.actiondock.web.execution.ExecutionController;
 import org.team4u.actiondock.web.script.ScriptController;
@@ -28,6 +29,9 @@ class RuntimeApplicationContextTest {
     @Autowired
     private ApplicationContext applicationContext;
 
+    @Autowired
+    private PluginRuntimeService pluginRuntimeService;
+
     @Test
     void contextLoadsWebBeans() {
         assertThat(applicationContext.getBean(AdminUiController.class)).isNotNull();
@@ -35,5 +39,13 @@ class RuntimeApplicationContextTest {
         assertThat(applicationContext.getBean(ExecutionController.class)).isNotNull();
         assertThat(applicationContext.getBean("apiKeyAuthFilter")).isNotNull();
         assertThat(applicationContext.getBean(SampleDataInitializer.class)).isNotNull();
+    }
+
+    @Test
+    void defaultRuntimeDoesNotExposeBrowserPlugin() {
+        assertThat(pluginRuntimeService.list()).extracting("pluginId")
+                .doesNotContain("actiondock-browser");
+        assertThat(pluginRuntimeService.listPluginReferences()).extracting("pluginId")
+                .doesNotContain("actiondock-browser");
     }
 }

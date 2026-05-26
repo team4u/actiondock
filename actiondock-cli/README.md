@@ -1,166 +1,131 @@
-# actiondock-cli
+# ActionDock
 
-## 常用命令
+> 把脚本、插件、仓库分发、AI 调用和运行治理放进同一运行体系的工具平台。同一份脚本定义，可以同时被人、REST API、CLI 和 Agent 使用。
 
-以下命令对应当前“工作副本 + 上游绑定”模型，不再使用旧的 `development-*` 命名。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Java 21](https://img.shields.io/badge/JDK-21-green.svg)
+![npm](https://img.shields.io/npm/v/actiondock.svg)
 
-### 从仓库资源创建工作副本
+---
 
-仓库脚本 -> 脚本工作副本：
+## ActionDock 是什么
 
-```bash
-actiondock script repository-working-copy <repositoryId> <scriptId>
-actiondock script repository-working-copy <repositoryId> <scriptId> --script-id <localScriptId>
-```
+ActionDock 做的核心事情是：
 
-仓库 Webhook -> Webhook 工作副本：
+1. 你写一段脚本（Groovy 或 Python）
+2. 给它定义输入输出的格式（JSON Schema）
+3. 发布成不可变的快照版本
+4. 然后通过管理台、REST API、CLI、定时任务、Webhook、AI Agent 等多种入口执行它
 
-```bash
-actiondock webhook repository-working-copy <repositoryId> <webhookId>
-actiondock webhook repository-working-copy <repositoryId> <webhookId> --webhook-id <localWebhookId>
-```
+整个过程有完整的生命周期管理（草稿 → 发布 → 归档）、依赖声明（脚本依赖、插件依赖、AI 依赖）、版本快照和执行审计轨迹。
 
-### 查看上游同步状态
+## 核心特性
 
-脚本工作副本：
+- 统一脚本抽象 — 脚本不是一段源码，而是带 Schema、发布快照、依赖、日志和执行入口的脚本资产
+- 多入口复用 — 管理台、REST API、CLI、Agent 共用同一脚本
+- 仓库化协作 — 脚本、插件、AI 能力包可从仓库发现、安装、更新
+- 项目知识解析 — 项目仓库可通过 `repository resolve --repository-id` 返回 `ACTIONDOCK.md` 原文，供后续检索
+- Webhook仓库资产 — Webhook可连同配置模板和脚本依赖一起发布、安装
+- AI 原生集成 — 脚本可暴露给 Agent，AI 辅助生成、诊断、Review
+- 治理能力完整 — 内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复
+- 插件扩展 — 基于 PF4J，编写 Java 插件打包成 JAR 上传安装
 
-```bash
-actiondock script upstream-status <scriptId>
-```
-
-Webhook 工作副本：
-
-```bash
-actiondock webhook upstream-status <webhookId>
-```
-
-### 从上游拉取更新
-
-脚本工作副本：
-
-```bash
-actiondock script upstream-pull <scriptId>
-actiondock script upstream-pull <scriptId> --force
-```
-
-Webhook 工作副本：
-
-```bash
-actiondock webhook upstream-pull <webhookId>
-actiondock webhook upstream-pull <webhookId> --force
-```
-
-### 说明
-
-- 工作副本在本地以普通可编辑资源存在。
-- 上游同步关系由 `upstream binding` 维护。
-- `--force` 会在存在本地改动时强制用上游内容覆盖当前工作副本。
-
-## 项目仓库解析
-
-如果要读取某个业务项目的知识库入口，使用：
-
-```bash
-actiondock repository list --purpose project
-actiondock repository sync <repositoryId>
-actiondock repository resolve --repository-id <repositoryId>
-actiondock repository resolve --repository-id <repositoryId> --json
-```
-
-约定上，项目仓库会在项目根目录放一个 `ACTIONDOCK.md`。CLI 会返回：
-
-- 项目根目录
-- 入口文件路径
-- `ACTIONDOCK.md` 的原始 Markdown 内容
-
-后续再根据正文去读取 `overview.md`、`database.md`、`workflows.md`、`runbooks/` 或源码。
-
-## 打包与发布流程
-
-从仓库根目录进入本目录：
-
-```bash
-cd actiondock-cli
-```
-
-### 1. 准备环境
-
-要求：
-
-- Node.js 18+
-- JDK 21
-- Maven
-- npm 已登录：`npm whoami`
-
-安装依赖：
-
-```bash
-npm ci
-```
-
-### 2. 构建最终发布产物
-
-```bash
-npm run prepack
-```
-
-这个命令会依次执行：
-
-- `npm run build`：编译 CLI 到 `dist/`
-- `npm run build:runtime`：用 Maven 构建 Spring Boot runtime jar，并复制到 `runtime/actiondock-app-spring.jar`
-- `npm run jdeploy:package`：生成 `jdeploy-bundle/`
-
-### 3. 检查 npm 包内容
-
-```bash
-npm run pack:dry-run
-```
-
-必须确认输出里有：
+## 核心数据流架构
 
 ```text
-bin/**
-dist/**
-jdeploy-bundle/**
-jdeploy-bundle/actiondock-app-spring.jar
-jdeploy-bundle/jdeploy.cjs
-package.json
-README.md
+创建/编辑脚本 (DRAFT)
+       ↓ 校验
+       ↓ 发布
+已发布快照 (PUBLISHED, 不可变)
+       ↓
+┌──────────────────────────────────────────┐
+│              执行入口                      │
+│  ┌─────┐ ┌──────┐ ┌────┐ ┌──────┐ ┌──────┐ │
+│  │ UI  │ │ REST │ │CLI │ │定时  │ │Webhook│ │
+│  │运行 │ │ API  │ │运行│ │触发  │ │触发 │ │
+│  └─────┘ └──────┘ └────┘ └──────┘ └──────┘ │
+└──────────────────────────────────────────┘
+       ↓
+   脚本运行时
+  ┌──────────────────────┐
+  │ scripts.invoke()     │ ← 调用其他脚本
+  │ plugins.invoke()     │ ← 调用插件 Action
+  │ state.get/put/cas()  │ ← 读写共享状态
+  │ log.info/warn/error()│ ← 输出执行日志
+  │ config.get()         │ ← 读取配置值
+  └──────────────────────┘
+       ↓
+   ExecutionRecord (执行记录，全链路审计)
 ```
 
-不应该出现：
+## 快速开始
 
-```text
-src/**
-test/**
-node_modules/**
-../actiondock-app-spring/target/**
-../actiondock-admin-ui/node_modules/**
-```
+### 系统要求
 
-### 4. 发布到 npm
+JDK 21+ | Maven 3.9+（源码构建） | Node.js 18+（CLI） | Python 3.x（Python 脚本）
 
-先确认 `package.json` 的 `version` 是要发布的版本。
-
-推荐发布命令：
+### 安装
 
 ```bash
-npm publish --access public --ignore-scripts
-```
-
-推荐加 `--ignore-scripts`，因为第 2 步已经显式执行过 `prepack`。不加这个参数时，`npm publish` 会再次自动执行 `prepack`，会重复构建 runtime 和 jDeploy bundle。
-
-如果希望一条命令自动构建并发布，也可以执行：
-
-```bash
-npm publish --access public
-```
-
-### 5. 发布后验证
-
-```bash
-npm view actiondock
-npm install -g actiondock@latest
-actiondock --help
+# CLI 一键安装（推荐）
+npm install -g actiondock
 actiondock server
+
+# 或从源码构建
+git clone https://github.com/team4u/actiondock.git
+cd action-dock
+mvn -pl actiondock-app-spring -am -DskipTests spring-boot:run
 ```
+
+### 验证
+
+启动后访问 http://localhost:5177/admin/app/scripts
+
+> 完整安装方式和第一个脚本教程请阅读 [快速开始](docs/quick-start.md)。
+
+## 开发指引
+
+### 后端开发
+
+```bash
+# 启动后端服务
+mvn -pl actiondock-app-spring -am spring-boot:run
+
+# 编译检查
+mvn -pl actiondock-app-spring -am -DskipTests compile
+
+# 运行测试
+mvn test
+```
+
+### 前端开发
+
+```bash
+cd actiondock-admin-ui
+npm ci
+npm run dev       # 开发模式
+npx tsc --noEmit  # 类型检查
+npm run build     # 构建
+```
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [让脚本真正可复用](docs/script-platform.md) | 项目理念与核心能力介绍 |
+| [仓库与分发](docs/repository-distribution.md) | 能力仓库、项目仓库、`ACTIONDOCK.md` 知识入口 |
+| [项目知识库](docs/project-knowledge.md) | 项目知识从痛点到设计的完整链路 |
+| [用户手册](docs/user-manual.md) | 完整文档入口 |
+
+## 技术栈
+
+- 后端：Java 21 · Spring Boot 3.3 · Groovy 4.0 · Python 3
+- 前端：React 18 · Ant Design 5 · Monaco Editor
+- 插件：PF4J 3.13
+- CLI：Node.js (oclif)
+- 存储：JPA / H2
+- AI：OpenAI · Anthropic · Gemini · DashScope · Ollama
+
+## License
+
+[MIT](LICENSE)
