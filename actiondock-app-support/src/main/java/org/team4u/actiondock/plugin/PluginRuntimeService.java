@@ -695,8 +695,10 @@ public class PluginRuntimeService {
             PluginActionMetadata actionMetadata = requireActionMetadata(registration, action);
             assertActionAvailable(pluginId, action);
             String normalizedConfigName = PluginConfigManager.normalizeConfigName(configName);
-            Map<String, Object> normalizedArgs = configValueApplicationService.resolveMap(args);
-            Map<String, Object> normalizedScriptInput = configValueApplicationService.resolveMap(scriptInput);
+            ConfigValueApplicationService.ResolvedMapView argsView = configValueApplicationService.resolveMapView(args);
+            ConfigValueApplicationService.ResolvedMapView scriptInputView = configValueApplicationService.resolveMapView(scriptInput);
+            Map<String, Object> normalizedArgs = argsView.resolved();
+            Map<String, Object> normalizedScriptInput = scriptInputView.resolved();
             Map<String, Object> pluginResult = MapValueConverter.toResultMap(
                     doInvoke(pluginId, action, null,
                             new ScriptExecutionContext()
@@ -710,8 +712,8 @@ public class PluginRuntimeService {
                     .setResult(ExecutionOutputProjector.project(pluginResult, actionMetadata.getOutputSchema()))
                     .setDebug(includeDebug
                             ? new PluginInvokeDebugView()
-                            .setArgs(normalizedArgs)
-                            .setScriptInput(normalizedScriptInput)
+                            .setArgs(argsView.redacted())
+                            .setScriptInput(scriptInputView.redacted())
                             : null);
         });
     }

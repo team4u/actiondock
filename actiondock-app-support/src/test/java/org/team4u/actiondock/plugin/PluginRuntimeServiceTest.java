@@ -406,8 +406,9 @@ class PluginRuntimeServiceTest {
         InMemoryConfigValueRepository configRepository = new InMemoryConfigValueRepository();
         ConfigValueApplicationService configService = new ConfigValueApplicationService(configRepository);
         configService.create(new ConfigValue().setKey("plugin_prefix").setValue("hello"));
-        configService.create(new ConfigValue().setKey("message").setValue("debug"));
-        configService.create(new ConfigValue().setKey("user_name").setValue("Alice"));
+        configService.create(new ConfigValue().setKey("message").setValue("debug").setSecret(true));
+        configService.create(new ConfigValue().setKey("user_name").setValue("Alice").setSecret(true));
+        configService.create(new ConfigValue().setKey("auth_header").setValue("Bearer ${config.message}"));
         PluginRuntimeService service = new PluginRuntimeService(jsonCodec, repository, properties, configService);
 
         service.install("demo-plugin.jar", Files.readAllBytes(pluginJar));
@@ -430,14 +431,16 @@ class PluginRuntimeServiceTest {
         PluginInvokeView debug = service.invokeForDebug(
                 "actiondock-demo-plugin",
                 "echo",
-                Map.of("message", "${config.message}"),
+                Map.of("message", "${config.message}", "header", "${config.auth_header}"),
                 Map.of("name", "${config.user_name}"),
                 true
         );
 
         assertThat(debug.getResult()).containsEntry("message", "hello:debug");
-        assertThat(debug.getDebug().getArgs()).containsEntry("message", "debug");
-        assertThat(debug.getDebug().getScriptInput()).containsEntry("name", "Alice");
+        assertThat(debug.getDebug().getArgs())
+                .containsEntry("message", "********")
+                .containsEntry("header", "Bearer ********");
+        assertThat(debug.getDebug().getScriptInput()).containsEntry("name", "********");
     }
 
     @Test
@@ -1117,6 +1120,7 @@ class PluginRuntimeServiceTest {
                     .setKey(configValue.getKey())
                     .setValue(configValue.getValue())
                     .setDescription(configValue.getDescription())
+                    .setSecret(configValue.isSecret())
                     .setCreatedAt(configValue.getCreatedAt())
                     .setUpdatedAt(configValue.getUpdatedAt());
             values.put(copy.getKey(), copy);

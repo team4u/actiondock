@@ -24,6 +24,9 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
     private static final Pattern KEY_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_.-]*");
     private static final ConfigValueApplicationService DISABLED = new ConfigValueApplicationService();
 
+    public record ResolvedMapView(Map<String, Object> resolved, Map<String, Object> redacted) {
+    }
+
     private record ConfigValueFlags(boolean secret, boolean managed, boolean overridden) {
         static final ConfigValueFlags DEFAULT = new ConfigValueFlags(false, false, false);
     }
@@ -206,6 +209,15 @@ public class ConfigValueApplicationService extends OptionalServiceSupport {
             return source == null ? new LinkedHashMap<>() : new LinkedHashMap<>(source);
         }
         return placeholderResolver.resolveMap(source, snapshot());
+    }
+
+    public ResolvedMapView resolveMapView(Map<String, Object> source) {
+        if (!isEnabled()) {
+            Map<String, Object> copy = source == null ? new LinkedHashMap<>() : new LinkedHashMap<>(source);
+            return new ResolvedMapView(copy, new LinkedHashMap<>(copy));
+        }
+        ConfigPlaceholderResolver.ResolvedMapView resolved = placeholderResolver.resolveMapView(source);
+        return new ResolvedMapView(resolved.resolved(), resolved.redacted());
     }
 
     public Object resolveObject(Object value) {

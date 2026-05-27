@@ -46,6 +46,35 @@ class ConfigValueApplicationServiceTest {
     }
 
     @Test
+    void resolveMapViewRedactsSecretPlaceholders() {
+        service.create(new ConfigValue().setKey("token").setValue("abc123").setSecret(true));
+        service.create(new ConfigValue().setKey("endpoint").setValue("https://svc.example.com"));
+        service.create(new ConfigValue().setKey("auth_header").setValue("Bearer ${config.token}"));
+
+        ConfigValueApplicationService.ResolvedMapView view = service.resolveMapView(Map.of(
+                "headers", Map.of(
+                        "Authorization", "Bearer ${config.token}",
+                        "Forwarded", "${config.auth_header}"
+                ),
+                "targets", List.of("${config.endpoint}/v1", "${config.token}"),
+                "enabled", true
+        ));
+
+        assertThat((Map<String, Object>) view.resolved().get("headers"))
+                .containsEntry("Authorization", "Bearer abc123")
+                .containsEntry("Forwarded", "Bearer abc123");
+        assertThat(view.resolved())
+                .containsEntry("targets", List.of("https://svc.example.com/v1", "abc123"));
+
+        assertThat((Map<String, Object>) view.redacted().get("headers"))
+                .containsEntry("Authorization", "Bearer ********")
+                .containsEntry("Forwarded", "Bearer ********");
+        assertThat(view.redacted())
+                .containsEntry("targets", List.of("https://svc.example.com/v1", "********"))
+                .containsEntry("enabled", true);
+    }
+
+    @Test
     void snapshotRejectsMissingAndCircularReferences() {
         service.create(new ConfigValue().setKey("broken").setValue("${config.missing}"));
 
