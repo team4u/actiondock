@@ -67,14 +67,6 @@ final class BrowserDslTabs {
 
     Map<String, Object> transformResult(ScriptPluginContext context, String session, Map<String, Object> result) {
         Map<String, Object> transformed = new LinkedHashMap<>(result);
-        Object pageId = transformed.remove("pageId");
-        if (pageId != null) {
-            transformed.put("tab", publicTab(context, session, String.valueOf(pageId)));
-        }
-        Object activePageId = transformed.remove("activePageId");
-        if (activePageId != null) {
-            transformed.put("activeTab", publicTab(context, session, String.valueOf(activePageId)));
-        }
         Object pages = transformed.get("pages");
         if (pages instanceof java.util.List<?> list) {
             transformed.put("tabs", list.stream()
@@ -82,6 +74,14 @@ final class BrowserDslTabs {
                     .map(item -> transformPageItem(context, session, (Map<?, ?>) item))
                     .toList());
             transformed.remove("pages");
+        }
+        Object pageId = transformed.remove("pageId");
+        if (pageId != null) {
+            transformed.put("tab", publicTab(context, session, String.valueOf(pageId)));
+        }
+        Object activePageId = transformed.remove("activePageId");
+        if (activePageId != null) {
+            transformed.put("activeTab", publicTab(context, session, String.valueOf(activePageId)));
         }
         return transformed;
     }

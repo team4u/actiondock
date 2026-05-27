@@ -648,7 +648,11 @@ final class BrowserGatewayService {
             result.put("sessionId", session.sessionId());
             result.put("activePageId", session.activePageId());
             result.put("op", op);
-            result.put("data", data);
+            if ("list".equals(op)) {
+                result.put("pages", data);
+            } else {
+                result.put("data", data);
+            }
             return result;
         });
     }

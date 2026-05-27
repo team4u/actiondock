@@ -3,6 +3,7 @@ package org.team4u.actiondock.browser.plugin;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,6 +81,32 @@ class BrowserDslSessionStateTest {
         assertThatThrownBy(() -> tabs.pageId(context, "run-close", Map.of("tab", "docs")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Browser tab not found");
+    }
+
+    @Test
+    void transformsPageListToPublicTabs() {
+        ScriptPluginContext context = new ScriptPluginContext();
+        BrowserDslTabs tabs = new BrowserDslTabs();
+
+        Map<String, Object> transformed = tabs.transformResult(context, "run-list", new java.util.LinkedHashMap<>(Map.of(
+                "ok", true,
+                "activePageId", "p2",
+                "pages", List.of(
+                        Map.of("pageId", "p1", "active", false, "closed", false, "url", "https://one.test", "title", "One"),
+                        Map.of("pageId", "p2", "active", true, "closed", false, "url", "https://two.test", "title", "Two")
+                )
+        )));
+
+        assertThat(transformed)
+                .containsEntry("activeTab", "t2")
+                .doesNotContainKeys("activePageId", "pages");
+        List<?> tabItems = (List<?>) transformed.get("tabs");
+        assertThat(tabItems).hasSize(2);
+        tabItems.forEach(item -> {
+            Map<?, ?> tab = (Map<?, ?>) item;
+            assertThat(tab.get("tab")).isNotNull();
+            assertThat(tab.containsKey("pageId")).isFalse();
+        });
     }
 
     @Test

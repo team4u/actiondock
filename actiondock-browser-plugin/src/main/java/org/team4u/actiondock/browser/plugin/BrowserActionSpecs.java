@@ -107,7 +107,7 @@ final class BrowserActionSpecs {
     }
 
     private static void addTabsAndSessions(List<Map<String, Object>> actions) {
-        add(actions, "tabList", "Tab List", "List tabs.", schema(p("session", str())), pageResult(), Map.of("session", "run1"));
+        add(actions, "tabList", "Tab List", "List tabs.", schema(p("session", str())), tabListResult(), Map.of("session", "run1"));
         add(actions, "tabNew", "Tab New", "Create and switch to a new tab.", schema(p("session", str()), p("url", str()), p("label", str())), pageResult(), Map.of("session", "run1", "url", "https://example.com", "label", "docs"));
         for (String action : List.of("tabSwitch", "tabClose", "tabBringToFront")) {
             add(actions, action, title(action), "Operate a tab by id or label.", schema(p("session", str()), p("tab", str())), pageResult(), Map.of("session", "run1", "tab", "docs"));
@@ -189,6 +189,17 @@ final class BrowserActionSpecs {
 
     private static Map<String, Object> pageResult() {
         return obj(props(p("ok", bool()), p("session", str()), p("tab", str()), p("activeTab", str()), p("url", str()), p("title", str()), p("action", str()), p("outputMeta", object())));
+    }
+
+    private static Map<String, Object> tabListResult() {
+        Map<String, Object> tabItem = obj(props(
+                p("tab", str()),
+                p("active", bool()),
+                p("closed", bool()),
+                p("url", str()),
+                p("title", str())
+        ));
+        return obj(props(p("ok", bool()), p("session", str()), p("activeTab", str()), p("tabs", arr(tabItem)), p("action", str()), p("outputMeta", object())));
     }
 
     private static Map<String, Object> sessionResult() {
