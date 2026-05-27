@@ -16,6 +16,7 @@ final class BrowserDslActions implements BrowserActionRegistrar {
     private final BrowserDslStateActions stateActions;
     private final BrowserDslNetworkActions networkActions;
     private final BrowserDslEvalActions evalActions;
+    private final BrowserDslDebugActions debugActions;
     private final BrowserDslBatchActions batchActions;
 
     BrowserDslActions(BrowserGatewayService service) {
@@ -31,6 +32,7 @@ final class BrowserDslActions implements BrowserActionRegistrar {
         this.stateActions = new BrowserDslStateActions(service, tabs);
         this.networkActions = new BrowserDslNetworkActions(service, tabs);
         this.evalActions = new BrowserDslEvalActions(service, targets, tabs);
+        this.debugActions = new BrowserDslDebugActions(service, tabs);
         this.batchActions = new BrowserDslBatchActions();
         this.batchActions.setActions(this);
     }
@@ -49,6 +51,7 @@ final class BrowserDslActions implements BrowserActionRegistrar {
     }
 
     Object invoke(String action, ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserActionPolicy.assertAllowed(context == null ? null : context.getPluginConfig(BrowserPluginConfig.class), action);
         return switch (action) {
             case "open" -> open(context, args);
             case "snapshot" -> pageActions.snapshot(context(context, args));
@@ -69,6 +72,15 @@ final class BrowserDslActions implements BrowserActionRegistrar {
             case "reload" -> pageActions.reload(context(context, args));
             case "back" -> pageActions.back(context(context, args));
             case "forward" -> pageActions.forward(context(context, args));
+            case "keyboardType" -> pageActions.keyboardType(context(context, args));
+            case "keyboardInsertText" -> pageActions.keyboardInsertText(context(context, args));
+            case "keyDown" -> pageActions.keyDown(context(context, args));
+            case "keyUp" -> pageActions.keyUp(context(context, args));
+            case "scroll" -> pageActions.scroll(context(context, args));
+            case "mouseMove" -> pageActions.mouseMove(context(context, args));
+            case "mouseDown" -> pageActions.mouseDown(context(context, args));
+            case "mouseUp" -> pageActions.mouseUp(context(context, args));
+            case "mouseWheel" -> pageActions.mouseWheel(context(context, args));
             case "findClick" -> pageActions.findClick(context(context, args));
             case "findFill" -> pageActions.findFill(context(context, args));
             case "findType" -> pageActions.findType(context(context, args));
@@ -125,6 +137,16 @@ final class BrowserDslActions implements BrowserActionRegistrar {
             case "networkOffline" -> networkActions.networkOffline(context(context, args));
             case "networkHeaders" -> networkActions.networkHeaders(context(context, args));
             case "networkEvents" -> networkActions.networkEvents(context(context, args));
+            case "consoleList" -> debugActions.consoleList(context(context, args));
+            case "errorList" -> debugActions.errorList(context(context, args));
+            case "requestList" -> debugActions.requestList(context(context, args));
+            case "requestGet" -> debugActions.requestGet(context(context, args));
+            case "traceStart" -> debugActions.traceStart(context(context, args));
+            case "traceStop" -> debugActions.traceStop(context(context, args));
+            case "harStart" -> debugActions.harStart(context(context, args));
+            case "harStop" -> debugActions.harStop(context(context, args));
+            case "snapshotDiff" -> debugActions.snapshotDiff(context(context, args));
+            case "screenshotDiff" -> debugActions.screenshotDiff(context(context, args));
             case "eval" -> evalActions.eval(context(context, args));
             case "batch" -> batchActions.batch(context, args);
             case "capabilities" -> BrowserActionSpecs.capabilities();

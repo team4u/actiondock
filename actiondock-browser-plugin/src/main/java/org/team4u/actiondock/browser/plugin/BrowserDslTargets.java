@@ -56,6 +56,9 @@ final class BrowserDslTargets {
     }
 
     private static void addCommonOptions(Map<String, Object> target, Map<String, Object> args) {
+        if (Args.has(args, "snapshotId")) {
+            target.put("snapshotId", Args.requiredString(args, "snapshotId"));
+        }
         if (Args.has(args, "exact")) {
             target.put("exact", Args.optionalBoolean(args, "exact", false));
         }

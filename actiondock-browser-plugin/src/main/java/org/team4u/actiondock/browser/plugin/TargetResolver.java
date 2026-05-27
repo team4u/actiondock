@@ -27,8 +27,9 @@ final class TargetResolver {
             return target;
         }
 
-        Map<String, Object> resolvedTarget = new LinkedHashMap<>(session.ref(pageId, ref));
+        Map<String, Object> resolvedTarget = new LinkedHashMap<>(session.ref(pageId, ref, Args.optionalString(target, "snapshotId", null)));
         resolvedTarget.remove("ref");
+        resolvedTarget.remove("snapshotId");
         target.forEach((key, value) -> {
             if (!"ref".equals(key)) {
                 resolvedTarget.put(key, value);

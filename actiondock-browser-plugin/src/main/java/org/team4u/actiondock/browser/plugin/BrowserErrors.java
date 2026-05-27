@@ -33,9 +33,37 @@ final class BrowserErrors {
         return new PluginRuntimeException(422, "PLUGIN_ACTION_FAILED", message, details, cause);
     }
 
+    static PluginRuntimeException blocked(String action, String category, String message, Throwable cause) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("action", action);
+        details.put("reason", "ACTION_BLOCKED");
+        if (!Args.isBlank(category)) {
+            details.put("category", category);
+        }
+        return new PluginRuntimeException(403, "PLUGIN_ACTION_BLOCKED", message, details, cause);
+    }
+
+    static PluginRuntimeException staleRef(String action, BrowserRefStaleException exception) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("action", action);
+        details.put("reason", "REF_STALE");
+        details.put("ref", exception.ref());
+        details.put("pageId", exception.pageId());
+        details.put("expectedSnapshotId", exception.expectedSnapshotId());
+        details.put("currentSnapshotId", exception.currentSnapshotId());
+        details.put("pageVersion", exception.pageVersion());
+        return new PluginRuntimeException(409, "PLUGIN_REF_STALE", exception.getMessage(), details, exception);
+    }
+
     static PluginRuntimeException wrap(String action, Exception exception) {
         if (exception instanceof PluginRuntimeException pluginRuntimeException) {
             return pluginRuntimeException;
+        }
+        if (exception instanceof BrowserRefStaleException staleException) {
+            return staleRef(action, staleException);
+        }
+        if (exception instanceof BrowserActionBlockedException blockedException) {
+            return blocked(action, blockedException.category(), blockedException.getMessage(), blockedException);
         }
         String message = exception.getMessage() == null || exception.getMessage().isBlank()
                 ? exception.getClass().getSimpleName()

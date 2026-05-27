@@ -8,6 +8,20 @@
 actiondock plugin invoke actiondock-browser <action> --flag value --json
 ```
 
+每个 action 的完整 `inputSchema` / `outputSchema` / `exampleArgs` 都可以通过通用插件命令查看：
+
+```bash
+actiondock plugin action actiondock-browser <action> --json
+```
+
+例如查看 `snapshot` 的 schema：
+
+```bash
+actiondock plugin action actiondock-browser snapshot --json
+```
+
+插件查看、schema 浏览和复杂入参传递规则见 `references/plugin-usage.md`，其中 L3 `plugin action <plugin-id> <action>` 是单个 action schema 的权威入口。
+
 设计原则：一个 action 表达一个清晰语义；入参保持扁平。不要使用嵌套 `target` 对象，也不要用通用 `--op` 字段。
 
 ## 标准工作流
@@ -23,6 +37,7 @@ actiondock plugin invoke actiondock-browser snapshot --session <open返回的ses
 - `url` / `title`
 - `visibleText`
 - `ariaSnapshot`
+- `snapshotId` / `pageVersion`
 - `elements[].ref`，格式为 `@e1`
 - `forms`
 - `frames`
@@ -33,6 +48,27 @@ actiondock plugin invoke actiondock-browser snapshot --session <open返回的ses
 
 ```bash
 actiondock plugin invoke actiondock-browser click --session <open返回的session> --target @e2 --json
+```
+
+如果想让 AI 更稳地读页面，可加这些过滤参数：
+
+```bash
+actiondock plugin invoke actiondock-browser snapshot --session run1 \
+  --interactiveOnly true \
+  --compact true \
+  --depth 4 \
+  --scopeTarget '#main' \
+  --includeUrls true \
+  --json
+```
+
+如果要严格校验 `@eN` 没有过期，可把上次 `snapshot` 返回的 `snapshotId` 一起传给后续动作：
+
+```bash
+actiondock plugin invoke actiondock-browser click --session run1 \
+  --target @e2 \
+  --snapshotId sn12 \
+  --json
 ```
 
 ## 目标选择器
@@ -71,6 +107,9 @@ actiondock plugin invoke actiondock-browser dblclick --session run1 --target @e2
 actiondock plugin invoke actiondock-browser fill --session run1 --target @e3 --text hello@example.com --json
 actiondock plugin invoke actiondock-browser type --session run1 --target @e3 --text hello --json
 actiondock plugin invoke actiondock-browser press --session run1 --key Enter --json
+actiondock plugin invoke actiondock-browser keyboardType --session run1 --text hello --json
+actiondock plugin invoke actiondock-browser keyDown --session run1 --key Shift --json
+actiondock plugin invoke actiondock-browser keyUp --session run1 --key Shift --json
 ```
 
 复选框和单选框：
@@ -86,6 +125,9 @@ actiondock plugin invoke actiondock-browser uncheck --session run1 --target @e4 
 actiondock plugin invoke actiondock-browser select --session run1 --target @e5 --value US --json
 actiondock plugin invoke actiondock-browser upload --session run1 --target @e6 --path ./upload.txt --json
 actiondock plugin invoke actiondock-browser drag --session run1 --target @e1 --to @e2 --json
+actiondock plugin invoke actiondock-browser scroll --session run1 --direction down --pixels 600 --json
+actiondock plugin invoke actiondock-browser mouseMove --session run1 --x 240 --y 180 --json
+actiondock plugin invoke actiondock-browser mouseWheel --session run1 --dy 600 --json
 ```
 
 ### 读取和判断
@@ -147,8 +189,11 @@ actiondock plugin invoke actiondock-browser sessionClose --session run1 --json
 ```bash
 actiondock plugin invoke actiondock-browser screenshot --session run1 --name page --fullPage true --json
 actiondock plugin invoke actiondock-browser screenshot --session run1 --target @e1 --name element --json
+actiondock plugin invoke actiondock-browser screenshot --session run1 --name page --annotate true --json
 actiondock plugin invoke actiondock-browser pdf --session run1 --name page --format A4 --json
 ```
+
+`--annotate true` 会返回 `annotations[]`，并在截图里标出与 `@eN` 对齐的编号。
 
 Dialog：
 
@@ -173,6 +218,10 @@ actiondock plugin invoke actiondock-browser storageClear --session run1 --area l
 actiondock plugin invoke actiondock-browser networkRequest --session run1 --url https://example.com/api/me --method GET --json
 actiondock plugin invoke actiondock-browser networkRoute --session run1 --url '**/*.png' --routeAction abort --json
 actiondock plugin invoke actiondock-browser networkOffline --session run1 --value true --json
+actiondock plugin invoke actiondock-browser consoleList --session run1 --json
+actiondock plugin invoke actiondock-browser errorList --session run1 --json
+actiondock plugin invoke actiondock-browser requestList --session run1 --status 2xx --json
+actiondock plugin invoke actiondock-browser requestGet --session run1 --requestId rq1 --json
 ```
 
 复杂 JSON 用字符串字段：
@@ -208,6 +257,19 @@ actiondock plugin invoke actiondock-browser eval --session run1 \
   --target @e1 \
   --expression 'el => el.outerHTML' \
   --json
+```
+
+## 调试与对比
+
+```bash
+actiondock plugin invoke actiondock-browser traceStart --session run1 --json
+actiondock plugin invoke actiondock-browser traceStop --session run1 --name trace --json
+
+actiondock plugin invoke actiondock-browser harStart --session run1 --name network --json
+actiondock plugin invoke actiondock-browser harStop --session run1 --json
+
+actiondock plugin invoke actiondock-browser snapshotDiff --session run1 --baselineSnapshotId sn11 --json
+actiondock plugin invoke actiondock-browser screenshotDiff --session run1 --baselinePath ./baseline.png --path diff.png --json
 ```
 
 ## 排查顺序

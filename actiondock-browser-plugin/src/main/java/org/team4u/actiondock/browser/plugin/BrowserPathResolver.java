@@ -18,6 +18,18 @@ final class BrowserPathResolver {
         return resolvePath(config.getArtifactDir(), args, "name", "path", ".pdf", createParent);
     }
 
+    Path resolveTracePath(BrowserPluginConfig config, Map<String, Object> args, boolean createParent) throws IOException {
+        return resolvePath(config.getArtifactDir(), args, "name", "path", ".zip", createParent);
+    }
+
+    Path resolveHarPath(BrowserPluginConfig config, Map<String, Object> args, boolean createParent) throws IOException {
+        return resolvePath(config.getArtifactDir(), args, "name", "path", ".har", createParent);
+    }
+
+    Path resolveJsonArtifactPath(BrowserPluginConfig config, Map<String, Object> args, boolean createParent) throws IOException {
+        return resolvePath(config.getArtifactDir(), args, "name", "path", ".json", createParent);
+    }
+
     Path resolveInputFilePath(String pathValue) throws IOException {
         if (Args.isBlank(pathValue)) {
             throw new IllegalArgumentException("path must not be blank");

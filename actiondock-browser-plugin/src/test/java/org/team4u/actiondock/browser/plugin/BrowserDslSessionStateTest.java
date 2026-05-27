@@ -81,4 +81,28 @@ class BrowserDslSessionStateTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Browser tab not found");
     }
+
+    @Test
+    void reportsStaleSnapshotIdForStoredRef() {
+        com.microsoft.playwright.Page page = mock(com.microsoft.playwright.Page.class);
+        when(page.isClosed()).thenReturn(false);
+        when(page.url()).thenReturn("https://example.test");
+        BrowserSession session = new BrowserSession(
+                "br_test",
+                "owner",
+                "chromium",
+                mock(com.microsoft.playwright.Playwright.class),
+                mock(com.microsoft.playwright.Browser.class),
+                mock(com.microsoft.playwright.BrowserContext.class),
+                page,
+                30000
+        );
+        session.replaceRefs("p1", java.util.List.of(Map.of("ref", "e1", "selector", "#submit")), Map.of("visibleText", "before"));
+        session.invalidateRefs("p1");
+        session.replaceRefs("p1", java.util.List.of(Map.of("ref", "e1", "selector", "#submit2")), Map.of("visibleText", "after"));
+
+        assertThatThrownBy(() -> session.ref("p1", "e1", "sn1"))
+                .isInstanceOf(BrowserRefStaleException.class)
+                .hasMessageContaining("stale");
+    }
 }

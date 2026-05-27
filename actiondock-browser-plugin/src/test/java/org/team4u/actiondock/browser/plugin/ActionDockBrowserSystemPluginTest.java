@@ -28,6 +28,9 @@ class ActionDockBrowserSystemPluginTest {
                         "snapshot",
                         "click",
                         "fill",
+                        "keyboardType",
+                        "scroll",
+                        "mouseMove",
                         "press",
                         "getText",
                         "getTitle",
@@ -40,6 +43,9 @@ class ActionDockBrowserSystemPluginTest {
                         "cookiesSet",
                         "storageGet",
                         "networkRequest",
+                        "consoleList",
+                        "traceStart",
+                        "snapshotDiff",
                         "eval",
                         "batch",
                         "capabilities"
@@ -73,12 +79,13 @@ class ActionDockBrowserSystemPluginTest {
                 .orElseThrow()
                 .getOutputSchema();
         assertThat(propertiesOf(snapshotSchema))
-                .containsKeys("ok", "session", "tab", "url", "title", "elements", "suggestions", "events");
+                .containsKeys("ok", "session", "tab", "url", "title", "elements", "suggestions", "events",
+                        "snapshotId", "pageVersion", "scope", "truncated", "elementCount", "outputMeta");
 
         Map<String, Object> elementsSchema = nestedSchema(snapshotSchema, "elements");
         assertThat(elementsSchema).containsEntry("type", "array");
         assertThat(propertiesOf((Map<String, Object>) elementsSchema.get("items")))
-                .containsKeys("ref", "selector", "role", "name", "label", "placeholder", "testId", "bounds");
+                .containsKeys("ref", "selector", "role", "name", "label", "placeholder", "testId", "bounds", "interactive");
 
         Map<String, Object> fillSchema = manifest.getActions().stream()
                 .filter(action -> "fill".equals(action.getAction()))
@@ -86,7 +93,7 @@ class ActionDockBrowserSystemPluginTest {
                 .orElseThrow()
                 .getInputSchema();
         assertThat(propertiesOf(fillSchema))
-                .containsKeys("session", "tab", "target", "text", "exact", "index");
+                .containsKeys("session", "tab", "target", "snapshotId", "text", "exact", "index");
         assertThat(propertiesOf(fillSchema)).doesNotContainKey("op");
         assertThat(propertiesOf(fillSchema).get("target"))
                 .as("target is a flat selector string, not a nested schema")
@@ -143,6 +150,7 @@ class ActionDockBrowserSystemPluginTest {
                 "defaultTimeoutMs", 30000,
                 "sessionTtlSeconds", 600,
                 "maxSessions", 10,
+                "maxOutputChars", 50000,
                 "stateDir", ".actiondock/browser-state",
                 "artifactDir", ".actiondock/browser-artifacts",
                 "downloadDir", ".actiondock/browser-downloads"

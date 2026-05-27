@@ -31,7 +31,8 @@ final class BrowserActionSpecs {
                 p("credentialsJson", str()), p("label", str())
         ), pageResult(), Map.of());
         add(actions, "snapshot", "Snapshot", "Read page text, refs, forms, frames, events, and suggestions.", pageSchema(
-                p("limit", integer()), p("maxTextLength", integer())
+                p("limit", integer()), p("maxTextLength", integer()), p("interactiveOnly", bool()), p("compact", bool()),
+                p("depth", integer()), p("scopeTarget", str()), p("includeUrls", bool())
         ), snapshotResult(), Map.of("limit", 80));
 
         element(actions, "click", "Click", "Click target.", targetSchema(), Map.of("target", "@e2"));
@@ -51,6 +52,15 @@ final class BrowserActionSpecs {
         element(actions, "reload", "Reload", "Reload active tab.", pageSchema(p("waitUntil", str()), p("timeoutMs", integer())), Map.of());
         element(actions, "back", "Back", "Go back in history.", pageSchema(p("waitUntil", str()), p("timeoutMs", integer())), Map.of());
         element(actions, "forward", "Forward", "Go forward in history.", pageSchema(p("waitUntil", str()), p("timeoutMs", integer())), Map.of());
+        add(actions, "keyboardType", "Keyboard Type", "Type with page keyboard.", pageSchema(p("text", str())), pageResult(), Map.of("text", "hello"));
+        add(actions, "keyboardInsertText", "Keyboard Insert Text", "Insert text without key events.", pageSchema(p("text", str())), pageResult(), Map.of("text", "hello"));
+        add(actions, "keyDown", "Key Down", "Hold a key down.", pageSchema(p("key", str())), pageResult(), Map.of("key", "Shift"));
+        add(actions, "keyUp", "Key Up", "Release a key.", pageSchema(p("key", str())), pageResult(), Map.of("key", "Shift"));
+        add(actions, "scroll", "Scroll", "Scroll page or target.", targetOptionalSchema(p("direction", enumSchema("up", "down", "left", "right")), p("pixels", integer())), pageResult(), Map.of("direction", "down", "pixels", 600));
+        add(actions, "mouseMove", "Mouse Move", "Move mouse cursor to viewport coordinates.", pageSchema(p("x", number()), p("y", number())), pageResult(), Map.of("x", 100, "y", 120));
+        add(actions, "mouseDown", "Mouse Down", "Press mouse button.", pageSchema(p("button", enumSchema("left", "right", "middle"))), pageResult(), Map.of("button", "left"));
+        add(actions, "mouseUp", "Mouse Up", "Release mouse button.", pageSchema(p("button", enumSchema("left", "right", "middle"))), pageResult(), Map.of("button", "left"));
+        add(actions, "mouseWheel", "Mouse Wheel", "Scroll with mouse wheel deltas.", pageSchema(p("dx", number()), p("dy", number())), pageResult(), Map.of("dy", 600));
 
         for (String action : List.of("findClick", "findHover", "findFocus", "findCheck", "findUncheck", "findText")) {
             add(actions, action, title(action), "Find by semantic locator and run " + action.substring(4).toLowerCase() + ".", findSchema(), pageResult(), Map.of("by", "role", "query", "button", "name", "Submit"));
@@ -108,7 +118,7 @@ final class BrowserActionSpecs {
     }
 
     private static void addArtifactsAndDialog(List<Map<String, Object>> actions) {
-        add(actions, "screenshot", "Screenshot", "Take page or element screenshot.", targetOptionalSchema(p("name", str()), p("path", str()), p("fullPage", bool())), pageResult(), Map.of("name", "page", "fullPage", true));
+        add(actions, "screenshot", "Screenshot", "Take page or element screenshot.", targetOptionalSchema(p("name", str()), p("path", str()), p("fullPage", bool()), p("annotate", bool()), p("quality", integer())), pageResult(), Map.of("name", "page", "fullPage", true));
         add(actions, "pdf", "PDF", "Save page as PDF.", pageSchema(p("name", str()), p("path", str()), p("format", str()), p("printBackground", bool()), p("landscape", bool()), p("scale", number()), p("pageRanges", str()), p("width", str()), p("height", str())), pageResult(), Map.of("name", "page", "format", "A4"));
         add(actions, "dialogList", "Dialog List", "List pending dialogs.", pageSchema(), pageResult(), Map.of());
         add(actions, "dialogAccept", "Dialog Accept", "Accept dialog by id.", pageSchema(p("id", str()), p("text", str())), pageResult(), Map.of("id", "d1"));
@@ -129,6 +139,16 @@ final class BrowserActionSpecs {
         add(actions, "networkOffline", "Network Offline", "Toggle offline mode.", pageSchema(p("value", bool())), sessionResult(), Map.of("value", true));
         add(actions, "networkHeaders", "Network Headers", "Set extra HTTP headers.", pageSchema(p("headersJson", str())), sessionResult(), Map.of("headersJson", "{\"X-Test\":\"1\"}"));
         add(actions, "networkEvents", "Network Events", "Read buffered browser events.", pageSchema(p("types", str()), p("sinceId", integer()), p("clear", bool())), sessionResult(), Map.of("types", "request,response"));
+        add(actions, "consoleList", "Console List", "List buffered console messages.", pageSchema(p("sinceId", integer()), p("clear", bool())), sessionResult(), Map.of());
+        add(actions, "errorList", "Error List", "List buffered page errors.", pageSchema(p("sinceId", integer()), p("clear", bool())), sessionResult(), Map.of());
+        add(actions, "requestList", "Request List", "List tracked requests.", pageSchema(p("text", str()), p("method", str()), p("status", str()), p("resourceType", str()), p("sinceId", integer()), p("clear", bool())), sessionResult(), Map.of());
+        add(actions, "requestGet", "Request Get", "Get tracked request detail.", pageSchema(p("requestId", str())), sessionResult(), Map.of("requestId", "rq1"));
+        add(actions, "traceStart", "Trace Start", "Start browser tracing.", pageSchema(), sessionResult(), Map.of());
+        add(actions, "traceStop", "Trace Stop", "Stop tracing and save artifact.", pageSchema(p("name", str()), p("path", str())), sessionResult(), Map.of("name", "trace"));
+        add(actions, "harStart", "HAR Start", "Start request capture for HAR export.", pageSchema(p("name", str()), p("path", str())), sessionResult(), Map.of("name", "network"));
+        add(actions, "harStop", "HAR Stop", "Stop HAR capture and save artifact.", pageSchema(), sessionResult(), Map.of());
+        add(actions, "snapshotDiff", "Snapshot Diff", "Compare current snapshot against prior snapshot or saved JSON.", pageSchema(p("limit", integer()), p("maxTextLength", integer()), p("interactiveOnly", bool()), p("compact", bool()), p("depth", integer()), p("scopeTarget", str()), p("includeUrls", bool()), p("baselineSnapshotId", str()), p("baselinePath", str())), sessionResult(), Map.of());
+        add(actions, "screenshotDiff", "Screenshot Diff", "Compare current screenshot against baseline image.", pageSchema(p("baselinePath", str()), p("path", str()), p("threshold", number())), sessionResult(), Map.of("baselinePath", "./baseline.png"));
     }
 
     private static void element(List<Map<String, Object>> actions, String action, String title, String description, Map<String, Object> input, Map<String, Object> example) {
@@ -137,12 +157,12 @@ final class BrowserActionSpecs {
 
     @SafeVarargs
     private static Map<String, Object> targetSchema(Map.Entry<String, Object>... entries) {
-        return pageSchema(prepend(entries, p("target", str()), p("exact", bool()), p("index", integer())));
+        return pageSchema(prepend(entries, p("target", str()), p("snapshotId", str()), p("exact", bool()), p("index", integer())));
     }
 
     @SafeVarargs
     private static Map<String, Object> targetOptionalSchema(Map.Entry<String, Object>... entries) {
-        return pageSchema(prepend(entries, p("target", str()), p("exact", bool()), p("index", integer())));
+        return pageSchema(prepend(entries, p("target", str()), p("snapshotId", str()), p("exact", bool()), p("index", integer())));
     }
 
     @SafeVarargs
@@ -168,7 +188,7 @@ final class BrowserActionSpecs {
     }
 
     private static Map<String, Object> pageResult() {
-        return obj(props(p("ok", bool()), p("session", str()), p("tab", str()), p("activeTab", str()), p("url", str()), p("title", str())));
+        return obj(props(p("ok", bool()), p("session", str()), p("tab", str()), p("activeTab", str()), p("url", str()), p("title", str()), p("action", str()), p("outputMeta", object())));
     }
 
     private static Map<String, Object> sessionResult() {
@@ -176,15 +196,15 @@ final class BrowserActionSpecs {
     }
 
     private static Map<String, Object> valueResult() {
-        return obj(props(p("ok", bool()), p("session", str()), p("tab", str()), p("what", str()), p("value", new LinkedHashMap<>())));
+        return obj(props(p("ok", bool()), p("session", str()), p("tab", str()), p("what", str()), p("value", new LinkedHashMap<>()), p("outputMeta", object())));
     }
 
     private static Map<String, Object> snapshotResult() {
-        return obj(props(p("ok", bool()), p("session", str()), p("tab", str()), p("url", str()), p("title", str()), p("ariaSnapshot", str()), p("visibleText", str()), p("elements", arr(elementSchema())), p("suggestions", arr(object())), p("forms", arr(object())), p("frames", arr(object())), p("events", arr(object()))));
+        return obj(props(p("ok", bool()), p("session", str()), p("tab", str()), p("url", str()), p("title", str()), p("ariaSnapshot", str()), p("visibleText", str()), p("elements", arr(elementSchema())), p("suggestions", arr(object())), p("forms", arr(object())), p("frames", arr(object())), p("events", arr(object())), p("snapshotId", str()), p("pageVersion", integer()), p("scope", object()), p("truncated", bool()), p("elementCount", integer()), p("outputMeta", object())));
     }
 
     private static Map<String, Object> elementSchema() {
-        return obj(props(p("ref", str()), p("selector", str()), p("tag", str()), p("type", str()), p("role", str()), p("name", str()), p("text", str()), p("label", str()), p("placeholder", str()), p("title", str()), p("alt", str()), p("testId", str()), p("href", str()), p("visible", bool()), p("enabled", bool()), p("checked", bool()), p("value", str()), p("bounds", object())));
+        return obj(props(p("ref", str()), p("selector", str()), p("tag", str()), p("type", str()), p("role", str()), p("name", str()), p("text", str()), p("label", str()), p("placeholder", str()), p("title", str()), p("alt", str()), p("testId", str()), p("href", str()), p("visible", bool()), p("enabled", bool()), p("interactive", bool()), p("checked", bool()), p("value", str()), p("bounds", object())));
     }
 
     private static void add(List<Map<String, Object>> actions, String action, String title, String description, Map<String, Object> inputSchema, Map<String, Object> outputSchema, Map<String, Object> exampleArgs) {

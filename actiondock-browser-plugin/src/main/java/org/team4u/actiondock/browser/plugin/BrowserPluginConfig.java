@@ -14,6 +14,9 @@ public class BrowserPluginConfig {
     private String downloadDir = ".actiondock/browser-downloads";
     private List<String> allowedHosts = new ArrayList<>();
     private boolean includeCookieValueByDefault = false;
+    private int maxOutputChars = 50000;
+    private boolean markUntrustedContent = true;
+    private String actionPolicyPath;
 
     public String getDefaultBrowser() {
         return defaultBrowser;
@@ -102,6 +105,33 @@ public class BrowserPluginConfig {
 
     public BrowserPluginConfig setIncludeCookieValueByDefault(boolean includeCookieValueByDefault) {
         this.includeCookieValueByDefault = includeCookieValueByDefault;
+        return this;
+    }
+
+    public int getMaxOutputChars() {
+        return maxOutputChars;
+    }
+
+    public BrowserPluginConfig setMaxOutputChars(int maxOutputChars) {
+        this.maxOutputChars = maxOutputChars;
+        return this;
+    }
+
+    public boolean isMarkUntrustedContent() {
+        return markUntrustedContent;
+    }
+
+    public BrowserPluginConfig setMarkUntrustedContent(boolean markUntrustedContent) {
+        this.markUntrustedContent = markUntrustedContent;
+        return this;
+    }
+
+    public String getActionPolicyPath() {
+        return actionPolicyPath;
+    }
+
+    public BrowserPluginConfig setActionPolicyPath(String actionPolicyPath) {
+        this.actionPolicyPath = actionPolicyPath;
         return this;
     }
 }

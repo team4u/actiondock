@@ -13,6 +13,7 @@ import com.microsoft.playwright.Request;
 import com.microsoft.playwright.Response;
 import com.microsoft.playwright.Route;
 import com.microsoft.playwright.APIResponse;
+import com.microsoft.playwright.Tracing;
 import com.microsoft.playwright.options.Geolocation;
 import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.options.Cookie;
@@ -21,8 +22,14 @@ import com.microsoft.playwright.options.RequestOptions;
 import com.microsoft.playwright.options.WaitForSelectorState;
 import com.microsoft.playwright.options.WaitUntilState;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
+import org.team4u.actiondock.plugin.api.PluginObjectMappers;
 
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,12 +40,20 @@ final class BrowserGatewayService {
     private static final int MAX_WAIT_TIMEOUT_MS = 120000;
     private static final int DEFAULT_OBSERVE_LIMIT = 80;
     private static final String OBSERVE_SCRIPT = """
-            ({ limit, maxTextLength }) => {
+            ({ limit, maxTextLength, interactiveOnly, compact, depth, includeUrls, rootSelector }) => {
               const textOf = (value) => typeof value === 'string' ? value.replace(/\\s+/g, ' ').trim() : '';
               const isVisible = (el) => {
                 const style = window.getComputedStyle(el);
                 const rect = el.getBoundingClientRect();
                 return style && style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+              };
+              const isInteractive = (el) => {
+                if (!el) return false;
+                const role = el.getAttribute('role');
+                if (role && ['button','link','checkbox','radio','textbox','combobox','menuitem','switch','tab','option','searchbox'].includes(role)) return true;
+                if (el.isContentEditable) return true;
+                if (el.hasAttribute('tabindex') && el.getAttribute('tabindex') !== '-1') return true;
+                return ['A','BUTTON','INPUT','TEXTAREA','SELECT','SUMMARY'].includes(el.tagName);
               };
               const cssPath = (el) => {
                 if (el.id) return '#' + CSS.escape(el.id);
@@ -82,6 +97,25 @@ final class BrowserGatewayService {
                 }
                 return textOf(el.getAttribute('aria-label'));
               };
+              const depthOf = (root, el) => {
+                let current = el;
+                let currentDepth = 0;
+                while (current && current !== root) {
+                  current = current.parentElement;
+                  currentDepth += 1;
+                }
+                return current === root ? currentDepth : -1;
+              };
+              const compactItem = (item) => {
+                if (!compact) return item;
+                const result = {};
+                for (const [key, value] of Object.entries(item)) {
+                  if (value === null || value === '') continue;
+                  if (typeof value === 'object' && !Array.isArray(value) && value !== null && Object.keys(value).length === 0) continue;
+                  result[key] = value;
+                }
+                return result;
+              };
               const accessibleNameOf = (el, text, label) =>
                 textOf(el.getAttribute('aria-label')) ||
                 label ||
@@ -100,8 +134,20 @@ final class BrowserGatewayService {
                 button: 'button',
                 search: 'searchbox'
               }[String(el.type || '').toLowerCase()] || 'textbox') : null);
-              const candidates = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role],[contenteditable],label,summary,[tabindex]'))
+              const root = rootSelector ? document.querySelector(rootSelector) : document.body;
+              if (!root) {
+                return { visibleText: '', elements: [], forms: [], rootFound: false };
+              }
+              const selector = interactiveOnly
+                ? 'a[href],button,input,textarea,select,[contenteditable],summary,[tabindex]:not([tabindex="-1"])'
+                : 'a,button,input,textarea,select,[role],[contenteditable],label,summary,[tabindex]';
+              const candidates = Array.from(root.querySelectorAll(selector))
                 .filter(isVisible)
+                .filter(el => {
+                  if (depth == null || depth < 0) return true;
+                  const actualDepth = depthOf(root, el);
+                  return actualDepth >= 0 && actualDepth <= depth;
+                })
                 .slice(0, limit)
                 .map((el, index) => {
                   const rect = el.getBoundingClientRect();
@@ -126,17 +172,18 @@ final class BrowserGatewayService {
                     title: title || null,
                     alt: alt || null,
                     testId: testId || null,
-                    href: href || null,
+                    href: includeUrls ? (href || null) : null,
                     visible: true,
                     enabled: !el.disabled,
+                    interactive: isInteractive(el),
                     checked: typeof el.checked === 'boolean' ? el.checked : null,
                     value: typeof el.value === 'string' ? el.value : null,
                     bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
                   };
-                  return item;
+                  return compactItem(item);
                 });
-              const visibleText = (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, maxTextLength);
-              const forms = Array.from(document.forms || []).map((form, index) => ({
+              const visibleText = (root ? root.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, maxTextLength);
+              const forms = Array.from(root.querySelectorAll('form') || []).map((form, index) => ({
                 index,
                 action: form.action,
                 method: form.method,
@@ -146,7 +193,7 @@ final class BrowserGatewayService {
                   value: typeof el.value === 'string' ? el.value : null
                 }))
               }));
-              return { visibleText, elements: candidates, forms };
+              return { visibleText, elements: candidates, forms, rootFound: true };
             }
             """;
 
@@ -172,6 +219,7 @@ final class BrowserGatewayService {
         applyContextOptions(contextOptions, config, args);
 
         BrowserContext browserContext = browser.newContext(contextOptions);
+        installAllowedHostRoute(browserContext, config);
         browserContext.setDefaultTimeout(timeoutMs);
         browserContext.setDefaultNavigationTimeout(timeoutMs);
         Page page = browserContext.newPage();
@@ -211,33 +259,18 @@ final class BrowserGatewayService {
 
     Map<String, Object> snapshot(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         BrowserSession session = requireSession(context, args);
-        String pageId = Args.optionalString(args, "pageId", null);
-        int limit = Args.optionalInt(args, "limit", DEFAULT_OBSERVE_LIMIT);
-        int maxTextLength = Args.optionalInt(args, "maxTextLength", 6000);
+        BrowserPluginConfig config = config(context);
         return session.withLock(() -> {
+            String pageId = Args.optionalString(args, "pageId", null);
             Page page = session.page(pageId);
             String resolvedPageId = resolvedPageId(session, pageId);
-            Map<String, Object> observed = castMap(page.evaluate(OBSERVE_SCRIPT, Map.of(
-                    "limit", Math.max(1, limit),
-                    "maxTextLength", Math.max(0, maxTextLength)
-            )));
-            List<Map<String, Object>> elements = castMapList(observed.get("elements"));
-            session.replaceRefs(resolvedPageId, elements);
-
-            Map<String, Object> result = pageResult(session, resolvedPageId, page);
-            result.put("ariaSnapshot", safeAriaSnapshot(page));
-            result.put("visibleText", observed.get("visibleText"));
-            result.put("elements", elements);
-            result.put("suggestedActions", suggestedActions(elements));
-            result.put("forms", observed.getOrDefault("forms", List.of()));
-            result.put("frames", frames(page));
-            result.put("events", session.events(resolvedPageId, List.of(), 0, false));
-            return result;
+            return observePage(session, page, resolvedPageId, config, args);
         });
     }
 
     Map<String, Object> execute(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
         String op = Args.requiredString(args, "op").trim();
         String pageId = Args.optionalString(args, "pageId", null);
         Map<String, Object> target = Args.optionalMap(args, "target");
@@ -250,21 +283,26 @@ final class BrowserGatewayService {
             Object data = switch (op) {
                 case "goto" -> {
                     String url = Args.requiredString(values, "url");
+                    BrowserHostPolicy.assertAllowed(config, url, "open");
                     WaitUntilState waitUntil = BrowserEnums.waitUntil(Args.optionalString(options, "waitUntil", null), WaitUntilState.LOAD);
-                    int timeoutMs = Args.optionalInt(options, "timeoutMs", config(context).getDefaultTimeoutMs());
+                    int timeoutMs = Args.optionalInt(options, "timeoutMs", config.getDefaultTimeoutMs());
                     Response response = page.navigate(url, new Page.NavigateOptions().setWaitUntil(waitUntil).setTimeout(timeoutMs));
+                    session.invalidateRefs(resolvedPageId);
                     yield response == null ? Map.of() : responseMap(response);
                 }
                 case "reload" -> {
                     Response response = page.reload();
+                    session.invalidateRefs(resolvedPageId);
                     yield response == null ? Map.of() : responseMap(response);
                 }
                 case "back", "goBack" -> {
                     Response response = page.goBack();
+                    session.invalidateRefs(resolvedPageId);
                     yield response == null ? Map.of() : responseMap(response);
                 }
                 case "forward", "goForward" -> {
                     Response response = page.goForward();
+                    session.invalidateRefs(resolvedPageId);
                     yield response == null ? Map.of() : responseMap(response);
                 }
                 case "click" -> {
@@ -298,6 +336,26 @@ final class BrowserGatewayService {
                     } else {
                         target(session, page, resolvedPageId, target).press(key);
                     }
+                    yield Map.of("key", key);
+                }
+                case "keyboardType" -> {
+                    String text = Args.requiredString(values, "text");
+                    page.keyboard().type(text);
+                    yield Map.of("text", text);
+                }
+                case "keyboardInsertText" -> {
+                    String text = Args.requiredString(values, "text");
+                    page.keyboard().insertText(text);
+                    yield Map.of("text", text);
+                }
+                case "keyDown" -> {
+                    String key = Args.requiredString(values, "key");
+                    page.keyboard().down(key);
+                    yield Map.of("key", key);
+                }
+                case "keyUp" -> {
+                    String key = Args.requiredString(values, "key");
+                    page.keyboard().up(key);
                     yield Map.of("key", key);
                 }
                 case "check" -> {
@@ -339,6 +397,31 @@ final class BrowserGatewayService {
                     target(session, page, resolvedPageId, target).scrollIntoViewIfNeeded();
                     yield Map.of();
                 }
+                case "scroll" -> {
+                    int pixels = Args.optionalInt(values, "pixels", 600);
+                    String direction = Args.optionalString(values, "direction", "down");
+                    if (target.isEmpty()) {
+                        switch (direction) {
+                            case "up" -> page.mouse().wheel(0, -pixels);
+                            case "left" -> page.mouse().wheel(-pixels, 0);
+                            case "right" -> page.mouse().wheel(pixels, 0);
+                            default -> page.mouse().wheel(0, pixels);
+                        }
+                    } else {
+                        int dx = switch (direction) {
+                            case "left" -> -pixels;
+                            case "right" -> pixels;
+                            default -> 0;
+                        };
+                        int dy = switch (direction) {
+                            case "up" -> -pixels;
+                            case "down" -> pixels;
+                            default -> 0;
+                        };
+                        target(session, page, resolvedPageId, target).evaluate("(el, [dx, dy]) => el.scrollBy(dx, dy)", List.of(dx, dy));
+                    }
+                    yield Map.of("direction", direction, "pixels", pixels);
+                }
                 case "tap" -> {
                     target(session, page, resolvedPageId, target).tap();
                     yield Map.of();
@@ -375,9 +458,31 @@ final class BrowserGatewayService {
                     page.addStyleTag(styleOptions);
                     yield Map.of();
                 }
-                case "screenshot" -> screenshot(config(context), page, null, values);
-                case "locatorScreenshot" -> screenshot(config(context), page, target(session, page, resolvedPageId, target), values);
-                case "pdf" -> pdf(config(context), page, values);
+                case "mouseMove" -> {
+                    double x = Args.requiredDouble(values, "x");
+                    double y = Args.requiredDouble(values, "y");
+                    page.mouse().move(x, y);
+                    yield Map.of("x", x, "y", y);
+                }
+                case "mouseDown" -> {
+                    String button = Args.optionalString(values, "button", "left");
+                    page.mouse().down(new com.microsoft.playwright.Mouse.DownOptions().setButton(mouseButton(button)));
+                    yield Map.of("button", button);
+                }
+                case "mouseUp" -> {
+                    String button = Args.optionalString(values, "button", "left");
+                    page.mouse().up(new com.microsoft.playwright.Mouse.UpOptions().setButton(mouseButton(button)));
+                    yield Map.of("button", button);
+                }
+                case "mouseWheel" -> {
+                    double dx = Args.optionalDouble(values, "dx") == null ? 0 : Args.optionalDouble(values, "dx");
+                    double dy = Args.optionalDouble(values, "dy") == null ? 0 : Args.optionalDouble(values, "dy");
+                    page.mouse().wheel(dx, dy);
+                    yield Map.of("dx", dx, "dy", dy);
+                }
+                case "screenshot" -> screenshot(config, page, null, resolvedPageId, session, values);
+                case "locatorScreenshot" -> screenshot(config, page, target(session, page, resolvedPageId, target), resolvedPageId, session, values);
+                case "pdf" -> pdf(config, page, values);
                 case "dialogAccept" -> {
                     String dialogId = Args.requiredString(values, "dialogId");
                     Dialog dialog = session.takeDialog(dialogId);
@@ -401,6 +506,7 @@ final class BrowserGatewayService {
 
     Map<String, Object> evaluate(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
         String pageId = Args.optionalString(args, "pageId", null);
         String scope = Args.optionalString(args, "scope", "page");
         String expression = Args.requiredString(args, "expression");
@@ -418,7 +524,15 @@ final class BrowserGatewayService {
             };
             Map<String, Object> result = pageResult(session, resolvedPageId, page);
             result.put("scope", scope);
-            result.put("value", value);
+            if (value instanceof String text) {
+                boolean truncated = BrowserOutputSupport.truncated(text, config.getMaxOutputChars());
+                result.put("value", BrowserOutputSupport.truncate(text, config.getMaxOutputChars()));
+                if (config.isMarkUntrustedContent()) {
+                    BrowserOutputSupport.mark(result, "value", "eval." + scope, truncated, text.length());
+                }
+            } else {
+                result.put("value", value);
+            }
             return result;
         });
     }
@@ -492,6 +606,7 @@ final class BrowserGatewayService {
 
     Map<String, Object> tabs(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
         String op = Args.requiredString(args, "op");
         return session.withLock(() -> {
             Object data = switch (op) {
@@ -501,7 +616,9 @@ final class BrowserGatewayService {
                     String url = Args.optionalString(args, "url", null);
                     Page page = session.page(pageId);
                     if (!Args.isBlank(url)) {
+                        BrowserHostPolicy.assertAllowed(config, url, "tabNew");
                         page.navigate(url);
+                        session.invalidateRefs(pageId);
                     }
                     session.switchPage(pageId);
                     yield Map.of("pageId", pageId, "url", page.url(), "title", page.title());
@@ -549,6 +666,188 @@ final class BrowserGatewayService {
             result.put("events", events);
             result.put("count", events.size());
             result.put("cleared", clear);
+            return result;
+        });
+    }
+
+    Map<String, Object> consoleList(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return eventList(context, args, List.of("console"), "console");
+    }
+
+    Map<String, Object> errorList(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        return eventList(context, args, List.of("pageError"), "errors");
+    }
+
+    private Map<String, Object> eventList(ScriptPluginContext context,
+                                          Map<String, Object> args,
+                                          List<String> types,
+                                          String key) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            String pageId = Args.optionalString(args, "pageId", null);
+            int sinceId = Args.optionalInt(args, "sinceId", 0);
+            boolean clear = Args.optionalBoolean(args, "clear", false);
+            List<Map<String, Object>> items = session.events(pageId, types, sinceId, clear);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("pageId", pageId);
+            result.put(key, items);
+            result.put("count", items.size());
+            result.put("cleared", clear);
+            return result;
+        });
+    }
+
+    Map<String, Object> requestList(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            String pageId = Args.optionalString(args, "pageId", null);
+            String text = Args.optionalString(args, "text", null);
+            String method = Args.optionalString(args, "method", null);
+            String resourceType = Args.optionalString(args, "resourceType", null);
+            String status = Args.optionalString(args, "status", null);
+            int sinceId = Args.optionalInt(args, "sinceId", 0);
+            boolean clear = Args.optionalBoolean(args, "clear", false);
+            List<Map<String, Object>> requests = session.requestRecords(pageId).stream()
+                    .filter(item -> ((Number) item.getOrDefault("id", 0)).intValue() > sinceId)
+                    .filter(item -> Args.isBlank(text) || String.valueOf(item.getOrDefault("url", "")).contains(text))
+                    .filter(item -> Args.isBlank(method) || method.equalsIgnoreCase(String.valueOf(item.getOrDefault("method", ""))))
+                    .filter(item -> Args.isBlank(resourceType) || resourceType.equalsIgnoreCase(String.valueOf(item.getOrDefault("resourceType", ""))))
+                    .filter(item -> matchStatus(item.get("status"), status))
+                    .toList();
+            if (clear) {
+                session.clearRequestRecords(pageId);
+            }
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("pageId", pageId);
+            result.put("requests", requests);
+            result.put("count", requests.size());
+            result.put("cleared", clear);
+            return result;
+        });
+    }
+
+    Map<String, Object> requestGet(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("request", session.requestRecord(Args.requiredString(args, "requestId")));
+            return result;
+        });
+    }
+
+    Map<String, Object> traceStart(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            if (!session.isTraceActive()) {
+                session.context().tracing().start(new Tracing.StartOptions().setScreenshots(true).setSnapshots(true));
+                session.setTraceActive(true);
+            }
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("traceActive", true);
+            return result;
+        });
+    }
+
+    Map<String, Object> traceStop(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
+        return session.withLock(() -> {
+            Path path = pathResolver.resolveTracePath(config, args, true);
+            session.context().tracing().stop(new Tracing.StopOptions().setPath(path));
+            session.setTraceActive(false);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("path", path.toString());
+            result.put("traceActive", false);
+            return result;
+        });
+    }
+
+    Map<String, Object> harStart(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
+        return session.withLock(() -> {
+            Path path = pathResolver.resolveHarPath(config, args, true);
+            session.startHar(Args.optionalString(args, "name", path.getFileName().toString()), path);
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("harActive", true);
+            result.put("path", path.toString());
+            return result;
+        });
+    }
+
+    Map<String, Object> harStop(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        return session.withLock(() -> {
+            Path path = session.stopHar();
+            if (path == null) {
+                throw new IllegalStateException("HAR recording is not active");
+            }
+            writeHar(path, session.harEntries());
+            Map<String, Object> result = Results.ok();
+            result.put("sessionId", session.sessionId());
+            result.put("path", path.toString());
+            result.put("harActive", false);
+            result.put("count", session.harEntries().size());
+            return result;
+        });
+    }
+
+    Map<String, Object> snapshotDiff(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        Map<String, Object> current = snapshot(context, args);
+        BrowserSession session = requireSession(context, args);
+        String pageId = Args.optionalString(args, "pageId", null);
+        String requestedBaselineSnapshotId = Args.optionalString(args, "baselineSnapshotId", null);
+        String baselinePath = Args.optionalString(args, "baselinePath", null);
+        return session.withLock(() -> {
+            String resolvedPageId = resolvedPageId(session, pageId);
+            String baselineSnapshotId = requestedBaselineSnapshotId;
+            if (Args.isBlank(baselineSnapshotId) && Args.isBlank(baselinePath)) {
+                baselineSnapshotId = session.previousSnapshotId(resolvedPageId);
+            }
+            Map<String, Object> baseline = Args.isBlank(baselinePath)
+                    ? session.snapshotPayload(baselineSnapshotId)
+                    : castMap(PluginObjectMappers.DEFAULT.readValue(Path.of(baselinePath).toFile(), Object.class));
+            if (baseline == null) {
+                throw new IllegalArgumentException("Baseline snapshot not found");
+            }
+            Map<String, Object> result = Results.ok();
+            result.put("session", current.get("session"));
+            result.put("tab", current.get("tab"));
+            result.put("snapshotId", current.get("snapshotId"));
+            result.put("baselineSnapshotId", baselineSnapshotId);
+            result.putAll(diffSnapshotPayloads(baseline, current));
+            return result;
+        });
+    }
+
+    Map<String, Object> screenshotDiff(ScriptPluginContext context, Map<String, Object> args) throws Exception {
+        BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
+        String pageId = Args.optionalString(args, "pageId", null);
+        Path baseline = Path.of(Args.requiredString(args, "baselinePath")).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(baseline)) {
+            throw new IllegalArgumentException("baselinePath must point to an existing file");
+        }
+        return session.withLock(() -> {
+            Page page = session.page(pageId);
+            String resolvedPageId = resolvedPageId(session, pageId);
+            Path currentPath = pathResolver.resolveArtifactPath(config, Map.of("name", "screenshot-diff-current"), true);
+            page.screenshot(new Page.ScreenshotOptions().setPath(currentPath));
+            Map<String, Object> diff = diffImages(
+                    baseline,
+                    currentPath,
+                    Args.optionalString(args, "path", null),
+                    Args.optionalDouble(args, "threshold") == null ? 0.0 : Args.optionalDouble(args, "threshold"),
+                    config
+            );
+            Map<String, Object> result = pageResult(session, resolvedPageId, page);
+            result.putAll(diff);
             return result;
         });
     }
@@ -667,9 +966,11 @@ final class BrowserGatewayService {
 
     Map<String, Object> httpRequest(ScriptPluginContext context, Map<String, Object> args) throws Exception {
         BrowserSession session = requireSession(context, args);
+        BrowserPluginConfig config = config(context);
         String url = Args.requiredString(args, "url");
         String method = Args.optionalString(args, "method", "GET").toUpperCase();
         return session.withLock(() -> {
+            BrowserHostPolicy.assertAllowed(config, url, "networkRequest");
             RequestOptions options = RequestOptions.create().setMethod(method);
             applyRequestOptions(options, args);
             APIResponse response = session.context().request().fetch(url, options);
@@ -749,8 +1050,20 @@ final class BrowserGatewayService {
         }
     }
 
-    private Object screenshot(BrowserPluginConfig config, Page page, Locator locator, Map<String, Object> values) throws Exception {
+    private Object screenshot(BrowserPluginConfig config,
+                              Page page,
+                              Locator locator,
+                              String pageId,
+                              BrowserSession session,
+                              Map<String, Object> values) throws Exception {
         Path path = pathResolver.resolveArtifactPath(config, values, true);
+        boolean annotate = Args.optionalBoolean(values, "annotate", false);
+        if (annotate && locator != null) {
+            throw new IllegalArgumentException("annotate is only supported for page screenshots");
+        }
+        if (locator == null && annotate) {
+            return annotatedScreenshot(config, page, pageId, session, values, path);
+        }
         if (locator == null) {
             page.screenshot(new Page.ScreenshotOptions()
                     .setPath(path)
@@ -803,6 +1116,155 @@ final class BrowserGatewayService {
         }
         page.pdf(options);
         return Map.of("path", path.toString());
+    }
+
+    private Map<String, Object> annotatedScreenshot(BrowserPluginConfig config,
+                                                    Page page,
+                                                    String pageId,
+                                                    BrowserSession session,
+                                                    Map<String, Object> values,
+                                                    Path path) throws Exception {
+        Map<String, Object> snapshot = observePage(session, page, pageId, config, Map.of(
+                "interactiveOnly", true,
+                "includeUrls", true,
+                "limit", Args.optionalInt(values, "limit", DEFAULT_OBSERVE_LIMIT)
+        ));
+        List<Map<String, Object>> elements = castMapList(snapshot.get("elements"));
+        page.evaluate("""
+                (elements) => {
+                  const existing = document.getElementById('__actiondock_annotation_layer__');
+                  if (existing) existing.remove();
+                  const layer = document.createElement('div');
+                  layer.id = '__actiondock_annotation_layer__';
+                  layer.style.position = 'fixed';
+                  layer.style.inset = '0';
+                  layer.style.zIndex = '2147483647';
+                  layer.style.pointerEvents = 'none';
+                  document.body.appendChild(layer);
+                  for (const [index, element] of elements.entries()) {
+                    const bounds = element.bounds || {};
+                    const box = document.createElement('div');
+                    box.style.position = 'fixed';
+                    box.style.left = `${bounds.x || 0}px`;
+                    box.style.top = `${bounds.y || 0}px`;
+                    box.style.width = `${bounds.width || 0}px`;
+                    box.style.height = `${bounds.height || 0}px`;
+                    box.style.border = '2px solid #ff4d4f';
+                    box.style.background = 'rgba(255, 77, 79, 0.08)';
+                    const label = document.createElement('div');
+                    label.textContent = `[${index + 1}]`;
+                    label.style.position = 'absolute';
+                    label.style.left = '0';
+                    label.style.top = '0';
+                    label.style.transform = 'translateY(-100%)';
+                    label.style.background = '#ff4d4f';
+                    label.style.color = '#fff';
+                    label.style.font = '12px sans-serif';
+                    label.style.padding = '1px 4px';
+                    label.style.borderRadius = '4px';
+                    box.appendChild(label);
+                    layer.appendChild(box);
+                  }
+                }
+                """, elements);
+        try {
+            page.screenshot(new Page.ScreenshotOptions()
+                    .setPath(path)
+                    .setFullPage(Args.optionalBoolean(values, "fullPage", true)));
+        } finally {
+            page.evaluate("() => document.getElementById('__actiondock_annotation_layer__')?.remove()");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("path", path.toString());
+        result.put("snapshotId", snapshot.get("snapshotId"));
+        result.put("annotations", elements.stream().map(item -> Map.of(
+                "index", Integer.parseInt(String.valueOf(item.get("ref")).substring(1)),
+                "ref", "@" + item.get("ref"),
+                "role", String.valueOf(item.getOrDefault("role", "")),
+                "name", String.valueOf(item.getOrDefault("name", "")),
+                "bounds", item.get("bounds")
+        )).toList());
+        return result;
+    }
+
+    private void installAllowedHostRoute(BrowserContext browserContext, BrowserPluginConfig config) {
+        if (config == null || config.getAllowedHosts().isEmpty()) {
+            return;
+        }
+        browserContext.route("**/*", route -> {
+            if (BrowserHostPolicy.isAllowed(config, route.request().url())) {
+                route.resume();
+            } else {
+                route.abort("blockedbyclient");
+            }
+        });
+    }
+
+    private Map<String, Object> observePage(BrowserSession session,
+                                            Page page,
+                                            String resolvedPageId,
+                                            BrowserPluginConfig config,
+                                            Map<String, Object> args) {
+        int limit = Args.optionalInt(args, "limit", DEFAULT_OBSERVE_LIMIT);
+        int maxTextLength = Args.optionalInt(args, "maxTextLength", 6000);
+        boolean interactiveOnly = Args.optionalBoolean(args, "interactiveOnly", false);
+        boolean compact = Args.optionalBoolean(args, "compact", false);
+        int depth = Args.optionalInt(args, "depth", -1);
+        boolean includeUrls = Args.optionalBoolean(args, "includeUrls", false);
+        String rootSelector = scopeSelector(session, resolvedPageId, Args.optionalMap(args, "scopeTarget"));
+        Map<String, Object> observed = castMap(page.evaluate(OBSERVE_SCRIPT, Map.of(
+                "limit", Math.max(1, limit),
+                "maxTextLength", Math.max(0, maxTextLength),
+                "interactiveOnly", interactiveOnly,
+                "compact", compact,
+                "depth", depth,
+                "includeUrls", includeUrls,
+                "rootSelector", rootSelector
+        )));
+        List<Map<String, Object>> elements = castMapList(observed.get("elements"));
+        String rawVisibleText = String.valueOf(observed.getOrDefault("visibleText", ""));
+        boolean textTruncated = BrowserOutputSupport.truncated(rawVisibleText, config.getMaxOutputChars());
+        String visibleText = BrowserOutputSupport.truncate(rawVisibleText, config.getMaxOutputChars());
+        Map<String, Object> result = pageResult(session, resolvedPageId, page);
+        Map<String, Object> payload = new LinkedHashMap<>(result);
+        payload.put("visibleText", visibleText);
+        payload.put("elements", elements);
+        payload.put("forms", observed.getOrDefault("forms", List.of()));
+        payload.put("frames", frames(page));
+        String snapshotId = session.replaceRefs(resolvedPageId, elements, payload);
+        result.put("ariaSnapshot", safeAriaSnapshot(page));
+        result.put("visibleText", visibleText);
+        result.put("elements", elements);
+        result.put("suggestedActions", suggestedActions(elements));
+        result.put("forms", observed.getOrDefault("forms", List.of()));
+        result.put("frames", frames(page));
+        result.put("events", session.events(resolvedPageId, List.of(), 0, false));
+        result.put("snapshotId", snapshotId);
+        result.put("pageVersion", session.pageVersion(resolvedPageId));
+        result.put("scope", Map.of("target", rootSelector == null ? "" : rootSelector, "scoped", rootSelector != null));
+        result.put("truncated", textTruncated);
+        result.put("elementCount", elements.size());
+        if (config.isMarkUntrustedContent()) {
+            BrowserOutputSupport.mark(result, "visibleText", "page.visibleText", textTruncated, rawVisibleText.length());
+            BrowserOutputSupport.mark(result, "ariaSnapshot", "page.ariaSnapshot", false, result.get("ariaSnapshot") == null ? 0 : String.valueOf(result.get("ariaSnapshot")).length());
+        }
+        return result;
+    }
+
+    private String scopeSelector(BrowserSession session, String pageId, Map<String, Object> target) {
+        if (target == null || target.isEmpty()) {
+            return null;
+        }
+        String selector = Args.optionalString(target, "selector", null);
+        if (!Args.isBlank(selector)) {
+            return selector;
+        }
+        String ref = Args.optionalString(target, "ref", null);
+        if (!Args.isBlank(ref)) {
+            Map<String, Object> resolved = session.ref(pageId, ref, Args.optionalString(target, "snapshotId", null));
+            return Args.optionalString(resolved, "selector", null);
+        }
+        return null;
     }
 
     private BrowserSession requireSession(ScriptPluginContext context, Map<String, Object> args) {
@@ -982,6 +1444,116 @@ final class BrowserGatewayService {
             }
             default -> throw new IllegalArgumentException("Unsupported routeAction: " + action);
         }
+    }
+
+    private static boolean matchStatus(Object value, String filter) {
+        if (Args.isBlank(filter)) {
+            return true;
+        }
+        if (!(value instanceof Number number)) {
+            return false;
+        }
+        int status = number.intValue();
+        if (filter.endsWith("xx") && filter.length() == 3) {
+            int family = Integer.parseInt(filter.substring(0, 1));
+            return status / 100 == family;
+        }
+        if (filter.contains("-")) {
+            String[] parts = filter.split("-", 2);
+            return status >= Integer.parseInt(parts[0]) && status <= Integer.parseInt(parts[1]);
+        }
+        return status == Integer.parseInt(filter);
+    }
+
+    private static com.microsoft.playwright.options.MouseButton mouseButton(String value) {
+        String normalized = value == null ? "left" : value.trim().toLowerCase();
+        return switch (normalized) {
+            case "right" -> com.microsoft.playwright.options.MouseButton.RIGHT;
+            case "middle" -> com.microsoft.playwright.options.MouseButton.MIDDLE;
+            default -> com.microsoft.playwright.options.MouseButton.LEFT;
+        };
+    }
+
+    private static void writeHar(Path path, List<Map<String, Object>> entries) throws IOException {
+        Map<String, Object> har = Map.of(
+                "log", Map.of(
+                        "version", "1.2",
+                        "creator", Map.of("name", "actiondock-browser", "version", "0.1.0"),
+                        "entries", entries
+                )
+        );
+        PluginObjectMappers.DEFAULT.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), har);
+    }
+
+    private static Map<String, Object> diffSnapshotPayloads(Map<String, Object> baseline, Map<String, Object> current) {
+        List<Map<String, Object>> baselineElements = castMapList(baseline.get("elements"));
+        List<Map<String, Object>> currentElements = castMapList(current.get("elements"));
+        Map<String, Map<String, Object>> baselineByRef = new LinkedHashMap<>();
+        baselineElements.forEach(item -> baselineByRef.put(String.valueOf(item.get("ref")), item));
+        Map<String, Map<String, Object>> currentByRef = new LinkedHashMap<>();
+        currentElements.forEach(item -> currentByRef.put(String.valueOf(item.get("ref")), item));
+        List<String> addedRefs = currentByRef.keySet().stream().filter(ref -> !baselineByRef.containsKey(ref)).toList();
+        List<String> removedRefs = baselineByRef.keySet().stream().filter(ref -> !currentByRef.containsKey(ref)).toList();
+        List<String> changedRefs = currentByRef.keySet().stream()
+                .filter(baselineByRef::containsKey)
+                .filter(ref -> !baselineByRef.get(ref).equals(currentByRef.get(ref)))
+                .toList();
+        Map<String, Object> result = Results.ok();
+        result.put("visibleTextChanged", !String.valueOf(baseline.getOrDefault("visibleText", "")).equals(String.valueOf(current.getOrDefault("visibleText", ""))));
+        result.put("addedRefs", addedRefs);
+        result.put("removedRefs", removedRefs);
+        result.put("changedRefs", changedRefs);
+        result.put("changed", !addedRefs.isEmpty() || !removedRefs.isEmpty() || !changedRefs.isEmpty() || Boolean.TRUE.equals(result.get("visibleTextChanged")));
+        return result;
+    }
+
+    private Map<String, Object> diffImages(Path baseline,
+                                           Path current,
+                                           String outputPath,
+                                           double threshold,
+                                           BrowserPluginConfig config) throws IOException {
+        BufferedImage baselineImage = ImageIO.read(baseline.toFile());
+        BufferedImage currentImage = ImageIO.read(current.toFile());
+        if (baselineImage == null || currentImage == null) {
+            throw new IllegalArgumentException("Unable to read baseline/current screenshot");
+        }
+        int width = Math.min(baselineImage.getWidth(), currentImage.getWidth());
+        int height = Math.min(baselineImage.getHeight(), currentImage.getHeight());
+        BufferedImage diffImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        int changedPixels = 0;
+        int totalPixels = width * height;
+        int thresholdValue = (int) Math.round(Math.max(0.0, threshold) * 255);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Color left = new Color(baselineImage.getRGB(x, y), true);
+                Color right = new Color(currentImage.getRGB(x, y), true);
+                int delta = Math.max(
+                        Math.abs(left.getRed() - right.getRed()),
+                        Math.max(Math.abs(left.getGreen() - right.getGreen()), Math.abs(left.getBlue() - right.getBlue()))
+                );
+                if (delta > thresholdValue) {
+                    changedPixels++;
+                    diffImage.setRGB(x, y, new Color(255, 77, 79, 200).getRGB());
+                } else {
+                    diffImage.setRGB(x, y, new Color(0, 0, 0, 0).getRGB());
+                }
+            }
+        }
+        String diffPathValue = outputPath;
+        if (!Args.isBlank(diffPathValue)) {
+            Path diffPath = pathResolver.resolveArtifactPath(config, Map.of("path", diffPathValue), true);
+            ImageIO.write(diffImage, "png", diffPath.toFile());
+            diffPathValue = diffPath.toString();
+        }
+        Map<String, Object> result = Results.ok();
+        result.put("baselinePath", baseline.toString());
+        result.put("currentPath", current.toString());
+        result.put("diffPath", diffPathValue);
+        result.put("changedPixels", changedPixels);
+        result.put("totalPixels", totalPixels);
+        result.put("changedRatio", totalPixels == 0 ? 0.0 : (double) changedPixels / totalPixels);
+        result.put("changed", changedPixels > 0);
+        return result;
     }
 
     private static Map<String, Object> responseMap(Response response) {

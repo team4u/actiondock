@@ -23,7 +23,7 @@ final class BrowserDslCaptureActions {
 
     private Map<String, Object> capture(BrowserDslContext dsl, String op) throws Exception {
         Map<String, Object> call = dsl.callArgs();
-        BrowserDslSupport.copyIfPresent(dsl.args(), call, "name", "path", "fullPage", "format", "printBackground",
+        BrowserDslSupport.copyIfPresent(dsl.args(), call, "name", "path", "fullPage", "annotate", "quality", "format", "printBackground",
                 "landscape", "scale", "pageRanges", "width", "height", "displayHeaderFooter", "headerTemplate",
                 "footerTemplate", "preferCSSPageSize", "outline", "tagged");
         Map<String, Object> result = switch (op) {

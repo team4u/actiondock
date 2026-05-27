@@ -36,7 +36,10 @@ final class BrowserDslPageActions {
 
     Map<String, Object> snapshot(BrowserDslContext dsl) throws Exception {
         Map<String, Object> call = dsl.callArgs();
-        BrowserDslSupport.copyIfPresent(dsl.args(), call, "limit", "maxTextLength");
+        BrowserDslSupport.copyIfPresent(dsl.args(), call, "limit", "maxTextLength", "interactiveOnly", "compact", "depth", "includeUrls");
+        if (Args.has(dsl.args(), "scopeTarget")) {
+            call.put("scopeTarget", targets.fromTarget(Map.of("target", Args.requiredString(dsl.args(), "scopeTarget"))));
+        }
         Map<String, Object> result = service.snapshot(dsl.context(), call);
         rewriteRefs(result);
         rewriteSuggestedActions(result);
@@ -112,6 +115,42 @@ final class BrowserDslPageActions {
         return elementAction(dsl, "forward");
     }
 
+    Map<String, Object> keyboardType(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "keyboardType");
+    }
+
+    Map<String, Object> keyboardInsertText(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "keyboardInsertText");
+    }
+
+    Map<String, Object> keyDown(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "keyDown");
+    }
+
+    Map<String, Object> keyUp(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "keyUp");
+    }
+
+    Map<String, Object> scroll(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "scroll");
+    }
+
+    Map<String, Object> mouseMove(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "mouseMove");
+    }
+
+    Map<String, Object> mouseDown(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "mouseDown");
+    }
+
+    Map<String, Object> mouseUp(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "mouseUp");
+    }
+
+    Map<String, Object> mouseWheel(BrowserDslContext dsl) throws Exception {
+        return elementAction(dsl, "mouseWheel");
+    }
+
     private Map<String, Object> elementAction(BrowserDslContext dsl, String op) throws Exception {
         Map<String, Object> target = Map.of();
         Map<String, Object> values = new LinkedHashMap<>();
@@ -137,6 +176,15 @@ final class BrowserDslPageActions {
             }
             case "check", "uncheck", "hover", "focus", "clear", "tap" -> target = targets.requireTarget(dsl.args());
             case "scrollIntoView", "scrollinto" -> target = targets.requireTarget(dsl.args());
+            case "keyboardType", "keyboardInsertText" -> values.put("text", Args.requiredString(dsl.args(), "text"));
+            case "keyDown", "keyUp" -> values.put("key", Args.requiredString(dsl.args(), "key"));
+            case "scroll" -> {
+                target = targets.fromTarget(dsl.args());
+                BrowserDslSupport.copyIfPresent(dsl.args(), values, "direction", "pixels");
+            }
+            case "mouseMove" -> BrowserDslSupport.copyIfPresent(dsl.args(), values, "x", "y");
+            case "mouseDown", "mouseUp" -> BrowserDslSupport.copyIfPresent(dsl.args(), values, "button");
+            case "mouseWheel" -> BrowserDslSupport.copyIfPresent(dsl.args(), values, "dx", "dy");
             case "upload" -> {
                 target = targets.requireTarget(dsl.args());
                 values.put("path", Args.requiredString(dsl.args(), "path"));

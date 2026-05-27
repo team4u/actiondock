@@ -24,6 +24,9 @@ final class BrowserConfigValidator {
         if (config.getMaxSessions() <= 0) {
             throw new IllegalArgumentException("maxSessions must be positive");
         }
+        if (config.getMaxOutputChars() <= 0) {
+            throw new IllegalArgumentException("maxOutputChars must be positive");
+        }
         if (isBlank(config.getStateDir())) {
             throw new IllegalArgumentException("stateDir must not be blank");
         }

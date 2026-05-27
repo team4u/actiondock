@@ -22,17 +22,20 @@ final class BrowserManifestGenerator {
         manifest.put("description", "AI-first Playwright browser gateway. Actions are intentionally precise so AI can call browser operations without guessing hidden op-specific params.");
         manifest.put("version", "0.1.0");
         manifest.put("configSchema", configSchema());
-        manifest.put("defaultConfig", Map.of(
-                "defaultBrowser", "chromium",
-                "headless", true,
-                "defaultTimeoutMs", 30000,
-                "sessionTtlSeconds", 600,
-                "maxSessions", 10,
-                "stateDir", ".actiondock/browser-state",
-                "artifactDir", ".actiondock/browser-artifacts",
-                "downloadDir", ".actiondock/browser-downloads",
-                "allowedHosts", java.util.List.of(),
-                "includeCookieValueByDefault", false
+        manifest.put("defaultConfig", Map.ofEntries(
+                Map.entry("defaultBrowser", "chromium"),
+                Map.entry("headless", true),
+                Map.entry("defaultTimeoutMs", 30000),
+                Map.entry("sessionTtlSeconds", 600),
+                Map.entry("maxSessions", 10),
+                Map.entry("maxOutputChars", 50000),
+                Map.entry("markUntrustedContent", true),
+                Map.entry("stateDir", ".actiondock/browser-state"),
+                Map.entry("artifactDir", ".actiondock/browser-artifacts"),
+                Map.entry("downloadDir", ".actiondock/browser-downloads"),
+                Map.entry("allowedHosts", java.util.List.of()),
+                Map.entry("includeCookieValueByDefault", false),
+                Map.entry("actionPolicyPath", "")
         ));
         manifest.put("actions", BrowserActionSpecs.actions());
         Files.createDirectories(output.getParent());
@@ -51,6 +54,9 @@ final class BrowserManifestGenerator {
         properties.put("downloadDir", Map.of("type", "string", "title", "Download Directory"));
         properties.put("allowedHosts", Map.of("type", "array", "items", Map.of("type", "string"), "title", "Allowed Hosts"));
         properties.put("includeCookieValueByDefault", Map.of("type", "boolean", "title", "Include Cookie Value By Default"));
+        properties.put("maxOutputChars", Map.of("type", "integer", "title", "Max Output Characters"));
+        properties.put("markUntrustedContent", Map.of("type", "boolean", "title", "Mark Untrusted Content"));
+        properties.put("actionPolicyPath", Map.of("type", "string", "title", "Action Policy Path"));
         return Map.of("type", "object", "properties", properties);
     }
 }

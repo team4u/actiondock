@@ -10,6 +10,7 @@ import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Request;
 import com.microsoft.playwright.Response;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -31,10 +32,14 @@ final class BrowserSession implements AutoCloseable {
     private final int defaultTimeoutMs;
     private final Map<String, Page> pages = new LinkedHashMap<>();
     private final IdentityHashMap<Page, String> pageIds = new IdentityHashMap<>();
-    private final Map<String, Map<String, Map<String, Object>>> pageRefs = new LinkedHashMap<>();
+    private final Map<String, BrowserSnapshotState> snapshotStates = new LinkedHashMap<>();
+    private final Map<String, Map<String, Object>> snapshotPayloads = new LinkedHashMap<>();
     private final Map<String, Dialog> dialogs = new LinkedHashMap<>();
     private final Map<String, Download> downloads = new LinkedHashMap<>();
     private final Map<String, AutoCloseable> routes = new LinkedHashMap<>();
+    private final IdentityHashMap<Request, String> requestIds = new IdentityHashMap<>();
+    private final Map<String, Map<String, Object>> requestRecords = new LinkedHashMap<>();
+    private final List<Map<String, Object>> harEntries = new ArrayList<>();
     private final List<Map<String, Object>> events = new ArrayList<>();
     private final Instant createdAt;
     private final ReentrantLock lock = new ReentrantLock();
@@ -43,9 +48,15 @@ final class BrowserSession implements AutoCloseable {
     private int nextDialogId = 1;
     private int nextDownloadId = 1;
     private int nextRouteId = 1;
+    private int nextSnapshotId = 1;
+    private int nextRequestId = 1;
     private volatile Instant lastAccessAt;
     private volatile boolean closed;
     private String activePageId;
+    private boolean traceActive;
+    private boolean harActive;
+    private String harName;
+    private Path harPath;
 
     BrowserSession(String sessionId,
                    String ownerKey,
@@ -112,6 +123,7 @@ final class BrowserSession implements AutoCloseable {
             String pageId = "p" + nextPageNumber++;
             pageIds.put(page, pageId);
             pages.put(pageId, page);
+            snapshotStates.putIfAbsent(pageId, new BrowserSnapshotState());
             page.setDefaultTimeout(defaultTimeoutMs);
             page.setDefaultNavigationTimeout(defaultTimeoutMs);
             wirePage(pageId, page);
@@ -139,7 +151,7 @@ final class BrowserSession implements AutoCloseable {
         Page page = page(pageId);
         page.close();
         pages.remove(pageId);
-        pageRefs.remove(pageId);
+        snapshotStates.remove(pageId);
         if (pageId.equals(activePageId)) {
             activePageId = pages.keySet().stream().findFirst().orElse(null);
         }
@@ -159,7 +171,7 @@ final class BrowserSession implements AutoCloseable {
         return items;
     }
 
-    void replaceRefs(String pageId, List<Map<String, Object>> elements) {
+    String replaceRefs(String pageId, List<Map<String, Object>> elements, Map<String, Object> snapshotPayload) {
         Map<String, Map<String, Object>> refs = new LinkedHashMap<>();
         for (Map<String, Object> element : elements) {
             Object ref = element.get("ref");
@@ -167,15 +179,54 @@ final class BrowserSession implements AutoCloseable {
                 refs.put(String.valueOf(ref), new LinkedHashMap<>(element));
             }
         }
-        pageRefs.put(pageId, refs);
+        String snapshotId = "sn" + nextSnapshotId++;
+        snapshotStates.computeIfAbsent(pageId, ignored -> new BrowserSnapshotState()).replace(snapshotId, refs);
+        snapshotPayloads.put(snapshotId, new LinkedHashMap<>(snapshotPayload));
+        while (snapshotPayloads.size() > 20) {
+            snapshotPayloads.remove(snapshotPayloads.keySet().iterator().next());
+        }
+        return snapshotId;
     }
 
-    Map<String, Object> ref(String pageId, String ref) {
-        Map<String, Map<String, Object>> refs = pageRefs.get(pageId);
-        if (refs == null || !refs.containsKey(ref)) {
+    String replaceRefs(String pageId, List<Map<String, Object>> elements) {
+        return replaceRefs(pageId, elements, Map.of());
+    }
+
+    Map<String, Object> ref(String pageId, String ref, String expectedSnapshotId) {
+        BrowserSnapshotState state = snapshotStates.get(pageId);
+        if (state == null) {
+            throw new IllegalArgumentException("Element ref not found. Call snapshot again: " + ref);
+        }
+        if (!Args.isBlank(expectedSnapshotId) && !expectedSnapshotId.equals(state.currentSnapshotId())) {
+            throw new BrowserRefStaleException(pageId, ref, expectedSnapshotId, state.currentSnapshotId(), state.pageVersion());
+        }
+        Map<String, Object> value = state.ref(ref);
+        if (value == null) {
             throw new IllegalArgumentException("Element ref not found. Call observe again: " + ref);
         }
-        return refs.get(ref);
+        return value;
+    }
+
+    long pageVersion(String pageId) {
+        return snapshotStates.computeIfAbsent(pageId, ignored -> new BrowserSnapshotState()).pageVersion();
+    }
+
+    String currentSnapshotId(String pageId) {
+        BrowserSnapshotState state = snapshotStates.get(pageId);
+        return state == null ? null : state.currentSnapshotId();
+    }
+
+    String previousSnapshotId(String pageId) {
+        BrowserSnapshotState state = snapshotStates.get(pageId);
+        return state == null ? null : state.previousSnapshotId();
+    }
+
+    Map<String, Object> snapshotPayload(String snapshotId) {
+        return snapshotPayloads.get(snapshotId);
+    }
+
+    void invalidateRefs(String pageId) {
+        snapshotStates.computeIfAbsent(pageId, ignored -> new BrowserSnapshotState()).bumpPageVersion();
     }
 
     void addEvent(String pageId, String type, Map<String, Object> data) {
@@ -276,6 +327,128 @@ final class BrowserSession implements AutoCloseable {
         return closed;
     }
 
+    boolean isTraceActive() {
+        return traceActive;
+    }
+
+    void setTraceActive(boolean traceActive) {
+        this.traceActive = traceActive;
+    }
+
+    boolean isHarActive() {
+        return harActive;
+    }
+
+    void startHar(String name, Path path) {
+        this.harActive = true;
+        this.harName = name;
+        this.harPath = path;
+        this.harEntries.clear();
+    }
+
+    Path stopHar() {
+        this.harActive = false;
+        Path path = harPath;
+        harName = null;
+        harPath = null;
+        return path;
+    }
+
+    String harName() {
+        return harName;
+    }
+
+    Path harPath() {
+        return harPath;
+    }
+
+    List<Map<String, Object>> harEntries() {
+        return harEntries.stream().map(LinkedHashMap::new).map(item -> (Map<String, Object>) item).toList();
+    }
+
+    String rememberRequest(String pageId, Request request) {
+        String requestId = requestIds.get(request);
+        if (requestId != null) {
+            return requestId;
+        }
+        requestId = "rq" + nextRequestId++;
+        requestIds.put(request, requestId);
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", nextRequestId - 1);
+        item.put("requestId", requestId);
+        item.put("pageId", pageId);
+        item.put("url", request.url());
+        item.put("method", request.method());
+        item.put("resourceType", request.resourceType());
+        item.put("navigation", request.isNavigationRequest());
+        item.put("failure", request.failure());
+        item.put("startedAt", Instant.now().toString());
+        try {
+            item.put("requestHeaders", new LinkedHashMap<>(request.headers()));
+        } catch (RuntimeException ignored) {
+        }
+        requestRecords.put(requestId, item);
+        return requestId;
+    }
+
+    void completeRequest(Request request, Response response, String failure, boolean finished) {
+        String requestId = requestIds.get(request);
+        if (requestId == null) {
+            return;
+        }
+        Map<String, Object> item = requestRecords.get(requestId);
+        if (item == null) {
+            return;
+        }
+        if (!Args.isBlank(failure)) {
+            item.put("failure", failure);
+        }
+        if (response != null) {
+            item.put("status", response.status());
+            item.put("statusText", response.statusText());
+            item.put("ok", response.ok());
+            try {
+                item.put("responseHeaders", new LinkedHashMap<>(response.headers()));
+            } catch (RuntimeException ignored) {
+            }
+            try {
+                item.put("responseBody", response.text());
+            } catch (RuntimeException ignored) {
+            }
+        }
+        if (finished) {
+            item.put("finishedAt", Instant.now().toString());
+        }
+        if (harActive) {
+            rememberHarEntry(item);
+        }
+    }
+
+    List<Map<String, Object>> requestRecords(String pageId) {
+        return requestRecords.values().stream()
+                .filter(item -> Args.isBlank(pageId) || pageId.equals(item.get("pageId")))
+                .map(LinkedHashMap::new)
+                .map(item -> (Map<String, Object>) item)
+                .toList();
+    }
+
+    Map<String, Object> requestRecord(String requestId) {
+        Map<String, Object> item = requestRecords.get(requestId);
+        if (item == null) {
+            throw new IllegalArgumentException("Request not found: " + requestId);
+        }
+        return new LinkedHashMap<>(item);
+    }
+
+    void clearRequestRecords(String pageId) {
+        requestRecords.entrySet().removeIf(entry -> Args.isBlank(pageId) || pageId.equals(entry.getValue().get("pageId")));
+        requestIds.entrySet().removeIf(entry -> {
+            String requestId = entry.getValue();
+            Map<String, Object> item = requestRecords.get(requestId);
+            return item == null || Args.isBlank(pageId) || pageId.equals(item.get("pageId"));
+        });
+    }
+
     <T> T withLock(Callable<T> operation) throws Exception {
         lock.lock();
         try {
@@ -319,7 +492,7 @@ final class BrowserSession implements AutoCloseable {
             lock.lock();
             try {
                 pages.remove(pageId);
-                pageRefs.remove(pageId);
+                snapshotStates.remove(pageId);
                 addEvent(pageId, "page", Map.of("action", "closed"));
                 if (pageId.equals(activePageId)) {
                     activePageId = pages.keySet().stream().findFirst().orElse(null);
@@ -330,16 +503,37 @@ final class BrowserSession implements AutoCloseable {
         });
         page.onConsoleMessage(message -> addEvent(pageId, "console", consoleEvent(message)));
         page.onPageError(message -> addEvent(pageId, "pageError", Map.of("message", message)));
-        page.onRequest(request -> addEvent(pageId, "request", requestEvent(request)));
-        page.onRequestFailed(request -> addEvent(pageId, "requestFailed", requestEvent(request)));
-        page.onRequestFinished(request -> addEvent(pageId, "requestFinished", requestEvent(request)));
-        page.onResponse(response -> addEvent(pageId, "response", responseEvent(response)));
+        page.onRequest(request -> {
+            String requestId = rememberRequest(pageId, request);
+            Map<String, Object> event = requestEvent(request);
+            event.put("requestId", requestId);
+            addEvent(pageId, "request", event);
+        });
+        page.onRequestFailed(request -> {
+            completeRequest(request, null, request.failure(), true);
+            Map<String, Object> event = requestEvent(request);
+            event.put("requestId", requestIds.get(request));
+            addEvent(pageId, "requestFailed", event);
+        });
+        page.onRequestFinished(request -> {
+            completeRequest(request, null, null, true);
+            Map<String, Object> event = requestEvent(request);
+            event.put("requestId", requestIds.get(request));
+            addEvent(pageId, "requestFinished", event);
+        });
+        page.onResponse(response -> {
+            completeRequest(response.request(), response, null, false);
+            Map<String, Object> event = responseEvent(response);
+            event.put("requestId", requestIds.get(response.request()));
+            addEvent(pageId, "response", event);
+        });
         page.onDownload(download -> rememberDownload(pageId, download));
         page.onDialog(dialog -> rememberDialog(pageId, dialog));
         page.onPopup(popup -> {
             String popupPageId = registerPage(popup);
             addEvent(pageId, "popup", Map.of("popupPageId", popupPageId, "url", safeUrl(popup)));
         });
+        page.onLoad(ignored -> invalidateRefs(pageId));
     }
 
     private static Map<String, Object> consoleEvent(ConsoleMessage message) {
@@ -367,6 +561,14 @@ final class BrowserSession implements AutoCloseable {
         item.put("statusText", response.statusText());
         item.put("ok", response.ok());
         return item;
+    }
+
+    private void rememberHarEntry(Map<String, Object> requestRecord) {
+        String requestId = String.valueOf(requestRecord.get("requestId"));
+        boolean exists = harEntries.stream().anyMatch(item -> requestId.equals(item.get("requestId")));
+        if (!exists) {
+            harEntries.add(new LinkedHashMap<>(requestRecord));
+        }
     }
 
     private static String safeUrl(Page page) {
