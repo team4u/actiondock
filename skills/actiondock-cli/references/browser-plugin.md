@@ -39,6 +39,7 @@ actiondock plugin invoke actiondock-browser snapshot --session <open返回的ses
 - `ariaSnapshot`
 - `snapshotId` / `pageVersion`
 - `elements[].ref`，格式为 `@e1`
+- `elements[].name` 表示可访问名称；如果元素有 HTML `name` 属性，会单独放在 `domName`
 - `forms`
 - `frames`
 - `events`
@@ -47,8 +48,10 @@ actiondock plugin invoke actiondock-browser snapshot --session <open返回的ses
 后续操作直接把 `elements[].ref` 作为字符串传给 `--target`：
 
 ```bash
-actiondock plugin invoke actiondock-browser click --session <open返回的session> --target @e2 --json
+actiondock plugin invoke actiondock-browser click --session <open返回的session> --target '@e2' --json
 ```
+
+`@eN` 是当前浏览器 `session` 内、最近一次 `snapshot` 建立的元素引用，不是跨会话或跨服务重启的持久 ID。建议始终给 `@eN` 加引号；在 PowerShell 中未加引号的 `@e2` 会被 shell 解析，导致 CLI 收不到 `target`。
 
 如果想让 AI 更稳地读页面，可加这些过滤参数：
 
@@ -66,7 +69,7 @@ actiondock plugin invoke actiondock-browser snapshot --session run1 \
 
 ```bash
 actiondock plugin invoke actiondock-browser click --session run1 \
-  --target @e2 \
+  --target '@e2' \
   --snapshotId sn12 \
   --json
 ```
@@ -78,6 +81,8 @@ actiondock plugin invoke actiondock-browser click --session run1 \
 - `@e1`: 来自最近一次 `snapshot` 的元素引用
 - `#submit` / `.item`: CSS selector
 - `css:button.primary`: 显式 CSS selector
+
+`@eN` 表示“操作刚刚在 snapshot 中观察到的那个元素”。插件会优先使用 snapshot 记录的稳定选择器定位该元素，并在必要时回退到可访问名称、label、placeholder、title 等语义候选。页面跳转或明显 DOM 更新后，应重新 `snapshot` 再使用新的 `@eN`。
 
 语义定位使用专门 action：
 
@@ -102,10 +107,10 @@ actiondock plugin invoke actiondock-browser findFill --session run1 \
 ### 点击和输入
 
 ```bash
-actiondock plugin invoke actiondock-browser click --session run1 --target @e2 --json
-actiondock plugin invoke actiondock-browser dblclick --session run1 --target @e2 --json
-actiondock plugin invoke actiondock-browser fill --session run1 --target @e3 --text hello@example.com --json
-actiondock plugin invoke actiondock-browser type --session run1 --target @e3 --text hello --json
+actiondock plugin invoke actiondock-browser click --session run1 --target '@e2' --json
+actiondock plugin invoke actiondock-browser dblclick --session run1 --target '@e2' --json
+actiondock plugin invoke actiondock-browser fill --session run1 --target '@e3' --text hello@example.com --json
+actiondock plugin invoke actiondock-browser type --session run1 --target '@e3' --text hello --json
 actiondock plugin invoke actiondock-browser press --session run1 --key Enter --json
 actiondock plugin invoke actiondock-browser keyboardType --session run1 --text hello --json
 actiondock plugin invoke actiondock-browser keyDown --session run1 --key Shift --json
@@ -115,16 +120,16 @@ actiondock plugin invoke actiondock-browser keyUp --session run1 --key Shift --j
 复选框和单选框：
 
 ```bash
-actiondock plugin invoke actiondock-browser check --session run1 --target @e4 --json
-actiondock plugin invoke actiondock-browser uncheck --session run1 --target @e4 --json
+actiondock plugin invoke actiondock-browser check --session run1 --target '@e4' --json
+actiondock plugin invoke actiondock-browser uncheck --session run1 --target '@e4' --json
 ```
 
 选择框、上传、拖拽：
 
 ```bash
-actiondock plugin invoke actiondock-browser select --session run1 --target @e5 --value US --json
-actiondock plugin invoke actiondock-browser upload --session run1 --target @e6 --path ./upload.txt --json
-actiondock plugin invoke actiondock-browser drag --session run1 --target @e1 --to @e2 --json
+actiondock plugin invoke actiondock-browser select --session run1 --target '@e5' --value US --json
+actiondock plugin invoke actiondock-browser upload --session run1 --target '@e6' --path ./upload.txt --json
+actiondock plugin invoke actiondock-browser drag --session run1 --target '@e1' --to '@e2' --json
 actiondock plugin invoke actiondock-browser scroll --session run1 --direction down --pixels 600 --json
 actiondock plugin invoke actiondock-browser mouseMove --session run1 --x 240 --y 180 --json
 actiondock plugin invoke actiondock-browser mouseWheel --session run1 --dy 600 --json
@@ -135,19 +140,19 @@ actiondock plugin invoke actiondock-browser mouseWheel --session run1 --dy 600 -
 ```bash
 actiondock plugin invoke actiondock-browser getTitle --session run1 --json
 actiondock plugin invoke actiondock-browser getUrl --session run1 --json
-actiondock plugin invoke actiondock-browser getText --session run1 --target @e1 --json
-actiondock plugin invoke actiondock-browser getAttr --session run1 --target @e1 --name href --json
+actiondock plugin invoke actiondock-browser getText --session run1 --target '@e1' --json
+actiondock plugin invoke actiondock-browser getAttr --session run1 --target '@e1' --name href --json
 
-actiondock plugin invoke actiondock-browser isVisible --session run1 --target @e1 --json
-actiondock plugin invoke actiondock-browser isEnabled --session run1 --target @e1 --json
-actiondock plugin invoke actiondock-browser isChecked --session run1 --target @e1 --json
+actiondock plugin invoke actiondock-browser isVisible --session run1 --target '@e1' --json
+actiondock plugin invoke actiondock-browser isEnabled --session run1 --target '@e1' --json
+actiondock plugin invoke actiondock-browser isChecked --session run1 --target '@e1' --json
 ```
 
 ### 等待
 
 ```bash
 actiondock plugin invoke actiondock-browser waitForLoad --session run1 --state load --json
-actiondock plugin invoke actiondock-browser waitForElement --session run1 --target @e1 --state visible --json
+actiondock plugin invoke actiondock-browser waitForElement --session run1 --target '@e1' --state visible --json
 actiondock plugin invoke actiondock-browser waitForText --session run1 --text Welcome --json
 actiondock plugin invoke actiondock-browser waitForUrl --session run1 --url '**/dashboard' --json
 actiondock plugin invoke actiondock-browser waitForResponse --session run1 --value '**/api/**' --json
@@ -188,7 +193,7 @@ actiondock plugin invoke actiondock-browser sessionClose --session run1 --json
 
 ```bash
 actiondock plugin invoke actiondock-browser screenshot --session run1 --name page --fullPage true --json
-actiondock plugin invoke actiondock-browser screenshot --session run1 --target @e1 --name element --json
+actiondock plugin invoke actiondock-browser screenshot --session run1 --target '@e1' --name element --json
 actiondock plugin invoke actiondock-browser screenshot --session run1 --name page --annotate true --json
 actiondock plugin invoke actiondock-browser pdf --session run1 --name page --format A4 --json
 ```
@@ -254,7 +259,7 @@ actiondock plugin invoke actiondock-browser eval --session run1 \
 
 actiondock plugin invoke actiondock-browser eval --session run1 \
   --scope locator \
-  --target @e1 \
+  --target '@e1' \
   --expression 'el => el.outerHTML' \
   --json
 ```

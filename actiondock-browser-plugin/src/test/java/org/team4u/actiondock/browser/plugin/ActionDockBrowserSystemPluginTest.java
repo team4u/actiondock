@@ -186,6 +186,28 @@ class ActionDockBrowserSystemPluginTest {
     }
 
     @Test
+    void observeOptionsAllowsNullRootSelector() {
+        Map<String, Object> options = BrowserGatewayService.observeOptions(
+                0,
+                -1,
+                true,
+                true,
+                3,
+                true,
+                null
+        );
+
+        assertThat(options)
+                .containsEntry("limit", 1)
+                .containsEntry("maxTextLength", 0)
+                .containsEntry("interactiveOnly", true)
+                .containsEntry("compact", true)
+                .containsEntry("depth", 3)
+                .containsEntry("includeUrls", true)
+                .containsEntry("rootSelector", null);
+    }
+
+    @Test
     void wrapsUnknownExceptionsAsInternalPluginFailures() {
         NullPointerException cause = new NullPointerException("boom");
 

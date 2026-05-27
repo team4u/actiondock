@@ -29,7 +29,8 @@ class TargetResolverTest {
 
         when(page.isClosed()).thenReturn(false);
         when(page.url()).thenReturn("https://example.test");
-        when(page.getByRole(org.mockito.Mockito.eq(com.microsoft.playwright.options.AriaRole.TEXTBOX), any(Page.GetByRoleOptions.class))).thenReturn(locator);
+        when(page.locator("input[name='email']")).thenReturn(locator);
+        when(locator.count()).thenReturn(1);
 
         BrowserSession session = new BrowserSession(
                 "br_test",
@@ -54,7 +55,7 @@ class TargetResolverTest {
     }
 
     @Test
-    void prefersSemanticLocatorForObservedRef() {
+    void prefersSnapshotSelectorForObservedRef() {
         Playwright playwright = mock(Playwright.class);
         Browser browser = mock(Browser.class);
         BrowserContext context = mock(BrowserContext.class);
@@ -63,7 +64,8 @@ class TargetResolverTest {
 
         when(page.isClosed()).thenReturn(false);
         when(page.url()).thenReturn("https://example.test");
-        when(page.getByLabel(org.mockito.Mockito.eq("Email"), any(Page.GetByLabelOptions.class))).thenReturn(locator);
+        when(page.locator("input[name='email']")).thenReturn(locator);
+        when(locator.count()).thenReturn(1);
 
         BrowserSession session = new BrowserSession(
                 "br_test",
@@ -86,7 +88,82 @@ class TargetResolverTest {
         Locator resolved = new TargetResolver().locator(session, page, "p1", Map.of("ref", "e3"));
 
         assertThat(resolved).isSameAs(locator);
-        verify(page, never()).locator("input[name='email']");
+        verify(page, never()).getByLabel(org.mockito.Mockito.eq("Email"), any(Page.GetByLabelOptions.class));
+    }
+
+    @Test
+    void fallsBackToSemanticCandidateWhenSnapshotSelectorNoLongerMatches() {
+        Playwright playwright = mock(Playwright.class);
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+        Page page = mock(Page.class);
+        Locator selectorLocator = mock(Locator.class);
+        Locator labelLocator = mock(Locator.class);
+
+        when(page.isClosed()).thenReturn(false);
+        when(page.url()).thenReturn("https://example.test");
+        when(page.locator("input[name='email']")).thenReturn(selectorLocator);
+        when(selectorLocator.count()).thenReturn(0);
+        when(page.getByLabel(org.mockito.Mockito.eq("Email"), any(Page.GetByLabelOptions.class))).thenReturn(labelLocator);
+        when(labelLocator.count()).thenReturn(1);
+
+        BrowserSession session = new BrowserSession(
+                "br_test",
+                "owner",
+                "chromium",
+                playwright,
+                browser,
+                context,
+                page,
+                30000
+        );
+        session.replaceRefs("p1", List.of(Map.of(
+                "ref", "e3",
+                "selector", "input[name='email']",
+                "label", "Email",
+                "role", "textbox",
+                "name", "Email"
+        )));
+
+        Locator resolved = new TargetResolver().locator(session, page, "p1", Map.of("ref", "e3"));
+
+        assertThat(resolved).isSameAs(labelLocator);
+    }
+
+    @Test
+    void doesNotUseDomNameAsRoleNameForObservedRef() {
+        Playwright playwright = mock(Playwright.class);
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+        Page page = mock(Page.class);
+        Locator locator = mock(Locator.class);
+
+        when(page.isClosed()).thenReturn(false);
+        when(page.url()).thenReturn("https://example.test");
+        when(page.locator("#UserName")).thenReturn(locator);
+        when(locator.count()).thenReturn(1);
+
+        BrowserSession session = new BrowserSession(
+                "br_test",
+                "owner",
+                "chromium",
+                playwright,
+                browser,
+                context,
+                page,
+                30000
+        );
+        session.replaceRefs("p1", List.of(Map.of(
+                "ref", "e2",
+                "selector", "#UserName",
+                "role", "textbox",
+                "domName", "username"
+        )));
+
+        Locator resolved = new TargetResolver().locator(session, page, "p1", Map.of("ref", "e2"));
+
+        assertThat(resolved).isSameAs(locator);
+        verify(page, never()).getByRole(org.mockito.Mockito.eq(com.microsoft.playwright.options.AriaRole.TEXTBOX), any(Page.GetByRoleOptions.class));
     }
 
     @Test

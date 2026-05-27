@@ -119,7 +119,6 @@ final class BrowserGatewayService {
               const accessibleNameOf = (el, text, label) =>
                 textOf(el.getAttribute('aria-label')) ||
                 label ||
-                textOf(el.getAttribute('name')) ||
                 textOf(el.getAttribute('title')) ||
                 text;
               const roleOf = (el) => el.getAttribute('role') || ({
@@ -158,6 +157,7 @@ final class BrowserGatewayService {
                   const alt = textOf(el.getAttribute('alt'));
                   const href = textOf(el.getAttribute('href'));
                   const testId = testIdOf(el);
+                  const domName = textOf(el.getAttribute('name'));
                   const type = textOf(el.getAttribute('type')) || el.tagName.toLowerCase();
                   const item = {
                     ref: `e${index + 1}`,
@@ -166,6 +166,7 @@ final class BrowserGatewayService {
                     type,
                     role: roleOf(el),
                     name: accessibleNameOf(el, text, label),
+                    domName: domName || null,
                     text: text.slice(0, 240),
                     label: label || null,
                     placeholder: placeholder || null,
@@ -1212,14 +1213,14 @@ final class BrowserGatewayService {
         int depth = Args.optionalInt(args, "depth", -1);
         boolean includeUrls = Args.optionalBoolean(args, "includeUrls", false);
         String rootSelector = scopeSelector(session, resolvedPageId, Args.optionalMap(args, "scopeTarget"));
-        Map<String, Object> observed = castMap(page.evaluate(OBSERVE_SCRIPT, Map.of(
-                "limit", Math.max(1, limit),
-                "maxTextLength", Math.max(0, maxTextLength),
-                "interactiveOnly", interactiveOnly,
-                "compact", compact,
-                "depth", depth,
-                "includeUrls", includeUrls,
-                "rootSelector", rootSelector
+        Map<String, Object> observed = castMap(page.evaluate(OBSERVE_SCRIPT, observeOptions(
+                limit,
+                maxTextLength,
+                interactiveOnly,
+                compact,
+                depth,
+                includeUrls,
+                rootSelector
         )));
         List<Map<String, Object>> elements = castMapList(observed.get("elements"));
         String rawVisibleText = String.valueOf(observed.getOrDefault("visibleText", ""));
@@ -1249,6 +1250,24 @@ final class BrowserGatewayService {
             BrowserOutputSupport.mark(result, "ariaSnapshot", "page.ariaSnapshot", false, result.get("ariaSnapshot") == null ? 0 : String.valueOf(result.get("ariaSnapshot")).length());
         }
         return result;
+    }
+
+    static Map<String, Object> observeOptions(int limit,
+                                             int maxTextLength,
+                                             boolean interactiveOnly,
+                                             boolean compact,
+                                             int depth,
+                                             boolean includeUrls,
+                                             String rootSelector) {
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("limit", Math.max(1, limit));
+        options.put("maxTextLength", Math.max(0, maxTextLength));
+        options.put("interactiveOnly", interactiveOnly);
+        options.put("compact", compact);
+        options.put("depth", depth);
+        options.put("includeUrls", includeUrls);
+        options.put("rootSelector", rootSelector);
+        return options;
     }
 
     private String scopeSelector(BrowserSession session, String pageId, Map<String, Object> target) {
@@ -1323,8 +1342,9 @@ final class BrowserGatewayService {
             String ref = String.valueOf(element.get("ref"));
             String role = String.valueOf(element.getOrDefault("role", ""));
             String tag = String.valueOf(element.getOrDefault("tag", ""));
+            String type = String.valueOf(element.getOrDefault("type", ""));
             Object checked = element.get("checked");
-            if (Boolean.TRUE.equals(checked) || Boolean.FALSE.equals(checked) || "checkbox".equals(role) || "radio".equals(role)) {
+            if ("checkbox".equals(role) || "radio".equals(role) || "checkbox".equals(type) || "radio".equals(type)) {
                 suggestions.add(Map.of("action", Boolean.TRUE.equals(checked) ? "uncheck" : "check", "target", "@" + ref));
             } else if ("textbox".equals(role) || "searchbox".equals(role) || "textarea".equals(tag) || "input".equals(tag)) {
                 suggestions.add(Map.of("action", "fill", "target", "@" + ref, "text", ""));

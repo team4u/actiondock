@@ -204,7 +204,7 @@ final class BrowserActionSpecs {
     }
 
     private static Map<String, Object> elementSchema() {
-        return obj(props(p("ref", str()), p("selector", str()), p("tag", str()), p("type", str()), p("role", str()), p("name", str()), p("text", str()), p("label", str()), p("placeholder", str()), p("title", str()), p("alt", str()), p("testId", str()), p("href", str()), p("visible", bool()), p("enabled", bool()), p("interactive", bool()), p("checked", bool()), p("value", str()), p("bounds", object())));
+        return obj(props(p("ref", str()), p("selector", str()), p("tag", str()), p("type", str()), p("role", str()), p("name", str()), p("domName", str()), p("text", str()), p("label", str()), p("placeholder", str()), p("title", str()), p("alt", str()), p("testId", str()), p("href", str()), p("visible", bool()), p("enabled", bool()), p("interactive", bool()), p("checked", bool()), p("value", str()), p("bounds", object())));
     }
 
     private static void add(List<Map<String, Object>> actions, String action, String title, String description, Map<String, Object> inputSchema, Map<String, Object> outputSchema, Map<String, Object> exampleArgs) {
