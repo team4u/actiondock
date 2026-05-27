@@ -217,6 +217,9 @@ public class GlobalExceptionHandler {
         String message = "API exception status=" + status + " code=" + code + " method=" + method + " uri=" + uri + " message=" + ErrorDetailSupport.summarize(exception);
         if (status >= 500) {
             LOGGER.error(message, exception);
+        } else if (exception instanceof PluginRuntimeException pluginRuntimeException
+                && pluginRuntimeException.getCause() != null) {
+            LOGGER.warn(message, exception);
         } else {
             LOGGER.warn(message);
         }

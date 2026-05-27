@@ -30,7 +30,7 @@ final class BrowserErrors {
         if (cause != null) {
             details.put("causeType", cause.getClass().getName());
         }
-        return new PluginRuntimeException(422, "PLUGIN_ACTION_FAILED", message, details, cause);
+        return new PluginRuntimeException(500, "PLUGIN_ACTION_FAILED", message, details, cause);
     }
 
     static PluginRuntimeException blocked(String action, String category, String message, Throwable cause) {
@@ -70,9 +70,6 @@ final class BrowserErrors {
                 : exception.getMessage();
         if (exception instanceof IllegalArgumentException) {
             return invalid(action, message, exception);
-        }
-        if (exception instanceof PlaywrightException || exception instanceof IllegalStateException) {
-            return failed(action, message, exception);
         }
         return failed(action, message, exception);
     }

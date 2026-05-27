@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginManifestLoader;
 import org.team4u.actiondock.plugin.api.PluginObjectMappers;
+import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 
 import java.io.InputStream;
 import java.util.Map;
@@ -182,6 +183,24 @@ class ActionDockBrowserSystemPluginTest {
                     .containsEntry("id", "actiondock-browser")
                     .containsEntry("pluginId", "actiondock-browser");
         }
+    }
+
+    @Test
+    void wrapsUnknownExceptionsAsInternalPluginFailures() {
+        NullPointerException cause = new NullPointerException("boom");
+
+        assertThatThrownBy(() -> {
+            throw BrowserErrors.wrap("snapshot", cause);
+        })
+                .isInstanceOfSatisfying(PluginRuntimeException.class, exception -> {
+                    assertThat(exception.getStatus()).isEqualTo(500);
+                    assertThat(exception.getCode()).isEqualTo("PLUGIN_ACTION_FAILED");
+                    assertThat(exception.getMessage()).isEqualTo("boom");
+                    assertThat(exception.getDetails())
+                            .containsEntry("action", "snapshot")
+                            .containsEntry("causeType", NullPointerException.class.getName());
+                    assertThat(exception.getCause()).isSameAs(cause);
+                });
     }
 
     @SuppressWarnings("unchecked")
