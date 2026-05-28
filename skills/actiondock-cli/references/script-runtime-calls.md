@@ -80,11 +80,19 @@ return {"ok": result["ok"], "stdout": result["stdout"], "stderr": result["stderr
 
 注意：
 
-- 拼命令时优先用 `shell.join([...])` 或 `shell.quote(value)`，不要直接拼用户输入
+- 拼完整命令时优先用 `shell.join([...])`，不要直接拼用户输入
+- `shell.quote(value)` 只用于转义单个参数；不要手写 `arg.contains(" ") ? "\"${arg}\"" : arg` 这类 Windows 分支
 - `shell.exec` 默认 `check: true`，非 0 退出码、超时或启动失败会抛异常
 - 需要自己处理失败时传 `check: false`
 - 不传 `cwd` 时使用服务进程当前工作目录；传入的 `cwd` 必须已存在，框架不会自动创建
 - `timeoutSeconds` 和 `maxOutputBytes` 用来防止命令挂死或输出过大
+
+推荐写法：
+
+```groovy
+def command = shell.join(["agent-browser", "--session", session, "open", input.url])
+def result = shell.exec(command, [check: false])
+```
 
 ### 执行上下文
 

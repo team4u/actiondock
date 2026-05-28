@@ -106,6 +106,45 @@ class ScriptShellTest {
         assertThat(shell.quote("a b'c", Map.of("shell", "sh"))).isEqualTo("'a b'\"'\"'c'");
     }
 
+    @Test
+    void joinKeepsSimplePowerShellCommandExecutableAndQuotesArguments() {
+        ScriptShell shell = new ScriptShell(properties(), context("quote-powershell"));
+
+        String command = shell.join(
+                List.of("agent-browser", "--session", "browser 1", "open", "https://example.test/a b"),
+                Map.of("shell", "powershell")
+        );
+
+        assertThat(command)
+                .isEqualTo("agent-browser '--session' 'browser 1' 'open' 'https://example.test/a b'");
+    }
+
+    @Test
+    void joinUsesPowerShellCallOperatorWhenCommandPathNeedsQuoting() {
+        ScriptShell shell = new ScriptShell(properties(), context("quote-powershell-path"));
+
+        String command = shell.join(
+                List.of("C:\\Program Files\\Agent Browser\\agent-browser.exe", "open", "it's ok"),
+                Map.of("shell", "powershell")
+        );
+
+        assertThat(command)
+                .isEqualTo("& 'C:\\Program Files\\Agent Browser\\agent-browser.exe' 'open' 'it''s ok'");
+    }
+
+    @Test
+    void joinQuotesCmdArgumentsOnlyWhenNeeded() {
+        ScriptShell shell = new ScriptShell(properties(), context("quote-cmd"));
+
+        String command = shell.join(
+                List.of("agent-browser", "--session", "browser 1", "open", "https://example.test/a b"),
+                Map.of("shell", "cmd")
+        );
+
+        assertThat(command)
+                .isEqualTo("agent-browser --session \"browser 1\" open \"https://example.test/a b\"");
+    }
+
     private AppProperties properties() {
         AppProperties properties = new AppProperties();
         properties.setHomeDir(tempDir.toString());

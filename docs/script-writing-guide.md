@@ -357,10 +357,19 @@ return {
 
 拼接命令时优先使用：
 
-- `shell.quote(value)`：转义单个参数
 - `shell.join(args)`：把参数数组拼成安全命令字符串
+- `shell.quote(value)`：只转义单个参数
 
-不要直接把用户输入拼进命令字符串；先用 `shell.join` 或 `shell.quote` 处理参数。
+不要直接把用户输入拼进命令字符串；完整命令优先用 `shell.join`。不要手写 `arg.contains(" ") ? "\"${arg}\"" : arg` 这类 Windows 分支，`shell.join` 会按当前 shell 处理命令位和参数转义。
+
+```groovy
+def command = shell.join([
+    "agent-browser",
+    "--session", session,
+    "open", input.url
+])
+def result = shell.exec(command, [check: false])
+```
 
 如果脚本需要写入截图、下载文件、日志片段等产物，可以使用 `context.artifactDir` 作为约定路径，但框架不会自动创建或清理该目录。脚本需要自行创建目录，并在不需要保留产物时自行回收。
 

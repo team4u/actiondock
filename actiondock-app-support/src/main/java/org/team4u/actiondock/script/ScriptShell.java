@@ -85,10 +85,34 @@ public class ScriptShell {
             return "";
         }
         String shell = shellOption(options == null ? null : options.get("shell"));
+        String effective = AUTO.equals(shell) ? (isWindows() ? POWERSHELL : BASH) : shell;
+        if (POWERSHELL.equals(effective)) {
+            return joinPowerShell(args);
+        }
         return args.stream()
-                .map(item -> quoteForShell(item == null ? "" : String.valueOf(item), shell))
+                .map(item -> quoteForShell(item == null ? "" : String.valueOf(item), effective))
                 .reduce((left, right) -> left + " " + right)
                 .orElse("");
+    }
+
+    private String joinPowerShell(List<?> args) {
+        if (args.isEmpty()) {
+            return "";
+        }
+        String command = args.getFirst() == null ? "" : String.valueOf(args.getFirst());
+        StringBuilder builder = new StringBuilder(powerShellCommand(command));
+        for (int index = 1; index < args.size(); index++) {
+            builder.append(' ')
+                    .append(quoteForPowerShell(args.get(index) == null ? "" : String.valueOf(args.get(index))));
+        }
+        return builder.toString();
+    }
+
+    private String powerShellCommand(String command) {
+        if (isSimplePowerShellCommand(command)) {
+            return command;
+        }
+        return "& " + quoteForPowerShell(command);
     }
 
     private Map<String, Object> runWithShellCandidates(String command,
@@ -222,11 +246,37 @@ public class ScriptShell {
     private String quoteForShell(String value, String shell) {
         String effective = AUTO.equals(shell) ? (isWindows() ? POWERSHELL : BASH) : shell;
         return switch (effective) {
-            case POWERSHELL -> "'" + value.replace("'", "''") + "'";
-            case CMD -> "\"" + value.replace("\"", "\\\"") + "\"";
+            case POWERSHELL -> quoteForPowerShell(value);
+            case CMD -> quoteForCmd(value);
             case BASH, SH -> "'" + value.replace("'", "'\"'\"'") + "'";
             default -> throw new IllegalArgumentException("Unsupported shell: " + shell);
         };
+    }
+
+    private String quoteForPowerShell(String value) {
+        return "'" + value.replace("'", "''") + "'";
+    }
+
+    private String quoteForCmd(String value) {
+        String escaped = value.replace("\"", "\\\"");
+        return requiresCmdQuote(value) ? "\"" + escaped + "\"" : escaped;
+    }
+
+    private static boolean isSimplePowerShellCommand(String value) {
+        return !NormalizeUtils.isBlank(value) && value.matches("[A-Za-z0-9_.:/\\\\-]+");
+    }
+
+    private static boolean requiresCmdQuote(String value) {
+        if (value.isEmpty()) {
+            return true;
+        }
+        for (int index = 0; index < value.length(); index++) {
+            char ch = value.charAt(index);
+            if (Character.isWhitespace(ch) || "&()[]{}^=;!'+,`~|<>\"".indexOf(ch) >= 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String shellOption(Object value) {

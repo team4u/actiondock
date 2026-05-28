@@ -169,11 +169,11 @@ Python 脚本默认只有宿主 `python3` 与标准库；如需第三方包，�
 
 如果脚本需要执行本机命令，优先使用：
 
-- `shell.join([...])` 拼命令参数
-- `shell.quote(value)` 转义单个参数
+- `shell.join([...])` 拼完整命令
+- `shell.quote(value)` 只转义单个参数
 - `shell.exec(command, options)` 执行命令
 
-不要直接把用户输入拼进命令字符串。`shell.exec` 默认 `check: true`，命令失败会抛异常；如果脚本要自己处理非 0 退出码，传 `check: false`。
+不要直接把用户输入拼进命令字符串，也不要手写 `arg.contains(" ") ? "\"${arg}\"" : arg` 这类 Windows 分支。`shell.exec` 默认 `check: true`，命令失败会抛异常；如果脚本要自己处理非 0 退出码，传 `check: false`。
 
 需要写入临时文件、截图、下载物或其他产物时，可以把 `context.artifactDir` 当作本次执行的约定路径，但它只是路径字符串。框架不会自动创建或清理该目录；脚本应按实际需要自行创建，并在不需要保留时自行回收。
 
