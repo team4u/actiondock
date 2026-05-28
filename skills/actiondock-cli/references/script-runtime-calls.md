@@ -123,9 +123,11 @@ return {"executionId": context.get("executionId"), "runDir": run_dir}
 ```bash
 actiondock plugin references --json
 actiondock plugin get <plugin-id> --json
+actiondock plugin action <plugin-id> <action> --json
 ```
 
-再把确认后的 `pluginId` 和 `action` 写进 `plugins.invoke(...)`。
+先用 `plugin references` 或 `plugin get` 确认插件 ID 和动作名，再用 `plugin action` 查看具体动作的参数 Schema，最后把确认后的 `pluginId`、`action` 和参数写进 `plugins.invoke(...)`。
+
 
 ### 确认目标脚本 ID 和入参
 

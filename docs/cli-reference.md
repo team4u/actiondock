@@ -575,13 +575,17 @@ actiondock repository:knowledge-uninstall --repository-id team-repo --knowledge-
 ```bash
 actiondock plugin list --json
 actiondock plugin get <plugin-id> --json
+actiondock plugin action <plugin-id> <action> --json
 actiondock plugin references --json
 actiondock plugin config get <plugin-id> --json
 actiondock plugin config list <plugin-id> --json
 actiondock plugin config get <plugin-id> --config-name prod --json
 ```
 
-`plugin list` 只返回插件摘要，包括状态、版本和 `actionCount`，不返回 action schema。需要查看 action 参数、描述、示例时使用 `plugin get <plugin-id> --json`。
+- `plugin list` 只返回已安装插件的摘要（状态、版本、动作数量）。
+- `plugin get <plugin-id>` 返回该插件的元信息及所包含的所有动作（仅包含动作名、标题和描述，不含详细参数 Schema）。
+- `plugin action <plugin-id> <action>` 返回具体某个动作的完整 Schema（包括 `inputSchema`、`outputSchema` 及传参示例）。
+
 
 ### 调用插件动作
 

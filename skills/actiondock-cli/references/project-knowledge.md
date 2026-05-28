@@ -167,11 +167,16 @@ actiondock plugin invoke actiondock-workspace getSystemInfo --json
 actiondock plugin invoke actiondock-workspace getSystemInfo \
   --args-json '{"additionalCommands":["go","gradle","docker"]}' --json
 ```
-
-如果不确定插件有哪些动作或参数，先查看插件详情（返回每个动作的 `inputSchema` 和 `outputSchema`）：
+如果不确定插件有哪些动作，可以先列出该插件的所有动作：
 
 ```bash
 actiondock plugin get actiondock-workspace --json
+```
+
+如果需要查看具体某个动作的参数及 Schema（返回该动作的 `inputSchema` 和 `outputSchema`），可以使用：
+
+```bash
+actiondock plugin action actiondock-workspace <action> --json
 ```
 
 ## 回答用户时要体现的依据
