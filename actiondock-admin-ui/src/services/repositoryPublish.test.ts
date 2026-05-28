@@ -27,15 +27,17 @@ describe("repositoryPublish", () => {
     expect(repositories.map((item) => item.id)).toEqual(["a", "b"]);
   });
 
-  it("filters non-publishable repositories and sorts by id", () => {
+  it("filters non-publishable repositories and excludes PROJECT purpose", () => {
     const repositories = getPublishableRepositories([
       repository({ id: "b" }),
       repository({ id: "c", enabled: false }),
       repository({ id: "a", type: "LOCAL_DIR" }),
-      repository({ id: "d", type: "HTTP" })
+      repository({ id: "d", type: "HTTP" }),
+      repository({ id: "e", purpose: "PROJECT" }),
+      repository({ id: "f", purpose: "CAPABILITY" })
     ]);
 
-    expect(repositories.map((item) => item.id)).toEqual(["a", "b"]);
+    expect(repositories.map((item) => item.id)).toEqual(["a", "b", "f"]);
   });
 
   it("uses the first publishable repository as publish default", () => {

@@ -7,7 +7,9 @@ export function getEnabledRepositories(repositories: RepositoryDefinition[]): Re
 }
 
 export function getPublishableRepositories(repositories: RepositoryDefinition[]): RepositoryDefinition[] {
-  return getEnabledRepositories(repositories);
+  return getEnabledRepositories(repositories).filter(
+    (item) => (item.purpose ?? "CAPABILITY") === "CAPABILITY"
+  );
 }
 
 export function pickDefaultPublishRepository(repositories: RepositoryDefinition[]): RepositoryDefinition | undefined {
